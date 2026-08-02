@@ -733,6 +733,101 @@ begin
   Result:= True;
 end; // function
 
+// Collapses runs of whitespace to single spaces and trims. A type declaration
+// can wrap across source lines; the stored signature should still read as one
+// line. Shared by the two type-target walkers below.
+function CollapseWhitespace(const AText: string): string;
+var
+  i        : Integer;
+  C        : Char   ;
+  PrevSpace: Boolean;
+begin
+  Result   := '';
+  PrevSpace:= False;
+  for i:= 1 to Length(AText) do
+  begin
+    C:= AText[i];
+    if (C = #9) or (C = #10) or (C = #13) or (C = ' ') then
+    begin
+      if not PrevSpace then Result:= Result + ' ';
+      PrevSpace:= True;
+    end
+    else
+    begin
+      Result   := Result + C;
+      PrevSpace:= False;
+    end;
+  end;
+  Result:= Trim(Result);
+end; // function
+
+// INBOX 2.11 (converter-editor team, 2026-08-02): a STRONG / distinct type alias
+// -- `TFileName = type string;`, `TDate = type TDateTime;` -- was never indexed.
+// Same defect class as 2.1: parsed cleanly, claimed by no handler, no row written.
+//
+// The cause is that the strong form carries TWO `type:` fields, and
+// ChildByField returns the FIRST:
+//
+//   (declType name: (identifier) (kEq)
+//     type: (kType)                                <- the `type` KEYWORD
+//     type: (type (typeref (identifier))))         <- the actual target
+//
+// TryWalkAlias reads that first field, finds `kType` (which is not a typeref and
+// has no typeref child), and exits -- so every strong alias fell through. The
+// plain form has only the second field, which is why plain aliases, subranges and
+// enums all index correctly and only this shape is blind.
+//
+// `type string` compounds it: its target is `(declString (kString))`, not a
+// typeref at all, so even reading the correct field would not have helped a
+// typeref-only rule. This walker therefore takes the LAST `type:` wrapper and
+// stores its TEXT, whatever node kind it holds.
+//
+// Gated on the `kType` keyword being present, so it fires ONLY on the strong
+// form. That matters: everything it claims is currently emitted by nobody, so it
+// cannot change any existing row -- it can only add the missing ones.
+//
+// Why it matters: `Bde.DBTables.TTable.TableName` is `TFileName` and
+// `FireDAC.Comp.Client.TFDTable.TableName` is `String`. The assignment is legal
+// Delphi -- TFileName IS a string -- but with no declaration row the converter
+// cannot prove the cast and declines an otherwise-obvious Auto-Match. That is
+// every RTL/VCL `type string` / `type Integer` alias, for every type-aware
+// consumer.
+function TryWalkStrongAlias(const ADeclTypeNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
+var
+  i             : Integer;
+  Child         : TTSNode;
+  WrapNode      : TTSNode;
+  NameNode      : TTSNode;
+  HasTypeKeyword: Boolean;
+  TypeName      : string ;
+  QName         : string ;
+  Target        : string ;
+begin
+  Result        := False;
+  HasTypeKeyword:= False;
+  WrapNode      := Default(TTSNode);
+  for i:= 0 to ADeclTypeNode.NamedChildCount - 1 do
+  begin
+    Child:= ADeclTypeNode.NamedChild(i);
+    { The section keyword of `type ... = ...` is a child of declTypes, not of
+      declType, so a kType HERE only ever means the strong-alias form. }
+    if Child.NodeType = 'kType' then HasTypeKeyword:= True
+    else if Child.NodeType = 'type' then WrapNode:= Child; { keep the LAST }
+  end;
+  if not HasTypeKeyword then Exit;
+  if WrapNode.IsNull then Exit;
+  NameNode:= ADeclTypeNode.ChildByField('name');
+  if NameNode.IsNull then Exit;
+  TypeName:= NodeText(NameNode, AState.Source);
+  if TypeName = '' then Exit;
+  Target:= CollapseWhitespace(NodeText(WrapNode, AState.Source));
+  if Target = '' then Exit;
+  if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
+  else QName:= TypeName;
+  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
+  Result:= True;
+end; // function
+
 // INBOX 2.1 (converter-editor team, 2026-08-02): a method-pointer / procedural
 // type -- `X = procedure(...) [of object];` / `X = function(...): T [of object];`
 // -- was PARSED and then silently dropped. The grammar produces it cleanly:
@@ -784,24 +879,7 @@ begin
   if TypeName = '' then Exit;
   { A parameter list can wrap across lines; collapse runs of whitespace so the
     stored signature is one readable line, as TypeTextOf already does for fields. }
-  Raw      := NodeText(RefNode, AState.Source);
-  PrevSpace:= False;
-  Target   := '';
-  for i:= 1 to Length(Raw) do
-  begin
-    C:= Raw[i];
-    if (C = #9) or (C = #10) or (C = #13) or (C = ' ') then
-    begin
-      if not PrevSpace then Target:= Target + ' ';
-      PrevSpace:= True;
-    end
-    else
-    begin
-      Target   := Target + C;
-      PrevSpace:= False;
-    end;
-  end;
-  Target:= Trim(Target);
+  Target:= CollapseWhitespace(NodeText(RefNode, AState.Source));
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
   AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
@@ -1335,6 +1413,7 @@ begin
     if TryWalkHelper       (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v15: declHelper is distinct from declClass -- must be tried first or its target typeref gets grabbed by TryWalkAlias }
     if TryWalkClassOrRecord(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
     if TryWalkEnum         (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
+    if TryWalkStrongAlias  (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { INBOX 2.11: gated on the `type` KEYWORD, so it claims only the strong form -- shapes nothing else emits }
     if TryWalkProcType     (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { INBOX 2.1: before TryWalkAlias -- a declProcRef's ARGUMENTS contain typerefs that TryWalkAlias would otherwise grab as the alias target }
     if TryWalkAlias        (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v11 (M1) }
     // Unknown shape (set, subrange, proc-type, etc.) - fall through to default recurse.
