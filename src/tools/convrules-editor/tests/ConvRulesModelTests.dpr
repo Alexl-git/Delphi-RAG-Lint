@@ -2779,6 +2779,352 @@ begin
     'garbage must not report success');
 end;
 
+{ VCL-PREFERRED TIE-BREAK: which of several EQUALLY-RANKED declarations wins.
+
+  TypeKindTier settles concrete-vs-alias and nothing else, so a bare `TEdit` still
+  arrived at two class rows and took whichever the engine happened to list first --
+  FMX.Edit.TEdit. This is a VCL tool: an FMX property tree for a VCL form is a wrong
+  answer, not a taste. Measured against library-Win64.sqlite on 2026-08-02, 298 names
+  resolved FMX-first, TEdit / TButton / TLabel / TForm / TPanel among them.
+
+  The tie-break is a strict ORDER, applied ONLY among rows already tied at the winning
+  kind tier, first difference wins, and an exhausted order keeps the first row:
+    1. not FireMonkey, before FMX.*
+    2. top-level, before a type nested inside another type
+    3. System.* then Vcl.* then everything else
+  One fixture per step below, so no step can be dropped without a FAIL.
+
+  Fixtures are REAL `drag-lint query --name ... --json` output captured from
+  C:\Projects\.drag-lint\library-Win64.sqlite on 2026-08-02, reduced to the exact-name
+  rows (SelectQuerySymbol drops the substring rows before ranking, so they change
+  nothing here). Two are re-ordered, which is stated on the fixture: engine row order
+  is not contractual, and a rule that only works in one listing order is not a rule. }
+procedure TestQuerySymbolTieBreak;
+const
+  QJ_TEDIT =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 1931967,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "TEdit",'#13#10 +
+    '    "qualified_name": "FMX.Edit.TEdit",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 5755,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\fmx\\FMX.Edit.pas",'#13#10 +
+    '    "start_line": 650,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 743,'#13#10 +
+    '    "end_col": 7,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 1286269,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "TEdit",'#13#10 +
+    '    "qualified_name": "Vcl.StdCtrls.TEdit",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4597,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\SOURCE\\VCL\\Vcl.StdCtrls.pas",'#13#10 +
+    '    "start_line": 368,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 443,'#13#10 +
+    '    "end_col": 7,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  QJ_TCOLOR =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 176146,'#13#10 +
+    '    "kind": "type",'#13#10 +
+    '    "name": "TColor",'#13#10 +
+    '    "qualified_name": "Spring.Logging.TColor",'#13#10 +
+    '    "signature": "Graphics.TColor",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 1045,'#13#10 +
+    '    "file": "C:\\Projects\\spring4d\\Source\\Base\\Logging\\Spring.Logging.pas",'#13#10 +
+    '    "start_line": 50,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 50,'#13#10 +
+    '    "end_col": 28,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 1268754,'#13#10 +
+    '    "kind": "type",'#13#10 +
+    '    "name": "TColor",'#13#10 +
+    '    "qualified_name": "Vcl.Graphics.TColor",'#13#10 +
+    '    "signature": "System.UITypes.TColor",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4558,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\SOURCE\\VCL\\Vcl.Graphics.pas",'#13#10 +
+    '    "start_line": 37,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 37,'#13#10 +
+    '    "end_col": 34,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  QJ_TGLYPH =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 1945956,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "TGlyph",'#13#10 +
+    '    "qualified_name": "FMX.ImgList.TGlyph",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 5788,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\fmx\\FMX.ImgList.pas",'#13#10 +
+    '    "start_line": 435,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 532,'#13#10 +
+    '    "end_col": 7,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 1262675,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "TGlyph",'#13#10 +
+    '    "qualified_name": "Vcl.ExtCtrls.TEditButton.TGlyph",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4553,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\SOURCE\\VCL\\Vcl.ExtCtrls.pas",'#13#10 +
+    '    "start_line": 1544,'#13#10 +
+    '    "start_col": 7,'#13#10 +
+    '    "end_line": 1555,'#13#10 +
+    '    "end_col": 11,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  QJ_TMENUBARITEM =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 1267121,'#13#10 +
+    '    "kind": "record",'#13#10 +
+    '    "name": "TMenuBarItem",'#13#10 +
+    '    "qualified_name": "Vcl.Forms.TFormStyleHook.TMainMenuBarStyleHook.TMenuBarItem",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4556,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\SOURCE\\VCL\\Vcl.Forms.pas",'#13#10 +
+    '    "start_line": 2173,'#13#10 +
+    '    "start_col": 7,'#13#10 +
+    '    "end_line": 2178,'#13#10 +
+    '    "end_col": 11,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 1662704,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "TMenuBarItem",'#13#10 +
+    '    "qualified_name": "Winapi.Microsoft.UI.Xaml.ControlsRT.TMenuBarItem",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4946,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\rtl\\win\\winrt\\Winapi.Microsoft.UI.Xaml.ControlsRT.pas",'#13#10 +
+    '    "start_line": 25327,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 25338,'#13#10 +
+    '    "end_col": 6,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 1723961,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "TMenuBarItem",'#13#10 +
+    '    "qualified_name": "Winapi.UI.Xaml.ControlsRT.TMenuBarItem",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4976,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\rtl\\win\\winrt\\Winapi.UI.Xaml.ControlsRT.pas",'#13#10 +
+    '    "start_line": 28377,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 28388,'#13#10 +
+    '    "end_col": 6,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  QJ_EOLEERROR_VCL_FIRST =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 1279619,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "EOleError",'#13#10 +
+    '    "qualified_name": "Vcl.OleAuto.EOleError",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4577,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\SOURCE\\VCL\\Vcl.OleAuto.pas",'#13#10 +
+    '    "start_line": 180,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 180,'#13#10 +
+    '    "end_col": 32,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 1350850,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "EOleError",'#13#10 +
+    '    "qualified_name": "System.Win.ComObj.EOleError",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4712,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\rtl\\common\\System.Win.ComObj.pas",'#13#10 +
+    '    "start_line": 405,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 405,'#13#10 +
+    '    "end_col": 32,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+  QJ_TDRAGTARGET =
+    '['#13#10 +
+    '  {'#13#10 +
+    '    "id": 1750749,'#13#10 +
+    '    "kind": "class",'#13#10 +
+    '    "name": "TDragTarget",'#13#10 +
+    '    "qualified_name": "DesignIntf.TDragTarget",'#13#10 +
+    '    "signature": "",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4995,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\ToolsAPI\\DesignIntf.pas",'#13#10 +
+    '    "start_line": 1310,'#13#10 +
+    '    "start_col": 3,'#13#10 +
+    '    "end_line": 1319,'#13#10 +
+    '    "end_col": 7,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  },'#13#10 +
+    '  {'#13#10 +
+    '    "id": 1253915,'#13#10 +
+    '    "kind": "type",'#13#10 +
+    '    "name": "TDragTarget",'#13#10 +
+    '    "qualified_name": "Vcl.Controls.TDragTarget",'#13#10 +
+    '    "signature": "Pointer",'#13#10 +
+    '    "modifiers": "",'#13#10 +
+    '    "section": "interface",'#13#10 +
+    '    "usable_from_other_units": true,'#13#10 +
+    '    "file_id": 4545,'#13#10 +
+    '    "file": "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\SOURCE\\VCL\\Vcl.Controls.pas",'#13#10 +
+    '    "start_line": 869,'#13#10 +
+    '    "start_col": 5,'#13#10 +
+    '    "end_line": 869,'#13#10 +
+    '    "end_col": 27,'#13#10 +
+    '    "impl_start_line": 0,'#13#10 +
+    '    "impl_end_line": 0'#13#10 +
+    '  }'#13#10 +
+    ']'#13#10;
+
+var
+  Sym: TQuerySymbol;
+  Amb: Integer;
+begin
+  { Step 1. Both rows are tier-0 classes; FMX is listed FIRST by the real engine. }
+  Check('tiebreak.vcl.beats.fmx',
+    SelectQuerySymbol(ParseQuerySymbols(QJ_TEDIT), 'TEdit', Sym, Amb)
+    and SameText(Sym.QualifiedName, 'Vcl.StdCtrls.TEdit'),
+    'a VCL tool must not answer TEdit with FireMonkey; got ' + Sym.QualifiedName);
+  { The tie-break picks a side; it does NOT make the ambiguity go away. The count is
+    still what the editor shows the user, unchanged from before this rule existed. }
+  Check('tiebreak.still.reports.the.tie',
+    SelectQuerySymbol(ParseQuerySymbols(QJ_TEDIT), 'TEdit', Sym, Amb) and (Amb = 2),
+    'two class rows are still two class rows; got ' + IntToStr(Amb));
+  { And asking for FMX BY NAME still gets FMX -- the preference is for the BARE name
+    only, never a veto on what the caller explicitly requested. }
+  Check('tiebreak.qualified.request.wins',
+    SelectQuerySymbol(ParseQuerySymbols(QJ_TEDIT), 'FMX.Edit.TEdit', Sym, Amb)
+    and SameText(Sym.QualifiedName, 'FMX.Edit.TEdit') and (Amb = 1),
+    'an explicit qualified request is not a tie; got ' + Sym.QualifiedName);
+
+  { Step 3, third-party arm. The plan's own case: TColor came back Spring.Logging. }
+  Check('tiebreak.vcl.beats.thirdparty',
+    SelectQuerySymbol(ParseQuerySymbols(QJ_TCOLOR), 'TColor', Sym, Amb)
+    and SameText(Sym.QualifiedName, 'Vcl.Graphics.TColor') and (Amb = 2),
+    'TColor in a VCL form is Vcl.Graphics.TColor; got ' + Sym.QualifiedName);
+
+  { Step 1 ABOVE step 2: FMX loses even to a type nested inside a VCL class. Both
+    answers are poor, but only one of them is reachable from a VCL form at all. }
+  Check('tiebreak.fmx.loses.even.to.a.nested.decl',
+    SelectQuerySymbol(ParseQuerySymbols(QJ_TGLYPH), 'TGlyph', Sym, Amb)
+    and SameText(Sym.QualifiedName, 'Vcl.ExtCtrls.TEditButton.TGlyph'),
+    'FMX ranks last, below a nested non-FMX row; got ' + Sym.QualifiedName);
+
+  { Step 2 ABOVE step 3: a top-level Winapi class beats a record nested in a VCL
+    style hook. Ordering the library preference FIRST instead would pick the nested
+    Vcl row here -- measured on the real index, that ordering promotes a nested type
+    over a top-level one for 10 names, which is the only way this change was measured
+    to make any answer worse. Hence nesting outranks the library preference. }
+  Check('tiebreak.toplevel.beats.nested.vcl',
+    SelectQuerySymbol(ParseQuerySymbols(QJ_TMENUBARITEM), 'TMenuBarItem', Sym, Amb)
+    and SameText(Sym.QualifiedName, 'Winapi.Microsoft.UI.Xaml.ControlsRT.TMenuBarItem'),
+    'a nested type is rarely what a bare name means; got ' + Sym.QualifiedName);
+
+  { Step 3, RTL arm. Vcl.OleAuto.EOleError is a re-export of the System.Win.ComObj
+    class; both rows are section=interface with usable_from_other_units=true, so no
+    row attribute separates them. Measured: in ALL 35 names where a System.* and a
+    Vcl.* declaration tie at the same kind tier, the Vcl row is the re-export or a
+    unit-local copy -- so System.* outranks Vcl.*. Vcl.* is listed FIRST here. }
+  Check('tiebreak.system.beats.vcl.reexport',
+    SelectQuerySymbol(ParseQuerySymbols(QJ_EOLEERROR_VCL_FIRST), 'EOleError', Sym, Amb)
+    and SameText(Sym.QualifiedName, 'System.Win.ComObj.EOleError'),
+    'the RTL declares it; Vcl.OleAuto re-exports it; got ' + Sym.QualifiedName);
+
+  { The tie-break is INSIDE a tier and can never reach across one. Vcl.Controls
+    declares TDragTarget as an alias (kind=type, tier 1) while DesignIntf declares the
+    class (tier 0), so the class wins although the library preference points the other
+    way. Without this, "prefer Vcl" would start beating "a real declaration outranks
+    an alias to it" -- and only the concrete row can yield enum members. }
+  Check('tiebreak.kind.tier.still.outranks.it',
+    SelectQuerySymbol(ParseQuerySymbols(QJ_TDRAGTARGET), 'TDragTarget', Sym, Amb)
+    and SameText(Sym.QualifiedName, 'DesignIntf.TDragTarget') and (Amb = 1),
+    'tiering comes first and is untouched; got ' + Sym.QualifiedName);
+end;
+
+
 { Enum members: the PURE parse of an enum's DECLARATION SOURCE.
 
   There is no members list in the index and no children query -- an enum row
@@ -2895,6 +3241,32 @@ begin
     Check('gotodef.live.class.has.no.members',
       not Adapter.EnumMembersOf('TThread', M, Err) and (Err <> '')
       and (Length(M) = 0), 'a class is not an enum, and must say so: Err=' + Err);
+
+    { LIVE corroboration of the VCL-preferred tie-break -- the fixture tests in
+      TestQuerySymbolTieBreak are the specification; these two prove the real index
+      and the real exe behave the way the fixtures say. Before the tie-break, both
+      of these answered FireMonkey. }
+    Check('gotodef.live.vcl.beats.fmx',
+      Adapter.ResolveTypeLocation('TEdit', F, Ln, Err)
+      and SameText(ExtractFileName(F), 'Vcl.StdCtrls.pas'),
+      'a bare TEdit must land in the VCL; got ' + F + ' ' + Err);
+    { DeclaringUnitOf goes through ResolveClassQName, which is the OTHER caller of
+      SelectQuerySymbol -- so this is what proves the qualification path (and with it
+      all eight GetProptree call sites) inherits the same preference. }
+    Check('declaringunit.live.vcl.beats.fmx',
+      SameText(Adapter.DeclaringUnitOf('TButton'), 'Vcl.StdCtrls'),
+      'ResolveClassQName must inherit the tie-break; got '
+      + Adapter.DeclaringUnitOf('TButton'));
+    Check('declaringunit.live.tlabel',
+      SameText(Adapter.DeclaringUnitOf('TLabel'), 'Vcl.StdCtrls'),
+      'TLabel answered FMX.StdCtrls before the tie-break; got '
+      + Adapter.DeclaringUnitOf('TLabel'));
+    { TColor is the third-party arm, live: both rows are kind='type' (one tier), and
+      the first one the engine lists is Spring.Logging.TColor. }
+    Check('gotodef.live.tcolor.is.vcl',
+      Adapter.ResolveTypeLocation('TColor', F, Ln, Err)
+      and SameText(ExtractFileName(F), 'Vcl.Graphics.pas'),
+      'TColor in a VCL form is Vcl.Graphics.TColor; got ' + F + ' ' + Err);
   finally
     Adapter.Free;
   end;
@@ -4018,6 +4390,7 @@ begin
     TestProptreeRefsAsLeavesLive;
     TestAcceptanceTcxButtonToPool;
     TestQueryLocationParse;
+    TestQuerySymbolTieBreak;
     TestEnumMembersParse;
     TestGoToDefinitionLive;
     TestMappingRules;

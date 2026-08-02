@@ -114,8 +114,9 @@ function ParseQuerySymbols(const AJson: string): TArray<TQuerySymbol>;
 /// <param name="ASym">The chosen row. Untouched (Default) when the result is False.</param>
 /// <param name="AAmbiguity">How many exact-name rows shared the WINNING tier. 1 means
 /// the answer was forced; &gt; 1 means ASym is one of several equally-ranked candidates
-/// and was picked only by the engine's row order. 0 when the result is False. The
-/// caller MUST surface a value &gt; 1 -- see the remarks.</param>
+/// and was chosen by the tie-break in the remarks. 0 when the result is False. The
+/// caller MUST surface a value &gt; 1 -- the tie-break makes the pick less often wrong,
+/// it does not make the tie disappear.</param>
 /// <returns>False when no row carries that exact name.</returns>
 /// <remarks>`--name` is a SUBSTRING match, so the reply routinely contains unrelated
 /// symbols: `--name TNotifyEvent` returns local variables called ANotifyEvent and
@@ -127,15 +128,28 @@ function ParseQuerySymbols(const AJson: string): TArray<TQuerySymbol>;
 /// System.UITypes.TFontPitch beats the alias Vcl.Graphics.TFontPitch that merely points
 /// at it, whichever order the engine happened to list them in -- and it is the enum row
 /// that EnumMembersOf can actually read members out of.</remarks>
-/// <remarks>Ranking CANNOT settle a tie inside a tier, and ties are common rather than
-/// exotic: `--name TAlignment` returns THREE tier-0 rows -- System.Classes.TAlignment
+/// <remarks>Kind ranking CANNOT settle a tie INSIDE a tier, and ties are common rather
+/// than exotic: `--name TAlignment` returns THREE tier-0 rows -- System.Classes.TAlignment
 /// (enum), a record nested in a DevExpress RichEdit dialog form, and an enum nested in
 /// dxSplashForms -- all `section=interface` with `usable_from_other_units=true`, so no
-/// row attribute separates them either. The right one wins only because System.Classes
-/// was indexed first, which is exactly the ordering assumption the tiering exists to
-/// remove. Rather than guess harder, this reports HOW MANY tied via AAmbiguity so the
-/// caller can turn a silent wrong jump into a visible choice. Pass a qualified name to
-/// force the issue.</remarks>
+/// row attribute separates them either. `--name TEdit` returns two classes,
+/// Vcl.StdCtrls.TEdit and FMX.Edit.TEdit. Leaving those to the engine's row order is not
+/// neutral: THIS IS A VCL TOOL, so answering a bare class name with the FireMonkey twin
+/// hands the editor an FMX property tree for a VCL form -- a wrong answer, not a
+/// preference. So among the rows tied at the WINNING tier only, first difference wins:
+/// (1) not FireMonkey, before FMX.*;
+/// (2) top-level, before a type nested inside another type (the
+/// dxSplashForms.TdxSplashFormBase.TAlignment shape), which another unit cannot even
+/// name without naming the owner;
+/// (3) System.* then Vcl.* then everything else -- measured against library-Win64, in
+/// all 35 names where a System.* and a Vcl.* row tie at one tier the Vcl row is a
+/// re-export of the System one.
+/// Anything still tied keeps the FIRST row, exactly as before. The tie-break never
+/// crosses a tier, so a concrete declaration still outranks a Vcl alias to it.</remarks>
+/// <remarks>The tie-break reduces wrong answers; it does not license silence.
+/// AAmbiguity still counts EVERY row at the winning tier and ignores the tie-break, so
+/// a caller that said "N declarations named X; used Y" reports the same N as before.
+/// Pass a qualified name to force the issue instead.</remarks>
 function SelectQuerySymbol(const ASyms: TArray<TQuerySymbol>;
   const AWantedName: string; out ASym: TQuerySymbol;
   out AAmbiguity: Integer): Boolean;
@@ -202,8 +216,9 @@ type
     /// when it already contains a '.', when it is empty, or when no class row
     /// carries it.</param>
     /// <param name="AAmbiguity">1 when exactly one class is named AName. &gt; 1 when
-    /// several are and the result is one of them, picked only by the engine's row
-    /// order -- the caller must SAY SO. 0 when nothing resolved.</param>
+    /// several are and the result is one of them, chosen by SelectQuerySymbol's
+    /// VCL-preferred tie-break -- the caller must still SAY SO. 0 when nothing
+    /// resolved.</param>
     /// <returns>The chosen row's qualified_name, or AName unchanged.</returns>
     /// <remarks>Selection goes through the same ParseQuerySymbols/SelectQuerySymbol
     /// pair the go-to-definition path uses, narrowed to kind='class' first (proptree
@@ -212,8 +227,10 @@ type
     /// SUBSTRING match: measured against library-Win64 on 2026-08-02, `--name TLabel`
     /// returns 34 rows of which most are kind='component' DFM instances. Ties between
     /// frameworks are the normal case, not the exotic one -- TEdit has two classes
-    /// (FMX.Edit and Vcl.StdCtrls) and TButton four -- so the count is what turns a
-    /// silent FMX property tree into a visible one.</remarks>
+    /// (FMX.Edit and Vcl.StdCtrls) and TButton four -- so the VCL-preferred tie-break
+    /// inherited from SelectQuerySymbol is what stops a bare VCL control name resolving
+    /// to a FireMonkey property tree, and the count is what keeps that choice visible
+    /// rather than silent.</remarks>
     function ResolveClassQName(const AName: string;
       out AAmbiguity: Integer): string; overload;
   public
@@ -316,8 +333,9 @@ type
     /// <param name="ALine">1-based declaration line; 0 when False.</param>
     /// <param name="AError">Why it failed; '' on success.</param>
     /// <param name="AAmbiguity">1 when the answer was forced. &gt; 1 when AFile is one
-    /// of several tied candidates, chosen only by the engine's row order -- the caller
-    /// must SAY SO rather than present it as the answer. 0 when False.</param>
+    /// of several tied candidates, chosen by SelectQuerySymbol's VCL-preferred
+    /// tie-break -- the caller must still SAY SO rather than present it as the only
+    /// answer. 0 when False.</param>
     /// <returns>As the overload above.</returns>
     /// <remarks>Ties are ordinary, not exotic: `TAlignment` has three (an RTL enum and
     /// two types nested in DevExpress form classes) and `TColor` has two
@@ -1045,6 +1063,77 @@ begin
   Result := 2;
 end;
 
+// ---------------------------------------------------------------------------
+// The VCL-PREFERRED TIE-BREAK. Kind tiering settles concrete-vs-alias and
+// nothing else, so a bare `TEdit` still reached two tier-0 class rows and took
+// whichever the engine listed first -- FMX.Edit.TEdit. This is a VCL tool: an
+// FMX property tree for a VCL form is a wrong answer, not a taste. Measured
+// against C:\Projects\.drag-lint\library-Win64.sqlite on 2026-08-02, 298 names
+// resolved FireMonkey-first, TEdit / TButton / TLabel / TForm / TPanel / TMemo /
+// TComboBox among them.
+//
+// Which library a row's declaration comes from. Lower is better.
+//   0  System.* -- the RTL. Measured: in ALL 35 names where a System.* and a
+//      Vcl.* declaration tie at one kind tier, the System row is the real
+//      declaration and the Vcl row a re-export or a unit-local copy
+//      (Vcl.OleAuto.EOleError of System.Win.ComObj.EOleError,
+//      Vcl.Graphics.PColor of System.UITypes.PColor, Vcl.Imaging.jpeg.INT32 of
+//      System.Int32). Ranking the RTL first therefore never fights the
+//      "a real declaration outranks an alias to it" rule TypeKindTier encodes.
+//   1  Vcl.*    -- this tool's target framework.
+//   2  anything else -- third-party, Winapi.*, Spring.*, dx*, cx*.
+//   3  FMX.*    -- the FireMonkey twin of a VCL control. Never the answer here.
+const
+  FAM_SYSTEM = 0;
+  FAM_VCL    = 1;
+  FAM_OTHER  = 2;
+  FAM_FMX    = 3;
+
+function UnitFamilyRank(const AQualifiedName: string): Integer;
+begin
+  if SameText(Copy(AQualifiedName, 1, 4), 'FMX.')    then Exit(FAM_FMX);
+  if SameText(Copy(AQualifiedName, 1, 4), 'Vcl.')    then Exit(FAM_VCL);
+  if SameText(Copy(AQualifiedName, 1, 7), 'System.') then Exit(FAM_SYSTEM);
+  Result := FAM_OTHER;
+end;
+
+// True when the row's type is declared INSIDE another type -- the
+// dxSplashForms.TdxSplashFormBase.TAlignment shape. The unit name is the
+// declaring file's base name, so whatever the qualified name carries BETWEEN
+// the unit and the symbol is an owning class or record. A nested type is rarely
+// what a bare name means: another unit cannot even refer to it by the bare name.
+// With no file we cannot tell, and answer False -- a missing field must not
+// demote a row.
+function IsNestedDecl(const ASym: TQuerySymbol): Boolean;
+var
+  DotPos: Integer;
+begin
+  Result := False;
+  if (ASym.FilePath = '') or (ASym.QualifiedName = '') then Exit;
+  DotPos := LastDelimiter('.', ASym.QualifiedName);
+  if DotPos <= 1 then Exit;                    // no owner segment at all
+  Result := not SameText(Copy(ASym.QualifiedName, 1, DotPos - 1),
+                         ChangeFileExt(ExtractFileName(ASym.FilePath), ''));
+end;
+
+// The whole tie-break as ONE sort key, lower is better, so the caller keeps a
+// single strictly-less comparison and stays STABLE: equal keys leave the earlier
+// row in place, which is both today's behaviour and the documented fallback.
+//   1. not FireMonkey, before FMX.*        (weight 8)
+//   2. top-level, before nested-in-a-type  (weight 4)
+//   3. System.* then Vcl.* then the rest   (weight 1, values 0..2)
+// The family only reaches 3 for an FMX row, which already carries the 8, so the
+// three levels cannot bleed into one another.
+function TieBreakRank(const ASym: TQuerySymbol): Integer;
+var
+  Fam: Integer;
+begin
+  Fam := UnitFamilyRank(ASym.QualifiedName);
+  Result := Fam;
+  if IsNestedDecl(ASym) then Inc(Result, 4);
+  if Fam = FAM_FMX      then Inc(Result, 8);
+end;
+
 function SelectQuerySymbol(const ASyms: TArray<TQuerySymbol>;
   const AWantedName: string; out ASym: TQuerySymbol;
   out AAmbiguity: Integer): Boolean;
@@ -1053,7 +1142,9 @@ var
   Qualified: Boolean;
   S        : TQuerySymbol;
   Best     : Integer;
+  BestRank : Integer;
   Tier     : Integer;
+  Rank     : Integer;
   DotPos   : Integer;
 begin
   ASym := Default(TQuerySymbol);
@@ -1066,11 +1157,14 @@ begin
   Qualified := DotPos > 0;
   if Qualified then Bare := Copy(Bare, DotPos + 1, MaxInt);
 
-  // Two passes over the same filter. The first finds the best tier present and its
-  // first row; the second counts how many rows tied there. Counting cannot be folded
-  // into the first pass without knowing the winning tier up front -- and the count is
-  // the whole point: it is what stops a tie being reported as a certainty.
+  // Two passes over the same filter. The first finds the best tier present and the
+  // best-ranked row in it; the second counts how many rows tied at that TIER.
+  // Counting cannot be folded into the first pass without knowing the winning tier up
+  // front -- and the count is the whole point: it is what stops a tie being reported
+  // as a certainty. It deliberately ignores the tie-break: picking a side does not
+  // make the ambiguity go away, and the caller still has to say N.
   Best := MaxInt;
+  BestRank := MaxInt;
   for S in ASyms do
   begin
     // Exact name only: `--name` matched a SUBSTRING, so most rows are other symbols.
@@ -1079,10 +1173,16 @@ begin
     // cannot be answered by a same-named type from some other unit.
     if Qualified and not SameText(S.QualifiedName, AWantedName) then Continue;
     Tier := TypeKindTier(S.Kind);
-    if Tier < Best then
+    if Tier > Best then Continue;             // the tie-break never crosses a tier
+    Rank := TieBreakRank(S);
+    // A better tier always wins; within one tier the tie-break decides, and a row
+    // that only EQUALS the incumbent's rank loses -- so the first row still wins an
+    // exhausted order, exactly as before.
+    if (Tier < Best) or (Rank < BestRank) then
     begin
       Best := Tier;
-      ASym := S;          // first row of the best tier seen so far
+      BestRank := Rank;
+      ASym := S;
       Result := True;
     end;
   end;
