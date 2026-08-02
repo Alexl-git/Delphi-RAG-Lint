@@ -1188,6 +1188,11 @@ begin
   FPool.Clear;
   SetStatus(Format('Loaded %d line(s), %d rule(s). Select a rule to edit its mapping.',
     [FBook.Nodes.Count, Length(FBook.ConvertHeaders)]));
+  // Re-gate BEFORE the auto-select below, not after: a file with no #convert rules
+  // skips that branch entirely, so LoadGridForBlock's re-gate never runs and the
+  // toolbar would still be showing the PREVIOUS file's enabled state over an empty
+  // grid. When there IS a rule the auto-select re-gates again a moment later.
+  UpdateToolbarEnabled;
   // Auto-select the first rule so the grid shows content immediately (also makes
   // the tool usable if a click ever fails to register). Selecting fires
   // OnSelectItem -> LoadGridForBlock.
@@ -1824,6 +1829,10 @@ begin
   RefreshPool;
   SyncRawFromModel;
   RefreshRulesList;
+  // RefreshPool consumed the highlighted leaf, so FPool.ItemIndex is now -1 -- but
+  // rebuilding the list does NOT fire FPool.OnClick, so nothing else re-gates and
+  // "<- Assign" would stay enabled over a selection that no longer exists.
+  UpdateToolbarEnabled;
   SetStatus(Format('Assigned %s <- %s%s', [ToPath, FromPath,
     IfThen(FindLinkForFrom(FromPath).Cast <> '', ' : ' + FindLinkForFrom(FromPath).Cast, '')]));
 end;
@@ -2043,6 +2052,7 @@ begin
   RefreshPool;
   SyncRawFromModel;
   RefreshRulesList;
+  UpdateToolbarEnabled;   // same reason as DoAssign: the pool list was rebuilt
   SetStatus('Unassigned ' + FromPath);
 end;
 
