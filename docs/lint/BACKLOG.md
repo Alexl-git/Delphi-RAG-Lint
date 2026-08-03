@@ -71,12 +71,33 @@
 > encoding guard red; fixed on disk (git's `.gitattributes` had already normalized the committed
 > blob, so there was nothing to commit -- exactly the failure mode that guard exists to catch).
 >
+> ### Battery -- and the trap it walked straight into
+>
+> First full run after T9: **204 pass / 5 fail / 0 timeout of 209** (baseline 200/6 of 206).
+> Then the shared exe was restaged and the failures resolved to **ONE**, the known pre-existing
+> `run_missing_doc_fix` (red since Task 3). The other four were all one cause:
+>
+> **`tests/run_battery.ps1` runs the runners with NO `-Exe`, so they resolve the STAGED exe** --
+> which was still the pre-T9 binary the concurrent T10 session had staged at 19:57. So
+> `run_doc_p3_decayrouting`, `_guards` and `_idempotency_sweep` -- the three suites whose re-pins
+> assert the NEW behaviour -- failed against an exe that does not have it, while
+> `run_exe_freshness` correctly reported the staleness that caused it. **This is trap #2 from
+> LATEST-78, hit again.** Note `_tagoccurrence` and `_unhandledtags` passed against BOTH exes,
+> because their re-pins match behaviour T9 did not change -- so a partial green here proves
+> nothing about which binary ran.
+>
+> **Rule to carry forward: restage BEFORE the battery, never after, and never DURING.**
+>
 > ### Git
 >
-> `feat/autodoc-phase3` = **`1e2c125`**, 134 ahead of `main` (`3b4a877`, untouched).
-> **NOTHING PUSHED.** The shared exe `third_party\dll-win64\drag-lint.exe` was **NOT** restaged
-> this session -- it is still the pre-T9 binary. Build output with T9 in it:
-> `src\cli\Win64\Debug\drag-lint.exe`. **Restage before any other team consumes it.**
+> `feat/autodoc-phase3` = **`26dfa9b`**, 135 ahead of `main` (`3b4a877`, untouched).
+> **NOTHING PUSHED.**
+>
+> **The shared exe IS restaged and VERIFIED IN THE STAGED BINARY** --
+> `third_party\dll-win64\drag-lint.exe`, 2026-08-02 20:14:31, byte-length 30913827, identical to
+> `src\cli\Win64\Debug\drag-lint.exe`. It carries **T9 + T10**. All five autodoc suites pass with
+> NO `-Exe` override (the real consumer path), and `run_exe_freshness` is green for both exes.
+> The exe is gitignored, so git will never tell you this -- **check its timestamp.**
 
 > ## RESUME 2026-08-02 (LATEST-78) -- **`main` IS MERGED IN. 2.9 + 2.10 FIXED. A merge-induced regression was found and fixed. ONE USER RULING IS BLOCKING. Read this before LATEST-77.**
 >
