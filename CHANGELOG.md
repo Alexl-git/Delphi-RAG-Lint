@@ -5,6 +5,8 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v1.2.2-alpha -- 2026-08-03
+
 ### Auto-Document Phase 3 -- provenance, comment harvesting, four new facts (schema v19)
 
 - **Uniform provenance marker, and the content sniff is gone.** Every

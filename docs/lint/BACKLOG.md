@@ -1,5 +1,68 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-03 (LATEST-82) -- **v1.2.2-alpha CUT. PHASE 3 COMPLETE BAR THE 9-DB REINDEX. YADF SELF-DOCUMENTED + RELEASED-GATED.** Read this before LATEST-81.
+>
+> ### >>> START HERE NEXT SESSION
+>
+> **The remaining T17 work is the 9-DB REINDEX and nothing else:**
+> `drag-lint index --all --config third_party\dll-win64\drag-lint.json --jobs 0`
+> (**`--jobs` needs `--config`**; `--dry-run` first). Then verify each DB reads
+> `schema_version = 19`, and **fill in section 6 of
+> `docs/INBOX-index-schema-v19-reindex-for-converter.md`**, which is deliberately
+> left saying "not yet rebuilt" with an EMPTY table. That is a multi-hour job.
+>
+> ### What shipped after LATEST-81
+>
+> * **`eb86af9` -- the banner-harvest fix.** Found on REAL CODE, not a fixture:
+>   YADFOT's `Register` was documented as `--- Register ------...`. A separate
+>   banner comment sat ONE blank line above the real prose; `FindDocRegionAbove`
+>   tolerates exactly that gap, so the scan swallowed the banner and the
+>   first-paragraph rule made it the `<summary>`. Fixed in `HarvestText` (leading
+>   decoration paragraphs are DROPPED, not demoted), reusing hrBanner's own test
+>   via the newly named `SEPARATOR_SHARE_MIN` -- the 0.6 was a bare literal.
+> * **v1.2.2-alpha** -- `VERSION` bumped, CHANGELOG heading cut.
+> * **YADF `485aea2` / `95170f9` / `ee08894`** -- revert point, autodoc, re-run
+>   with the fix. Suite 22/22, all four artifacts green, declaration counts
+>   identical, 7-bit ASCII + CRLF.
+>
+> ### YADF findings worth carrying
+>
+> * **`document --project YADF.dproj` reaches THIRD-PARTY code.** Half its compile
+>   closure (8 of 16 files) is DelphiAST/SimpleParser under `C:\Projects\DelphiAST`.
+>   The run was scoped to the 11 in-repo files instead. **Anyone re-running this
+>   must re-scope it** -- `--project` on that dproj writes into a vendored
+>   dependency.
+> * **39 blank `<summary></summary>` in YADF block the harvest** and cannot be
+>   cleared by `--strip`: they carry NO marker (HEAD had 49 managed blocks and
+>   zero markers -- they predate uniform marking), so the engine correctly treats
+>   them as hand-written. Removing them is a separate, deliberate edit. **This is
+>   why the harvest yield was 2, not a large share of YADF's 120
+>   implementation-side comments.**
+> * The remaining poor summary is `'event handlers'` (YADF.OptionsFrame.pas) -- a
+>   bare section label with no separator characters, so not decoration by any
+>   deterministic test. Widening the rule to reject short labels would start
+>   rejecting genuine short summaries. Left alone ON PURPOSE.
+> * The ` ?` uncertainty marker went **120 -> 11** on this corpus.
+>
+> ### Still open
+>
+> 1. **The `Pure` gate** -- `Pure` never creates a doc block (my deviation; the
+>    plan's unconditional emit turned ELEVEN suites red). One condition to widen.
+> 2. **`run_doc_drift_rule.ps1` does not gate `ddHarvestDrift`** -- that path was
+>    verified by hand on a scratch index, not by a test.
+> 3. **Two filed index/engine defects, unfixed:**
+>    `docs/INBOX-bare-call-in-binary-expression-not-indexed.md` (a bare
+>    parameterless call as a binary-expression operand records NO ref) and the
+>    banner note, now fixed and kept for history.
+> 4. The queued `Assigned` section feature -- still 0 lines of code.
+>
+> ### Traps added this session
+>
+> **The staged exe can be LOCKED by an orphaned `drag-lint.exe` / `drag_lint_graph.exe`**
+> -- `Copy-Item` fails, the copy is skipped, and the tests then run the OLD binary
+> and "fail" the fix you just made. Kill the orphans, restage, and re-verify the
+> timestamp. Hit once this session, exactly as CLAUDE.md warns.
+
 > ## RESUME 2026-08-03 (LATEST-81) -- **PHASE 3 IS 16 OF 17. T11-T16 ALL SHIPPED. THE BATTERY HAS NO KNOWN RED. ONLY T17 (ROLLOUT) IS LEFT.** Read this before LATEST-80.
 >
 > ### >>> START HERE NEXT SESSION
