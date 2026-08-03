@@ -477,6 +477,14 @@ function IdentifierAtCursor: string; forward;
 { v0.64.1: forward so all heavy-command handlers above can call DLExe64
   before its implementation appears later in this unit. }
 function DLExe64: string; forward;
+{ Same reason: InvokeRename (and every other handler declared before the
+  implementation below) resolves its DB through ResolvePrimaryIndexDb. }
+function ResolvePrimaryIndexDb: string; forward;
+{ Same reason: InvokeFormatProjectYadf opens its job report with DLOpenInEditor,
+  and UnsavedProjectUnits reads editor buffers with ReadSourceEditorText; both
+  implementations appear further down. }
+procedure DLOpenInEditor(const AFilePath: string); forward;
+function ReadSourceEditorText(const ASrc: IOTASourceEditor): string; forward;
 
 function SliceJsonBracket(const AText: string; AOpen, AClose: Char): string;
 // v0.94.1: extract the first balanced AOpen..AClose region from AText, ignoring
@@ -1534,7 +1542,7 @@ begin
   end;
 
   { Resolve project DB and exe path }
-  ProjDb:= GetActiveProjectDb;
+  ProjDb:= ResolvePrimaryIndexDb;
   ExePath:= DLExe64;
 
   { Open the refactor preview form.
@@ -1587,6 +1595,228 @@ begin
 
   { The IDE will auto-detect the file change on next focus switch. }
   ShowMessage( Format('drag-lint Format with YADF:'#13#10 + '%s', [Trim(Output)]));
+end; // procedure
+
+/// <summary>The active project's `.pas` members that exist on disk.</summary>
+/// <param name="AUnits">Absolute paths, project-member order; [] when False.</param>
+/// <returns>False when there is no active project or it has no .pas member.</returns>
+/// <remarks>Project MEMBERS, not the project folder: a loose unit sitting beside
+/// the .dproj is deliberately not reformatted, because nothing in the project
+/// compiles it and the user may be keeping it as scratch.</remarks>
+function ActiveProjectUnits(out AUnits: TArray<string>): Boolean;
+var
+  MS  : IOTAModuleServices;
+  PG  : IOTAProjectGroup  ;
+  Proj: IOTAProject       ;
+  i   : Integer           ;
+  FN  : string            ;
+  L   : TList<string>     ;
+begin
+  Result:= False;
+  SetLength(AUnits, 0);
+  if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+  if MS = nil then Exit;
+  PG:= MS.MainProjectGroup;
+  if PG = nil then Exit;
+  Proj:= PG.ActiveProject;
+  if Proj = nil then Exit;
+
+  L:= TList<string>.Create;
+  try
+    for i:= 0 to Proj.GetModuleCount - 1 do
+    begin
+      FN:= Proj.GetModule(i).FileName;
+      if FN = '' then Continue;
+      if not SameText(ExtractFileExt(FN), '.pas') then Continue;
+      { Absolute form: UnsavedProjectUnits matches these against IOTASourceEditor
+        FileNames by string, so a member returned relative would silently fail to
+        match its own open editor -- and a dirty unit would be reported clean,
+        which is the one failure this guard must not have. }
+      try FN:= TPath.GetFullPath(FN); except Continue; end;
+      if not FileExists(FN) then Continue;   // a member that was deleted on disk
+      L.Add(FN);
+    end;
+    AUnits:= L.ToArray;
+    Result:= Length(AUnits) > 0;
+  finally
+    L.Free;
+  end;
+end; // function
+
+/// <summary>Which of AUnits have an open editor buffer that differs from
+/// disk -- i.e. unsaved edits YADF would silently overwrite.</summary>
+/// <param name="AUnits">Candidate paths (the project's members).</param>
+/// <returns>The subset with unsaved changes, in AUnits order. [] when all clean.</returns>
+/// <remarks>The test is a BYTE DIFF against the file on disk, not an IOTAModule
+/// Modified flag -- that flag is not exposed on this OTA interface version. The
+/// same technique, and the same reason, as CollectUnsavedOverlays above.</remarks>
+/// <remarks>A member with no open editor cannot be dirty, so it is clean by
+/// construction and never appears here.</remarks>
+function UnsavedProjectUnits(const AUnits: TArray<string>): TArray<string>;
+var
+  MS       : IOTAModuleServices     ;
+  M, FE    : Integer                ;
+  Modu     : IOTAModule             ;
+  Src      : IOTASourceEditor       ;
+  Path     : string                 ;
+  BufText  : string                 ;
+  BufBytes : TBytes                 ;
+  DiskBytes: TBytes                 ;
+  Members  : TDictionary<string, Boolean>;
+  Dirty    : TList<string>          ;
+  U        : string                 ;
+begin
+  SetLength(Result, 0);
+  if Length(AUnits) = 0 then Exit;
+  if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+  if MS = nil then Exit;
+
+  Members:= TDictionary<string, Boolean>.Create;
+  Dirty  := TList<string>.Create;
+  try
+    for U in AUnits do Members.AddOrSetValue(LowerCase(U), False);
+
+    for M:= 0 to MS.ModuleCount - 1 do
+    begin
+      Modu:= MS.Modules[M];
+      if Modu = nil then Continue;
+      for FE:= 0 to Modu.GetModuleFileCount - 1 do
+      begin
+        if not Supports(Modu.GetModuleFileEditor(FE), IOTASourceEditor, Src) then Continue;
+        Path:= Src.FileName;
+        if Path = '' then Continue;
+        try Path:= TPath.GetFullPath(Path); except Continue; end;  // match ActiveProjectUnits' form
+        if not Members.ContainsKey(LowerCase(Path)) then Continue;
+        BufText:= ReadSourceEditorText(Src);
+        if BufText = '' then Continue;          // unreadable buffer -- assume clean
+        BufBytes:= TEncoding.ANSI.GetBytes(BufText);
+        try DiskBytes:= TFile.ReadAllBytes(Path); except SetLength(DiskBytes, 0); end;
+        if (Length(BufBytes) = Length(DiskBytes)) and
+           ((Length(BufBytes) = 0) or CompareMem(@BufBytes[0], @DiskBytes[0], Length(BufBytes))) then Continue;
+        Members[LowerCase(Path)]:= True;
+      end;
+    end;
+
+    { Report in AUnits order, so the message reads in project order rather than
+      in whatever order the IDE happens to hold its open modules. }
+    for U in AUnits do
+      if Members[LowerCase(U)] then Dirty.Add(U);
+    Result:= Dirty.ToArray;
+  finally
+    Dirty.Free;
+    Members.Free;
+  end;
+end; // function
+
+{ Format EVERY .pas member of the active project with YADF.
+
+  WHY THIS REFUSES TO RUN ON UNSAVED WORK, rather than saving for the user:
+  `drag-lint format` rewrites the file ON DISK, and the IDE then reloads it. An
+  editor buffer holding unsaved edits would be silently discarded on that reload
+  -- so a SaveAll here would quietly commit edits the user never chose to commit,
+  and NOT saving would destroy them. Neither is ours to decide across a whole
+  project, so the command stops and names the units. (The single-file
+  InvokeFormatYadf has the same hazard and merely documents it; whole-project
+  scope makes the same silent loss far larger, hence the hard stop.)
+
+  Formatting shifts every line number in the project, so the index is stale the
+  moment this finishes -- the batch therefore re-indexes at the end, for the same
+  reason InvokeAutoDocumentProject's third step does, and into the DB the LSP
+  actually reads. }
+procedure InvokeFormatProjectYadf(Sender: TObject);
+var
+  Proj   : string          ;
+  Db     : string          ;
+  ProjDir: string          ;
+  Plat   : string          ;
+  Units  : TArray<string>  ;
+  Unsaved: TArray<string>  ;
+  Bat    : string          ;
+  BatPath: string          ;
+  OutPath: string          ;
+  Msg    : string          ;
+  i      : Integer         ;
+  Shown  : Integer         ;
+const
+  MAX_LISTED = 15;   // a 300-unit project must not produce an unreadable dialog
+begin
+  Proj:= GetActiveProjectFile;
+  if Proj = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
+
+  if not ActiveProjectUnits(Units) then
+  begin
+    ShowMessage('drag-lint: the active project has no .pas members to format.');
+    Exit;
+  end;
+
+  Unsaved:= UnsavedProjectUnits(Units);
+  if Length(Unsaved) > 0 then
+  begin
+    Shown:= Length(Unsaved);
+    if Shown > MAX_LISTED then Shown:= MAX_LISTED;
+    Msg:= Format('drag-lint: %d project unit(s) have unsaved changes.'#13#10#13#10 +
+                 'YADF rewrites files on disk, so those edits would be lost when ' +
+                 'the IDE reloads them.'#13#10#13#10 +
+                 'Save these first, then run this command again:'#13#10#13#10,
+                 [Length(Unsaved)]);
+    for i:= 0 to Shown - 1 do
+      Msg:= Msg + '    ' + ExtractFileName(Unsaved[i]) + #13#10;
+    if Length(Unsaved) > Shown then
+      Msg:= Msg + Format('    ... and %d more'#13#10, [Length(Unsaved) - Shown]);
+    ShowMessage(Msg);
+    Exit;
+  end;
+
+  if MessageDlg(Format('Format all %d unit(s) of %s with YADF?'#13#10#13#10 +
+                       'Every file is rewritten in place. The project index is ' +
+                       'refreshed afterwards.',
+                       [Length(Units), ExtractFileName(Proj)]),
+                mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  Db:= ResolvePrimaryIndexDb;
+  ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
+  Plat   := GetActiveProjectPlatform;
+
+  { One `format` per unit: the verb takes a single <file> (verified -- handing it
+    a directory answers 'File not found', exit 2). Deliberately NO '|| exit /b 1'
+    between the format lines: one unit YADF cannot parse must not abandon the
+    remaining units half-formatted. The trailing reindex is separate and always
+    runs, so the index matches whatever ended up on disk. }
+  Bat:= '@echo off'#13#10;
+  for i:= 0 to High(Units) do
+    Bat:= Bat + Format('"%s" format "%s"'#13#10, [DLExe64, Units[i]]);
+  if Db <> '' then
+    Bat:= Bat + Format('"%s" index "%s" --db "%s" --platform %s'#13#10, [DLExe64, ProjDir, Db, Plat]);
+
+  BatPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-yadf-project.bat');
+  try TFile.WriteAllText(BatPath, Bat, TEncoding.ANSI); except end;
+  OutPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-yadf-project.txt');
+
+  DLT('menu', Format('enqueue(yadf-project): %d unit(s) -> %s', [Length(Units), BatPath]));
+
+  var FJob: TDragLintJob:= TDragLintJob.Create;
+  FJob.Kind       := jkReindex;   { same queue slot as reindex -- it ends in one }
+  FJob.Title      := Format('YADF %s (%d units)', [ChangeFileExt(ExtractFileName(Proj), ''), Length(Units)]);
+  FJob.CoalesceKey:= 'yadfproject:' + LowerCase(Proj);
+  FJob.CmdLine    := Format('cmd.exe /c "%s"', [BatPath]);
+  FJob.TimeoutMs  := 600000;
+  FJob.OnPreRun   :=
+    procedure
+    begin
+      { The trailing index needs the exclusive WAL lock; a live LSP connection
+        blocks it. Same precondition as InvokeReindexProject. }
+      if GLspClient <> nil then begin GLspClient.Stop; FreeAndNil(GLspClient); end;
+    end;
+  FJob.OnDone     :=
+    procedure(AExit: Integer; AOut: string)
+    var S: string;
+    begin
+      S:= AOut;
+      if Trim(S) = '' then S:= '(no output)';
+      try TFile.WriteAllText(OutPath, S); except end;
+      DLOpenInEditor(OutPath);
+    end;
+  JobQueue.Enqueue(FJob);
 end; // procedure
 
 // Broadcasts textDocument/didSave for every .pas file mentioned in AOutput
@@ -1828,17 +2058,24 @@ begin
   RunCompileDiagnoseAsync(AProjFile, False);
 end;
 
-{ Task 6 fix: the DB refresh-findings must WRITE is the same PRIMARY DB the LSP
-  READS for its diagnostics overlay -- otherwise the sweep refreshes a DB the
-  IDE never displays from. The LSP resolves its active DBs via
-  ResolveActiveIndexDbs (manifest-first: an ORM3-root manifest DB shadows a
-  stale per-project <projname>.sqlite), and its Result[0] is the primary
-  writable DB. So resolve the refresh target the identical way; fall back to
-  GetActiveProjectDb only if the resolver yields nothing (no manifest, no
-  indexed DB). Using GetActiveProjectDb directly (the old behaviour) wrote
-  <projdir>\<projname>.sqlite, which for a manifest-covered file is exactly the
-  DB the LSP deliberately ignores -- so findings never appeared. }
-function ResolveRefreshFindingsDb: string;
+{ Task 6 fix: the DB a wizard command WRITES must be the same PRIMARY DB the LSP
+  READS -- otherwise the command refreshes a DB the IDE never displays from. The
+  LSP resolves its active DBs via ResolveActiveIndexDbs (manifest-first: an
+  ORM3-root manifest DB shadows a stale per-project <projname>.sqlite), and its
+  Result[0] is the primary writable DB. So resolve the write target the identical
+  way; fall back to GetActiveProjectDb only if the resolver yields nothing (no
+  manifest, no indexed DB). Using GetActiveProjectDb directly (the old behaviour)
+  wrote <projdir>\<projname>.sqlite, which for a manifest-covered file is exactly
+  the DB the LSP deliberately ignores -- so the work never appeared.
+
+  RENAMED from ResolveRefreshFindingsDb on 2026-08-03. It was never specific to
+  refresh-findings, and the misleading name is why InvokeReindexProject kept
+  calling GetActiveProjectDb instead: on C:\Projects\DataCopy the Reindex Project
+  menu item spent over an hour building DataCopy.sqlite while the LSP and the
+  graph viewer were both querying DataCopy\drag-lint.sqlite, so the reindex could
+  not have changed a single answer the IDE gave. Same defect as Task 6, different
+  call site. Anything that writes an index from the wizard must call THIS. }
+function ResolvePrimaryIndexDb: string;
 var
   DbList: TArray<string>;
 begin
@@ -1906,7 +2143,7 @@ begin
   { Task 6: ADD-alongside spawn -- keeps the persistent compiler_findings DB
     fresh on every save, independent of (and in addition to) the pane-publish
     compile-check above. Fire-and-forget; does not block the save. }
-  SpawnRefreshFindings(GetActiveProjectFile, ResolveRefreshFindingsDb, False);
+  SpawnRefreshFindings(GetActiveProjectFile, ResolvePrimaryIndexDb, False);
 end;
 
 function DLActivePas(out APath: string): Boolean; forward;
@@ -2009,7 +2246,7 @@ var
   ProjDb  : string;
 begin
   ProjFile:= GetActiveProjectFile;
-  ProjDb  := ResolveRefreshFindingsDb; { the DB the LSP displays from -- not <projname>.sqlite }
+  ProjDb  := ResolvePrimaryIndexDb; { the DB the LSP displays from -- not <projname>.sqlite }
   if (ProjFile = '') or (ProjDb = '') then
   begin
     ShowMessage('drag-lint Full Compile Sweep: no active project found.');
@@ -2266,7 +2503,7 @@ var
   Line     : string     ;
   LLine    : string     ;
 begin
-  DbPath:= GetActiveProjectDb;
+  DbPath:= ResolvePrimaryIndexDb;
 
   Dlg:= TOpenDialog.Create(nil);
   try
@@ -2377,7 +2614,7 @@ begin
 
   ExePath:= DLExe64;
 
-  DbPath:= GetActiveProjectDb;
+  DbPath:= ResolvePrimaryIndexDb;
 
   if DbPath <> '' then CmdLine:= Format('"%s" check-ast "%s" --db "%s"', [ExePath, FilePath, DbPath])
   else CmdLine:= Format('"%s" check-ast "%s"', [ExePath, FilePath]);
@@ -2549,7 +2786,7 @@ var
 begin
   ExePath:= DLExe64;
 
-  ProjDb:= GetActiveProjectDb;
+  ProjDb:= ResolvePrimaryIndexDb;
   Selected:= ShowSymbolSearch(ExePath, ProjDb);
   if Selected = '' then Exit;
 
@@ -2665,7 +2902,7 @@ begin
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
 
   ProjFile:= GetActiveProjectFile;
-  ProjDb  := GetActiveProjectDb;
+  ProjDb  := ResolvePrimaryIndexDb;
   if (ProjFile = '') or (ProjDb = '') then
   begin
     ShowMessage('drag-lint: no active project or index found.');
@@ -3342,7 +3579,7 @@ procedure InvokeCircularUses(Sender: TObject);
 var
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no active project index (DB) found.'); Exit; end;
   DLRunReport(Format('cycles --db "%s" --plan --edges --causes --format text', [Db]), 'drag-lint-circular-uses.txt');
 end;
@@ -3353,7 +3590,7 @@ var
 begin
   if not DLActivePas(Pas) then begin ShowMessage('drag-lint: open a .pas unit first.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index (DB).'); Exit; end;
   DLRunReport(Format('uses-audit "%s" --db "%s" --format text', [Pas, Db]), 'drag-lint-uses-audit.txt');
 end;
@@ -3364,7 +3601,7 @@ var
 begin
   if not DLActivePas(Pas) then begin ShowMessage('drag-lint: open a .pas unit first.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
-  Db:= GetActiveProjectDb; Proj:= GetActiveProjectFile;
+  Db:= ResolvePrimaryIndexDb; Proj:= GetActiveProjectFile;
   if (Db = '') or (Proj = '') then begin ShowMessage('drag-lint: no project/index found.'); Exit; end;
   { report-only preview (no --apply): compiler-verified moves + removals. }
   DLRunReport(Format('uses-fix "%s" --project "%s" --db "%s"', [Pas, Proj, Db]), 'drag-lint-uses-fix-preview.txt');
@@ -3385,7 +3622,7 @@ var
   Db    : string;
   OutCsv: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   OutCsv:= TPath.Combine(TPath.GetTempPath, 'drag-lint-uses-report.csv');
   DLRunReport(Format('uses-report --output "%s" --db "%s"', [OutCsv, Db]), 'drag-lint-uses-report-log.txt');
@@ -3397,7 +3634,7 @@ var
   Q : string;
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if not DLAskQName(Q) then Exit;
   DLRunReport(Format('impact --qname "%s" --db "%s" --depth 3 --format text', [Q, Db]), 'drag-lint-impact.txt');
@@ -3418,7 +3655,7 @@ begin
     it and let the engine resolve the index from the manifest (like hover/find-
     usages), which handles projects whose index lives elsewhere (e.g. ORM3 ->
     ...\ORM3\drag-lint.sqlite, not ...\CLIENT\Micronite2027.sqlite). }
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if (Db <> '') and FileExists(Db) then DbArg:= Format(' --db "%s"', [Db])
   else DbArg:= '';
   DLRunReport(Format('wiring --qname "%s"%s --format text', [Q, DbArg]), 'drag-lint-wiring.txt');
@@ -3432,7 +3669,7 @@ var
   Q : string;
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if not DLAskQName(Q) then Exit;
   DLRunReport(Format('reverse-calltree --qname "%s" --db "%s" --depth 3 --format text', [Q, Db]), 'drag-lint-reverse-calltree.txt');
@@ -3456,7 +3693,7 @@ var
   Q : string;
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if not DLAskQName(Q) then Exit;
 
@@ -3612,7 +3849,7 @@ var
   Q : string;
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if not DLAskQName(Q) then Exit;
   ShowButterflyForQName(Q, Db);
@@ -4243,7 +4480,7 @@ var
   Q : string;
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if not DLAskQName(Q) then Exit;
   DLRunReport(Format('surface --qname "%s" --db "%s" --format text', [Q, Db]), 'drag-lint-surface.txt');
@@ -4254,7 +4491,7 @@ var
   Q : string;
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if not DLAskQName(Q) then Exit;
   DLRunReport(Format('slice --qname "%s" --db "%s" --format text', [Q, Db]), 'drag-lint-slice.txt');
@@ -4269,7 +4506,7 @@ begin
   if (EV = nil) or (EV.Buffer = nil) then begin ShowMessage('drag-lint: no active editor.'); Exit; end;
   Pas:= EV.Buffer.FileName;
   Row:= EV.Position.Row; ColN:= EV.Position.Column;
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   DLRunReport(Format('typeat "%s:%d:%d" --db "%s" --format text', [Pas, Row, ColN, Db]), 'drag-lint-typeat.txt');
 end;
@@ -4278,7 +4515,7 @@ procedure InvokeFindDeadCode(Sender: TObject);
 var
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   DLRunReport(Format('find-deadcode --db "%s"', [Db]), 'drag-lint-deadcode.txt');
 end;
@@ -4298,7 +4535,7 @@ procedure InvokeCompilerHints(Sender: TObject);
 var
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   DLRunReport(Format('query hints --db "%s"', [Db]), 'drag-lint-hints.txt');
 end;
@@ -4308,7 +4545,7 @@ var
   Q : string;
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if not DLAskQName(Q) then Exit;
   DLRunReport(Format('generate-docs --qname "%s" --format xmldoc --db "%s"', [Q, Db]), 'drag-lint-docstub.txt');
@@ -4334,7 +4571,13 @@ var
 begin
   Proj:= GetActiveProjectFile;
   if Proj = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
-  Db:= GetActiveProjectDb;
+  { ResolvePrimaryIndexDb, NOT GetActiveProjectDb -- same defect as
+    InvokeReindexProject, and as Task 6's refresh-findings before it. This
+    batch's THIRD step re-indexes precisely so hover/lint/LSP stay correct after
+    --apply shifts line numbers; aimed at <projname>.sqlite that re-freshening
+    lands in a DB no consumer reads, leaving the LSP stale on exactly the files
+    just rewritten -- the one outcome the third step exists to prevent. }
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
@@ -4379,7 +4622,7 @@ var
   Q : string;
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   if not DLAskQName(Q) then Exit;
   DLRunReport(Format('generate-test --qname "%s" --framework dunitx --db "%s"', [Q, Db]), 'drag-lint-teststub.txt');
@@ -4389,7 +4632,7 @@ procedure InvokeExportEnums(Sender: TObject);
 var
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   DLRunReport(Format('export enums --db "%s" --format delphi-const', [Db]), 'drag-lint-enums.txt');
 end;
@@ -4398,7 +4641,7 @@ procedure InvokeTopSymbols(Sender: TObject);
 var
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   DLRunReport(Format('top --db "%s" --by fanin --limit 50', [Db]), 'drag-lint-top.txt');
 end;
@@ -4407,7 +4650,7 @@ procedure InvokeFindUndocumented(Sender: TObject);
 var
   Db: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   DLRunReport(Format('query find --no-docs --public --db "%s"', [Db]), 'drag-lint-undocumented.txt');
 end;
@@ -4417,7 +4660,7 @@ var
   Db  : string;
   Outp: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   Outp:= TPath.Combine(TPath.GetTempPath, 'drag-lint-graph.dot');
   DLRunReport(Format('graph --db "%s" --format dot --output "%s"', [Db, Outp]), 'drag-lint-graph-log.txt');
@@ -4431,7 +4674,7 @@ var
   Cmd   : string;
   Output: string;
 begin
-  Db:= GetActiveProjectDb;
+  Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
   Dir:= TPath.Combine(TPath.GetTempPath, 'drag-lint-obsidian');
   try TDirectory.CreateDirectory(Dir); except end;
@@ -4449,7 +4692,12 @@ var
   OutPath: string;
   Db, Proj, ProjDir: string; MS: IOTAModuleServices;
 begin
-  Proj:= GetActiveProjectFile; Db:= GetActiveProjectDb;
+  { ResolvePrimaryIndexDb, NOT GetActiveProjectDb: the reindex must WRITE the DB
+    the LSP and the graph viewer READ. GetActiveProjectDb is ChangeFileExt(proj,
+    '.sqlite'), so on C:\Projects\DataCopy this menu item built DataCopy.sqlite
+    while every consumer queried DataCopy\drag-lint.sqlite -- an hour of indexing
+    that could not change one answer the IDE gave. See ResolvePrimaryIndexDb. }
+  Proj:= GetActiveProjectFile; Db:= ResolvePrimaryIndexDb;
   if (Proj = '') or (Db = '') then begin ShowMessage('drag-lint: no project/index found.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
@@ -4668,6 +4916,7 @@ begin
   AddWrappedItem(RootMenu, 'Show Structure'             , InvokeShowStructure   );
   AddWrappedItem(RootMenu, 'Rename Symbol...'           , InvokeRename          );
   AddWrappedItem(RootMenu, 'Format with YADF'           , InvokeFormatYadf      );
+  AddWrappedItem(RootMenu, 'Format Whole Project with YADF...', InvokeFormatProjectYadf);
   AddWrappedItem(RootMenu, 'Generate Test Helper CSV...', InvokeGenerateFormsCsv);
   AddWrappedItem(RootMenu, 'drag-lint Options...'       , InvokeOptionsDialog   );
 
@@ -4805,7 +5054,7 @@ begin
         + fire-and-forget, so it cannot slow down or block the ghost-check
         above. '' guards inside SpawnRefreshFindings make this a silent no-op
         when no project is open. }
-      try SpawnRefreshFindings(GetActiveProjectFile, ResolveRefreshFindingsDb, False); except end;
+      try SpawnRefreshFindings(GetActiveProjectFile, ResolvePrimaryIndexDb, False); except end;
     end;
     { v0.47: best-effort crash recovery on startup -- if a project is already open,
     restore any file left overlaid by a crashed ghost-check (no prompt; only posts
@@ -4839,7 +5088,7 @@ begin
       procedure(AQName: string; ALine: Integer)
         var F: string;
         begin
-          F:= DLResolveQnameFile(AQName, GetActiveProjectDb);
+          F:= DLResolveQnameFile(AQName, ResolvePrimaryIndexDb);
           if F = '' then F:= DLResolveQnameFile(AQName, DLLibraryDb);
           if (F <> '') and FileExists(F) then DLNavigateToSource(F, ALine)
           else ShowMessage('drag-lint: could not locate ' + AQName + ' in the project or library index; open it manually.');
