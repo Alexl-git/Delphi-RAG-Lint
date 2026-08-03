@@ -3,7 +3,7 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 18;
+  SCHEMA_VERSION = 19;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
@@ -267,7 +267,15 @@ const
       '  dfm_event     TEXT,' +
       '  sql_reads     TEXT,' +
       '  sql_writes    TEXT,' +
-      '  covered_by    TEXT)'
+      '  covered_by    TEXT,' +
+      // v19 (ADP3 T11-T14): four ADDITIVE analysis columns. The table stays
+      // WIDE (a narrow key/value fact table was considered and rejected in the
+      // Phase 3 design); the accepted consequence is that a future fact kind
+      // repeats this migration + full-reindex cycle.
+      '  mutates_params TEXT,' +
+      '  ui_affinity    TEXT,' +
+      '  touches        TEXT,' +
+      '  wiring         TEXT)'
 
     , 'CREATE VIRTUAL TABLE IF NOT EXISTS string_fts USING fts5(' +
     '  text, content=''string_literals'', content_rowid=''id'', tokenize=''unicode61'')'

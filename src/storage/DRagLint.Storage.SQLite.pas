@@ -813,6 +813,13 @@ begin
     Populated ('ro'/'rw'/'wo') during property extraction (Task 6); NULL for a
     pre-v17 DB row until it is re-indexed with the v17 engine. }
   TryExec('ALTER TABLE symbols ADD COLUMN prop_access TEXT');
+  { v19 (ADP3): four additive symbol_facts columns. TryExec swallows the
+    "duplicate column name" error on an already-migrated DB, same as every
+    ALTER above it. }
+  TryExec('ALTER TABLE symbol_facts ADD COLUMN mutates_params TEXT');
+  TryExec('ALTER TABLE symbol_facts ADD COLUMN ui_affinity TEXT'   );
+  TryExec('ALTER TABLE symbol_facts ADD COLUMN touches TEXT'       );
+  TryExec('ALTER TABLE symbol_facts ADD COLUMN wiring TEXT'        );
   { v11 (M1): direct ancestor edges (one row per heritage entry). Created here
     rather than in SCHEMA_DDL to avoid renumbering the FTS5 split index; it is
     plain DDL that must always exist (independent of FTS5 availability).
@@ -1008,10 +1015,11 @@ begin
     ' deprecated, start_line, end_line ' + 'FROM symbol_docs WHERE symbol_id = :sid');
 
   // v(ADP2 T1): symbol_facts UPSERT (keyed on symbol_id) + read-back.
+  // v19 (ADP3): extended with four new columns (mutates_params, ui_affinity, touches, wiring).
   FQPutSymbolFacts:= NewQuery(
     'INSERT OR REPLACE INTO symbol_facts ' + '(symbol_id, reads_fields, writes_fields, returns_owner, cyclomatic, ' +
-    ' body_loc, dfm_event, sql_reads, sql_writes, covered_by) ' +
-    'VALUES (:sid, :reads, :writes, :ret, :cyc, :loc, :dfm, :sqlr, :sqlw, :cov)');
+    ' body_loc, dfm_event, sql_reads, sql_writes, covered_by, mutates_params, ui_affinity, touches, wiring) ' +
+    'VALUES (:sid, :reads, :writes, :ret, :cyc, :loc, :dfm, :sqlr, :sqlw, :cov, :mut, :uia, :tch, :wir)');
   FQPutSymbolFacts.Params.ParamByName('sid'  ).DataType:= ftLargeint;
   FQPutSymbolFacts.Params.ParamByName('reads' ).DataType:= ftWideMemo;
   FQPutSymbolFacts.Params.ParamByName('writes').DataType:= ftWideMemo;
@@ -1022,11 +1030,16 @@ begin
   FQPutSymbolFacts.Params.ParamByName('sqlr'  ).DataType:= ftWideMemo;
   FQPutSymbolFacts.Params.ParamByName('sqlw'  ).DataType:= ftWideMemo;
   FQPutSymbolFacts.Params.ParamByName('cov'   ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('mut'   ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('uia'   ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('tch'   ).DataType:= ftWideMemo;
+  FQPutSymbolFacts.Params.ParamByName('wir'   ).DataType:= ftWideMemo;
   FQPutSymbolFacts.Prepare;
 
   FQGetSymbolFacts:= NewQuery(
     'SELECT reads_fields, writes_fields, returns_owner, cyclomatic, body_loc, ' +
-    ' dfm_event, sql_reads, sql_writes, covered_by ' + 'FROM symbol_facts WHERE symbol_id = :sid');
+    ' dfm_event, sql_reads, sql_writes, covered_by, mutates_params, ui_affinity, touches, wiring ' +
+    'FROM symbol_facts WHERE symbol_id = :sid');
 
   FQFindByDocTag:= NewQuery(
     'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE (:tag = ''deprecated'' AND d.deprecated = 1) ' +
@@ -2583,6 +2596,10 @@ begin
   SetNullableText('sqlr', AFacts.SqlReads );
   SetNullableText('sqlw', AFacts.SqlWrites);
   SetNullableText('cov' , AFacts.CoveredBy);
+  SetNullableText('mut' , AFacts.MutatesParams);
+  SetNullableText('uia' , AFacts.UiAffinity  );
+  SetNullableText('tch' , AFacts.Touches     );
+  SetNullableText('wir' , AFacts.Wiring      );
   FQPutSymbolFacts.ExecSQL;
 end; // procedure
 
@@ -2604,6 +2621,10 @@ begin
     Result.SqlReads    := FQGetSymbolFacts.FieldByName('sql_reads'    ).AsString;
     Result.SqlWrites   := FQGetSymbolFacts.FieldByName('sql_writes'   ).AsString;
     Result.CoveredBy   := FQGetSymbolFacts.FieldByName('covered_by'   ).AsString;
+    Result.MutatesParams:= FQGetSymbolFacts.FieldByName('mutates_params').AsString;
+    Result.UiAffinity  := FQGetSymbolFacts.FieldByName('ui_affinity'  ).AsString;
+    Result.Touches     := FQGetSymbolFacts.FieldByName('touches'      ).AsString;
+    Result.Wiring      := FQGetSymbolFacts.FieldByName('wiring'       ).AsString;
     Result.Present     := True;
   finally
     FQGetSymbolFacts.Close;

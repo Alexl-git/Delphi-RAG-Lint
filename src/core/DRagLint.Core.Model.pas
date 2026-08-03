@@ -106,6 +106,22 @@ type
     SqlReads    : string ;   // CSV of tables read
     SqlWrites   : string ;   // CSV of tables written
     CoveredBy   : string ;   // CSV of test qnames (capped)
+    /// <summary>v19 (ADP3 T11): var/out parameters the routine writes to,
+    /// display-ready, e.g. 'pReason (out), pList (var)'. '' when none.</summary>
+    MutatesParams: string;
+    /// <summary>v19 (ADP3 T12): VCL/DevExpress controls or Application/Screen
+    /// the routine touches, display-ready, e.g. 'cxGrid1, Application'. ''
+    /// when none -- POSITIVE FINDINGS ONLY, never a thread-safety claim.</summary>
+    UiAffinity   : string;
+    /// <summary>v19 (ADP3 T13): CATEGORIES of external resource touched, plus
+    /// transaction verbs, e.g. 'file system, registry|starts, commits'. The
+    /// pipe separates the resource list from the transaction list; either side
+    /// may be empty. '' when neither.</summary>
+    Touches      : string;
+    /// <summary>v19 (ADP3 T14): DI/ORM wiring joined from di_bindings /
+    /// orm_links / fb_relations, e.g. 'di:IFolderService (singleton)' or
+    /// 'ds:qryFolders -&gt; FOLDERS (ID, NAME)'. '' when none.</summary>
+    Wiring       : string;
     /// <summary>False when no symbol_facts row exists for SymbolId -- the
     /// renderer's cue to omit every derived doc-comment line entirely.</summary>
     Present     : Boolean;

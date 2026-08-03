@@ -14445,12 +14445,20 @@ begin
   Facts.SqlReads    := '';
   Facts.SqlWrites   := '';
   Facts.CoveredBy   := '';
+  Facts.MutatesParams:= '';
+  Facts.UiAffinity  := '';
+  Facts.Touches     := '';
+  Facts.Wiring      := '';
   Store.PutSymbolFacts(Facts);
 
   Got:= Store.GetSymbolFacts(Facts.SymbolId);
   Writeln(Format('RT=%s CYC=%d', [Got.ReturnsOwner, Got.Cyclomatic]));
   Writeln('READS='  , Got.ReadsFields );
   Writeln('WRITES=' , Got.WritesFields);
+  Writeln('MUT='    , Got.MutatesParams);
+  Writeln('UIA='    , Got.UiAffinity  );
+  Writeln('TCH='    , Got.Touches     );
+  Writeln('WIR='    , Got.Wiring      );
   Writeln(Format('PRESENT=%d', [Ord(Got.Present)]));
 
   // Present=False probe: a symbol_id with no symbol_facts row.
