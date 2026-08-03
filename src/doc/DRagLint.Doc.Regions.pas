@@ -1431,6 +1431,13 @@ begin
     // middle would rewrite every already-documented block in the corpus.
     if AFacts.MutatesParams <> '' then
       Lines.Add('Mutates: ' + EscXml(AFacts.MutatesParams));
+    // v(ADP3 T12): UI affinity -- POSITIVE FINDINGS ONLY. The absence of this
+    // line means "no UI touch was DETECTED", never "this routine is
+    // thread-safe": a stale curated list under-reports, and a thread-safety
+    // claim cannot be proven by this analysis. Nothing here may ever grow an
+    // `else` arm that says the opposite.
+    if AFacts.UiAffinity <> '' then
+      Lines.Add('UI thread only -- touches ' + EscXml(AFacts.UiAffinity));
     Result:= Lines.ToStringArray;
   finally
     Lines.Free;

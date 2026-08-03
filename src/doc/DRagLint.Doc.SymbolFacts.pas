@@ -768,6 +768,258 @@ begin
   end;
 end;
 
+const
+  // v(ADP3 T12): curated UI base types + globals. ENGINE KNOWLEDGE, not user
+  // configuration -- it lives here, next to the analysis that consumes it, not
+  // in the manifest. A STALE list UNDER-reports (the fact is simply omitted),
+  // it never emits a false claim, so growing it later is safe and
+  // non-breaking. That asymmetry is the whole reason the fact is
+  // positive-findings-only: see AnalyzeUiAffinity's header.
+  UI_BASE_TYPES: array[0..9] of string = (
+    'TControl', 'TWinControl', 'TForm', 'TFrame', 'TCustomForm',
+    'TGraphicControl', 'TcxControl', 'TcxCustomGrid', 'TdxBar', 'TCustomPanel');
+  UI_GLOBALS: array[0..1] of string = ('Application', 'Screen');
+
+// v(ADP3 T12): strips a unit qualifier and any generic argument list from a
+// declared-type text, leaving the bare type name. '' when there is none.
+function BareTypeName(const ATypeName: string): string;
+var P: Integer;
+begin
+  Result:= Trim(ATypeName);
+  if Result = '' then Exit;
+  P:= Pos('<', Result);
+  if P > 0 then Result:= Trim(Copy(Result, 1, P - 1));
+  P:= Result.LastDelimiter('.'); // Vcl.Forms.TForm -> TForm
+  if P >= 0 then Result:= Trim(Copy(Result, P + 2, MaxInt));
+end;
+
+// v(ADP3 T12): True when ATypeName is, or descends from, a curated UI base
+// type. Two arms, in cost order:
+//   1. DIRECT NAME -- the (qualifier-stripped) type name is itself on
+//      UI_BASE_TYPES. No store access at all.
+//   2. ANCESTRY -- the name resolves to a class symbol whose ancestor CHAIN
+//      reaches a curated name. This is what catches the shape real code is
+//      actually made of: `TMyPanel = class(TCustomPanel)`, or any generated
+//      form class, whose OWN name will never be on any list.
+// Unresolvable -> False. Absence over a wrong claim, the same stance
+// IsReferenceTypeName takes for its own tier-1 ground truth.
+//
+// THE CHAIN IS WALKED VIA TSymbol.Heritage, NOT GetTransitiveAncestors, and
+// that is a hard requirement of running at INDEX time rather than render time.
+// type_ancestors is populated by the RESOLVE pass, which runs AFTER the
+// per-file facts loop; re-indexing a file cascades its old rows away first, so
+// during Analyze that table is reliably EMPTY for the very file being analyzed.
+// Reproduced directly: the direct-name arm passed while the ancestry arm
+// returned nothing, on a first index AND on a forced re-index. Heritage is the
+// parser's raw ancestor text and is written with the symbol row itself, one
+// loop earlier, so it is the only ancestry signal that exists this early.
+//
+// Consequences, both accepted and both in the "under-report, never mis-report"
+// direction: a cross-unit ancestor whose unit has not been indexed yet is
+// invisible until the next run, and an ancestor named only through an alias the
+// resolve pass would have followed is not followed here.
+//
+// ACache memoizes per lowercased bare name for the lifetime of ONE routine's
+// analysis: a form method touches the same few control types repeatedly.
+function IsUiTypeName(const AStore: ISymbolStore; const ATypeName: string;
+  ACache: TDictionary<string, Boolean>): Boolean;
+
+  // Walks the Heritage chain upward from a type NAME. Bounded by ADepth and by
+  // ASeen (a cycle guard -- malformed/mutually-referencing heritage text must
+  // not spin here, since this runs per identifier per routine, corpus-wide).
+  function ChainReachesUi(const AName: string; ASeen: TStringList; ADepth: Integer): Boolean;
+  var
+    Cands: TArray<TSymbol>;
+    Cand : TSymbol        ;
+    Part : string         ;
+    Bare : string         ;
+  begin
+    Result:= False;
+    if (ADepth <= 0) or (AName = '') then Exit;
+    if ASeen.IndexOf(LowerCase(AName)) >= 0 then Exit;
+    ASeen.Add(LowerCase(AName));
+    if MatchText(AName, UI_BASE_TYPES) then Exit(True);
+
+    Cands:= AStore.FindSymbolsByExactName(AName);
+    for Cand in Cands do
+    begin
+      if not (Cand.Kind in [skClass, skInterface]) then Continue;
+      if Trim(Cand.Heritage) = '' then Continue;
+      // Heritage is a raw 'TBar, IBaz' list: an ancestor class plus any
+      // implemented interfaces. Every entry is followed -- a control type can
+      // sit behind either position depending on how the class was declared.
+      for Part in Cand.Heritage.Split([',']) do
+      begin
+        Bare:= BareTypeName(Part);
+        if Bare = '' then Continue;
+        if ChainReachesUi(Bare, ASeen, ADepth - 1) then Exit(True);
+      end;
+    end;
+  end;
+
+var
+  Bare : string     ;
+  Key  : string     ;
+  Seen : TStringList;
+begin
+  Result:= False;
+  Bare:= BareTypeName(ATypeName);
+  if Bare = '' then Exit;
+
+  Key:= LowerCase(Bare);
+  if (ACache <> nil) and ACache.TryGetValue(Key, Result) then Exit;
+
+  Seen:= TStringList.Create;
+  try
+    Seen.CaseSensitive:= False;
+    Result:= ChainReachesUi(Bare, Seen, 16);
+  finally
+    Seen.Free;
+  end;
+
+  if ACache <> nil then ACache.AddOrSetValue(Key, Result);
+end;
+
+// v(ADP3 T12): collects the UI-typed identifiers one routine body touches.
+// Node-shape rules are WalkFieldRW's, for the same reasons -- in particular
+// 'exprDot' walks its LHS ONLY, because the RHS is a member NAME: without that,
+// a method or property called `Application` would be counted as the VCL global.
+//
+// Resolution order per bare identifier, and the order is Pascal's own scoping:
+//   1. a routine-scoped local/parameter (TRoutineVarTable) -> its declared type;
+//   2. otherwise an own-class FIELD -> its declared type (a field symbol's
+//      Signature column carries it, verified against a scratch index);
+//   3. otherwise a curated GLOBAL name (Application/Screen), which a local or
+//      field of the same name therefore correctly shadows.
+// Anything that resolves to none of those is not reported.
+procedure WalkUiTouches(const N: TTSNode; const ASrc: TBytes; const AStore: ISymbolStore;
+  AVars: TRoutineVarTable; AFieldTypes: TDictionary<string, TPair<string, string>>;
+  ACache: TDictionary<string, Boolean>; AOut: TList<string>);
+
+  procedure MarkIdent(const AIdent: TTSNode);
+  var
+    Raw, Key, Disp, TypeName: string;
+    Idx : Integer;
+    RV  : TRoutineVar;
+    Pair: TPair<string, string>;
+  begin
+    if AIdent.IsNull or (AIdent.NodeType <> 'identifier') then Exit;
+    Raw:= Trim(FieldNodeStr(AIdent, ASrc));
+    if Raw = '' then Exit;
+    Key:= LowerCase(Raw);
+
+    Disp:= ''; TypeName:= '';
+    if AVars <> nil then
+    begin
+      Idx:= AVars.IndexOf(Key);
+      if Idx >= 0 then
+      begin
+        RV:= AVars.Get(Idx);
+        Disp:= RV.Display; TypeName:= RV.TypeText;
+      end;
+    end;
+    if (Disp = '') and (AFieldTypes <> nil) and AFieldTypes.TryGetValue(Key, Pair) then
+    begin
+      Disp:= Pair.Key; TypeName:= Pair.Value;
+    end;
+
+    if Disp = '' then
+    begin
+      // Neither a routine var nor an own-class field: the curated globals are
+      // the only remaining way an identifier can be a UI touch.
+      if not MatchText(Raw, UI_GLOBALS) then Exit;
+      if AOut.IndexOf(Raw) < 0 then AOut.Add(Raw);
+      Exit;
+    end;
+
+    if not IsUiTypeName(AStore, TypeName, ACache) then Exit;
+    if AOut.IndexOf(Disp) < 0 then AOut.Add(Disp);
+  end;
+
+var
+  I  : Integer;
+  Ent: TTSNode;
+begin
+  if N.IsNull then Exit;
+
+  if N.NodeType = 'identifier' then begin MarkIdent(N); Exit; end;
+
+  if N.NodeType = 'exprDot' then
+  begin
+    WalkUiTouches(N.ChildByField('lhs'), ASrc, AStore, AVars, AFieldTypes, ACache, AOut);
+    Exit; // rhs = member name, never itself a variable reference
+  end;
+
+  if N.NodeType = 'exprCall' then
+  begin
+    Ent:= N.ChildByField('entity');
+    WalkUiTouches(Ent, ASrc, AStore, AVars, AFieldTypes, ACache, AOut);
+    var ArgsN: TTSNode:= N.ChildByField('args');
+    if not ArgsN.IsNull then
+      for I:= 0 to ArgsN.NamedChildCount - 1 do
+        WalkUiTouches(ArgsN.NamedChild(I), ASrc, AStore, AVars, AFieldTypes, ACache, AOut);
+    Exit;
+  end;
+
+  for I:= 0 to N.NamedChildCount - 1 do
+    WalkUiTouches(N.NamedChild(I), ASrc, AStore, AVars, AFieldTypes, ACache, AOut);
+end;
+
+// v(ADP3 T12): fills the display-ready UI-affinity string for one routine --
+// the controls/globals it touches, e.g. 'FPanel, Application'. '' when none was
+// detected. AProc/ABody are the SAME nodes Analyze already matched.
+//
+// POSITIVE FINDINGS ONLY. This fact can say "a UI touch WAS detected"; it can
+// never say the converse. An empty result means "nothing was detected", NOT
+// "this routine is thread-safe", and no caller may render it as the latter --
+// the curated list under-reports by construction (a control type nobody has
+// added yet is invisible), so a thread-safety claim built on it would be false
+// exactly when it mattered most. tests\autodoc\run_doc_p3_ui.ps1 asserts the
+// words 'thread-safe'/'thread safe' appear in no generated block, permanently.
+function AnalyzeUiAffinity(const AProc, ABody: TTSNode; const ASrc: TBytes;
+  const ASym: TSymbol; const AStore: ISymbolStore): string;
+var
+  Vars  : TRoutineVarTable                        ;
+  Fields: TDictionary<string, TPair<string, string>>;
+  Cache : TDictionary<string, Boolean>            ;
+  Hits  : TList<string>                           ;
+  Kids  : TArray<TSymbol>                         ;
+  Kid   : TSymbol                                 ;
+  LKey  : string                                  ;
+begin
+  Result:= '';
+  if ABody.IsNull then Exit;
+  Vars  := nil;
+  Fields:= TDictionary<string, TPair<string, string>>.Create;
+  Cache := TDictionary<string, Boolean>.Create;
+  Hits  := TList<string>.Create;
+  try
+    // Own-class fields only, the same scope AnalyzeReadsWrites uses (see its
+    // header for why inherited fields are out of scope): display name + the
+    // declared type text, which for a field symbol lives in Signature.
+    if ASym.ParentId > 0 then
+    begin
+      Kids:= AStore.FindAllChildSymbols(ASym.ParentId);
+      for Kid in Kids do
+        if Kid.Kind = skField then
+        begin
+          LKey:= LowerCase(Kid.Name);
+          if not Fields.ContainsKey(LKey) then
+            Fields.Add(LKey, TPair<string, string>.Create(Kid.Name, Kid.Signature));
+        end;
+    end;
+
+    Vars:= TRoutineVarTable.Build(AProc, ASrc);
+    WalkUiTouches(ABody, ASrc, AStore, Vars, Fields, Cache, Hits);
+    Result:= JoinCappedDisplay(Hits, FIELD_RW_CAP);
+  finally
+    Hits.Free;
+    Cache.Free;
+    Fields.Free;
+    Vars.Free;
+  end;
+end;
+
 // ADP2 T6: process-wide, SINGLE-ENTRY memoized cache of one .dfm's parsed
 // event-binding map: HandlerName (lowercased key) -> display 'ObjectName.
 // EventProp'. Re-parses ONLY when GDfmCachePath differs from the requested
@@ -2140,6 +2392,10 @@ begin
         // parameter list, so a free routine is covered too. See
         // WalkMutatedParams' header for the classification rules.
         Result.MutatesParams:= AnalyzeMutatesParams(Proc, Body, PF.Src);
+        // v(ADP3 T12): UI affinity -- same matched Proc/Body, no 2nd AST scan.
+        // POSITIVE FINDINGS ONLY; see AnalyzeUiAffinity's header for why the
+        // empty result must never be rendered as a thread-safety claim.
+        Result.UiAffinity:= AnalyzeUiAffinity(Proc, Body, PF.Src, ASym, AStore);
         // ADP2 T7: SQL tables touched -- same matched Body node, no 2nd AST
         // scan. See AnalyzeSqlTables' header comment (above, this unit's
         // implementation section) for the full literal-concatenation +

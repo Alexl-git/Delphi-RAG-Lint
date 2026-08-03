@@ -160,6 +160,16 @@ type
     /// are deliberately not (an ordinary call's var argument, e.g. SetLength,
     /// and a dot LHS are both absent by design).</remarks>
     MutatesParams    : string           ;
+    /// <summary>v(ADP3 T12): the UI controls/globals the routine touches,
+    /// display-ready as 'FPanel, Application'. '' when none was DETECTED.</summary>
+    /// <remarks>POSITIVE FINDINGS ONLY. An empty value means "no UI touch was
+    /// detected", never "this routine is thread-safe", and no surface may
+    /// render it as the latter: the curated base-type list in
+    /// DRagLint.Doc.SymbolFacts under-reports by construction, so a
+    /// thread-safety claim built on it would be false exactly when it mattered.
+    /// RAW PASSTHROUGH of symbol_facts.ui_affinity, the same contract as
+    /// ReadsFields/MutatesParams above.</remarks>
+    UiAffinity       : string           ;
     // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE, computed LAZILY
     // here in Build (NOT read back from symbol_facts.covered_by, which stays
     // unwritten/reserved -- see DRagLint.Doc.SymbolFacts' unit banner "TASK 5
@@ -1373,6 +1383,8 @@ begin
   // v(ADP3 T11): var/out parameter writes -- same raw-passthrough contract
   // again (capped and formatted at analysis time by AnalyzeMutatesParams).
   Result.MutatesParams:= SFacts.MutatesParams;
+  // v(ADP3 T12): UI affinity -- same raw-passthrough contract.
+  Result.UiAffinity:= SFacts.UiAffinity;
   // v(ADP2 T6): DFM event-wiring -- same raw-passthrough contract as
   // Cyclomatic/BodyLoc/ReadsFields/WritesFields above (already the final
   // display string, computed at index time by DRagLint.Doc.SymbolFacts.
