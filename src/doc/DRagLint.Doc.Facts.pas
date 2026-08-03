@@ -170,6 +170,19 @@ type
     /// RAW PASSTHROUGH of symbol_facts.ui_affinity, the same contract as
     /// ReadsFields/MutatesParams above.</remarks>
     UiAffinity       : string           ;
+    /// <summary>v(ADP3 T13): the external surfaces and transaction verbs the
+    /// routine reaches, as the stored wire string 'resources|transactions' --
+    /// e.g. 'file system, registry|starts, commits'. Either side may be empty
+    /// ('file system|', '|starts, commits'); '' when nothing was detected.</summary>
+    /// <remarks>CATEGORIES, NEVER CALL SITES: the call site is already in
+    /// Calls:, and repeating it here would be two facts that can disagree. RAW
+    /// PASSTHROUGH of symbol_facts.touches -- the renderer splits on '|' and
+    /// omits an empty side, so the two display lines stay independent while the
+    /// column stays single. Positive findings only, like UiAffinity above: '' is
+    /// "nothing detected", not "no side effects". It is ALSO one of the five
+    /// inputs to the derived Pure line -- see
+    /// TDocRegions.FormatPhase2FactLines.</remarks>
+    Touches          : string           ;
     // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE, computed LAZILY
     // here in Build (NOT read back from symbol_facts.covered_by, which stays
     // unwritten/reserved -- see DRagLint.Doc.SymbolFacts' unit banner "TASK 5
@@ -1385,6 +1398,8 @@ begin
   Result.MutatesParams:= SFacts.MutatesParams;
   // v(ADP3 T12): UI affinity -- same raw-passthrough contract.
   Result.UiAffinity:= SFacts.UiAffinity;
+  // v(ADP3 T13): external surfaces + transaction verbs -- same contract.
+  Result.Touches:= SFacts.Touches;
   // v(ADP2 T6): DFM event-wiring -- same raw-passthrough contract as
   // Cyclomatic/BodyLoc/ReadsFields/WritesFields above (already the final
   // display string, computed at index time by DRagLint.Doc.SymbolFacts.

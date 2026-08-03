@@ -367,6 +367,12 @@ try {
     '/// <!-- drag-lint:auto BEGIN -->',
     '/// Called from: tagoccurrence.CallsPlainDocumented (tagoccurrence.pas)',
     '/// Returns: AValue * 2',
+    # v(ADP3 T13): PlainDocumented has a body and no detected effect, so the
+    # derived Pure line is part of the expected block now. Kept in the literal
+    # expectation rather than filtered out: this check exists precisely to
+    # catch churn in the ordinary shape, so a fact-line change SHOULD land here
+    # and be looked at, not be masked away.
+    '/// Pure',
     '/// <!-- drag-lint:auto END -->',
     '/// </remarks>'
   ) -join "`n"

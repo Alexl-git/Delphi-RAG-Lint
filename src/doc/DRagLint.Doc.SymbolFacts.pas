@@ -1020,6 +1020,153 @@ begin
   end;
 end;
 
+const
+  // v(ADP3 T13): curated external-surface lists. Same discipline as
+  // UI_BASE_TYPES (T12): engine knowledge, positive findings only, a stale list
+  // under-reports and never lies.
+  //
+  // THE LISTS ARE SPLIT BY MATCH SHAPE, not just by category, and that split is
+  // load-bearing. A bare name match would manufacture false claims on two of
+  // the commonest identifiers in any Delphi codebase:
+  //   * TYPE receivers ('TFile', 'TRegistry', ...) are matched ANYWHERE an
+  //     identifier appears. They are type names, so a collision is unlikely and
+  //     a `TFile` in the body means the RTL type in practice.
+  //   * BARE INTRINSICS ('Reset', 'Rewrite', ...) are matched ONLY as the
+  //     entity of a call that HAS ARGUMENTS. `Reset` and `CloseFile` are
+  //     perfectly ordinary method names; the intrinsics always take a file
+  //     variable, so requiring an argument list separates them from a user's
+  //     own parameterless `Reset;` without needing type resolution.
+  //   * TRANSACTION VERBS ('Commit', 'Rollback', ...) are matched ONLY as a DOT
+  //     MEMBER name -- `ATxn.Commit`. A free routine called Commit is not a
+  //     transaction, and the verbs are always invoked on a connection object.
+  // Residual, accepted, and in the under-report direction: a file variable
+  // opened through a helper this list does not name is invisible.
+  TOUCH_TYPE_FILE    : array[0..3] of string = ('TFile', 'TDirectory', 'TPath', 'TStreamWriter');
+  TOUCH_BARE_FILE    : array[0..3] of string = ('AssignFile', 'Rewrite', 'Reset', 'CloseFile');
+  TOUCH_TYPE_REGISTRY: array[0..1] of string = ('TRegistry', 'TRegistryIniFile');
+  TOUCH_TYPE_NETWORK : array[0..3] of string = ('THTTPClient', 'TIdHTTP', 'TNetHTTPClient', 'TIdTCPClient');
+  TOUCH_TXN_START    : array[0..0] of string = ('StartTransaction');
+  TOUCH_TXN_COMMIT   : array[0..1] of string = ('Commit', 'CommitRetaining');
+  TOUCH_TXN_ROLLBACK : array[0..1] of string = ('Rollback', 'RollbackRetaining');
+
+type
+  // v(ADP3 T13): what one body was observed to reach. Booleans, not lists: the
+  // fact renders CATEGORIES, never call sites -- the call site is already in
+  // 'Calls:', and repeating it here would be two facts that can disagree.
+  TTouchFlags = record
+    FileSys : Boolean;
+    Registry: Boolean;
+    Network : Boolean;
+    TxnStart: Boolean;
+    TxnCommit  : Boolean;
+    TxnRollback: Boolean;
+  end;
+
+// v(ADP3 T13): single classification walk for the Touches fact. See the const
+// block above for the match-shape rules, which this function is the executable
+// form of. Recurses into every named child; the shape tests are applied at the
+// 'exprCall'/'exprDot' nodes where the distinction is actually visible.
+procedure WalkTouches(const N: TTSNode; const ASrc: TBytes; var AFlags: TTouchFlags);
+
+  function IdentText(const ANode: TTSNode): string;
+  begin
+    Result:= '';
+    if (not ANode.IsNull) and (ANode.NodeType = 'identifier') then
+      Result:= Trim(FieldNodeStr(ANode, ASrc));
+  end;
+
+  // A TYPE receiver can appear anywhere; classify on the bare name alone.
+  procedure MarkTypeName(const AName: string);
+  begin
+    if AName = '' then Exit;
+    if MatchText(AName, TOUCH_TYPE_FILE    ) then AFlags.FileSys := True;
+    if MatchText(AName, TOUCH_TYPE_REGISTRY) then AFlags.Registry:= True;
+    if MatchText(AName, TOUCH_TYPE_NETWORK ) then AFlags.Network := True;
+  end;
+
+  // A dot MEMBER name -- the only shape a transaction verb is accepted in.
+  procedure MarkMember(const AName: string);
+  begin
+    if AName = '' then Exit;
+    if MatchText(AName, TOUCH_TXN_START   ) then AFlags.TxnStart   := True;
+    if MatchText(AName, TOUCH_TXN_COMMIT  ) then AFlags.TxnCommit  := True;
+    if MatchText(AName, TOUCH_TXN_ROLLBACK) then AFlags.TxnRollback:= True;
+  end;
+
+var
+  I        : Integer;
+  Ent, Args: TTSNode;
+begin
+  if N.IsNull then Exit;
+
+  if N.NodeType = 'identifier' then begin MarkTypeName(IdentText(N)); Exit; end;
+
+  if N.NodeType = 'exprDot' then
+  begin
+    MarkMember(IdentText(N.ChildByField('rhs')));
+    WalkTouches(N.ChildByField('lhs'), ASrc, AFlags);
+    Exit;
+  end;
+
+  if N.NodeType = 'exprCall' then
+  begin
+    Ent := N.ChildByField('entity');
+    Args:= N.ChildByField('args');
+    // The bare intrinsics, and ONLY with an argument list -- see the const
+    // block for why the argument requirement is what keeps `Reset;` out.
+    if (not Args.IsNull) and (Args.NamedChildCount > 0) then
+      if MatchText(IdentText(Ent), TOUCH_BARE_FILE) then AFlags.FileSys:= True;
+    WalkTouches(Ent, ASrc, AFlags);
+    if not Args.IsNull then
+      for I:= 0 to Args.NamedChildCount - 1 do
+        WalkTouches(Args.NamedChild(I), ASrc, AFlags);
+    Exit;
+  end;
+
+  for I:= 0 to N.NamedChildCount - 1 do
+    WalkTouches(N.NamedChild(I), ASrc, AFlags);
+end;
+
+// v(ADP3 T13): the external surfaces and transaction verbs one routine body
+// reaches, as the stored wire string 'resources|transactions' -- for example
+// 'file system, registry|starts, commits'. EITHER SIDE MAY BE EMPTY and the
+// separator is always present when anything was found ('file system|',
+// '|starts, commits'); '' when nothing was. The renderer splits on '|' and
+// omits an empty side, so the two display lines stay independent while the
+// column stays single. Categories and verbs are emitted in a FIXED order, never
+// discovery order, so the same code always produces the same bytes.
+function AnalyzeTouches(const ABody: TTSNode; const ASrc: TBytes): string;
+var
+  Flags: TTouchFlags;
+  Res  : string     ;
+  Txn  : string     ;
+
+  procedure AddTo(var ATarget: string; const AWord: string);
+  begin
+    if ATarget <> '' then ATarget:= ATarget + ', ';
+    ATarget:= ATarget + AWord;
+  end;
+
+begin
+  Result:= '';
+  if ABody.IsNull then Exit;
+  Flags:= Default(TTouchFlags);
+  WalkTouches(ABody, ASrc, Flags);
+
+  Res:= '';
+  if Flags.FileSys  then AddTo(Res, 'file system');
+  if Flags.Registry then AddTo(Res, 'registry');
+  if Flags.Network  then AddTo(Res, 'network');
+
+  Txn:= '';
+  if Flags.TxnStart    then AddTo(Txn, 'starts');
+  if Flags.TxnCommit   then AddTo(Txn, 'commits');
+  if Flags.TxnRollback then AddTo(Txn, 'rolls back');
+
+  if (Res = '') and (Txn = '') then Exit;
+  Result:= Res + '|' + Txn;
+end;
+
 // ADP2 T6: process-wide, SINGLE-ENTRY memoized cache of one .dfm's parsed
 // event-binding map: HandlerName (lowercased key) -> display 'ObjectName.
 // EventProp'. Re-parses ONLY when GDfmCachePath differs from the requested
@@ -2396,6 +2543,10 @@ begin
         // POSITIVE FINDINGS ONLY; see AnalyzeUiAffinity's header for why the
         // empty result must never be rendered as a thread-safety claim.
         Result.UiAffinity:= AnalyzeUiAffinity(Proc, Body, PF.Src, ASym, AStore);
+        // v(ADP3 T13): external surfaces + transaction verbs -- same matched
+        // Body, no 2nd AST scan. Stored as 'resources|transactions'; see
+        // AnalyzeTouches' header for the wire format and the match-shape rules.
+        Result.Touches:= AnalyzeTouches(Body, PF.Src);
         // ADP2 T7: SQL tables touched -- same matched Body node, no 2nd AST
         // scan. See AnalyzeSqlTables' header comment (above, this unit's
         // implementation section) for the full literal-concatenation +

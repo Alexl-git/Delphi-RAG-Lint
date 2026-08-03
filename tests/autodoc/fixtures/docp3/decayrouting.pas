@@ -42,15 +42,25 @@ procedure CallsQuotedBlockExact;
 //
 // The control for N5, and the only shape that reaches the containment scan's
 // mismatch path at all. Every previously-committed shape answers False through
-// the "inner is longer than outer" early-out, never through the loop. Here the
-// existing region is SIX lines and the block to insert is FIVE, so the loop
-// really runs, compares, and fails on ONE character: the quoted file name says
-// .pos where the real block says .pas.
+// the "inner is longer than outer" early-out, never through the loop. The
+// existing region must therefore stay AT LEAST AS LONG as the block the engine
+// would insert, so the loop really runs, compares, and fails on ONE character:
+// the quoted file name says .pos where the real block says .pas. The runner
+// derives both lengths and asserts that relation rather than trusting it.
+//
+// v(ADP3 T13): the quoted block gained a `Pure` line because the real one did
+// -- QuotedBlockNearMiss has a body and no detected effect, so the engine now
+// renders Pure for it. Without this line the existing region would be SHORTER
+// than the block to insert, the early-out would answer first, and the
+// discrimination check would (correctly) report that it no longer discriminates.
+// Keep the two in step: if the rendered fact lines change again, this quoted
+// copy must change with them, and only the .pos/.pas character may differ.
 
 /// <remarks></remarks>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: decayrouting.CallsQuotedBlockNearMiss (decayrouting.pos)
+/// Pure
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure QuotedBlockNearMiss;

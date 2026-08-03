@@ -286,7 +286,15 @@ type
     /// <returns>Zero or more display lines, in Complexity / Reads-Writes /
     /// Owns returned / Handles / SQL / Covered-by order; empty when AFacts
     /// carries none of the six.</returns>
-    class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10): TArray<string>;
+    /// <param name="AHasOtherContent">v(ADP3 T13): True when the caller's block
+    /// ALREADY carries content from outside this helper (the Phase-1 lines).
+    /// Governs the derived &lt;c&gt;Pure&lt;/c&gt; line ONLY: Pure never creates a block of
+    /// its own, because a doc block is a file edit and 'Pure' alone is a
+    /// statement about the ABSENCE of findings -- see the emit site for the full
+    /// reasoning. Defaults True so a read-only surface (hover), which is not
+    /// writing anything to disk, keeps showing it.</param>
+    class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
+      AHasOtherContent: Boolean = True): TArray<string>;
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
     /// managed facts block (fenced inside remarks) + managed param/summary/
@@ -1341,7 +1349,8 @@ end;
 // literal spaces for Reads/Writes, semicolon-space for SQL), same order.
 // Lines are UNPREFIXED -- callers (RenderFactsBlock, hover) each apply
 // whatever leading text their own surface needs.
-class function TDocRegions.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10): TArray<string>;
+class function TDocRegions.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
+  AHasOtherContent: Boolean = True): TArray<string>;
 var
   Lines: TStringList;
 begin
@@ -1438,6 +1447,50 @@ begin
     // `else` arm that says the opposite.
     if AFacts.UiAffinity <> '' then
       Lines.Add('UI thread only -- touches ' + EscXml(AFacts.UiAffinity));
+    // v(ADP3 T13): external surfaces touched, as CATEGORIES (not call sites)
+    // and transaction verbs. Stored as 'resources|transactions'; either side
+    // may be empty, and the whole line pair is omitted when both are.
+    if AFacts.Touches <> '' then
+    begin
+      var TouchParts: TArray<string>:= AFacts.Touches.Split(['|']);
+      if (Length(TouchParts) > 0) and (TouchParts[0] <> '') then
+        Lines.Add('Touches: ' + EscXml(TouchParts[0]));
+      if (Length(TouchParts) > 1) and (TouchParts[1] <> '') then
+        Lines.Add('Transaction: ' + EscXml(TouchParts[1]));
+    end;
+    // v(ADP3 T13): 'Pure' is DERIVED at render time from the other facts and
+    // has NO column of its own -- so it can never disagree with them. Emitted
+    // for a routine WITH A BODY that writes no field, mutates no var/out
+    // parameter, touches no external surface and reads/writes no SQL. It is a
+    // CONCLUSION, not an observation: it says "none of the effects this engine
+    // can detect were detected", which is exactly as strong as the facts
+    // beneath it -- and no stronger, which is why it is not called
+    // 'side-effect free'. Emitted LAST, per the fixed Phase 3 line order.
+    //
+    // BodyLoc > 0 is the with-a-body gate: an interface-only declaration, or a
+    // symbol with no symbol_facts row at all, reads 0 and must not be called
+    // Pure on the strength of five facts that were never computed.
+    //
+    // PURE NEVER CREATES A BLOCK OF ITS OWN -- the AHasOtherContent gate. This
+    // is a DEVIATION from the plan's snippet, taken deliberately after the
+    // literal version was implemented and run. `Pure` is true of a very large
+    // fraction of any real codebase, so an unconditional emit gives a managed
+    // block to nearly every trivial effect-free routine -- reversing the
+    // long-standing "omit when empty" contract corpus-wide, and silently: five
+    // existing suites assert in so many words that a symbol with nothing to say
+    // gets NO managed block at all (run_doc_p2_sql's 'NoSql has NO managed
+    // block at all (no fact fires)' and its four siblings), and every one of
+    // them went red on the literal version. Writing a doc block into a file is
+    // an EDIT; the bar for creating one is "there was something to say", and
+    // 'Pure' alone is a statement about the absence of findings. It still
+    // appears on every block that exists for any other reason, which is where
+    // it is actually useful. Widening this later is one condition; unwinding a
+    // corpus-wide block explosion is not.
+    if (AFacts.BodyLoc > 0)
+       and (AFacts.WritesFields = '') and (AFacts.MutatesParams = '')
+       and (AFacts.Touches = '') and (AFacts.SqlWrites = '') and (AFacts.SqlReads = '')
+       and ((Lines.Count > 0) or AHasOtherContent) then
+      Lines.Add('Pure');
     Result:= Lines.ToStringArray;
   finally
     Lines.Free;
@@ -1617,7 +1670,9 @@ begin
     // value comes from, and the per-line omit-when-empty/threshold rules --
     // this call site only adds APrefix per line, byte-identical to the
     // pre-extraction output.
-    for var P2Line in FormatPhase2FactLines(AFacts, AComplexityMin) do
+    // AHasOtherContent: Sb already holds every Phase-1 line for this symbol, so
+    // its emptiness IS the test for 'this block would not exist but for Pure'.
+    for var P2Line in FormatPhase2FactLines(AFacts, AComplexityMin, Sb.Length > 0) do
       Sb.AppendLine(APrefix + P2Line);
     // v(ADF T5): OPT-IN git <since> line. AFacts.Since is '' unless the caller
     // built the facts with --since (TDocFactsBuilder.Build's AIncludeSince) AND

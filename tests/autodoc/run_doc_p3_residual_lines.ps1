@@ -239,7 +239,11 @@ Check 'CONTROL FullyModeledControl: each modeled tag appears EXACTLY once (nothi
    (([regex]::Matches(($b -join "`n"), '<param ')).Count -eq 1) -and `
    (([regex]::Matches(($b -join "`n"), '<returns>')).Count -eq 1)) ($b -join ' | ')
 Check 'CONTROL FullyModeledControl: exactly the pristine tag lines plus ONE facts <remarks> block' `
-  ((@($b | Where-Object { $_ -notmatch '<remarks>|</remarks>|drag-lint:auto|Called from:|Returns:|Used in units:|Calls:' })).Count -eq $pristine['FullyModeledControl'].Count) ($b -join ' | ')
+  ((@($b | Where-Object { $_ -notmatch '<remarks>|</remarks>|drag-lint:auto|Called from:|Returns:|Used in units:|Calls:|^\s*///\s*Pure\s*$' })).Count -eq $pristine['FullyModeledControl'].Count) ($b -join ' | ')
+# ^ v(ADP3 T13): 'Pure' joins the engine-generated lines this mask subtracts.
+#   Anchored on the WHOLE line so the word can never be masked out of an
+#   author's prose -- the point of this check is that NOTHING of the author's is
+#   added to or lost from the pristine tag lines.
 
 Write-Host ''
 Write-Host '--- IMPORTANT 1: the accounted-span mask must agree with the MODEL -------------'
