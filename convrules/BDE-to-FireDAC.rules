@@ -19,9 +19,45 @@
 //   leaf's NAME is unique among ALL target last-segments and exactly one such
 //   target is castable. Nothing ambiguous was guessed.
 //
-// WHAT STILL NEEDS A HUMAN:
-//   * Every block's '#note outstanding:' line counts the source properties that
-//     got NO target. They were deliberately left out rather than invented.
+// EVERY SOURCE PROPERTY CARRIES A DIRECTIVE. A property that got no target is
+//   not silently absent: it gets a block-scoped '#ignore <FromPath>', which is the
+//   documented way to say 'intentionally NOT mapped'. On top of that, a property
+//   that is unmapped in EVERY block exposing it and read by NO #link anywhere also
+//   gets a machine-derived file-scope '#remove' in section 1, so it is stripped
+//   from the result rather than carried over dead.
+//
+// A '#remove' is only derived when it is provably safe. '#remove' is FILE-SCOPED
+//   and takes a BARE property name -- it has no '<Class>:' qualifier the way
+//   #migrate does -- so it hits every component in the converted file. Three
+//   things therefore BLOCK a derived #remove, each flagged by its own #note:
+//
+//   * '#note CONFLICT'      -- unmapped here, but #link'd in another block (or by
+//                              a sub-property of the same name in this one).
+//                              Removing it would strip it from under that link.
+//   * '#note NEAR-MISS'     -- unmapped, but THIS target still HAS the property;
+//                              Auto-Match only declined because the two type names
+//                              do not bridge (TableName is TFileName on BDE and
+//                              String on FireDAC). These are unresolved MAPPINGS,
+//                              not deletions -- #remove'ing one would silently
+//                              destroy a live property. Link them by hand.
+//   * '#note NAME COLLISION'-- no counterpart on this target, but another block's
+//                              target has a property of that name.
+//
+// '#remove X' AND '#remove DFM: X' ARE NOT THE SAME STATEMENT -- do not conflate
+//   them, in this file or when you extend it:
+//     #remove X       strips X from BOTH the .pas and the .dfm. X is GONE. It is
+//                     a decision, it settles the property, and X must not also
+//                     be #link'd. (Corpus: SessionName, PrivateDir.)
+//     #remove DFM: X  drops ONLY the value persisted in the .dfm and KEEPS the
+//                     property in code. It is NOT evidence that X is unassigned:
+//                     it must not suppress a #link, and it does not count toward
+//                     the outstanding total. (Corpus: Origin -- the one DFM-only
+//                     line in the corpus, and Origin IS #link'd, on purpose.)
+//
+// WHAT STILL NEEDS A HUMAN, in priority order:
+//   * every '#note NEAR-MISS' line -- these are the cheapest real wins: the target
+//     property exists and is named, so each is one hand-made #link;
+//   * every '#note CONFLICT' and '#note NAME COLLISION' line -- a judgement call;
 //   * The #migrate lines at the bottom could not become property links -- they
 //     rename METHODS (Session.*, FindDatabase, AddAlias, TDatabase:Execute), or
 //     enum types with no property that carries them (TUpdateKind, TUpdateAction,
@@ -51,6 +87,40 @@
 #remove PrivateDir
 #remove DFM: Origin
 
+// MACHINE-DERIVED (not corpus): each property below is unmapped in EVERY
+// #convert block that exposes it, and NO #link anywhere reads it, so stripping
+// it file-wide cannot pull the rug from under another block. Each one also
+// carries a block-scoped #ignore at its own #convert, so the intent is stated
+// twice on purpose: #ignore says 'not mapped', #remove says 'and delete it'.
+// NOTE #remove is FILE-SCOPED and takes a BARE property name -- it has no
+// '<Class>:' qualifier -- so a generically-named entry here (Source,
+// Destination, Mappings, ...) will also strip that property from any OTHER
+// component in the converted file. Delete the ones you are not sure about.
+#remove AbortOnKeyViol
+#remove AbortOnProblem
+#remove AutoRefresh
+#remove AutoSessionName
+#remove ChangedTableName
+#remove Constrained
+#remove DefaultIndex
+#remove Destination
+#remove HandleShared
+#remove HasConstraints
+#remove IndexFiles
+#remove KeepConnections
+#remove KeyViolTableName
+#remove NetFileDir
+#remove OnPassword
+#remove OnStartup
+#remove ParamCheck
+#remove ProblemTableName
+#remove Ranged
+#remove RecordCount
+#remove SQLHourGlass
+#remove StoreDefs
+#remove TableType
+#remove Transliterate
+
 // ---------------------------------------------------------------------------
 // 2. Enum-valued property conversions (corpus). Only the two groups that a
 //    #convert block below actually consumes are expressed as #mapping; the
@@ -73,15 +143,28 @@
 // ---------------------------------------------------------------------------
 
 #convert Bde.DBTables.TSession -> FireDAC.Comp.Client.TFDManager, FireDAC.Comp.Client
-#note 11 source properties; 0 corpus-supplied, 3 auto-matched, 8 left for you.
+#note 11 source properties: 0 corpus-supplied, 3 auto-matched, 0 via #mapping,
+#note 8 unmapped -- every one of them named in an #ignore below, none silent.
 #note auto-matched by the editor's Auto-Match rule -- review before applying.
 #link Active <- Active
 #link Name <- Name
 #link Tag <- Tag
-#note outstanding: 8 source properties with no target -- left out rather than guessed.
+#note unmapped -- each line below is a decision, not an omission:
+#note - 6 also #remove'd file-wide (unmapped everywhere, read by no #link).
+#note - 2 already decided by the corpus's own file-scope #remove -- NOT
+#note - counted as work, and deliberately not #remove'd a second time.
+#ignore AutoSessionName
+#ignore KeepConnections
+#ignore NetFileDir
+#ignore PrivateDir
+#ignore SessionName
+#ignore SQLHourGlass
+#ignore OnPassword
+#ignore OnStartup
 
 #convert Bde.DBTables.TDatabase -> FireDAC.Comp.Client.TFDConnection, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Error, FireDAC.UI.Intf, FireDAC.Phys.Intf, FireDAC.Stan.Def, FireDAC.Stan.Pool, FireDAC.Stan.Async, FireDAC.Phys, FireDAC.Comp.Client
-#note 19 source properties; 2 corpus-supplied, 10 auto-matched, 6 left for you.
+#note 19 source properties: 2 corpus-supplied, 10 auto-matched, 1 via #mapping,
+#note 6 unmapped -- every one of them named in an #ignore below, none silent.
 #note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
 #link ConnectionName <- DatabaseName
 #link ConnectionDefName <- AliasName
@@ -98,10 +181,29 @@
 #link BeforeDisconnect <- BeforeDisconnect
 #link Name <- Name
 #link Tag <- Tag
-#note outstanding: 6 source properties with no target -- left out rather than guessed.
+#note unmapped -- each line below is a decision, not an omission:
+#note - 1 also #remove'd file-wide (unmapped everywhere, read by no #link).
+#note - 1 already decided by the corpus's own file-scope #remove -- NOT
+#note - counted as work, and deliberately not #remove'd a second time.
+#note - NEAR-MISS: OnLogin (TDatabaseLoginEvent) is unmapped, but THIS target still has OnLogin (TFDConnectionLoginEvent).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - CONFLICT: Exclusive is unmapped here but #link'd in TTable -- NO #remove
+#note - emitted (it is file-scoped and would strip it there too). Decide by hand.
+#note - CONFLICT: Params is unmapped here but #link'd in TQuery, TStoredProc -- NO #remove
+#note - emitted (it is file-scoped and would strip it there too). Decide by hand.
+#note - CONFLICT: ReadOnly is unmapped here but #link'd in TAutoIncField, TTable -- NO #remove
+#note - emitted (it is file-scoped and would strip it there too). Decide by hand.
+#ignore Exclusive
+#ignore HandleShared
+#ignore Params
+#ignore ReadOnly
+#ignore SessionName
+#ignore OnLogin
 
 #convert Bde.DBTables.TTable -> FireDAC.Comp.Client.TFDTable, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param, FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client
-#note 89 source properties; 3 corpus-supplied, 73 auto-matched, 13 left for you.
+#note 89 source properties: 3 corpus-supplied, 73 auto-matched, 0 via #mapping,
+#note 13 unmapped -- every one of them named in an #ignore below, none silent.
 #note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
 #link ConnectionName <- DatabaseName
 #link UpdateOptions.UpdateMode <- UpdateMode
@@ -180,10 +282,43 @@
 #link FieldDefList.FieldDefs.Name <- FieldDefList.FieldDefs.Name
 #link Name <- Name
 #link Tag <- Tag
-#note outstanding: 13 source properties with no target -- left out rather than guessed.
+#note unmapped -- each line below is a decision, not an omission:
+#note - 6 also #remove'd file-wide (unmapped everywhere, read by no #link).
+#note - 1 already decided by the corpus's own file-scope #remove -- NOT
+#note - counted as work, and deliberately not #remove'd a second time.
+#note - NEAR-MISS: TableName (TFileName) is unmapped, but THIS target still has TableName (String).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - NEAR-MISS: UpdateObject (TDataSetUpdateObject) is unmapped, but THIS target still has UpdateObject (TFDCustomUpdateObject).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - NEAR-MISS: OnUpdateError (TUpdateErrorEvent) is unmapped, but THIS target still has OnUpdateError (TFDUpdateErrorEvent).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - NEAR-MISS: OnUpdateRecord (TUpdateRecordEvent) is unmapped, but THIS target still has OnUpdateRecord (TFDUpdateRecordEvent).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - CONFLICT: FieldDefs is unmapped here but #link'd in TQuery, TStoredProc -- NO #remove
+#note - emitted (it is file-scoped and would strip it there too). Decide by hand.
+#note - CONFLICT: IndexDefs is unmapped as a whole, but IndexDefs.* sub-properties ARE
+#note - #link'd in this very block -- NO #remove, it would strip them too.
+#ignore DefaultIndex
+#ignore FieldDefs
+#ignore IndexDefs
+#ignore IndexFiles
+#ignore StoreDefs
+#ignore TableName
+#ignore TableType
+#ignore UpdateObject
+#ignore Ranged
+#ignore AutoRefresh
+#ignore SessionName
+#ignore OnUpdateError
+#ignore OnUpdateRecord
 
 #convert Bde.DBTables.TQuery -> FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param, FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client
-#note 81 source properties; 5 corpus-supplied, 68 auto-matched, 8 left for you.
+#note 81 source properties: 5 corpus-supplied, 68 auto-matched, 0 via #mapping,
+#note 8 unmapped -- every one of them named in an #ignore below, none silent.
 #note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
 #link ConnectionName <- DatabaseName
 #link FetchOptions.Unidirectional <- Unidirectional
@@ -259,20 +394,43 @@
 #link FieldDefList.FieldDefs.Name <- FieldDefList.FieldDefs.Name
 #link Name <- Name
 #link Tag <- Tag
-#note outstanding: 8 source properties with no target -- left out rather than guessed.
+#note unmapped -- each line below is a decision, not an omission:
+#note - 3 also #remove'd file-wide (unmapped everywhere, read by no #link).
+#note - 1 already decided by the corpus's own file-scope #remove -- NOT
+#note - counted as work, and deliberately not #remove'd a second time.
+#note - NEAR-MISS: UpdateObject (TDataSetUpdateObject) is unmapped, but THIS target still has UpdateObject (TFDCustomUpdateObject).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - NEAR-MISS: OnUpdateError (TUpdateErrorEvent) is unmapped, but THIS target still has OnUpdateError (TFDUpdateErrorEvent).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - NEAR-MISS: OnUpdateRecord (TUpdateRecordEvent) is unmapped, but THIS target still has OnUpdateRecord (TFDUpdateRecordEvent).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - CONFLICT: Params is unmapped here but #link'd in TStoredProc -- NO #remove
+#note - emitted (it is file-scoped and would strip it there too). Decide by hand.
+#ignore Constrained
+#ignore ParamCheck
+#ignore Params
+#ignore UpdateObject
+#ignore AutoRefresh
+#ignore SessionName
+#ignore OnUpdateError
+#ignore OnUpdateRecord
 
 #convert Bde.DBTables.TUpdateSQL -> FireDAC.Comp.Client.TFDUpdateSQL, FireDAC.Comp.Client
-#note 5 source properties; 0 corpus-supplied, 5 auto-matched, 0 left for you.
+#note 5 source properties: 0 corpus-supplied, 5 auto-matched, 0 via #mapping,
+#note 0 unmapped -- every one of them named in an #ignore below, none silent.
 #note auto-matched by the editor's Auto-Match rule -- review before applying.
 #link ModifySQL <- ModifySQL
 #link InsertSQL <- InsertSQL
 #link DeleteSQL <- DeleteSQL
 #link Name <- Name
 #link Tag <- Tag
-#note outstanding: 0 source properties with no target -- left out rather than guessed.
 
 #convert Bde.DBTables.TStoredProc -> FireDAC.Comp.Client.TFDStoredProc, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param, FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client
-#note 76 source properties; 1 corpus-supplied, 68 auto-matched, 7 left for you.
+#note 76 source properties: 1 corpus-supplied, 68 auto-matched, 0 via #mapping,
+#note 7 unmapped -- every one of them named in an #ignore below, none silent.
 #note corpus -- from FireDAC_Migrate_BDE.rules; do not let Auto-Match overwrite these.
 #link ConnectionName <- DatabaseName
 #note auto-matched by the editor's Auto-Match rule -- review before applying.
@@ -344,10 +502,35 @@
 #link FieldDefList.FieldDefs.Name <- FieldDefList.FieldDefs.Name
 #link Name <- Name
 #link Tag <- Tag
-#note outstanding: 7 source properties with no target -- left out rather than guessed.
+#note unmapped -- each line below is a decision, not an omission:
+#note - 1 also #remove'd file-wide (unmapped everywhere, read by no #link).
+#note - 1 already decided by the corpus's own file-scope #remove -- NOT
+#note - counted as work, and deliberately not #remove'd a second time.
+#note - NEAR-MISS: ParamBindMode (TParamBindMode) is unmapped, but THIS target still has ParamBindMode (TFDParamBindMode).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - NEAR-MISS: UpdateObject (TDataSetUpdateObject) is unmapped, but THIS target still has UpdateObject (TFDCustomUpdateObject).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - NEAR-MISS: OnUpdateError (TUpdateErrorEvent) is unmapped, but THIS target still has OnUpdateError (TFDUpdateErrorEvent).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - NEAR-MISS: OnUpdateRecord (TUpdateRecordEvent) is unmapped, but THIS target still has OnUpdateRecord (TFDUpdateRecordEvent).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - CONFLICT: Params is unmapped here but #link'd in TQuery -- NO #remove
+#note - emitted (it is file-scoped and would strip it there too). Decide by hand.
+#ignore Params
+#ignore ParamBindMode
+#ignore UpdateObject
+#ignore AutoRefresh
+#ignore SessionName
+#ignore OnUpdateError
+#ignore OnUpdateRecord
 
 #convert Data.DB.TParam -> FireDAC.Stan.Param.TFDParam, FireDAC.Stan.Param
-#note 7 source properties; 0 corpus-supplied, 7 auto-matched, 0 left for you.
+#note 7 source properties: 0 corpus-supplied, 7 auto-matched, 0 via #mapping,
+#note 0 unmapped -- every one of them named in an #ignore below, none silent.
 #note auto-matched by the editor's Auto-Match rule -- review before applying.
 #link DataType <- DataType
 #link Precision <- Precision
@@ -356,10 +539,10 @@
 #link ParamType <- ParamType
 #link Size <- Size
 #link Value <- Value
-#note outstanding: 0 source properties with no target -- left out rather than guessed.
 
 #convert Data.DB.TParams -> FireDAC.Stan.Param.TFDParams, FireDAC.Stan.Param
-#note 7 source properties; 0 corpus-supplied, 7 auto-matched, 0 left for you.
+#note 7 source properties: 0 corpus-supplied, 7 auto-matched, 0 via #mapping,
+#note 0 unmapped -- every one of them named in an #ignore below, none silent.
 #note auto-matched by the editor's Auto-Match rule -- review before applying.
 #link Items.DataType <- Items.DataType
 #link Items.Precision <- Items.Precision
@@ -368,10 +551,10 @@
 #link Items.ParamType <- Items.ParamType
 #link Items.Size <- Items.Size
 #link Items.Value <- Items.Value
-#note outstanding: 0 source properties with no target -- left out rather than guessed.
 
 #convert Data.DB.TAutoIncField -> FireDAC.Comp.DataSet.TFDAutoIncField, FireDAC.Comp.DataSet
-#note 32 source properties; 0 corpus-supplied, 31 auto-matched, 1 left for you.
+#note 32 source properties: 0 corpus-supplied, 31 auto-matched, 0 via #mapping,
+#note 1 unmapped -- every one of them named in an #ignore below, none silent.
 #note auto-matched by the editor's Auto-Match rule -- review before applying.
 #link MaxValue <- MaxValue
 #link MinValue <- MinValue
@@ -404,19 +587,47 @@
 #link OnValidate <- OnValidate
 #link Name <- Name
 #link Tag <- Tag
-#note CONFLICT: the file-scope '#remove DFM: Origin' above deletes Origin,
-#note but Auto-Match paired it here. Decide which one you want.
-#note outstanding: 1 source property with no target -- left out rather than guessed.
+#note BOTH RULES STAND -- do not 'fix' this by deleting either one.
+#note 'Origin <- Origin' above is a REAL mapping: Origin is the one inherited
+#note Data.DB.TField.Origin, and both TAutoIncField and
+#note TFDAutoIncField descend from Data.DB.TField, so it is
+#note literally the same property on both sides.
+#note The file-scope '#remove DFM: Origin' is COMPLEMENTARY, not contradictory: the
+#note 'DFM:' prefix drops only the VALUE persisted in the old form -- a
+#note BDE-format string such as 'DBDEMOS.CUSTOMER.CUSTNO' that is stale
+#note once the dataset is FireDAC. The property itself is kept and stays
+#note assignable at run time, which is exactly what the #link preserves.
+#note unmapped -- each line below is a decision, not an omission:
+#note - 1 also #remove'd file-wide (unmapped everywhere, read by no #link).
+#ignore HasConstraints
 
 #convert Bde.DBTables.TBatchMove -> FireDAC.Comp.BatchMove.TFDBatchMove, FireDAC.Comp.BatchMove
-#note 14 source properties; 0 corpus-supplied, 3 auto-matched, 10 left for you.
+#note 14 source properties: 0 corpus-supplied, 3 auto-matched, 1 via #mapping,
+#note 10 unmapped -- every one of them named in an #ignore below, none silent.
 #note corpus -- enum-valued property, handled by the #mapping above.
 #apply BdeBatchMode
 #note auto-matched by the editor's Auto-Match rule -- review before applying.
 #link CommitCount <- CommitCount
 #link Name <- Name
 #link Tag <- Tag
-#note outstanding: 10 source properties with no target -- left out rather than guessed.
+#note unmapped -- each line below is a decision, not an omission:
+#note - 8 also #remove'd file-wide (unmapped everywhere, read by no #link).
+#note - NEAR-MISS: Mappings (TStrings) is unmapped, but THIS target still has Mappings (TFDBatchMoveMappings).
+#note - Auto-Match declined only because the two type names do not bridge.
+#note - NOT #remove'd -- that would delete a live property. Link it by hand.
+#note - NAME COLLISION: Source is unmapped here and has no counterpart on
+#note - this target, but TTable's target has IndexDefs.Items.Source. #remove is file-scoped, so
+#note - removing it would strip that one too. #ignore only; decide by hand.
+#ignore AbortOnKeyViol
+#ignore AbortOnProblem
+#ignore ChangedTableName
+#ignore Destination
+#ignore KeyViolTableName
+#ignore Mappings
+#ignore ProblemTableName
+#ignore RecordCount
+#ignore Source
+#ignore Transliterate
 
 // ---------------------------------------------------------------------------
 // 4. Corpus lines that could NOT become property links -- carried verbatim.

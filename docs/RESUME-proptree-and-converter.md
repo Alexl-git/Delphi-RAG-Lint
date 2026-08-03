@@ -1,9 +1,97 @@
 # RESUME — proptree ancestor scope + converter/editor fixes
 
-Cold-start pointer. Last updated **2026-08-02** (Phase G complete). Read this first, then
-the SDD ledger named below.
+Cold-start pointer. Last updated **2026-08-02** (Phase G complete + conversion library
+assembled). Read this first, then the SDD ledger named below.
 
-## Status
+## RESUME POINT — 2026-08-02 (latest; everything below this section is older history)
+
+**Next action: the user is hand-debugging the BDE -> FireDAC conversion library.** They open it
+at the DEPLOYED path; the canonical copy is in this repo.
+
+- Open: `C:\Projects\Delphi-RAG-lint-converter\third_party\dll-win64\convrules\BDE-to-FireDAC.rules`
+- Canonical: `convrules\BDE-to-FireDAC.rules` (this repo)
+- The DSL: `docs\converter\convrules-dsl.md`. The tool: `docs\converter\convrules-editor-manual.md`.
+- Full build log + coverage table + every conflict:
+  `.superpowers\sdd\2026-07-30-converter-editor-phase-g\conversion-library-report.md`
+  (and `progress.md` beside it -- the whole plan's decision ledger).
+
+### Branch state -- DIVERGED, do not fast-forward blindly
+
+| Ref | Commit | Note |
+|---|---|---|
+| `merge/converter-into-main` | `0d16ffe` | this work, tree CLEAN, 126 unpushed |
+| `main` | `13e7fb0` | drag-lint ENGINE team cherry-picked their fixes here |
+| common base | `c1385d0` | **1 ahead each -- a merge, not a ff** |
+
+**Another Claude session is active in `C:\Projects\Delphi-RAG-lint`** (the wiki hot cache records
+two sessions colliding there on 2026-08-02). Coordinate before merging. Nothing is pushed, by
+standing instruction -- nothing goes to GitHub until engine and editor match and are tested on
+real project forms.
+
+### What the library contains
+
+341 From-side properties across 10 `#convert` blocks =
+**11 corpus-supplied + 275 auto-matched + 2 via `#mapping` + 53 unmapped**. Every unmapped
+property now carries an explicit directive -- nothing is silently dropped. Loads with 0
+`rnkUnknown`, round-trips byte-exactly, ~300 lines reconstruct from parsed fields.
+Suite **594 pass / 0 fail / 0 skip**.
+
+**Genuinely open for a human: 13, not 53** -- 8 NEAR-MISS lines (one hand-made `#link` each)
+plus 5 cross-block conflicts. The other 40 are `#ignore`d or `#remove`d with a stated reason.
+
+**The 8 near-misses split into two causes -- verified 2026-08-02. Triage them separately:**
+
+- **Cause A: a missing DECLARATION in the index, not a cast rule.** `TTable.TableName : TFileName`
+  vs `TFDTable.TableName : String` -- same name, top-level both sides, and legal Delphi. It failed
+  only because **`TFileName` has no declaration row**: strong type aliases (`T = type X`) are never
+  indexed (`TCaption`, `TDate`, `TTime` likewise; subranges and enums are fine). Filed as INBOX
+  **2.11**. **When the engine fixes that, re-run the matcher and these should resolve themselves --
+  do not hand-write them yet.**
+- **Cause B: the target path is NESTED, and this will never auto-match.** `TFDTable`, `TFDQuery`
+  and `TFDConnection` have **zero top-level `ReadOnly`** -- only `UpdateOptions.ReadOnly` /
+  `TxOptions.ReadOnly` (plus `CheckReadOnly`). BDE's is top-level. Auto-Match declined *correctly*:
+  pass 1 wants the same full path, pass 2 wants a globally unique last segment and `ReadOnly` is
+  not unique. This is exactly why Embarcadero hand-wrote `#link UpdateOptions.ReadOnly <- ReadOnly`
+  for `TTable`; the `TDatabase` equivalent is almost certainly
+  `#link TxOptions.ReadOnly <- ReadOnly`. **These are the ones to do by hand.**
+
+### Gotchas that will bite a cold start
+
+1. **`#remove <prop>` is FILE-SCOPED.** There is no `[<Class>:]` qualifier (unlike `#migrate`),
+   so it strips the property from every component in the file. A literal "auto-`#remove` every
+   unassigned property" rule was measured and is **unsafe**: 8 of 32 would have deleted a
+   property the FireDAC target still has, including `#remove TableName` silently stripping
+   `TFDTable.TableName`. Those are `#note NEAR-MISS` lines instead.
+2. **`#remove DFM: X` is NOT `#remove X`.** It keeps the property in the `.pas` and drops only
+   the stale persisted DFM value. It is not evidence the property is unassigned. `Origin` is the
+   corpus's only such line, and `Origin` IS legitimately `#link`ed -- both rules stand, pinned by
+   `convlib.bde2fd.removes.dont.strip.links`.
+3. **`convert-validate` rejects `#mapping`/`#apply`** (12 findings on this file, all of that
+   kind). Known engine gap, filed. Everything else validates clean.
+4. **Deploy `ConvRulesEditor.exe` + `drag-lint.exe` as a PAIR** -- the editor passes
+   `--refs-as-leaves` and an older engine treats it as FATAL. On 2026-08-02 only the editor was
+   deployed, because the engine already present was newer and supported the flag. Verify with
+   `drag-lint.exe --help | findstr refs-as-leaves`.
+5. **Use `_local.bat` to build.** The plain `build\_build_convrules_*.bat` used to hard-code
+   `C:\Projects\Delphi-RAG-lint\...` and would build/stage the MAIN checkout from a worktree
+   while printing `BUILD_EXITCODE=0`. Now fixed to forward, but know why.
+6. **The console suite does NOT link the form units** -- a green suite says nothing about GUI
+   behaviour. Form work is verified by driving the real exe.
+7. **drag-lint DBs are grandfathered after the engine team's `13e7fb0` fix** -- every existing
+   index kept a stale parse across engine upgrades. Each needs one `--force-reparse`, including
+   `C:\Projects\.drag-lint\convrules-worktree.sqlite`.
+
+### Filed with the drag-lint engine team
+
+`C:\Projects\Delphi-RAG-lint\docs\INBOX-converter-editor-phase-g-engine-findings.md` (untracked)
+-- 10 findings. They have already fixed two (`context` omitting routine bodies; the stale-parse
+skip). Still open and worth chasing: **`convert-validate` should recognise and SKIP
+`#mapping`/`#apply`** (small, unblocks authoring), and **`--refs-as-leaves` does not prune 7
+component-reference roots** (354 of 364 `TFDUpdateSQL` leaves were phantom).
+
+---
+
+## Status (historical)
 
 **`main` = `659e665`, 80 commits ahead of `origin/main`, NOT pushed** (user holds push).
 
