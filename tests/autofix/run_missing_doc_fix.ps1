@@ -8,7 +8,7 @@
   stubs project-wide).
 
   Fixture: fixtures\missingdocfix\missfix.pas
-    Undocumented(Value: Integer): Integer  -- line 16, public, NO doc, has a
+    Undocumented(Value: Integer): Integer  -- line 25, public, NO doc, has a
         param + a caller (CallsIt) -> the missing-doc finding whose Fix-it
         inserts a document-qname comment (<returns> from the mined
         `Result := Value + 1` case, plus the Called-from facts block).
@@ -23,7 +23,7 @@
   missing-doc + doc-drift are store-backed (only run on lint-all/lint-project),
   and ship OFF by default (ADF Task 11b) -> enabled here via --config.
 
-  Part A -- single-fix WORKS: lint-all --fix --fix-line 16 --fix-rule missing-doc
+  Part A -- single-fix WORKS: lint-all --fix --fix-line 25 --fix-rule missing-doc
     --apply INSERTS a /// DocInsight comment with a managed block on the
     Undocumented decl (matching document --qname output -- post-T3 that is
     <returns> + the facts block, and deliberately no <summary>/<param>).
@@ -44,7 +44,11 @@ function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),
 
 $exePath = (Resolve-Path $Exe).Path
 $fixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\missingdocfix\missfix.pas')).Path
-$L       = 16   # the Undocumented decl line in the fixture
+$L       = 25   # the Undocumented decl line in the fixture
+# v(ADP3 T15): was 16. The fixture's explanatory header moved ABOVE `interface`
+# (it was being harvested into a <summary>, which is what A3 exists to forbid),
+# which pushed the declaration down. This number and the fixture must move
+# together -- A0 fails loudly if they ever drift apart.
 
 # ---- Part A + B: single-fix (own scratch) ---------------------------------
 $scratch = Join-Path C:\TEMP 'draglint_missdocfix_single'
@@ -67,7 +71,7 @@ try {
   $findings = @()
   if ($aS -ge 0 -and $aE -gt $aS) { $findings = @(ConvertFrom-Json $rawL.Substring($aS, $aE - $aS + 1)) }
   $md = @($findings | Where-Object { $_.rule -eq 'missing-doc' -and $_.start_line -eq $L })
-  Check 'A0 missing-doc finding present on the Undocumented line (16)' ($md.Count -ge 1)
+  Check 'A0 missing-doc finding present on the Undocumented line (25)' ($md.Count -ge 1)
 
   # --- Part A: single-fix INSERTS the document-qname comment ---
   # ADF Task 13: missing-doc ships OFF by default, so --fix must opt it in via
