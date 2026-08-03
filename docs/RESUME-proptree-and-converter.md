@@ -1,7 +1,8 @@
 # RESUME — proptree ancestor scope + converter/editor fixes
 
-Cold-start pointer. Last updated **2026-08-02** (Phase G complete + conversion library
-assembled). Read this first, then the SDD ledger named below.
+Cold-start pointer. Last updated **2026-08-03** (indexes rebuilt to schema v19; the
+editor+engine PAIR is deployed; both "HELD FOR A HUMAN" items are now done). Read this
+first, then the SDD ledger named below.
 
 ## RESUME POINT — 2026-08-02 (latest; everything below this section is older history)
 
@@ -160,14 +161,24 @@ corpus **imported as product files** in the new top-level `convrules\` directory
 G6 is deferred by design. **G8 (the DSL design message + human manual) is NOT started and
 is the natural next piece of work.**
 
-**HELD FOR A HUMAN -- (1) the deploy.** Task 10 Step 3 (copy `ConvRulesEditor.exe` AND
-`drag-lint.exe` + `drag-lint.json` + the three `tree-sitter*.dll` into
-`C:\Projects\Delphi-RAG-lint-converter\third_party\dll-win64\`) was deliberately NOT done:
-it writes into another checkout and overwrites binaries a human uses. It needs explicit
-confirmation. **When it happens, they must go as a PAIR** -- see the gotcha below.
+**~~HELD FOR A HUMAN~~ -- (1) the deploy. DONE 2026-08-03, on explicit confirmation.**
+All six files (`ConvRulesEditor.exe`, `drag-lint.exe`, `drag-lint.json`, the three
+`tree-sitter*.dll`) were copied into
+`C:\Projects\Delphi-RAG-lint-converter\third_party\dll-win64\` as a PAIR, every one
+SHA256-verified against the source. The previous set is in
+`_backup-pre-v19-20260803-103203\` beside them.
 
-**HELD FOR A HUMAN -- (2) the merge.** `merge/converter-into-main` has not been merged
-into `main`.
+The editor was **rebuilt first**: the copy deployed on 08-02 at 11:33 predated three
+commits (`9a41030`, `a2bee3b`, `0d16ffe`) -- exactly the stale-binary trap the gotcha
+below warns about, and it had already happened once. Fresh Win64 build, staged, hashes
+match, console suite **594 pass / 0 fail / 594**.
+
+The deployed `drag-lint.json` is the repo's, which is a strict superset of the one it
+replaced (two added `exclude` globs); nothing converter-specific was lost.
+
+**~~HELD FOR A HUMAN~~ -- (2) the merge. DONE.** `merge/converter-into-main` was merged
+into `main` (`da7e05f`) on 2026-08-03, and `main` has since been pushed. `git branch
+--no-merged main` is empty.
 
 **Do not push.** `main` is 99 ahead of `origin/main` on purpose: nothing is published until
 the converter engine and the editor match and are both tested on several real project forms.
@@ -242,9 +253,16 @@ the library index. Details in item 3 below.
   mystery — it is NOT the agent tool's timeout, and running detached or under Task Scheduler does
   not protect you. The hazard is concurrency: do not run a long index/proptree job while another
   session builds.
-- **`C:\Projects\.drag-lint\library-Win32.sqlite` is a ~9.5 MB fragment of a ~1.9 GB index.** It
-  answers queries and silently misses almost everything — authoritative for **nothing**. Use
-  `library-Win64.sqlite` (1.87 GB, schema 18) and treat it as read-only (`--no-write-back`).
+- ~~**`C:\Projects\.drag-lint\library-Win32.sqlite` is a ~9.5 MB fragment of a ~1.9 GB index.**~~
+  **FIXED 2026-08-03.** The v19 rollout rebuilt it from scratch: it is now **2.09 GB with
+  2,295,181 symbols** (Win64 is 2,160,051), and both are at schema 19. Either platform is
+  authoritative now; still treat them as read-only (`--no-write-back`).
+- **Go-to-definition on `TColor` changed with that rebuild, and it is not a regression.** The
+  complete index carries a third row the old one lacked, so `TColor` now resolves to
+  `System.UITypes.pas` (the real declaration) rather than `Vcl.Graphics.pas` (an alias of it).
+  That is what `UnitFamilyRank` has always specified — `System.*` outranks `Vcl.*`. The
+  VCL-over-FMX preference that this tool actually depends on is unaffected (`TEdit`, `TLabel`
+  and `TButton` have no `System.*` row); `gotodef.live.tcolor.is.system` pins the new answer.
 - **Never write into `C:\Projects\Delphi-RAG-lint`** (autodoc group, `feat/autodoc-phase3`, dozens
   of dirty files) **or `C:\Projects\Delphi-RAG-lint-converter`** (`feat/converter-editor`, carries a
   third workstream's uncommitted edits to `ConvRules.Engine.pas` — the same file Phase 2 touches,

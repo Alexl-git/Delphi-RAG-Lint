@@ -53,6 +53,24 @@ Push `main` once green. Note `main` was already 128 commits ahead of
 
 ## 2. The one piece of Phase 3 that is genuinely unfinished
 
+> **DONE 2026-08-03.** All nine manifest DBs are at `schema_version = 19` with
+> populated `mutates_params` / `ui_affinity` / `touches`. Section 6 of the INBOX
+> note is filled in with the per-DB table. Two things the plan below did not
+> anticipate:
+>
+> * **`--force-reparse` is mandatory.** Without it the migration adds the columns
+>   but leaves them NULL on every row, because the incremental walk skips
+>   unchanged files. `library-Win64.sqlite` was already v19 with the columns and
+>   **0 of 398,055 rows populated**.
+> * **`ORM3\drag-lint.sqlite` was bricked** -- stamped v19 with v18 columns, so
+>   every open FATALed and the `>=` gate meant the migration never retried. Had
+>   to be deleted and rebuilt. Filed as
+>   `docs/INBOX-schema-migration-not-atomic.md` (the migration stamps the version
+>   outside the transaction that adds the columns).
+>
+> Run as three concurrent processes (`--only <sections>` / `--only Library
+> --platform win32|win64`); ~3.6 h wall clock for the two library platforms.
+
 **Reindex the nine manifest DBs to schema v19.**
 
 ```bash
@@ -82,8 +100,10 @@ Conversions need four things true at once. Two are already true:
 |---|---|---|
 | 1 | Engine carries the converter INBOX fixes (2.1, 2.4, 2.6, 2.8, 2.9, 2.10, 2.11) | **Done**, but split across `main` (2.1, 2.11) and the autodoc branch (the rest) -- **step 1 is what brings them together** |
 | 2 | The BDE->FireDAC rules library | **Done**, on `merge/converter-into-main` -- also step 1 |
-| 3 | `ConvRulesEditor.exe` + `drag-lint.exe` **deployed as a PAIR** | **Not done** -- see below |
-| 4 | Indexes at v19 so the new columns and the NOCASE indexes exist | **Not done** -- step 2 |
+| 3 | `ConvRulesEditor.exe` + `drag-lint.exe` **deployed as a PAIR** | **Done 2026-08-03** -- editor rebuilt first (the deployed copy was 3 commits stale), suite 594/594, all six files SHA256-verified into the converter checkout, previous set backed up |
+| 4 | Indexes at v19 so the new columns and the NOCASE indexes exist | **Done 2026-08-03** -- all nine at v19 with facts populated; needed `--force-reparse`, see step 2 |
+
+**All four are now true. Conversions are unblocked.**
 
 **On (3): the pair rule is load-bearing.** The editor and the engine must be
 deployed together; a mismatched pair is the failure mode the converter team

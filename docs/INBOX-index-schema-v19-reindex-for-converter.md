@@ -77,17 +77,74 @@ Relevant to anything of yours that reads or writes DocInsight comments:
 
 ## 6. Which DBs are at v19
 
-**Not yet rebuilt.** The Phase 3 rollout (plan Task 17) had not run when this message
-was written, so **every DB on this machine is still at its previous version**. This
-section will be filled in with the actual `schema_version` per DB once the reindex
-completes; until then, introspect the specific `.sqlite` you are about to read:
+**Done -- all nine manifest DBs were rebuilt on 2026-08-03** with drag-lint
+`1.2.2-alpha` (Win64). Every one reads `schema_version = 19` and carries populated
+values in the three writable new columns.
 
-```sql
-SELECT value FROM schema_meta WHERE key = 'schema_version';
+| Section | DB file | `schema_version` | symbols | `symbol_facts` rows | non-empty `mutates_params` / `ui_affinity` / `touches` |
+|---|---|---|---|---|---|
+| `ORM3` | `drag-lint.sqlite` | 19 | 74,230 | 13,267 | 355 / 302 / 463 |
+| `SQL` | `drag-lint-sql.sqlite` | 19 | 4,631 | 0 | 0 / 0 / 0 |
+| `Loader` | `Loader.sqlite` | 19 | 7,824 | 463 | 13 / 80 / 105 |
+| `TableTools` | `TableTools.sqlite` | 19 | 1,280 | 152 | 6 / 4 / 10 |
+| `DragLint` | `Delphi-RAG-lint.sqlite` | 19 | 20,653 | 3,586 | 177 / 60 / 326 |
+| `DragLintGraph` | `Delphi-RAG-Lint-Graph.sqlite` | 19 | 2,362 | 399 | 20 / 1 / 14 |
+| `OCRPDF` | `OCRPDF.sqlite` | 19 | 505 | 53 | 3 / 3 / 10 |
+| `Library[Win32]` | `library-Win32.sqlite` | 19 | 2,295,181 | 418,255 | 9,826 / 14,701 / 755 |
+| `Library[Win64]` | `library-Win64.sqlite` | 19 | 2,160,051 | 396,099 | 9,084 / 14,583 / 717 |
+
+`SQL`'s zero is correct, not a gap: that DB indexes `MS*.SQL` migration scripts only
+(4,631 symbols, all `sql_table` / `sql_column` / `sql_procedure` / `sql_trigger` /
+`sql_domain` / `sql_generator`). `symbol_facts` is produced per **Pascal routine**, so
+a DB with no Pascal has no fact rows.
+
+`wiring` reads 0 non-empty in every DB. That is **by design** -- see section 4; do not
+read it as a rebuild failure.
+
+`YADF.sqlite` and `YADFOT.sqlite` are not manifest sections and were not part of this
+rollout; introspect them before use.
+
+### 6a. `--force-reparse` is MANDATORY on this upgrade -- read before you reindex
+
+The v18 -> v19 migration adds the columns but **does not repopulate them**. An ordinary
+incremental `index` run skips every file whose `path + mtime + sha` is unchanged, so its
+`symbol_facts` rows are never rewritten and all four new columns stay NULL. Before the
+force-reparse, `library-Win64.sqlite` was already stamped v19 and had the columns, with
+**0 of 398,055 rows populated** -- a consumer querying it would have concluded "no
+routine in the RTL mutates a var parameter".
+
+The command actually used (three concurrent processes, ~3.6 h wall clock for the two
+library platforms on 9 cores):
+
+```
+drag-lint index --all --config third_party\dll-win64\drag-lint.json ^
+  --only ORM3,SQL,Loader,TableTools,DragLint,DragLintGraph,OCRPDF --jobs 3 --force-reparse
+drag-lint index --all --config third_party\dll-win64\drag-lint.json --only Library --platform win32 --jobs 2 --force-reparse
+drag-lint index --all --config third_party\dll-win64\drag-lint.json --only Library --platform win64 --jobs 4 --force-reparse
 ```
 
-The DBs in scope for that rollout are the nine manifest entries plus `YADF.sqlite`
-(v18) and `YADFOT.sqlite` (still v17).
+`--jobs` needs `--config`. `--only <Section>` plus `--platform` splits the two library
+platforms into separate processes writing separate DBs, which is safe -- SQLite locking
+is per-DB.
+
+**If you ever see an empty new column, check whether the DB was force-reparsed before
+concluding the fact does not apply.**
+
+### 6b. One DB had to be deleted and rebuilt -- the migration is not atomic
+
+`ORM3\drag-lint.sqlite` was found stamped `schema_version = 19` while `symbol_facts`
+still had only the v18 columns. Because the version gate is `>=`, the migration never
+retried, and **every open of that DB then failed hard**:
+
+```
+FATAL: ESQLiteNativeException: [FireDAC][Phys][SQLite] ERROR:
+       table symbol_facts has no column named mutates_params
+```
+
+The only recovery was to delete the file and index from scratch (the pre-existing
+`-shm` / `-wal` siblings suggest the earlier run was interrupted mid-migration). Filed
+as a defect: `docs/INBOX-schema-migration-not-atomic.md`. If a DB of yours FATALs this
+way, do not try to repair it -- delete and rebuild.
 
 ## 7. Not relevant to the converter
 
