@@ -183,6 +183,18 @@ type
     /// inputs to the derived Pure line -- see
     /// TDocRegions.FormatPhase2FactLines.</remarks>
     Touches          : string           ;
+    /// <summary>v(ADP3 T14): DI/ORM wiring -- '; '-joined 'di:'/'ds:' entries,
+    /// e.g. 'di:IFolderService (singleton)'. '' when the symbol is neither
+    /// registered nor linked to a relation.</summary>
+    /// <remarks>CONTROLLER OVERRIDE, exactly like CoveredBy above: computed
+    /// LAZILY here in Build via DRagLint.Doc.SymbolFacts.ComputeWiring, NOT read
+    /// back from symbol_facts.wiring, which stays unwritten/reserved. orm_links
+    /// is produced by a separate post-index pass, so an index-time value would
+    /// be empty on every first index and would afterwards point at symbol ids
+    /// that no longer exist -- see ComputeWiring's own header. A pure join over
+    /// already-indexed tables; no AST analysis, so a failed parse cannot
+    /// suppress it.</remarks>
+    Wiring           : string           ;
     // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE, computed LAZILY
     // here in Build (NOT read back from symbol_facts.covered_by, which stays
     // unwritten/reserved -- see DRagLint.Doc.SymbolFacts' unit banner "TASK 5
@@ -1427,6 +1439,12 @@ begin
   // like Cyclomatic/ReadsFields above: ComputeCoveredBy itself early-outs
   // to '' for a non-routine ASym, so no kind-guard is duplicated here.
   Result.CoveredBy:= ComputeCoveredBy(AStore, ASym);
+
+  // v(ADP3 T14): DI/ORM wiring -- the SECOND controller override, for the same
+  // class of reason as CoveredBy above (the data is not in place when the facts
+  // loop runs). A pure join over di_bindings/orm_links/fb_relations/fb_columns;
+  // symbol_facts.wiring stays unwritten/reserved. See ComputeWiring's header.
+  Result.Wiring:= ComputeWiring(AStore, ASym);
 end;
 
 end.

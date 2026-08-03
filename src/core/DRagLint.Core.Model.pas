@@ -222,6 +222,18 @@ type
     EndCol       : Integer;
   end;
 
+  /// <summary>v(ADP3 T14): one ORM dataset link -- a Delphi symbol tied by the
+  /// orm-link pass to a Firebird relation, with that relation's leading columns
+  /// in declaration order. Backs the doc/hover 'Dataset: qryFolders -&gt;
+  /// FOLDERS (ID, NAME)' line.</summary>
+  /// <remarks>Columns is CAPPED by the reader, not by the renderer, so the row
+  /// is display-ready in the same sense reads_fields is: the store decides how
+  /// many columns are worth carrying, and every consumer shows the same set.</remarks>
+  TOrmDatasetLink = record
+    RelationName: string        ;
+    Columns     : TArray<string>;
+  end;
+
   /// <summary>One indexed string-literal occurrence (a message, caption, or
   /// exception text). SymbolId is the enclosing routine/component, resolved by
   /// the indexer post-parse (0 in parser output). Text is the DECODED logical

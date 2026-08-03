@@ -193,6 +193,50 @@ try {
   $hoverMd3 = (& $exePath hover --qname p2hover.TBusy.Complex --db $db --format md 2>&1) -join "`n"
   Check 'reindex + re-hover: Complexity line unchanged' ((Get-FactLine $hoverMd3 'Complexity') -eq $hoverComplexity2)
   Check 'reindex + re-hover: Reads/Writes line unchanged' ((Get-FactLine $hoverMd3 'Reads') -eq $hoverRW2)
+
+  # =========================================================================
+  # v(ADP3 T14): THE PHASE 3 EXTENSION OF THE v(ADP2 T9) CONSISTENCY LOCK.
+  #
+  # All four Phase 3 facts render through the SAME shared
+  # TDocRegions.FormatPhase2FactLines that the six Phase 2 lines do, so hover
+  # gets them "for free" -- and "for free" is exactly the claim that needs a
+  # test, because the freeness is a property of the call graph, not of the
+  # language. If someone ever inlines the helper into RenderFactsBlock, or adds
+  # a Phase 3 line to the doc path only, the doc block and the hover popup start
+  # showing different facts for the same symbol and NOTHING else would notice.
+  #
+  # Mutates: is the fact under test (plan §7 asks for at least one of the four).
+  # The comparison is on the fact line's TEXT, after stripping the doc block's
+  # '/// ' prefix and hover's markdown bolding, so it survives cosmetic
+  # differences in framing but not a difference in the fact itself.
+  # =========================================================================
+  $p3dir = Join-Path C:\TEMP 'draglint_docp2hover_p3'
+  if (Test-Path $p3dir) { Remove-Item $p3dir -Recurse -Force }
+  New-Item -ItemType Directory -Path $p3dir | Out-Null
+  $p3src = Join-Path $p3dir 'mutates.pas'
+  $p3db  = Join-Path $p3dir 'p3.sqlite'
+  Copy-Item (Join-Path $PSScriptRoot 'fixtures\docp3\mutates.pas') $p3src -Force
+
+  & $exePath index $p3dir --db $p3db 2>$null | Out-Null
+  & $exePath document --unit $p3src --db $p3db --apply 2>$null | Out-Null
+  & $exePath index $p3dir --db $p3db 2>$null | Out-Null
+
+  # The doc side: the Mutates line out of the emitted block, /// stripped.
+  $docMut = ''
+  foreach ($l in [IO.File]::ReadAllLines($p3src)) {
+    $t = ($l -replace '^\s*///\s?','').Trim()
+    if ($t -match '^Mutates: (.*)$') { $docMut = $Matches[1].Trim(); break }
+  }
+  # The hover side: the same line out of the markdown render, bolding stripped.
+  $p3Hover = (& $exePath hover --qname mutates.FillBoth --db $p3db --format md 2>&1) -join "`n"
+  $hovMut  = ''
+  $hm = [regex]::Match($p3Hover, '(?m)^\W*\*{0,2}Mutates:\*{0,2}\s*(.+?)\s*$')
+  if ($hm.Success) { $hovMut = $hm.Groups[1].Value.Trim() }
+
+  Check 'CONSISTENCY (ADP3): the doc block carries a Mutates: line' ($docMut -ne '') "doc=[$docMut]"
+  Check 'CONSISTENCY (ADP3): hover carries a Mutates: line'         ($hovMut -ne '') $p3Hover
+  Check 'CONSISTENCY (ADP3): doc and hover show the SAME Mutates: text' `
+    (($docMut -ne '') -and ($docMut -eq $hovMut)) "doc=[$docMut] hover=[$hovMut]"
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

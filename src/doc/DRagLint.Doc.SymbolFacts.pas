@@ -252,6 +252,22 @@ function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
 /// detected as a test -- see IsTestRoutine for the two detection rules.</returns>
 function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): string;
 
+/// <summary>v(ADP3 T14): the DI/ORM wiring string for ASym -- '; '-joined
+/// entries, each &lt;c&gt;di:&lt;interface&gt; (&lt;lifetime&gt;)&lt;/c&gt; or
+/// &lt;c&gt;ds:&lt;symbol&gt; -&gt; &lt;RELATION&gt; (&lt;COL&gt;, &lt;COL&gt;)&lt;/c&gt;. '' when the
+/// symbol is neither registered nor linked.</summary>
+/// <param name="AStore">Open symbol store; not owned. Must not be nil.</param>
+/// <param name="ASym">The symbol to describe. A method is wired through its
+/// owning class, so ASym.ParentId is followed for the DI lookup.</param>
+/// <returns>The stored wire string, or ''.</returns>
+/// <remarks>A pure JOIN over already-indexed tables -- no AST analysis at all,
+/// so a failed parse cannot suppress it. CONTROLLER OVERRIDE, computed lazily
+/// at render time like ComputeCoveredBy and for the same class of reason:
+/// orm_links is written by a separate post-index pass, so an index-time column
+/// would be empty on every first index and stale-by-dead-id afterwards. See the
+/// implementation's own header for the full argument.</remarks>
+function ComputeWiring(const AStore: ISymbolStore; const ASym: TSymbol): string;
+
 type
   /// <summary>Index-time analyzer that derives a TSymbolFacts row for one
   /// routine symbol -- the single call site the indexer uses for every fact
@@ -2653,6 +2669,108 @@ begin
   if ParentSym.Kind <> skClass then Exit;
   for Anc in AStore.GetTransitiveAncestors(ParentSym.Id) do
     if SameText(Anc.Name, 'TTestCase') then Exit(True);
+end;
+
+// v(ADP3 T14): DI/ORM wiring for one symbol, as the stored wire string --
+// '; '-joined entries, each 'di:<interface> (<lifetime>)' or
+// 'ds:<symbol> -> <RELATION> (<COL>, <COL>)'. '' when the symbol is neither
+// registered nor linked. NO NEW AST ANALYSIS: this is a pure join over tables
+// the index already carries (di_bindings, orm_links, fb_relations, fb_columns).
+//
+// COMPUTED AT RENDER TIME, NOT INDEX TIME -- a deliberate deviation from the
+// plan, and the SECOND fact to need it after ADP2 T5's CoveredBy, for the same
+// class of reason: the data does not exist yet when the facts loop runs.
+//   * orm_links is written by a SEPARATE pass (DRagLint.Sql.OrmLinker, the
+//     `orm-link` command), which starts with `DELETE FROM orm_links` and
+//     rebuilds. It is not part of `index` at all. An index-time wiring column
+//     would therefore be EMPTY on every first index, and could only pick the
+//     links up on a later reindex -- which re-inserts the Delphi symbols with
+//     NEW ids, leaving the orm_links rows (whose delphi_symbol_id has no FK and
+//     so is never cascaded) pointing at symbols that no longer exist. The fact
+//     would be reliably wrong rather than occasionally stale.
+//   * di_bindings IS written during the same index pass, so that half could
+//     have been index-time; splitting one fact across two computation times to
+//     save one query would be a worse trade than the query.
+// symbol_facts.wiring therefore stays UNWRITTEN/RESERVED, exactly as
+// symbol_facts.covered_by does -- see TDocFacts.CoveredBy's own field comment.
+//
+// A METHOD IS WIRED THROUGH ITS CLASS. `Registered as:` is a property of the
+// registered type, so for a method the lookup uses the owning class's name
+// (ASym.ParentId); for a class symbol it uses its own. The dataset link is
+// looked up for both the symbol and its parent, since orm-link may attach
+// either.
+function ComputeWiring(const AStore: ISymbolStore; const ASym: TSymbol): string;
+var
+  Entries : TStringList        ;
+  TypeName: string             ;
+  OwnerId : Int64              ;
+  Parent  : TSymbol            ;
+  B       : TDiBindingRow      ;
+  L       : TOrmDatasetLink    ;
+
+  procedure AddDatasetLinks(ASymbolId: Int64; const ADisplay: string);
+  var Lk: TOrmDatasetLink; Cols: string; I: Integer;
+  begin
+    if ASymbolId <= 0 then Exit;
+    for Lk in AStore.FindOrmDatasetLinks(ASymbolId) do
+    begin
+      Cols:= '';
+      for I:= 0 to High(Lk.Columns) do
+      begin
+        if I > 0 then Cols:= Cols + ', ';
+        Cols:= Cols + Lk.Columns[I];
+      end;
+      if Cols <> '' then
+        Entries.Add(Format('ds:%s -> %s (%s)', [ADisplay, Lk.RelationName, Cols]))
+      else
+        Entries.Add(Format('ds:%s -> %s', [ADisplay, Lk.RelationName]));
+    end;
+  end;
+
+begin
+  Result:= '';
+  if ASym.Id <= 0 then Exit;
+
+  Entries:= TStringList.Create;
+  try
+    Entries.Duplicates:= dupIgnore; // the same registration can be reachable twice
+    // --- DI: what is this type registered as? -------------------------------
+    TypeName:= '';
+    OwnerId := 0;
+    if ASym.Kind = skClass then
+    begin
+      TypeName:= ASym.Name;
+      OwnerId := ASym.Id;
+    end
+    else if ASym.ParentId > 0 then
+    begin
+      Parent:= AStore.GetSymbolById(ASym.ParentId);
+      if Parent.Kind = skClass then
+      begin
+        TypeName:= Parent.Name;
+        OwnerId := Parent.Id;
+      end;
+    end;
+    if TypeName <> '' then
+      for B in AStore.FindDiBindingsForImpl(TypeName) do
+        if Trim(B.InterfaceName) <> '' then
+        begin
+          if Trim(B.Lifetime) <> '' then
+            Entries.Add(Format('di:%s (%s)', [B.InterfaceName, B.Lifetime]))
+          else
+            Entries.Add(Format('di:%s', [B.InterfaceName]));
+        end;
+
+    // --- ORM: which relation does this symbol read/write? -------------------
+    AddDatasetLinks(ASym.Id, ASym.Name);
+    if (OwnerId > 0) and (OwnerId <> ASym.Id) then
+      AddDatasetLinks(OwnerId, TypeName);
+
+    if Entries.Count = 0 then Exit;
+    Result:= string.Join('; ', Entries.ToStringArray);
+  finally
+    Entries.Free;
+  end;
 end;
 
 function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): string;

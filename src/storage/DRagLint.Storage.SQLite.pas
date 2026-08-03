@@ -232,6 +232,8 @@ type
       function DumpAllCallEdges: TArray<TCallEdge>;
       function GetAmbiguousCalls(const AQName, AFilePath: string): TArray<TResolvedCaller>;
       function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
+      function FindDiBindingsForImpl( const AImplName: string): TArray<TDiBindingRow>;
+      function FindOrmDatasetLinks(ASymbolId: Int64; AMaxColumns: Integer = 4): TArray<TOrmDatasetLink>;
       function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
       function FindDiUnresolved: TArray<TReference>                                       ;
       function FindEventHandlersForForm( const AFormName: string): TArray<TReference>     ;
@@ -1934,6 +1936,113 @@ begin
     end;
     Result:= List.ToArray;
   finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+// v(ADP3 T14): the reverse of FindImplementationsOf -- see the ISymbolStore
+// declaration. COLLATE NOCASE rather than a lowercased comparison so
+// idx_di_impl can still serve the lookup; Pascal type names are
+// case-insensitive, and the extractor stores whatever spelling the source used.
+function TSQLiteSymbolStore.FindDiBindingsForImpl(const AImplName: string): TArray<TDiBindingRow>;
+var
+  Q   : TFDQuery            ;
+  List: TList<TDiBindingRow>;
+  B   : TDiBindingRow       ;
+begin
+  List:= TList<TDiBindingRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT * FROM di_bindings WHERE impl_name = :impl COLLATE NOCASE ' +
+                 'ORDER BY file_id, start_line';
+    Q.ParamByName('impl').AsString:= AImplName;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      B:= Default(TDiBindingRow);
+      B.Id           := Q.FieldByName('id'            ).AsLargeInt;
+      B.FileId       := Q.FieldByName('file_id'       ).AsLargeInt;
+      B.InterfaceName:= Q.FieldByName('interface_name').AsString;
+      B.ImplName     := Q.FieldByName('impl_name'     ).AsString;
+      B.Lifetime     := Q.FieldByName('lifetime'      ).AsString;
+      B.StartLine    := Q.FieldByName('start_line'    ).AsInteger;
+      B.StartCol     := Q.FieldByName('start_col'     ).AsInteger;
+      B.EndLine      := Q.FieldByName('end_line'      ).AsInteger;
+      B.EndCol       := Q.FieldByName('end_col'       ).AsInteger;
+      List.Add(B);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+// v(ADP3 T14): orm_links -> fb_relations -> fb_columns, in two queries rather
+// than one join, so the per-relation column cap is applied by LIMIT instead of
+// by post-filtering a cross product.
+//
+// NOTE ON THE JOIN KEY: orm_links.sql_symbol_id is matched against
+// fb_relations.sql_table_symbol_id. orm_links carries no relation id, and
+// sql_table_symbol_id is exactly the symbol the SQL side indexed for that
+// table, so it is the only key the two tables share. A relation the snapshot
+// never linked to a symbol (sql_table_symbol_id NULL) is therefore invisible
+// here -- absence, never a wrong relation name.
+function TSQLiteSymbolStore.FindOrmDatasetLinks(ASymbolId: Int64; AMaxColumns: Integer = 4): TArray<TOrmDatasetLink>;
+var
+  Q, QC: TFDQuery              ;
+  List : TList<TOrmDatasetLink>;
+  L    : TOrmDatasetLink       ;
+  Cols : TList<string>         ;
+  RelId: Int64                 ;
+begin
+  List:= TList<TOrmDatasetLink>.Create;
+  Q   := TFDQuery.Create(nil);
+  QC  := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    QC.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT r.id AS rel_id, r.name AS rel_name FROM orm_links o ' +
+                 'JOIN fb_relations r ON r.sql_table_symbol_id = o.sql_symbol_id ' +
+                 'WHERE o.delphi_symbol_id = :sid ORDER BY r.name';
+    Q.ParamByName('sid').AsLargeInt:= ASymbolId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      RelId:= Q.FieldByName('rel_id').AsLargeInt;
+      L:= Default(TOrmDatasetLink);
+      L.RelationName:= Q.FieldByName('rel_name').AsString;
+      Cols:= TList<string>.Create;
+      try
+        // The cap is FORMATTED IN, not bound: FireDAC does not reliably bind a
+        // parameter in a LIMIT clause against SQLite, and a silently empty
+        // column list here would have degraded the fact to a bare relation name
+        // rather than failing loudly. AMaxColumns is an engine-supplied
+        // integer, never user input, so there is nothing to inject.
+        QC.SQL.Text:= Format('SELECT name FROM fb_columns WHERE relation_id = :rid ' +
+                             'ORDER BY position LIMIT %d', [AMaxColumns]);
+        QC.ParamByName('rid').AsLargeInt:= RelId;
+        QC.Open;
+        while not QC.Eof do begin Cols.Add(QC.FieldByName('name').AsString); QC.Next; end;
+        QC.Close;
+        L.Columns:= Cols.ToArray;
+      finally
+        Cols.Free;
+      end;
+      List.Add(L);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    // Closed here, not only inside the loop: an exception mid-walk would
+    // otherwise leave the inner cursor open until Free. (drag-lint's own
+    // dataset-open-without-close rule, applied to its own source.)
+    if QC.Active then QC.Close;
+    if Q.Active  then Q.Close;
+    QC.Free;
     Q.Free;
     List.Free;
   end; // try

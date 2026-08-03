@@ -1458,6 +1458,27 @@ begin
       if (Length(TouchParts) > 1) and (TouchParts[1] <> '') then
         Lines.Add('Transaction: ' + EscXml(TouchParts[1]));
     end;
+    // v(ADP3 T14): DI/ORM wiring -- a JOIN over already-indexed tables
+    // (di_bindings / orm_links / fb_relations / fb_columns), NOT a new
+    // analysis. Stored as '; '-joined 'di:'/'ds:' entries; split into two
+    // display lines here so each can be omitted independently.
+    if AFacts.Wiring <> '' then
+    begin
+      var DiPart: string:= ''; var DsPart: string:= '';
+      for var WEntry in AFacts.Wiring.Split(['; ']) do
+        if StartsStr('di:', WEntry) then
+        begin
+          if DiPart <> '' then DiPart:= DiPart + ', ';
+          DiPart:= DiPart + Copy(WEntry, 4, MaxInt);
+        end
+        else if StartsStr('ds:', WEntry) then
+        begin
+          if DsPart <> '' then DsPart:= DsPart + ', ';
+          DsPart:= DsPart + Copy(WEntry, 4, MaxInt);
+        end;
+      if DiPart <> '' then Lines.Add('Registered as: ' + EscXml(DiPart));
+      if DsPart <> '' then Lines.Add('Dataset: ' + EscXml(DsPart));
+    end;
     // v(ADP3 T13): 'Pure' is DERIVED at render time from the other facts and
     // has NO column of its own -- so it can never disagree with them. Emitted
     // for a routine WITH A BODY that writes no field, mutates no var/out

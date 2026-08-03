@@ -303,6 +303,22 @@ type
     procedure UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);
     procedure DeleteDiBindingsForFile(AFileId: Int64);
     function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
+    /// <summary>v(ADP3 T14): the DI registrations whose IMPL type is AImplName,
+    /// i.e. the reverse of FindImplementationsOf. Answers "what is this class
+    /// registered as, and with what lifetime" for the doc/hover
+    /// 'Registered as:' line. Empty when the class is not registered.</summary>
+    /// <remarks>Matched case-insensitively on impl_name, which idx_di_impl
+    /// already indexes. Ordered by file_id then start_line so a class
+    /// registered more than once renders in a stable order.</remarks>
+    function FindDiBindingsForImpl(const AImplName: string): TArray<TDiBindingRow>;
+    /// <summary>v(ADP3 T14): the Firebird relations the orm-link pass tied to
+    /// ASymbolId, each with up to AMaxColumns leading columns in declaration
+    /// order. Empty when the symbol has no orm_links row, which is the normal
+    /// case for any index the orm-link pass has not been run against.</summary>
+    /// <param name="ASymbolId">The Delphi symbol (orm_links.delphi_symbol_id).</param>
+    /// <param name="AMaxColumns">Column cap per relation; the row is
+    /// display-ready, so the cap lives here rather than in the renderer.</param>
+    function FindOrmDatasetLinks(ASymbolId: Int64; AMaxColumns: Integer = 4): TArray<TOrmDatasetLink>;
     function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
     function FindDiUnresolved: TArray<TReference>                                       ;
     /// <summary>DFM event handlers of a form/class: its child methods bound to a
