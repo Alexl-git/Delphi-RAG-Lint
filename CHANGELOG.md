@@ -5,6 +5,61 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Auto-Document Phase 3 -- provenance, comment harvesting, four new facts (schema v19)
+
+- **Uniform provenance marker, and the content sniff is gone.** Every
+  engine-owned tag now carries `<!-- drag-lint:auto -->`. Ownership is
+  MARKER-KEYED, never content-keyed: the old `StartsText('Observed:')` sniff --
+  which silently adopted any human sentence that happened to begin that way --
+  is deleted. **The contract in one line: text inside a marked tag is
+  engine-owned and will be regenerated; remove the marker to take ownership; a
+  tag without the marker is never touched.**
+- **`document --strip`.** Removes the engine's own managed blocks and marked
+  tags and leaves everything else byte-identical, so a documented tree can be
+  returned to its pre-`document` state exactly. The marker is what makes this
+  exact rather than heuristic.
+- **Comment harvesting.** A plain `//` comment above a declaration is promoted
+  into a managed `<summary>` (first paragraph) and `<remarks>` prose (the rest),
+  XML-escaped. Interface-side is preferred; implementation-side is where the
+  volume actually is (on the YADF corpus, 120 of 121 harvestable comments sit
+  above the body). **COPY, NEVER MOVE:** the original comment stays exactly
+  where it was. A hand-written `<summary>` always wins over a harvest.
+- **Harvest drift is reported, not applied silently.** A new `ddHarvestDrift`
+  doc-drift finding fires when a marked `<summary>` no longer matches the
+  comment it was harvested from -- refreshed when the source comment changed,
+  removed when the source comment is gone -- naming the symbol and both texts.
+  Fixable: the next `document --apply` (or `lint-all --fix`) satisfies it.
+- **Repair is non-destructive.** The repair path may no longer delete a tag it
+  does not model; every unmodeled tag is preserved byte-for-byte. Accepted
+  consequence: a stale unmodeled tag lingers until a human removes it.
+- **Render fixes:** an empty tag is never written (a blank `<summary>` renders
+  as a blank tooltip, which is worse than no tooltip); the ` ?` uncertainty
+  marker appears only on genuinely mixed lists; a non-callable renders
+  `Used by:` rather than `Called from:`.
+- **Four new facts + `Pure`** (schema v19 adds `mutates_params`, `ui_affinity`,
+  `touches`, `wiring` to `symbol_facts`):
+  - `Mutates: AList (var), AReason (out)` -- the `var`/`out` parameters a
+    routine writes through. Closes the Phase-2 gap that covered fields only.
+  - `UI thread only -- touches FPanel, Application` -- **positive findings
+    only.** Its absence means "no UI touch was detected", never "thread-safe".
+  - `Touches: file system, registry` and `Transaction: starts, commits` --
+    categories, not call sites.
+  - `Registered as: IFolderService (singleton)` and
+    `Dataset: qryFolders -> FOLDERS (ID, NAME)` -- a pure join over
+    `di_bindings` / `orm_links` / `fb_relations` / `fb_columns`, no new AST
+    analysis. Computed at render time, like `Covered by:`, because `orm_links`
+    is written by a separate post-index pass.
+  - `Pure` -- DERIVED at render time from the other facts, with no column of its
+    own so it cannot disagree with them. It means "none of the effects this
+    engine can detect were detected", and it never creates a doc block on its
+    own: a block is only written when there was something else to say.
+- **Schema 18 -> 19 is purely additive.** Four columns on the existing
+  `symbol_facts` table; nothing removed or renamed, the version gate stays a
+  `>=` check. A consumer issuing `SELECT *` on `symbol_facts` now gets four more
+  columns -- select by name if position matters. **`symbols.id` is reassigned by
+  the full reindex: re-resolve by `qualified_name`, never by a cached id.**
+
+
 - **Fixed: a used unit's name was stored with the source's alignment padding,
   and the `uses` edge was silently lost.** `unit_uses.unit_name` came from
   `Trim(NodeText(moduleName))`, but a `moduleName` node spans the WHOLE dotted

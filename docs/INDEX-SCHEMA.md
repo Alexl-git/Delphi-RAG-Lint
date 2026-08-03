@@ -6,14 +6,23 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **18** (`SCHEMA_VERSION` in
+Current schema version at time of writing: **19** (`SCHEMA_VERSION` in
 `src/storage/DRagLint.Storage.Schema.pas`). Recent additive changes:
 v16 added the column `files.last_compiled_unix` (compiler-finding freshness;
 see 2.1); v17 added `symbols.prop_access` (property-leaf assignability engine;
 see 2.2); **v18 added the new `symbol_facts` table** -- per-routine analysis
 facts (cyclomatic complexity + body LOC, own-field reads/writes, SQL tables
 touched, paired-`.dfm` event wiring, returned-object ownership) surfaced by the
-`document` managed block and `hover`; see 2.15.
+`document` managed block and `hover`; see 2.15; **v19 added four additive
+columns to `symbol_facts`** (`mutates_params`, `ui_affinity`, `touches`,
+`wiring`) -- see 2.15.
+
+Schema history, one line per step:
+
+- `17 -> 18`: new `symbol_facts` table.
+- `18 -> 19`: four additive `symbol_facts` columns; the `>=` gate is unchanged;
+  **`symbols.id` is reassigned by the full reindex** -- re-resolve by
+  `qualified_name`, never by a cached id.
 
 All facts in this document were cross-checked against the DDL in
 `src/storage/DRagLint.Storage.SQLite.pas` and
@@ -77,7 +86,7 @@ read as absent, never wrong) until it is re-indexed with the v18 engine.
 | `type_ancestors` | 1443 | Class/interface inheritance edges |
 | `type_helpers` | 22 | Record/class helper -> target-type edges |
 | `symbol_docs` | 4789 | Parsed XMLDoc/PasDoc/oneline doc comments per symbol |
-| `symbol_facts` | 13267 | Per-routine analysis facts (complexity, reads/writes, SQL tables, DFM event, ownership) -- v18+; see 2.15 |
+| `symbol_facts` | 13267 | Per-routine analysis facts (complexity, reads/writes, SQL tables, DFM event, ownership; v19 adds mutated params, UI affinity, external surfaces, wiring) -- v18+; see 2.15 |
 | `di_bindings` | 540 | Spring4D `RegisterType<T>.Implements<I>` DI registrations |
 | `string_literals` | 40276 | Every string literal, with owning symbol/file |
 | `symbol_trigrams` | 649557 | Trigram inverted index for fuzzy symbol search |
@@ -442,6 +451,10 @@ popup (a single shared formatter renders both, so they cannot drift).
 | `dfm_event` | TEXT (nullable) | For a published method wired to a component event in the routine's PAIRED `.dfm`: `'ObjectName.EventProp'` (e.g. `Button1.OnClick`). NULL when not wired / no sibling `.dfm`. |
 | `sql_reads` | TEXT (nullable) | CSV of SQL tables the routine READS (`FROM`/`JOIN`), best-effort from concatenated SQL string literals in the body; capped at 8. Dynamic / sub-query / CTE SQL is skipped (absence over a wrong table). NULL when none. |
 | `sql_writes` | TEXT (nullable) | CSV of SQL tables WRITTEN (`INSERT INTO` / `UPDATE` / `DELETE FROM`), same best-effort/format. NULL when none. |
+| `mutates_params` | TEXT (nullable) | **v19.** CSV of the `var`/`out` PARAMETERS the routine writes through, display-ready with each mode in parentheses -- `'pList (var), pReason (out)'`. Same cap/format as `reads_fields` (8 entries, then ` (+N more)`). Closes the gap named in `writes_fields` above. Claimed write shapes: a bare-identifier assignment LHS, an indexed LHS (`AList[0] := X`), and `Inc`/`Dec`. NOT claimed, by design: an ordinary call's var argument (`SetLength(AList, N)`) and a dot LHS (`AObj.F := X`). NULL when none. |
+| `ui_affinity` | TEXT (nullable) | **v19.** CSV of the UI controls/globals the routine touches -- `'cxGrid1, Application'`. A field/local/parameter whose declared type is, or descends from, a curated VCL/DevExpress base type, plus bare `Application`/`Screen`. **POSITIVE FINDINGS ONLY:** NULL means "no UI touch was detected", NEVER "this routine is thread-safe" -- the curated list under-reports by construction. |
+| `touches` | TEXT (nullable) | **v19.** External surfaces and transaction verbs, as CATEGORIES not call sites, in ONE column with a **`|` separator**: `'<resources>|<transactions>'`, e.g. `'file system, registry|starts, commits'`. Either side may be empty and the separator is still present (`'file system|'`, `'|starts, commits'`); NULL when both are. Resource words: `file system`, `registry`, `network`. Transaction words: `starts`, `commits`, `rolls back`. Both sides are emitted in that fixed order, never discovery order. |
+| `wiring` | TEXT (nullable) | **v19, RESERVED / currently unpopulated** -- same status as `covered_by` below and for the same class of reason. The DI/ORM wiring fact is computed LAZILY at `document`/`hover` time by joining `di_bindings` / `orm_links` / `fb_relations` / `fb_columns`, because `orm_links` is written by a SEPARATE post-index pass (`orm-link`): an index-time value would be empty on every first index and would afterwards reference `symbols.id` values the reindex had already replaced. Rendered shape, for reference: `'di:IFolderService (singleton); ds:qryFolders -> FOLDERS (ID, NAME)'`. Do not rely on this column being filled. |
 | `covered_by` | TEXT (nullable) | **RESERVED / currently unpopulated.** The "Covered by (tests)" fact is computed LAZILY at `document`/`hover` time from the live reverse-call graph (a test->routine edge is non-deterministic to persist per-file at index time), so the current engine leaves this column NULL. Do not rely on it being filled. |
 
 Consumers: this table is purely additive -- pre-v18 tools that do not read it

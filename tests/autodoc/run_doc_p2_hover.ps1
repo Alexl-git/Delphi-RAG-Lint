@@ -205,7 +205,7 @@ try {
   # a Phase 3 line to the doc path only, the doc block and the hover popup start
   # showing different facts for the same symbol and NOTHING else would notice.
   #
-  # Mutates: is the fact under test (plan §7 asks for at least one of the four).
+  # Mutates: is the fact under test (the plan section 7 asks for at least one of the four).
   # The comparison is on the fact line's TEXT, after stripping the doc block's
   # '/// ' prefix and hover's markdown bolding, so it survives cosmetic
   # differences in framing but not a difference in the fact itself.

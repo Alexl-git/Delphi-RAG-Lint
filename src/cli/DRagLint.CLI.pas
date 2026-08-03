@@ -450,7 +450,14 @@ begin
   Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors] [--db PATH]         - document every public decl in the unit (facts-only)');
   Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex] [--db PATH]  - document every public decl in the project''s compile closure (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
   Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
-  Writeln('     batch modes (--unit/--project/document-all) default facts-only (summary/param left as TODO); add --stubs to also create all-TODO stub comments');
+  // v(ADP3 T15): this line used to read "summary/param left as TODO ... add
+  // --stubs to also create all-TODO stub comments". Both halves went stale in
+  // v(ADP3 T3), which deleted the TODO placeholders outright: an empty tag is
+  // now not written at all, a <param> never gets a skeleton, and a <summary> is
+  // only written when one can be HARVESTED from a nearby // comment. --stubs
+  // survives but means something narrower now -- keep a fresh comment even when
+  // it carries no managed facts block.
+  Writeln('     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block');
   Writeln('     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too');
   Writeln('  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)');
   Writeln('     --strip is also accepted on --qname/--project/document-all (strips just that symbol''s doc region, or every file in scope); mutually exclusive with --stubs');

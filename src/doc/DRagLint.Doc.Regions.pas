@@ -1,5 +1,40 @@
 unit DRagLint.Doc.Regions;
 
+// THE PROVENANCE CONTRACT -- this unit's governing invariant (v(ADP3) T1/T15).
+//
+// Every tag this engine owns carries the marker AUTO_MARK
+// (`<!-- drag-lint:auto -->`) immediately after its opening tag, and the facts
+// block is fenced by AUTO_BEGIN..AUTO_END. Ownership is decided BY THAT MARKER
+// AND BY NOTHING ELSE:
+//
+//   * A tag WITHOUT the marker belongs to the human. It is preserved verbatim
+//     -- its text, its whitespace, whatever it says -- and MergeComment must
+//     never rewrite, reflow or delete it. A tag this unit does not even model
+//     is carried through byte-for-byte (v(ADP3 T3f)/T9).
+//   * A tag WITH the marker is engine-owned and its contents are regenerated on
+//     every run, regardless of what now sits between the markers.
+//   * Ownership changes hands ONLY by REMOVING the marker. It never changes by
+//     the engine sniffing content -- the pre-v(ADP3) StartsText('Observed:')
+//     sniff, which silently adopted any human sentence beginning that way, was
+//     deleted in T1 and must not come back in any form. An exact-string compare
+//     against generated text is the same mistake by the back door.
+//
+// The consequence, stated rather than hidden: a human edit made INSIDE a marked
+// tag is overwritten on the next run. It has to be -- "a human edited inside
+// the markers" and "the source comment this was harvested from changed" are the
+// same string comparison, so both refresh. What the engine owes in exchange is
+// VISIBILITY, not silence: Doc.Drift's ddHarvestDrift reports the overwrite,
+// naming the symbol and both texts. Documented for users in docs/AI-USAGE.md.
+//
+// This contract is also exactly what makes `document --strip` (Doc.Strip) an
+// EXACT inverse rather than a heuristic: the marker says what to remove.
+//
+// One more invariant lives here: FormatPhase2FactLines is the SINGLE home for
+// the fact lines of BOTH surfaces, the managed doc block and the hover popup,
+// so the two can never show different facts for the same TDocFacts. The order
+// of the lines is part of that contract -- appending is safe, inserting in the
+// middle rewrites every already-documented block in the corpus.
+
 interface
 
 uses

@@ -1,5 +1,40 @@
 unit DRagLint.Doc.SymbolFacts;
 
+// v(ADP3 T11-T14): FOUR MORE ANALYSES, and one rule that governs all of them.
+//
+//   Mutates      (T11, column mutates_params) -- the var/out PARAMETERS a
+//                routine writes through. Closes the Phase-2 T4 gap, which
+//                resolved against the owning class's FIELDS only, so a free
+//                procedure that existed solely to fill an `out` parameter said
+//                nothing at all. Parameter MODES come from TRoutineVarTable,
+//                the one place that already parses var/out/const off a declArg.
+//   UI affinity  (T12, column ui_affinity) -- identifiers whose declared type
+//                is, or descends from, a curated VCL/DevExpress base type, plus
+//                the curated globals Application/Screen.
+//   Touches      (T13, column touches) -- external surfaces (file system /
+//                registry / network) and transaction verbs, as CATEGORIES, not
+//                call sites; the call site is already in 'Calls:'.
+//   Wiring       (T14, column wiring, RESERVED) -- DI registrations and
+//                dataset->relation links. A pure JOIN over already-indexed
+//                tables, no AST at all, and computed at RENDER time like
+//                ComputeCoveredBy -- see ComputeWiring's own header for why an
+//                index-time value could only ever be empty or wrong.
+//
+// THE CURATED LISTS (UI_BASE_TYPES / UI_GLOBALS for T12, the TOUCH_* family for
+// T13) ARE ENGINE KNOWLEDGE, NOT USER CONFIGURATION. They live here, beside the
+// analysis that consumes them, and never in the manifest. The property that
+// makes that safe is asymmetric and is the reason these facts are stated as
+// POSITIVE FINDINGS ONLY: a STALE LIST UNDER-REPORTS -- the fact is simply
+// omitted -- IT NEVER EMITS A FALSE CLAIM. Growing a list later is therefore
+// always safe and never breaking. The corollary is binding on every consumer:
+// an empty ui_affinity means "no UI touch was DETECTED", never "this routine is
+// thread-safe", and nothing may render it as the latter.
+//
+// The T13 lists are additionally split BY MATCH SHAPE, not just by category
+// (type receiver / bare intrinsic with arguments / dot member), because Reset
+// and Commit are among the commonest method names in any Delphi codebase and a
+// bare name match would manufacture a false claim on both. See the const block.
+//
 // Auto-Document Phase 2, Task 1: the analysis-facts layer. TSymbolFacts
 // itself lives in DRagLint.Core.Model (so ISymbolStore.Get/PutSymbolFacts can
 // reference it without a circular interface-uses -- see Core.Interfaces).

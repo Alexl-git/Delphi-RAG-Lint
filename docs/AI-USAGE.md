@@ -172,8 +172,43 @@ in 2b.
 | `document --qname U.T.M` | generate/repair one managed DocInsight comment (never filtered -- see accessor note below) |
 | `document --unit F` / `--project P` | document every public decl in a unit/project (`--stubs`, `--seealso`, `--since`, `--include-accessors`) |
 | `document-all` | document every public decl in every indexed unit (`--include-accessors`) |
+| `document --strip --apply` | REMOVE the engine's own managed blocks and marked tags, leaving everything else byte-identical |
 | `generate-docs --qname U.T.M` | emit a doc comment (`--format xmldoc\|pasdoc`) |
 | `generate-test --qname U.T.M` | scaffold a DUnitX/DUnit test (`--framework dunitx\|dunit`) |
+
+> **THE PROVENANCE CONTRACT -- read this before editing a generated comment.**
+> Every tag drag-lint owns carries the marker `<!-- drag-lint:auto -->`
+> immediately after its opening tag, and the facts block is fenced by
+> `<!-- drag-lint:auto BEGIN -->` / `<!-- drag-lint:auto END -->`. Ownership is
+> decided by that marker and by nothing else:
+>
+> - **A tag WITHOUT the marker is yours. drag-lint never touches it** -- not its
+>   text, not its whitespace, whatever it says.
+> - **A tag WITH the marker is the engine's, and its contents are regenerated on
+>   every run.** If you edit the text INSIDE a marked tag, your edit WILL be
+>   overwritten the next time `document --apply` runs over that file. This is
+>   not a bug and the engine cannot avoid it: "a human edited inside the
+>   markers" and "the source comment this was harvested from changed" are the
+>   same string comparison, so both refresh. What you get instead is a
+>   **report** -- the `doc-drift` finding `ddHarvestDrift` names the symbol and
+>   both texts, so the overwrite is visible rather than silent.
+> - **To take ownership, DELETE THE MARKER** (just the
+>   `<!-- drag-lint:auto -->` comment). The tag is then hand-written and is
+>   preserved verbatim from that moment on.
+>
+> `document --strip --apply` is the exact inverse of a `document` run: it
+> removes the managed blocks and the marked tags and leaves every other byte
+> alone, which is only possible BECAUSE ownership is marker-keyed.
+>
+> **Comment harvesting.** A plain `//` comment sitting above a declaration is
+> promoted into a managed `<summary>` (its first paragraph) plus `<remarks>`
+> prose (the rest), XML-escaped. The interface-side comment is preferred; the
+> implementation side is used when there is none there. **COPY, NEVER MOVE** --
+> your original comment stays exactly where you wrote it. A comment is only
+> accepted when it is a plain comment block immediately above the declaration
+> (one blank line tolerated) that is not already a DocInsight `///` region, not
+> a commented-out block of code, and not a divider/banner rule; anything else is
+> left alone. A HAND-WRITTEN `<summary>` always beats a harvest.
 
 > **Trivial accessor skip (batch modes only).** `document --unit`/`--project`
 > and `document-all` silently skip a public `Get*`/`Set*`-named method whose
