@@ -1,5 +1,115 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-03 (LATEST-81) -- **PHASE 3 IS 16 OF 17. T11-T16 ALL SHIPPED. THE BATTERY HAS NO KNOWN RED. ONLY T17 (ROLLOUT) IS LEFT.** Read this before LATEST-80.
+>
+> ### >>> START HERE NEXT SESSION
+>
+> **NEXT ACTION: T17, the rollout** -- and read the TWO OPEN DECISIONS below FIRST,
+> because one of them changes what T17 does and the other touches a second repository.
+> Status board: `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/progress.md`.
+>
+> ### What shipped this session
+>
+> | Task | Commit | What |
+> | --- | --- | --- |
+> | T9 pt2 | `ad5de38` | `ddHarvestDrift` -- the REPORT half; the four behaviour rows were already implemented |
+> | T11 | `fa5e664` | `Mutates:` -- var/out parameter writes |
+> | T12 | `ac0981c` | `UI thread only --` -- positive findings only |
+> | T13 | `a8e9513` | `Touches:` / `Transaction:` + the derived `Pure` line |
+> | T14 | `521901c` | `Registered as:` / `Dataset:` -- a join, computed at render time |
+> | T15 | `3342157` | Schema doc, CHANGELOG, AI-USAGE provenance contract, `--help`, unit banners |
+> | T16 | `a4e4c30` | Converter INBOX for v19 + the Obsidian `DragLint_Index_Schema` page |
+> | fix | `60e02ac` | The last red -- a FIXTURE harvesting its own header |
+>
+> ### >>> TWO OPEN DECISIONS FOR THE USER
+>
+> **1. `Pure` never creates a doc block -- I chose the conservative reading, reverse it
+> if you disagree.** The plan's snippet emitted `Pure` unconditionally. Implemented
+> literally, it gives a managed block to nearly every trivial effect-free routine in the
+> corpus, reversing the long-standing omit-when-empty contract -- ELEVEN suites went red,
+> five of them asserting in so many words that a symbol with nothing to say gets NO block
+> (`run_doc_p2_sql`'s "NoSql has NO managed block at all"). I gated it: `Pure` still
+> appears on every block that exists for another reason, but never creates one. The gate
+> is `FormatPhase2FactLines`' `AHasOtherContent` parameter -- **one condition to widen,
+> and a corpus-wide block explosion to unwind if it ships wrong.**
+>
+> **2. T17 step 5 edits the YADF REPOSITORY, not this one.** It runs `document --strip`
+> then `--apply` over `C:\Projects\YADF` on branch `experiment/drag-lint-autodoc` and
+> reviews the diff. That is a second repo's working tree; per hot.md, YADF's tree is
+> ALREADY DIRTY on purpose (an ungated self-format pass plus two verified fixes awaiting
+> a commit decision), and `GITPush.bat` there does `git add .`. **Do not start step 5
+> without the user's explicit go-ahead and without dealing with that dirty tree first.**
+>
+> ### T17 is otherwise unblocked -- the gate is satisfied
+>
+> Its own text says "do not reindex on a red battery". There is now no known red.
+> `run_missing_doc_fix` had been red since the Phase 3 work began and the cause was the
+> FIXTURE, not the engine: its explanatory `//` header sat directly above `function
+> Undocumented`, so T7's harvester correctly promoted 600 characters of test commentary
+> into a `<summary>` -- exactly what assertion A3 exists to forbid. Prose moved above
+> `interface`; pinned decl line 16 -> 25.
+>
+> **T17's remaining steps, in order:** (1) build + deploy, (2) full battery and record
+> the driver's OWN printed denominator, (3) `drag-lint index --all --config
+> third_party\dll-win64\drag-lint.json --jobs 0` -- **`--jobs` needs `--config`**, and
+> `--dry-run` first, (4) the two YADF DBs explicitly (`YADF.sqlite` v18,
+> `YADFOT.sqlite` still v17), (5) the YADF strip/re-apply -- see decision 2, (6) version
+> bump off `'1.2.1-alpha'` at `src/cli/DRagLint.CLI.pas:6` + `pack-lint-release.ps1`,
+> (7) commit. **Then fill in section 6 of
+> `docs/INBOX-index-schema-v19-reindex-for-converter.md`**, which is deliberately left
+> saying "not yet rebuilt" with an empty DB table.
+>
+> ### Engine decisions worth not re-litigating
+>
+> * **Two facts are computed at RENDER time, not index time, and their columns stay
+>   RESERVED** -- `covered_by` (ADP2 T5) and now `wiring` (T14). For wiring the reason is
+>   concrete: `orm_links` is written by a SEPARATE post-index pass (`orm-link`, which
+>   `DELETE`s and rebuilds), so an index-time value would be empty on every first index
+>   and would afterwards point at `symbols.id` values the reindex had already replaced.
+> * **T12's ancestry arm walks `TSymbol.Heritage`, NOT `GetTransitiveAncestors`.**
+>   `type_ancestors` is filled by the RESOLVE pass, which runs AFTER the per-file facts
+>   loop, and a reindex cascades the old rows away first -- so during `Analyze` that table
+>   is reliably EMPTY for the file being analyzed. Found by running, not by reading.
+> * **T13's curated lists are split BY MATCH SHAPE** (type receiver / bare intrinsic with
+>   arguments / dot member). `Reset` and `Commit` are among the commonest method names in
+>   Delphi; a bare name match would manufacture false claims on both.
+> * **The doc/hover consistency lock now covers a Phase 3 fact** (`run_doc_p2_hover.ps1`).
+>
+> ### Traps hit this session, all now recorded in the files that own them
+>
+> * **A source edit made WHILE the battery runs turns `run_exe_freshness` red** -- it
+>   asserts the exe is not older than the newest CLI source file. LATEST-80's staging trap,
+>   other direction. Rebuild + restage + re-run cleared it.
+> * **An edit that REPLACES rather than appends** silently dropped the `Covered by:` emit
+>   in T11's first cut. Found by stashing only the T11 source edits and rebuilding
+>   (baseline green, T11 red), not by re-reading the diff.
+> * **PowerShell comments are `#`, not `//`** -- a `//` inside an array literal is a parse
+>   error that shows up as an exit code with no FAIL lines.
+> * **.NET multiline `$` leaves the CR** on a CRLF file: `'\.$'` never matches; use
+>   `'\.?$'`. A silent no-op edit makes the whole step test the unchanged file.
+> * **A non-ASCII character in a policed directory fails the encoding guard** -- a section
+>   sign in a test comment did it.
+> * **FireDAC does not reliably bind a parameter in a LIMIT clause** against SQLite.
+> * **A seeded `symbols` row with an unknown `kind` breaks the engine outright**
+>   (`FATAL: Unknown symbol kind: "table"`) and the batch path SWALLOWS it into a
+>   silently unchanged doc block.
+>
+> ### Index gap filed
+>
+> **A bare parameterless call used as a BINARY-EXPRESSION OPERAND records no ref at all.**
+> `Result := Drifting + Vanishing;` gives neither routine a caller fact. NOT the fixed
+> lone-bare-RHS bug: `Result := A;` records and `Result := Abs(A);` records; only
+> `Result := A + 1;` is dropped. `docs/INBOX-bare-call-in-binary-expression-not-indexed.md`
+> + `stats/draglint-gaps.log`. Every harvest/facts fixture works around it with empty
+> parens. Probable site: `Walk`'s `assignment` arm only inspects `ChildByField('rhs')` for
+> a bare identifier node; any fix must keep `run_bare_rhs_refs.ps1`'s over-capture guard.
+>
+> ### Git / exe
+>
+> Branch `feat/autodoc-phase3`. **NOTHING PUSHED.** The staged exe
+> (`third_party\dll-win64\drag-lint.exe`) is gitignored -- **check its timestamp, git
+> will never tell you.** It carries T15.
+
 > ## RESUME 2026-08-03 (LATEST-80) -- **T9 IS COMPLETE. `ddHarvestDrift` SHIPPED. Battery 208 pass / 2 fail / 0 timeout of 210. NEXT = T11.** Read this before LATEST-79.
 >
 > ### >>> START HERE NEXT SESSION
