@@ -2,9 +2,37 @@
 
 > ## RESUME 2026-08-02 (LATEST-78) -- **`main` IS MERGED IN. 2.9 + 2.10 FIXED. A merge-induced regression was found and fixed. ONE USER RULING IS BLOCKING. Read this before LATEST-77.**
 >
+> ### >>> START HERE NEXT SESSION
+>
+> **T8 IS DONE** (`447dd51`). Phase 3 is **9 of 17 tasks** (T1-T8 + all 15 inserted).
+> **T9 is next and is BLOCKED on ONE user ruling** -- `docs/lint/TRIAGE-the-22-harvest-repair.md`.
+> **T10 (schema v19, four additive columns) is INDEPENDENT of the harvester and can be started
+> instead while that ruling is pending.** Full per-task status: the STATUS BOARD at the top of
+> `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/progress.md`.
+>
+> **T8's two findings, both from RUNNING the plan's own fixture rather than reading it:**
+> 1. **A symbol with NO FACTS gets NO doc block at all** -- `document` reports "nothing to
+>    document" and writes nothing, so a routine whose only documentation would be its harvested
+>    comment still gets none. The plan's T8 fixture could not demonstrate its own assertion 1 for
+>    this reason; it now carries a `Driver` routine to manufacture caller facts, the same device
+>    `harvest_text.pas` already uses. This caps the harvester on exactly the corpus that motivated
+>    it (YADF: 120 of 121 comments implementation-side).
+> 2. **Scope a marker assertion to the TAG you mean.** A documented block also carries correct
+>    markers on `<returns>` and the facts fence, so a whole-block search falsely reports "a
+>    hand-written summary was refreshed" for a summary nothing touched.
+>
+> **USER RULING (2026-08-02) -- the `Assigned` feature is now a GAP FIX, not only a feature.**
+> `docs/lint/FEATURE-assigned-section-autodoc-hover.md`. Every variable has some usage, so showing
+> the initialization (`X := TFoo.Create`, `X := 0`) means something ALWAYS shows up -- which closes
+> finding 1 above as a side effect. **TWO RENDER SITES, ONE MINER:** the hovered variable AND a fact
+> on the routine's own doc block; implementing only the hover half looks like a fix and is not one.
+> It is a **deliberate reversal of T3's omit-empty-tags rule** and is recorded as such. Still NOT
+> STARTED -- 0 references in `src/`, against 57 for the `max_callers` precedent it copies. Queued
+> outside the T1-T17 plan; sequence it against T9-T17.
+>
 > ### Git
 >
-> `feat/autodoc-phase3` = **`c963dd9`**, was 110 behind `main` and is now current.
+> `feat/autodoc-phase3` = **`54f6493`**, was 110 behind `main` and is now current.
 > `main` = `3b4a877`, unchanged -- **nothing was merged INTO main.** NOTHING PUSHED.
 > Shared exe `third_party\dll-win64\drag-lint.exe` rebuilt + staged **17:31**, verified in the
 > STAGED binary. Completion report for the converter team:
