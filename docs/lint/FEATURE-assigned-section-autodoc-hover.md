@@ -99,6 +99,40 @@ line is real information a reader cannot get from the signature, and the cap of 
 does NOT reopen T3's rule for empty tags generally: an `Assigned` section with nothing to say must
 still be omitted, per open question 4 below.
 
+## THE GUIDING PRINCIPLE, user, 2026-08-02 evening -- read this before any design decision here
+
+> Show **as much as we can and as much as we know, to some degree** -- not so much that it overloads
+> the user, but enough extra that it is **all gathered in a single place**.
+
+This is the tie-breaker for every "should we show X?" question below, and it generalises beyond this
+feature to the whole hover / autodoc surface. Three consequences worth stating, because they are
+what make it actionable rather than aspirational:
+
+1. **Aggregation is the product.** The value is not any single fact -- it is not having to go hunting
+   across files to assemble the picture. A fact that is individually marginal can still earn its
+   place by completing the set. That is the argument for showing the type argument's definition
+   beside the assignments rather than making the reader navigate for it.
+2. **Breadth is governed by the principle; DEPTH is governed by the caps.** These do not conflict,
+   and reading them as a conflict is the likely mistake. Include more KINDS of information; cap how
+   much of each (`docs.max_callers`, `docs.max_assigned`, both 5). "Not overloading" is achieved by
+   the caps and by omitting sections with nothing to say -- not by refusing a category outright.
+3. **"To some degree" means SHOW IT AND LABEL THE CONFIDENCE -- never withhold it silently.** This
+   already has precedent in the engine, and the precedent is the point:
+   - `match_kind: "exact" | "fuzzy"` (added 2026-08-02) -- a near-miss is returned, and MARKED, so a
+     consumer can use or reject it. Before that the guess was returned unlabelled, which is the
+     failure this principle exists to prevent.
+   - the `?` marker on a MIXED caller list (Phase 3 T4) -- shown only when the list really is mixed,
+     so the marker carries signal instead of firing on 49 of 49.
+   - `Truncated` / "5 of 23" style counts, which say that more exists rather than silently cutting.
+   The anti-pattern is absence that reads as certainty: a blank where the engine actually has a
+   partial answer tells the reader "there is nothing", which is a stronger and wronger claim than
+   "here is what we have, with this much confidence".
+
+**Where this does NOT reach:** it is not licence to emit an empty section. Phase 3 T3's
+omit-empty-tags rule stands -- a section with nothing to say is omitted, per open question 4 below.
+The principle says *include the category and be honest about partial knowledge*; it does not say
+*always render the heading*.
+
 ## SPEC EXTENSION, user, 2026-08-02 evening -- the rendering is TYPE-DEPENDENT
 
 The section is not one fixed shape. **What is shown depends on the complexity of the variable's
