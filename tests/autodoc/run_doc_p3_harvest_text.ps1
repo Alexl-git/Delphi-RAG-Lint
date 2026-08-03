@@ -106,8 +106,12 @@ Check 'PRECONDITION: the fixture carries NO /// line before the apply' `
   (@($pre | Where-Object { $_ -match '^\s*///' }).Count -eq 0) ''
 Check 'PRECONDITION: IsAsciiAlpha''s // comment is TWO wrapped lines (so "joined with single spaces" is testable)' `
   ((@($pre | Where-Object { $_ -match '^// (True for a 7-bit|shield and unshield)' }).Count) -eq 2) ''
-Check 'PRECONDITION: TwoParagraphs'' // comment has a BLANK comment line separating two paragraphs' `
-  (@($pre | Where-Object { $_.Trim() -eq '//' }).Count -eq 1) ''
+# TWO of them as of the banner-drop case: one separates TwoParagraphs' two
+# paragraphs, one separates BannerLed's. The count is asserted rather than
+# loosened to '>= 1' because the paragraph SPLIT is what both shapes depend on
+# -- if a fixture edit ever removes one, the suite should say so right here.
+Check 'PRECONDITION: two shapes carry a BLANK comment line separating paragraphs' `
+  (@($pre | Where-Object { $_.Trim() -eq '//' }).Count -eq 2) ''
 Check 'PRECONDITION: the second paragraph really contains the three characters XML escaping must handle' `
   (@($pre | Where-Object { $_ -match 'A < B & C > D' }).Count -eq 1) ''
 
@@ -172,6 +176,29 @@ Check 'SPLIT (de-vacuator): TwoParagraphs really does render an AUTO_BEGIN fence
 Check 'SPLIT: the harvested remarks prose sits ABOVE the AUTO_BEGIN fence' `
   (($idxProse -ge 0) -and ($idxBegin -ge 0) -and ($idxProse -lt $idxBegin)) `
   ("prose=$idxProse begin=$idxBegin")
+
+# --- (3b) A LEADING BANNER PARAGRAPH IS NOT THE SUMMARY. -------------------
+# v(ADP3, post-T17 rollout): found on real code, not on a fixture. YADFOT's
+# `Register` came out with the summary '--- Register --------------------...'
+# because a separate banner comment sat one blank line above the real prose;
+# the boundary scan tolerates exactly one blank line (AllowGap = 1), so it
+# swallowed the banner, and "first paragraph becomes the summary" did the rest.
+# Neither the scan nor the split was individually wrong -- the interaction was.
+#
+# The summary must be the PROSE, and the banner must not survive anywhere in the
+# block: dropping it from the summary but leaving it at the top of <remarks>
+# would just move the noise.
+$lnBanner = Get-DeclLine $db 'BannerLed'
+Check 'BANNER: BannerLed resolved to an interface declaration line' ($lnBanner -gt 0) "line=$lnBanner"
+$blkBanner = Get-DocBlockAtLine $lines $lnBanner
+Check 'BANNER: the summary is the PROSE, not the banner rule' `
+  ((Get-Summary $blkBanner) -eq 'Real prose that must become the summary.') `
+  ("got=[" + (Get-Summary $blkBanner) + "]")
+Check 'BANNER: no run of dashes survives anywhere in the emitted block' `
+  (-not ($blkBanner -match '---')) ($blkBanner -replace "`n",' | ')
+Check 'BANNER (de-vacuator): the SECOND paragraph still reached <remarks>' `
+  ((($blkBanner -split "`n") -join ' ') -match 'Second paragraph stays remarks prose') `
+  ($blkBanner -replace "`n",' | ')
 
 # --- (4) XML escaping, in BOTH directions. ---------------------------------
 Check 'ESCAPE: < and > and & in the harvested prose are escaped' `

@@ -154,6 +154,13 @@ type
 
 const
   SEPARATOR_CHARS = ['-', '=', '*', '_', '#'];
+  // The share of a line's non-space characters that must be separators before
+  // it counts as decoration rather than prose. ONE home, TWO readers: hrBanner's
+  // single-line arm (which rejects a block that is ONLY a rule) and HarvestText's
+  // leading-banner drop (which removes a rule that merely LEADS real prose).
+  // Promoted from a bare 0.6 literal when the second reader was added -- two
+  // copies of a tuning threshold is how they drift apart.
+  SEPARATOR_SHARE_MIN = 0.6;
 
 // Classifies one line, advancing AState across it. A line is CODE the moment it
 // carries a single non-whitespace character outside a comment -- `end; // done`
@@ -461,6 +468,36 @@ begin
   end;
   if Length(Paras) = 0 then Exit;
 
+  // (2b) DROP LEADING BANNER PARAGRAPHS. Found on real code during the Phase 3
+  // rollout, not on a fixture: YADFOT.Wizard.pas's `Register` came out with the
+  // summary '--- Register ---------------------------...'.
+  //
+  // The source there is a SEPARATE banner comment, ONE blank line, then eleven
+  // lines of real prose. FindDocRegionAbove tolerates exactly one blank line
+  // (AllowGap = 1), so the boundary scan crosses the gap and swallows the
+  // banner; the paragraph split then does precisely what it is specified to do
+  // and makes the banner paragraph 1, hence the <summary> -- the one line that
+  // shows in a Help Insight tooltip and in every hover. Neither the scan nor
+  // the split is individually wrong; the INTERACTION is, so the repair belongs
+  // here, where both have already happened.
+  //
+  // The test is the SAME one hrBanner's own single-line arm uses --
+  // SeparatorShare >= SEPARATOR_SHARE_MIN -- not a second, parallel notion of
+  // "looks like a rule". hrBanner rejects a block that is ONLY decoration; this
+  // drops decoration that merely LEADS a block with real prose in it, which is
+  // the case hrBanner cannot see because the block as a whole is legitimate.
+  //
+  // Dropped, not demoted: moving the banner into <remarks> instead would just
+  // relocate the noise. If every paragraph is decoration there is nothing to
+  // harvest and the caller gets '' for both -- which cannot normally happen,
+  // since hrBanner would already have rejected such a block, but the loop is
+  // written not to depend on that.
+  var FirstReal: Integer:= 0;
+  while (FirstReal <= High(Paras)) and (SeparatorShare(Paras[FirstReal]) >= SEPARATOR_SHARE_MIN) do
+    Inc(FirstReal);
+  if FirstReal > High(Paras) then Exit;
+  if FirstReal > 0 then Paras:= Copy(Paras, FirstReal, Length(Paras) - FirstReal);
+
   // (3) + (4) First paragraph is the summary, the rest are remarks prose,
   // separated by a blank line. Escaped with the ONE escaper (see the header).
   ASummary:= EscXml(Paras[0]);
@@ -606,7 +643,7 @@ begin
   AllSep:= True;
   for i:= Top to Bottom do
     if not IsSeparatorOnly(Infos[i].Text) then begin AllSep:= False; Break; end;
-  if AllSep or ((Bottom = Top) and (SeparatorShare(Infos[Top].Text) >= 0.6)) then
+  if AllSep or ((Bottom = Top) and (SeparatorShare(Infos[Top].Text) >= SEPARATOR_SHARE_MIN)) then
   begin
     Result.Reason:= hrBanner;
     Exit;
