@@ -426,8 +426,24 @@ try {
   # <remarks> with facts to fence takes the multi-line form and stays there after
   # the fence is stripped (no marker records the reformat, so --strip cannot undo
   # it). Both keep the FIRST remarks and lose the surplus; both are marker-free.
+  # v(ADP3 T9) RE-PINNED: TwoRemarksNoFacts now leaves the SAME three-line form
+  # as TwoRemarksWithFacts, so the two expectations have converged.
+  #
+  # The comment just above already states the rule that explains it -- a
+  # <remarks> with engine content to fence takes the multi-line form and stays
+  # there after the strip, because no marker records the reformat and --strip
+  # cannot undo what it cannot see. What changed is only WHICH shapes have
+  # engine content: T7's harvester mines the '//' comment above the declaration,
+  # so "NoFacts" is now a misnomer -- the symbol has no CALLER facts, but it does
+  # get harvested prose, which needs the same multi-line container.
+  #
+  # NOTHING IS LOST that was not already pinned as lost: the author's
+  # 'First remarks.' survives verbatim in both, and the surplus second <remarks>
+  # is dropped in both -- the pre-existing loss these two shapes exist to pin
+  # (see IsRetractableSurplusContainer: retracting it cannot reach a fixed
+  # point, it oscillates A/B/A). Only the line wrapping moved.
   $remarksStrippedExpected = @{
-    TwoRemarksNoFacts   = '/// <remarks>First remarks.</remarks>'
+    TwoRemarksNoFacts   = "/// <remarks>`n/// First remarks.`n/// </remarks>"
     TwoRemarksWithFacts = "/// <remarks>`n/// First remarks.`n/// </remarks>"
   }
   Check 'ROUND-TRIP (pinned pre-existing): TwoSinceAndTwoSummary does NOT round-trip -- the engine canonicalized tag ORDER' `

@@ -113,5 +113,34 @@ questions:
    makes no distinction, and that distinction is a product call, not a
    derivation.
 
-Until that ruling, the 22 remain red **by choice**, and that choice is now
-recorded with its evidence rather than inherited.
+## THE RULING -- given 2026-08-02, both questions answered
+
+**1. Direction: the REPAIR branch becomes NON-DESTRUCTIVE.** The recommendation
+above is adopted as written. The repair-vs-fresh routing term is **not** to be
+widened -- the reverted one-liner at `Doc.Document.pas:764-770` stays reverted,
+and this document's measurement is the reason on the record: widening it moves
+the deletion to cycle 1 rather than preventing it, buying green suites with
+silent data loss on the user's first run.
+
+**2. Scope: preserve EVERY unmodeled tag. No exceptions.** If the engine does
+not model a tag, its span is copied byte-for-byte. The engine is **not**
+granted permission to reclaim a stale *modeled* tag either (the `<param>` for a
+parameter that no longer exists was offered explicitly and declined). The rule
+is deliberately the simplest statable one, and it matches the guard the
+fresh-insert path already applies to `<value>`:
+
+| tag | modeled? | repair may... |
+| --- | --- | --- |
+| `<summary>` | yes | refresh per T9's four-way table |
+| `<param>` / `<returns>` | yes | refresh |
+| `<remarks>` | no | **PRESERVE** |
+| `<value>` | no | **PRESERVE** (already true on the fresh path) |
+| anything else | no | **PRESERVE** |
+
+Consequence accepted knowingly: a genuinely stale unmodeled tag lingers until a
+human removes it. That is the intended trade -- an engine that never destroys
+hand-written prose is worth more than one that tidies up after the author.
+
+**This ruling is T9's central design decision**, not a side fix: T9 is
+"drift protection, idempotency, strip round-trip" and all 22 red checks are
+idempotency failures caused by harvesting. Implement it as part of T9.

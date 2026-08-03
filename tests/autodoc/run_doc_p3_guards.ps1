@@ -198,10 +198,22 @@ try {
   $decayedAfter = Get-DocBlock $after $patDecayed
   Check 'D12 the hand-written <value> beside a decayed fence SURVIVES (the guard fails closed)' `
     ($null -ne $decayedAfter -and $decayedAfter.Contains('<value>Unmodeled tag beside a decayed fence; must survive.</value>'))
-  Check 'D12 KNOWN GAP, pinned: the DECAYED fact is still on disk -- unchanged/0 forever, never cleaned' `
-    ($null -ne $decayedAfter -and $decayedAfter.Contains('Called from: guards.NoSuchCallerAnyMore'))
-  Check 'D12 the whole block is byte-identical (no edit is produced for this shape at all)' `
-    ($decayedAfter -ceq $decayedBefore)
+  # v(ADP3 T9) PIN FLIPPED -- D12 IS CLOSED, the same way N4 in
+  # run_doc_p3_decayrouting is. This shape's region is routed by an author's
+  # <remarks>, and T9 added Existing.HasRemarksTag to the repair-vs-fresh
+  # OR-chain in DRagLint.Doc.Document.pas, so it now reaches the REPAIR path
+  # instead of stalling on "Merged comes out '' and the delete guard correctly
+  # refuses to delete a region containing hand-written source".
+  #
+  # The stale 'Called from: guards.NoSuchCallerAnyMore' fence -- a caller that
+  # does not exist -- is now cleaned, and the guard's real job still holds: the
+  # hand-written <value> beside it survives (checked immediately above, and that
+  # check is UNCHANGED). That is the pairing that matters: the decay is
+  # repaired WITHOUT the unmodeled tag being destroyed.
+  Check 'D12 FIXED (T9): the DECAYED fact naming a non-existent caller is now CLEANED' `
+    ($null -ne $decayedAfter -and -not $decayedAfter.Contains('Called from: guards.NoSuchCallerAnyMore'))
+  Check 'D12 FIXED (T9): the block WAS edited (it is no longer byte-identical -- the repair really ran)' `
+    ($decayedAfter -cne $decayedBefore)
 
   # --- D11: FIXED by T3h ----------------------------------------------------
   # This pin used to assert the LOSS. Task 3h closed it as one instance of the

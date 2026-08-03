@@ -57,7 +57,22 @@
 > the reporters were right not to invent a VCL-over-FMX preference. Suggested shape offered in the
 > reply: a `--prefer-namespace Vcl` hint on the query rather than a baked-in default.
 >
-> ### >>> NEXT ACTION: get the ruling in `docs/lint/TRIAGE-the-22-harvest-repair.md`
+> ### >>> THE RULING IS IN (2026-08-02) -- T9 IS UNBLOCKED. NEXT ACTION: implement T9.
+>
+> Both questions at the end of `docs/lint/TRIAGE-the-22-harvest-repair.md` were answered, and
+> the answers are recorded there under "THE RULING":
+> 1. **Direction -- the REPAIR branch becomes NON-DESTRUCTIVE.** The routing term is NOT
+>    widened; the reverted one-liner at `Doc.Document.pas:764-770` stays reverted.
+> 2. **Scope -- preserve EVERY unmodeled tag, no exceptions.** Reclaiming a stale *modeled*
+>    `<param>` was offered explicitly and DECLINED. If the engine does not model a tag, its span
+>    is copied byte-for-byte. Accepted consequence: a stale unmodeled tag lingers until a human
+>    removes it.
+>
+> This is T9's central design decision, so it is implemented AS PART OF T9 -- not as a separate
+> fix ahead of it. Group A's 16 checks should go green on the merits; Group B's 5 pinned
+> "known gap" checks get re-pinned AFTER Group A settles; Group C is the same family.
+>
+> ### The evidence behind that ruling (kept -- it is why the obvious fix was refused)
 >
 > The 22 red autodoc checks were triaged as LATEST-75 asked. **The obvious fix is worse than
 > leaving them red, and the triage now proves why with numbers.** `EmptyRemarksOnly` goes

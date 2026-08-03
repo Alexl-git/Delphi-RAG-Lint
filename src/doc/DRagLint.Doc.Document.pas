@@ -768,9 +768,45 @@ begin
   // INTERIM behaviour for a region Merged cannot model; Task 3b (tag round-
   // tripping) is where Merged learns to carry these tags, at which point the
   // repair path can handle them precisely instead of stacking.
+  // v(ADP3 T9): HasRemarksTag JOINS the chain, and this is the fix the user's
+  // 2026-08-02 ruling asked for (docs/lint/TRIAGE-the-22-harvest-repair.md,
+  // "THE RULING"). It is NOT the round-3 widening the comment above records as
+  // deleted -- that one was (Trim(Region.RawText) <> ''), which swept in ANY
+  // non-blank region including ones holding tags Merged could not represent.
+  // This term adds exactly one thing: a <remarks> TAG being literally present.
+  // The parameter is documented as "True when the EXISTING doc region carries
+  // any tag at all", so its absence was a plain omission in the enumeration,
+  // not a policy.
+  //
+  // WHY IT IS THE NON-DESTRUCTIVE FIX, measured rather than argued. A comment
+  // whose only tag is an empty <remarks></remarks> has HasContent False and no
+  // summary/returns/param, so it took the FRESH-INSERT branch, which leaves the
+  // author's line alone and stacks a second block below it. Cycle 2 then sees
+  // one region holding both, takes the REPAIR branch, and re-emits a single
+  // <remarks> -- silently dropping the author's now-surplus empty one. Measured
+  // on fixtures/docp3/idempotency_shapes.EmptyRemarksOnly:
+  //   7502 -> 9481 -> 9456 -> 9456 bytes, actions created/1 extended/2
+  // The 25-byte cycle-2 SHRINK is exactly '/// <remarks></remarks>' + CRLF.
+  //
+  // Routing it to repair on cycle 1 does not MOVE that deletion earlier (the
+  // trap the triage warned about); it removes the deletion entirely, because
+  // repair ADOPTS the author's <remarks> as the container for its own facts
+  // instead of stacking a rival one for a later cycle to reconcile. The proof
+  // was already in the fixture: the six *PlusEmptyRemarks symbols each carry an
+  // empty <remarks> beside a tag that DOES set this flag, so they already took
+  // repair on cycle 1 -- and every one of them converges at cycle 1 with its
+  // empty <remarks> intact. The only three symbols that lost content were the
+  // only three that took fresh-insert.
+  //
+  // The round-3 comment above defers this to "Task 3b ... at which point the
+  // repair path can handle them precisely instead of stacking". That
+  // precondition is MET: T3f's verbatim carry-through (SplitResidualLines)
+  // ships, and run_doc_p3_idempotency_sweep's own NON-DESTRUCTIVE checks prove
+  // an unmodeled hand-written <value> now survives all three cycles THROUGH the
+  // repair path. Stacking was the interim; it is now the thing doing the damage.
   var ExistingHasAnyTag: Boolean:=
     Existing.HasSummaryTag or Existing.HasReturnsTag or (Length(Existing.Params) > 0)
-    or Existing.HasContent;
+    or Existing.HasRemarksTag or Existing.HasContent;
   Merged:= TDocRegions.MergeComment(Existing, SigParams, Facts, HasRet, Prefix, AComplexityMin, ExistingHasAnyTag);
 
   // v(ADP3 T3): MergeComment returns '' when omit-when-empty suppression

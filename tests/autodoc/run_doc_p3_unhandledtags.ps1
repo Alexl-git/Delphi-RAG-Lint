@@ -147,8 +147,14 @@ try {
   # zero edits (see assertions 2/3 below), so 2 is the total for the unit.
   # Review round 1 (Minor): '"edits":2' would ALSO match '"edits":20' etc. --
   # anchor on the terminating ',' or '}' so only the exact value 2 passes.
-  Check '1. apply reports edits=2 for the whole unit (ONLY HasSinceSeeAlsoExampleDeprecated is repaired)' `
-    ($applyJson -match '"edits":2[,}]') $applyJson
+  # v(ADP3 T9) RE-PINNED 2 -> 4. TWO decls are repaired now, not one, and a
+  # repair is a delete+insert PAIR -- so 2 symbols x 2 edits = 4. The second
+  # symbol is HasValueTag: T7's harvester gives it a <summary> mined from the
+  # '//' comment above its declaration, where before it had no content the
+  # engine could write and fell through to Merged=''. HasException still
+  # contributes zero (check 2 below, unchanged, asserts its span byte-exactly).
+  Check '1. apply reports edits=4 for the whole unit (TWO decls repaired x delete+insert)' `
+    ($applyJson -match '"edits":4[,}]') $applyJson
 
   $lines = [IO.File]::ReadAllLines($target)
 
@@ -164,9 +170,31 @@ try {
   # preserve loop has nothing to read for it -- Merged is STILL '' and this
   # decl is STILL protected by RegionFullyEngineOwned, unchanged from before
   # this task (the genuinely load-bearing case for that guard, going forward).
+  # v(ADP3 T9) RE-PINNED. This decl is no longer byte-identical, and both
+  # reasons are deliberate engine behaviour shipped since this pin was written:
+  #   * T7 harvest ADDS a <summary> mined from the '//' comment above the decl.
+  #   * T3 omit-when-empty DROPS the '<returns><!-- drag-lint:auto --></returns>'
+  #     -- that tag is engine-MARKED and EMPTY, i.e. engine-owned with nothing
+  #     to say, exactly what T3 exists to stop emitting.
+  # What the pin was really protecting is unchanged and is asserted directly
+  # below instead of via a whole-span hash: the hand-written <value> survives
+  # verbatim. Nothing UNMARKED was touched, which is the standard the user's
+  # 2026-08-02 ruling sets (docs/lint/TRIAGE-the-22-harvest-repair.md).
   $valueTagBlockAfter = Get-DocBlockAbove $lines '^function HasValueTag: Integer;'
-  Check '3. HasValueTag''s doc-comment span is byte-identical to before the apply (guard still protects the unmodeled tag)' `
-    ($null -ne $valueTagBlockBefore -and $null -ne $valueTagBlockAfter -and $valueTagBlockAfter -ceq $valueTagBlockBefore)
+  # BYTE-EXACT on the author's own line, rather than a Contains() on its text:
+  # that is the part of the old whole-span pin worth keeping, and it still uses
+  # the pre-apply capture as its source of truth instead of a literal retyped
+  # here (which could drift from the fixture without anyone noticing).
+  $valueLineBefore = @($valueTagBlockBefore -split "`n" | Where-Object { $_ -match '<value[ >]' })
+  $valueLineAfter  = @($valueTagBlockAfter  -split "`n" | Where-Object { $_ -match '<value[ >]' })
+  Check '3. FIXTURE: exactly one <value> line before the apply' ($valueLineBefore.Count -eq 1)
+  Check '3. HasValueTag: the hand-written <value> line is BYTE-IDENTICAL after the repair (the guard''s real job)' `
+    ($valueLineBefore.Count -eq 1 -and $valueLineAfter.Count -eq 1 -and $valueLineAfter[0] -ceq $valueLineBefore[0]) `
+    ("before=[" + ($valueLineBefore -join '|') + "] after=[" + ($valueLineAfter -join '|') + "]")
+  Check '3. HasValueTag: exactly ONE <value> tag (preserved, not duplicated)' `
+    ($null -ne $valueTagBlockAfter -and (([regex]::Matches($valueTagBlockAfter, '<value[ >]')).Count -eq 1))
+  Check '3. HasValueTag FIXED (T7): the decl now carries a harvested <summary> where it previously had none' `
+    ($null -ne $valueTagBlockAfter -and $valueTagBlockAfter.Contains('<summary><!-- drag-lint:auto -->'))
 
   # 4. HasSinceSeeAlsoExampleDeprecated: all four tags survive, verbatim, in
   # Task 3b's fixed emission order (no <exception> on this decl, so:
@@ -189,7 +217,19 @@ try {
   $text = [IO.File]::ReadAllText($target)
   Check '5. hand-written <exception> survives verbatim'  ($text.Contains('/// <exception cref="EFoo">Boom.</exception>'))
   Check '5. hand-written <value> survives verbatim (unmodeled tag type)' ($text.Contains('/// <value>Hand-written; must survive.</value>'))
-  Check '5. the paired marked-empty <returns> survives too (untouched, not just the value tag)' ($text.Contains('/// <returns><!-- drag-lint:auto --></returns>'))
+  # v(ADP3 T9) PIN INVERTED, deliberately. The paired <returns> is MARKED
+  # ('<!-- drag-lint:auto -->') and EMPTY -- engine-owned content with nothing
+  # to say -- so T3's omit-when-empty rule removes it, and that removal is the
+  # rule working, not content loss. The identical assertion for this decl's
+  # HasSinceSeeAlsoExampleDeprecated sibling (check 4, "the now-empty, now-
+  # redundant <remarks></remarks> is correctly gone") has always read this way;
+  # this check simply predates T3 and was never brought into line.
+  #
+  # The distinction that matters, and the one the user's ruling turns on: the
+  # UNMARKED hand-written <value> on the very same decl is untouched (check 5
+  # above and the byte-exact check 3). Marked+empty goes; hand-written stays.
+  Check '5. the paired marked-empty <returns> is correctly GONE (T3 omit-when-empty: engine-owned and empty)' `
+    (-not $text.Contains('/// <returns><!-- drag-lint:auto --></returns>'))
 
   # 6. Idempotency: reindex + a second --stubs --apply is byte-identical --
   # the newly-repaired HasSinceSeeAlsoExampleDeprecated is now a stable

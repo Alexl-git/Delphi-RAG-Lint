@@ -356,10 +356,34 @@ Check 'SWEEP C: EVERY symbol reaches a fixed point from cycle 2 under --qname-sc
 # gone red), which is exactly why a genuine three-symbol branch flip went
 # unnoticed. Pinning the cycle-1 action here makes a FUTURE flip of this kind
 # visible instead of silent, for both directions (created<->extended).
+# v(ADP3 T9): the LAST THREE 'created' pins FLIP to 'extended', and this is the
+# re-pin the pin's own instruction above asks for -- "update the pin only after
+# understanding why". The why, measured:
+#
+# T9 added Existing.HasRemarksTag to the repair-vs-fresh OR-chain in
+# DRagLint.Doc.Document.pas, so a comment whose ONLY tag is an empty/whitespace
+# <remarks> now routes to REPAIR on cycle 1 instead of stacking a second block
+# for cycle 2 to reconcile. That is the SAME mechanism, in the SAME direction,
+# that Task 3c's own widening applied to the three shapes below -- and it was
+# recorded there as "safe, non-destructive, faster-convergence". T9 simply
+# finishes the enumeration: HasRemarksTag was missing from a chain documented as
+# "any tag at all".
+#
+# This flip is the FIX, not a regression, and the numbers say so. Cycle 2 used to
+# be a DELETION -- it removed the author's own '/// <remarks></remarks>' line:
+#   EmptyRemarksOnly    7502 -> 9481 -> 9456 -> 9456   (cycle 2 SHRANK by 25 = the line)
+#   GappedEmptyRemarks  7502 -> 8204 -> 7687 -> 7687   (cycle 2 SHRANK by 517)
+# and now settles on cycle 1 with nothing destroyed:
+#   EmptyRemarksOnly    7502 -> 9456 -> 9456 -> 9456
+#   GappedEmptyRemarks  7502 -> 8179 -> 8179 -> 8179
+# Per the user ruling in docs/lint/TRIAGE-the-22-harvest-repair.md, repair must
+# be non-destructive; routing here EARLIER is what makes it so, because repair
+# ADOPTS the author's <remarks> as the container for its facts rather than
+# emitting a rival one. A flip BACK to 'created' now means that fix regressed.
 $expectedCycle1Action = @{
-  'EmptyRemarksOnly'        = 'created'   # unaffected by Task 3c: no since/example/seealso involved
-  'WhitespaceRemarksOnly'   = 'created'   # unaffected by Task 3c
-  'TwoLineRemarksOnly'      = 'created'   # unaffected by Task 3c
+  'EmptyRemarksOnly'        = 'extended'  # v(ADP3 T9): was 'created' pre-T9 -- see comment above
+  'WhitespaceRemarksOnly'   = 'extended'  # v(ADP3 T9): was 'created' pre-T9
+  'TwoLineRemarksOnly'      = 'extended'  # v(ADP3 T9): was 'created' pre-T9
   'SincePlusEmptyRemarks'   = 'extended'  # v(ADP3 T3c): was 'created' pre-3c -- see comment above
   'ExamplePlusEmptyRemarks' = 'extended'  # v(ADP3 T3c): was 'created' pre-3c
   'SeeAlsoPlusEmptyRemarks' = 'extended'  # v(ADP3 T3c): was 'created' pre-3c

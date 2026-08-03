@@ -2338,9 +2338,45 @@ begin
     // preserves the convention every other shape in this codebase already
     // follows.
     var LenBeforeResidual: Integer:= Sb.Length;
+    // v(ADP3 T9): note whether the carried-through residual ALREADY contains a
+    // <remarks> element of the author's. See ResidualCarriesRemarks' use below.
+    var ResidualCarriesRemarks: Boolean:= False;
     for var ResidualLine in Residual do
+    begin
       Sb.AppendLine(LinePrefix + ResidualLine);
+      if not ResidualCarriesRemarks then
+        ResidualCarriesRemarks:= ContainsText(ResidualLine, '<remarks');
+    end;
     var LenAfterResidual: Integer:= Sb.Length;
+
+    // v(ADP3 T9): DO NOT FABRICATE A SECOND <remarks> BESIDE THE AUTHOR'S.
+    //
+    // The shape (fixtures/docp3/guards.pas, UnfencedRemarksTail):
+    //   /// <remarks>Plain hand prose, no fence, no marker.</remarks> <value>tail value</value>
+    // T3f carries that whole line through VERBATIM, because the author's prose
+    // shares the line with an unmodeled <value> tail. Carrying it through also
+    // removes it from AccountedRaw, so Eff parses no remarks and Prose is ''
+    // (which is why the author's prose is correctly emitted exactly once).
+    // The harvester then had HarvestedRemarks <> '' with nowhere to put it, so
+    // the emitter below opened a <remarks> of its OWN -- and the region ended
+    // up with two sibling <remarks> elements, which is not well-formed
+    // DocInsight. run_doc_p3_guards' "no <remarks> was fabricated beside the
+    // author's" check names exactly this.
+    //
+    // The rule applied here is T8's, not a new one: HAND-WRITTEN WINS.
+    // Harvested prose is the fallback for a symbol whose author wrote none --
+    // an author who HAS written <remarks> outranks it. Nothing is destroyed by
+    // dropping it either: the harvest is derived from a source comment that is
+    // still sitting in the file, so it is recomputed, not lost.
+    //
+    // NARROW ON PURPOSE -- gated on Facts = ''. When there ARE facts, the fence
+    // genuinely needs a <remarks> container and suppressing it would drop real
+    // engine output; that case keeps its own element and is covered by the
+    // idempotency sweep's NON-DESTRUCTIVE checks. This gate only removes an
+    // element whose ENTIRE contents would have been the harvested paragraph.
+    var HarvestedForEmit: string:= AFacts.HarvestedRemarks;
+    if ResidualCarriesRemarks and (Facts = '') then
+      HarvestedForEmit:= '';
 
     // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh
     // managed block. Strip any old fenced block from the prose before re-emitting
@@ -2434,9 +2470,9 @@ begin
     // v(ADP3 T7): ... and no harvested prose to place above a fence. The
     // one-line form has nowhere to put a second, marked paragraph, so harvested
     // remarks take the multi-line path below exactly as Facts already do.
-    if (Trim(Prose) <> '') and (Facts = '') and (AFacts.HarvestedRemarks = '') and (not NormProse.Contains(#10)) then
+    if (Trim(Prose) <> '') and (Facts = '') and (HarvestedForEmit = '') and (not NormProse.Contains(#10)) then
       Sb.AppendLine(APrefix + '<remarks>' + Trim(Prose) + '</remarks>')
-    else if (Trim(Prose) <> '') or (Facts <> '') or (AFacts.HarvestedRemarks <> '') then
+    else if (Trim(Prose) <> '') or (Facts <> '') or (HarvestedForEmit <> '') then
     begin
       Sb.AppendLine(APrefix + '<remarks>');
       if Trim(Prose) <> '' then
@@ -2450,7 +2486,9 @@ begin
             Sb.AppendLine(APrefix + Trim(ProseLine));
       end;
       // v(ADP3 T7): after the preserved hand prose, before the fence.
-      EmitHarvestedRemarks(Sb, APrefix, AFacts.HarvestedRemarks);
+      // v(ADP3 T9): HarvestedForEmit, not AFacts.HarvestedRemarks -- see the
+      // "DO NOT FABRICATE A SECOND <remarks>" comment above.
+      EmitHarvestedRemarks(Sb, APrefix, HarvestedForEmit);
       if Facts <> '' then
       begin
         Sb.AppendLine(APrefix + AUTO_BEGIN);
