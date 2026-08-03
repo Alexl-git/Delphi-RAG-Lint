@@ -37,10 +37,38 @@ type
       procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>);
       procedure ReadDProj       (const ADprojPath: string; AList: TList<string>);
       procedure ReadDprUsesPaths(const ADprPath  : string; AList: TList<string>);
+      procedure CollectProjectFolders(const ADprojPath: string; AList: TList<string>);
     public
       constructor Create;
       destructor Destroy; override;
+      /// <summary>The COMPILER search path for ADprojPath: the project's own
+      /// folders PLUS the IDE's registry Library/Browsing paths for Win32 and
+      /// Win64. Use for anything that has to invoke dcc, which must be able to
+      /// find the RTL.</summary>
+      /// <param name="ADprojPath">Absolute path to the .dproj.</param>
+      /// <returns>Deduplicated existing folders, project folders first.</returns>
+      /// <exception cref="Exception">Raised when ADprojPath does not exist.</exception>
+      /// <remarks>NOT an indexing scope. The registry tail is the whole machine's
+      /// library -- 151 folders on a typical box -- so walking what this returns
+      /// indexes the entire RTL/VCL and every installed component's source. Use
+      /// <see cref="ResolveProjectOnly"/> to index a project.</remarks>
       function Resolve(const ADprojPath: string): TArray<string>;
+      /// <summary>The INDEXING scope for ADprojPath: the project's own folders
+      /// only -- its .dproj search paths, the directories named by the .dpr's
+      /// `in '...'` clauses, and the project directory itself. The registry
+      /// Library/Browsing paths are deliberately NOT appended.</summary>
+      /// <param name="ADprojPath">Absolute path to the .dproj.</param>
+      /// <returns>Deduplicated existing folders. Typically 1-5 entries.</returns>
+      /// <exception cref="Exception">Raised when ADprojPath does not exist.</exception>
+      /// <remarks>Split out from <see cref="Resolve"/> on 2026-08-03: `index
+      /// --project` had been walking Resolve's registry tail, which turned a
+      /// 12-unit project into a 153-folder scan duplicating library-Win32.sqlite
+      /// and library-Win64.sqlite wholesale. Library coverage belongs in those
+      /// shared indexes; a consumer reaches it by passing a second --db.</remarks>
+      /// <remarks>A .dproj search path that itself points into a library tree IS
+      /// still returned -- that is an explicit statement by the project author,
+      /// unlike the registry tail, which no project asked for.</remarks>
+      function ResolveProjectOnly(const ADprojPath: string): TArray<string>;
       // Library/Browsing paths from registry only - no .dproj required.
       // Useful for "index everything Delphi knows about" without a project.
       //   AAllPlatforms = False -> Win32 + Win64 only (the IDE's native targets).
@@ -416,32 +444,54 @@ begin
   end;
 end;
 
-function TProjectResolver.Resolve(const ADprojPath: string): TArray<string>;
+// The project's OWN folders, shared by Resolve and ResolveProjectOnly: the
+// .dproj search paths plus the directories named by the main source's
+// `in '...'` clauses. Deliberately contains no registry lookup -- that tail is
+// what separates a compiler search path from an indexing scope, and it is added
+// by Resolve alone.
+procedure TProjectResolver.CollectProjectFolders(const ADprojPath: string; AList: TList<string>);
 var
-  List      : TList<string>;
-  DprPath   : string       ;
-  BaseDir   : string       ;
-  MainSource: string       ;
+  DprPath   : string;
+  MainSource: string;
 begin
   if not TFile.Exists(ADprojPath) then raise Exception.CreateFmt('.dproj not found: %s', [ADprojPath]);
+
+  ReadDProj(ADprojPath, AList);
+
+  // Try to find the matching .dpr (same basename) next to the .dproj
+  MainSource:= TPath.ChangeExtension(ADprojPath, '.dpr');
+  if TFile.Exists(MainSource) then DprPath:= MainSource
+  else
+  begin
+    // Sometimes the .dpk has the uses list (packages)
+    MainSource:= TPath.ChangeExtension(ADprojPath, '.dpk');
+    if TFile.Exists(MainSource) then DprPath:= MainSource
+    else DprPath:= '';
+  end;
+  if DprPath <> '' then ReadDprUsesPaths(DprPath, AList);
+end; // procedure
+
+function TProjectResolver.Resolve(const ADprojPath: string): TArray<string>;
+var
+  List: TList<string>;
+begin
   List:= TList<string>.Create;
   try
-    ReadDProj(ADprojPath, List);
-
-    // Try to find the matching .dpr (same basename) next to the .dproj
-    BaseDir:= TPath.GetDirectoryName(ADprojPath);
-    MainSource:= TPath.ChangeExtension(ADprojPath, '.dpr');
-    if TFile.Exists(MainSource) then DprPath:= MainSource
-    else
-    begin
-      // Sometimes the .dpk has the uses list (packages)
-      MainSource:= TPath.ChangeExtension(ADprojPath, '.dpk');
-      if TFile.Exists(MainSource) then DprPath:= MainSource
-      else DprPath:= '';
-    end;
-    if DprPath <> '' then ReadDprUsesPaths(DprPath, List);
-
+    CollectProjectFolders(ADprojPath, List);
     ReadLibraryPaths(List, ['Win32', 'Win64']);
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end; // try
+end; // function
+
+function TProjectResolver.ResolveProjectOnly(const ADprojPath: string): TArray<string>;
+var
+  List: TList<string>;
+begin
+  List:= TList<string>.Create;
+  try
+    CollectProjectFolders(ADprojPath, List);
     Result:= List.ToArray;
   finally
     List.Free;

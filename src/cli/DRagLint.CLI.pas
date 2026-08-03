@@ -1882,7 +1882,17 @@ begin
     Writeln('Project: ', AArgs.ProjectPath);
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
-      Folders:= Resolver.Resolve(AArgs.ProjectPath);
+      { ResolveProjectOnly, NOT Resolve: Resolve appends the IDE's registry
+        Library/Browsing paths for Win32+Win64, which is right for a COMPILER
+        search path (check-unit, the compile helper) and catastrophic for an
+        indexing scope. Walking that tail turned `index --project DataCopy.dproj`
+        -- a 12-unit project declaring no search paths of its own -- into a
+        153-folder recursive scan of the whole RAD Studio source tree, Raize,
+        Spring4D and OmniThreadLibrary's tests\ and examples\: over an hour in,
+        only 3.5% of the indexed files belonged to the project. All of it is
+        already in library-Win32.sqlite / library-Win64.sqlite, which a consumer
+        reaches by passing a second --db. }
+      Folders:= Resolver.ResolveProjectOnly(AArgs.ProjectPath);
     finally
       Resolver.Free;
     end;
