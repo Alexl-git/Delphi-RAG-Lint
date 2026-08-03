@@ -99,8 +99,64 @@ line is real information a reader cannot get from the signature, and the cap of 
 does NOT reopen T3's rule for empty tags generally: an `Assigned` section with nothing to say must
 still be omitted, per open question 4 below.
 
+## SPEC EXTENSION, user, 2026-08-02 evening -- the rendering is TYPE-DEPENDENT
+
+The section is not one fixed shape. **What is shown depends on the complexity of the variable's
+type.** Three cases, in the user's own examples:
+
+### 1. Scalar -- `BlockCount: Integer;`
+
+Show **how it is initialized**, plus **up to ~5 further assigned values**. This is the base case and
+the one the original cap of 5 was written for. The initialization is distinguished from the later
+assignments rather than being just the first row: "what does it start as" and "what else does it
+become" are different questions.
+
+### 2. Object / interface -- and the CREATE statement
+
+Show **the create statement** (`X := TFoo.Create(...)`), not merely the fact that X is assigned. For
+an object variable the constructor call is usually the single most informative line about it, and it
+is what tells a reader the CONCRETE type behind an interface-typed or abstract-typed variable.
+
+### 3. Generic / container -- `BlockList: IList<IBlockRecord>;`
+
+Also show **the definition of the TYPE ARGUMENT** -- here `IBlockRecord`, not `IList`. The
+container's identity is rarely the question; the element's is.
+
+- If that definition is a **one-liner**, render it INLINE in the popup.
+- If it is not, offer **navigation: jump from the popup straight to `IBlockRecord`'s definition, and
+  BACK again.**
+
+**"And back" is the load-bearing half.** The hover popup already has one-way navigation (Phase
+LATEST-63 shipped clickable `Returns` lines with `returns_lines` + plugin nav, and the three
+`HandleMemoClick` sites navigate via `TThread.ForceQueue`). One-way is fine when the popup is
+dismissed by the jump. Here the user explicitly wants to come BACK, which means a **navigation
+STACK** in the popup, not just a jump -- a new affordance, and the part of this extension most
+likely to be underestimated.
+
+### What this implies, recorded so the design pass does not rediscover it
+
+- **Resolution must reach TYPE ARGUMENTS, not just the declared type.** `IList<IBlockRecord>`
+  resolves to `IList`; the useful symbol is the argument. There is prior art to reuse rather than
+  invent: the generic/alias member resolution shipped at LATEST-63 (`TTypeAtResolver`, cross-store
+  generic base + arity, RTL-preferred) already decomposes generic types.
+- **"One-liner or not" is a rendering heuristic and needs a stated rule** -- most likely
+  `end_line - start_line` on the indexed symbol, with a small threshold. Say the rule; do not let it
+  become an accident of whatever the renderer happened to do.
+- **The cap interacts with the cases.** 5 assigned values is right for a scalar; for case 3 the
+  budget is spent on a type definition instead. `docs.max_assigned` should cap the ASSIGNMENT LIST,
+  not the whole section, or the type definition will crowd out the assignments (or vice versa).
+- **Three cases means three fixture shapes**, and the acceptance test must cover a scalar, an
+  object with a constructor, and a generic whose argument is both one-line and multi-line. A single
+  fixture proves the case it happens to contain.
+- Case 2 partially overlaps the existing **ownership** fact (`Owns returned:`), which already reasons
+  about construction and disposal. Check before building a second miner for the same question.
+
 ## Status
 
-**Not started.** No branch, no spec, no plan. This document is the request of record, and as of
-2026-08-02 it also carries the gap-fix rationale above. Queued outside the T1-T17 Phase 3 plan;
-sequence it against T9-T17 when Phase 3's remaining tasks are scheduled.
+**Not started.** No branch, no spec, no plan. This document is the request of record. As of
+2026-08-02 it carries (a) the gap-fix rationale -- a factless symbol gets no doc block at all, and
+this feature would close that -- and (b) the type-dependent rendering extension above. Queued
+outside the T1-T17 Phase 3 plan; sequence it against T9-T17 when Phase 3's remaining tasks are
+scheduled. **It has grown from "a facts line" to "a facts line plus a navigable type view", so it
+wants its own spec pass (`superpowers:brainstorming` then a design doc) rather than being slipped in
+as a small task.**
