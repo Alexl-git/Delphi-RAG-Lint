@@ -71,11 +71,13 @@
 > encoding guard red; fixed on disk (git's `.gitattributes` had already normalized the committed
 > blob, so there was nothing to commit -- exactly the failure mode that guard exists to catch).
 >
-> ### Battery -- and the trap it walked straight into
+> ### Battery -- **208 pass / 1 fail / 0 timeout of 209** (baseline 200 / 6 / 0 of 206)
 >
-> First full run after T9: **204 pass / 5 fail / 0 timeout of 209** (baseline 200/6 of 206).
-> Then the shared exe was restaged and the failures resolved to **ONE**, the known pre-existing
-> `run_missing_doc_fix` (red since Task 3). The other four were all one cause:
+> **The single remaining failure is `tests/autofix/run_missing_doc_fix.ps1`, red since Task 3 and
+> already documented. There is no unexplained failure anywhere in the battery.**
+> Confirmed on a clean 23.4-minute run at `26dfa9b` AFTER the exe was restaged.
+>
+> The FIRST run, before restaging, read **204 / 5** -- and four of those five were one cause: 
 >
 > **`tests/run_battery.ps1` runs the runners with NO `-Exe`, so they resolve the STAGED exe** --
 > which was still the pre-T9 binary the concurrent T10 session had staged at 19:57. So
