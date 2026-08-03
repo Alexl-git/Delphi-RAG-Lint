@@ -40,6 +40,15 @@
 > a commit decision), and `GITPush.bat` there does `git add .`. **Do not start step 5
 > without the user's explicit go-ahead and without dealing with that dirty tree first.**
 >
+> ### Battery -- **214 pass / 0 fail / 0 timeout of 214 executed (of 215 found)**
+>
+> **A COMPLETELY GREEN BATTERY.** Baseline entering this session was 208 / 1 / 0 of 209;
+> before LATEST-79 it was 200 / 6 / 0 of 206. Clean 10.7-minute run at `60e02ac` with the
+> exe restaged FIRST. The one runner found-but-not-executed is `tests/run_battery.ps1`
+> itself, excluded by policy because it would recurse into itself -- so 214/214 is total
+> coverage, not a partial. Quote the driver's OWN printed denominator when re-running;
+> it moves every time a runner is added (63 in `tests/autodoc` now).
+>
 > ### T17 is otherwise unblocked -- the gate is satisfied
 >
 > Its own text says "do not reindex on a red battery". There is now no known red.
