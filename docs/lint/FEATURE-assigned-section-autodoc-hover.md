@@ -72,6 +72,35 @@ silently reset the others.
    has no meaning, so the section must be suppressed, not emitted empty (Phase 3 T3 established
    the omit-empty-tags rule -- follow it).
 
+## SECOND MOTIVATION, added 2026-08-02 after Phase 3 T8 -- this is now a GAP FIX, not only a feature
+
+T8 surfaced a limitation nobody had filed: **a symbol with no FACTS gets no doc block at all.**
+`document` reports "N public decl(s), nothing to document" and writes nothing, so a routine whose
+only documentation would be its harvested comment still gets none. That caps the harvester on
+exactly the corpus that motivated it -- YADF, where 120 of 121 harvestable comments sit above the
+body and many of those routines are simple enough to carry no other fact. It was found because the
+plan's own T8 fixture could not demonstrate its own assertion for this reason; both that fixture and
+`harvest_text.pas` now carry a `Driver` routine purely to manufacture a caller fact.
+
+**The user's ruling (2026-08-02):** every variable has *some* usage, so showing the initialization
+(`X := TFoo.Create`, `X := 0`) means **something always shows up**. An `Assigned` fact would
+therefore be near-universal, and would close the factless-symbol gap as a side effect rather than
+needing a separate mechanism.
+
+**TWO RENDER SITES, ONE MINER -- do not conflate them.** The request above is about the *hovered*
+object/variable ("where is X created or assigned"). Closing the gap needs the same data rendered as
+a fact on the *routine's own* doc block. A session that implements only the hover half will believe
+the gap is closed when it is not.
+
+**A DELIBERATE REVERSAL, recorded as such.** Phase 3 T3 established *omit empty tags* -- say nothing
+rather than say nothing loudly. "At least something must show up" pushes the other way, and on a
+one-line getter `Assigned: Result := AValue` is arguably noise. The ruling is that an initialization
+line is real information a reader cannot get from the signature, and the cap of 5 bounds it. This
+does NOT reopen T3's rule for empty tags generally: an `Assigned` section with nothing to say must
+still be omitted, per open question 4 below.
+
 ## Status
 
-**Not started.** No branch, no spec, no plan. This document is the request of record.
+**Not started.** No branch, no spec, no plan. This document is the request of record, and as of
+2026-08-02 it also carries the gap-fix rationale above. Queued outside the T1-T17 Phase 3 plan;
+sequence it against T9-T17 when Phase 3's remaining tasks are scheduled.
