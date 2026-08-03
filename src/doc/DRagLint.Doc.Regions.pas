@@ -342,6 +342,23 @@ type
     /// happens to start with 'Observed:' or read 'TODO: describe.' is no longer
     /// silently adopted.</summary>
     class function IsManagedText(const S: string): Boolean;
+    /// <summary>True when S is engine-owned tag text WITHOUT regard to
+    /// emptiness: it carries AUTO_MARK (IsManagedText), or it is the legacy
+    /// 'TODO: describe.' sentinel. This is the ownership test for
+    /// &lt;summary&gt; and &lt;returns&gt; ONLY -- marked there means engine-owned,
+    /// full stop, whatever follows the marker.</summary>
+    /// <remarks>Deliberately NOT IsManagedDesc: that one also answers True for
+    /// EMPTY text, which is right for a &lt;param&gt; slot and wrong here -- a
+    /// human's blank, unmarked &lt;summary&gt;&lt;/summary&gt; is hand-written and
+    /// must be preserved verbatim, not adopted.
+    ///
+    /// v(ADP3 T9): PROMOTED from a nested function inside MergeComment to a
+    /// class function, for the same reason IsManagedDesc was promoted in
+    /// v(ADP3 T1) -- the Task 9 harvest-drift check in DRagLint.Doc.Drift needs
+    /// this EXACT test, and hand-expanding its two arms a second time is how
+    /// that unit silently drifted out of sync with MergeComment once already.
+    /// One executable home; both callers read it.</remarks>
+    class function IsEngineOwnedTagText(const S: string): Boolean;
     /// <summary>Removes a leading AUTO_MARK, if present, from S -- and, either
     /// way, also removes any leading whitespace: the TrimLeft this performs is
     /// UNCONDITIONAL, not gated on the marker being found, so S is NOT
@@ -1263,6 +1280,25 @@ begin
   Result:= StartsStr(AUTO_MARK, TrimLeft(S));
 end;
 
+// v(ADP3 T3, promoted to a class function in v(ADP3 T9)): True when S is
+// engine-owned WITHOUT regard to emptiness -- carries AUTO_MARK, or is the
+// legacy 'TODO: describe.' sentinel (the pre-v(ADP3) format; still self-heals
+// here). Used for <summary> and <returns> ONLY: marked there means engine-owned,
+// full stop, regardless of what follows the marker -- see the plan's own
+// recorded deviation (a human edit inside the markers is not separable from "the
+// source comment changed", so both refresh; ownership changes hands only by
+// REMOVING the marker, never by the engine sniffing content). v(ADP3 T3 review
+// round 2): a content-keyed exception was tried here and reverted -- an exact-
+// string compare against generated text is content-keyed ownership by the back
+// door, MORE brittle than the StartsText('Observed:') sniff Task 1 deleted
+// (exact equality survives neither whitespace normalization nor legitimate
+// drift, where a prefix match would have survived both) -- see MergeComment's
+// own remarks for the reproduced breakage.
+class function TDocRegions.IsEngineOwnedTagText(const S: string): Boolean;
+begin
+  Result:= IsManagedText(S) or SameText(Trim(S), 'TODO: describe.');
+end;
+
 class function TDocRegions.StripMark(const S: string): string;
 begin
   Result:= TrimLeft(S);
@@ -1628,24 +1664,15 @@ var
       else Result:= Result + sLineBreak + APrefix + Trim(Parts[i]);
     Result:= Result + AClose;
   end;
-  // v(ADP3 T3): True when S is engine-owned WITHOUT regard to emptiness --
-  // carries AUTO_MARK, or is the legacy 'TODO: describe.' sentinel (the
-  // pre-v(ADP3) format; still self-heals here). Used for <summary> and
-  // <returns> ONLY: marked there means engine-owned, full stop, regardless
-  // of what follows the marker -- see the plan's own recorded deviation
-  // (a human edit inside the markers is not separable from "the source
-  // comment changed", so both refresh; ownership changes hands only by
-  // REMOVING the marker, never by the engine sniffing content). v(ADP3 T3
-  // review round 2): a content-keyed exception was tried here and reverted
-  // -- an exact-string compare against generated text is content-keyed
-  // ownership by the back door, MORE brittle than the StartsText('Observed:')
-  // sniff Task 1 deleted (exact equality survives neither whitespace
-  // normalization nor legitimate drift, where a prefix match would have
-  // survived both) -- see MergeComment's own remarks for the reproduced
-  // breakage.
+  // v(ADP3 T9): the body of this test now lives on TDocRegions itself, as
+  // IsEngineOwnedTagText -- Doc.Drift's harvest-drift check needs the SAME
+  // ownership test, and a second hand-expansion of its two arms is exactly how
+  // that unit desynced from MergeComment before (see IsManagedDesc's own
+  // remarks). This local name is kept only so the call sites and the comments
+  // that cite them read unchanged.
   function IsEngineOwnedRegardlessOfContent(const S: string): Boolean;
   begin
-    Result:= IsManagedText(S) or SameText(Trim(S), 'TODO: describe.');
+    Result:= IsEngineOwnedTagText(S);
   end;
   // v(ADP3 T3 review round 2, Finding 1 -- PARAM ONLY): classifies
   // ownership of one existing <param>'s raw parsed text (S) for the repair

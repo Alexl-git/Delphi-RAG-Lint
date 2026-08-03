@@ -1,5 +1,81 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-03 (LATEST-80) -- **T9 IS COMPLETE. `ddHarvestDrift` SHIPPED. Battery 208 pass / 2 fail / 0 timeout of 210. NEXT = T11.** Read this before LATEST-79.
+>
+> ### >>> START HERE NEXT SESSION
+>
+> **NEXT ACTION: T11** (`mutates_params` + derived `Pure`). T9 and T10 are both DONE, so
+> **Phase 3 is 11 of 17.** T10 already landed the schema v19 columns T11-T14 write into.
+> Status board: `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/progress.md`.
+>
+> ### T9 PART 2 -- the whole task turned out to be the REPORT, not the rewrite
+>
+> The plan predicted its own step 4 would fail ("a stale marked summary survives with no
+> source"). **It did not.** Run against the pre-part-2 exe, **all four behaviour rows of
+> the Task 9 refresh/removal table already passed** -- refresh, removal, hand-written-
+> never-touched, and idempotency -- because Task 3's omit-when-empty rule already performs
+> the removal (`MergeComment` emits the `<summary>` only `else if
+> AFacts.HarvestedSummary <> ''`). The strip round trip passed too. **The only failures
+> were the six `ddHarvestDrift` assertions.** So `MergeComment` was not touched at all.
+>
+> **What shipped, three edits:**
+> 1. `DRagLint.Doc.Drift.pas` -- `ddHarvestDrift` added to `TDocDriftKind`, emitted as
+>    check 10 with two arms (REMOVAL when the harvest is now `''`, REFRESH when it
+>    differs), `Fixable: True`, detail naming the symbol and BOTH texts.
+> 2. `DRagLint.Doc.Regions.pas` -- `IsEngineOwnedRegardlessOfContent` **promoted** from a
+>    nested function inside `MergeComment` to `TDocRegions.IsEngineOwnedTagText`, so the
+>    drift check reads the SAME marker-keyed ownership test instead of hand-expanding its
+>    arms a second time (the duplication that desynced Drift from MergeComment once
+>    already; `IsManagedDesc` was promoted in T1 for the same reason). **Deliberately NOT
+>    `IsManagedDesc`** -- that one is True for EMPTY text and would adopt a human's blank,
+>    unmarked `<summary></summary>`, the one shape the plan's table says never to touch.
+> 3. `DRagLint.CLI.pas` -- the `--json` kind string.
+>
+> No `TDocumentResult` threading was needed: `TDocDrift.Analyze` already calls
+> `TDocFactsBuilder.Build`, which already harvests, so the fresh harvest was in hand.
+>
+> **`Fixable: True` is verified, not asserted.** `run_doc_p3_harvest_drift.ps1` asserts the
+> drift CLEARS after `document --apply`. The store-backed path was checked by hand on a
+> scratch index: `lint-all --json` emits it under rule id `doc-drift`, `lint-all --fix
+> --apply` refreshes the summary, and a re-run reports nothing. **`run_doc_drift_rule.ps1`
+> does not yet cover this KIND** -- a cheap follow-up if anyone wants it gated.
+>
+> ### TWO TRAPS THAT COST REAL TIME -- both now in the fixture's own header
+>
+> 1. **`document --unit` and `--qname` DISAGREE** on a symbol whose only content would be a
+>    harvested `<summary>`. The batch path's facts-only filter (`Doc.Batch`: `Keep :=
+>    HasManagedBlock(Res) or (Res.Action in [daExtended, daRemoved])`) drops a fresh create
+>    carrying a harvested summary but no facts fence -- so `--unit` says **"nothing to
+>    document"** while `--qname` documents the same symbol. This is T8's factless-symbol
+>    finding restated one layer up, and it is why every harvest fixture needs a `Driver`.
+> 2. **A bare parameterless call as a BINARY-EXPRESSION OPERAND records NO ref at all.**
+>    `Result := Drifting + Vanishing;` gave neither routine a caller fact. **NOT** the fixed
+>    lone-bare-RHS bug -- a probe isolates it exactly: `Result := A;` IS recorded (Bug B's
+>    fix) and `Result := Abs(A);` IS recorded; only `Result := A + 1;` is dropped. Filed as
+>    `docs/INBOX-bare-call-in-binary-expression-not-indexed.md`, logged in
+>    `stats/draglint-gaps.log`, worked around with **empty parens** in the fixture. Probable
+>    site: `Walk`'s `assignment` arm only inspects `ChildByField('rhs')` for a bare
+>    identifier node. Any fix must keep `run_bare_rhs_refs.ps1`'s over-capture guard.
+>
+> ### Battery -- **208 pass / 2 fail / 0 timeout of 210** (10.7 min)
+>
+> Baseline was 208 / 1 / 0 of 209: **one runner added, one pass added.** The two reds:
+> * `tests/autofix/run_missing_doc_fix.ps1` -- the known red since Task 3. Unchanged.
+> * `tests/autotest/run_exe_freshness.ps1` -- **SELF-INFLICTED and since CLEARED.** A
+>   comment-only edit to `DRagLint.Doc.Drift.pas` was made WHILE the battery ran, so the
+>   source became newer than the staged exe and the guard correctly reported it. Rebuilt,
+>   restaged, re-ran: **PASS**. Same lesson as LATEST-79's staging trap, other direction --
+>   **do not touch source while a battery runs, not just the exe.**
+>
+> After the rebuild: **all 59 `tests/autodoc` runners PASS, encoding guard PASS,
+> `run_exe_freshness` PASS**, and `run_missing_doc_fix` still exits 1 as expected.
+>
+> ### Git / exe
+>
+> Branch `feat/autodoc-phase3`. **Staged exe restaged 2026-08-03 00:04:51**, byte-length
+> 30916098, identical to `src\cli\Win64\Debug\drag-lint.exe`; carries T9 part 2. Gitignored
+> -- **check its timestamp, git will never tell you.**
+
 > ## RESUME 2026-08-02 late (LATEST-79) -- **THE RULING CAME IN, T9 PART 1 SHIPPED, ALL 22 RED CHECKS ARE GREEN. T10 landed CONCURRENTLY. Read this before LATEST-78.**
 >
 > ### >>> START HERE NEXT SESSION

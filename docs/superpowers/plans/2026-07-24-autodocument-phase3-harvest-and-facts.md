@@ -1096,7 +1096,18 @@ Refresh rules (§3.3), decided per symbol in `MergeComment` by comparing the exi
 
 Drift reporting: `DRagLint.Doc.Drift` gains a `harvest-drift` finding emitted when a marked summary is refreshed or removed, naming the symbol and both texts. It reports; it does not block.
 
-- [ ] **Step 1: Write the failing test** `tests/autodoc/run_doc_p3_harvest_drift.ps1`.
+- [x] **Step 1: Write the failing test** `tests/autodoc/run_doc_p3_harvest_drift.ps1`.
+
+> **AS BUILT (2026-08-02).** The fixture below needed a `Driver` routine added, for
+> the reason Task 8 recorded: a symbol with no facts gets no doc block, and the batch
+> path's facts-only filter additionally drops a fresh create that carries only a
+> harvested `<summary>` -- so `document --unit` reports "nothing to document" for a
+> symbol `--qname` documents. **`Driver` must call with EMPTY PARENTHESES**
+> (`Drifting() + Vanishing()`): a bare parameterless call used as a binary-expression
+> operand records no ref at all, so neither routine would get a caller fact. That is a
+> separate engine defect, filed as
+> `docs/INBOX-bare-call-in-binary-expression-not-indexed.md` and logged in
+> `stats/draglint-gaps.log`; it is NOT fixed here.
 
 Fixture `tests/autodoc/fixtures/docp3/harvest_drift.pas`:
 
@@ -1134,18 +1145,48 @@ Runner scenario, all on a scratch copy:
 5. Manually remove the `AUTO_MARK` from `Drifting`'s summary and change its text to `Human owns this now.`. Reindex; `document --unit --apply`. Assert the summary is **untouched** -- still `Human owns this now.`, still unmarked.
 6. Strip round trip: from the state after step 1, run `document --unit --strip --apply` and assert the file matches the pre-`apply` bytes exactly, including all original `//` comments.
 
-- [ ] **Step 2: Run it, verify FAIL.**
+- [x] **Step 2: Run it, verify FAIL.**
 
 Run: `pwsh -File tests\autodoc\run_doc_p3_harvest_drift.ps1`
 Expected: step 4 FAILs (a stale marked summary survives with no source) and step 3's drift report is absent.
 
-- [ ] **Step 3: Implement.**
+> **AS BUILT.** The prediction was half wrong, and usefully so. **All four behaviour
+> rows already passed** on the pre-T9-part-2 exe -- including step 4's removal, which
+> Task 3's omit-when-empty rule already performs (`MergeComment`'s repair path emits
+> the `<summary>` only `else if AFacts.HarvestedSummary <> ''`, so an empty harvest
+> omits the tag). Refresh, idempotency, hand-written-untouched and the strip round
+> trip were all green too. **The exact and only failures were the six `ddHarvestDrift`
+> assertions** -- so the whole of T9 part 2 is the REPORT, not the rewrite.
+
+- [x] **Step 3: Implement.**
 
 In `MergeComment`'s repair path, replace Task 3's marked-summary arm with the four-way rule, and add the code comment described above. In `DRagLint.Doc.Drift.pas`, add the `harvest-drift` finding kind alongside the existing kinds (follow whatever pattern that unit already uses for a finding -- read it first) and emit it from the refresh/remove branches. Thread the drift signal out through `TDocumentResult` if `Drift` cannot observe the merge directly; prefer whichever wiring already exists over adding a new channel.
 
-- [ ] **Step 4: Build, run the test, verify PASS.**
+> **AS BUILT.** `MergeComment` needed **no behaviour change** -- see Step 2. The
+> implementation is three edits:
+> 1. `DRagLint.Doc.Drift.pas` -- `ddHarvestDrift` added to `TDocDriftKind`, emitted as
+>    check 10 with two arms (removal when the harvest is now `''`, refresh when it
+>    differs), `Fixable: True`, detail naming the symbol and both texts.
+> 2. `DRagLint.Doc.Regions.pas` -- `IsEngineOwnedRegardlessOfContent` **promoted** from
+>    a nested function inside `MergeComment` to `TDocRegions.IsEngineOwnedTagText`, so
+>    the drift check reads the SAME marker-keyed ownership test instead of
+>    hand-expanding its arms a second time (the duplication that desynced Drift from
+>    MergeComment once already; `IsManagedDesc` was promoted in T1 for the same
+>    reason). Note it is deliberately NOT `IsManagedDesc`: that one answers True for
+>    EMPTY text and would adopt a human's blank unmarked `<summary></summary>`.
+> 3. `DRagLint.CLI.pas` -- the `--json` kind string.
+>
+> No `TDocumentResult` threading was needed: `TDocDrift.Analyze` already calls
+> `TDocFactsBuilder.Build`, which already harvests, so the fresh harvest was in hand.
+
+- [x] **Step 4: Build, run the test, verify PASS.**
 
 Run: `pwsh -File tests\autodoc\run_doc_p3_harvest_drift.ps1`, then the full harvest set (`run_doc_p3_harvest_scan.ps1`, `_text.ps1`, `_impl.ps1`), plus `run_doc_drift_engine.ps1`, `run_doc_drift_rule.ps1`, `run_doc_idempotent.ps1`, `run_doc_p3_strip.ps1`.
+
+> **AS BUILT.** Went wider than asked: **all 59 `tests/autodoc` runners PASS, 0
+> failures**, plus the encoding guard. Exe rebuilt (`BUILD_EXITCODE=0`, no `[dcc]
+> Error`) and **restaged BEFORE any runner** -- `run_battery.ps1` passes no `-Exe`, so
+> every runner resolves the staged binary.
 
 - [ ] **Step 5: Commit.**
 

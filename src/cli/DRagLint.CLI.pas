@@ -10674,6 +10674,7 @@ begin
     ddExceptionNotRaised   : Result:= 'ddExceptionNotRaised';
     ddIdentifierGone       : Result:= 'ddIdentifierGone';
     ddFactsBlockStale      : Result:= 'ddFactsBlockStale';
+    ddHarvestDrift         : Result:= 'ddHarvestDrift';
     else Result:= 'unknown';
   end;
 end;

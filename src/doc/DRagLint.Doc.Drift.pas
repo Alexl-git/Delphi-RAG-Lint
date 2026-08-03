@@ -25,6 +25,9 @@ type
   //   ddExceptionNotRaised    - an <exception cref> not in the body's actual Raises facts
   //   ddIdentifierGone        - a <c>/<paramref> code identifier no longer present (bounded)
   //   ddFactsBlockStale       - the managed facts block differs from a fresh render (FIXABLE)
+  //   ddHarvestDrift          - a MARKED <summary> no longer matches the comment it
+  //                             was harvested from: it will be refreshed, or removed
+  //                             when the source comment is gone (FIXABLE -- v(ADP3 T9))
   TDocDriftKind = (
     ddParamRenamedOrRemoved,
     ddParamMissing,
@@ -34,11 +37,12 @@ type
     ddReturnTypeChanged,
     ddExceptionNotRaised,
     ddIdentifierGone,
-    ddFactsBlockStale
+    ddFactsBlockStale,
+    ddHarvestDrift
   );
 
   /// <summary>One drift finding: its kind, a human-readable detail string, the
-  /// Fixable flag (True only for ddFactsBlockStale and for the
+  /// Fixable flag (True for ddFactsBlockStale, for ddHarvestDrift, and for the
   /// ddValueButNoReturns instances a fix can actually satisfy -- a mechanical,
   /// prose-free fix; v(ADP3 T3) update: ddParamMissing is report-only, see
   /// MakeFinding's own call site for why), and the doc/decl line it anchors
@@ -69,7 +73,10 @@ type
     /// <summary>Analyzes ADoc against ASym's live signature and body facts,
     /// returning all drift findings (empty when the doc is structurally current).
     /// Deterministic and side-effect-free: reads the index (via AStore, for the
-    /// Raises facts and the fresh facts block) but writes nothing.</summary>
+    /// Raises facts and the fresh facts block) and, through the facts builder,
+    /// the SOURCE FILE -- the harvestable comment above the declaration, which
+    /// v(ADP3 T9)'s ddHarvestDrift compares the marked summary against -- but
+    /// writes nothing.</summary>
     /// <param name="AStore">Open symbol store; not owned. Used for the exception
     /// Raises facts and the fresh facts-block render. Must not be nil.</param>
     /// <param name="ASym">The documented symbol (routine).</param>
@@ -629,6 +636,59 @@ begin
       if CollapseAllWhitespace(CurBlock) <> CollapseAllWhitespace(Fresh) then
         Findings.Add(MakeFinding(ddFactsBlockStale,
           'managed facts block is out of date', True, DocLine));
+    end;
+
+    // --- 10. ddHarvestDrift: a MARKED <summary> vs a fresh harvest. FIXABLE. --
+    // v(ADP3 T9): the REPORT half of the harvest refresh/removal rule (plan
+    // Task 9 / spec 3.3). MergeComment already performs the rewrite -- an
+    // engine-owned <summary> is refilled from AFacts.HarvestedSummary, or
+    // omitted entirely once the harvest is '' (v(ADP3 T3)'s omit-when-empty
+    // rule) -- so this finding exists to make that overwrite VISIBLE instead of
+    // silent. It reports; it does not block. Fixable: True, and honestly so --
+    // NOT the false promise ddParamMissing and ddValueButNoReturns were flipped
+    // for. The very next `document --apply` satisfies it, which
+    // run_doc_p3_harvest_drift.ps1 asserts end-to-end with its 'the drift CLEARS
+    // once the refresh/removal is applied' checks. The store-backed
+    // `lint-all --fix --apply` path satisfies it too -- same
+    // TDocumenter.BuildFor -> MergeComment underneath -- verified by hand on a
+    // scratch index when this was written (the finding is emitted with rule id
+    // 'doc-drift', the fix refreshes the summary, and a re-run reports nothing);
+    // run_doc_drift_rule.ps1 does not yet cover this KIND specifically.
+    //
+    // OWNERSHIP IS MARKER-KEYED, and the test is the SAME one MergeComment's
+    // <summary> arm uses -- TDocRegions.IsEngineOwnedTagText, promoted to a
+    // class function by this task for exactly this call. Hand-expanding its two
+    // arms here instead is how this unit silently desynced from MergeComment
+    // once already (see check 9's own comment). Note it is NOT IsManagedDesc:
+    // that one is True for EMPTY text too, which would adopt a human's blank,
+    // unmarked <summary></summary> -- the one shape the plan's table says to
+    // never touch and never report.
+    //
+    // WHITESPACE IS COLLAPSED ON BOTH SIDES, for the same reason check 9 does
+    // it: EmitTagged re-prefixes a long summary's continuation lines with '///'
+    // and the parser flattens them back to spaces, so a raw compare would report
+    // drift on a file the engine itself had just written. Neither side is
+    // un-escaped -- the harvester XML-escapes the prose it promotes and the doc
+    // parser stores tag text verbatim (no entity decoding), so both are already
+    // in the same alphabet.
+    //
+    // NOT REPORTED: a symbol with NO <summary> at all but a harvest available.
+    // The next apply will ADD one, which is not "drift" in any of the plan's
+    // four rows -- every row is about a summary that already exists.
+    if TDocRegions.IsEngineOwnedTagText(ADoc.Summary) then
+    begin
+      var CurSummary: string:= CollapseAllWhitespace(TDocRegions.StripMark(ADoc.Summary));
+      var FreshHarv : string:= CollapseAllWhitespace(Facts.HarvestedSummary);
+      if (CurSummary <> '') and (FreshHarv = '') then
+        Findings.Add(MakeFinding(ddHarvestDrift,
+          Format('managed <summary> on "%s" has no source comment left to harvest -- ' +
+                 'it will be REMOVED (doc has: "%s")', [ASym.QualifiedName, CurSummary]),
+          True, DocLine))
+      else if (FreshHarv <> '') and (CurSummary <> FreshHarv) then
+        Findings.Add(MakeFinding(ddHarvestDrift,
+          Format('managed <summary> on "%s" is out of date -- doc has "%s", the source ' +
+                 'comment now yields "%s"', [ASym.QualifiedName, CurSummary, FreshHarv]),
+          True, DocLine));
     end;
 
     Result:= Findings.ToArray;
