@@ -1,5 +1,83 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-02 late (LATEST-79) -- **THE RULING CAME IN, T9 PART 1 SHIPPED, ALL 22 RED CHECKS ARE GREEN. T10 landed CONCURRENTLY. Read this before LATEST-78.**
+>
+> ### >>> START HERE NEXT SESSION
+>
+> **NEXT ACTION: T9 PART 2** -- the harvest refresh/removal rules + the `harvest-drift` finding.
+> That is the only part of T9 the plan specifies that is NOT built. Then T11-T17.
+> Full per-task status: the STATUS BOARD at the top of
+> `.superpowers/sdd/2026-07-24-autodocument-phase3-harvest-and-facts/progress.md`
+> (corrected this session -- it was wrong about both T9 and T10).
+>
+> ### THE RULING (both questions answered) -- recorded in the triage doc
+>
+> `docs/lint/TRIAGE-the-22-harvest-repair.md` now carries a "THE RULING" section:
+> 1. **The REPAIR branch becomes NON-DESTRUCTIVE.** The routing term is NOT widened; the
+>    reverted one-liner at `Doc.Document.pas` stays reverted.
+> 2. **Preserve EVERY unmodeled tag, no exceptions.** Reclaiming a stale *modeled* `<param>`
+>    was offered explicitly and **DECLINED**. Accepted consequence: a stale unmodeled tag
+>    lingers until a human removes it.
+>
+> ### T9 PART 1 -- SHIPPED `1e2c125`. ALL 22 RED CHECKS GREEN, 0 REGRESSIONS.
+>
+> **The root cause was ONE MISSING TERM, not the deletion the triage assumed.**
+> `Existing.HasRemarksTag` was absent from the repair-vs-fresh OR-chain in
+> `DRagLint.Doc.Document.pas` -- a chain whose own doc comment says "True when the EXISTING doc
+> region carries any tag at all". So a comment whose only tag was an empty `<remarks></remarks>`
+> took FRESH-INSERT, stacked a second block below the author's line, and cycle 2 folded the two
+> and dropped the author's. The 25-byte shrink is exactly `/// <remarks></remarks>` + CRLF.
+>
+> **Routing it to repair EARLIER removes the deletion rather than moving it** -- the exact trap
+> the triage warned about, avoided because repair ADOPTS the author's `<remarks>` as the
+> container for its facts instead of stacking a rival one. The proof was already sitting in the
+> fixture: the six `*PlusEmptyRemarks` shapes had a tag that DID set the flag, already took
+> repair on cycle 1, and every one converged there with its `<remarks>` intact.
+>
+> **Second fix, same commit:** do not fabricate a `<remarks>` beside the author's. When T3f
+> carries an author's `<remarks>` through as residual and there are no facts to fence, the
+> harvester used to open a rival element (two siblings, not well-formed DocInsight). Gated on
+> `Facts = ''`. Applies T8's own rule -- hand-written wins -- and loses nothing, because the
+> harvest is re-derived from a source comment still in the file.
+>
+> **The gaps are genuinely CLOSED, not re-pinned around:**
+> * `decayrouting` N5/N6/N7 -- each shape now converges to **ONE** `<remarks>` and **ONE** fence.
+> * `decayrouting` N4 **and** `guards` D12 -- **the decay gap itself.** The engine used to match
+>   the older of two stacked blocks and report `unchanged/0` forever while a block on disk named
+>   a caller that no longer existed. `--apply` now detects and repairs it, **no `--strip` needed**.
+> * `unhandledtags` / `tagoccurrence` -- re-pinned to behaviour T3 and T7 already shipped
+>   (marked+empty `<returns>` dropped by omit-when-empty; harvested prose forces the multi-line
+>   `<remarks>` form).
+>
+> **Verified: all 57 `tests/autodoc` runners PASS. Encoding guard PASS.**
+>
+> ### ONE RESIDUAL LOSS, pinned with its evidence (NOT a T9 regression)
+>
+> An author's **EMPTY** `<remarks></remarks>` does not survive an `apply` -> `strip` round trip.
+> Probed directly against the pre-T9 staged exe: it returned `$null` there too. Once repair
+> adopts the author's element, the result is byte-identical to one the engine created from
+> nothing -- both have unmarked `<remarks>` tags and only marked content between them -- so
+> `--strip` cannot tell "restore the author's" from "remove the one I invented". Fixing it needs
+> a **marker on the wrapper**, which changes emitted bytes for every documented symbol in the
+> repo. **Its own task; do not smuggle it into T9.** The loss is information-free (an EMPTY tag);
+> any `<remarks>` with real prose is preserved and covered by tests.
+>
+> ### T10 WAS COMMITTED BY A CONCURRENT SESSION -- and the board said "NOT STARTED"
+>
+> `963086d` (19:59) landed schema v19 while this session was still reading the resume docs.
+> **This repo runs nine worktrees and more than one agent at a time -- re-read
+> `git log main..HEAD` before trusting any "NOT STARTED".** Its two files
+> (`run_doc_p3_store19.ps1`, `fixtures/docp3/store19.pas`) arrived **lone-LF**, which turned the
+> encoding guard red; fixed on disk (git's `.gitattributes` had already normalized the committed
+> blob, so there was nothing to commit -- exactly the failure mode that guard exists to catch).
+>
+> ### Git
+>
+> `feat/autodoc-phase3` = **`1e2c125`**, 134 ahead of `main` (`3b4a877`, untouched).
+> **NOTHING PUSHED.** The shared exe `third_party\dll-win64\drag-lint.exe` was **NOT** restaged
+> this session -- it is still the pre-T9 binary. Build output with T9 in it:
+> `src\cli\Win64\Debug\drag-lint.exe`. **Restage before any other team consumes it.**
+
 > ## RESUME 2026-08-02 (LATEST-78) -- **`main` IS MERGED IN. 2.9 + 2.10 FIXED. A merge-induced regression was found and fixed. ONE USER RULING IS BLOCKING. Read this before LATEST-77.**
 >
 > ### >>> START HERE NEXT SESSION
