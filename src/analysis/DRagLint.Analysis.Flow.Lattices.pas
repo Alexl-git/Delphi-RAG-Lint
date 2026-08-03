@@ -19,8 +19,17 @@ type
 
   /// <summary>A routine-scoped variable: name (lowercased), kind, declared-type
   /// text, declaration position, and whether it is captured by a nested routine.</summary>
+  /// <remarks>v(ADP3 T11): Display carries the ORIGINAL-CASE spelling from the
+  /// declaration, which Name deliberately does not -- Name is lowercased because
+  /// every lookup here is case-insensitive (Pascal identifiers are). A consumer
+  /// that RENDERS a variable to a human needs the spelling the author wrote, and
+  /// recovering it from Name is impossible, so it is captured once at Build time
+  /// beside it. Every existing consumer matches on Name and is unaffected;
+  /// Display is set at every construction site, so it is never ''. Added for
+  /// DRagLint.Doc.SymbolFacts' Mutates fact, which names var/out parameters.</remarks>
   TRoutineVar = record
     Name    : string;
+    Display : string;
     Kind    : TVarKind;
     TypeText: string;
     DeclLine: Integer;
@@ -305,6 +314,7 @@ var
         begin
           R := Default(TRoutineVar);
           R.Name := LowerCase(NodeStr(NameId, ASrc));
+          R.Display := NodeStr(NameId, ASrc);
           R.Kind := vkLocal;
           R.TypeText := Trim(NodeStr(TypeNode, ASrc));
           R.DeclLine := Integer(NameId.StartPoint.Row) + 1;
@@ -340,6 +350,7 @@ var
         begin
           R := Default(TRoutineVar);
           R.Name := LowerCase(NodeStr(NameId, ASrc));
+          R.Display := NodeStr(NameId, ASrc);
           R.Kind := Mode;
           R.TypeText := Trim(NodeStr(TypeNode, ASrc));
           R.DeclLine := Integer(NameId.StartPoint.Row) + 1;
@@ -367,7 +378,8 @@ var
         if not IdN.IsNull then
         begin
           R := Default(TRoutineVar);
-          R.Name := LowerCase(NodeStr(IdN, ASrc)); R.Kind := vkLocal; R.TypeText := '';
+          R.Name := LowerCase(NodeStr(IdN, ASrc)); R.Display := NodeStr(IdN, ASrc);
+          R.Kind := vkLocal; R.TypeText := '';
           R.DeclLine := Integer(IdN.StartPoint.Row) + 1;
           R.DeclCol  := Integer(IdN.StartPoint.Column) + 1;
           Tbl.Add(R);
@@ -385,6 +397,7 @@ var
         begin
           R := Default(TRoutineVar);
           R.Name := LowerCase(NodeStr(IdN, ASrc));
+          R.Display := NodeStr(IdN, ASrc);
           R.Kind := vkLocal; R.TypeText := '';
           R.DeclLine := Integer(IdN.StartPoint.Row) + 1;
           R.DeclCol  := Integer(IdN.StartPoint.Column) + 1;
@@ -422,7 +435,7 @@ begin
     if not Ret.IsNull then
     begin
       RV := Default(TRoutineVar);
-      RV.Name := 'result'; RV.Kind := vkResult; RV.TypeText := Trim(NodeStr(Ret, ASrc));
+      RV.Name := 'result'; RV.Display := 'Result'; RV.Kind := vkResult; RV.TypeText := Trim(NodeStr(Ret, ASrc));
       RV.DeclLine := Integer(Header.StartPoint.Row) + 1;
       RV.DeclCol  := Integer(Header.StartPoint.Column) + 1;
       Tbl.Add(RV);

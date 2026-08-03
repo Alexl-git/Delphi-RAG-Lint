@@ -619,6 +619,155 @@ begin
   end;
 end;
 
+// v(ADP3 T11): the var/out parameters this routine writes THROUGH, as a
+// display-ready 'AList (var), AReason (out)' string. '' when the routine
+// mutates none, which is what makes the renderer omit the whole line.
+//
+// This closes the gap ADP2 T4 left open by design: AnalyzeReadsWrites resolves
+// identifiers against the owning class's FIELDS, so a free procedure whose
+// entire job is to fill an `out` parameter reported nothing at all.
+//
+// NO SECOND PARSE, NO SECOND VAR TABLE PASS. AProc/ABody are the SAME nodes
+// Analyze already matched for Cyclomatic/AnalyzeReadsWrites, and the parameter
+// MODES come from DRagLint.Analysis.Flow.Lattices' TRoutineVarTable -- the one
+// place in this codebase that already parses `var`/`out`/`const` modifiers off
+// a declArg (see its AddArgs). ASym.Signature was the alternative the plan
+// offered; it was read and rejected: it is a re-serialized string that would
+// need a SECOND modifier parser, and the indexed Signature is empty often
+// enough (see AnalyzeReadsWrites' own HasReturn note in Doc.Drift) that the
+// fact would silently go missing. The var table is AST-grounded and already
+// built for every routine this walk runs on. TRoutineVar.Display -- added by
+// this task -- carries the DECLARATION spelling, so the rendered name is the
+// one the author wrote, not the (possibly differently-cased) use site.
+//
+// WHAT COUNTS AS A MUTATION. Deliberately the same shapes WalkFieldRW already
+// treats as writes, plus one:
+//   - 'assignment' with a BARE-IDENTIFIER lhs        -> mutation.
+//   - 'assignment' with an INDEXED lhs (`AList[0] :=`) whose base resolves to
+//     a bare identifier -> mutation. This one is NEW relative to WalkFieldRW,
+//     and it is not a guess: `A[i] := v` cannot execute without writing through
+//     A. WalkFieldRW declines it because for a FIELD the indexed base may be
+//     an unrelated expression; here the base must resolve to a var/out
+//     parameter of THIS routine or nothing is reported.
+//   - 'exprCall' on Inc/Dec, first argument a bare identifier -> mutation.
+//
+// WHAT IS DELIBERATELY NOT DETECTED, absence over a wrong fact:
+//   - an ordinary call's var argument, `SetLength(AList, N)` most notably.
+//     Resolving whether an arbitrary callee's parameter is var/out is the
+//     cross-referenced work ADP2 T4 explicitly declined, and SetLength is not
+//     special-cased because a curated intrinsic list is a maintenance surface
+//     that silently under-reports everything not on it. tests\autodoc\
+//     fixtures\docp3\mutates.pas carries the SetLength form next to a real
+//     indexed write precisely so the case is on file if this is ever revisited.
+//   - a DOT lhs, `AObj.Field := X`. For a record parameter that IS a mutation;
+//     for a class-typed one it mutates the POINTEE, not the parameter, and the
+//     two are indistinguishable here without type resolution. Reporting both
+//     would make 'Mutates:' mean two different things.
+//
+// Capped at FIELD_RW_CAP with the same ' (+N more)' suffix as Reads/Writes, via
+// the shared JoinCappedDisplay -- one cap rule for every display-ready column.
+procedure WalkMutatedParams(const N: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable; AOut: TList<string>);
+
+  // The bare identifier an assignment LHS ultimately writes through, or a null
+  // node when the shape is one this fact does not claim. Descends through
+  // indexing/call-shaped wrappers (`A[i]`, `A[i][j]`) via the entity/lhs field
+  // or the first named child, and STOPS DEAD at an 'exprDot' -- see the header.
+  // The iteration cap is a cheap guard against a pathological/malformed tree,
+  // never a semantic limit: real LHS nesting is one or two levels.
+  function BaseIdentOfLhs(const ALhs: TTSNode): TTSNode;
+  var Cur, Nxt: TTSNode; Guard: Integer;
+  begin
+    Result:= Default(TTSNode);
+    Cur   := ALhs;
+    for Guard:= 0 to 7 do
+    begin
+      if Cur.IsNull then Exit;
+      if Cur.NodeType = 'identifier' then Exit(Cur);
+      if Cur.NodeType = 'exprDot' then Exit;      // mutates the pointee, not the param
+      Nxt:= Cur.ChildByField('entity');
+      if Nxt.IsNull then Nxt:= Cur.ChildByField('lhs');
+      if Nxt.IsNull and (Cur.NamedChildCount > 0) then Nxt:= Cur.NamedChild(0);
+      if Nxt.IsNull then Exit;
+      Cur:= Nxt;
+    end;
+  end;
+
+  // Records AIdent when it resolves to a var/out parameter of this routine.
+  // Deduped on the DISPLAY string, so a parameter written many times appears
+  // once, in first-write order.
+  procedure MarkMutation(const AIdent: TTSNode);
+  var Idx: Integer; RV: TRoutineVar; Disp: string;
+  begin
+    if AIdent.IsNull or (AIdent.NodeType <> 'identifier') or (AVars = nil) then Exit;
+    Idx:= AVars.IndexOf(LowerCase(Trim(FieldNodeStr(AIdent, ASrc))));
+    if Idx < 0 then Exit;
+    RV:= AVars.Get(Idx);
+    if not (RV.Kind in [vkParamVar, vkParamOut]) then Exit;
+    if RV.Kind = vkParamVar then Disp:= RV.Display + ' (var)'
+    else Disp:= RV.Display + ' (out)';
+    if AOut.IndexOf(Disp) < 0 then AOut.Add(Disp);
+  end;
+
+var
+  I       : Integer;
+  Lhs, Rhs: TTSNode ;
+  Ent, Arg: TTSNode ;
+begin
+  if N.IsNull then Exit;
+
+  if N.NodeType = 'assignment' then
+  begin
+    Lhs:= N.ChildByField('lhs');
+    Rhs:= N.ChildByField('rhs');
+    if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then
+      MarkMutation(Lhs)
+    else
+      MarkMutation(BaseIdentOfLhs(Lhs));
+    // The LHS subtree is still walked: an index expression can itself contain
+    // a nested assignment/Inc in exotic code, and the RHS always can.
+    WalkMutatedParams(Lhs, ASrc, AVars, AOut);
+    WalkMutatedParams(Rhs, ASrc, AVars, AOut);
+    Exit;
+  end;
+
+  if N.NodeType = 'exprCall' then
+  begin
+    Ent:= N.ChildByField('entity');
+    Arg:= N.ChildByField('args');
+    if IsIncOrDecEntity(Ent, ASrc) and (not Arg.IsNull) and (Arg.NamedChildCount > 0) then
+      MarkMutation(Arg.NamedChild(0));
+    // Fall through to the generic recursion below rather than returning: an
+    // ordinary call's arguments can hold assignments (an inline lambda body).
+  end;
+
+  for I:= 0 to N.NamedChildCount - 1 do
+    WalkMutatedParams(N.NamedChild(I), ASrc, AVars, AOut);
+end;
+
+// v(ADP3 T11): fills the display-ready `Mutates:` string for one routine. See
+// WalkMutatedParams' header (immediately above) for the derivation rules and
+// for what is deliberately not detected. AProc/ABody are the SAME nodes Analyze
+// already matched -- no second AST scan.
+function AnalyzeMutatesParams(const AProc, ABody: TTSNode; const ASrc: TBytes): string;
+var
+  Vars: TRoutineVarTable;
+  Hits: TList<string>   ;
+begin
+  Result:= '';
+  if ABody.IsNull then Exit;
+  Vars:= nil;
+  Hits:= TList<string>.Create;
+  try
+    Vars:= TRoutineVarTable.Build(AProc, ASrc);
+    WalkMutatedParams(ABody, ASrc, Vars, Hits);
+    Result:= JoinCappedDisplay(Hits, FIELD_RW_CAP);
+  finally
+    Vars.Free;
+    Hits.Free;
+  end;
+end;
+
 // ADP2 T6: process-wide, SINGLE-ENTRY memoized cache of one .dfm's parsed
 // event-binding map: HandlerName (lowercased key) -> display 'ObjectName.
 // EventProp'. Re-parses ONLY when GDfmCachePath differs from the requested
@@ -1985,6 +2134,12 @@ begin
         // unit's implementation section) for the field-set + classification
         // rules.
         AnalyzeReadsWrites(Proc, Body, PF.Src, ASym, AFilePath, AStore, Result.ReadsFields, Result.WritesFields);
+        // v(ADP3 T11): var/out parameter writes -- same matched Proc/Body, no
+        // 2nd AST scan. Complements the line above: that one resolves against
+        // the owning class's FIELDS, this one against the routine's own
+        // parameter list, so a free routine is covered too. See
+        // WalkMutatedParams' header for the classification rules.
+        Result.MutatesParams:= AnalyzeMutatesParams(Proc, Body, PF.Src);
         // ADP2 T7: SQL tables touched -- same matched Body node, no 2nd AST
         // scan. See AnalyzeSqlTables' header comment (above, this unit's
         // implementation section) for the full literal-concatenation +

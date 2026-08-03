@@ -146,6 +146,20 @@ type
     // every other absent fact.
     ReadsFields      : string           ;
     WritesFields     : string           ;
+    /// <summary>v(ADP3 T11): the var/out parameters the routine writes THROUGH,
+    /// display-ready as 'AList (var), AReason (out)'. '' when it mutates none,
+    /// which is what makes the renderer omit the whole Mutates: line.</summary>
+    /// <remarks>RAW PASSTHROUGH of symbol_facts.mutates_params, the same
+    /// contract as ReadsFields/WritesFields above -- already ', '-joined, capped
+    /// at 8 with a ' (+N more)' suffix (JoinCappedDisplay), so nothing is
+    /// re-decided at render time. Complements ReadsFields/WritesFields rather
+    /// than overlapping them: those resolve identifiers against the OWNING
+    /// CLASS's fields, this one against the routine's own parameter list, so a
+    /// free routine is covered too. See DRagLint.Doc.SymbolFacts'
+    /// WalkMutatedParams for exactly which write shapes are claimed and which
+    /// are deliberately not (an ordinary call's var argument, e.g. SetLength,
+    /// and a dot LHS are both absent by design).</remarks>
+    MutatesParams    : string           ;
     // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE, computed LAZILY
     // here in Build (NOT read back from symbol_facts.covered_by, which stays
     // unwritten/reserved -- see DRagLint.Doc.SymbolFacts' unit banner "TASK 5
@@ -1356,6 +1370,9 @@ begin
   // Cyclomatic/BodyLoc above (already capped/formatted at analysis time).
   Result.ReadsFields := SFacts.ReadsFields;
   Result.WritesFields:= SFacts.WritesFields;
+  // v(ADP3 T11): var/out parameter writes -- same raw-passthrough contract
+  // again (capped and formatted at analysis time by AnalyzeMutatesParams).
+  Result.MutatesParams:= SFacts.MutatesParams;
   // v(ADP2 T6): DFM event-wiring -- same raw-passthrough contract as
   // Cyclomatic/BodyLoc/ReadsFields/WritesFields above (already the final
   // display string, computed at index time by DRagLint.Doc.SymbolFacts.

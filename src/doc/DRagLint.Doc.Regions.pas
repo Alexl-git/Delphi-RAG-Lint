@@ -1416,6 +1416,21 @@ begin
     // DISPLAY-READY, so this is a one-line omit-when-empty emit.
     if AFacts.CoveredBy <> '' then
       Lines.Add('Covered by: ' + EscXml(AFacts.CoveredBy));
+    // v(ADP3 T11): Mutates -- the var/out parameters the routine writes
+    // through. Closes the Phase-2 T4 deferred gap (that fact covered the owning
+    // class's FIELDS only, so a free procedure that exists solely to fill an
+    // `out` parameter said nothing). Display-ready at index time, so this is a
+    // passthrough; omitted entirely when empty, like every other fact line.
+    //
+    // POSITION IS PART OF THE CONTRACT. The Phase 3 lines are appended AFTER
+    // the existing six, in the plan's fixed order -- Mutates: (T11), UI thread
+    // only (T12), Touches:/Transaction: (T13), Registered as:/Dataset: (T14),
+    // Pure last (T13). Fixing the order here is what keeps the doc/hover
+    // consistency lock meaningful and regeneration byte-idempotent: this ONE
+    // function is the single home for both surfaces, so a line inserted in the
+    // middle would rewrite every already-documented block in the corpus.
+    if AFacts.MutatesParams <> '' then
+      Lines.Add('Mutates: ' + EscXml(AFacts.MutatesParams));
     Result:= Lines.ToStringArray;
   finally
     Lines.Free;
