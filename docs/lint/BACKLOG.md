@@ -1,5 +1,67 @@
 # drag-lint Linter -- Backlog & Resume Point
 
+> ## RESUME 2026-08-03 (LATEST-83) -- **PHASE 3 COMPLETE. v1.2.2-alpha RELEASED. EVERYTHING MERGED INTO `main` AND PUSHED. Battery 214/0/0.** Read this before LATEST-82.
+>
+> ### >>> START HERE NEXT SESSION
+>
+> **Read `docs/lint/PLAN-post-v122-leftovers.md` first -- it is the written plan.**
+> **NEXT ACTION: the nine-DB manifest reindex to schema v19.** It is the single
+> remaining Phase 3 task, and together with deploying the ConvRulesEditor +
+> drag-lint PAIR it is exactly what "ready for conversions" means. **The user is
+> waiting on conversions.**
+>
+> ```
+> drag-lint index --all --config third_party\dll-win64\drag-lint.json --jobs 0 --dry-run
+> drag-lint index --all --config third_party\dll-win64\drag-lint.json --jobs 0
+> ```
+>
+> **`--jobs` does nothing without `--config`** -- without it the run goes
+> sequential, hours per platform. Then verify every DB reads `schema_version = 19`
+> and **fill in section 6 of
+> `docs/INBOX-index-schema-v19-reindex-for-converter.md`**, which today
+> deliberately says "not yet rebuilt" and carries an EMPTY table.
+>
+> ### State
+>
+> * **`main` = `398be4f`, pushed, in sync with `origin/main`.**
+>   `git branch --no-merged main` is **EMPTY** -- every branch is in.
+> * Merged this session: `feat/autodoc-phase3` (149 ahead / 0 behind -- a clean
+>   fast-forward) and `merge/converter-into-main` (3/3 -- a real merge, `da7e05f`,
+>   no conflicts; disjoint file sets). Only those two were ever unmerged; the
+>   other eighteen branches already were.
+> * **Battery 214 pass / 0 fail / 0 timeout of 214 executed** (of 215 found -- the
+>   excluded one is `run_battery.ps1` itself). **Four consecutive green runs**,
+>   including one against the shipped Release binary and one on merged `main`.
+> * **v1.2.2-alpha** shipped; zips at `C:\TEMPel-1.2.2-alpha\`.
+> * YADF is self-documented, gated (22/22, 83 goldens idempotent, 50
+>   compile-gated, all four artifacts) and pushed -- `485aea2` / `95170f9` /
+>   `ee08894`.
+>
+> ### Two traps that each cost real time
+>
+> 1. **A merge into `main` FAILS while RAD Studio is open.** The fast-forward must
+>    rewrite `third_party/dll-win32/dclDragLintWizard.bpl`, and the IDE holds that
+>    design-time package: `error: unable to write file ... Permission denied`.
+>    Close `bds.exe` first.
+> 2. **The staged exe can be LOCKED by an orphaned `drag-lint.exe` /
+>    `drag_lint_graph.exe`.** `Copy-Item` fails, the copy is silently skipped, and
+>    the tests then run the OLD binary and "fail" the fix you just made. Kill the
+>    orphans, restage, re-verify the timestamp.
+>
+> ### Still open -- see the PLAN doc for the full ordered list
+>
+> 1. **The `Pure` gate** -- it never CREATES a doc block. My deviation; the plan's
+>    unconditional emit turned ELEVEN suites red. One condition to widen.
+> 2. **`run_doc_drift_rule.ps1` does not gate `ddHarvestDrift`** -- verified by
+>    hand on a scratch index, not by a test. Cheapest real win.
+> 3. **`docs/INBOX-bare-call-in-binary-expression-not-indexed.md`** -- a bare
+>    parameterless call as a binary-expression operand records NO ref.
+> 4. **39 blank `<summary></summary>` in YADF** predate uniform marking, so
+>    `--strip` cannot clear them and they suppress harvesting there.
+> 5. The `Assigned` section feature -- still 0 lines of code.
+>
+> `stash@{0}` holds a superseded pre-merge copy of the wizard BPL; safe to drop.
+
 > ## RESUME 2026-08-03 (LATEST-82) -- **v1.2.2-alpha CUT. PHASE 3 COMPLETE BAR THE 9-DB REINDEX. YADF SELF-DOCUMENTED + RELEASED-GATED.** Read this before LATEST-81.
 >
 > ### >>> START HERE NEXT SESSION
