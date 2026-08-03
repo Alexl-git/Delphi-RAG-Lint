@@ -3261,12 +3261,34 @@ begin
       SameText(Adapter.DeclaringUnitOf('TLabel'), 'Vcl.StdCtrls'),
       'TLabel answered FMX.StdCtrls before the tie-break; got '
       + Adapter.DeclaringUnitOf('TLabel'));
-    { TColor is the third-party arm, live: both rows are kind='type' (one tier), and
-      the first one the engine lists is Spring.Logging.TColor. }
-    Check('gotodef.live.tcolor.is.vcl',
+    { TColor is the third-party arm, live: every row is kind='type' (one tier), so
+      only the family rank separates them, and the first one the engine lists is
+      Spring.Logging.TColor.
+
+      REVISED 2026-08-03, after the schema-v19 --force-reparse rebuilt the library
+      indexes. That rebuild added a THIRD row this assertion had never seen:
+
+        type  TColor  Spring.Logging.TColor : Graphics.TColor
+        type  TColor  System.UITypes.TColor : -$7FFFFFFF-1..$7FFFFFFF
+        type  TColor  Vcl.Graphics.TColor   : System.UITypes.TColor
+
+      With only Spring.Logging and Vcl.Graphics present, FAM_VCL beat FAM_OTHER and
+      the answer was Vcl.Graphics. Now that the real declaration is indexed,
+      FAM_SYSTEM (0) outranks FAM_VCL (1) -- which is exactly what UnitFamilyRank's
+      header specifies, and for exactly the reason it gives: Vcl.Graphics.TColor is
+      an ALIAS of System.UITypes.TColor, and a real declaration outranks an alias to
+      it. So the ranking did not change; the index stopped under-reporting. Do NOT
+      "fix" this by moving FAM_VCL ahead of FAM_SYSTEM -- that would reverse the
+      documented decision for every RTL type the VCL re-exports (PColor, INT32, ...),
+      not just this one.
+
+      The two assertions above still pin the VCL-over-FMX preference, which is the
+      one this tool actually depends on: TEdit and TLabel have no System.* row. }
+    Check('gotodef.live.tcolor.is.system',
       Adapter.ResolveTypeLocation('TColor', F, Ln, Err)
-      and SameText(ExtractFileName(F), 'Vcl.Graphics.pas'),
-      'TColor in a VCL form is Vcl.Graphics.TColor; got ' + F + ' ' + Err);
+      and SameText(ExtractFileName(F), 'System.UITypes.pas'),
+      'TColor resolves to its real declaration, System.UITypes.TColor -- '
+      + 'Vcl.Graphics.TColor is an alias of it; got ' + F + ' ' + Err);
   finally
     Adapter.Free;
   end;
