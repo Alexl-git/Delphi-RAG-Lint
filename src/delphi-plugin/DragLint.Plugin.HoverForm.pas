@@ -113,6 +113,13 @@ type
       popups keep the generous popup-rect dismissal so they stay interactive. }
       FAnchorDismiss: Boolean;
       FDwellAnchor  : TPoint ;
+      { v(hover-resize): True for the duration of a user resize drag (between
+        WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE). HandleWatchTick is the sole
+        automatic dismissal (OnDeactivate has been a no-op since v0.40.8), and
+        it closes on "cursor outside the popup rect" -- which a sizing drag can
+        satisfy while the rect is being dragged smaller. Suppress that tick
+        while set, so grabbing an edge cannot make the popup vanish. }
+      FSizing: Boolean;
       procedure HandleKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
       procedure HandleDeactivate    (Sender: TObject);
       procedure HandleTimerTick     (Sender: TObject);
@@ -133,7 +140,28 @@ type
       { v0.94: shared final placement + no-steal-focus show, used by BOTH ShowAt
       overloads so the focus/dwell mechanics can never drift between them. }
       procedure PlaceAndShow(X, Y, W, H: Integer);
+      /// <summary>Widest of ALines rendered in the body font, in pixels.</summary>
+      /// <param name="ALines">Logical (unwrapped) lines the body will show.</param>
+      /// <returns>Pixel width of the widest line; 0 when ALines is empty.</returns>
+      /// <remarks>Replaces a fixed ~7.6 px-per-character estimate, which is only
+      /// right for a monospaced font at one size: it over-measured narrow text
+      /// (needless whitespace) and under-measured wide text (the message wrapped
+      /// when it did not need to). Bold is measured explicitly because the
+      /// signature header -- usually the widest line -- is drawn bold.</remarks>
+      function MeasureTextWidth(const ALines: array of string; ABold: Boolean): Integer;
+      /// <summary>Usable width for a popup shown at screen point (AX, AY): the
+      /// work area of the monitor it lands on, less a small margin.</summary>
+      function MaxPopupWidthAt(AX, AY: Integer): Integer;
     protected
+      { v(hover-resize): the popup is BorderStyle=bsNone by design (a bare info
+        panel, no caption). A borderless window gets no sizing border from
+        Windows, so resizing needs two things: WS_THICKFRAME added in
+        CreateParams (gives DefWindowProc a sizing loop to run) and a hit-test
+        that reports the edges as sizing zones. The frame stays invisible
+        because there is still no caption and no border style to paint. }
+      procedure WMNCHitTest    (var Msg: TWMNCHitTest); message WM_NCHITTEST;
+      procedure WMEnterSizeMove(var Msg: TMessage    ); message WM_ENTERSIZEMOVE;
+      procedure WMExitSizeMove (var Msg: TMessage    ); message WM_EXITSIZEMOVE;
       procedure DoClose(var Action: TCloseAction); override;
       { v0.47: WS_EX_NOACTIVATE -- show as an info popup that NEVER steals keyboard
       focus, so the user can keep typing in the editor. Mouse clicks on the
@@ -493,6 +521,12 @@ begin
     topmost position on every tick (SWP_NOACTIVATE so we never steal focus from
     the editor caret) -- within one 150 ms tick we reclaim the top and the IDE
     popup drops behind. Cheap idempotent no-op when we are already on top. }
+  { v(hover-resize): a sizing drag keeps the cursor on the popup edge and briefly
+    activates the window; both would otherwise satisfy a dismissal rule below and
+    close the popup mid-drag. Also skip the topmost re-assert, which fights the
+    sizing loop's own painting. }
+  if FSizing then Exit;
+
   if Visible and HandleAllocated then
     SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0,
       SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
@@ -1139,6 +1173,47 @@ begin
   { v0.94.1: borderless form (bsNone) -- add a thin 1px frame so the popup still
     reads as a distinct window against the editor, like Delphi's Code Insight. }
   Params.Style:= Params.Style or WS_BORDER;
+  { v(hover-resize): WS_THICKFRAME is what lets DefWindowProc run its sizing
+    loop when WMNCHitTest reports an edge. With no caption and bsNone there is
+    nothing extra painted -- the visible frame is still the WS_BORDER hairline
+    above -- but the window becomes user-resizable. }
+  Params.Style:= Params.Style or WS_THICKFRAME;
+end;
+
+procedure TDragLintHoverForm.WMNCHitTest(var Msg: TWMNCHitTest);
+const
+  GRIP = 6; { edge band, in px, that reports as a sizing zone }
+var
+  P: TPoint;
+begin
+  inherited;
+  if Msg.Result <> HTCLIENT then Exit; { let real non-client results stand }
+  P:= ScreenToClient(Point(Msg.XPos, Msg.YPos));
+  { Right / bottom / corner only. The top-left edges are deliberately NOT sizing
+    zones: the popup is anchored at its top-left to the hovered token, and
+    dragging that corner would move the anchor out from under the cursor and
+    trip the drift dismissal. }
+  if (P.X >= ClientWidth - GRIP) and (P.Y >= ClientHeight - GRIP) then Msg.Result:= HTBOTTOMRIGHT
+  else if P.X >= ClientWidth  - GRIP then Msg.Result:= HTRIGHT
+  else if P.Y >= ClientHeight - GRIP then Msg.Result:= HTBOTTOM;
+end;
+
+procedure TDragLintHoverForm.WMEnterSizeMove(var Msg: TMessage);
+begin
+  inherited;
+  FSizing:= True;
+end;
+
+procedure TDragLintHoverForm.WMExitSizeMove(var Msg: TMessage);
+begin
+  inherited;
+  FSizing:= False;
+  { Re-anchor to where the user left it, so the post-resize cursor position is
+    measured against the NEW rect and the popup does not immediately self-close. }
+  FAnchor.X      := Left;
+  FAnchor.Y      := Top;
+  FAnchorDismiss := False;   { once resized it is an interactive window, not a dwell tip }
+  FShowTickMs    := GetTickCount;
 end;
 
 procedure TDragLintHoverForm.ShowAt(
@@ -1157,7 +1232,6 @@ var
   SummaryH    : Integer  ;
   ShortName   : string   ;
   Ln          : string   ;
-  MaxLen      : Integer  ;
   CleanSummary: string   ;
   ShownCount  : Integer  ;
   HasTrailer  : Boolean  ;
@@ -1261,22 +1335,63 @@ begin
     a couple of declaration lines) instead of the fixed 900 px, so they don't
     blanket the panes behind the editor. Consolas 9 pt ~ 7 px/char. Menu
     popups keep the full width because they carry the callers grid. }
-  if AAnchorDismiss then
+  { v(hover-width): size to the CONTENT, measured in the real body font, and cap
+    on the monitor instead of a fixed 900. Two things changed here: the 7 px/char
+    estimate is gone (only valid for a monospaced cell), and MENU popups are now
+    content-sized too -- they previously took MAX_W unconditionally, so a short
+    message got a 900 px popup and a long one was truncated by the same 900. }
+  var SumLines: TArray<string>:= [AHeader];
+  for Ln in CleanSummary.Split([#10]) do SumLines:= SumLines + [Ln.TrimRight];
+  W:= MeasureTextWidth(SumLines, False) + 40;
+  if W < 200 then W:= 200;
+  if not AAnchorDismiss then
   begin
-    MaxLen:= Length(AHeader);
-    for Ln in CleanSummary.Split([#10]) do
-      if Length(Ln.TrimRight) > MaxLen then MaxLen:= Length(Ln.TrimRight);
-    W:= 40 + MaxLen * 7;
-    if W < 200 then W:= 200;
-    if W > MAX_W then W:= MAX_W;
-  end
-  else W:= MAX_W;
+    { menu popup: never let the callers grid need a horizontal scrollbar }
+    var ColsW0: Integer:= 0;
+    for var Ci:= 0 to FCallers.Columns.Count - 1 do ColsW0:= ColsW0 + FCallers.Columns[Ci].Width;
+    var NeedW0: Integer:= ColsW0 + GetSystemMetrics(SM_CXVSCROLL) + 8;
+    if W < NeedW0 then W:= NeedW0;
+  end;
+  if W > MaxPopupWidthAt(X, Y) then W:= MaxPopupWidthAt(X, Y);
   H:= HeaderH + SummaryH + CallersH + PAD * 2;
   if H > MAX_H then H:= MAX_H;
   if H < 120 then H:= 120;
 
   PlaceAndShow(X, Y, W, H);
 end; // procedure
+
+function TDragLintHoverForm.MeasureTextWidth(const ALines: array of string; ABold: Boolean): Integer;
+var
+  Bmp: Vcl.Graphics.TBitmap;
+  S  : string;
+  Wd : Integer;
+begin
+  Result:= 0;
+  Bmp:= Vcl.Graphics.TBitmap.Create;
+  try
+    Bmp.Canvas.Font.Assign(FBody.Font);
+    if ABold then Bmp.Canvas.Font.Style:= Bmp.Canvas.Font.Style + [fsBold];
+    for S in ALines do
+    begin
+      if S = '' then Continue;
+      Wd:= Bmp.Canvas.TextWidth(S);
+      if Wd > Result then Result:= Wd;
+    end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+function TDragLintHoverForm.MaxPopupWidthAt(AX, AY: Integer): Integer;
+const
+  EDGE_MARGIN = 24; { keep a little air between the popup and the screen edge }
+var
+  R: TRect;
+begin
+  R:= Screen.MonitorFromPoint(Point(AX, AY), mdNearest).WorkareaRect;
+  Result:= (R.Right - R.Left) - EDGE_MARGIN;
+  if Result < 480 then Result:= 480; { pathological tiny display -- keep it usable }
+end;
 
 procedure TDragLintHoverForm.PlaceAndShow(X, Y, W, H: Integer);
 { v0.94: the final size + on-screen placement + no-steal-focus show, factored
@@ -1294,8 +1409,15 @@ begin
     top up to use the space above too; only if it still doesn't fit the whole
     work area do we clamp H to the work-area height (the TRichEdit then scrolls).
     So: use available space first, fall back to the screen edge -- never run off. }
-  if SystemParametersInfo(SPI_GETWORKAREA, 0, @MonR, 0) then
+  { Use the work area of the monitor the popup actually lands on. SPI_GETWORKAREA
+    reports the PRIMARY monitor only, so on a multi-monitor desk a popup on the
+    secondary screen was clamped against the wrong rectangle. }
+  MonR:= Screen.MonitorFromPoint(Point(X, Y), mdNearest).WorkareaRect;
   begin
+    { Width was never clamped -- only nudged left -- so a popup wider than the
+      work area ran off the right edge (X hit MonR.Left and W stayed oversized).
+      Clamp it the same way H is clamped below; the body then wraps to fit. }
+    if W > MonR.Right - MonR.Left then W:= MonR.Right - MonR.Left;
     if X + W > MonR.Right then X:= MonR.Right - W;
     if X < MonR.Left then X:= MonR.Left;
 
@@ -1413,10 +1535,20 @@ begin
     FBody.Lines, which is already wrapped at the current narrow width). The
     signature header (+ its "   unit.pas (line)" locator) is almost always the
     widest line; also consider the widest param line. ~7.6 px/char + padding. }
-  var LongestChars: Integer:= Length(AModel.Signature) + Length(AModel.UnitFile) + 12;
+  { v(hover-width): MEASURE the candidate lines in the real body font instead of
+    estimating ~7.6 px per character. The estimate assumed a monospaced cell, so
+    on a proportional font it both padded narrow popups and wrapped wide ones
+    that would have fitted. Collect every logical line the body can show -- the
+    signature header with its locator, each parameter, each mined return, each
+    fact -- and take the widest. }
+  var Cands: TArray<string>;
+  Cands:= [AModel.Signature + '     ' + AModel.UnitFile + ' (line ' + IntToStr(AModel.DefLine) + ')'];
   for I:= 0 to High(AModel.Params) do
-    LongestChars:= Max(LongestChars, Length(AModel.Params[I].Modifier) + Length(AModel.Params[I].Name) + Length(AModel.Params[I].TypeText) + 8);
-  W:= 70 + Round(LongestChars * 7.6);
+    Cands:= Cands + [Trim(AModel.Params[I].Modifier + ' ' + AModel.Params[I].Name + ': ' + AModel.Params[I].TypeText) + '    '];
+  for I:= 0 to High(AModel.Returns) do Cands:= Cands + ['    Result := ' + AModel.Returns[I]];
+  for I:= 0 to High(AModel.Facts)   do Cands:= Cands + ['    ' + AModel.Facts[I]];
+  { Bold: the signature header is drawn bold and is almost always the widest. }
+  W:= MeasureTextWidth(Cands, True) + 70;
   if W < 480   then W:= 480;
   { #4: when the callers grid is shown, floor the width to fit ALL of its columns
     (+ a possible vertical scrollbar + borders) so there is NO horizontal
@@ -1428,7 +1560,9 @@ begin
     var NeedW: Integer:= ColsW + GetSystemMetrics(SM_CXVSCROLL) + 8;
     if W < NeedW then W:= NeedW;
   end;
-  if W > MAX_W then W:= MAX_W;
+  { Cap on the SCREEN, not on a hardcoded 1200: "as wide as the message needs,
+    never wider than the monitor it appears on". }
+  if W > MaxPopupWidthAt(X, Y) then W:= MaxPopupWidthAt(X, Y);
 
   { v(hover-polish): CONTENT-FIT sizing. Re-flow the body at the FINAL width so its
     wrapped line count is accurate (alClient FBody follows ClientWidth), then size
