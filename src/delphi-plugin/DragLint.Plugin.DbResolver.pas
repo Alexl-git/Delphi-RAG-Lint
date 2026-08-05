@@ -73,6 +73,17 @@ function ResolveActiveIndexDbs(const ASettings: TDragLintSettings): TArray<strin
   diagnostic string showing exactly what the resolver saw and decided. }
 function ResolverDiagnostic(const ASettings: TDragLintSettings): string;
 
+/// <summary>Path to the library index for the ACTIVE project's platform
+/// (library-&lt;platform&gt;.sqlite under the manifest outDir), falling back to a
+/// BPL-relative Win32/Win64/legacy probe.</summary>
+/// <param name="ASettings">Plugin settings; ExePath locates drag-lint.json.</param>
+/// <returns>Absolute path to the best available library DB; may not exist.</returns>
+/// <remarks>Exposed so menu commands can pass it to lint-all as the SECOND
+/// --db. Without it used-unit-not-resolvable has no library source and flags
+/// every third-party and RTL unit the project legitimately uses.
+/// Not thread-safe; call from the main thread only.</remarks>
+function GetPlatformAwareLibraryDbPath(const ASettings: TDragLintSettings): string;
+
 implementation
 
 function ManifestPathBesideEngine: string;

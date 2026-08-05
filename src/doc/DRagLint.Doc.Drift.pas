@@ -7,6 +7,12 @@ uses
   System.Generics.Collections,
   DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
+const
+  /// <summary>Substring common to every Auto-Document provenance marker
+  /// (drag-lint:auto BEGIN / END / bare / param). Its presence means the
+  /// surrounding doc region was written by us, not by a human.</summary>
+  AUTO_TOKEN = 'drag-lint:auto';
+
 type
   /// <summary>The kinds of DETERMINISTIC doc-vs-code drift the engine detects.
   /// Each is a structural mismatch between a DocInsight comment and the code it
@@ -460,15 +466,30 @@ begin
       // survive forever and reasonably conclude the tool is broken. The
       // finding itself stays useful (a real, permanent "this param has no
       // docs" signal for a human), just no longer claims a mechanical fix.
-      for N in SigNames do
-      begin
-        var Documented: Boolean:= False;
-        for DP in ADoc.Params do
-          if SameText(DP.Name, N) then begin Documented:= True; Break; end;
-        if not Documented then
-          Findings.Add(MakeFinding(ddParamMissing,
-            Format('signature param "%s" has no <param> tag', [N]), False, DocLine));
-      end;
+      // v(2026-08-03): do NOT fire on a doc block that is ENTIRELY our own
+      // generated output. Auto-Document emits <returns>/<remarks> and, by the
+      // deliberate policy above, never a <param> -- so on a purely generated
+      // block this rule reported every parameter of every routine, and the tool
+      // was grading its own output (225 of 1871 findings on DataCopy, the
+      // second-largest rule, none of them actionable).
+      // "Drift" means the doc and the code moved APART. A symbol a human never
+      // documented has not drifted; that is missing-doc's job, and it already
+      // covers it. So require evidence of human authorship -- a <summary>, or at
+      // least one <param> already written. The moment either appears, a param
+      // with no tag IS real drift and is reported again.
+      var HumanAuthored: Boolean:=
+        ADoc.HasSummaryTag or (Length(ADoc.Params) > 0) or
+        (not ContainsText(ADoc.RawBlock, AUTO_TOKEN));
+      if HumanAuthored then
+        for N in SigNames do
+        begin
+          var Documented: Boolean:= False;
+          for DP in ADoc.Params do
+            if SameText(DP.Name, N) then begin Documented:= True; Break; end;
+          if not Documented then
+            Findings.Add(MakeFinding(ddParamMissing,
+              Format('signature param "%s" has no <param> tag', [N]), False, DocLine));
+        end;
 
       // --- 3. ddParamVolatileMode: var/out param documented as input-only. ----
       // BOUNDED: fires ONLY when the param's ';'-group is var/out AND the <param>

@@ -1096,7 +1096,9 @@ begin
 
   // v0.25: dead-code finder - symbols with no entry in refs.name_text
   FQFindNoCallers:= NewQuery(
-    'SELECT s.* FROM symbols s ' + 'LEFT JOIN refs r ON r.name_text = s.name ' + 'WHERE r.id IS NULL ' + '  AND (:kind = '''' OR s.kind = :kind) ' +
+    { COLLATE NOCASE -- Delphi identifiers are case-insensitive; without it a
+      symbol referenced under different casing looks unreferenced (dead). }
+    'SELECT s.* FROM symbols s ' + 'LEFT JOIN refs r ON r.name_text = s.name COLLATE NOCASE ' + 'WHERE r.id IS NULL ' + '  AND (:kind = '''' OR s.kind = :kind) ' +
     '  AND s.name NOT IN (''Main'', ''Register'', ''initialization'', ''finalization'') ' + '  AND s.kind NOT IN (''constructor'', ''destructor'') ' +
     '  AND (:includePrivate = 1 OR (s.modifiers IS NULL ' + '       OR s.modifiers NOT LIKE ''%private%''))');
 
@@ -1498,7 +1500,7 @@ begin
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
-      'WHERE r.name_text = :n ' + KindP +
+      'WHERE r.name_text = :n COLLATE NOCASE ' + KindP + { Delphi identifiers are case-insensitive }
       '  AND r.id NOT IN (SELECT ref_id FROM call_edges) ' +
       '  AND (s.parent_id IS NULL OR s.parent_id NOT IN (' +
       '        SELECT id FROM symbols WHERE name = :n2 AND kind IN (''class'',''interface'',''record'',''type''))) ' +
@@ -1751,6 +1753,21 @@ begin
       'JOIN files f ON f.id = r.file_id ' +
       'LEFT JOIN call_edges ce ON ce.ref_id = r.id ' +
       'WHERE ' + CallSiteRefKindSql('r') +
+      { Deliberately BYTE-EXACT, unlike the refs.name_text lookups elsewhere in
+        this unit. Delphi identifiers are case-insensitive, so a NOCASE
+        membership test would be more correct -- but this subquery reads
+        symbols.name, which is served by the BINARY idx_symbols_name, and NOCASE
+        cannot use a BINARY index (see the CaseSensitiveLookups remarks at the
+        top of this unit). Applied here it degrades a bounded lookup into a scan
+        of symbols (2.3M rows on the shipped library index) for a predicate
+        evaluated across the whole refs table (3.4M rows): an incremental index
+        of 27 files into library-Win32.sqlite went from seconds to >20 minutes of
+        100% CPU with no commit.
+        The refs.name_text comparisons CAN take NOCASE for free -- that column
+        carries no index at all, so they were already scans.
+        To make this one case-insensitive too, first add idx_symbols_name_nocase
+        in Migrate (the probe at ~line 499 already knows about it) and only then
+        switch the collation, so the membership stays index-served. }
       '  AND r.name_text IN (SELECT name FROM symbols WHERE kind IN (''procedure'',''function'',''method'',''constructor'',''destructor'')) ' +
       '  AND (ce.ref_id IS NULL OR ce.confidence = ''ambiguous'') ';
     if AQName <> '' then SqlTxt:= SqlTxt + '  AND s.qualified_name = :qn ';
@@ -2538,7 +2555,14 @@ begin
     // Match any reference kind (call, event-binding, type_use, ...). "callers"
     // is a slight misnomer - the semantic is "every site that references
     // this name" - but it's what users mean when they say find-callers.
-    Q.SQL.Text:= 'SELECT * FROM refs WHERE name_text = :name ' + 'ORDER BY file_id, start_line';
+    { COLLATE NOCASE because Delphi identifiers are case-INSENSITIVE: a routine
+      declared `TagMRUAdd` and called `TAGMRUAdd;` is the same routine, but
+      SQLite's default BINARY collation made find-callers return 0 for the name
+      as DECLARED and 3 for the name as CALLED. That silently under-reports the
+      index's headline query, and made unused-private-member call a live routine
+      dead code. There is no index on refs(name_text) (only idx_refs_enclosing),
+      so this was already a scan -- NOCASE costs nothing here. }
+    Q.SQL.Text:= 'SELECT * FROM refs WHERE name_text = :name COLLATE NOCASE ' + 'ORDER BY file_id, start_line';
     Q.ParamByName('name').AsString:= ACalleeName;
     Q.Open;
     while not Q.Eof do
@@ -3789,8 +3813,10 @@ end;
 function TSQLiteSymbolStore.FindTransitiveCallers(const ASymbolName: string; ADepth: Integer): TArray<TImpactLevel>;
 const
   CTE_SQL = 'WITH RECURSIVE caller_walk(level, caller_id, caller_name, file_id) AS (' + '  SELECT 1, s2.id, s2.name, s2.file_id ' +
-  '    FROM refs r INNER JOIN symbols s2 ON s2.file_id = r.file_id ' + '      AND r.start_line BETWEEN s2.start_line AND s2.end_line ' + '    WHERE r.name_text = :targetName ' +
-  '  UNION ' + '  SELECT cw.level + 1, s3.id, s3.name, s3.file_id ' + '    FROM caller_walk cw ' + '    INNER JOIN refs r2 ON r2.name_text = cw.caller_name ' +
+  { COLLATE NOCASE on both hops -- Delphi identifiers are case-insensitive, so a
+    caller that spells the callee differently must still walk the chain. }
+  '    FROM refs r INNER JOIN symbols s2 ON s2.file_id = r.file_id ' + '      AND r.start_line BETWEEN s2.start_line AND s2.end_line ' + '    WHERE r.name_text = :targetName COLLATE NOCASE ' +
+  '  UNION ' + '  SELECT cw.level + 1, s3.id, s3.name, s3.file_id ' + '    FROM caller_walk cw ' + '    INNER JOIN refs r2 ON r2.name_text = cw.caller_name COLLATE NOCASE ' +
   '    INNER JOIN symbols s3 ON s3.file_id = r2.file_id ' + '      AND r2.start_line BETWEEN s3.start_line AND s3.end_line ' + '    WHERE cw.level < :maxDepth' + ') ' +
   'SELECT level, COUNT(DISTINCT caller_id) AS callers, ' + '       COUNT(DISTINCT file_id) AS units ' + '  FROM caller_walk GROUP BY level ORDER BY level';
 var

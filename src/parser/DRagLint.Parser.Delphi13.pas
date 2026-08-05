@@ -1107,6 +1107,27 @@ begin
   end;
 end; // function
 
+// A `message`/`resident` handler -- `procedure WMSize(var M: TWMSize); message
+// WM_SIZE;` -- is dispatched by the VCL through the message table, never called
+// by name. Recorded in Modifiers so consumers can tell it apart from ordinary
+// dead code (unused-private-member reported every one of them as unreferenced,
+// which is their normal state, not a defect). Same `procAttribute` shape as
+// ProcIsVirtual above.
+function ProcIsMessageHandler(const ANode: TTSNode): Boolean;
+var
+  i, j : Integer;
+  Attr : TTSNode;
+begin
+  Result:= False;
+  for i:= 0 to ANode.NamedChildCount - 1 do
+  begin
+    Attr:= ANode.NamedChild(i);
+    if Attr.NodeType <> 'procAttribute' then Continue;
+    for j:= 0 to Attr.NamedChildCount - 1 do
+      if Attr.NamedChild(j).NodeType = 'kMessage' then Exit(True);
+  end;
+end; // function
+
 // v14 (D5, Task 2): emit each formal parameter of a routine as an skParam
 // symbol carrying its declared type, parented to the routine. Enables Task 5
 // to type a call-site receiver that is a parameter (AFoo.M where AFoo: TFoo).
@@ -1200,6 +1221,10 @@ begin
   { Methods carry their class visibility (UML glyphs); free procs do not. }
   if AAsMethod then Modifiers:= AState.CurrentVisibility
   else Modifiers:= '';
+  { Record the message directive alongside the visibility so dead-code rules can
+    exempt VCL-dispatched handlers (see ProcIsMessageHandler). }
+  if ProcIsMessageHandler(ANode) then
+    Modifiers:= Trim(Modifiers + ' message');
   { v0.42: Signature = full parameter list + return type (Code-Insight style),
     e.g. '(const A: Integer): Boolean'. Was return-type-only before. }
   RoutineIdx:= AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode));
@@ -1605,6 +1630,43 @@ begin
     end;
     // Walk children so a typed const's type emits a type_use ref.
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    Exit;
+  end; // if
+
+  // declVar at UNIT level: emit a variable symbol. The sibling of declConst
+  // above, and missing until now -- skVarDecl was consumed by the hover/LSP
+  // renderers but emitted by nothing, so NO unit-level global was ever a
+  // symbol. A "globals unit" (uGlobals: HeaderFields, TagList, EXEDir, ...) was
+  // therefore invisible: `query --name` and `find-callers` returned nothing for
+  // any of them, and unused-unit-in-uses declared the unit a dead import in
+  // every file that used only its globals.
+  // Routine locals are NOT reached here -- defProc walks only its `body` child
+  // and hands its declVars to EmitRoutineLocals (skLocalVar). The RoutineDepth
+  // guard covers the one remaining overlap: Delphi 13 inline body vars
+  // (`var X := 1;`), which are locals and must not be emitted as globals.
+  if (NodeType = 'declVar') and (AState.RoutineDepth = 0) then
+  begin
+    // One shared type for every name in this declVar (grouped `X, Y: T`).
+    var VTypeText:= TypeTextOf(ANode, AState.Source);
+    // Ref-gap E parity with locals: a global's declared type gets a type_use
+    // ref so a type rename reaches the declaration site.
+    var VTypeField:= ANode.ChildByField('type');
+    if not VTypeField.IsNull then
+    begin
+      var VTyperef:= FindNamedChildOfType(VTypeField, 'typeref');
+      if not VTyperef.IsNull then EmitTypeUseReference(VTyperef, AState);
+    end;
+    for i:= 0 to ANode.NamedChildCount - 1 do
+    begin
+      var VChild:= ANode.NamedChild(i);
+      if VChild.NodeType <> 'identifier' then Continue; // the type lives under 'type'
+      var VName:= NodeText(VChild, AState.Source);
+      if VName = '' then Continue;
+      var VQName: string;
+      if AParentQualifiedName <> '' then VQName:= AParentQualifiedName + '.' + VName
+      else VQName:= VName;
+      AState.Emit(skVarDecl, VName, VQName, AParentSymbolIdx, VChild, VTypeText);
+    end;
     Exit;
   end; // if
 

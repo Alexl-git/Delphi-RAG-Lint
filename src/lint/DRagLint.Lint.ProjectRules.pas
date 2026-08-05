@@ -718,7 +718,12 @@ begin
 
       { unused-unit-in-uses: build the set of file IDs referenced from this file.
         Skip files with no uses entries to avoid the O(refs) cost for every file. }
-      if WantRule('unused-unit-in-uses') then
+      { A program/package uses clause is the project's unit-INCLUSION list, not an
+        import list: a .dpr legitimately names every unit it links even when its
+        main block references no symbol from any of them. Only a .pas import can
+        be a dead import, so never run this rule on .dpr/.dpk. }
+      if WantRule('unused-unit-in-uses') and
+         not (SameText(ExtractFileExt(Path), '.dpr') or SameText(ExtractFileExt(Path), '.dpk')) then
       begin
         UsesList:= AStore.GetUnitUsesForFile(Fid);
         if Length(UsesList) > 0 then
@@ -844,6 +849,12 @@ begin
               (Sym.Kind in [skMethod, skFunction, skProcedure, skConstructor, skDestructor,
                             skField, skConstDecl, skTypeAlias, skClass, skInterface, skRecord, skEnum]) and
               (Pos('override', PrivModifiers) = 0) and
+              { A message handler -- `procedure WMSize(var M: TWMSize); message WM_SIZE;`
+                -- is dispatched by the VCL through the message table and is NEVER
+                called by name, so "no references" is its normal, correct state,
+                not dead code. Same dispatch argument as the virtual/override
+                guard beside it. }
+              (Pos('message', PrivModifiers) = 0) and
               (not Sym.IsVirtual) then
             begin
               { Skip members whose name appears as a property accessor or backing

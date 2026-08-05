@@ -311,6 +311,13 @@ var
     the published or implicit-first section are IDE-generated / DFM-wired and
     must not be renamed, so they are exempt from the PascalCase requirement. }
   CurSectionSkipsMethodCase: Boolean;
+  { True while the walker is inside a RECORD type declaration. The "F" backing-
+    field convention is a CLASS convention: a record is a data carrier whose
+    member names are part of its public shape, and an API-mapped record
+    (RM_PROCESS_INFO.dwProcessId, TWMKey.CharCode) has names dictated by the
+    external header -- renaming them breaks the mapping. Saved/restored around
+    declType recursion. }
+  InRecordDecl: Boolean;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -321,6 +328,34 @@ var
     S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { True when a declType's type expression is a record (optionally packed).
+    Grammar-agnostic on purpose: the leading keyword of the type text is the
+    one signal that cannot drift with the tree-sitter node naming. }
+  function TypeNodeIsRecord(const ATypeNode: TTSNode): Boolean;
+  var
+    S: string;
+  begin
+    Result:= False;
+    if ATypeNode.IsNull then Exit;
+    S:= Trim(NodeStr(ATypeNode));
+    if StartsText('packed', S) then S:= Trim(Copy(S, Length('packed') + 1, MaxInt));
+    Result:= StartsText('record', S);
+  end;
+
+  { True for a type name that mirrors an external C/Win32 header --
+    ALL-CAPS with underscores (RM_PROCESS_INFO, LOGFONTW). Renaming these
+    breaks the correspondence with the API they map, so the T-prefix
+    convention does not apply. }
+  function IsApiStyleTypeName(const AName: string): Boolean;
+  var
+    Ch: Char;
+  begin
+    Result:= Pos('_', AName) > 0;
+    if not Result then Exit;
+    for Ch in AName do
+      if CharInSet(Ch, ['a'..'z']) then Exit(False);
   end;
 
   { Emit one finding pointing at the name identifier node. }
@@ -561,10 +596,20 @@ var
             end
             else
             begin
-              if (ANaming.ClassPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.ClassPrefix)) then
+              { Two exemptions, both cases where the name is NOT ours to choose:
+                - an API-mapped record/struct (RM_PROCESS_INFO) mirrors an
+                  external header verbatim;
+                - an attribute class follows the Delphi '...Attribute' naming
+                  contract (declared INICaptionAttribute, written [INICaption]),
+                  where a T prefix would be wrong.
+                Also report a record AS a record: emitting 'Class "..."' for a
+                record type misnames the construct in the message. }
+              if (ANaming.ClassPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.ClassPrefix))
+                and (not IsApiStyleTypeName(TypeName))
+                and (not EndsText('Attribute', TypeName)) then
                 EmitAt(NameNode, 'type-name-prefix',
-                  Format('Class "%s" should start with the "%s" prefix',
-                    [TypeName, ANaming.ClassPrefix]));
+                  Format('%s "%s" should start with the "%s" prefix',
+                    [IfThen(TypeNodeIsRecord(TypeNode), 'Record', 'Class'), TypeName, ANaming.ClassPrefix]));
             end;
           end
           else if TypeNode.NodeType = 'declIntf' then
@@ -583,8 +628,12 @@ var
           end;
         end;
       end;
-      { Still recurse for nested type declarations. }
+      { Still recurse for nested type declarations. Carry "inside a record"
+        down the subtree so field-name-prefix can exempt record members. }
+      var SavedInRecord: Boolean:= InRecordDecl;
+      if TypeNodeIsRecord(TypeNode) then InRecordDecl:= True;
       for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+      InRecordDecl:= SavedInRecord;
       Exit;
     end;
 
@@ -640,7 +689,7 @@ var
       missing F is a real violation and fires. }
     if N.NodeType = 'declField' then
     begin
-      if ANaming.FieldPrefix <> '' then
+      if (ANaming.FieldPrefix <> '') and (not InRecordDecl) then
       begin
         NameNode:= N.ChildByField('name');
         TypeNode:= N.ChildByField('type');
@@ -656,8 +705,18 @@ var
             begin
               var FieldType: string:= '';
               if not TypeNode.IsNull then FieldType:= Trim(NodeStr(TypeNode));
-              IsComponentField:= (Length(FieldType) >= 2)
-                and (FieldType[1] = 'T') and CharInSet(FieldType[2], ['A'..'Z', 'a'..'z']);
+              { The IDE writes the DFM component dump with a namespace-QUALIFIED
+                type whenever the short name is ambiguous -- 'Timer1:
+                Vcl.ExtCtrls.TTimer' beside 'StTrayIcon1: TStTrayIcon'. Testing
+                the first character of the whole expression then saw 'V', missed
+                the skip, and demanded an F prefix on a published component that
+                cannot be renamed without breaking the .dfm. Test the LAST dotted
+                segment, which is the actual type name. }
+              var ShortType: string:= FieldType;
+              var DotAt: Integer:= LastDelimiter('.', ShortType);
+              if DotAt > 0 then ShortType:= Copy(ShortType, DotAt + 1, MaxInt);
+              IsComponentField:= (Length(ShortType) >= 2)
+                and (ShortType[1] = 'T') and CharInSet(ShortType[2], ['A'..'Z', 'a'..'z']);
             end;
             if not IsComponentField then
             begin
@@ -693,7 +752,18 @@ var
         and (not CurSectionSkipsMethodCase) then
       begin
         var MethName: string:= Trim(NodeStr(NameNode));
-        if (MethName <> '') and (not StartsText('operator', MethName)) then
+        { A QUALIFIED name here (TForm1.btnOkClick) is an implementation header,
+          not a class-body declaration -- the grammar reaches it through this
+          same node type. It arrives with no enclosing declSection, so
+          CurSectionSkipsMethodCase is False and the published/implicit-first
+          exemption never applied: every DFM event handler
+          (drpFromDropFiles, edtBckPropertiesButtonClick -- named by the IDE
+          after their component and unrenamable without breaking the DFM
+          wiring) was reported at its implementation line. The class-body
+          declProc is the authoritative check for these, exactly as the defProc
+          branch below already documents. }
+        if (MethName <> '') and (not StartsText('operator', MethName))
+          and (LastDelimiter('.', MethName) = 0) then
         begin
           if (not MatchesCase(MethName, ANaming.MethodCase))
             and (not IsShortAllCaps(MethName)) then

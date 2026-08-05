@@ -4813,7 +4813,7 @@ end;
   lint-all exit codes: 0 = no findings, 1 = findings (both success), 2 = error. }
 procedure InvokeLintAll(Sender: TObject);
 var
-  Proj, Db, OutPath, Cmd: string;
+  Proj, Db, LibDb, OutPath, Cmd: string;
   MS: IOTAModuleServices;
 begin
   Proj:= GetActiveProjectFile;
@@ -4838,7 +4838,19 @@ begin
   end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   OutPath:= TPath.Combine(ExtractFilePath(Proj), 'lint-report-' + FormatDateTime('yyyymmdd-hhnnss', Now) + '.txt');
-  Cmd    := Format('"%s" lint-all --db "%s" --project "%s" --out "%s"', [DLExe64, Db, Proj, OutPath]);
+  { lint-all takes the FIRST existing --db as the project index and the SECOND as
+    the platform library index. Passing only the project DB left the library
+    source empty, so used-unit-not-resolvable flagged every third-party and RTL
+    unit the project legitimately uses -- 420 of 1871 findings on DataCopy, 333 of
+    them pure noise. Append library-<active platform>.sqlite so the rule can tell
+    "unit the compiler resolves from the library path" from "unit that resolves
+    nowhere". Omitted silently when the library DB has not been built. }
+  LibDb:= '';
+  try LibDb:= GetPlatformAwareLibraryDbPath(LoadSettings); except LibDb:= ''; end;
+  if (LibDb <> '') and FileExists(LibDb) then
+    Cmd:= Format('"%s" lint-all --db "%s" --db "%s" --project "%s" --out "%s"', [DLExe64, Db, LibDb, Proj, OutPath])
+  else
+    Cmd:= Format('"%s" lint-all --db "%s" --project "%s" --out "%s"', [DLExe64, Db, Proj, OutPath]);
   DLT('menu', 'enqueue(lint-all): ' + Cmd);
   { v0.65.1: enqueue on the R2 job queue (serialized with reindex / forms-csv);
     the drag-lint dock status bar shows live % while it runs. The queue parses

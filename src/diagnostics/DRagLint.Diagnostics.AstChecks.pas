@@ -3960,8 +3960,9 @@ var
 
   procedure Visit(const N: TTSNode);
   var
-    I, J                     : Integer ;
+    I, J, AI                 : Integer ;
     Ent, Args, Fmt, Arr, Elem: TTSNode ;
+    Elems                    : TArray<TTSNode>;
     Kinds                    : TArray<Char>;
     P, PE                    : TTSPoint;
     F                        : TLintFinding;
@@ -3982,15 +3983,26 @@ var
           Arr:= Args.NamedChild(1);
           if (Fmt.NodeType = 'literalString') and (Arr.NodeType = 'exprBrackets') then
           begin
+            { A comment INSIDE the argument array is a named child of
+              exprBrackets, so counting NamedChildCount counted it as an
+              argument: an array holding one commented-out argument followed by
+              one real argument was reported as "1 specifier but 2 arguments"
+              against a single-specifier format string. Every 'error'-severity
+              finding on the DataCopy corpus was this. Same skip as the
+              executable-code walk above: a comment is not an argument. }
+            Elems:= nil;
+            for AI:= 0 to Arr.NamedChildCount - 1 do
+              if Arr.NamedChild(AI).NodeType <> 'comment' then
+                Elems:= Elems + [Arr.NamedChild(AI)];
             Kinds:= SpecKinds(NodeStr(Fmt), IsComplex);
             { count check -- skipped for indexed/star formats we cannot count reliably }
-            if (not IsComplex) and (Length(Kinds) <> Arr.NamedChildCount) then
+            if (not IsComplex) and (Length(Kinds) <> Length(Elems)) then
             begin
               P:= Ent.StartPoint;
               F:= Default(TLintFinding);
               F.RuleId  := 'format-argument-count';
               F.Severity:= 'error';
-              F.Message := Format('Format string has %d specifier(s) but %d argument(s) were supplied.', [Length(Kinds), Arr.NamedChildCount]);
+              F.Message := Format('Format string has %d specifier(s) but %d argument(s) were supplied.', [Length(Kinds), Length(Elems)]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(P.Row   ) + 1;
               F.StartCol := Integer(P.Column) + 1;
@@ -4002,8 +4014,8 @@ var
             if not IsComplex then
             for J:= 0 to Length(Kinds) - 1 do
             begin
-              if J >= Arr.NamedChildCount then Break;
-              Elem:= Arr.NamedChild(J);
+              if J >= Length(Elems) then Break;
+              Elem:= Elems[J]; { comment-free, so specifier J lines up with argument J }
               K:= Kinds[J];
               IsNum    := CharInSet(K, ['d', 'u', 'x', 'i', 'f', 'g', 'e', 'n']);
               IsIntOnly:= CharInSet(K, ['d', 'u', 'x', 'i']);
