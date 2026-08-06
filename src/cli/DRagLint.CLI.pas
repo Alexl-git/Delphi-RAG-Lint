@@ -4697,12 +4697,12 @@ end;
   NamingFixEdits (the rename engine), both via a store-backed append in
   FinalizeAndOutput, not from the pure-text edit builder. }
 const
-  FIXABLE_RULE_IDS: array[0..19] of string = (
+  FIXABLE_RULE_IDS: array[0..20] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
     'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc',
     'method-pascalcase', 'local-var-casing', 'const-casing',
     'field-name-prefix', 'param-name-prefix', 'type-name-prefix',
-    'nil-comparison', 'uppercase-compare', 'uppercase-compare-always-false');
+    'nil-comparison', 'uppercase-compare', 'uppercase-compare-always-false', 'unused-local');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var
@@ -5281,6 +5281,21 @@ begin
           end;
         end; // if
       end // if
+      else if SameText(F.RuleId, 'unused-local') then
+      begin
+        { An unused local variable (H2164). The finding points to the variable
+          name in the declaration. Delete the entire line containing the declaration.
+          This handles the simple case where one variable is declared per line;
+          if multiple variables are declared on one line (X, Y: Integer;), the entire
+          line is deleted, which is the safest approach when only one is unused. }
+        E:= Default(TTextEdit);
+        E.FilePath:= F.FilePath;
+        E.Kind:= tekDeleteLines;
+        E.Line:= F.StartLine;
+        E.EndLine:= F.StartLine; { delete just the one line }
+        Result:= Result + [E];
+        Inc(AFixableCount);
+      end
       else if SameText(F.RuleId, 'off-by-one-count') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers the loop end-bound (X.Count / Length(X)). Append ' - 1'.

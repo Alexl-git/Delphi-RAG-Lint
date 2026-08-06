@@ -1,0 +1,30 @@
+unit UnusedLocalTest;
+
+interface
+
+implementation
+
+procedure Test1;
+var
+  Y: string;
+begin
+  WriteLn(Y);
+end;
+
+procedure Test2;
+var
+  A: Integer;
+  B: Integer;
+begin
+  A := 5;
+  B := 10;
+  WriteLn(A);
+end;
+
+procedure Test3;
+var
+begin
+  WriteLn('Hello');
+end;
+
+end.

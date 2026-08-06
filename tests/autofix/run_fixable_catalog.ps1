@@ -43,9 +43,10 @@ try {
   # it marks a comparison that can never be true, which is a defect rather than
   # the style nit uppercase-compare reports.
   Check 'uppercase-compare-always-false severity=error' ($byId['uppercase-compare-always-false'].default_severity -eq 'error')
+  Check 'unused-local fixable=true'          ($byId['unused-local'].fixable -eq $true)
   # a rule with no fix must be false (pick a stable always-present rule):
   Check 'cyclomatic-complexity fixable=false' ($byId['cyclomatic-complexity'].fixable -eq $false)
   $fixableCount = ($obj.rules | Where-Object { $_.fixable -eq $true }).Count
-  Check 'exactly 20 fixable rules' ($fixableCount -eq 20)
+  Check 'exactly 21 fixable rules' ($fixableCount -eq 21)
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
