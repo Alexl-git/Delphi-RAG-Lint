@@ -56,9 +56,42 @@ File facts, in case they matter: `StShlCtl.pas` is 270,385 bytes, no BOM, pure
 7-bit ASCII. All three are shell-namespace units that lean heavily on
 `{$IFDEF VER130}` / BCB conditional blocks near the top.
 
-## Suggested next step
+## Bisection Progress (2026-08-05, evening session)
 
-Bisect `StShlCtl.pas` -- halve the body until the error clears -- to get the
-construct down to a few lines, then add it to `tests\preprocess` as a fixture.
-The reported position (the `unit` keyword, col 1) is almost certainly where
-tree-sitter's error node surfaces, not where the offending construct is.
+Performed binary bisection on `StShlCtl.pas` (8238 lines) using the rebuilt
+`drag-lint.exe`:
+- Lines 1..8235 + end. -> **PASS** (parses clean)
+- Lines 1..8237 + end. -> **PASS** (parses clean)
+- Original file -> **FAIL** (parse error at 40:1)
+
+The file structure around the problem area (finalization block):
+```
+Line 8233: finalization
+Line 8234:   if NeedToUninitialize then
+Line 8235:     OleUninitialize;
+Line 8236: (blank)
+Line 8237: end.
+```
+
+Hypothesis: The issue is **not** in the finalization block or the
+initialization section. It likely involves a directive, conditional, or
+construct between the `interface` and the main code that the preprocessor or
+parser chokes on. The `interface` block has many `{$IFDEF VER130}` directives
+and `{$HPPEMIT}` blocks that might be causing the issue.
+
+The reported error position (40:1) is definitely where the parser's error node
+surfaces, not the root cause -- the actual problem is earlier in the file.
+
+## Suggested next steps
+
+1. Bisect the **prologue** (lines 1..60) more carefully, focusing on:
+   - The include directive (`{$I SsDefine.inc}`)
+   - The preprocessor directives (`{$IFDEF}`, `{$IF}`, etc.)
+   - The `{$HPPEMIT}` blocks in the interface section
+
+2. Compare with `SsBase.pas` (which parses fine) to see what's different
+   in the prologue or early code structure
+
+3. Add a minimal repro fixture to `tests\preprocess` once identified
+
+
