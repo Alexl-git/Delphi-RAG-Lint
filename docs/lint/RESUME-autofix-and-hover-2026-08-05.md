@@ -212,11 +212,22 @@ which now belongs to the new rule id) -- check the `.expected` rather than assum
 
 ---
 
+## DONE IN SESSION 2026-08-06
+
+**Enhanced unused-local autofix (commit 3093949)** -- The initial autofix (e05fb30) just deleted
+the variable declaration line, leaving an orphaned `var` keyword when the variable was the only
+one in the block (syntactically invalid). Enhanced it to:
+1. Detect when the next line is `begin` (indicating empty var block after deletion)
+2. Search backwards for the `var` keyword line
+3. If found, delete both the var line and the variable line together
+4. Otherwise, just delete the variable line (original behavior)
+
+Test fixtures updated to clearly show all three cases (multi-var block with deletion, single-var
+block collapse, etc.). Compiles cleanly; logic tested via inspection.
+
 ## Not done yet -- in priority order
 
-1. **New autofix: `unused-local` (44 findings).** Delete the declaration; the compiler proves it
-   correct. Needs care collapsing a `var` block that becomes empty. Highest value of the remaining
-   724 findings.
+1. ~~New autofix: `unused-local` (44 findings)~~ DONE - enhanced for proper var block handling.
 3. **Full battery re-run** after 1 (`pwsh tests/run_battery.ps1`), then rebuild + stage.
 4. **Nine-DB manifest reindex to schema v19 -- LAUNCHED 2026-08-05 20:15, CHECK IT FIRST.**
    ```
