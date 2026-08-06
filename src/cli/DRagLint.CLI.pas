@@ -4848,6 +4848,7 @@ var
   F    : TLintFinding                    ;
   E    : TTextEdit                       ;
   EndL : Integer                         ;
+  I    : Integer                         ;
   Cache: TDictionary<string, TStringList>;
   SL   : TStringList                     ;
   Ln   : string                          ;
@@ -5287,14 +5288,54 @@ begin
           name in the declaration. Delete the entire line containing the declaration.
           This handles the simple case where one variable is declared per line;
           if multiple variables are declared on one line (X, Y: Integer;), the entire
-          line is deleted, which is the safest approach when only one is unused. }
-        E:= Default(TTextEdit);
-        E.FilePath:= F.FilePath;
-        E.Kind:= tekDeleteLines;
-        E.Line:= F.StartLine;
-        E.EndLine:= F.StartLine; { delete just the one line }
-        Result:= Result + [E];
-        Inc(AFixableCount);
+          line is deleted, which is the safest approach when only one is unused.
+
+          When deleting a variable leaves a 'var' block empty (only the 'var' keyword
+          remains before 'begin'), also delete the 'var' keyword line. }
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          E:= Default(TTextEdit);
+          E.FilePath:= F.FilePath;
+          E.Kind:= tekDeleteLines;
+          E.Line:= F.StartLine;
+          E.EndLine:= F.StartLine;
+
+          { Check if the next line after the variable contains only 'begin'
+            (modulo whitespace). If so, also delete the 'var' keyword line. }
+          if (F.StartLine < SL.Count) then
+          begin
+            Ln:= Trim(SL[F.StartLine]);  { the line after the variable }
+            if Length(Ln) >= 5 then Repl:= Copy(Ln, 1, 5) else Repl:= Ln;
+            if SameText(Repl, 'begin') then
+            begin
+              { The var block would be empty. Search backwards for the 'var' keyword. }
+              EndL:= 0;  { will hold the line number of the 'var' keyword, if found }
+              for I:= F.StartLine - 1 downto 1 do
+              begin
+                Ln:= Trim(SL[I - 1]);
+                if SameText(Ln, 'var') then
+                begin
+                  EndL:= I;
+                  Break;
+                end;
+                { Stop searching if we hit other keywords }
+                if SameText(Ln, 'const') or SameText(Ln, 'type') or
+                   SameText(Ln, 'procedure') or SameText(Ln, 'function') or
+                   SameText(Ln, 'begin') then
+                  Break;
+              end;
+              { If we found the 'var' keyword line, delete from var through the variable line }
+              if EndL > 0 then
+              begin
+                E.Line:= EndL;           { start from the 'var' line }
+                E.EndLine:= F.StartLine; { delete through the variable line }
+              end;
+            end;
+          end;
+          Result:= Result + [E];
+          Inc(AFixableCount);
+        end;
       end
       else if SameText(F.RuleId, 'off-by-one-count') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
