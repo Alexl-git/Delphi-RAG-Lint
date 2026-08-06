@@ -5531,6 +5531,7 @@ var
   F           : TLintFinding                ;
   DefDisabled : TArray<string>              ;
   EffPath     : string                      ;
+  Store       : ISymbolStore                ;
 begin
   DefDisabled:= nil;
   { AutoFix Chunk 1: accept --file <F> as an alias for the positional <path>.
@@ -5778,10 +5779,42 @@ begin
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end; // if
   end; // if
+  { The store-backed quick-fixes -- the six naming rules, doc-drift and
+    missing-doc -- all sit behind `if AStore <> nil` in FinalizeAndOutput, and
+    this caller used to omit AStore entirely, so it always defaulted to nil.
+    Consequence: `lint --file <F> --db <D> --fix` produced NO naming or doc fix
+    at all, while `lint-all --db <D> --fix` on the same file, same rule and same
+    config produced them. Measured on DataCopy's uFileUtils.pas: 0 of 10
+    local-var-casing findings fixable here vs 324 project-wide. That single-file
+    command is exactly what the IDE spawns for "Fix it" and "Fix all in this
+    file" (DragLint.Plugin.StructureForm), so every store-backed quick-fix was
+    dead in the IDE.
+
+    Open the index when --db names one and hand it over. READ-ONLY: a fix run
+    must never write to the index, and OpenReadOnlyStore is also the one helper
+    that gets the WAL open right. A stale-schema DB (AOk False) degrades to nil
+    -- the text-only fixes still apply -- rather than failing the whole run. With
+    no --db, Store stays nil and this path is byte-identical to before.
+
+    GATED ON --fix, and that gate is load-bearing, not an optimisation. The store
+    is consumed by nothing except the fix block, and OpenReadOnlyStore WRITES TO
+    STDOUT when the index schema is behind ("index schema vN < vM: run ..."). On a
+    plain `lint --db <older-db> --format sarif` that line lands inside the SARIF
+    document and it stops being parseable JSON -- caught by
+    tests/ergonomics/run_pipeline_tests.ps1 ("sarif parses" / "sarif version
+    2.1.0") when this was first written without the gate. }
+  Store:= nil;
+  if AArgs.Fix and (AArgs.DbPath <> '') and TFile.Exists(AArgs.DbPath) then
+  begin
+    var StoreOk: Boolean;
+    Store:= OpenReadOnlyStore(AArgs.DbPath, StoreOk);
+    if not StoreOk then Store:= nil;
+  end;
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
-            FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('%d finding(s)', [Length(ASurv)])); end
+            FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('%d finding(s)', [Length(ASurv)])); end,
+    Store
   );
 end; // function
 
