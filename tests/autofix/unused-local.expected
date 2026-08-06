@@ -16,13 +16,11 @@ var
   A: Integer;
   B: Integer;
 begin
-  A := 5;
-  B := 10;
   WriteLn(A);
+  WriteLn(B);
 end;
 
 procedure Test3;
-var
 begin
   WriteLn('Hello');
 end;

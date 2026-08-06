@@ -18,8 +18,9 @@ var
   B: Integer;
   C: Integer;
 begin
+  A := 5;
+  B := 10;
   WriteLn(A);
-  WriteLn(B);
 end;
 
 procedure Test3;
