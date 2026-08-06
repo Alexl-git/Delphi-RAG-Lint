@@ -4697,11 +4697,12 @@ end;
   NamingFixEdits (the rename engine), both via a store-backed append in
   FinalizeAndOutput, not from the pure-text edit builder. }
 const
-  FIXABLE_RULE_IDS: array[0..16] of string = (
+  FIXABLE_RULE_IDS: array[0..19] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
     'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc',
     'method-pascalcase', 'local-var-casing', 'const-casing',
-    'field-name-prefix', 'param-name-prefix', 'type-name-prefix');
+    'field-name-prefix', 'param-name-prefix', 'type-name-prefix',
+    'nil-comparison', 'uppercase-compare', 'uppercase-compare-always-false');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var
@@ -4721,10 +4722,14 @@ begin
 end;
 
 { Behaviour-CHANGING fixes: still applied by Fix-it/Fix-all, but tagged so a
-  human/AI orchestrator is warned. Currently only off-by-one-count (appends
-  ' - 1' to a loop bound, which breaks an intentionally-inclusive loop). }
+  human/AI orchestrator is warned. off-by-one-count appends ' - 1' to a loop
+  bound, which breaks an intentionally-inclusive loop.
+  uppercase-compare-always-false recases the literal so a comparison that could
+  NEVER be true becomes capable of being true -- that is the whole point of the
+  fix, but it means a previously-dead branch starts executing, so a human has to
+  confirm the branch was meant to run. }
 const
-  RISKY_FIX_RULE_IDS: array[0..0] of string = ('off-by-one-count');
+  RISKY_FIX_RULE_IDS: array[0..1] of string = ('off-by-one-count', 'uppercase-compare-always-false');
 
   /// <summary>True iff the rule's registered fix is behaviour-CHANGING (not merely
   /// a redundant-code cleanup). Such fixes are still applied, but callers surface a
@@ -4899,6 +4904,160 @@ begin
           end;
         end; // if
       end // if
+      { v(autofix-compare): `X = nil` -> `not Assigned(X)`, `X <> nil` -> `Assigned(X)`.
+        The rule pins @warn to the whole exprBinary, so the span is the complete
+        comparison. Note the polarity inversion: `= nil` means NOT assigned. }
+      else if SameText(F.RuleId, 'nil-comparison') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          var NcOpAt : Integer:= Pos('<>', Span);
+          var NcOpLen: Integer:= 2;
+          var NcNeg  : Boolean:= False;   { True -> the fix needs a leading `not` }
+          if NcOpAt <= 0 then
+          begin
+            NcOpAt := Pos('=', Span);
+            NcOpLen:= 1;
+            NcNeg  := True;               { `X = nil` is "not assigned" }
+          end;
+          if NcOpAt > 1 then
+          begin
+            var NcLhs: string:= Trim(Copy(Span, 1, NcOpAt - 1));
+            var NcRhs: string:= Trim(Copy(Span, NcOpAt + NcOpLen, MaxInt));
+            if SameText(NcRhs, 'nil') and (NcLhs <> '') then
+            begin
+              Repl:= 'Assigned(' + NcLhs + ')';
+              if NcNeg then Repl:= 'not ' + Repl;
+              E:= Default(TTextEdit);
+              E.FilePath:= F.FilePath;
+              E.Kind    := tekReplaceInLine;
+              E.Line    := F.StartLine;
+              E.Col     := F.StartCol;
+              E.EndCol  := F.EndCol;
+              E.Text    := Repl;
+              Result:= Result + [E];
+              Inc(AFixableCount);
+            end;
+          end;
+        end; // if
+      end
+      { v(autofix-compare): `UpperCase(X) = 'ABC'` -> `SameText(X, 'ABC')` (and
+        `<>` -> `not SameText(...)`). Only the STYLE variant of the rule reaches
+        here -- the always-false variant is a separate rule id below, because
+        rewriting THAT one to SameText would silently turn a never-matching test
+        into a sometimes-matching one.
+        The operator is located in the text BEFORE the first quote, so a literal
+        containing '=' or '<>' ('a<>b') cannot be mistaken for the operator. }
+      else if SameText(F.RuleId, 'uppercase-compare') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          var UcOpen: Integer:= Pos('(', Span);
+          var UcClose: Integer:= 0;
+          if UcOpen > 0 then
+          begin
+            var UcDepth: Integer:= 0;
+            for var UcQ: Integer:= UcOpen to Length(Span) do
+            begin
+              if Span[UcQ] = '(' then Inc(UcDepth)
+              else if Span[UcQ] = ')' then
+              begin
+                Dec(UcDepth);
+                if UcDepth = 0 then begin UcClose:= UcQ; Break; end;
+              end;
+            end;
+          end;
+          if UcClose > UcOpen then
+          begin
+            var UcInner: string := Trim(Copy(Span, UcOpen + 1, UcClose - UcOpen - 1));
+            var UcRest : string := Copy(Span, UcClose + 1, MaxInt);
+            var UcQuote: Integer:= Pos('''', UcRest);
+            if (UcInner <> '') and (UcQuote > 1) then
+            begin
+              var UcNeg: Boolean:= Pos('<>', Copy(UcRest, 1, UcQuote - 1)) > 0;
+              var UcLit: string := Trim(Copy(UcRest, UcQuote, MaxInt));
+              if UcLit <> '' then
+              begin
+                Repl:= 'SameText(' + UcInner + ', ' + UcLit + ')';
+                if UcNeg then Repl:= 'not ' + Repl;
+                E:= Default(TTextEdit);
+                E.FilePath:= F.FilePath;
+                E.Kind    := tekReplaceInLine;
+                E.Line    := F.StartLine;
+                E.Col     := F.StartCol;
+                E.EndCol  := F.EndCol;
+                E.Text    := Repl;
+                Result:= Result + [E];
+                Inc(AFixableCount);
+              end;
+            end;
+          end; // if
+        end; // if
+      end
+      { v(autofix-compare): the always-false variant. The fix RECASES THE LITERAL
+        to agree with the conversion (`UpperCase(X) = 'abc'` -> `... = 'ABC'`),
+        which preserves the author's evident intent and makes the comparison
+        capable of being true. Deliberately NOT a SameText rewrite: that also
+        works, but it changes case-sensitivity as well as fixing the dead branch,
+        and one behaviour change at a time is enough. Registered RISKY -- a test
+        that could never pass can now pass, which is the point, but a human must
+        confirm that was the intent. }
+      else if SameText(F.RuleId, 'uppercase-compare-always-false') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      begin
+        SL:= LinesFor(F.FilePath);
+        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        begin
+          Ln:= SL[F.StartLine - 1];
+          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
+          var AfOpen: Integer:= Pos('(', Span);
+          if AfOpen > 1 then
+          begin
+            var AfFn   : string := Trim(Copy(Span, 1, AfOpen - 1));
+            var AfClose: Integer:= 0;
+            var AfDepth: Integer:= 0;
+            for var AfQ: Integer:= AfOpen to Length(Span) do
+            begin
+              if Span[AfQ] = '(' then Inc(AfDepth)
+              else if Span[AfQ] = ')' then
+              begin
+                Dec(AfDepth);
+                if AfDepth = 0 then begin AfClose:= AfQ; Break; end;
+              end;
+            end;
+            if AfClose > AfOpen then
+            begin
+              var AfRest : string := Copy(Span, AfClose + 1, MaxInt);
+              var AfQuote: Integer:= Pos('''', AfRest);
+              if AfQuote > 0 then
+              begin
+                var AfLit: string:= Trim(Copy(AfRest, AfQuote, MaxInt));
+                var AfNew: string;
+                { Recase toward the conversion the code already performs. }
+                if ContainsText(AfFn, 'upper') then AfNew:= UpperCase(AfLit)
+                else                                AfNew:= LowerCase(AfLit);
+                if (AfLit <> '') and (AfNew <> AfLit) then
+                begin
+                  E:= Default(TTextEdit);
+                  E.FilePath:= F.FilePath;
+                  E.Kind    := tekReplaceInLine;
+                  E.Line    := F.StartLine;
+                  E.Col     := F.StartCol;
+                  E.EndCol  := F.EndCol;
+                  E.Text    := Copy(Span, 1, AfClose + AfQuote - 1) + AfNew;
+                  Result:= Result + [E];
+                  Inc(AFixableCount);
+                end;
+              end;
+            end;
+          end; // if
+        end; // if
+      end
       else if SameText(F.RuleId, 'redundant-cast') and (F.StartLine = F.EndLine) then
       begin
         { redundant-cast fires only on 'TFoo(x)' with x a SINGLE identifier (the

@@ -1,6 +1,6 @@
 {
   "id": "uppercase-compare",
   "severity": "warning",
-  "message": "Comparing UpperCase/LowerCase(...) to a string literal -- fragile (always-false if the literal's case differs) and slow; use SameText.",
+  "message": "UpperCase/LowerCase(...) compared to a string literal allocates a new string on every evaluation -- SameText compares in place and is clearer. (The literal's case agrees with the conversion here, so the comparison is correct; a literal in the OPPOSITE case is reported separately as uppercase-compare-always-false.)",
   "warn_capture": "warn"
 }

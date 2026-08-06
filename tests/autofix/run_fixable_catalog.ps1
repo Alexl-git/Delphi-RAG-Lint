@@ -31,9 +31,21 @@ try {
   Check 'field-name-prefix fixable=true'       ($byId['field-name-prefix'].fixable -eq $true)
   Check 'param-name-prefix fixable=true'       ($byId['param-name-prefix'].fixable -eq $true)
   Check 'type-name-prefix fixable=true'        ($byId['type-name-prefix'].fixable -eq $true)
+  # v(autofix-compare): the two comparison rules, plus the always-false SPLIT of
+  # uppercase-compare. Unlike the naming rules above these are pure-text fixes
+  # with their own BuildAutofixEdits branches -- no store needed. They are also
+  # the first fixable rules that are EXTERNAL .scm rules rather than built-ins,
+  # so this also pins that `rules --json`.fixable reports correctly for those.
+  Check 'nil-comparison fixable=true'          ($byId['nil-comparison'].fixable -eq $true)
+  Check 'uppercase-compare fixable=true'       ($byId['uppercase-compare'].fixable -eq $true)
+  Check 'uppercase-compare-always-false fixable=true' ($byId['uppercase-compare-always-false'].fixable -eq $true)
+  # ...and that the always-false split is reported as an ERROR, not a warning:
+  # it marks a comparison that can never be true, which is a defect rather than
+  # the style nit uppercase-compare reports.
+  Check 'uppercase-compare-always-false severity=error' ($byId['uppercase-compare-always-false'].default_severity -eq 'error')
   # a rule with no fix must be false (pick a stable always-present rule):
   Check 'cyclomatic-complexity fixable=false' ($byId['cyclomatic-complexity'].fixable -eq $false)
   $fixableCount = ($obj.rules | Where-Object { $_.fixable -eq $true }).Count
-  Check 'exactly 17 fixable rules' ($fixableCount -eq 17)
+  Check 'exactly 20 fixable rules' ($fixableCount -eq 20)
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

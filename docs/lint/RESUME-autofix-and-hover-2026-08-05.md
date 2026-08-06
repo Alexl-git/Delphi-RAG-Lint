@@ -154,25 +154,70 @@ so they should all already be clickable.
 
 ---
 
+## 5. DONE in the unattended window -- `uppercase-compare` split three ways + two new fixes
+
+The rules turned out to be **declarative tree-sitter `.scm` queries under `rules\`** (loaded at
+runtime from `<exe-dir>\rules`, sidecar `.json` for id/severity/message), not Delphi code -- so the
+rule half needed no rebuild at all. `rules\README.md` documents the format and the supported
+predicates, including `#match?` / `#not-match?`, which is what made the split expressible as data.
+
+**The three-way split, exactly as asked:**
+
+| shape | rule | severity |
+|---|---|---|
+| `UpperCase(S) = 'ABC'` -- literal agrees with the conversion | `uppercase-compare` | warning |
+| `UpperCase(S) = 'abc'` -- literal CONTRADICTS it, can never be equal | `uppercase-compare-always-false` | **error** |
+| `UpperCase(S) = '+'` -- no cased characters, `UpperCase` is a no-op | *nothing fires* | -- |
+
+The always-false case is the one that mattered: a style rule was sitting on top of a correctness
+bug. `'='` is unconditionally False and `'<>'` unconditionally True whatever the variable holds, so
+the branch is dead. Now reported at **error** with its own message.
+
+Each rule is TWO patterns because the exclusion is direction-dependent -- `UpperCase` must reject a
+literal containing lowercase, `LowerCase` the reverse. The base rule uses `#not-match?` so the two
+rules never double-report the same site.
+
+**Three autofixes added** (`BuildAutofixEdits`, all pure text, no store needed), registered in
+`FIXABLE_RULE_IDS`:
+- `nil-comparison`: `X <> nil` -> `Assigned(X)`, `X = nil` -> `not Assigned(X)` (note the polarity
+  inversion).
+- `uppercase-compare`: -> `SameText(X, 'ABC')`, `<>` -> `not SameText(...)`.
+- `uppercase-compare-always-false`: **recases the literal** (`= 'abc'` -> `= 'ABC'`) rather than
+  rewriting to SameText. SameText would also work, but it changes case-sensitivity AND revives the
+  dead branch in one step; recasing preserves the author's evident intent and changes one thing.
+  Registered in `RISKY_FIX_RULE_IDS` -- a test that could never pass can now pass, which is the
+  point, but a human must confirm the branch was meant to run.
+
+Verified on a probe covering the edge cases (all 7 correct):
+```
+Obj <> nil                  -> Assigned(Obj)
+Obj = nil                   -> not Assigned(Obj)
+UpperCase(S) = 'abc'        -> UpperCase(S) = 'ABC'          (always-false recase)
+LowerCase(Trim(S)) = 'ABC'  -> LowerCase(Trim(S)) = 'abc'    (nested parens)
+UpperCase(S) = 'ABC'        -> SameText(S, 'ABC')
+LowerCase(S) <> 'abc'       -> not SameText(S, 'abc')
+UpperCase(S) = 'A<>B'       -> SameText(S, 'A<>B')           ('<>' inside the literal is NOT
+                                                              mistaken for the operator: the
+                                                              operator is sought only BEFORE the
+                                                              first quote)
+```
+
+Fixture `tests/lint/uppercase-compare.pas` + `.expected` extended to 11 assertions covering all
+three shapes in both directions. `uppercase-compare-always-false` added to `ScmCategory`'s
+`bug-patterns` list (the only Delphi change on the rule side, and purely cosmetic).
+
+**If a battery suite regresses on this**, the likely cause is another fixture that asserts
+`uppercase-compare` on a literal that no longer qualifies (non-casable, or the always-false shape
+which now belongs to the new rule id) -- check the `.expected` rather than assuming the rule is wrong.
+
+---
+
 ## Not done yet -- in priority order
 
 1. **New autofix: `unused-local` (44 findings).** Delete the declaration; the compiler proves it
    correct. Needs care collapsing a `var` block that becomes empty. Highest value of the remaining
    724 findings.
-2. **New autofix: `nil-comparison` (3) + `uppercase-compare` (3).** Trivial local text transforms,
-   nearly free. The user asked for a THREE-WAY split on `uppercase-compare`, which is a real
-   bug-class distinction the current single rule misses:
-   - literal has NO cased characters (e.g. `'+'`, `'123'`) -> `UpperCase()` is a no-op, the
-     comparison is not fragile at all, and **the warning itself should stand down** (or drop to a
-     pure-perf note). Today it fires and is noise.
-   - literal is already ALL-UPPERCASE -> the safe mechanical rewrite to
-     `SameText(X, 'ABC')`.
-   - literal CONTAINS LOWERCASE (e.g. `UpperCase(X) = 'lowercase'`) -> the comparison is
-     **unconditionally false**. That is a DEFECT, not a style nit: it deserves its own higher
-     severity and a distinct message, and the fix must upcase the literal as well
-     (user's words: "upconvert both -- the const and add the code to ToUpper").
-   Same casability check applies to the lint warning, not just the fix.
-3. **Full battery re-run** after 1 and 2 (`pwsh tests/run_battery.ps1`), then rebuild + stage.
+3. **Full battery re-run** after 1 (`pwsh tests/run_battery.ps1`), then rebuild + stage.
 4. **Nine-DB manifest reindex to schema v19** (carried over from 2026-08-03):
    `drag-lint index --all --config third_party\dll-win64\drag-lint.json --jobs 0`
    (`--jobs` does nothing without `--config`), then fill section 6 of
@@ -203,9 +248,13 @@ so they should all already be clickable.
 2. **Never rebuild `drag-lint.exe` while the battery runs** -- runners resolve
    `src\cli\Win64\Debug\drag-lint.exe` and a mid-run swap invents a phantom failure. Building the
    **BPL** during a battery IS safe (different artifact, not used by the runners).
-3. **The user is now testing in a live RAD Studio.** While the IDE is open the BPL is LOCKED (cannot
-   rebuild) and the LSP server can hold `drag-lint.exe` and the index DBs -- which blocks exe
-   rebuilds and reindexing. Ask before assuming you can rebuild the plugin.
+3. **IDE availability changes what you can build.** While RAD Studio is open the BPL is LOCKED
+   (cannot rebuild) and the LSP server can hold `drag-lint.exe` and the index DBs, blocking exe
+   rebuilds and reindexing. **As of 2026-08-05 ~23:00 the user is AWAY for a few hours and the IDE is
+   CLOSED**, so plugin rebuilds and the v19 reindex are unblocked in that window. Check
+   `Get-Process bds` before assuming either way.
+   Note also that `drag-lint.exe` rebuilds and a running reindex conflict with each other: a reindex
+   holds the exe, so a rebuild cannot overwrite it. Sequence the two -- rebuild first, reindex after.
 4. **Do not open a store on a non-fix `lint` path** -- see section 2. Gate on `AArgs.Fix`.
 5. `deploy-staged.bat` REGRESSES the plugin: it copies the BPL from `C:\TEMP1\bpl_staging`, a July 5
    build. The plugin build writes straight to `third_party\dll-win32`.

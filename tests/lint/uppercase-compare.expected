@@ -1,3 +1,21 @@
-# UpperCase(S) = 'ABC' (9) fires; plain S = 'ABC' (11) must not
+# Line 9  UpperCase(S) = 'ABC'  -- literal case AGREES with the conversion: style
+#                                 warning, rewritable to SameText.
+# Line 11 S = 'ABC'             -- no conversion at all: must not fire.
+# Line 13 UpperCase(S) = 'abc'  -- literal contradicts the conversion: the strings
+# Line 15 LowerCase(S) = 'ABC'     can NEVER be equal. That is a defect, not a
+#                                 style nit -- the always-false rule owns these
+#                                 and the style rule must NOT double-report them.
+# Line 17 UpperCase(S) = '+'    -- no cased characters: UpperCase is a no-op, the
+#                                 comparison is not fragile, nothing to warn about.
+# Line 19 LowerCase(S) = 'abc'  -- agrees with the conversion: style warning.
 uppercase-compare 9
 !uppercase-compare 11
+!uppercase-compare 13
+!uppercase-compare 15
+!uppercase-compare 17
+uppercase-compare 19
+uppercase-compare-always-false 13
+uppercase-compare-always-false 15
+!uppercase-compare-always-false 9
+!uppercase-compare-always-false 17
+!uppercase-compare-always-false 19

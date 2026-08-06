@@ -241,7 +241,8 @@ begin
     'raise-bare-exception','reraise-loses-stack','nil-comparison','not-in-precedence',
     'not-comparison-precedence','self-assignment','comparison-same-operands',
     'classname-string-compare','empty-conditional','empty-loop-body','constant-condition',
-    'ifthen-both-branches','uppercase-compare','off-by-one-count','division-by-zero-literal',
+    'ifthen-both-branches','uppercase-compare','uppercase-compare-always-false',
+    'off-by-one-count','division-by-zero-literal',
     'empty-procedure-body','empty-case-branch','large-magic-number','case-magic-numbers',
     'sleep-in-vcl','parser-error']) then
     Result:= 'bug-patterns'

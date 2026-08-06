@@ -1,0 +1,6 @@
+{
+  "id": "uppercase-compare-always-false",
+  "severity": "error",
+  "message": "UpperCase/LowerCase(...) compared to a literal in the opposite case -- the two can NEVER be equal, so '=' is always False and '<>' always True. Correct the literal's case to match the conversion (or use SameText if a case-insensitive match was intended).",
+  "warn_capture": "warn"
+}
