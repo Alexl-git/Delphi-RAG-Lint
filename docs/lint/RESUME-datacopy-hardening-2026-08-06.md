@@ -91,33 +91,51 @@ All nine manifest sections are at schema v19; a tenth (`DataCopy`) was added in 
 
 ### D. drag-lint -- cleanup still owed
 
+**Session 2026-08-06 (post-handoff) closed D2, D3, D4, D5 and D6.** All five are implemented,
+built (Win64, staged to `third_party\dll-win64`) and covered by tests. Battery denominator moved
+217 -> 219 (two new runners). **NOT COMMITTED** -- the working tree carries all of it.
+
 1. **Prefix-rule group atomicity.** Skipping is per-edit, so for the three prefix rules an applied
    declaration edit with a skipped use-site can leave uncompilable code. The new guard makes partial
-   application MORE likely, not less. Needs a design decision.
-2. **The index never prunes vanished files** -- filed in
-   `docs/INBOX-lint-scope-stale-files-and-project-members.md`. After the user moved 10 units, lint
-   still reported ~249 findings against paths that no longer existed.
-3. **`lint-all --project` is accepted but does not scope the finding set.** Same INBOX note. This is
-   what ORM3 actually needs: it is multi-folder (CLIENT / SERVER / OBJECT / COMMON), so a folder-scoped
-   index unions client and server. **Per-project INDEXING already works** -- `index --project` resolves
-   the search paths and follows the unit closure across folders (verified by dry-run on
-   `CLIENT\Micronite2027.dproj`: 21 scan folders including COMMON and COMMON\OBJECTS). ORM3 could be
-   split into per-`.dproj` sections; the tradeoff is that a per-project scan also pulls in resolved
-   library roots (Spring4D etc.) and would want an exclude for those.
-4. **`doc-drift` / `missing-doc` resolve decls by `(file, line)` with NO name check**
-   (`DocRules.pas:348`) -- the same latent shape as the naming bug, with a different blast radius
-   (wrong doc comment attached rather than corrupted tokens). Verified they do NOT emit
-   `tekReplaceInLine`, so they were never exposed to the corruption itself.
-5. **`lint-all --json` prints a banner to stdout** -- `docs/INBOX-lint-all-json-stdout-banner.md`. The
-   JSON will not parse without stripping it.
-6. `TTextEditApplier` rewrites a file and writes a `.bak` even when every edit for it was skipped.
+   application MORE likely, not less. Needs a design decision. **STILL OPEN -- the top remaining item.**
+2. ~~**The index never prunes vanished files.**~~ **DONE** -- `ISymbolStore.PruneMissingFiles` +
+   an opt-in `--prune` on every `index` form. The dependent rows needed no hand-written sweep:
+   every file-owned table already declares `ON DELETE CASCADE` from `files(id)` and `Migrate` sets
+   `PRAGMA foreign_keys = ON`. `string_literals` IS deleted explicitly first -- its FTS5 shadow
+   tables sync via `AFTER DELETE` triggers, which SQLite does not fire for FK-cascaded rows unless
+   `recursive_triggers` is on. Test `tests\autotest\run_index_prune.ps1` (12 checks); the
+   load-bearing one indexes two folders into one DB and proves a targeted prune does not touch the
+   other folder. Full write-up in the INBOX note.
+3. ~~**`lint-all --project` does not scope the finding set.**~~ **DONE** -- scopes to the project's
+   compile closure + sibling `.dfm` + the `.dpr`/`.dproj`. BOTH passes are scoped: filtering the
+   file list alone only narrows the per-file rules, and every project-wide rule reads the whole
+   store. An unresolvable `--project` now exits 2 rather than reporting a clean project.
+   Test `tests\autotest\run_lint_project_scope.ps1` (12 checks, 22 findings -> 11 when scoped).
+   **The ORM3 note above still stands as a separate question** -- per-project sections would still
+   pull in resolved library roots and want an exclude; lint-side filtering just lowers the urgency.
+4. ~~**`doc-drift` / `missing-doc` resolve decls by `(file, line)`.**~~ **DONE** -- `TLintFinding`
+   gained `SymbolName`; `RunMissingDoc` records it and `FixEditsForMissingDoc` requires line AND
+   name to agree, resolving nothing when they do not. Deliberately NOT done by parsing the message
+   (the codebase has a stated policy against it) nor by checking the column against the file --
+   `StartCol` can point at the `procedure` keyword rather than the identifier, per
+   `NamingFix.ResolveSymbolAt`'s own note.
+5. ~~**`lint-all --json` prints a banner to stdout.**~~ **DONE** -- one predicate
+   (`IsMachineReadableOutput`) + one writer (`EmitStatusLine`) above `FinalizeAndOutput`, which
+   every prose site now routes through. Test: `run_pipeline_tests.ps1` section 6 (16/16).
+6. ~~`TTextEditApplier` rewrites a file and writes a `.bak` even when every edit was skipped.~~
+   **DONE** -- and it was worse than clutter: the write path re-serializes through a `TStringList`
+   and forces CRLF, so a fully-skipped file was being MODIFIED. Now counted per file; no applied
+   edit means no backup, no rewrite, not counted as touched. An out-of-range `tekInsertInLine`
+   was also being dropped silently and is now reported as skipped. 4 new `TextEditTests` cases,
+   proven red against HEAD before going green.
 7. **The v19 reindex still owes a `--force-reparse` pass** -- the runs so far SKIP unchanged files, so
-   the B1 unit-level-`var` extractor has not reached them.
+   the B1 unit-level-`var` extractor has not reached them. **STILL OPEN.**
 8. Shellshock bisect (`docs/INBOX-parse-error-shellshock-units.md`) -- 3 units parse to 0 symbols; the
-   `{$I+}` hypothesis is DISPROVED in the doc.
+   `{$I+}` hypothesis is DISPROVED in the doc. **STILL OPEN.**
 9. Answer the other group's finding 2.5 (bare `TEdit` resolving FMX-first; they proposed
-   `--prefer-namespace Vcl`).
-10. **Push -- 16 commits on `main`, none pushed.**
+   `--prefer-namespace Vcl`). **STILL OPEN.**
+10. **Push -- `main` is 17 commits ahead of origin, none pushed, PLUS this session's uncommitted work.**
+    **STILL OPEN.**
 
 ---
 
@@ -128,6 +146,15 @@ All nine manifest sections are at schema v19; a tenth (`DataCopy`) was added in 
 2. **A reindex HOLDS `drag-lint.exe`, so a rebuild cannot overwrite it. Sequence them.** A concurrent
    session killing those processes to unblock itself is what aborted the first v19 attempt at 7/9.
 3. **Never rebuild the exe mid-battery** (the BPL is fine -- different artifact).
+   **Nor EDIT `src\*.pas` mid-battery** -- broader than the old rule and learned the hard way on
+   2026-08-06. Some runners COMPILE from source rather than using the staged exe
+   (`run_coherence.ps1` builds `CoherenceHarness.dpr` against `src\`), so an edit landing between
+   two of its statements fails a runner that has nothing wrong with it. It passed on re-run with
+   no change. A battery result taken while the tree was being edited is not a result.
+3a. **Write repo files with CRLF.** The `Write` tool emits lone LF, and
+   `tests\autotest\run_encoding_guard.ps1` fails the whole battery for it (it caught both new
+   runners this session). Normalize after creating any file, `.ps1` included -- `.gitattributes`
+   declares `eol=crlf` for `.ps1 .pas .dpr .dpk .dfm .inc .rules .bat .cmd`.
 4. **Reindex immediately before ANY store-backed `--fix`.** A stale index used to corrupt source
    silently with exit code 0; there is a guard now, but it SKIPS rather than fixing, so a stale index
    still means "nothing happens" instead of "work done".
