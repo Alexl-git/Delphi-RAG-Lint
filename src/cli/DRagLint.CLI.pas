@@ -9249,12 +9249,18 @@ type { v0.48: one unsaved file to overlay during a ghost-check (a .pas now; a .d
     OrigMtime: TDateTime;
     OrigFT   : TFileTime;
     HaveFT   : Boolean  ;
+    { The last-write time our own overlay write left on RealPath. This is the
+      OWNERSHIP TOKEN: at restore time the file may hold BufBytes because we put
+      them there, or because the user pressed Ctrl+S on the very buffer we
+      overlaid -- byte-identical, and only the timestamp tells them apart. }
+    OvlFT    : TFileTime;
+    HaveOvlFT: Boolean  ;
   end;
 
   { Apply one overlay: write the crash-recovery journal, overlay the buffer, stamp a
   CURRENT mtime so the incremental compiler rebuilds the unit, and drop the stale
   .dcu. Best-effort; GhostRestoreOverlay is the guarantee. }
-procedure GhostApplyOverlay(const E: TGhostOverlay);
+procedure GhostApplyOverlay(var E: TGhostOverlay);
 var
   JournalText: string;
 begin
@@ -9267,6 +9273,15 @@ begin
   except end;
   TFile.WriteAllBytes(E.RealPath, E.BufBytes);
   try TFile.SetLastWriteTime(E.RealPath, Now); except end;
+  { Capture the timestamp our write actually left behind, and record it in the
+    journal too. Read it back rather than assuming the value we asked for: the
+    filesystem's granularity, not ours, decides what is stored, and the restore
+    compares for EQUALITY. Written after the stamp, so a crash in between simply
+    leaves the journal without the token -- ghost-recover then refuses to revert
+    rather than reverting on a guess. }
+  E.HaveOvlFT:= ReadFileWriteTime(E.RealPath, E.OvlFT);
+  if E.HaveOvlFT then
+  try TFile.AppendAllText(E.Journal, 'ovlft=' + IntToStr(FileTimeToI64(E.OvlFT)) + sLineBreak); except end;
   if (E.DcuPath <> '') and TFile.Exists(E.DcuPath) then
   try TFile.Delete(E.DcuPath); except end;
 end; // procedure
@@ -9277,22 +9292,53 @@ end; // procedure
   finish on next startup). }
 procedure GhostRestoreOverlay(const E: TGhostOverlay);
 var
-  CurBytes   : TBytes ;
-  RestoreDone: Boolean;
+  CurBytes   : TBytes   ;
+  RestoreDone: Boolean  ;
+  CurFT      : TFileTime;
+  StillOurs  : Boolean  ;
 begin
   RestoreDone:= False;
   try
     CurBytes:= TFile.ReadAllBytes(E.RealPath);
-    if BytesSame(CurBytes, E.OrigBytes) or BytesSame(CurBytes, E.BufBytes) then
+    if BytesSame(CurBytes, E.OrigBytes) then
     begin
-      { disk holds our overlay (or already-original content) -> normalize back to
-        the saved original: rewrite content only if needed, but ALWAYS restore the
-        ORIGINAL timestamp (the overlay stamped 'Now' to force the rebuild), VERIFY. }
-      if not BytesSame(CurBytes, E.OrigBytes) then TFile.WriteAllBytes(E.RealPath, E.OrigBytes);
+      { Already the original content. Nothing to rewrite; just put the ORIGINAL
+        timestamp back (the overlay stamped 'Now' to force the rebuild). }
       if not (E.HaveFT and SetFileWriteTime(E.RealPath, E.OrigFT)) then
       try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;
-      try RestoreDone:= BytesSame(TFile.ReadAllBytes(E.RealPath), E.OrigBytes);
-      except RestoreDone:= False; end;
+      RestoreDone:= True;
+    end
+    else if BytesSame(CurBytes, E.BufBytes) then
+    begin
+      { The file holds the overlaid bytes -- but CONTENT ALONE DOES NOT PROVE WE
+        PUT THEM THERE. If the user pressed Ctrl+S during the compile window, the
+        IDE wrote the SAME buffer, and treating that as our overlay meant writing
+        the pre-edit original back over their save: the file silently reverted a
+        minute or two after they edited it, with the original timestamp restored
+        so nothing even looked changed. That is the ghost-check data-loss bug.
+
+        The write timestamp is the discriminator: ours is the one our own write
+        left. A save by anyone else moves it. If we cannot prove ownership we do
+        NOT restore -- leaving the user's own bytes on disk is at worst a file
+        that got saved, whereas restoring wrongly destroys work. }
+      CurFT:= Default(TFileTime);
+      StillOurs:= E.HaveOvlFT and ReadFileWriteTime(E.RealPath, CurFT)
+                  and (FileTimeToI64(CurFT) = FileTimeToI64(E.OvlFT));
+      if StillOurs then
+      begin
+        TFile.WriteAllBytes(E.RealPath, E.OrigBytes);
+        if not (E.HaveFT and SetFileWriteTime(E.RealPath, E.OrigFT)) then
+        try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;
+        try RestoreDone:= BytesSame(TFile.ReadAllBytes(E.RealPath), E.OrigBytes);
+        except RestoreDone:= False; end;
+      end
+      else
+      begin
+        RestoreDone:= True; { nothing of ours left to undo }
+        Writeln('ghost-check: NOTE -- ', E.RealPath,
+          ' was written by something else during the check (same content, different timestamp);'
+          + ' left as-is rather than reverting a save.');
+      end;
     end
     else
     begin
@@ -9397,7 +9443,16 @@ begin
 
     Res:= Default(TCompileCheckResult);
     try
-      for E in Entries do GhostApplyOverlay(E);
+      { Indexed, not for-in: GhostApplyOverlay records the ownership timestamp of
+        its own write back into the record, and a for-in loop variable is a COPY
+        -- the token would be discarded and every restore would fall back to
+        "cannot prove ownership". }
+      for i:= 0 to Entries.Count - 1 do
+      begin
+        E:= Entries[i];
+        GhostApplyOverlay(E);
+        Entries[i]:= E;
+      end;
       Res:= TCompileChecker.Run(Dproj);
       Res.Findings:= NormalizeFindings(Res.Findings,
         ExtractFilePath(StringReplace(Dproj, '/', '\', [rfReplaceAll])));
@@ -9465,6 +9520,9 @@ var
   Lines    : TArray<string>;
   Recovered: Integer       ;
   FtVal    : Int64         ;
+  OvlFtStr : string        ;
+  OvlFtVal : Int64         ;
+  CurFT    : TFileTime     ;
 begin
   Root:= AArgs.Target;
   if Root = '' then Root:= AArgs.Path;
@@ -9480,15 +9538,33 @@ begin
   end;
   for J in Journals do
   begin
-    UnitPath:= ''; OrigBak:= ''; MtimeStr:= ''; FtStr:= '';
+    UnitPath:= ''; OrigBak:= ''; MtimeStr:= ''; FtStr:= ''; OvlFtStr:= '';
     try
       Lines:= TFile.ReadAllLines(J);
       for Ln in Lines do
         if Ln.StartsWith('unit=') then UnitPath:= Copy(Ln, 6, MaxInt)
       else if Ln.StartsWith('orig=' ) then OrigBak := Copy(Ln, 6, MaxInt)
       else if Ln.StartsWith('mtime=') then MtimeStr:= Copy(Ln, 7, MaxInt)
+      else if Ln.StartsWith('ovlft=') then OvlFtStr:= Copy(Ln, 7, MaxInt)
       else if Ln.StartsWith('ft=') then FtStr:= Copy(Ln, 4, MaxInt);
     except end;
+    { Same ownership rule as the live restore: only undo an overlay that is still
+      OURS. Without this the recovery pass reverted the file to the pre-crash
+      original no matter what had happened since -- including a save the user
+      made after the crash, which it would silently overwrite. The journal now
+      records the timestamp our overlay write left; if the file no longer carries
+      it, someone else wrote the file and the journal is not ours to act on. }
+    if (UnitPath <> '') and TFile.Exists(UnitPath) and (OvlFtStr <> '')
+       and TryStrToInt64(OvlFtStr, OvlFtVal) then
+    begin
+      if (not ReadFileWriteTime(UnitPath, CurFT)) or (FileTimeToI64(CurFT) <> OvlFtVal) then
+      begin
+        Writeln('ghost-recover: SKIP ', UnitPath,
+          ' -- written since the overlay (timestamp differs); refusing to revert it.');
+        Writeln('               Original from before the overlay kept at ', OrigBak, '.');
+        Continue;
+      end;
+    end;
     if (UnitPath <> '') and (OrigBak <> '') and TFile.Exists(OrigBak) and TFile.Exists(UnitPath) then
     begin
       try
