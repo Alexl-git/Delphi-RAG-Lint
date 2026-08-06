@@ -248,7 +248,7 @@ end;
 function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;
 var
   K, EntTxt: string;
-  Cond, ThenN, ElseN, BodyN, StartN, EntityN, IterN: TTSNode;
+  Cond, ThenN, ElseN, BodyN, StartN, EntityN, IterN, LhsN: TTSNode;
   ThenAfter, ElseAfter, JoinIdx, HdrIdx, BodyIdx, FollowIdx, TestIdx, BodyAfter: Integer;
   TryN, FinN, TryAfter, FinAfter, ExcAfter: Integer;
   TryNode, FinNode: TTSNode;
@@ -330,8 +330,27 @@ begin
   begin
     StartN := ANode.ChildByField('start'); { assignment: defines the loop var }
     if not StartN.IsNull then Cfg.Blocks[ACur].AddItem(StartN, WithDepth > 0);
+    { The BOUND expression is a read, and it was being dropped on the floor: only
+      'start' and 'body' were ever emitted, so `for J := 1 to LCount` never
+      recorded a read of LCount and write-only-local reported a variable the loop
+      plainly consumes. Every named child that is neither start nor body is the
+      bound (Delphi evaluates it ONCE, before the loop -- hence ACur, not the
+      header). Same rule ExtractMethod already applies. }
+    for I := 0 to ANode.NamedChildCount - 1 do
+      if (not (ANode.NamedChild(I) = StartN)) and (not (ANode.NamedChild(I) = ANode.ChildByField('body'))) then
+        Cfg.Blocks[ACur].AddItem(ANode.NamedChild(I), WithDepth > 0);
     HdrIdx := Cfg.NewBlock.Index;
     Cfg.Blocks[ACur].AddSucc(HdrIdx);
+    { The loop READS its control variable on every test/increment. Without this
+      the variable is 'assigned' by start and read nowhere, so a counter whose
+      body never mentions it -- `for J := 1 to N do <work not using J>` -- was
+      reported as write-only. Emitting the start assignment's lhs identifier into
+      the header block models that read exactly where it happens. }
+    if not StartN.IsNull then
+    begin
+      LhsN := StartN.ChildByField('lhs');
+      if not LhsN.IsNull then Cfg.Blocks[HdrIdx].AddItem(LhsN, WithDepth > 0);
+    end;
     FollowIdx := Cfg.NewBlock.Index;
     BodyIdx := Cfg.NewBlock.Index;
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
@@ -436,8 +455,19 @@ begin
             ExcAfter := EmitStmt(HdrIdx, ANode.NamedChild(I).ChildByField('body'))
           else
             ExcAfter := EmitStmt(HdrIdx, ANode.NamedChild(I));
-          if ExcAfter >= 0 then Cfg.Blocks[ExcAfter].AddSucc(FollowIdx)
-          else Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
+          { A handler that DIVERTS (exit / raise / break / continue -> EmitStmt
+            returns -1) has no fallthrough, and wiring its ENTRY to the follow
+            block anyway re-created the very path that cannot happen: the
+            "exception fired, so the try body's assignments never ran" state
+            flowed past the handler into the code after the try, and every local
+            assigned in the try body was reported as possibly-used-before-
+            assignment. Measured on DataCopy uFileUtils.pas: SrcSize is assigned
+            in the try and the handler ends with `exit`, yet its later use was
+            flagged.
+
+            Note this is NOT the same as the finally case above, where the
+            equivalent edge is deliberate -- a finally block always runs. }
+          if ExcAfter >= 0 then Cfg.Blocks[ExcAfter].AddSucc(FollowIdx);
         end;
       Exit(FollowIdx);
     end;

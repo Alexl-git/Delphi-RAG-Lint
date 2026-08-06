@@ -434,6 +434,39 @@ begin
       Result:= Result + [R.RuleId];
 end;
 
+{ True when an empty case branch reported at ALine carries an explanatory
+  comment, which empty-case-branch's own message offers as the way to say "this
+  no-op is deliberate".
+
+  The comment usually sits on the STATEMENT line rather than the label line --
+
+      #$00B0, #$2300, #$00F8, #$00D8:
+        ; // Skip/Eliminate
+
+  so both the label line and the one after it are inspected. An opening brace
+  immediately followed by a dollar sign is a COMPILER DIRECTIVE, not a comment,
+  and must not silence the rule. }
+function EmptyBranchIsCommented(const ASource: TBytes; ALine: Integer): Boolean;
+var
+  Lines: TArray<string>;
+  I    : Integer       ;
+  S    : string        ;
+  P    : Integer       ;
+begin
+  Result:= False;
+  if ALine < 1 then Exit;
+  Lines:= TEncoding.UTF8.GetString(ASource).Replace(#13#10, #10).Split([#10]);
+  for I:= ALine - 1 to ALine do   { 0-based: the label line and the next one }
+  begin
+    if (I < 0) or (I > High(Lines)) then Continue;
+    S:= Lines[I];
+    if Pos('//', S) > 0 then Exit(True);
+    if Pos('(*', S) > 0 then Exit(True);
+    P:= Pos('{', S);
+    if (P > 0) and not ((P < Length(S)) and (S[P + 1] = '$')) then Exit(True);
+  end;
+end;
+
 function TLinter.CheckFileImpl( const AFilePath: string): TArray<TLintFinding>;
 var
   Parser  : TTSParser          ;
@@ -479,7 +512,15 @@ begin
       begin
         var QFindings:= R.Run(Tree.RootNode, Source, AFilePath);
         var F: TLintFinding;
-        for F in QFindings do Findings.Add(F);
+        for F in QFindings do
+        begin
+          { empty-case-branch's own message says "or add a comment if
+            intentional" -- but the .scm only anchors on the caseLabel being the
+            branch's last child, so it fired whether or not the comment was
+            there and the documented escape hatch did not exist. Honour it. }
+          if SameText(F.RuleId, 'empty-case-branch') and EmptyBranchIsCommented(Source, F.StartLine) then Continue;
+          Findings.Add(F);
+        end;
       end;
     end;
     Result:= Findings.ToArray;
