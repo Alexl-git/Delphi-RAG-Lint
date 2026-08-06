@@ -5348,6 +5348,34 @@ begin
   end; // try
 end; // begin
 
+/// <summary>True when stdout is carrying a machine-readable DOCUMENT (JSON or
+/// SARIF) rather than human text, so a single line of prose on stdout makes the
+/// whole document unparseable.</summary>
+/// <param name="AArgs">Parsed CLI args; only the output-format fields are read.</param>
+/// <returns>True for --json, --format json and --format sarif.</returns>
+/// <remarks>The one predicate every prose writer in a finding-producing command
+/// must consult. Two separate regressions (the SARIF store-message and the
+/// `lint-all: scanning N` banner) were each fixed by gating THAT writer, which
+/// left the class alive for the next writer added; route through
+/// <see cref="EmitStatusLine"/> instead of adding another per-site gate.</remarks>
+function IsMachineReadableOutput(const AArgs: TArgs): Boolean;
+begin
+  Result:= AArgs.AsJson or SameText(AArgs.Format, 'json') or SameText(AArgs.Format, 'sarif');
+end; // function
+
+/// <summary>Writes one human-facing status/progress/diagnostic line to stdout on
+/// the text path, and to stderr whenever the selected output format is
+/// machine-readable.</summary>
+/// <param name="AArgs">Parsed CLI args; decides the destination stream.</param>
+/// <param name="AText">The line to write, without a trailing newline.</param>
+/// <remarks>Text output stays byte-identical -- the redirect only happens on the
+/// --json / --format sarif paths, where the line was corrupting the document.</remarks>
+procedure EmitStatusLine(const AArgs: TArgs; const AText: string);
+begin
+  if IsMachineReadableOutput(AArgs) then begin Writeln(ErrOutput, AText); Flush(ErrOutput); end
+  else Writeln(AText);
+end; // procedure
+
 /// <summary>Shared output tail for the finding-producing commands. Applies line
 /// suppressions, config (severity remap + enable/disable), and the baseline, then
 /// emits the survivors as SARIF, JSON, or -- via AEmitText -- the command's own
@@ -5391,7 +5419,7 @@ begin
   if AArgs.WriteBaseline <> '' then
   begin
     DRagLint.Lint.Baseline.TBaseline.Write(AArgs.WriteBaseline, Survivors);
-    Writeln(Format('baseline written: %d fingerprint(s) -> %s', [Length(Survivors), AArgs.WriteBaseline]));
+    EmitStatusLine(AArgs, Format('baseline written: %d fingerprint(s) -> %s', [Length(Survivors), AArgs.WriteBaseline]));
     Exit(0);
   end;
 
@@ -8287,7 +8315,7 @@ begin
     if ProjectDb  = '' then ProjectDb:= D
     else if LibDb = '' then LibDb:= D;
   end;
-  if ProjectDb = '' then begin Writeln('ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
+  if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }
   Store:= TSQLiteSymbolStore.Create(ProjectDb);
@@ -8301,7 +8329,9 @@ begin
     PasPath:= Store.GetFilePath(Fid);
     if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then FilePaths:= FilePaths + [PasPath];
   end;
-  Writeln(Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
+  { The banner is prose: on --json / --format sarif it belongs on stderr, or the
+    document it precedes will not parse (docs\INBOX-lint-all-json-stdout-banner.md). }
+  EmitStatusLine(AArgs, Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
 
   { Per-file rules: external .scm rules + all built-in AST checks }
   var Cfg: TLintConfig:= LoadLintConfig(AArgs);

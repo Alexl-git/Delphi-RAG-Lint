@@ -70,6 +70,37 @@ $new = & $exe lint $fx --baseline $base 2>$null | Out-String
 # false-passed. Anchored to the summary line the same way.
 Ok "baseline suppresses known finding" ((FindingCount $new) -eq 0)
 
+# 6. lint-all --json: stdout is the JSON DOCUMENT and nothing else.
+# Regression for docs\INBOX-lint-all-json-stdout-banner.md -- `lint-all` wrote
+# "lint-all: scanning N .pas file(s)" to STDOUT ahead of the array, so
+# ConvertFrom-Json died on 'l'. Every consumer had to strip lines until the
+# first '['. This is the same class as the SARIF check at the top of this file
+# (a human line landing inside a machine document), so it is asserted the same
+# way: parse the RAW stdout, with no preamble-stripping of any kind. --quiet is
+# deliberately NOT passed -- it never covered this line, and a fix that only
+# works under --quiet is not a fix.
+$scratch6 = Join-Path C:\TEMP 'draglint_pipeline_json'
+if (Test-Path $scratch6) { Remove-Item $scratch6 -Recurse -Force }
+New-Item -ItemType Directory -Path $scratch6 | Out-Null
+Copy-Item $fx (Join-Path $scratch6 'pipeline_fixture.pas') -Force
+$db6 = Join-Path $scratch6 'pipeline.sqlite'
+& $exe index $scratch6 --db $db6 2>$null | Out-Null
+$rawJson = & $exe lint-all --db $db6 --json 2>$null | Out-String
+$j6 = $null; try { $j6 = $rawJson | ConvertFrom-Json } catch {}
+Ok "lint-all --json stdout parses with no preamble" ($j6 -ne $null)
+Ok "lint-all --json stdout starts at the array"     ($rawJson.TrimStart().StartsWith('['))
+Ok "lint-all --json stdout has no scanning banner"  (-not ($rawJson -match 'lint-all: scanning'))
+# The banner is not deleted, only redirected -- prove it still reaches stderr,
+# or the next reader "fixes" this by silencing progress output altogether.
+# NB: `2>&1 1>$null` does NOT isolate stderr in PowerShell -- 2>&1 merges the
+# streams first, so 1>$null then discards both. Merge, then keep only the
+# records that came from stderr (a native command's stderr surfaces as
+# ErrorRecord once redirected).
+$err6 = ((& $exe lint-all --db $db6 --json 2>&1 |
+          Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }) -join "`n")
+Ok "lint-all --json banner still goes to stderr"    ($err6 -match 'lint-all: scanning')
+Remove-Item $scratch6 -Recurse -Force -ErrorAction SilentlyContinue
+
 Remove-Item $cfg,$cfgD,$base -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Host "pipeline-tests: $pass pass / $fail fail"
