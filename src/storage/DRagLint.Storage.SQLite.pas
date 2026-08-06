@@ -211,6 +211,7 @@ type
       procedure DeleteDiBindingsForFile(AFileId: Int64);
       procedure UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
       procedure DeleteStringLiteralsForFile(AFileId: Int64);
+      function PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
       function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
       // v14 (D5): resolved call-target edges (call_edges table).
       procedure UpsertCallEdge(const AToken: TFileTxToken; const AEdge: TCallEdge);
@@ -1842,6 +1843,113 @@ begin
   if not FFts5Available then Exit; // same guard as UpsertStringLiteral
   FQDeleteFileStringLiterals.ParamByName('fid').AsLargeInt:= AFileId;
   FQDeleteFileStringLiterals.ExecSQL;  // triggers cascade the FTS 'delete'
+end;
+
+{ Drops every indexed file that lived under one of ARoots and is no longer on
+  disk. See ISymbolStore.PruneMissingFiles for the contract.
+
+  Two deliberate choices:
+
+  * The row deletion is a single `DELETE FROM files`, not a hand-written sweep of
+    the dependent tables. Every file-owned table declares
+    `REFERENCES files(id) ON DELETE CASCADE` and Migrate turns
+    `PRAGMA foreign_keys = ON`, so the database removes symbols / refs /
+    unit_uses / di_bindings / string_literals -- and transitively symbol_docs,
+    symbol_trigrams, type_ancestors, type_helpers, symbol_facts -- itself. A
+    hand-written list would silently miss the next table someone adds.
+  * string_literals IS deleted explicitly first, because its FTS5 shadow tables
+    are kept in sync by AFTER DELETE TRIGGERS on that table, and SQLite only
+    fires triggers for rows removed by a foreign-key cascade when
+    recursive_triggers is on. Leaving it to the cascade would strand the FTS
+    rows and `query --text` would go on matching deleted source. }
+function TSQLiteSymbolStore.PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
+var
+  Q     : TFDQuery      ;
+  Fid   : Int64         ;
+  Path  : string        ;
+  Roots : TArray<string>;
+  Gone  : TList<string> ;
+  Ids   : TList<Int64>  ;
+  I     : Integer       ;
+
+  { True when APath sits inside one of the walked roots. Compared on the same
+    canonical all-backslash spelling the paths are STORED in. A folder root always
+    carries a trailing separator by the time it gets here, so the prefix test
+    cannot let 'C:\Proj\App' swallow 'C:\Proj\AppTools'; a root that names a
+    single FILE is only ever matched whole, never as a prefix (otherwise root
+    'C:\a\U.pas' would also claim 'C:\a\U.pas.bak'). }
+  function UnderARoot(const APath: string): Boolean;
+  var
+    R: string;
+  begin
+    Result:= False;
+    for R in Roots do
+    begin
+      if R = '' then Continue;
+      if SameText(APath, R) then Exit(True);
+      if (R[Length(R)] = '\') and SameText(Copy(APath, 1, Length(R)), R) then Exit(True);
+    end;
+  end;
+
+begin
+  Result:= nil;
+  if Length(ARoots) = 0 then Exit;
+
+  { Canonicalize the roots ONCE: absolute (stored paths always are, so a relative
+    root like '.' would otherwise match nothing and prune silently), all-backslash,
+    and folder roots terminated with a separator. }
+  SetLength(Roots, Length(ARoots));
+  for I:= 0 to High(ARoots) do
+  begin
+    Roots[I]:= ARoots[I];
+    if Roots[I] = '' then Continue;
+    try Roots[I]:= TPath.GetFullPath(Roots[I]); except { unparseable root: use as given } end;
+    Roots[I]:= NormalizeStoredPath(Roots[I]);
+    if (Roots[I][Length(Roots[I])] <> '\') and TDirectory.Exists(Roots[I]) then
+      Roots[I]:= Roots[I] + '\';
+  end;
+
+  Gone:= TList<string>.Create;
+  Ids := TList<Int64>.Create;
+  try
+    { Collect first, delete second: deleting while the SELECT cursor is open on
+      the same table is exactly the shape that produces half-applied sweeps. }
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      Q.SQL.Text  := 'SELECT id, path FROM files';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        Fid := Q.FieldByName('id'  ).AsLargeInt;
+        Path:= Q.FieldByName('path').AsString  ;
+        if UnderARoot(Path) and (not TFile.Exists(Path)) then
+        begin Ids.Add(Fid); Gone.Add(Path); end;
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+
+    if Ids.Count = 0 then Exit;
+
+    FConn.StartTransaction;
+    try
+      for I:= 0 to Ids.Count - 1 do
+      begin
+        DeleteStringLiteralsForFile(Ids[I]);            { fire the FTS5 triggers }
+        FConn.ExecSQL('DELETE FROM files WHERE id = ?', [Ids[I]]); { cascades the rest }
+      end;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+    Result:= Gone.ToArray;
+  finally
+    Ids.Free;
+    Gone.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;

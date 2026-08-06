@@ -246,6 +246,10 @@ type
     Roots: TArray<string>; // --root <dir> repeatable (drift check)
     // v0.45: index manifest (Task 1)
     IndexAll: Boolean; // --all  (index all sections from manifest)
+    { --prune: after the walk, drop indexed files under the walked roots that no
+      longer exist on disk. Opt-in for now -- the conservative first cut, since
+      the deletion is not undoable and a mis-scoped root would be expensive. }
+    Prune: Boolean;
     // v0.45: index walk filter (Task 4)
     ExcludeGlobs    : TArray<string>; // --exclude <glob> (repeatable)
     IncludeOnlyGlobs: TArray<string>; // --include-only <glob> (repeatable)
@@ -390,6 +394,11 @@ begin
   Writeln('                               any index form also takes [--force-reparse] (alias --no-skip): re-parse every');
   Writeln('                               walked file even when path+mtime+sha are unchanged. Needed once per DB after an');
   Writeln('                               engine upgrade that extracts something new -- see INBOX 2.3.');
+  Writeln('                               any index form also takes [--prune]: after the walk, delete indexed files that');
+  Writeln('                               lie under the walked folders and NO LONGER EXIST on disk (deleted/moved/renamed');
+  Writeln('                               source), together with their symbols/refs/uses/docs. Without it those rows');
+  Writeln('                               survive and the linter keeps reporting findings against paths that are gone.');
+  Writeln('                               Scoped to the folders THIS run walked -- indexing a subfolder never purges the rest.');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
@@ -728,6 +737,7 @@ begin
     // NOTE: --edges is parsed once, near --resolve-uses/--causes (originally
     // for 'cycles'); deps-report reuses that same Result.Edges field.
     else if A = '--all'              then Result.IndexAll       := True
+    else if A = '--prune'            then Result.Prune          := True
     else if (A = '--only') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1916,6 +1926,27 @@ begin
       if TFile.Exists(F) then Indexer.IndexFile(F)
       else Indexer.IndexFolder(F, True);
     end;
+    { --prune: drop rows for source that has been deleted, moved or renamed since
+      the last run. The incremental walk adds and refreshes but has no notion of
+      a file that went away, so without this the linter goes on reporting against
+      paths that do not exist (measured: ~249 of 674 findings on a project after
+      the user moved 10 retired units into a Backup folder).
+
+      Runs BEFORE the resolve passes below, so unit_uses.target_file_id and the
+      ancestry/helper/call edges are recomputed against the surviving set rather
+      than left pointing at rows that just vanished. Scoped to the folders THIS
+      run walked -- `index <subdir>` must never purge the rest of the DB. }
+    if AArgs.Prune then
+    begin
+      var Pruned: TArray<string>:= Store.PruneMissingFiles(Folders);
+      if Length(Pruned) = 0 then Writeln('--prune: no vanished files to remove.')
+      else
+      begin
+        Writeln(Format('--prune: removed %d file(s) no longer on disk:', [Length(Pruned)]));
+        for var PP: string in Pruned do Writeln('  ', PP);
+      end;
+    end;
+
     { v0.40.4: post-pass resolves target_file_id for every unit_uses row.
       Done here (not inside the per-file transaction) because resolution
       needs to see every file the indexer has just written. }

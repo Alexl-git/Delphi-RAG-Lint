@@ -106,6 +106,21 @@ type
     function CountReferences: Int64;
     function CountFiles     : Int64;
 
+    /// <summary>Deletes every indexed file whose path lies under one of ARoots
+    /// and NO LONGER EXISTS on disk, together with everything that hangs off it
+    /// (symbols, refs, uses, docs, DI bindings, string literals, ...).</summary>
+    /// <param name="ARoots">The roots just walked. A file outside all of them is
+    /// left alone no matter what: indexing one subfolder must never purge the
+    /// rest of the DB. An empty array prunes NOTHING.</param>
+    /// <returns>The paths removed, in the order encountered; empty if none.</returns>
+    /// <remarks>An incremental walk adds new files and refreshes changed ones but
+    /// has no notion of a file that went away, so rows for deleted/moved/renamed
+    /// source outlive it and keep feeding the linter -- findings get reported
+    /// against paths that do not exist, and the totals used to judge a cleanup are
+    /// wrong. "Does not exist on disk" is the only deletion predicate; a file that
+    /// is merely out of the walk's filter is never touched.</remarks>
+    function PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
+
     // v0.17: blast-radius pack
     function FindTransitiveCallers(const ASymbolName: string; ADepth: Integer): TArray<TImpactLevel>            ;
     function GetClassSurface(const AQName: string; AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine> ;
