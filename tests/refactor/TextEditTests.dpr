@@ -14,8 +14,16 @@ begin
   Result.FilePath:= AFile; Result.Kind:= AKind; Result.Line:= ALine;
   Result.Col:= ACol; Result.EndLine:= AEnd; Result.Text:= AText;
 end;
+{ tekReplaceInLine builder: replace 1-based [ACol, AEndCol) on ALine with AText,
+  guarded by AExpect ('' = unguarded / legacy behaviour). }
+function MkRep(const AFile: string; ALine, ACol, AEndCol: Integer; const AText, AExpect: string): TTextEdit;
+begin
+  Result:= Default(TTextEdit);
+  Result.FilePath:= AFile; Result.Kind:= tekReplaceInLine; Result.Line:= ALine;
+  Result.Col:= ACol; Result.EndCol:= AEndCol; Result.Text:= AText; Result.ExpectText:= AExpect;
+end;
 var
-  P: string; Edits: TArray<TTextEdit>; After: string;
+  P: string; Edits: TArray<TTextEdit>; After: string; Skipped: Integer;
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -53,6 +61,58 @@ begin
     Check('multi-delete back-to-front kept l2+l4',
       (Pos('l2', After) > 0) and (Pos('l4', After) > 0) and (Pos('l1', After) = 0) and (Pos('l3', After) = 0));
     Check('CRLF preserved', Pos(#13#10, After) > 0);
+
+    { --- tekReplaceInLine: the ExpectText stale-position guard --- }
+
+    { unguarded (ExpectText='') replace still works exactly as before }
+    TFile.WriteAllText(P, '  glyActive:= 1;'#13#10, TEncoding.ANSI);
+    { '  glyActive:= 1;' -> g starts at col 3, span [3, 12) is 'glyActive' }
+    Edits:= [MkRep(P, 1, 3, 12, 'GlyActive', '')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('replace-in-line unguarded still applies (legacy caller unaffected)',
+      (Pos('  GlyActive:= 1;', After) > 0) and (Skipped = 0));
+
+    { guard MATCHES (case-insensitively) -> applied }
+    TFile.WriteAllText(P, '  glyActive:= 1;'#13#10, TEncoding.ANSI);
+    Edits:= [MkRep(P, 1, 3, 12, 'GlyActive', 'GLYACTIVE')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('replace-in-line applies when ExpectText matches',
+      (Pos('  GlyActive:= 1;', After) > 0) and (Skipped = 0));
+
+    { guard MISMATCHES -> skipped, line byte-identical.
+      This is the stale-index case: the store said line 1 col 3 held glyActive,
+      but the file now has something else there. }
+    TFile.WriteAllText(P, '  if not Err then'#13#10, TEncoding.ANSI);
+    Edits:= [MkRep(P, 1, 3, 12, 'GlyActive', 'glyActive')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('replace-in-line SKIPPED when ExpectText does not match',
+      (Pos('  if not Err then', After) > 0) and (Pos('GlyActive', After) = 0) and (Skipped = 1));
+
+    { Col past end-of-line -> REJECTED, never a silent append.
+      'else' is 4 chars, so col 20 is far past EOL; the old code clamped only
+      EndCol and produced 'elseGlyActive'. }
+    TFile.WriteAllText(P, 'else'#13#10, TEncoding.ANSI);
+    Edits:= [MkRep(P, 1, 20, 29, 'GlyActive', '')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('replace-in-line REJECTED when Col is past end-of-line (no append)',
+      (Pos('elseGlyActive', After) = 0) and (Pos('else', After) > 0) and (Skipped = 1));
+
+    { mixed set: the bad edit is dropped, the good one on another line applies }
+    TFile.WriteAllText(P, '  glyActive:= 1;'#13#10'else'#13#10, TEncoding.ANSI);
+    Edits:= [MkRep(P, 1, 3, 12, 'GlyActive', 'glyActive'), MkRep(P, 2, 20, 29, 'Nope', '')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('one bad edit skipped does not block a good one',
+      (Pos('  GlyActive:= 1;', After) > 0) and (Pos('elseNope', After) = 0) and (Skipped = 1));
 
     if TFile.Exists(P) then TFile.Delete(P);
     if TFile.Exists(P + '.bak') then TFile.Delete(P + '.bak');

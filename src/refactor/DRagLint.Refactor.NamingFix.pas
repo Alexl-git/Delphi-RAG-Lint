@@ -166,9 +166,26 @@ end;
   precedent (file+line lookup via FindSymbolsByFile) but also checks StartCol,
   since a naming finding is anchored at the identifier itself (tighter than a
   missing-doc finding's decl-line anchor) and a line can carry more than one
-  declared name (e.g. a multi-const declSection). }
+  declared name (e.g. a multi-const declSection).
+
+  AExpectedName is the identifier the caller is about to rename, read verbatim
+  from the file's own span. It gates the LINE-ONLY fallback, and it is the root
+  fix for the stale-index corruption: the store is a snapshot, so against a file
+  edited since it was indexed "whatever symbol the store recorded on line N" is
+  routinely a COMPLETELY DIFFERENT identifier -- that is how a rename of
+  glyActive came to be emitted at an unrelated site 100+ lines away. A fallback
+  match is therefore accepted only when the store symbol's own short name equals
+  AExpectedName (case-insensitively, Delphi identifiers being case-insensitive);
+  on mismatch we resolve NOTHING rather than resolving wrongly, and the caller
+  skips the finding.
+
+  The exact (line, col) match is deliberately left ungated so the normal path is
+  bit-for-bit unchanged; the line-only fallback is the one that exists solely to
+  absorb StartCol drift (e.g. a method decl whose store StartCol is the
+  `procedure` keyword, not the identifier) and so is the one that needs a leash.
+  An empty AExpectedName disables the fallback entirely. }
 function ResolveSymbolAt(const AStore: ISymbolStore; const AFilePath: string;
-  ALine, ACol: Integer): TSymbol;
+  ALine, ACol: Integer; const AExpectedName: string): TSymbol;
 var
   Syms: TArray<TSymbol>;
   Sym : TSymbol;
@@ -178,9 +195,11 @@ begin
   for Sym in Syms do
     if (Sym.StartLine = ALine) and (Sym.StartCol = ACol) then Exit(Sym);
   { Fall back to a line-only match (defensive -- covers any StartCol drift
-    between the naming checker's node position and the indexer's decl position). }
+    between the naming checker's node position and the indexer's decl position),
+    but ONLY for a symbol that actually bears the name being renamed. }
+  if AExpectedName = '' then Exit;
   for Sym in Syms do
-    if Sym.StartLine = ALine then Exit(Sym);
+    if (Sym.StartLine = ALine) and SameText(Sym.Name, AExpectedName) then Exit(Sym);
 end;
 
 { True when ANewName already exists as ANOTHER param or local variable in the
@@ -432,6 +451,12 @@ var
         Want     := RE.OldName;
       end;
       TE.Text:= RE.NewName;
+      { Belt and braces: the same expectation the local SpanHoldsIdent check
+        enforces here is ALSO carried on the edit itself, so TTextEditApplier
+        re-verifies it against the file at WRITE time -- covering the window
+        between building the edit set and applying it, and covering any future
+        caller that reaches the applier by another route. }
+      TE.ExpectText:= Want;
       { Never write a position the file no longer backs -- see SpanHoldsIdent. }
       if not SpanHoldsIdent(TE.FilePath, TE.Line, TE.Col, TE.EndCol, Want) then
       begin
@@ -493,7 +518,7 @@ begin
           else if SameText(F.RuleId, 'param-name-prefix') then Prefix:= ANaming.ParamPrefix
           else { type-name-prefix }
           begin
-            Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol);
+            Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol, OldName);
             if (Sym.Id <> 0) and (Sym.Kind = skInterface) then Prefix:= ANaming.InterfacePrefix
             else if (Sym.Id <> 0) and (Sym.Kind = skClass) and (ANaming.ExceptionPrefix <> '')
                     and AStore.IsDescendantOf(Sym.Name, 'Exception', Sym.FileId) then Prefix:= ANaming.ExceptionPrefix
@@ -532,7 +557,7 @@ begin
             qualified name. Build now also covers the symbol's separate
             implementation-section header (Type.OldName) itself, so no local
             workaround is needed here. }
-          Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol);
+          Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol, OldName);
           if Sym.Id = 0 then Continue; // unresolved symbol -- report NEEDS_CONTEXT by skipping
           if TRenameRefactoring.ConflictReason(AStore, Sym.QualifiedName, NewName) <> '' then Continue; // conflict -- skip
           EmitRenameEdits(TRenameRefactoring.Build(AStore, Sym.QualifiedName, NewName), Sym.StartLine, F.StartCol, F.EndCol, OldName);

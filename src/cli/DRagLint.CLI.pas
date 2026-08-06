@@ -5601,7 +5601,15 @@ begin
     if FixCount = 0 then Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))' + SkipSuffix)
     else if AArgs.Apply then
     begin
-      var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+      { The applier runs the SAME stale-position check a second time, at write
+        time -- it can drop an edit the build-time check passed (the file moved
+        underneath us in between) or one from a producer that has no build-time
+        check of its own. Fold those into the same "skipped (stale index)"
+        suffix rather than reporting them separately. }
+      var ApplySkipped: Integer;
+      var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup, ApplySkipped);
+      if ApplySkipped > 0 then
+        SkipSuffix:= Format(', %d skipped (stale index)', [NFSkippedTotal + ApplySkipped]);
       Writeln(Format('autofix: applied %d fix(es) across %d file(s)%s%s', [FixCount, Touched, SkipSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
     end
     else

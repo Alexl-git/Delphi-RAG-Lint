@@ -21,21 +21,49 @@ type
   /// Line (0 = top). tekDeleteLines: delete lines Line..EndLine inclusive.
   /// tekReplaceInLine: on line Line, replace the characters in 1-based columns
   /// [Col, EndCol) (EndCol exclusive) with Text (Text may be '' to delete).</summary>
+  /// <remarks>ExpectText is the OPTIONAL stale-position guard for
+  /// tekReplaceInLine (ignored by every other kind). When it is non-empty the
+  /// applier verifies -- case-insensitively, Delphi identifiers being
+  /// case-insensitive -- that the file AS IT IS ON DISK really holds ExpectText
+  /// at [Col, EndCol) of line Line, and DROPS the edit when it does not.
+  /// Producers whose coordinates come from the SYMBOL STORE (a snapshot that
+  /// goes stale the moment the file is edited) must set it; leaving it '' keeps
+  /// the historical unguarded behaviour for every existing caller.</remarks>
   TTextEdit = record
-    FilePath: string;
-    Kind    : TTextEditKind;
-    Line    : Integer;
-    Col     : Integer;
-    EndCol  : Integer;      { tekReplaceInLine: 1-based exclusive end column }
-    EndLine : Integer;
-    Text    : string;
+    FilePath  : string;
+    Kind      : TTextEditKind;
+    Line      : Integer;
+    Col       : Integer;
+    EndCol    : Integer;      { tekReplaceInLine: 1-based exclusive end column }
+    EndLine   : Integer;
+    Text      : string;
+    ExpectText: string;       { tekReplaceInLine only: '' = unguarded (legacy) }
   end;
 
   TTextEditApplier = class
   public
     /// <summary>Applies edits per file, back-to-front by line, preserving ANSI
     /// + CRLF + (optional) .bak backup. Returns files touched.</summary>
-    class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer;
+    /// <remarks>Edits are validated before they are written: a
+    /// tekReplaceInLine whose Col lies past end-of-line is REJECTED (it would
+    /// otherwise degrade into a silent append), and one carrying a non-empty
+    /// ExpectText is rejected unless the current line really holds that text at
+    /// [Col, EndCol) (compared case-insensitively). Use the overload with
+    /// ASkippedEdits to learn how many were dropped.</remarks>
+    class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer; overload;
+    /// <summary>Same as Apply(AEdits, AWriteBackups), additionally reporting how
+    /// many edits the pre-write validation dropped.</summary>
+    /// <param name="AEdits">The edit set.</param>
+    /// <param name="AWriteBackups">True writes a .bak beside each touched file.</param>
+    /// <param name="ASkippedEdits">Out: count of edits rejected before writing --
+    /// a tekReplaceInLine whose Col is past end-of-line, or whose non-empty
+    /// ExpectText does not match the current line at [Col, EndCol). Non-zero
+    /// means the producer's coordinates are stale for that file and the caller
+    /// should surface a "reindex and re-run" hint; those sites were NOT
+    /// written.</param>
+    /// <returns>Number of files touched.</returns>
+    class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean;
+      out ASkippedEdits: Integer): Integer; overload;
     /// <summary>Human-readable preview of the edit set.</summary>
     class function RenderDryRun(const AEdits: TArray<TTextEdit>): string;
   end;
@@ -81,7 +109,40 @@ begin
   if E.Kind = tekDeleteLines then Result:= E.EndLine else Result:= E.Line;
 end;
 
+{ THE STALE-POSITION GUARD for tekReplaceInLine. True when the edit may be
+  written against ALine, the current on-disk content of its target line.
+  Rejects two things the old unguarded path let through silently:
+   * Col past end-of-line -- Copy(S, 1, C-1) + Text + Copy(S, EC, MaxInt) then
+     degenerates into an APPEND, gluing the replacement onto whatever the line
+     ends with (observed: `then` + `GlyActive` -> `thenGlyActive`, exit code 0);
+   * a non-empty ExpectText that the line does not actually hold at
+     [Col, EndCol) -- i.e. store coordinates that have drifted since indexing.
+  An empty ExpectText leaves the second check off, which is exactly the historic
+  behaviour every pre-existing caller relies on. }
+function ReplaceEditIsValid(const E: TTextEdit; const ALine: string): Boolean;
+var
+  C, EC: Integer;
+begin
+  Result:= False;
+  C:= E.Col; if C < 1 then C:= 1;
+  if C > Length(ALine) + 1 then Exit;      { past end-of-line: reject, never append }
+  if E.ExpectText = '' then Exit(True);    { unguarded (legacy) caller }
+  EC:= E.EndCol;
+  if EC <= C then Exit;
+  if (EC - C) <> Length(E.ExpectText) then Exit;   { span width must match }
+  if (EC - 1) > Length(ALine) then Exit;           { span runs past end-of-line }
+  Result:= SameText(Copy(ALine, C, EC - C), E.ExpectText);
+end;
+
 class function TTextEditApplier.Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer;
+var
+  Skipped: Integer;
+begin
+  Result:= Apply(AEdits, AWriteBackups, Skipped);
+end;
+
+class function TTextEditApplier.Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean;
+  out ASkippedEdits: Integer): Integer;
 var
   FileMap : TDictionary<string, TList<TTextEdit>>;
   E       : TTextEdit;
@@ -94,6 +155,7 @@ var
   Cmp     : IComparer<TTextEdit>;
 begin
   Touched:= 0;
+  ASkippedEdits:= 0;
   FileMap:= TDictionary<string, TList<TTextEdit>>.Create;
   try
     for E in AEdits do
@@ -159,11 +221,18 @@ begin
                 if (E.Line >= 1) and (E.Line <= Lines.Count) then
                 begin
                   var S: string:= Lines[E.Line - 1];
-                  var C: Integer:= E.Col;    if C < 1 then C:= 1;
-                  var EC: Integer:= E.EndCol; if EC < C then EC:= C;
-                  if EC > Length(S) + 1 then EC:= Length(S) + 1;
-                  Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, EC, MaxInt);
-                end;
+                  if not ReplaceEditIsValid(E, S) then
+                    Inc(ASkippedEdits)
+                  else
+                  begin
+                    var C: Integer:= E.Col;    if C < 1 then C:= 1;
+                    var EC: Integer:= E.EndCol; if EC < C then EC:= C;
+                    if EC > Length(S) + 1 then EC:= Length(S) + 1;
+                    Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, EC, MaxInt);
+                  end;
+                end
+                else
+                  Inc(ASkippedEdits);   { line does not exist: out of range, never written }
               end;
           end;
         end;
