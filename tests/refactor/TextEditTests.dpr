@@ -23,7 +23,7 @@ begin
   Result.Col:= ACol; Result.EndCol:= AEndCol; Result.Text:= AText; Result.ExpectText:= AExpect;
 end;
 var
-  P: string; Edits: TArray<TTextEdit>; After: string; Skipped: Integer;
+  P: string; Edits: TArray<TTextEdit>; After: string; Skipped: Integer; Touched: Integer;
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -113,6 +113,38 @@ begin
     After:= TFile.ReadAllText(P, TEncoding.ANSI);
     Check('one bad edit skipped does not block a good one',
       (Pos('  GlyActive:= 1;', After) > 0) and (Pos('elseNope', After) = 0) and (Skipped = 1));
+
+    { --- a file whose EVERY edit was rejected must be left completely alone ---
+      The applier used to write the .bak and re-serialize the file BEFORE any
+      edit had been evaluated, so a fully-skipped file was still backed up,
+      still rewritten, and still counted in "applied N fix(es) across M file(s)". }
+
+    TFile.WriteAllText(P, '  if not Err then'#13#10, TEncoding.ANSI);
+    if TFile.Exists(P + '.bak') then TFile.Delete(P + '.bak');
+    Edits:= [MkRep(P, 1, 3, 12, 'GlyActive', 'glyActive')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, True { backups on }, Skipped);
+    Check('all-skipped file is NOT counted as touched', (Touched = 0) and (Skipped = 1));
+    Check('all-skipped file gets NO .bak', not TFile.Exists(P + '.bak'));
+
+    { The write path re-serializes through a TStringList and forces CRLF, so an
+      LF-only file is the sharpest probe for "rewritten with nothing applied". }
+    TFile.WriteAllBytes(P, TEncoding.ANSI.GetBytes('aaa'#10'bbb'#10));
+    Edits:= [MkRep(P, 1, 3, 12, 'GlyActive', 'glyActive')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, False, Skipped);
+    Check('all-skipped file is byte-identical (LF endings survive)',
+      (TFile.ReadAllText(P, TEncoding.ANSI) = 'aaa'#10'bbb'#10) and (Touched = 0));
+
+    { ...while a file that really did change still gets its backup. }
+    TFile.WriteAllText(P, '  glyActive:= 1;'#13#10, TEncoding.ANSI);
+    if TFile.Exists(P + '.bak') then TFile.Delete(P + '.bak');
+    Edits:= [MkRep(P, 1, 3, 12, 'GlyActive', 'glyActive')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, True, Skipped);
+    Check('applied file still gets a .bak holding the original',
+      (Touched = 1) and (Skipped = 0) and TFile.Exists(P + '.bak')
+      and (Pos('glyActive:= 1;', TFile.ReadAllText(P + '.bak', TEncoding.ANSI)) > 0));
 
     if TFile.Exists(P) then TFile.Delete(P);
     if TFile.Exists(P + '.bak') then TFile.Delete(P + '.bak');

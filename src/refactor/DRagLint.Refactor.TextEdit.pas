@@ -49,7 +49,11 @@ type
     /// otherwise degrade into a silent append), and one carrying a non-empty
     /// ExpectText is rejected unless the current line really holds that text at
     /// [Col, EndCol) (compared case-insensitively). Use the overload with
-    /// ASkippedEdits to learn how many were dropped.</remarks>
+    /// ASkippedEdits to learn how many were dropped.
+    /// A file whose every edit was rejected is NOT rewritten and gets NO .bak --
+    /// it is not counted as touched either. This matters beyond tidiness: the
+    /// write path re-serializes through a TStringList (ANSI + CRLF normalization),
+    /// so an unconditional rewrite would modify a file that no edit had changed.</remarks>
     class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer; overload;
     /// <summary>Same as Apply(AEdits, AWriteBackups), additionally reporting how
     /// many edits the pre-write validation dropped.</summary>
@@ -61,7 +65,8 @@ type
     /// means the producer's coordinates are stale for that file and the caller
     /// should surface a "reindex and re-run" hint; those sites were NOT
     /// written.</param>
-    /// <returns>Number of files touched.</returns>
+    /// <returns>Number of files ACTUALLY modified -- a file whose every edit was
+    /// rejected is not rewritten, backed up, or counted.</returns>
     class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean;
       out ASkippedEdits: Integer): Integer; overload;
     /// <summary>Human-readable preview of the edit set.</summary>
@@ -153,6 +158,7 @@ var
   Lines   : TStringList;
   Touched : Integer;
   Cmp     : IComparer<TTextEdit>;
+  AppliedInFile: Integer;
 begin
   Touched:= 0;
   ASkippedEdits:= 0;
@@ -170,9 +176,13 @@ begin
       if not TFile.Exists(Pair.Key) then Continue;
       RawBytes:= TFile.ReadAllBytes(Pair.Key);
       Content := TEncoding.ANSI.GetString(RawBytes);
-      if AWriteBackups then TFile.WriteAllBytes(Pair.Key + '.bak', RawBytes);
+      { The .bak used to be written HERE, before a single edit had been
+        evaluated -- so a file whose every edit the guard rejected still got a
+        backup, was still rewritten, and still counted as touched. RawBytes holds
+        the original, so the backup can wait until we know something changed. }
 
       Group:= Pair.Value;
+      AppliedInFile:= 0;
       { back-to-front: largest top-line first so indices stay valid }
       Cmp:= TComparer<TTextEdit>.Construct(
         function(const A, B: TTextEdit): Integer
@@ -194,7 +204,7 @@ begin
                 if LLo < 1 then LLo:= 1;
                 if LHi > Lines.Count then LHi:= Lines.Count;
                 for var L: Integer:= LHi downto LLo do
-                  if (L >= 1) and (L <= Lines.Count) then Lines.Delete(L - 1);
+                  if (L >= 1) and (L <= Lines.Count) then begin Lines.Delete(L - 1); Inc(AppliedInFile); end;
               end;
             tekInsertLines:
               begin
@@ -205,6 +215,7 @@ begin
                 var Parts: TArray<string>:= E.Text.Replace(#13#10, #10).Split([#10]);
                 for var PIdx: Integer:= High(Parts) downto 0 do
                   Lines.Insert(Idx, Parts[PIdx]);
+                Inc(AppliedInFile);
               end;
             tekInsertInLine:
               begin
@@ -214,7 +225,10 @@ begin
                   var C: Integer:= E.Col; if C < 1 then C:= 1;
                   if C > Length(S) + 1 then C:= Length(S) + 1;
                   Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, C, MaxInt);
-                end;
+                  Inc(AppliedInFile);
+                end
+                else
+                  Inc(ASkippedEdits);   { line does not exist: silently dropped before }
               end;
             tekReplaceInLine:
               begin
@@ -229,6 +243,7 @@ begin
                     var EC: Integer:= E.EndCol; if EC < C then EC:= C;
                     if EC > Length(S) + 1 then EC:= Length(S) + 1;
                     Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, EC, MaxInt);
+                    Inc(AppliedInFile);
                   end;
                 end
                 else
@@ -236,6 +251,14 @@ begin
               end;
           end;
         end;
+
+        { Nothing survived validation for this file: leave it exactly as found --
+          no backup, no rewrite, not counted. The re-serialization below is NOT
+          byte-preserving (TStringList + forced CRLF), so writing here would edit
+          a file on behalf of zero applied edits. }
+        if AppliedInFile = 0 then Continue;
+
+        if AWriteBackups then TFile.WriteAllBytes(Pair.Key + '.bak', RawBytes);
 
         { re-encode ANSI + CRLF, preserve a trailing newline if the original had one }
         var SB: TStringBuilder:= TStringBuilder.Create;
