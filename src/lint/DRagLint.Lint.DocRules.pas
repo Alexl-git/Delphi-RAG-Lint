@@ -113,7 +113,12 @@ type
     /// on a targeted single-fix (--fix-line/--fix-rule), NEVER the blanket batch --
     /// batch-documenting a whole project is `document --project`'s job. missing-doc
     /// findings carry no qname, so the symbol is re-resolved here via
-    /// AStore.FindSymbolsByFile matched on StartLine. Idempotent: a decl that
+    /// AStore.FindSymbolsByFile matched on StartLine AND on the decl's short name
+    /// (TLintFinding.SymbolName, recorded by RunMissingDoc) -- line alone cannot
+    /// distinguish two decls sharing a line, and cannot detect an anchor gone
+    /// stale, either of which would document the WRONG declaration. A finding
+    /// carrying no name resolves to nothing and contributes no edit.
+    /// Idempotent: a decl that
     /// already has a doc yields daUnchanged (no edits) -- but such a decl no longer
     /// produces a missing-doc finding either. Never raises; per-finding failures are
     /// swallowed so one bad decl cannot abort the fix.</remarks>
@@ -183,6 +188,9 @@ begin
       F.StartCol := Sym.StartCol;
       F.EndLine  := Sym.StartLine;
       F.EndCol   := Sym.StartCol + Length(Sym.Name);
+      { Identity for FixEditsForMissingDoc's re-resolution -- (file, line) alone
+        cannot tell two decls on one line apart, nor detect a stale anchor. }
+      F.SymbolName:= Sym.Name;
       Findings.Add(F);
     end;
     Result:= Findings.ToArray;
@@ -256,6 +264,7 @@ begin
           F.StartCol := ResSym.StartCol;
           F.EndLine  := D.Line;
           F.EndCol   := ResSym.StartCol + Length(ResSym.Name);
+          F.SymbolName:= ResSym.Name;
           Findings.Add(F);
         end;
       except
@@ -340,13 +349,32 @@ begin
       if not SameText(F.RuleId, 'missing-doc') then Continue;
       try
         { missing-doc findings carry no qname -- re-resolve the symbol from the
-          store by (file, start-line): FindSymbolsByFile returns every symbol
-          declared in the file; pick the one whose StartLine matches the finding
-          (the decl RunMissingDoc anchored to), then use its QualifiedName. }
+          store by (file, start-line) and CONFIRM it by name.
+
+          This used to take the first symbol in the file whose StartLine matched,
+          full stop. A line number is not an identity: two documentable decls can
+          share a line (a property and its accessor, a multi-decl line), and a
+          finding produced before the file changed underneath the index points at
+          a line that now holds something else entirely -- so the generated
+          DocInsight comment would be attached to the WRONG declaration, silently
+          and with exit code 0. That is the same shape as the naming-autofix
+          stale-coordinate bug (see DRagLint.Refactor.NamingFix.ResolveSymbolAt);
+          it only ever had a milder blast radius here because these edits are
+          tekInsertLines, never tekReplaceInLine.
+
+          RunMissingDoc records the decl's short name on the finding, so the
+          check is exact and needs neither the message text nor the file on disk
+          -- and unlike a column check it is immune to StartCol pointing at the
+          `procedure` keyword rather than the identifier. A finding with no name
+          resolves to NOTHING: refusing beats guessing. }
         QName:= '';
-        Syms := AStore.FindSymbolsByFile(F.FilePath);
-        for Sym in Syms do
-          if Sym.StartLine = F.StartLine then begin QName:= Sym.QualifiedName; Break; end;
+        if F.SymbolName <> '' then
+        begin
+          Syms := AStore.FindSymbolsByFile(F.FilePath);
+          for Sym in Syms do
+            if (Sym.StartLine = F.StartLine) and SameText(Sym.Name, F.SymbolName) then
+            begin QName:= Sym.QualifiedName; Break; end;
+        end;
         if QName = '' then Continue;
         { Two findings could resolve to the same decl (defensive) -- BuildFor once
           per decl so we never emit overlapping insert edits for one span. }

@@ -292,6 +292,14 @@ type
     EndCol   : Integer;
     Severity : string ;
     Message  : string ;
+    { Short name of the declaration this finding is anchored to, when the rule
+      knows it ('' otherwise -- most rules anchor to a position, not a symbol).
+      Exists so a fixer can re-resolve the SAME declaration later instead of
+      trusting (file, line) to identify it: a line number is not an identity, and
+      a finding produced against an index that has since gone stale points at a
+      line whose content has moved on. Set it in any rule whose findings feed a
+      fixer. }
+    SymbolName: string;
   end;
 
   TDocCommentKind = ( dckTripleSlash, dckDoubleSlashOne, dckTripleSlashOne, dckPasDocCurly, dckPasDocParen, dckLooseLine, dckLooseBlock );
