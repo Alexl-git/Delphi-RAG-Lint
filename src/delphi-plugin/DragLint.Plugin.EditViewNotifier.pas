@@ -33,6 +33,15 @@ var { v0.46: published by PaintLine so the hover tracker can map a screen point 
   GGutterAnchorLine: Integer = 0;
   GGutterAnchorTopY: Integer = 0;
   GGutterTextLeft  : Integer = 0;
+  { v(hover-follows-mouse): the cell WIDTH, the horizontal twin of
+    GGutterLineHeight. The IDE code editor is a fixed-pitch grid, so the 1-based
+    buffer column at client-X x is 1 + (x - GGutterTextLeft) div GGutterCharWidth.
+    Published so the hover tracker can resolve the symbol UNDER THE POINTER
+    instead of the one under the caret -- see TDragLintHoverTracker's timer, where
+    using the caret was making the popup describe a different token, and often a
+    different FILE, from the one being pointed at. 0 means "not painted yet";
+    callers must fall back to the caret rather than dividing by zero. }
+  GGutterCharWidth : Integer = 0;
 
 implementation
 
@@ -246,6 +255,10 @@ begin
     GGutterAnchorLine:= LineNumber; { 1-based buffer row }
     GGutterAnchorTopY:= LineRect.Top; { client Y of its top }
     GGutterTextLeft  := TextRect.Left; { client X where text begins }
+    { v(hover-follows-mouse): the horizontal half of the same grid. Guarded
+      separately from CY -- a zero here must leave the previous good value (or 0)
+      alone rather than publishing a divisor the tracker would divide by. }
+    if CellSize.CX > 0 then GGutterCharWidth:= CellSize.CX;
   end;
 
   { PaintLine LineNumber is 1-based; cache stores 0-based. }

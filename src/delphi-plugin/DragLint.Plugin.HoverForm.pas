@@ -120,6 +120,23 @@ type
         satisfy while the rect is being dragged smaller. Suppress that tick
         while set, so grabbing an edge cannot make the popup vanish. }
       FSizing: Boolean;
+      { v(hover-title): the signature line is the popup's TITLE BAND now, not body
+        line 0 -- a separate one-line TRichEdit docked alTop, with a hairline
+        separator under it, matching the way the IDE's own Code Insight popup puts
+        the declaration in a caption above the detail. It is still the click target
+        that navigates to the definition (HandleTitleClick). Keeping it a TRichEdit
+        rather than a TLabel is what preserves the per-token syntax colouring --
+        EmitSignatureHeader writes coloured runs, which a TLabel cannot show.
+        Moving it out of the body also takes the WIDEST line out of the body, which
+        is what used to force the horizontal scrollbar and, through it, the vertical
+        one (see ShowAt's h-scrollbar reservation). }
+      FTitle    : TRichEdit;
+      FTitleSep : TBevel   ;
+      { Emit target for the current run: FTitle while the header is being written,
+        FBody for everything after. Never nil in practice -- Emit falls back to
+        FBody defensively. }
+      FEmitTarget: TRichEdit;
+      procedure HandleTitleClick(Sender: TObject);
       procedure HandleKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
       procedure HandleDeactivate    (Sender: TObject);
       procedure HandleTimerTick     (Sender: TObject);
@@ -389,6 +406,31 @@ begin
     "drag-lint -- kind name -- unit.pas (line)" string and a duplicate
     inside the body is just visual noise. }
 
+  { Top: the TITLE BAND -- one line, the coloured signature + its unit/line
+    locator. Created FIRST so it docks at the very top; the hairline separator
+    docks immediately under it, then the callers grid takes the bottom and the
+    body fills what is left. ScrollBars is deliberately ssNone: the band is
+    exactly one line tall and must never grow a scrollbar of its own; a signature
+    wider than the popup is simply clipped, and the popup is resizable. }
+  FTitle:= TRichEdit.Create(Self);
+  FTitle.Parent        := Self;
+  FTitle.Align         := alTop;
+  FTitle.BorderStyle   := bsNone;
+  FTitle.ReadOnly      := True;
+  FTitle.WordWrap      := False;
+  FTitle.ScrollBars    := ssNone;
+  FTitle.TabStop       := False;
+  FTitle.StyleElements := [];   { same reason as FBody -- keep our syntax colours }
+  FTitle.Color         := clWindow;
+  FTitle.Cursor        := crHandPoint; { the whole band navigates to the definition }
+  FTitle.OnClick       := HandleTitleClick;
+
+  FTitleSep:= TBevel.Create(Self);
+  FTitleSep.Parent := Self;
+  FTitleSep.Align  := alTop;
+  FTitleSep.Height := 2;
+  FTitleSep.Shape  := bsTopLine;
+
   { Bottom: callers ListView. Created BEFORE memo so alClient memo fills middle. }
   FCallers:= TListView.Create(Self);
   FCallers.Parent           := Self;
@@ -453,11 +495,13 @@ begin
   if GetIdeEditorFont(FN, FS) then
   begin
     FBody.Font.Name   := FN; FBody.Font.Size   := FS;
+    FTitle.Font.Name  := FN; FTitle.Font.Size  := FS;
     FCallers.Font.Name:= FN; FCallers.Font.Size:= FS;
   end
   else
   begin
     FBody.Font.Name   := 'Consolas'; FBody.Font.Size   := 9;
+    FTitle.Font.Name  := 'Consolas'; FTitle.Font.Size  := 9;
     FCallers.Font.Name:= 'Consolas'; FCallers.Font.Size:= 9;
   end;
 
@@ -481,8 +525,12 @@ begin
     explicitly so its text stays readable on a dark surface. }
   Color              := ThemedColor(clWindow);
   FBody.Color        := Color;
+  FTitle.Color       := Color;
   FCallers.Color     := Color;
   FCallers.Font.Color:= ThemedColor(clWindowText);
+  { Runs written before RenderModel redirects it go to the body, which is what
+    the legacy string path expects. }
+  FEmitTarget:= FBody;
 end; // constructor
 
 procedure TDragLintHoverForm.DoClose(var Action: TCloseAction);
@@ -751,16 +799,17 @@ begin
     The Parameters/Returns lines below are plain, selectable text (no nav). }
   if FStructured then
   begin
-    { Pick the navigation target: the header line (0) -> the symbol's definition;
-      a "Result := <expr>" body line -> that return's source line (FB3). }
+    { Pick the navigation target. v(hover-title): the "line 0 -> the symbol's
+      definition" rule is GONE from here -- the signature moved to the title band,
+      so body line 0 is now an ordinary content line (usually PARAMETERS) and
+      treating it as the definition link would navigate on a click that the user
+      meant as a text selection. The definition link lives on FTitle
+      (HandleTitleClick). What remains here is the FB3 rule: a "Result := <expr>"
+      body line jumps to that return's own source line. }
     var NavQName: string := FModelQName;
     var NavLine : Integer:= -1;   // -1 = this line is not a navigation target
-    if LineIdx = 0 then NavLine:= FModelDefLine
-    else
-    begin
-      var RetLine: Integer:= ReturnLineForBodyLine(LineText);
-      if RetLine > 0 then NavLine:= RetLine;
-    end;
+    var RetLine : Integer:= ReturnLineForBodyLine(LineText);
+    if RetLine > 0 then NavLine:= RetLine;
     if (NavQName <> '') and (NavLine >= 0) and Assigned(GOnNavigateToQname) then
     begin
       { CRITICAL (AV fix): do NOT Close + navigate INSIDE this mouse-up handler.
@@ -902,11 +951,35 @@ begin
     aggressively; 4.5 (body text) for everything else. }
   if ABold then Safe:= EnsureReadable(AColor, Self.Color, 3.0)
   else          Safe:= EnsureReadable(AColor, Self.Color, 4.5);
-  FBody.SelStart := FBody.GetTextLen;
-  FBody.SelLength:= 0;
-  FBody.SelAttributes.Color:= Safe;
-  if ABold then FBody.SelAttributes.Style:= [fsBold] else FBody.SelAttributes.Style:= [];
-  FBody.SelText:= AText;
+  { v(hover-title): runs go to whichever rich edit is currently being filled --
+    FTitle while EmitSignatureHeader writes the title band, FBody afterwards.
+    Both share Self.Color, so the contrast guard above is correct for either. }
+  var Target: TRichEdit:= FEmitTarget;
+  if Target = nil then Target:= FBody;
+  Target.SelStart := Target.GetTextLen;
+  Target.SelLength:= 0;
+  Target.SelAttributes.Color:= Safe;
+  if ABold then Target.SelAttributes.Style:= [fsBold] else Target.SelAttributes.Style:= [];
+  Target.SelText:= AText;
+end;
+
+procedure TDragLintHoverForm.HandleTitleClick(Sender: TObject);
+{ v(hover-title): the title band replaces body line 0 as the definition link.
+  Same deferred close+navigate discipline as HandleMemoClick's structured branch:
+  navigating re-enters the message loop while the VCL/DevExpress global message
+  hooks are still dispatching this click, and closing here would free the control
+  mid-dispatch (access violation in System.GetDynaMethod). Queue it instead. }
+begin
+  if not FStructured then Exit;
+  if (FModelQName = '') or not Assigned(GOnNavigateToQname) then Exit;
+  var NavQName: string := FModelQName ;
+  var NavLine : Integer:= FModelDefLine;
+  TThread.ForceQueue(nil,
+    procedure
+    begin
+      Close;
+      if Assigned(GOnNavigateToQname) then GOnNavigateToQname(NavQName, NavLine);
+    end);
 end;
 
 function TDragLintHoverForm.GetSyntaxColor(ARole: TDLSynRole): TColor;
@@ -1045,6 +1118,17 @@ var
   P         : TDragLintHoverParam  ;
   NamePad   : string               ;
   HasReturns: Boolean              ;
+
+  { Blank line BETWEEN sections. Suppressed for whichever section happens to be
+    first: the body no longer opens with the signature header (that moved to the
+    title band), so an unconditional lead-in would start every popup with two
+    empty lines -- and those two lines are exactly what pushed the content past
+    the measured body height and produced the vertical scrollbar. }
+  procedure SectionBreak;
+  begin
+    if FBody.GetTextLen > 0 then Emit(sLineBreak + sLineBreak, GetSyntaxColor(srMuted), False);
+  end;
+
 begin
   FStructured   := True;
   FModelQName   := AModel.QualifiedName;
@@ -1062,17 +1146,31 @@ begin
     FSynOpts:= nil;
   end;
 
+  { (1) signature header -- coloured, bold, clickable. v(hover-title): it now
+    lands in the TITLE BAND above the body rather than being body line 0, so the
+    popup reads like the IDE's own Code Insight window: declaration on top, detail
+    underneath. FEmitTarget redirects EmitSignatureHeader's runs; it is restored
+    to FBody in the finally so nothing downstream can write into the title. }
+  FTitle.Visible   := True;
+  FTitleSep.Visible:= True;
+  FTitle.Lines.BeginUpdate;
+  try
+    FTitle.Clear;
+    FEmitTarget:= FTitle;
+    EmitSignatureHeader(AModel.Signature, AModel.UnitFile, AModel.DefLine);
+  finally
+    FEmitTarget:= FBody;
+    FTitle.Lines.EndUpdate;
+  end;
+
   FBody.Lines.BeginUpdate;
   try
     FBody.Clear;
 
-    { (1) signature header -- colored, bold, clickable line 0. }
-    EmitSignatureHeader(AModel.Signature, AModel.UnitFile, AModel.DefLine);
-
     { (2) Parameters. Align the colons: pad each name to MaxNameLen + 1. }
     if Length(AModel.Params) > 0 then
     begin
-      Emit(sLineBreak + sLineBreak, GetSyntaxColor(srMuted), False);
+      SectionBreak;
       Emit('PARAMETERS', GetSyntaxColor(srSection), True);
       MaxNameLen:= 0;
       for I:= 0 to High(AModel.Params) do
@@ -1103,7 +1201,7 @@ begin
     HasReturns:= (AModel.ReturnType <> '') or (Length(AModel.Returns) > 0);
     if HasReturns then
     begin
-      Emit(sLineBreak + sLineBreak, GetSyntaxColor(srMuted), False);
+      SectionBreak;
       Emit('RETURNS', GetSyntaxColor(srSection), True);
       if AModel.ReturnType <> '' then
       begin
@@ -1138,7 +1236,7 @@ begin
       them entirely. Omitted when the symbol has no facts. }
     if Length(AModel.Facts) > 0 then
     begin
-      Emit(sLineBreak + sLineBreak, GetSyntaxColor(srMuted), False);
+      SectionBreak;
       Emit('DETAILS', GetSyntaxColor(srSection), True);
       for var FI: Integer:= 0 to High(AModel.Facts) do
       begin
@@ -1152,7 +1250,7 @@ begin
       it. Only when there is at least one caller. }
     if ACallerCount > 0 then
     begin
-      Emit(sLineBreak + sLineBreak, GetSyntaxColor(srMuted), False);
+      SectionBreak;
       Emit('CALLED FROM (' + IntToStr(ACallerCount) + ')', GetSyntaxColor(srSection), True);
     end;
 
@@ -1237,6 +1335,11 @@ var
   HasTrailer  : Boolean  ;
 begin
   FStructured   := False; { legacy string path -> definition-row click parsing }
+  { v(hover-title): no model here means no signature to put in the title band --
+    hide it (and its separator) so the string path keeps its original single-pane
+    look and its height maths stay correct. }
+  FTitle.Visible   := False;
+  FTitleSep.Visible:= False;
   FAnchorDismiss:= AAnchorDismiss;
   if AAnchorX >= 0 then FDwellAnchor:= Point(AAnchorX, AAnchorY)
   else FDwellAnchor:= Point(X, Y);
@@ -1477,6 +1580,7 @@ var
   H       : Integer  ;
   CallersH: Integer  ;
   BodyH   : Integer  ;
+  TitleH  : Integer  ;
   BodyLines: Integer ;
   ShortName: string  ;
   ShownCount: Integer;
@@ -1541,12 +1645,18 @@ begin
     that would have fitted. Collect every logical line the body can show -- the
     signature header with its locator, each parameter, each mined return, each
     fact -- and take the widest. }
-  var Cands: TArray<string>;
-  Cands:= [AModel.Signature + '     ' + AModel.UnitFile + ' (line ' + IntToStr(AModel.DefLine) + ')'];
+  { v(hover-title): kept as TWO lists now. BodyCands is what the BODY can show;
+    the signature is measured separately because it lives in the title band. The
+    width still has to satisfy BOTH (the title is clipped, not wrapped), but only
+    BodyCands decides whether the body needs a horizontal scrollbar -- and that
+    distinction is what lets the body stop reserving space for the signature. }
+  var TitleCand: string:= AModel.Signature + '     ' + AModel.UnitFile + ' (line ' + IntToStr(AModel.DefLine) + ')';
+  var BodyCands: TArray<string>:= nil;
   for I:= 0 to High(AModel.Params) do
-    Cands:= Cands + [Trim(AModel.Params[I].Modifier + ' ' + AModel.Params[I].Name + ': ' + AModel.Params[I].TypeText) + '    '];
-  for I:= 0 to High(AModel.Returns) do Cands:= Cands + ['    Result := ' + AModel.Returns[I]];
-  for I:= 0 to High(AModel.Facts)   do Cands:= Cands + ['    ' + AModel.Facts[I]];
+    BodyCands:= BodyCands + [Trim(AModel.Params[I].Modifier + ' ' + AModel.Params[I].Name + ': ' + AModel.Params[I].TypeText) + '    '];
+  for I:= 0 to High(AModel.Returns) do BodyCands:= BodyCands + ['    Result := ' + AModel.Returns[I]];
+  for I:= 0 to High(AModel.Facts)   do BodyCands:= BodyCands + ['    ' + AModel.Facts[I]];
+  var Cands: TArray<string>:= [TitleCand] + BodyCands;
   { Bold: the signature header is drawn bold and is almost always the widest. }
   W:= MeasureTextWidth(Cands, True) + 70;
   if W < 480   then W:= 480;
@@ -1585,10 +1695,31 @@ begin
     Bmp.Free;
   end;
   if LineH < 12 then LineH:= Abs(FBody.Font.Height) + 3;
+
+  { v(hover-title): the title band is exactly one line plus a little air, and the
+    hairline separator sits under it. Both are alTop, so the body gets whatever is
+    left -- their heights therefore have to be part of the total below. }
+  TitleH:= LineH + 6;
+  FTitle.Height:= TitleH;
+
   var VisualLines: Integer:= FBody.Perform(EM_GETLINECOUNT, 0, 0);
   if VisualLines < 1 then VisualLines:= FBody.Lines.Count;
   if VisualLines < 3 then VisualLines:= 3;
   BodyH:= VisualLines * LineH + 12;   // a few px of bottom margin so the last line ("Used in/Called from") never triggers the vertical scrollbar
+
+  { THE VERTICAL SCROLLBAR BUG. FBody has WordWrap=False and ScrollBars=ssBoth, so
+    a line wider than the client area raises a HORIZONTAL scrollbar -- which then
+    consumes SM_CYHSCROLL pixels of the body's own height. The height computed
+    just above does not know that, so the last line is pushed out of view and the
+    VERTICAL scrollbar appears as a consequence. The two always arrived together,
+    which is why it looked like the body was simply sized one line short.
+    Reserve the horizontal bar's height when the widest BODY line genuinely
+    overflows. Measured non-bold: body lines are drawn non-bold (only the title
+    band is bold), and measuring them bold over-estimates the width and would
+    reserve the strip when nothing overflows. The signature is excluded outright
+    -- it lives in the title band now and is clipped there, not scrolled. }
+  if MeasureTextWidth(BodyCands, False) > (W - GetSystemMetrics(SM_CXVSCROLL) - 8) then
+    BodyH:= BodyH + GetSystemMetrics(SM_CYHSCROLL);
 
   if Length(ACallers) = 0 then
   begin
@@ -1614,7 +1745,8 @@ begin
     FCallers.Height:= CallersH;
   end;
 
-  H:= BodyH + CallersH + 2;   // exact stack: body + grid + minimal border (removes the ~2-line gap)
+  { Exact stack: title band + separator + body + grid + minimal border. }
+  H:= TitleH + FTitleSep.Height + BodyH + CallersH + 2;
   if H < 120 then H:= 120;
 
   PlaceAndShow(X, Y, W, H);

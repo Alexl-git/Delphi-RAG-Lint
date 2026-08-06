@@ -200,8 +200,16 @@ begin
     end;
 
     { v0.46: 5 ticks * 200 ms = 1.0 s dwell (was 1.6 s) -- snappier, and the
-      jitter tolerance above keeps it from firing on casual drift. }
-    if FStableCount < 5 then Exit;
+      jitter tolerance above keeps it from firing on casual drift.
+      v(hover-follows-mouse): 3 ticks = 0.6 s. The reported "takes much longer to
+      pop up than the IDE's own" is this dwell plus the work that follows it, and
+      the dwell was the part under our control: RAD Studio's Code Insight hover
+      arms at roughly half a second, so a 1.0 s dwell always lost the race even
+      when the query itself was instant. The remaining latency is the `hover
+      --json` PROCESS SPAWN in TryBuildHoverModel -- an out-of-process CLI start
+      plus an index open, which no dwell tuning can hide; closing that gap means
+      serving the model from the already-running LSP connection instead. }
+    if FStableCount < 3 then Exit;
 
     { Already showed for this stable position }
     if FHintShown then Exit;
@@ -268,6 +276,47 @@ begin
     CaretCol:= EditView.Position.Column - 1;
     if CaretRow < 0 then CaretRow:= 0;
     if CaretCol < 0 then CaretCol:= 0;
+
+    { v(hover-follows-mouse): THE dwell-hover defect. The caret position above is
+      where the user last CLICKED; the popup is placed at the MOUSE. So pointing at
+      an identifier described whatever the caret happened to be sitting on -- a
+      different token, and after switching tabs a token in a different unit
+      entirely. That is the reported "fires in other tabs showing information for a
+      different or previous popup": not a stale popup at all, but a correctly-fresh
+      popup about the wrong symbol.
+
+      It also explains the popup that never appears. FLastShownKey and FLastLspKey
+      are keyed on (file,row,col); with caret coordinates every token on the line
+      produced the SAME key, so after the first dwell the "already shown for this
+      caret" guard above swallowed every later hover until the caret itself moved.
+
+      Fix: map the pointer to a buffer cell with the grid the gutter painter
+      publishes -- the same arithmetic the gutter branch above already uses for
+      rows, plus the column now that GGutterCharWidth is exported. The IDE editor
+      is fixed-pitch, so the division is exact. Falls back to the caret whenever
+      the grid has not been painted yet (GGutter* zero) or the pointer is left of
+      the text (the gutter branch above owns that case and has already returned).
+      Safe against a split view / second tab: IsMouseOverEditorView(Pos) at the top
+      of this timer already established that the pointer is over THIS view, so the
+      coordinates and EditView.Buffer.FileName describe the same buffer. }
+    if (GGutterAnchorHwnd <> 0) and (GGutterLineHeight > 0) and (GGutterCharWidth > 0) then
+    begin
+      var MPt: TPoint:= Pos;
+      if ScreenToClient(GGutterAnchorHwnd, MPt) then
+      begin
+        var DY  : Integer:= MPt.Y - GGutterAnchorTopY;
+        var ROff: Integer                            ;
+        if DY >= 0 then ROff:= DY div GGutterLineHeight
+        else ROff:= -((-DY + GGutterLineHeight - 1) div GGutterLineHeight);
+        var MouseRow0: Integer:= (GGutterAnchorLine + ROff) - 1;  { 0-based }
+        var MouseCol0: Integer:= (MPt.X - GGutterTextLeft) div GGutterCharWidth;
+        if (MouseRow0 >= 0) and (MPt.X >= GGutterTextLeft) and (MouseCol0 >= 0) then
+        begin
+          CaretRow:= MouseRow0;
+          CaretCol:= MouseCol0;
+        end;
+      end;
+    end;
 
     { Pull cached diagnostic for this row, if any. }
     DiagText:= '';
