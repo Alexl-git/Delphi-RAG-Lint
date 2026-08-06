@@ -568,14 +568,32 @@ begin
           (not ADoc.HasReturnsTag) and (Length(Facts.ReturnCases) > 0), DocLine));
 
       // --- 6. ddReturnTypeChanged: a <c>Type</c> in <returns> != the sig type. -
-      // BOUNDED: only an EXACT <c>...</c> token that is NOT the actual return
-      // type fires. Free-text return prose (no <c> markup) never triggers this.
+      // BOUNDED TWICE. "Has <c> markup" was not a tight enough bound: DocInsight
+      // asks for <c> around CROSS-REFERENCES in prose, so a perfectly correct
+      //
+      //   <returns>The stamp, or the wall-clock <c>DateTimeFileString</c> when
+      //   the file cannot be stat'ed.</returns>
+      //
+      // on a function returning `string` was reported as naming the wrong type.
+      // The rule punished exactly the documentation style the convention asks
+      // for. It now fires ONLY when the <returns> element IS a bare type name --
+      // one <c> token and nothing else but whitespace around it, e.g.
+      // `<returns><c>TFoo</c></returns>` -- which is the only shape where
+      // reading it as a type claim is justified. Prose, however many <c>
+      // cross-references it carries, is never a type claim.
       if HasReturn and (RetType <> '') and (Trim(ADoc.ReturnsText) <> '') then
-        for var CTok in ExtractCTokens(ADoc.ReturnsText) do
-          if not SameText(CTok, RetType) then
+      begin
+        var CToks: TArray<string>:= ExtractCTokens(ADoc.ReturnsText);
+        if Length(CToks) = 1 then
+        begin
+          var Bare: string:= Trim(StringReplace(StringReplace(ADoc.ReturnsText,
+            '<c>', '', [rfReplaceAll, rfIgnoreCase]), '</c>', '', [rfReplaceAll, rfIgnoreCase]));
+          if SameText(Bare, CToks[0]) and (not SameText(CToks[0], RetType)) then
             Findings.Add(MakeFinding(ddReturnTypeChanged,
-              Format('<returns> names type "%s" but the signature returns "%s"', [CTok, RetType]),
+              Format('<returns> names type "%s" but the signature returns "%s"', [CToks[0], RetType]),
               False, DocLine));
+        end;
+      end;
     end;
 
     // --- 7. ddExceptionNotRaised: <exception cref> not in the body's Raises. ---

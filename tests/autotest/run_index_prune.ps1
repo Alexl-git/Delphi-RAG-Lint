@@ -12,12 +12,17 @@
   looking for a file that isn't there, and the counts used to judge "did the
   cleanup help?" are simply wrong.
 
-  WHAT IS ASSERTED, AND WHY THE OPT-IN IS ASSERTED TOO
-  ----------------------------------------------------
-  Deletion is not undoable, so --prune ships opt-in and the no-flag run is
-  asserted to still leave the stale row behind. That check is not endorsing the
-  stale row: it pins the CURRENT contract, so a later decision to prune by
-  default has to come here and change it deliberately rather than silently.
+  WHAT IS ASSERTED
+  ----------------
+  Pruning shipped OPT-IN first, and nothing ever passed the flag -- least of all
+  the IDE reindex, which is the one path that reindexes constantly. Ghost rows
+  went on outliving their files and every reference-derived answer
+  (find-callers, unused-public-symbol, generated doc facts) was quietly computed
+  against source that is not there. A flag nobody passes is not a fix, so a
+  FOLDER walk now prunes BY DEFAULT and `--no-prune` is the opt-out.
+
+  A single-FILE walk (`index <file.pas>`) still does not prune: the root is then
+  the one file the caller named, so there is nothing to sweep.
 
   THE SCOPE ASSERTION IS THE LOAD-BEARING ONE. A prune that walked one folder
   but purged rows for every other folder in a shared DB would be far worse than
@@ -125,24 +130,28 @@ Remove-Item (Join-Path $main  'Gone.pas')
 Remove-Item (Join-Path $other 'OtherGone.pas')
 
 # ---------------------------------------------------------------------------
-# 1) Re-index WITHOUT --prune: the vanished rows must still be there.
-#    This pins the opt-in contract (see the header) -- it is not an endorsement.
+# 1) --no-prune is the explicit opt-out and must leave the vanished row.
+#    Pruning shipped opt-in first and NOTHING ever passed the flag -- least of
+#    all the IDE reindex -- so ghost rows kept outliving their files. A flag
+#    nobody passes is not a fix, so a FOLDER walk now prunes by default and the
+#    opt-out is what gets pinned here.
 # ---------------------------------------------------------------------------
 Write-Host ''
-Write-Host 'Re-index without --prune' -ForegroundColor Cyan
-& $Exe index $main --db $db --quiet 2>&1 | Out-Null
+Write-Host 'Re-index with --no-prune (explicit opt-out)' -ForegroundColor Cyan
+& $Exe index $main --db $db --no-prune --quiet 2>&1 | Out-Null
 $files1 = Get-Files
-Check 'without --prune the vanished file row SURVIVES (prune is opt-in)' (HasLeaf $files1 'Gone.pas')
+Check '--no-prune leaves the vanished file row alone' (HasLeaf $files1 'Gone.pas')
 
 # ---------------------------------------------------------------------------
-# 2) Re-index WITH --prune, scoped to $main only.
+# 2) A plain folder walk prunes BY DEFAULT -- no flag passed. Still scoped to
+#    $main only.
 # ---------------------------------------------------------------------------
 Write-Host ''
-Write-Host 'Re-index with --prune (scoped to main\)' -ForegroundColor Cyan
-$out = & $Exe index $main --db $db --prune --quiet 2>&1 | ForEach-Object { $_.ToString() }
+Write-Host 'Re-index with NO flag (folder walk prunes by default), scoped to main\' -ForegroundColor Cyan
+$out = & $Exe index $main --db $db --quiet 2>&1 | ForEach-Object { $_.ToString() }
 $exit = $LASTEXITCODE
-Check 'index --prune exits 0' ($exit -eq 0) "exit=$exit"
-Check 'index --prune reports what it removed' (($out -join "`n") -match 'Gone\.pas')
+Check 'default-prune index exits 0' ($exit -eq 0) "exit=$exit"
+Check 'it reports what it removed' (($out -join "`n") -match 'Gone\.pas')
 
 $files2 = Get-Files
 Check 'vanished file is GONE from the index'   (-not (HasLeaf $files2 'Gone.pas'))
@@ -163,11 +172,11 @@ Check 'a MISSING file OUTSIDE the walked root is NOT pruned' (HasLeaf $files2 'O
 # 3) Idempotence: a second --prune with nothing to do changes nothing.
 # ---------------------------------------------------------------------------
 Write-Host ''
-Write-Host 'Second --prune (nothing left to remove)' -ForegroundColor Cyan
-$out3 = & $Exe index $main --db $db --prune --quiet 2>&1 | ForEach-Object { $_.ToString() }
-Check 'second --prune reports nothing to remove' (($out3 -join "`n") -match 'no vanished files')
+Write-Host 'Second run (nothing left to remove)' -ForegroundColor Cyan
+$out3 = & $Exe index $main --db $db --quiet 2>&1 | ForEach-Object { $_.ToString() }
+Check 'second run reports nothing to remove' (($out3 -join "`n") -match 'no vanished files')
 $files3 = Get-Files
-Check 'second --prune changed nothing' ($files3.Count -eq $files2.Count) "$($files3.Count) vs $($files2.Count)"
+Check 'second run changed nothing' ($files3.Count -eq $files2.Count) "$($files3.Count) vs $($files2.Count)"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

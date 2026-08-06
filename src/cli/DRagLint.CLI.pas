@@ -246,10 +246,12 @@ type
     Roots: TArray<string>; // --root <dir> repeatable (drift check)
     // v0.45: index manifest (Task 1)
     IndexAll: Boolean; // --all  (index all sections from manifest)
-    { --prune: after the walk, drop indexed files under the walked roots that no
-      longer exist on disk. Opt-in for now -- the conservative first cut, since
-      the deletion is not undoable and a mis-scoped root would be expensive. }
-    Prune: Boolean;
+    { --prune / --no-prune: after the walk, drop indexed files under the walked
+      roots that no longer exist on disk. DEFAULT ON for a folder walk (a stale
+      row silently corrupts every reference-derived output); --no-prune opts out,
+      and --prune still forces it for a single-file walk. }
+    Prune  : Boolean;
+    NoPrune: Boolean;
     // v0.45: index walk filter (Task 4)
     ExcludeGlobs    : TArray<string>; // --exclude <glob> (repeatable)
     IncludeOnlyGlobs: TArray<string>; // --include-only <glob> (repeatable)
@@ -394,11 +396,13 @@ begin
   Writeln('                               any index form also takes [--force-reparse] (alias --no-skip): re-parse every');
   Writeln('                               walked file even when path+mtime+sha are unchanged. Needed once per DB after an');
   Writeln('                               engine upgrade that extracts something new -- see INBOX 2.3.');
-  Writeln('                               any index form also takes [--prune]: after the walk, delete indexed files that');
-  Writeln('                               lie under the walked folders and NO LONGER EXIST on disk (deleted/moved/renamed');
-  Writeln('                               source), together with their symbols/refs/uses/docs. Without it those rows');
-  Writeln('                               survive and the linter keeps reporting findings against paths that are gone.');
-  Writeln('                               Scoped to the folders THIS run walked -- indexing a subfolder never purges the rest.');
+  Writeln('                               a FOLDER walk PRUNES BY DEFAULT: indexed files that lie under the walked folders');
+  Writeln('                               and NO LONGER EXIST on disk (deleted/moved/renamed source) are deleted together');
+  Writeln('                               with their symbols/refs/uses/docs. Otherwise those rows outlive their files and');
+  Writeln('                               every reference-derived answer (find-callers, unused-public-symbol, doc facts)');
+  Writeln('                               is computed against source that is not there. Scoped to the folders THIS run');
+  Writeln('                               walked -- indexing a subfolder never purges the rest. [--no-prune] opts out;');
+  Writeln('                               [--prune] forces it for a single-FILE walk, which does not prune by default.');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
@@ -741,6 +745,7 @@ begin
     // for 'cycles'); deps-report reuses that same Result.Edges field.
     else if A = '--all'              then Result.IndexAll       := True
     else if A = '--prune'            then Result.Prune          := True
+    else if A = '--no-prune'         then Result.NoPrune        := True
     else if (A = '--only') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1939,7 +1944,24 @@ begin
       ancestry/helper/call edges are recomputed against the surviving set rather
       than left pointing at rows that just vanished. Scoped to the folders THIS
       run walked -- `index <subdir>` must never purge the rest of the DB. }
-    if AArgs.Prune then
+    { Pruning is now the DEFAULT for a walk of whole FOLDERS, opt-out via
+      --no-prune. It shipped opt-in and nothing ever passed it -- least of all
+      the IDE reindex -- so ghost rows kept outliving their files and every
+      reference-derived artefact (facts blocks, unused-public-symbol,
+      find-callers) was quietly computed against source that is not there.
+      A flag nobody passes is not a fix.
+
+      Still skipped when the walk targets a single FILE (`index <file.pas>`):
+      the roots are then that one file, so there is nothing to sweep, and
+      "delete everything under this root that is missing" is not a sentence that
+      makes sense for one path the caller just named. Deletion is still bounded
+      to the walked roots either way. }
+    var WantPrune: Boolean:= AArgs.Prune;
+    if not AArgs.NoPrune then
+      for F in Folders do
+        if TDirectory.Exists(F) then begin WantPrune:= True; Break; end;
+    if AArgs.NoPrune then WantPrune:= False;
+    if WantPrune then
     begin
       var Pruned: TArray<string>:= Store.PruneMissingFiles(Folders);
       if Length(Pruned) = 0 then Writeln('--prune: no vanished files to remove.')
@@ -5435,6 +5457,28 @@ var
   JArr     : TJSONArray          ;
   JObj     : TJSONObject         ;
 begin
+  { 0a: drop exact duplicates. Four used-before-assignment findings arrived twice
+    in a real report because their file is reached twice by the walk; the same
+    (file, line, col, rule, message) is the same finding no matter how many
+    routes produced it, and printing it twice makes a report look like it found
+    more than it did. Done HERE so every finding-producing command inherits it.
+    Order is preserved -- the first occurrence wins. }
+  var SeenF: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  try
+    var Uniq: TArray<TLintFinding>:= nil;
+    for F in AFindings do
+    begin
+      var K: string:= LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + IntToStr(F.StartCol)
+                      + '|' + LowerCase(F.RuleId) + '|' + F.Message;
+      if SeenF.ContainsKey(K) then Continue;
+      SeenF.Add(K, True);
+      Uniq:= Uniq + [F];
+    end;
+    AFindings:= Uniq;
+  finally
+    SeenF.Free;
+  end;
+
   { 0: source-level ignore directives. }
   AFindings:= ApplyLineSuppressions(AFindings);
 
@@ -8629,9 +8673,38 @@ begin
       'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter',
       'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy',
       'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier', 'missing-doc'],
-    procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; EC, WC: Integer; OL: TStringBuilder; begin EC:= 0; WC:= 0; for FF in ASurv do if SameText(FF.Severity,
-        'error') then Inc(EC) else Inc(WC); OL:= TStringBuilder.Create; try for FF in ASurv do OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine,
-              FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); OL.AppendLine(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) scanned', [Length(ASurv), EC, WC, Length(FilePaths)])); TFile.WriteAllText(OutPath, OL.ToString, TEncoding.UTF8); finally OL.Free; end; for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('lint-all: %d finding(s) -- %d error(s), %d warning(s) -- %d file(s) -- report: %s', [Length(ASurv), EC, WC, Length(FilePaths), OutPath])); end,
+    { The roll-up counts EVERY severity, not just error-vs-everything-else. It
+      used to be `if error then Inc(EC) else Inc(WC)`, so a run of 62 hint + 138
+      info + 79 warning reported "0 error(s), 279 warning(s)" -- the one number a
+      reader actually looks at, and it was wrong for every finding below warning. }
+    procedure(ASurv: TArray<TLintFinding>)
+    var
+      FF: TLintFinding; EC, WC, IC, HC: Integer; OL: TStringBuilder; Summary: string;
+    begin
+      EC:= 0; WC:= 0; IC:= 0; HC:= 0;
+      for FF in ASurv do
+        if SameText(FF.Severity, 'error') then Inc(EC)
+        else if SameText(FF.Severity, 'warning') then Inc(WC)
+        else if SameText(FF.Severity, 'hint') then Inc(HC)
+        else Inc(IC);
+      Summary:= Format('lint-all: %d finding(s) -- %d error(s), %d warning(s), %d info, %d hint -- %d file(s) scanned',
+        [Length(ASurv), EC, WC, IC, HC, Length(FilePaths)]);
+      OL:= TStringBuilder.Create;
+      try
+        for FF in ASurv do OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
+        OL.AppendLine(Summary);
+        { The report is the answer to "did it actually cover my project?", so it
+          names the files it scanned rather than only counting them. }
+        OL.AppendLine('');
+        OL.AppendLine(Format('scanned %d file(s):', [Length(FilePaths)]));
+        for var SP: string in FilePaths do OL.AppendLine('  ' + SP);
+        TFile.WriteAllText(OutPath, OL.ToString, TEncoding.UTF8);
+      finally
+        OL.Free;
+      end;
+      for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
+      Writeln(Summary + Format(' -- report: %s', [OutPath]));
+    end,
     Store { ADF Task 8: enables the store-backed doc-drift --fix path }
   );
 end; // function
@@ -13911,9 +13984,11 @@ var
   ConfigPath: string                                    ;
   Platform  : string                                    ;
   Paths     : TArray<string>                            ;
+  AllPaths  : TArray<string>                            ;
   P         : string                                    ;
   J         : TJSONArray                                ;
 begin
+  AllPaths:= nil;
   // --- Resolve the DB list -------------------------------------------------
   if Length(AArgs.DbPaths) > 0 then
   begin
@@ -13941,13 +14016,31 @@ begin
       Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
       try
         Paths:= TDbSelect.Resolve(Manifest, Platform, Resolver, True);
+        { A section whose DB has never been built is dropped by ARequireExists,
+          silently -- which is how a DataCopy section could sit in the manifest
+          for a day while every consumer quietly answered from the wrong set of
+          DBs (or from none) and nothing said so. Resolve again WITHOUT the
+          existence filter and name the difference. }
+        AllPaths:= TDbSelect.Resolve(Manifest, Platform, Resolver, False);
       finally
         Resolver.Free;
       end;
     except
       // Any manifest parse / IO error: empty list (do not crash).
       Paths:= nil;
+      AllPaths:= nil;
     end; // try
+
+    for P in AllPaths do
+    begin
+      var Present: Boolean:= False;
+      for var Q: string in Paths do
+        if SameText(Q, P) then begin Present:= True; Break; end;
+      if (not Present) and (not TFile.Exists(P)) then
+        EmitStatusLine(AArgs, Format(
+          'NOTE: %s is configured in the manifest but has never been built -- run: drag-lint index --all --only %s',
+          [P, TPath.GetFileNameWithoutExtension(P)]));
+    end;
 
     // Fallback: preserve pre-Task-9 default when no manifest is found.
     if Length(Paths) = 0 then Paths:= [AArgs.DbPath];
