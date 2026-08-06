@@ -218,11 +218,28 @@ which now belongs to the new rule id) -- check the `.expected` rather than assum
    correct. Needs care collapsing a `var` block that becomes empty. Highest value of the remaining
    724 findings.
 3. **Full battery re-run** after 1 (`pwsh tests/run_battery.ps1`), then rebuild + stage.
-4. **Nine-DB manifest reindex to schema v19** (carried over from 2026-08-03):
-   `drag-lint index --all --config third_party\dll-win64\drag-lint.json --jobs 0`
-   (`--jobs` does nothing without `--config`), then fill section 6 of
-   `docs/INBOX-index-schema-v19-reindex-for-converter.md`. Wants RAD Studio CLOSED.
-   Note `--force-reparse` is needed once for the B1 unit-level-`var` extractor to take effect.
+4. **Nine-DB manifest reindex to schema v19 -- LAUNCHED 2026-08-05 20:15, CHECK IT FIRST.**
+   ```
+   drag-lint index --all --config third_party\dll-win64\drag-lint.json --jobs 0
+   log: C:\TEMP\claude\c--Projects-Delphi-RAG-lint\e82d6cb2-3c09-4896-9d77-cf9d86a6dcf6\scratchpad\reindex-v19.log
+   ```
+   Started detached (pid 70416 at launch) so it SURVIVES a `/clear`. Nine sections, running in
+   parallel; at the 2-minute mark Loader and ORM3 were both progressing with 0 errors.
+
+   **First thing next session:** tail that log. Three outcomes:
+   - Finished cleanly -> fill section 6 of `docs/INBOX-index-schema-v19-reindex-for-converter.md`
+     and tick this item off. Confirm with `drag-lint schema --db <each db>` that the version is 19.
+   - Still running after several hours -> suspect the known hang
+     (`docs/INBOX-incremental-index-hangs-on-large-db.md`): it commits its rows correctly, then
+     spins at 100% CPU on a frozen WAL. Watch the `files` count via `drag-lint schema`; once it
+     plateaus, kill it -- the data is already committed. ORM3 (~1.4 GB) is the likely victim.
+   - Errored -> the log has the failing file.
+
+   **Still outstanding either way:** this run does NOT pass `--force-reparse`, so files the indexer
+   considers up-to-date are SKIPPED -- which means the B1 unit-level-`var` extractor (new in
+   `9db27db`) will not have been applied to unchanged files. A second, slower pass with
+   `--force-reparse` is needed before global `var` declarations are reliably queryable everywhere.
+   Deliberate: a forced full reparse of nine DBs was too slow to start blind in this window.
 5. **Shellshock bisect** -- `docs/INBOX-parse-error-shellshock-units.md`: 3 units parse to 0 symbols;
    the `{$I+}` hypothesis is DISPROVED in the doc. Bisect `StShlCtl.pas` for the real construct.
 6. **Answer the other group.** Their message puts three questions to us, the sharpest being whether a
