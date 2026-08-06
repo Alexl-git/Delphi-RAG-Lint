@@ -99,5 +99,65 @@ Check 'a genuinely write-only local is still reported' `
 Check 'an UNcommented empty case branch is still reported' `
   ($out -match 'empty-case-branch') 'else the fix just disabled the rule'
 
+# ---------------------------------------------------------------------------
+# 3) used-before-assignment through a loop that ALWAYS runs.
+#
+# Reported as "the rule is blind to A[i] := ..." -- it is not: the definite-
+# assignment transfer already resolves the BASE of an indexed/qualified store.
+# The real cause was the zero-trip loop: every for-loop had a header->follow
+# edge, so control could skip the body and nothing it must-assigned survived.
+# `for I := 0 to 2` always runs, so a loop with literal bounds now enters its
+# body directly (do-while shape) and the body dominates the code after it.
+#
+# The negative case is load-bearing: a loop whose bound is NOT a literal really
+# can run zero times, and that warning must stay.
+# ---------------------------------------------------------------------------
+$src2 = @'
+unit flowfp2;
+
+interface
+
+function Demo(ACount: Integer): Integer;
+
+implementation
+
+function Demo(ACount: Integer): Integer;
+var
+  Arr    : array[0..2] of Integer;
+  Plain  : Integer;
+  Maybe  : Integer;
+  Idx    : Integer;
+  Acc    : Integer;
+begin
+  for Idx:= 0 to 2 do
+    Arr[Idx]:= Idx;
+  Acc:= Arr[0];
+
+  for Idx:= 0 to 2 do
+    Plain:= Idx;
+  Acc:= Acc + Plain;
+
+  for Idx:= 0 to ACount - 1 do
+    Maybe:= Idx;
+  Acc:= Acc + Maybe;
+
+  result:= Acc;
+end;
+
+end.
+'@ -replace "`r`n", "`n" -replace "`n", "`r`n"
+$unit2 = Join-Path $WorkDir 'flowfp2.pas'
+[System.IO.File]::WriteAllText($unit2, $src2, [System.Text.Encoding]::ASCII)
+$out2 = (& $Exe lint $unit2 --rule used-before-assignment 2>$null | Out-String)
+
+Write-Host ''
+Write-Host 'Definite assignment through a loop that always runs' -ForegroundColor Cyan
+Check 'indexed store in a literal-bound loop counts as assigned' `
+  (-not ($out2 -match 'Local "arr"'))
+Check 'plain store in a literal-bound loop counts as assigned' `
+  (-not ($out2 -match 'Local "plain"'))
+Check 'a NON-literal bound still warns (loop really can run zero times)' `
+  ($out2 -match 'Local "maybe"') 'else the fix over-reached and suppressed a real case'
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

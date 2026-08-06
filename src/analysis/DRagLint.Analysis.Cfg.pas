@@ -105,6 +105,64 @@ begin
   Result := LowerCase(Trim(NodeStr(N, ASrc)));
 end;
 
+{ True when a `for` loop provably runs its body AT LEAST ONCE -- both bounds are
+  integer literals and the direction agrees with them.
+
+  Why it matters: the CFG gives every for-loop a header->follow edge, so control
+  may skip the body entirely, and nothing the body MUST-assigns survives to the
+  code after the loop. For the overwhelmingly common
+  `for I := 0 to 2 do Arr[I] := ...` that is simply false -- the loop always runs
+  -- and every use of Arr afterwards was reported as possibly-used-before-
+  assigned (29 such findings on one real project).
+
+  Deliberately literal-only and direction-explicit: if the bounds are not
+  literals (`0 to List.Count - 1`) the loop genuinely CAN run zero times and the
+  warning is legitimate, and if the direction cannot be read from the source the
+  optimisation is skipped rather than guessed. Both fallbacks keep today's
+  behaviour, so this can only remove false positives, never create them.
+
+  The direction is read from the loop HEADER text only -- ANode.StartByte up to
+  the body -- so a nested `downto` inside the body cannot be mistaken for this
+  loop's own. }
+function ForLoopAlwaysExecutes(const ANode, AStartN, ABodyN: TTSNode; const ASrc: TBytes): Boolean;
+var
+  LowTxt, HighTxt: string;
+  LowVal, HighVal, I: Integer;
+  BoundN: TTSNode;
+  IsDownto: Boolean;
+begin
+  Result := False;
+  if AStartN.IsNull or ABodyN.IsNull then Exit;
+
+  { low bound = the start assignment's rhs }
+  LowTxt := LowerText(AStartN.ChildByField('rhs'), ASrc);
+  if not TryStrToInt(LowTxt, LowVal) then Exit;
+
+  { High bound = the named child that is neither start nor body AND is not a
+    KEYWORD TOKEN. The grammar exposes `for` / `to` / `downto` / `do` as named
+    children (kFor, kTo, kDownto, kDo -- the same 'k' prefix convention the try
+    lowering already relies on for kFinally/kEnd), so "the first child that is
+    not start or body" lands on the `for` keyword, not the bound. Direction
+    comes from the same place: a kDownto child, which is exact where scanning
+    the header text for the word would not be. }
+  BoundN := Default(TTSNode);
+  IsDownto := False;
+  for I := 0 to ANode.NamedChildCount - 1 do
+  begin
+    if ANode.NamedChild(I) = AStartN then Continue;
+    if ANode.NamedChild(I) = ABodyN then Continue;
+    if SameText(ANode.NamedChild(I).NodeType, 'kDownto') then IsDownto := True;
+    if SameText(Copy(ANode.NamedChild(I).NodeType, 1, 1), 'k') then Continue; { keyword token }
+    if BoundN.IsNull then BoundN := ANode.NamedChild(I);
+  end;
+  if BoundN.IsNull then Exit;
+  HighTxt := LowerText(BoundN, ASrc);
+  if not TryStrToInt(HighTxt, HighVal) then Exit;
+
+  if IsDownto then Result := LowVal >= HighVal
+  else Result := LowVal <= HighVal;
+end;
+
 { TCfgBlock }
 
 constructor TCfgBlock.Create(AIndex: Integer);
@@ -340,7 +398,6 @@ begin
       if (not (ANode.NamedChild(I) = StartN)) and (not (ANode.NamedChild(I) = ANode.ChildByField('body'))) then
         Cfg.Blocks[ACur].AddItem(ANode.NamedChild(I), WithDepth > 0);
     HdrIdx := Cfg.NewBlock.Index;
-    Cfg.Blocks[ACur].AddSucc(HdrIdx);
     { The loop READS its control variable on every test/increment. Without this
       the variable is 'assigned' by start and read nowhere, so a counter whose
       body never mentions it -- `for J := 1 to N do <work not using J>` -- was
@@ -355,6 +412,18 @@ begin
     BodyIdx := Cfg.NewBlock.Index;
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
     Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
+    { ENTRY EDGE. A loop with literal bounds that provably runs at least once
+      gets a DO-WHILE shape: fall straight into the body, and let the header
+      decide only whether to go round AGAIN. The body then dominates the follow
+      block, so whatever it must-assigns is still must-assigned afterwards.
+      Without this, `for I := 0 to 2 do Arr[I] := ...` left Arr
+      possibly-unassigned at every later use -- 29 such findings on one real
+      project, none of them reachable. A loop we cannot prove keeps the ordinary
+      zero-trip entry, where the warning is legitimate. }
+    if ForLoopAlwaysExecutes(ANode, StartN, ANode.ChildByField('body'), Cfg.Src) then
+      Cfg.Blocks[ACur].AddSucc(BodyIdx)
+    else
+      Cfg.Blocks[ACur].AddSucc(HdrIdx);
     Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
