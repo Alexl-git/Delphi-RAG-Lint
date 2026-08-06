@@ -13,6 +13,7 @@ uses
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Refactor.TextEdit
   ;
 
 type
@@ -34,6 +35,26 @@ type
       a nested routine = closure, or via with/property) raises the count and
       suppresses the finding. No compiler / no DB needed. }
       class function CheckUnusedLocals(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Builds the text edits that REMOVE the unused locals reported by
+      /// CheckUnusedLocals for AFile. Driven off the same declVars/declVar AST nodes
+      /// the check itself walks, so the edit always matches the real declaration
+      /// shape rather than guessing from line text.</summary>
+      /// <param name="AFile">The .pas/.inc file the edits apply to; findings for any
+      /// other path are ignored.</param>
+      /// <param name="AFindings">Findings to act on; non-'unused-local' rules are skipped.</param>
+      /// <param name="AFixedCount">Receives the number of findings that produced an edit.</param>
+      /// <returns>Edits for AFile, or nil when nothing can be safely removed.</returns>
+      /// <remarks>Three shapes, and the distinction is load-bearing: when EVERY name in a
+      /// declVar is unused the whole declaration is deleted; when only SOME are, the name
+      /// list is spliced so the surviving names keep their declaration -- deleting the line
+      /// would silently remove variables that are still used. A declVars left with no
+      /// surviving declVar also loses its now-orphaned 'var' keyword line, because a bare
+      /// 'var' before 'begin' does not compile. If that orphaned keyword cannot be located,
+      /// the section's deletions are DISCARDED rather than emitted, since a partial edit
+      /// there produces code that will not build. Multi-line name lists are skipped.
+      /// Edits never overlap: at most one edit per declVar, one per declVars.</remarks>
+      class function BuildUnusedLocalFixEdits(const AFile: string;
+        const AFindings: TArray<TLintFinding>; out AFixedCount: Integer): TArray<TTextEdit>;
       /// <summary>Flags a 'raise' statement located inside a 'finally' block.</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
       /// <returns>One finding per raise found within a finally body (capped at 100); nil/empty if none.</returns>
@@ -887,6 +908,228 @@ begin
     Findings.Free;
   end;
 end; // begin
+
+class function TAstChecker.BuildUnusedLocalFixEdits(const AFile: string;
+  const AFindings: TArray<TLintFinding>; out AFixedCount: Integer): TArray<TTextEdit>;
+var
+  Src     : TBytes                        ;
+  PF      : TParsedFile                   ;
+  Edits   : TList<TTextEdit>              ;
+  Flagged : TDictionary<string, Boolean>  ;
+  F       : TLintFinding                  ;
+  Fixed   : Integer                       ;
+
+  function NStr(const N: TTSNode): string;
+  var
+    S: Integer;
+    E: Integer;
+    L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { The finding's StartLine/StartCol are the name identifier's own start point
+    (+1 on each axis), so a node keys back to its finding exactly. }
+  function PosKey(ALine, ACol: Integer): string;
+  begin
+    Result:= IntToStr(ALine) + ':' + IntToStr(ACol);
+  end;
+
+  function NodeKey(const N: TTSNode): string;
+  begin
+    Result:= PosKey(Integer(N.StartPoint.Row) + 1, Integer(N.StartPoint.Column) + 1);
+  end;
+
+  { One routine's own var sections. Mirrors CheckUnusedLocals: only declVars
+    that are DIRECT children of the defProc, so a nested routine's sections are
+    handled when the walk reaches that routine. }
+  procedure HandleProc(const ADefProc: TTSNode);
+  var
+    I         : Integer          ;
+    J         : Integer          ;
+    K         : Integer          ;
+    DeclVars  : TTSNode          ;
+    DV        : TTSNode          ;
+    KwVar     : TTSNode          ;
+    TypeNode  : TTSNode          ;
+    NameId    : TTSNode          ;
+    TypeStart : Integer          ;
+    Names     : TArray<TTSNode>  ;
+    FlagCount : Integer          ;
+    AnyKept   : Boolean          ;
+    AnyDeleted: Boolean          ;
+    Section   : TList<TTextEdit> ;
+    SectFixed : Integer          ;
+    E         : TTextEdit        ;
+    Keep      : string           ;
+    KwLine    : Integer          ;
+    Covered   : Boolean          ;
+  begin
+    for I:= 0 to ADefProc.NamedChildCount - 1 do
+    begin
+      DeclVars:= ADefProc.NamedChild(I);
+      if DeclVars.NodeType <> 'declVars' then Continue;
+
+      Section   := TList<TTextEdit>.Create;
+      SectFixed := 0;
+      try
+        KwVar     := Default(TTSNode);
+        AnyKept   := False;
+        AnyDeleted:= False;
+
+        for J:= 0 to DeclVars.NamedChildCount - 1 do
+        begin
+          DV:= DeclVars.NamedChild(J);
+          if DV.NodeType = 'kVar' then begin KwVar:= DV; Continue; end;
+          if DV.NodeType <> 'declVar' then Continue;
+
+          { name identifiers precede the type field -- the rule CheckUnusedLocals uses }
+          TypeNode:= DV.ChildByField('type');
+          if TypeNode.IsNull then TypeStart:= MaxInt
+          else TypeStart:= Integer(TypeNode.StartByte);
+          Names:= nil;
+          for K:= 0 to DV.NamedChildCount - 1 do
+          begin
+            NameId:= DV.NamedChild(K);
+            if NameId.NodeType <> 'identifier' then Continue;
+            if Integer(NameId.StartByte) >= TypeStart then Continue;
+            Names:= Names + [NameId];
+          end;
+          if Length(Names) = 0 then begin AnyKept:= True; Continue; end;
+
+          FlagCount:= 0;
+          for K:= 0 to High(Names) do
+            if Flagged.ContainsKey(NodeKey(Names[K])) then Inc(FlagCount);
+
+          if FlagCount = 0 then
+          begin
+            AnyKept:= True;
+            Continue;
+          end;
+
+          if FlagCount = Length(Names) then
+          begin
+            { every name here is dead -> the whole declaration goes }
+            E:= Default(TTextEdit);
+            E.FilePath:= AFile;
+            E.Kind    := tekDeleteLines;
+            E.Line    := Integer(DV.StartPoint.Row) + 1;
+            E.EndLine := Integer(DV.EndPoint.Row  ) + 1;
+            Section.Add(E);
+            Inc(SectFixed, FlagCount);
+            AnyDeleted:= True;
+            Continue;
+          end;
+
+          { Only SOME names are dead. Splice the name list and keep the
+            declaration -- deleting the line here would take live variables
+            with it. Requires the whole list on one line so a single
+            replace-in-line span covers it exactly. }
+          if Integer(Names[0].StartPoint.Row) <> Integer(Names[High(Names)].EndPoint.Row) then
+          begin
+            AnyKept:= True;
+            Continue;
+          end;
+          Keep:= '';
+          for K:= 0 to High(Names) do
+            if not Flagged.ContainsKey(NodeKey(Names[K])) then
+            begin
+              if Keep <> '' then Keep:= Keep + ', ';
+              Keep:= Keep + NStr(Names[K]);
+            end;
+          if Trim(Keep) = '' then begin AnyKept:= True; Continue; end;
+          E:= Default(TTextEdit);
+          E.FilePath:= AFile;
+          E.Kind    := tekReplaceInLine;
+          E.Line    := Integer(Names[0].StartPoint.Row      ) + 1;
+          E.Col     := Integer(Names[0].StartPoint.Column   ) + 1;
+          E.EndCol  := Integer(Names[High(Names)].EndPoint.Column) + 1;
+          E.Text    := Keep;
+          Section.Add(E);
+          Inc(SectFixed, FlagCount);
+          AnyKept:= True;
+        end; // for J
+
+        { A declVars with nothing left must lose its 'var' keyword too -- a bare
+          'var' before 'begin' is a compile error. If the keyword cannot be
+          found, DROP this section's deletions: emitting them would be exactly
+          the breakage this guard exists to prevent. }
+        if AnyDeleted and (not AnyKept) then
+        begin
+          if KwVar.IsNull then
+          begin
+            { cannot locate the keyword -> cannot prove the collapse is safe.
+              Discard this section only; other sections still stand. }
+            Section.Clear;
+            SectFixed:= 0;
+          end
+          else
+          begin
+            KwLine := Integer(KwVar.StartPoint.Row) + 1;
+            Covered:= False;
+            for J:= 0 to DeclVars.NamedChildCount - 1 do
+            begin
+              DV:= DeclVars.NamedChild(J);
+              if (DV.NodeType = 'declVar') and (Integer(DV.StartPoint.Row) + 1 = KwLine) then
+              begin Covered:= True; Break; end;
+            end;
+            if not Covered then
+            begin
+              E:= Default(TTextEdit);
+              E.FilePath:= AFile;
+              E.Kind    := tekDeleteLines;
+              E.Line    := KwLine;
+              E.EndLine := KwLine;
+              Section.Add(E);
+            end;
+          end;
+        end;
+
+        Edits.AddRange(Section.ToArray);
+        Inc(Fixed, SectFixed);
+      finally
+        Section.Free;
+      end;
+    end; // for I
+  end; // procedure
+
+  procedure VisitProcs(const N: TTSNode);
+  var
+    I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then HandleProc(N);
+    for I:= 0 to N.NamedChildCount - 1 do VisitProcs(N.NamedChild(I));
+  end;
+
+begin
+  Result     := nil;
+  AFixedCount:= 0;
+  Fixed      := 0;
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
+
+  Edits  := TList<TTextEdit>.Create;
+  Flagged:= TDictionary<string, Boolean>.Create;
+  try
+    for F in AFindings do
+      if SameText(F.RuleId, 'unused-local') and SameText(F.FilePath, AFile) then
+        Flagged.AddOrSetValue(PosKey(F.StartLine, F.StartCol), True);
+    if Flagged.Count = 0 then Exit;
+
+    VisitProcs(PF.Tree.RootNode);
+    Result     := Edits.ToArray;
+    AFixedCount:= Fixed;
+  finally
+    Flagged.Free;
+    Edits.Free;
+  end;
+end;
 
 class function TAstChecker.CheckRaiseInFinally(const AFile: string): TArray<TLintFinding>;
 var

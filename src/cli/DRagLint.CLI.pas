@@ -4835,20 +4835,28 @@ end; // begin
 ///   boolean-comparison-true -> X=True/X&lt;&gt;False->X; X=False/X&lt;&gt;True->not X;
 ///   reserved-word-casing  -> lowercase the keyword token;
 ///   redundant-assigned-free -> drop the 'if Assigned(X) then' guard;
-///   off-by-one-count      -> append ' - 1' to the loop bound (RISKY).
+///   off-by-one-count      -> append ' - 1' to the loop bound (RISKY);
+///   unused-local          -> remove the dead declaration (AST-driven, grouped
+///                            per file -- see below).
 /// AFixableCount returns how many findings produced a fix. Rules without a fix
 /// are silently skipped.</summary>
 /// <remarks>Deliberately conservative: only rules whose fix is an exact,
 /// side-effect-free text edit are wired. redundant-parentheses is fixed only
 /// when the flagged span is single-line and literally starts with '(' and ends
 /// with ')'. Best for non-overlapping findings; same-line multi-fixes are not
-/// column-reconciled (the applier orders by line).</remarks>
+/// column-reconciled (the applier orders by line).
+/// unused-local is the ONE rule here that is NOT per-finding: it is delegated,
+/// once per file, to TAstChecker.BuildUnusedLocalFixEdits. Several dead names can
+/// share one declaration, so whether that declaration may be deleted outright or
+/// must have its name list spliced depends on every finding against it -- and the
+/// emptied-'var'-block collapse depends on the whole section. Per-finding edits
+/// here would delete still-used variables and stack overlapping deletes on one
+/// line, so that grouping is load-bearing, not a tidiness choice.</remarks>
 function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
 var
   F    : TLintFinding                    ;
   E    : TTextEdit                       ;
   EndL : Integer                         ;
-  I    : Integer                         ;
   Cache: TDictionary<string, TStringList>;
   SL   : TStringList                     ;
   Ln   : string                          ;
@@ -5282,61 +5290,6 @@ begin
           end;
         end; // if
       end // if
-      else if SameText(F.RuleId, 'unused-local') then
-      begin
-        { An unused local variable (H2164). The finding points to the variable
-          name in the declaration. Delete the entire line containing the declaration.
-          This handles the simple case where one variable is declared per line;
-          if multiple variables are declared on one line (X, Y: Integer;), the entire
-          line is deleted, which is the safest approach when only one is unused.
-
-          When deleting a variable leaves a 'var' block empty (only the 'var' keyword
-          remains before 'begin'), also delete the 'var' keyword line. }
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          E:= Default(TTextEdit);
-          E.FilePath:= F.FilePath;
-          E.Kind:= tekDeleteLines;
-          E.Line:= F.StartLine;
-          E.EndLine:= F.StartLine;
-
-          { Check if the next line after the variable contains only 'begin'
-            (modulo whitespace). If so, also delete the 'var' keyword line. }
-          if (F.StartLine < SL.Count) then
-          begin
-            Ln:= Trim(SL[F.StartLine]);  { the line after the variable }
-            if Length(Ln) >= 5 then Repl:= Copy(Ln, 1, 5) else Repl:= Ln;
-            if SameText(Repl, 'begin') then
-            begin
-              { The var block would be empty. Search backwards for the 'var' keyword. }
-              EndL:= 0;  { will hold the line number of the 'var' keyword, if found }
-              for I:= F.StartLine - 1 downto 1 do
-              begin
-                Ln:= Trim(SL[I - 1]);
-                if SameText(Ln, 'var') then
-                begin
-                  EndL:= I;
-                  Break;
-                end;
-                { Stop searching if we hit other keywords }
-                if SameText(Ln, 'const') or SameText(Ln, 'type') or
-                   SameText(Ln, 'procedure') or SameText(Ln, 'function') or
-                   SameText(Ln, 'begin') then
-                  Break;
-              end;
-              { If we found the 'var' keyword line, delete from var through the variable line }
-              if EndL > 0 then
-              begin
-                E.Line:= EndL;           { start from the 'var' line }
-                E.EndLine:= F.StartLine; { delete through the variable line }
-              end;
-            end;
-          end;
-          Result:= Result + [E];
-          Inc(AFixableCount);
-        end;
-      end
       else if SameText(F.RuleId, 'off-by-one-count') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers the loop end-bound (X.Count / Length(X)). Append ' - 1'.
@@ -5362,6 +5315,33 @@ begin
         end; // if
       end; // if
     end; // for
+
+    { unused-local is handled per FILE, not per finding: several dead names can
+      share one declaration, and whether a declaration may be deleted outright
+      (vs. having its name list spliced) depends on ALL the findings against it.
+      Emitting one edit per finding -- the obvious shape -- deletes live
+      variables and stacks overlapping deletes on the same line. Grouping also
+      keeps at most one edit per declaration, so the applier never sees an
+      overlap. Driven off the AST in TAstChecker, next to the check itself. }
+    var ULFiles: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      for F in AFindings do
+        if SameText(F.RuleId, 'unused-local') and (F.FilePath <> '') then
+          ULFiles.AddOrSetValue(F.FilePath, True);
+      for var ULPath: string in ULFiles.Keys do
+      begin
+        var ULFixed: Integer:= 0;
+        var ULEdits: TArray<TTextEdit>:=
+          DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits(ULPath, AFindings, ULFixed);
+        if Length(ULEdits) > 0 then
+        begin
+          Result:= Result + ULEdits;
+          Inc(AFixableCount, ULFixed);
+        end;
+      end;
+    finally
+      ULFiles.Free;
+    end;
   finally
     for SL in Cache.Values do SL.Free;
     Cache.Free;
