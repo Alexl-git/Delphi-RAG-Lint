@@ -59,7 +59,13 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// (MethodCase / LocalCase / ConstCase) and prefixes (FieldPrefix / ParamPrefix /
 /// ClassPrefix / ExceptionPrefix / InterfacePrefix / PointerPrefix) per rule.</param>
 /// <param name="AFixCount">Out: number of distinct identifiers actually fixed
-/// (one per fixed decl, not per edit/site).</param>
+/// (one per fixed decl, not per edit/site). A finding whose every edit was
+/// rejected by the stale-position guard is NOT counted here.</param>
+/// <param name="ASkippedCount">Out: number of edits rejected by the
+/// stale-position guard -- i.e. sites where the recorded (line, col) no longer
+/// holds the identifier being renamed. Non-zero means the store is stale for
+/// the target file(s) and the caller should surface a "reindex and re-run"
+/// hint; those sites were NOT written.</param>
 /// <returns>The applied edit set (empty if nothing was fixable).</returns>
 /// <remarks>Re-casing (phase 1) is collision-free in a case-insensitive language
 /// (the new name is just a different casing of the same letters), but
@@ -73,10 +79,20 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// separate `implementation` section header (Type.OldName) is renamed too --
 /// TRenameRefactoring.Build itself emits that edit (see its ImplStartLine
 /// handling), so --fix --apply never leaves a stale, now-uncompilable header
-/// referencing the pre-rename name.</remarks>
+/// referencing the pre-rename name.
+/// GUARANTEE (v0.82, stale-index corruption fix): every emitted edit is
+/// POSITION-VERIFIED against the file as it is on disk RIGHT NOW -- the span
+/// [Col, EndCol) on line Line must actually hold the identifier being renamed
+/// (compared case-insensitively, Delphi identifiers being case-insensitive).
+/// The rename engine resolves declaration and reference sites from the SYMBOL
+/// STORE, whose coordinates are a snapshot; when the file has changed since it
+/// was indexed those coordinates point at unrelated text (observed: an
+/// identifier glued onto the `then`/`else` keywords, exit code 0). Any edit
+/// whose span is out of range or does not hold the expected identifier is
+/// DROPPED and counted in ASkippedCount -- never written.</remarks>
 function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  out AFixCount: Integer): TArray<TTextEdit>;
+  out AFixCount: Integer; out ASkippedCount: Integer): TArray<TTextEdit>;
 
 implementation
 
@@ -318,10 +334,54 @@ end;
 
 function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  out AFixCount: Integer): TArray<TTextEdit>;
+  out AFixCount: Integer; out ASkippedCount: Integer): TArray<TTextEdit>;
 var
   Edits: TList<TTextEdit>;
   Seen : TDictionary<string, Boolean>;
+  Cache: TDictionary<string, TStringList>;
+
+  { ANSI-decoded lines of APath, read AT MOST ONCE per file (mirrors
+    BuildAutofixEdits' LinesFor). An unreadable/absent file yields an empty
+    list, which makes every span check on it fail -- i.e. skip, not write. }
+  function LinesFor(const APath: string): TStringList;
+  begin
+    if not Cache.TryGetValue(APath, Result) then
+    begin
+      Result:= TStringList.Create;
+      if TFile.Exists(APath) then Result.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+      Cache.Add(APath, Result);
+    end;
+  end;
+
+  { THE STALE-POSITION GUARD. True only when APath, AS IT IS ON DISK NOW, holds
+    AExpected at 1-based columns [ACol, AEndCol) of line ALine, compared
+    case-insensitively (Delphi identifiers are case-insensitive, and a re-casing
+    rename differs from the old name ONLY in case).
+
+    Load-bearing: the rename engine resolves decl/reference sites from the
+    SYMBOL STORE, which is a snapshot. Against a file edited since it was
+    indexed those coordinates address unrelated text, and TTextEditApplier's
+    tekReplaceInLine clamps EndCol but NOT Col -- so a column past end-of-line
+    silently APPENDS the new name to whatever the line ends with (observed:
+    `then` + `GlyActive` -> `thenGlyActive`, exit code 0). Every out-of-range
+    condition below is therefore a MISMATCH (skip), never an exception and
+    never a write. }
+  function SpanHoldsIdent(const APath: string; ALine, ACol, AEndCol: Integer;
+    const AExpected: string): Boolean;
+  var
+    SL  : TStringList;
+    Ln  : string     ;
+  begin
+    Result:= False;
+    if AExpected = '' then Exit;
+    if (ALine < 1) or (ACol < 1) or (AEndCol <= ACol) then Exit;
+    if (AEndCol - ACol) <> Length(AExpected) then Exit; { span width must match the identifier }
+    SL:= LinesFor(APath);
+    if ALine > SL.Count then Exit;                      { past EOF }
+    Ln:= SL[ALine - 1];
+    if (AEndCol - 1) > Length(Ln) then Exit;            { past end-of-line }
+    Result:= SameText(Copy(Ln, ACol, AEndCol - ACol), AExpected);
+  end;
 
   { AFindingLine/AFindingCol/AFindingEndCol: the ORIGINATING finding's own
     (already lint-verified) identifier span. TRenameRefactoring.Build's
@@ -334,14 +394,25 @@ var
     SAME line as the finding gets the finding's own verified StartCol/EndCol
     instead of the engine's Col/OldName-length; every other edit (reference
     sites, resolved from the refs table via FindCallersByName, which are
-    identifier-accurate) is trusted as-is. }
+    identifier-accurate) is trusted as-is.
+
+    AOldName is the identifier VERBATIM as it stands in the finding's own file
+    span -- the text SpanHoldsIdent must find at a finding-coordinate edit. For
+    every other (engine-coordinate) edit the expected text is RE.OldName, which
+    TRenameRefactoring.Build/BuildLocal always set to the bare short name. An
+    edit that fails the check is dropped and counted in ASkippedCount; AFixCount
+    is incremented only when at least one edit of this rename SURVIVED, so a
+    fully-skipped finding never inflates the CLI's "applied N fix(es)". }
   procedure EmitRenameEdits(const ARenameEdits: TArray<TRenameEdit>;
-    AFindingLine, AFindingCol, AFindingEndCol: Integer);
+    AFindingLine, AFindingCol, AFindingEndCol: Integer; const AOldName: string);
   var
-    RE: TRenameEdit;
-    TE: TTextEdit;
+    RE     : TRenameEdit;
+    TE     : TTextEdit  ;
+    Want   : string     ;
+    Emitted: Integer    ;
   begin
     if Length(ARenameEdits) = 0 then Exit;
+    Emitted:= 0;
     for RE in ARenameEdits do
     begin
       TE:= Default(TTextEdit);
@@ -352,16 +423,25 @@ var
       begin
         TE.Col   := AFindingCol;
         TE.EndCol:= AFindingEndCol;
+        Want     := AOldName;
       end
       else
       begin
         TE.Col   := RE.Col;
         TE.EndCol:= RE.Col + Length(RE.OldName);
+        Want     := RE.OldName;
       end;
       TE.Text:= RE.NewName;
+      { Never write a position the file no longer backs -- see SpanHoldsIdent. }
+      if not SpanHoldsIdent(TE.FilePath, TE.Line, TE.Col, TE.EndCol, Want) then
+      begin
+        Inc(ASkippedCount);
+        Continue;
+      end;
       Edits.Add(TE);
+      Inc(Emitted);
     end;
-    Inc(AFixCount);
+    if Emitted > 0 then Inc(AFixCount);
   end;
 
 var
@@ -375,11 +455,13 @@ var
   Prefix    : string;
 begin
   AFixCount:= 0;
+  ASkippedCount:= 0;
   Result:= nil;
   if AStore = nil then Exit;
 
   Edits:= TList<TTextEdit>.Create;
   Seen := TDictionary<string, Boolean>.Create;
+  Cache:= TDictionary<string, TStringList>.Create;
   try
     for F in AFindings do
     begin
@@ -432,7 +514,7 @@ begin
         if NewName = OldName then Continue; // already correct -- nothing to do
 
         if SameText(F.RuleId, 'local-var-casing') then
-          EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, NewName), F.StartLine, F.StartCol, F.EndCol)
+          EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, NewName), F.StartLine, F.StartCol, F.EndCol, OldName)
         else if SameText(F.RuleId, 'param-name-prefix') then
         begin
           { Routine-local rename. UNLIKE local-var-casing (collision-free
@@ -441,7 +523,7 @@ begin
             NEW guard: skip the whole fix if NewName already exists as another
             local/param in the same routine scope. }
           if LocalNameCollides(F.FilePath, F.StartLine, F.StartCol, NewName) then Continue; // collision -- skip
-          EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, NewName), F.StartLine, F.StartCol, F.EndCol);
+          EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, NewName), F.StartLine, F.StartCol, F.EndCol, OldName);
         end
         else
         begin
@@ -453,7 +535,7 @@ begin
           Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol);
           if Sym.Id = 0 then Continue; // unresolved symbol -- report NEEDS_CONTEXT by skipping
           if TRenameRefactoring.ConflictReason(AStore, Sym.QualifiedName, NewName) <> '' then Continue; // conflict -- skip
-          EmitRenameEdits(TRenameRefactoring.Build(AStore, Sym.QualifiedName, NewName), Sym.StartLine, F.StartCol, F.EndCol);
+          EmitRenameEdits(TRenameRefactoring.Build(AStore, Sym.QualifiedName, NewName), Sym.StartLine, F.StartCol, F.EndCol, OldName);
         end;
       except
         { A single malformed finding must not abort the whole fix sweep. }
@@ -461,6 +543,8 @@ begin
     end;
     Result:= Edits.ToArray;
   finally
+    for var SL: TStringList in Cache.Values do SL.Free;
+    Cache.Free;
     Seen.Free;
     Edits.Free;
   end;

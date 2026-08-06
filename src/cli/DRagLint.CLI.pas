@@ -5420,6 +5420,11 @@ begin
 
     var FixCount: Integer                                               ;
     var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
+    { Naming edits dropped by BuildNamingFixEdits' stale-position guard (the
+      recorded site no longer holds the identifier being renamed). Declared out
+      here so the autofix summary below can report it -- an invisible skip is
+      what made the stale-index corruption a silent, exit-0 failure. }
+    var NFSkippedTotal: Integer:= 0;
 
     { ADF Task 8: doc-drift is store-backed, so its fix cannot be produced by the
       pure-text BuildAutofixEdits above -- it needs the store (facts + MergeComment).
@@ -5519,12 +5524,18 @@ begin
           end;
 
         var NFCount: Integer;
-        var NFEdits: TArray<TTextEdit>:= DRagLint.Refactor.NamingFix.BuildNamingFixEdits(AStore, NamingTargets, Cfg.Naming, NFCount);
+        var NFSkipped: Integer;
+        var NFEdits: TArray<TTextEdit>:= DRagLint.Refactor.NamingFix.BuildNamingFixEdits(AStore, NamingTargets, Cfg.Naming, NFCount, NFSkipped);
         if Length(NFEdits) > 0 then
         begin
           Edits:= Edits + NFEdits;
           Inc(FixCount, NFCount);
         end;
+        Inc(NFSkippedTotal, NFSkipped);
+        if NFSkipped > 0 then
+          Writeln(ErrOutput, Format('drag-lint: warning: naming autofix skipped %d edit(s) whose recorded position no longer holds '
+            + 'the identifier being renamed -- the index is stale for the target file(s). Nothing was written at those sites; '
+            + 'reindex (drag-lint index <dir> --db <db>) and re-run.', [NFSkipped]));
       end;
     end;
 
@@ -5582,11 +5593,16 @@ begin
       Exit(0);
     end; // if
 
-    if FixCount = 0 then Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))')
+    { Empty unless the naming stale-position guard dropped something, so the
+      summary line stays byte-identical on the ordinary path. }
+    var SkipSuffix: string:= '';
+    if NFSkippedTotal > 0 then SkipSuffix:= Format(', %d skipped (stale index)', [NFSkippedTotal]);
+
+    if FixCount = 0 then Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))' + SkipSuffix)
     else if AArgs.Apply then
     begin
       var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
-      Writeln(Format('autofix: applied %d fix(es) across %d file(s)%s', [FixCount, Touched, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      Writeln(Format('autofix: applied %d fix(es) across %d file(s)%s%s', [FixCount, Touched, SkipSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
     end
     else
     begin
@@ -5595,7 +5611,7 @@ begin
       for F in Targeted do
         if IsRiskyFixRule(F.RuleId) then begin HasRisky:= True; Break; end;
       if HasRisky then Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
-      Writeln(Format('autofix: %d fixable finding(s) -- pass --apply to write', [FixCount]));
+      Writeln(Format('autofix: %d fixable finding(s)%s -- pass --apply to write', [FixCount, SkipSuffix]));
     end;
     Exit(0);
   end; // if
