@@ -425,6 +425,9 @@ begin
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
+  Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
+  Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
+  Writeln('                               several projects, or when the DB spans more than the project you are reviewing.');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
@@ -8313,11 +8316,88 @@ begin
   else Result:= 1;
 end; // function
 
+{ Canonical comparison form for a scope-set path: absolute, all-backslash,
+  lower-cased. Delphi paths are case-insensitive and the index stores them with
+  backslashes, so anything else produces false misses. }
+function ScopeKey(const APath: string): string;
+begin
+  Result:= APath;
+  try Result:= TPath.GetFullPath(Result); except { unparseable: compare as given } end;
+  Result:= LowerCase(StringReplace(Result, '/', '\', [rfReplaceAll]));
+end;
+
+/// <summary>The set of source files a `--project &lt;file&gt;` lint run is scoped
+/// to: the project's compile closure, plus each closure unit's sibling .dfm.</summary>
+/// <param name="AArgs">Parsed args; ProjectPath, ExcludeGlobs, NoPreprocess and
+/// CheckPlatform are read (the same inputs `selftest closure` uses).</param>
+/// <returns>A dictionary keyed by ScopeKey, owned by the CALLER; nil when the
+/// project resolves to no files at all.</returns>
+/// <remarks>The .dfm sibling is included deliberately: TClosureResolver yields
+/// .pas/.inc only, so scoping strictly to it would silently drop every form's
+/// DFM findings from a project run. Membership is a whitelist -- a file the
+/// closure cannot see is out of scope, which is the entire point.</remarks>
+function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>;
+var
+  Resolver    : TClosureResolver                          ;
+  ProjResolver: DRagLint.Project.Resolver.TProjectResolver;
+  LibRoots    : TArray<string>                            ;
+  CR          : TClosureResult                            ;
+  F           : string                                    ;
+  Dfm         : string                                    ;
+begin
+  Result:= nil;
+  ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    LibRoots:= ProjResolver.ResolveLibraryPaths;
+  finally
+    ProjResolver.Free;
+  end;
+  Resolver:= TClosureResolver.Create(LibRoots);
+  try
+    var Dproj: string:= '';
+    if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Dproj:= AArgs.ProjectPath;
+    Resolver.SetPreprocess(not AArgs.NoPreprocess, ResolveIndexProfile(Dproj, AArgs.CheckPlatform, ''));
+    { An unreadable/absent project file must surface as "no scope" -- which the
+      caller turns into a usage error -- not as an unhandled exception. }
+    CR:= Default(TClosureResult);
+    try CR:= Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs); except CR:= Default(TClosureResult); end;
+  finally
+    Resolver.Free;
+  end;
+  if Length(CR.Files) = 0 then Exit;
+
+  Result:= TDictionary<string, Boolean>.Create;
+  for F in CR.Files do
+  begin
+    Result.AddOrSetValue(ScopeKey(F), True);
+    if SameText(ExtractFileExt(F), '.pas') then
+    begin
+      Dfm:= ChangeFileExt(F, '.dfm');
+      if TFile.Exists(Dfm) then Result.AddOrSetValue(ScopeKey(Dfm), True);
+    end;
+  end;
+  { The project file itself AND its sibling program file. The closure drops the
+    .dpr by design (see run_index_project_scope.ps1), but EVERY unit-not-in-dpr
+    finding is anchored to one or the other -- TProjectChecks.CheckUnitsInDpr
+    attaches to ProgramPath or the .dproj, never to the offending unit -- so
+    without these the one rule that --project explicitly enables would be
+    filtered out of its own project's run. }
+  Result.AddOrSetValue(ScopeKey(AArgs.ProjectPath), True);
+  if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then
+    for var Sib: string in ['.dpr', '.dpk'] do
+    begin
+      Dfm:= ChangeFileExt(AArgs.ProjectPath, Sib);
+      if TFile.Exists(Dfm) then Result.AddOrSetValue(ScopeKey(Dfm), True);
+    end;
+end;
+
 // v0.61: drag-lint lint-all [--db <index.sqlite>] [--project <.dproj>]
 //   [--disable id,...] [--output <report.txt>] [--json]
 // Batch lint runner: runs ALL per-file AST rules over every indexed .pas file,
 // then all project-wide rules, and writes a consolidated report.
-// Exit 1 if any findings, 0 if none, 2 on usage error.
+// --project scopes BOTH passes to that project's compile closure.
+// Exit 1 if any findings, 0 if none, 2 on usage error (including a --project
+// that resolves to no source files at all).
 function DoLintAll(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>              ;
@@ -8335,6 +8415,9 @@ var
   FileIdx  : Integer                     ;
   LastPct  : Integer                     ;
   Pct      : Integer                     ;
+  { nil = unscoped (no --project), which is the default and must stay
+    byte-identical to the old behaviour. }
+  ScopeSet : TDictionary<string, Boolean>;
 begin
   { Resolve DBs: first existing = project index; second = library index }
   Dbs:= ResolveConsumerDbs(AArgs);
@@ -8353,12 +8436,43 @@ begin
   Store.Migrate;
   Findings:= nil;
 
+  { --project: restrict the whole run to the units this project actually
+    compiles. The flag was accepted and did NOTHING measurable before (674
+    findings bare, 675 with --project), which is worse than not offering it.
+
+    Why it matters: one folder legitimately holds several projects.
+    C:\Projects\DataCopy contains both DataCopy.dproj and SortTest.dproj, so
+    reviewing DataCopy meant wading through 93 findings belonging to a different
+    program; with the retired units still present, 989 of 1414 findings came from
+    source no project compiles. Per-project INDEXING (index --project) already
+    solves membership at index time, but it cannot help a shared or folder-scoped
+    DB -- and a per-project DB still pulls in the resolved library roots. So the
+    filter has to exist on the LINT side too, which is what this is.
+
+    An empty closure means the project file could not be read or declares no
+    units; scoping to nothing would report a clean project, so refuse instead. }
+  ScopeSet:= nil;
+  if AArgs.ProjectPath <> '' then
+  begin
+    ScopeSet:= BuildProjectFileScope(AArgs);
+    if ScopeSet = nil then
+    begin
+      EmitStatusLine(AArgs, Format('ERROR: --project %s resolved to NO source files. ' +
+        'Refusing to lint (an empty scope would report a clean project). Check the path and its uses clause.',
+        [AArgs.ProjectPath]));
+      Exit(2);
+    end;
+  end;
+
   { Enumerate all indexed .pas files from the project store }
   FilePaths:= nil;
   for Fid in Store.GetAllFileIds do
   begin
     PasPath:= Store.GetFilePath(Fid);
-    if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then FilePaths:= FilePaths + [PasPath];
+    if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then
+    begin
+      if (ScopeSet = nil) or ScopeSet.ContainsKey(ScopeKey(PasPath)) then FilePaths:= FilePaths + [PasPath];
+    end;
   end;
   { The banner is prose: on --json / --format sarif it belongs on stderr, or the
     document it precedes will not parse (docs\INBOX-lint-all-json-stdout-banner.md). }
@@ -8467,6 +8581,22 @@ begin
   if AArgs.ProjectPath <> '' then Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
   { Used-unit resolvability (used-unit-not-resolvable) }
   Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
+
+  { Scope the PROJECT-WIDE rules too. Filtering FilePaths above only narrowed the
+    per-file pass; every rule between here and there reads the whole store (god-
+    class, clone detection, layering, doc rules, used-unit-not-resolvable), so
+    without this the non-member noise walks straight back in through them.
+    A finding carrying no file path is kept -- it belongs to the run, not a file. }
+  if ScopeSet <> nil then
+  begin
+    var InScope: TArray<TLintFinding>:= nil;
+    for F in Findings do
+      if (F.FilePath = '') or ScopeSet.ContainsKey(ScopeKey(F.FilePath)) then InScope:= InScope + [F];
+    EmitStatusLine(AArgs, Format('lint-all: --project %s -- %d of %d finding(s) belong to the project''s %d source file(s)',
+      [ExtractFileName(AArgs.ProjectPath), Length(InScope), Length(Findings), ScopeSet.Count]));
+    Findings:= InScope;
+    FreeAndNil(ScopeSet);
+  end;
 
   { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside the DB }
   OutPath:= AArgs.Output;
