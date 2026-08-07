@@ -8,29 +8,35 @@ Status keys: `[ ]` not started · `[~]` in flight · `[x]` done · `[?]` needs a
 
 ---
 
-## >>> RESUME POINT (updated 2026-08-07) -- READ THIS FIRST
+## >>> RESUME POINT (updated 2026-08-07, second pass) -- READ THIS FIRST
 
-**State.** PHASE A is COMPLETE. `main` = **`24eec74`, pushed, in sync with origin**. Battery
-**226/226** (~13 min, needs `pwsh`). The exe beside the tests
-(`third_party\dll-win64\drag-lint.exe`) is built from that commit -- rebuild only if you
-change `src\`.
+**State.** PHASE A is COMPLETE. **PHASE B: B3, B7 and B1 are now DONE.** Battery **227/227**
+(~12 min, needs `pwsh`; one runner added for B3). The exe beside the tests
+(`third_party\dll-win64\drag-lint.exe`) is rebuilt from the B1/B3 source -- rebuild only if
+you change `src\` again.
 
 Working tree carries `FEATURES.txt` (another workstream's, **do not commit**) and untracked
 INBOX notes (untracked by convention). Nothing else is outstanding.
 
-**Next action: PHASE B**, ten engine defects below, none started. Suggested order, and why:
+**Next action: the rest of PHASE B.** Suggested order: **B9 first** -- it is now cheap and
+may already be gone, because B1's real cause (every `try..except` emitted its body into the
+CFG twice) was exactly the sort of thing that manufactures phantom flow, so re-measure
+`lcount` at `uFileUtils.pas:1045` before writing any code. Then **B2/B10** together (the same
+D-2 rule at two levels), then **B4/B5/B6** (all the same unscoped-bucket family), then **B8**
+(cosmetic).
 
-1. **B3** -- bare parameterless calls in expression position are unrecorded. Same family as
-   the nested-routine gap and the same consequence: `unused-public-symbol` calls live code
-   dead, i.e. the tool tells a user to delete working code. Highest harm of the ten.
-2. **B7** -- `lint-all --json` prints a banner to stdout, so the output does not parse.
-   Small, self-contained, and it blocks anyone scripting a baseline.
-3. **B1** -- an `except` handler ending in `exit` still merges with the normal path. One
-   wrong CFG edge was ALREADY fixed and did NOT clear the symptom, so a second merge route
-   is still unfound. The `finally` equivalent is DELIBERATE -- do not "fix" that one.
+**One decision is still waiting on the user, and only one:** A4 deliberately left open whether
+a PRESENT-but-EMPTY `<param>` body deserves its own lower-severity `hint`. It needs a new
+finding kind and a rules-catalogue entry, which adds findings to every consumer's run -- the
+user's call, not a side effect of A4.
 
-Then B2/B10 together (they are the same D-2 rule at two levels), B4/B5/B6 (all the same
-unscoped-bucket family), B8/B9 (cosmetic / small).
+**Lesson from this pass, worth carrying:** two of the three items were not what the list said
+they were. B7 was already fixed and the list had simply not been updated -- CHECK BEFORE
+IMPLEMENTING. B1 was filed as "an `except` handler ending in `exit` still merges", which
+framed it as a divergence problem and sent the previous session hunting for a wrong EDGE; the
+actual defect was a wrong NODE SELECTION that duplicated the try body for every handler
+shape, exiting or not. The filed symptom was one visible corner of a much wider bug. Reproduce
+and characterise the defect's real boundary before accepting the filing's framing.
 
 **One decision is waiting on the user, and only one:** A4 deliberately left open whether a
 PRESENT-but-EMPTY `<param>` body deserves its own lower-severity `hint`. It needs a new
@@ -285,14 +291,34 @@ anywhere.
 
 ## PHASE B -- remaining engine defects
 
-### B1 `[ ]` #5b -- `except` handler ending in `exit` still merges with the normal path
+### B1 `[x]` #5b -- `except` handler ending in `exit` still merges with the normal path
+-- DONE 2026-08-07, and the cause was WIDER than the filing
 
-`uFileUtils.pas` `srcsize` and the `DPPRoutines` double-free pair at 302-303 are ONE bug.
-One wrong CFG edge was already fixed in `src/analysis/DRagLint.Analysis.Cfg.pas` (a
-diverting handler still wired to the follow block; `EmitStmt` returns -1 for
-exit/raise/break/continue meaning "does not fall through") and it did NOT clear the
-symptom -- there is a SECOND merge route still to find. The `finally` branch's equivalent
-edge is DELIBERATE (a finally always runs) -- do not "fix" that one.
+**SHIPPED.** Five new cases in `tests/lint/double-free.pas` (+ expectations), RED first on
+three of them.
+
+The second merge route was not an edge at all -- it was a **node selection**. The handler
+scan accepted any `'statements'` child at index > 0, and the `try` node's children are
+`(kTry) (statements = THE TRY BODY) (kExcept) (statements = the handler) (kEnd)`. Index 1 is
+the try body, so **every `try..except` emitted its own try body into the CFG a second time**,
+as a pseudo-handler wired from the try entry and on into the follow block. One statement was
+analysed as two on a single path: a lone `X.Free;` in a try body was reported as a double
+free -- the `DPPRoutines` 302-303 pair -- and the duplicate reached the code after the try,
+which is the merge the previous session was looking for.
+
+It was never conditional on the handler diverting. Measured before the fix, all three handler
+shapes were wrong: `except exit;`, `except Writeln(...);` and `except on E: ... do exit;`.
+`try..finally` was correct throughout (different code path), so the deliberate finally edge
+was never touched.
+
+Fix: track the `kExcept` token and treat only children AFTER it as handlers, mirroring the
+`SeenFinally` scan directly above it. Skipping "index 1" would have worked and said nothing;
+the token test states what the grammar means. If `kExcept` is somehow absent no handler is
+emitted, which loses handler analysis but cannot invent a path.
+
+Controls are part of the fixture on purpose (P10/P11): a genuine double free inside a try
+body, and one straddling the try boundary, must still fire -- otherwise a "fix" that merely
+stopped analysing try bodies passes.
 
 ### B2 `[ ]` #1b -- the IDE reindex ignores the manifest
 
@@ -303,13 +329,38 @@ is what produced the 15 spurious `doc-drift` findings. #1a (naming an unbuilt ma
 on stderr) already shipped. Fold D-2 in here: when the IDE suspects staleness it should
 full-reindex the project into the MANIFEST-resolved DB.
 
-### B3 `[ ]` Bare parameterless calls in expression position are still unrecorded
+### B3 `[x]` Bare parameterless calls in expression position are still unrecorded
+-- DONE 2026-08-07
 
-Left open by step 2a. `if not LoopsBackIntoScan then` is a bare parameterless call in
-expression position, which is not an `exprCall` node, so no ref row is emitted and the
-symbol shows 0 refs. Same family as the nested-routine gap and the same consequence:
-`unused-public-symbol` can call live code dead. See the block comment above
-`REF_KIND_CALL` in `DRagLint.Core.Model`.
+**SHIPPED.** `tests/autotest/run_expr_bare_call_refs.ps1` (19 checks), reproduced RED first
+with all five expression shapes at ZERO refs.
+
+`DRagLint.Parser.Delphi13.EmitExpressionIdentReads`, called last inside the `EmitUsageRefs`
+block and deliberately NOT exiting. It covers the slots the v0.42 usage-ref handlers left
+untouched -- those reached only `obj.Member`, an assignment's bare-identifier RHS and a bare
+argument -- namely `exprUnary`, `exprBinary`, `exprParens`, `exprBrackets`, `exprSubscript`
+and the `if` / `while` / `repeat` / `for` / `foreach` / `with` / `case` / `caseLabel` /
+`raise` slots.
+
+**The kind is `read`, not `REF_KIND_CALL`, and that is the whole design decision.** In
+expression position the tree cannot distinguish a parameterless call from a variable read --
+`KeepGoing` is spelled identically either way and only cross-unit symbol resolution could
+decide. Emitting a call ref would put every variable read into the universe
+`ResolveCallTargets` resolves and that BOTH unresolved-call queries take their complement
+against, which is precisely the defect T3i closed. `read` is already what the identical
+ambiguity gets in `Result:= MaxItems;` and `Foo(Bar)`, and it is sufficient for the harm being
+fixed: `FindCallersByName` -- what `unused-public-symbol` and `query find-callers` consult --
+matches ANY ref kind. `call_edges` is unchanged, so anything needing certainty still has it.
+The runner asserts the non-widening directly: a local variable used in a condition gains a
+ref but NOT a call-kind one.
+
+`exprBinary` skips its RHS when the operator is `kIs`/`kAs` -- that RHS is a type name and
+already carries a `type_use`, and two ref rows of different kinds at one span is the
+co-located-duplicate shape behind register E1.
+
+The DISCLOSED CONSEQUENCE paragraph in `Core.Model`'s `REF_KIND_CALL` comment still stands as
+written: the paren-less DOTTED invocation (`N:= Obj.Func;`) remains outside the call universe,
+carrying only its `member-access` ref. That is a different, narrower gap and is not B3.
 
 ### B4 `[ ]` Receiver-aware unverified caller bucket (residual of #7)
 
@@ -333,11 +384,19 @@ per-hop file id its `Walk` does not currently carry.
 still arrive from an extra store. Fix needs the target unit resolved BY NAME inside each
 extra store before its uses graph can be used.
 
-### B7 `[ ]` `lint-all --json` prints a banner into stdout
+### B7 `[x]` `lint-all --json` prints a banner into stdout -- ALREADY FIXED 2026-08-06
 
-`docs/INBOX-lint-all-json-stdout-banner.md`. `--json --quiet` still emits
-`lint-all: scanning N .pas file(s)` on stdout, so the output does not parse. Progress and
-banners belong on stderr. Small, and it blocks anyone scripting a baseline.
+**This item was stale when it was written into this plan.** The INBOX note
+(`docs/INBOX-lint-all-json-stdout-banner.md`) already carried a `Status: FIXED 2026-08-06`
+section; the plan's PHASE B list was assembled from the older resume doc and did not pick it
+up. Re-verified empirically on 2026-08-07: `lint-all --db <db> --json` stdout begins at `[`
+and round-trips through `ConvertFrom-Json`.
+
+The durable form was taken rather than a per-site gate: `IsMachineReadableOutput(AArgs)` plus
+`EmitStatusLine(AArgs, AText)` in `DRagLint.CLI.pas`, which routes the scanning banner, the
+no-index error and the baseline line to **stderr** whenever the output is machine-readable.
+Regression test: `tests\ergonomics\run_pipeline_tests.ps1` section 6, which asserts the banner
+is absent from stdout AND still present on stderr.
 
 ### B8 `[ ]` #9b -- report encoding cosmetics
 
@@ -350,6 +409,12 @@ Normalise the message and drop the BOM.
 `lcount` at `uFileUtils.pas:1045` -- previously invisible because the loop bound was never
 read; the bound-as-read fix exposed it. Check whether `exit(False)` inside an if-chain is
 being modelled as a divert.
+
+**Do this one FIRST, and MEASURE before writing code.** B1 (fixed 2026-08-07) turned out to
+duplicate the try body of every `try..except` into the CFG, which is exactly the kind of
+phantom flow that manufactures findings like this one. Re-run the measurement on
+`uFileUtils.pas:1045` against the current binary before assuming there is anything left to
+fix.
 
 ### B10 `[ ]` Make D-2 a rule the tools follow
 

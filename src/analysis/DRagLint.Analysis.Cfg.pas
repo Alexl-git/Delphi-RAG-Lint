@@ -514,9 +514,39 @@ begin
     else
     begin
       if TryAfter >= 0 then Cfg.Blocks[TryAfter].AddSucc(FollowIdx); { normal completion }
+      { THE HANDLERS BEGIN AFTER kExcept, and nothing before it is one.
+
+        The scan used to accept any 'statements' child at index > 0. The try
+        node's children are (kTry) (statements = the TRY BODY) (kExcept)
+        (statements = the handler) (kEnd), so index 1 -- the try body itself --
+        satisfied that test. EVERY try..except therefore emitted its try body
+        into the CFG a SECOND time, as a pseudo-handler wired from the try
+        entry and on into the follow block. One statement was analysed as two
+        on a single path: a lone `X.Free;` inside a try body was reported as a
+        double free (DataCopy DPPRoutines 302-303), and the duplicate reached
+        the follow block, which is the second merge route that survived the
+        earlier fix to the diverting-handler edge below.
+
+        It was never conditional on what the handler does -- the bare-handler,
+        fall-through and `on E: ... do` shapes were all wrong, and all three are
+        pinned in tests/lint/double-free.pas (P7-P9) with the genuine double
+        frees kept as controls (P10-P11) so a fix that simply stopped analysing
+        try bodies fails instead of shipping.
+
+        Tracking the token, rather than skipping index 1, is what makes this
+        structural: it says what the grammar means. If kExcept is somehow absent
+        no handler is emitted at all, which loses handler analysis but cannot
+        invent a path -- the safe direction. }
+      var SeenExcept := False;
       for I := 0 to ANode.NamedChildCount - 1 do
-        if (ANode.NamedChild(I).NodeType = 'exceptionHandler')
-           or ((ANode.NamedChild(I).NodeType = 'statements') and (I > 0)) then
+      begin
+        if ANode.NamedChild(I).NodeType = 'kExcept' then
+        begin
+          SeenExcept := True;
+          Continue;
+        end;
+        if SeenExcept and ((ANode.NamedChild(I).NodeType = 'exceptionHandler')
+                           or (ANode.NamedChild(I).NodeType = 'statements')) then
         begin
           HdrIdx := Cfg.NewBlock.Index;
           Cfg.Blocks[BodyIdx].AddSucc(HdrIdx); { try entry -> handler (conservative) }
@@ -537,7 +567,8 @@ begin
             Note this is NOT the same as the finally case above, where the
             equivalent edge is deliberate -- a finally block always runs. }
           if ExcAfter >= 0 then Cfg.Blocks[ExcAfter].AddSucc(FollowIdx);
-        end;
+        end; { if -- this child is a handler }
+      end; { for }
       Exit(FollowIdx);
     end;
   end;

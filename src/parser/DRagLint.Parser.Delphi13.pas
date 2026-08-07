@@ -240,6 +240,88 @@ begin
   AState.EmitRef(REF_KIND_CALL, CalleeName, NameNode);
 end; // procedure
 
+{ PHASE B item B3 -- a bare parameterless call in EXPRESSION position.
+
+  Delphi invokes a parameterless routine by NAME ALONE, so `if not
+  LoopsBackIntoScan then`, `while KeepGoing do` and `N:= ItemLimit * 2` are
+  calls. None of them is an exprCall node, and none of them was reached by any
+  of the v0.42 usage-ref handlers either -- those cover exactly `obj.Member`,
+  an assignment's bare-identifier RHS, and a bare argument. So the routine got
+  NO ref row of any kind and showed ZERO references, and `unused-public-symbol`
+  reported live, called code as dead public API. That is the same harm as the
+  nested-routine gap, arriving through a different hole; both are pinned by a
+  runner (tests/autotest/run_expr_bare_call_refs.ps1 and run_nested_routine_refs.ps1).
+
+  WHY 'read' AND NOT REF_KIND_CALL. In expression position the tree cannot tell
+  a parameterless call from a variable read -- `KeepGoing` is spelled the same
+  either way, and only symbol resolution across units could decide. Emitting a
+  call ref would therefore put every variable read into the universe
+  ResolveCallTargets resolves and that BOTH unresolved-call queries take their
+  complement against; that widening is precisely the defect T3i closed (see the
+  block comment above REF_KIND_CALL in DRagLint.Core.Model). 'read' is what the
+  identical ambiguity already gets in `Result:= MaxItems;` and `Foo(Bar)`, and it
+  is sufficient for the harm being fixed: FindCallersByName -- which is what
+  unused-public-symbol and `query find-callers` consult -- matches ANY ref kind.
+  A caller that needs certainty still has call_edges, which is unchanged.
+
+  Scope is deliberately "an identifier sitting DIRECTLY in an expression or
+  condition slot", not "every identifier anywhere": declaration names, type
+  names and field names are reached through their own decl/typeref cases, which
+  this never sees, so broadening by node type cannot turn a declaration into a
+  usage. Nested expressions need no entry here -- each level is its own node and
+  Walk recurses into all of them. }
+procedure EmitExpressionIdentReads(const ANode: TTSNode; const AState: TWalkState);
+
+  procedure ReadField(const AField: string);
+  var
+    N: TTSNode;
+  begin
+    N:= ANode.ChildByField(AField);
+    if (not N.IsNull) and (N.NodeType = 'identifier') then AState.EmitRef('read', NodeText(N, AState.Source), N);
+  end;
+
+  { For the slots the grammar leaves UNNAMED -- a case selector, a parenthesised
+    or bracketed expression, a case label -- where there is no field to ask for. }
+  procedure ReadAllDirectIdents;
+  var
+    i: Integer;
+    C: TTSNode;
+  begin
+    for i:= 0 to ANode.NamedChildCount - 1 do
+    begin
+      C:= ANode.NamedChild(i);
+      if C.NodeType = 'identifier' then AState.EmitRef('read', NodeText(C, AState.Source), C);
+    end;
+  end;
+
+var
+  NT: string ;
+  Op: TTSNode;
+begin
+  NT:= ANode.NodeType;
+  if NT      = 'exprUnary' then ReadField('operand')   // not X, -X, @X, X^
+  else if NT = 'exprBinary' then
+  begin
+    ReadField('lhs');
+    { The RHS of `X is TFoo` / `X as TFoo` is a TYPE name and the exprBinary
+      handler in Walk already emits a type_use for it. Emitting a read as well
+      would give one identifier two ref rows of different kinds at the identical
+      span -- the co-located-duplicate shape that made every resolved call also
+      look unverified (register E1). }
+    Op:= ANode.ChildByField('operator');
+    if Op.IsNull or ((Op.NodeType <> 'kIs') and (Op.NodeType <> 'kAs')) then ReadField('rhs');
+  end
+  else if NT = 'exprSubscript' then ReadField('entity')    // A[i]  -- args recurse as exprArgs
+  else if (NT = 'if') or (NT = 'while') or (NT = 'repeat') then ReadField('condition')
+  else if NT = 'with'    then ReadField('entity')
+  else if NT = 'foreach' then ReadField('iterable')        // `for X in Coll` -- Coll only;
+                                                           // the iterator is written, not read
+  else if NT = 'raise'   then ReadField('exception')
+  else if NT = 'for'     then ReadField('end')             // the bound; `start` is an assignment
+  else if (NT = 'exprParens') or (NT = 'exprBrackets') or (NT = 'case') or (NT = 'caseLabel') then
+    ReadAllDirectIdents;
+end; // procedure
+
 // v0.40.4: extract the literal string body from a `kIn literalString` pair
 // inside a declUsesUnit. Strips the surrounding single quotes.
 function ExtractInPath(const ALitNode: TTSNode; const ASource: TBytes): string;
@@ -1921,6 +2003,14 @@ begin
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;
     end;
+
+    { B3: an identifier sitting directly in an expression or condition slot --
+      which in Pascal is how a parameterless routine is CALLED. See the block
+      comment on EmitExpressionIdentReads for why the kind is 'read'. Last in
+      this block and it does NOT Exit: every node type it answers to either has
+      no other handler at all, or (exprBinary) has one above that deliberately
+      falls through to the default recursion. }
+    EmitExpressionIdentReads(ANode, AState);
   end; // if
 
   // Default: recurse into named children

@@ -10,3 +10,22 @@ double-free 45
 !double-free 53
 # P6: single free inside try/finally -> absent (only one Free site)
 !double-free 64
+# B1 -- the try body of a try..EXCEPT was emitted into the CFG twice, so a single
+# Free inside it was analysed as two on one path. P7/P8/P9 are the three handler
+# shapes (exits / falls through / on-clause); P10 and P11 are the controls that a
+# real double free is still caught, in the try body and across the try boundary.
+# P7: one free, handler exits -> absent
+!double-free 77
+# P8: one free, handler falls through -> absent
+!double-free 90
+# P9: one free, `on E: ... do` handler -> absent
+!double-free 103
+# P10: genuine double free INSIDE the try body -> warning at the SECOND free.
+# The first free must not also be reported: that extra pair only existed because
+# the duplicated body made line 116 follow itself.
+double-free 117
+!double-free 116
+# P11: freed in the try body and again after the try -> warning at the free that
+# comes second on the normal-completion path, and only there.
+double-free 134
+!double-free 130

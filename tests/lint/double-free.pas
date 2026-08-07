@@ -64,4 +64,73 @@ begin
     X.Free;
   end;
 end;
+{ B1: a try..EXCEPT whose body frees X exactly ONCE. The try body was emitted
+  into the CFG TWICE -- the handler scan accepted any 'statements' child at
+  index > 0, and the try body IS the 'statements' child at index 1 -- so the one
+  Free was analysed as two on a single path. -> absent }
+procedure P7;
+var
+  X: TFoo;
+begin
+  X := TFoo.Create;
+  try
+    X.Free;
+  except
+    exit;
+  end;
+end;
+{ same, but the handler falls through: the duplication was never conditional on
+  the handler diverting, so this shape was equally wrong -> absent }
+procedure P8;
+var
+  X: TFoo;
+begin
+  X := TFoo.Create;
+  try
+    X.Free;
+  except
+    Writeln('boom');
+  end;
+end;
+{ same, reached through an `on E: ... do` handler node rather than a bare
+  statements handler -> absent }
+procedure P9;
+var
+  X: TFoo;
+begin
+  X := TFoo.Create;
+  try
+    X.Free;
+  except
+    on E: Exception do exit;
+  end;
+end;
+{ CONTROL: a GENUINE double free INSIDE a try body must still be reported --
+  otherwise the fix merely stopped analysing try bodies -> warning }
+procedure P10;
+var
+  X: TFoo;
+begin
+  X := TFoo.Create;
+  try
+    X.Free;
+    X.Free;
+  except
+    exit;
+  end;
+end;
+{ CONTROL: freed in the try body and again AFTER the try. The normal-completion
+  path runs both, so this is a real double free -> warning }
+procedure P11;
+var
+  X: TFoo;
+begin
+  X := TFoo.Create;
+  try
+    X.Free;
+  except
+    exit;
+  end;
+  X.Free;
+end;
 end.
