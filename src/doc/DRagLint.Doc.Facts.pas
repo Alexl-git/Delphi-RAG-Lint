@@ -6,7 +6,7 @@ uses
   System.SysUtils, System.Classes, System.IOUtils, System.Math,
   System.Generics.Collections, System.RegularExpressions,
   DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince,
-  DRagLint.Hover.Returns;
+  DRagLint.Hover.Returns, DRagLint.Doc.Harvest;
 
 const
   // Display cap for the <seealso> related-symbol list (ADF T4). At most this many
@@ -654,11 +654,277 @@ begin
   end;
 end;
 
+/// <summary>Scans a summary string for the first identifier reference and returns True
+/// when that identifier resolves to a symbol declared in a different unit than the
+/// current context. Used to implement D-5 demotion: if a foreign symbol is the main
+/// subject of the harvested comment, the comment documents an external entity, not
+/// this symbol itself, so it is demoted to remarks.</summary>
+function HasForeignSymbolInSummary(const AStore: ISymbolStore; ACurrentFileId: Integer;
+  const ASummary: string): Boolean;
+var
+  i, N: Integer;
+  IdStart, IdEnd: Integer;
+  Ident: string;
+  Symbols: TArray<TSymbol>;
+begin
+  Result:= False;
+  N:= Length(ASummary);
+  if N = 0 then Exit;
+
+  // Scan for the first identifier in the summary.
+  i:= 1;
+  while (i <= N) and not IsIdentStart(ASummary[i]) do Inc(i);
+  if i > N then Exit; // no identifier found
+
+  IdStart:= i;
+  while (i <= N) and IsIdentPart(ASummary[i]) do Inc(i);
+  IdEnd:= i - 1;
+
+  Ident:= Copy(ASummary, IdStart, IdEnd - IdStart + 1);
+
+  // Look up the identifier in the store.
+  Symbols:= AStore.FindSymbolsByExactName(Ident);
+  if Length(Symbols) = 0 then Exit; // doesn't resolve - it's prose, not a symbol name
+
+  // Check if the first resolved symbol is from a different file. A symbol is foreign
+  // if its FileId does not match the file we're documenting.
+  if Length(Symbols) > 0 then
+    Result:= (Symbols[0].FileId > 0) and (Symbols[0].FileId <> ACurrentFileId);
+end;
+
+// Helper: moves a string to remarks if it contains a foreign symbol identifier.
+// Returns True if the summary was moved to remarks and summary should be cleared.
+function DemoteIfForeignSymbol(const AStore: ISymbolStore; ACurrentFileId: Integer;
+  const ASummary: string; var ARemarks: string): Boolean;
+begin
+  Result:= False;
+  if not HasForeignSymbolInSummary(AStore, ACurrentFileId, ASummary) then Exit;
+  // Move summary to remarks (with blank line separator if remarks exists)
+  if ARemarks <> '' then
+    ARemarks:= ASummary + #10#10 + ARemarks
+  else
+    ARemarks:= ASummary;
+  Result:= True;
+end;
+
+/// <summary>Extracts non-whitespace runs from a string for deduplication comparison,
+/// treating each significant phrase as a dedupable unit. Returns a comma-separated
+/// list of unique significant tokens.</summary>
+function ExtractSignificantTokens(const AText: string): string;
+var
+  Tokens: TStringList;
+  i, N: Integer;
+  InWord: Boolean;
+  CurWord: string;
+begin
+  Tokens:= TStringList.Create;
+  try
+    Tokens.Sorted:= True;
+    Tokens.Duplicates:= dupIgnore;
+    N:= Length(AText);
+    InWord:= False;
+    CurWord:= '';
+    for i:= 1 to N do
+    begin
+      if CharInSet(AText[i], [' ', #9, #10, #13, ',', '.', ';', ':', '(', ')', '[', ']']) then
+      begin
+        if InWord and (Length(CurWord) > 2) then
+          Tokens.Add(LowerCase(CurWord));
+        CurWord:= '';
+        InWord:= False;
+      end
+      else
+      begin
+        CurWord:= CurWord + AText[i];
+        InWord:= True;
+      end;
+    end;
+    if InWord and (Length(CurWord) > 2) then
+      Tokens.Add(LowerCase(CurWord));
+    Result:= Tokens.CommaText;
+  finally
+    Tokens.Free;
+  end;
+end;
+
+/// <summary>Implements D-1 dedupe: when re-running the harvest, prevent duplicate
+/// text accumulation by comparing the newly harvested summary against an existing
+/// one. If they contain mostly the same content, clear the new one to avoid
+/// re-publishing identical prose.</summary>
+procedure DedupeHarvestedSummary(const AExistingSummary: string; var ANewSummary: string);
+var
+  ExistingTokens: string;
+  NewTokens: string;
+  ExistingList: TStringList;
+  NewList: TStringList;
+  i: Integer;
+  DupeCount: Integer;
+begin
+  if AExistingSummary = '' then Exit;
+  if ANewSummary = '' then Exit;
+
+  // Extract significant tokens from both strings
+  ExistingTokens:= ExtractSignificantTokens(AExistingSummary);
+  NewTokens:= ExtractSignificantTokens(ANewSummary);
+
+  // If either side has no significant tokens, they're not really comparable
+  if (ExistingTokens = '') or (NewTokens = '') then Exit;
+
+  ExistingList:= TStringList.Create;
+  NewList:= TStringList.Create;
+  try
+    ExistingList.CommaText:= ExistingTokens;
+    NewList.CommaText:= NewTokens;
+
+    // Count how many tokens from the new summary already appear in the existing one
+    DupeCount:= 0;
+    for i:= 0 to NewList.Count - 1 do
+      if ExistingList.IndexOf(NewList[i]) >= 0 then Inc(DupeCount);
+
+    // If more than 50% of the new tokens are duplicates, skip this harvest
+    // to avoid re-publishing the same facts on re-run
+    if (NewList.Count > 0) and (DupeCount * 100 / NewList.Count > 50) then
+      ANewSummary:= '';
+  finally
+    ExistingList.Free;
+    NewList.Free;
+  end;
+end;
+
+// v(A1, ruling D-5): a harvested summary whose FIRST SENTENCE names a FOREIGN
+// symbol is DEMOTED into the remarks, never discarded.
+//
+// THE SHAPE, from a real corpus (INBOX-datacopy-2026-08-06, defect 8). An orphan
+// note documenting a REMOVAL --
+//
+//   // SourceStampString used to live here. It MOVED to uFileUtils ...
+//
+// sat above the next declaration, `TZEISSTransfer.Create`, and the harvester made
+// it that constructor's <summary>. The prose is TRUE, just not about this
+// declaration; what makes it harmful is that the <summary> is the ONE line a
+// Help Insight tooltip shows. So it is moved to <remarks>, where it is still
+// available to a reader and no longer claims to be the symbol's contract.
+//
+// THREE CONDITIONS, all narrow on purpose -- a false demotion loses a good
+// summary, and "the summary mentions a helper it calls" is an extremely common
+// and entirely legitimate shape:
+//
+//   1. the identifier must LOOK LIKE a symbol reference, not an English word.
+//      The test is a compound-case spelling (an uppercase letter somewhere after
+//      the first character, plus at least one lowercase) or a dotted qualifier:
+//      SourceStampString, uFileUtils, CSVRoutines.BackupFile all pass; Register,
+//      Create, HTML, "the" do not. Without this filter every capitalised English
+//      word that happens to be a method name somewhere in a 1.5M-symbol index
+//      would demote a perfectly good summary.
+//   2. it must RESOLVE in the index. An identifier that names nothing is prose.
+//   3. it must be FOREIGN -- EVERY declaration of that name lives in another
+//      FILE. A name declared in this unit (or naming this very declaration) is
+//      the ordinary "summary mentions its neighbours" case and stays put.
+//
+// Only the first sentence is inspected: a summary that OPENS on another symbol
+// is about that symbol, whereas a later mention is a cross-reference.
+function LooksLikeSymbolRef(const AWord: string): Boolean;
+var
+  i       : Integer;
+  HasUpper: Boolean;
+  HasLower: Boolean;
+begin
+  Result:= False;
+  if Length(AWord) < 3 then Exit;
+  HasUpper:= False;
+  HasLower:= False;
+  for i:= 2 to Length(AWord) do
+    if CharInSet(AWord[i], ['A'..'Z']) then begin HasUpper:= True; Break; end;
+  for i:= 1 to Length(AWord) do
+    if CharInSet(AWord[i], ['a'..'z']) then begin HasLower:= True; Break; end;
+  Result:= HasUpper and HasLower;
+end;
+
+// The candidate identifiers of ASummary's first sentence, in order, capped so a
+// pathological comment cannot turn one harvest into hundreds of index queries.
+// A sentence ends at '. ' (or a terminal '.'); dotted qualifiers are split on
+// the dot and each segment offered separately, which is what makes
+// 'uFileUtils.SourceStampString' resolvable segment by segment.
+function FirstSentenceIdents(const ASummary: string): TArray<string>;
+const
+  MAX_CANDIDATES = 8;
+var
+  i, N, J: Integer;
+  Sent   : string ;
+  Word   : string ;
+begin
+  Result:= nil;
+  N     := Length(ASummary);
+  // Terminate the sentence at the first '.' that is followed by whitespace or
+  // end-of-string -- so 'uFileUtils.SourceStampString' does not end it.
+  Sent:= ASummary;
+  for i:= 1 to N do
+    if (ASummary[i] = '.') and ((i = N) or CharInSet(ASummary[i + 1], [' ', #9])) then
+    begin
+      Sent:= Copy(ASummary, 1, i - 1);
+      Break;
+    end;
+  i:= 1;
+  N:= Length(Sent);
+  while i <= N do
+  begin
+    if not IsIdentStart(Sent[i]) then begin Inc(i); Continue; end;
+    J:= i;
+    while (J <= N) and IsIdentPart(Sent[J]) do Inc(J);
+    Word:= Copy(Sent, i, J - i);
+    i   := J;
+    if not LooksLikeSymbolRef(Word) then Continue;
+    if Length(Result) >= MAX_CANDIDATES then Break;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)]:= Word;
+  end;
+end;
+
+// True when AName resolves in the index and EVERY declaration of it sits in a
+// file other than ASym's. Unresolvable -> False (prose, not a symbol reference);
+// declared here as well as elsewhere -> False (not foreign).
+function NamesForeignSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
+  const AName: string): Boolean;
+var
+  Hits: TArray<TSymbol>;
+  H   : TSymbol        ;
+begin
+  Result:= False;
+  if SameText(AName, ASym.Name) or SameText(AName, LastSeg(ASym.QualifiedName)) then Exit;
+  Hits:= AStore.FindSymbolsByExactName(AName);
+  if Length(Hits) = 0 then Exit;
+  for H in Hits do
+    if H.FileId = ASym.FileId then Exit;
+  Result:= True;
+end;
+
+procedure DemoteForeignSummary(const AStore: ISymbolStore; const ASym: TSymbol;
+  var AFacts: TDocFacts);
+var
+  Cand: string;
+begin
+  if AFacts.HarvestedSummary = '' then Exit;
+  for Cand in FirstSentenceIdents(AFacts.HarvestedSummary) do
+  begin
+    if not NamesForeignSymbol(AStore, ASym, Cand) then Continue;
+    // Demote, never discard. The prose keeps its provenance marker via
+    // EmitHarvestedRemarks, so a later run re-promotes it automatically once the
+    // comment or the declaration changes -- nothing here is a one-way door.
+    if AFacts.HarvestedRemarks = '' then
+      AFacts.HarvestedRemarks:= AFacts.HarvestedSummary
+    else
+      AFacts.HarvestedRemarks:= AFacts.HarvestedSummary + #10#10 + AFacts.HarvestedRemarks;
+    AFacts.HarvestedSummary:= '';
+    Exit;
+  end;
+end;
+
 procedure HarvestInterfaceComment(const AStore: ISymbolStore; const ASym: TSymbol;
   var AFacts: TDocFacts);
 var
   Lines: TArray<string>;
   Res  : THarvestResult;
+  Summary, Remarks: string;
 begin
   if ASym.StartLine <= 0 then Exit;
   try
@@ -687,7 +953,20 @@ begin
     Res:= HarvestScan(Lines, HarvestStartLine(Lines, ASym.ImplStartLine));
 
   if Res.Reason <> hrAccepted then Exit;
-  HarvestText(Res, AFacts.HarvestedSummary, AFacts.HarvestedRemarks);
+  HarvestText(Res, Summary, Remarks);
+
+  // v(PHASE A1 D-1): dedupe -- drop phrases that already appear in the existing summary
+  if AFacts.HarvestedSummary <> '' then
+    DedupeHarvestedSummary(AFacts.HarvestedSummary, Summary);
+
+  // v(PHASE A1 D-5): foreign-symbol demotion -- if the summary names a foreign
+  // symbol, move it to remarks and clear the summary, because the comment is
+  // about an external entity, not this symbol itself
+  if DemoteIfForeignSymbol(AStore, ASym.FileId, Summary, Remarks) then
+    Summary:= '';
+
+  AFacts.HarvestedSummary:= Summary;
+  AFacts.HarvestedRemarks:= Remarks;
 end;
 
 // Detects a Pascal 'deprecated' DIRECTIVE on ASym's declaration and, when

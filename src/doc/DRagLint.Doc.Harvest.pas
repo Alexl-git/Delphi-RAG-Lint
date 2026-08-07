@@ -62,8 +62,30 @@ unit DRagLint.Doc.Harvest;
 // * BLANK LINES ARE TRIMMED FROM BOTH ENDS OF THE ACCUMULATED BLOCK, not only
 //   from the top. The blank line between a comment and the declaration below it
 //   is no more part of the comment than the one above it is, and leaving it in
-//   would hand Task 7 a trailing empty paragraph to split off. Blank lines
-//   BETWEEN comment paragraphs are kept, which is what Task 7 splits on.
+//   would hand Task 7 a trailing empty paragraph to split off. Blank COMMENT
+//   lines (a bare `//`) between paragraphs are kept, which is what Task 7
+//   splits on -- see the boundary rule below for why a blank SOURCE line inside
+//   a block can no longer occur.
+//
+// THE BOUNDARY RULE (2026-08-06, plan item A1/1). A BLANK SOURCE LINE ENDS THE
+// BLOCK. The upward walk tolerates at most BLANK_GAP_MAX blank lines BELOW the
+// comment (the gap between it and the declaration, matching
+// FindDocRegionAbove's AllowGap = 1); once a comment line has been seen, the
+// next blank line is a boundary and the walk stops there.
+//
+// Before this rule the walk crossed blank lines without limit, so two SEPARATE
+// comment blocks -- a banner, a blank line, then eleven lines of real prose --
+// were accumulated as ONE block and the banner became paragraph 1, hence the
+// <summary>. That is `docs/INBOX-harvest-swallows-preceding-banner-comment.md`.
+// HarvestText's leading-banner drop (step 2b) was the first repair and it stays:
+// it catches a banner that leads a block with NO blank line after it, which this
+// rule cannot see. This rule is the more general one -- a preceding block is not
+// this declaration's comment whatever it contains, banner or prose.
+//
+// The same walk also stopped tolerating an UNBOUNDED gap below. A comment three
+// blank lines above a declaration is not that declaration's comment, and
+// FindDocRegionAbove -- whose window this scan's header has always claimed to
+// match -- would not have attributed it either.
 
 interface
 
@@ -161,6 +183,11 @@ const
   // Promoted from a bare 0.6 literal when the second reader was added -- two
   // copies of a tuning threshold is how they drift apart.
   SEPARATOR_SHARE_MIN = 0.6;
+  // How many blank SOURCE lines may sit between the comment block and the
+  // declaration below it. 1, deliberately: it is FindDocRegionAbove's AllowGap
+  // default, and the two must agree on where a region begins or the harvest
+  // reads a comment the doc-region attribution would never have claimed.
+  BLANK_GAP_MAX = 1;
 
 // Classifies one line, advancing AState across it. A line is CODE the moment it
 // carries a single non-whitespace character outside a comment -- `end; // done`
@@ -500,6 +527,9 @@ begin
 
   // (3) + (4) First paragraph is the summary, the rest are remarks prose,
   // separated by a blank line. Escaped with the ONE escaper (see the header).
+  // The AUTO_MARK volatility marker is added at EMIT time (when the tag is
+  // written to XML), not here, so that the harvested text itself stays pure.
+  // v(PHASE A1): dropping leading banner paragraphs has already happened above.
   ASummary:= EscXml(Paras[0]);
   if Length(Paras) > 1 then
   begin
@@ -549,6 +579,8 @@ var
   HugsEnd  : Boolean          ;
   GapBelow : Boolean          ;
   AllSep   : Boolean          ;
+  SeenText : Boolean          ; // a comment line has been accumulated already
+  Blanks   : Integer          ; // blank lines crossed BELOW the block so far
 begin
   Result.Reason   := hrNone;
   Result.RawLines := nil;
@@ -566,16 +598,32 @@ begin
   State:= lsNormal;
   for i:= 0 to N - 1 do ClassifyLine(ASrcLines[i], State, Infos[i]);
 
-  // Upward walk from the line above the declaration.
+  // Upward walk from the line above the declaration. See THE BOUNDARY RULE in
+  // this unit's header: at most BLANK_GAP_MAX blank lines below the block, and
+  // the first blank line AFTER a comment line has been seen ends the block.
+  //
+  // Breaking on that blank leaves StopIdx at -1, which is correct rather than
+  // merely convenient: the trailer tie-breaker asks "did a routine close
+  // IMMEDIATELY above this comment", and a blank-line boundary means the walk
+  // never reached whatever is above it, so there is no stop line to reason about.
   Bottom := ADeclLine - 2;
   Top    := Bottom + 1;  // empty range until something is accumulated
   StopIdx:= -1;
   HitDoc := False;
-  i      := Bottom;
+  SeenText:= False;
+  Blanks  := 0;
+  i       := Bottom;
   while i >= 0 do
   begin
     if Infos[i].Kind = lkDoc then begin HitDoc:= True; Break; end;
-    if not (Infos[i].Kind in [lkBlank, lkComment]) then begin StopIdx:= i; Break; end;
+    if Infos[i].Kind = lkBlank then
+    begin
+      if SeenText then Break;              // a blank line ENDS the block
+      Inc(Blanks);
+      if Blanks > BLANK_GAP_MAX then Break; // ... and the gap below is bounded
+    end
+    else if Infos[i].Kind <> lkComment then begin StopIdx:= i; Break; end
+    else SeenText:= True;
     Top:= i;
     Dec(i);
   end;
