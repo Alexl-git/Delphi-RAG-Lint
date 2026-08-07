@@ -10,7 +10,7 @@ Status keys: `[ ]` not started · `[~]` in flight · `[x]` done · `[?]` needs a
 
 ## >>> RESUME POINT (updated 2026-08-07, second pass) -- READ THIS FIRST
 
-**State.** PHASE A is COMPLETE. **PHASE B: B1, B3, B7 and B9 are DONE.** Battery **227/227**
+**State.** PHASE A is COMPLETE. **PHASE B: B1, B3, B7, B8 and B9 are DONE.** Battery **228/228**
 (~12 min, needs `pwsh`; one runner added for B3). The exe beside the tests
 (`third_party\dll-win64\drag-lint.exe`) is rebuilt from that source -- rebuild only if you
 change `src\` again.
@@ -19,8 +19,8 @@ Working tree carries `FEATURES.txt` (another workstream's, **do not commit**) an
 INBOX notes (untracked by convention). Nothing else is outstanding.
 
 **Next action: the rest of PHASE B** -- **B2/B10** together (the same D-2 rule at two levels),
-then **B4/B5/B6** (all the same unscoped-bucket family), then **B8** (cosmetic, and the only
-one of the ten that is purely cosmetic).
+then **B4/B5/B6** (all the same unscoped-bucket family). Those five are all that remain, plus
+the `rules/` line-ending sweep noted under B8.
 
 **One decision is still waiting on the user, and only one:** A4 deliberately left open whether
 a PRESENT-but-EMPTY `<param>` body deserves its own lower-severity `hint`. It needs a new
@@ -408,11 +408,37 @@ no-index error and the baseline line to **stderr** whenever the output is machin
 Regression test: `tests\ergonomics\run_pipeline_tests.ps1` section 6, which asserts the banner
 is absent from stdout AND still present on stderr.
 
-### B8 `[ ]` #9b -- report encoding cosmetics
+### B8 `[x]` #9b -- report encoding cosmetics -- DONE 2026-08-07
 
-The report file carries a UTF-8 BOM, and `writeln-in-source` uses a real em dash while
-every other rule message uses `--`. That one character is what makes the report non-ASCII.
-Normalise the message and drop the BOM.
+**SHIPPED.** `tests/autotest/run_report_encoding.ps1` (5 checks, RED first with 6 non-ASCII
+bytes in the report: 3 BOM + 3 em dash).
+
+Two independent causes, both fixed:
+- the report was written with `TFile.WriteAllText(..., TEncoding.UTF8)`, and that encoding
+  carries a PREAMBLE, so every report opened `EF BB BF`. Now
+  `TFile.WriteAllBytes(OutPath, TEncoding.UTF8.GetBytes(...))` -- same UTF-8, no preamble, so
+  a path that genuinely needs non-ASCII still round-trips while the ordinary report is plain
+  ASCII;
+- `rules/writeln-in-source.json` held a real em dash (U+2014). Normalised to `--`, which is
+  what every other message in the catalogue uses.
+
+The runner drives the report END TO END -- index a fixture, `lint-all --output`, read the
+bytes -- rather than only scanning the rule files, so a future writer that reintroduces a
+preamble fails here too. It also asserts the fixture actually fired `writeln-in-source`,
+without which the ASCII check would pass vacuously. (That check earned its place immediately:
+the first draft spelled the call `Writeln` and the rule's `#eq?` predicate is case-SENSITIVE
+on `WriteLn`, so the rule never fired and the em dash never reached the report.)
+
+**Observed while doing this, NOT fixed, for a later sweep:** 13 of the 112 files in `rules/`
+(`empty-on-handler`, `gettickcount-wraparound`, `hardcoded-absolute-path`,
+`hardcoded-connection-string`, `hardcoded-ip-address`, `locale-sensitive-conversion`,
+`not-comparison-precedence`, `outputdebugstring`, `public-field`, `redundant-not-not`,
+`uppercase-compare`, `uppercase-compare-always-false`, `writeln-in-source` -- each in both its
+`.json` and `.scm` form) use LF line endings where the rest of the repo is CRLF.
+`run_encoding_guard.ps1` does not cover `rules/`, which is why it never showed. Normalising
+them and adding `rules/` to the guard's roots is a self-contained follow-up; it was left out
+of B8 deliberately because it is a different invariant from the one B8 is about, and folding
+it in would have made this commit a 26-file line-ending churn.
 
 ### B9 `[x]` New noise introduced by the loop-bound fix -- DONE 2026-08-07.
 The suspicion in the original note was exactly right, and much bigger than one variable

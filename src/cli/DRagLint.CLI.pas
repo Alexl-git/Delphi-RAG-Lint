@@ -8805,7 +8805,15 @@ begin
         OL.AppendLine('');
         OL.AppendLine(Format('scanned %d file(s):', [Length(FilePaths)]));
         for var SP: string in FilePaths do OL.AppendLine('  ' + SP);
-        TFile.WriteAllText(OutPath, OL.ToString, TEncoding.UTF8);
+        { B8: GetBytes, not WriteAllText(..., TEncoding.UTF8). TEncoding.UTF8
+          carries a PREAMBLE, and WriteAllText emits it, so every report opened
+          with EF BB BF -- a BOM on a plain-text artefact that `type`, grep and
+          half the editors that guess an encoding all have to step over. GetBytes
+          returns the same UTF-8 without the preamble, so a report that needs
+          non-ASCII (a path can hold it) still round-trips, while the ordinary
+          all-ASCII report is now byte-for-byte plain ASCII. Pinned by
+          tests\autotest\run_report_encoding.ps1. }
+        TFile.WriteAllBytes(OutPath, TEncoding.UTF8.GetBytes(OL.ToString));
       finally
         OL.Free;
       end;
