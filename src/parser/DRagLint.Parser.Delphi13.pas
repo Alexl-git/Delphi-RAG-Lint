@@ -1754,6 +1754,30 @@ begin
         Dec(AState.RoutineDepth);
       end;
     end;
+    { NESTED ROUTINES. In Pascal a local procedure/function lives in the
+      DECLARATION part -- before `begin` -- so it is a sibling of declVars, NOT a
+      child of `body`. Walking only `body` therefore never entered a nested
+      routine, and every call made inside one was invisible to the reference
+      index: `SamePathFolder`, called once from inside a local function, had ZERO
+      ref rows, so unused-public-symbol called live code dead public API and
+      find-callers / impact / the call graph under-reported for any unit using
+      local functions -- an idiomatic Delphi pattern, and commonest in exactly
+      the large routines people most want a call graph for.
+
+      Walked at RoutineDepth > 0, so the nested routine still does not emit a
+      SYMBOL of its own (its decl is not a unit-level API, and EmitRoutineLocals
+      keeps its locals from leaking into the parent) -- only its references are
+      collected, which is what the reference-derived rules were missing. }
+    for i:= 0 to ANode.NamedChildCount - 1 do
+      if ANode.NamedChild(i).NodeType = 'defProc' then
+      begin
+        Inc(AState.RoutineDepth);
+        try
+          Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+        finally
+          Dec(AState.RoutineDepth);
+        end;
+      end;
     Exit;
   end; // if
 
