@@ -224,7 +224,7 @@ type
         class-typed caller would silently get different behaviour. Every caller
         goes through ISymbolStore, so omitting it here costs nothing. }
       function FindUnresolvedNameCallers(const AName: string;
-        ACallSitesOnly: Boolean): TArray<TResolvedCaller>;
+        ACallSitesOnly: Boolean; AReachableToFileId: Int64): TArray<TResolvedCaller>;
       function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
       function CountCallEdges: Int64;
       function PurgeLocals: Int64;
@@ -1481,22 +1481,71 @@ end; // function
 /// all, e.g. a plain top-level routine) is kept: s.parent_id is either a
 /// non-matching id or NULL, either of which satisfies the OR.</para></summary>
 function TSQLiteSymbolStore.FindUnresolvedNameCallers(const AName: string;
-  ACallSitesOnly: Boolean): TArray<TResolvedCaller>;
+  ACallSitesOnly: Boolean; AReachableToFileId: Int64): TArray<TResolvedCaller>;
 var
-  Q    : TFDQuery              ;
-  List : TList<TResolvedCaller>;
-  R    : TResolvedCaller       ;
-  KindP: string                ;
+  Q     : TFDQuery              ;
+  List  : TList<TResolvedCaller>;
+  R     : TResolvedCaller       ;
+  KindP : string                ;
+  ScopeC: string                ; { the reach CTE, or '' }
+  ScopeP: string                ; { the reach predicate, or '' }
 begin
   { ACallSitesOnly=False is the historic kind-blind scan. Its contract lives on
     the ISymbolStore declaration in DRagLint.Core.Interfaces and nowhere else --
     see the note in this routine's own header for why it is not restated here. }
   if ACallSitesOnly then KindP:= 'AND ' + CallSiteRefKindSql('r') + ' ' else KindP:= '';
+
+  { USES-SCOPE FILTER -- contract on the ISymbolStore declaration. `reach` is
+    the transitive set of files that can SEE AReachableToFileId: seeded with the
+    file itself (a same-unit caller needs no uses clause) and closed over
+    unit_uses in the USER direction -- edge u means u.file_id uses
+    u.target_file_id, so a file joins the set when it uses a file already in it.
+    Transitive rather than direct on purpose: an INHERITED member can be called
+    without using the unit that declares it, as long as the unit declaring the
+    receiver's class is used, and that unit uses the declaring one.
+
+    Rows with target_file_id NULL (a uses entry naming a unit this DB does not
+    index -- Classes, SysUtils, the DevExpress packages) contribute no edge,
+    which is correct: an unindexed unit cannot declare the target either. The
+    resolution pass that populates target_file_id (ResolveUnitUsesTargets) is
+    what makes this filter meaningful, so a DB indexed before that pass existed
+    would over-filter -- reindex, do not loosen the predicate.
+
+    NO CARVE-OUT FOR .dfm, and that was checked rather than assumed. A .dfm has
+    no uses clause, so scoping it by the uses graph can only ever exclude it --
+    which would be a silent regression IF a .dfm ref could reach this bucket.
+    It cannot: measured on the ORM3 index, all 1586 .dfm refs are kind
+    'event-binding' and they name event HANDLER METHODS, so ACallSitesOnly=True
+    (the routine case) already excludes them by kind, and the non-routine case
+    never sees them because a handler is a routine. A `type_use` from a .dfm --
+    the case that WOULD matter, `object Edit1: TMyEdit` naming a component type
+    from another unit -- is not emitted at all today. If .dfm type_use refs are
+    ever indexed, this filter must exempt them BEFORE they are trusted.
+    An exemption phrased as "any file with no uses rows" was tried and rejected:
+    it also exempts a .pas with no uses clause, which is a real unit whose refs
+    must be scoped -- it let the whole section-7 noise back in.
+
+    Omitted entirely (no CTE, no bound param) when the caller passes 0, so the
+    historic whole-DB scan costs exactly what it did before. }
+  if AReachableToFileId > 0 then
+  begin
+    ScopeC:= 'WITH RECURSIVE reach(fid) AS (' +
+             '  SELECT :tf ' +
+             '  UNION ' +
+             '  SELECT u.file_id FROM unit_uses u JOIN reach ON u.target_file_id = reach.fid) ';
+    ScopeP:= '  AND r.file_id IN (SELECT fid FROM reach) ';
+  end
+  else
+  begin
+    ScopeC:= '';
+    ScopeP:= '';
+  end;
+
   List:= TList<TResolvedCaller>.Create;
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:=
+    Q.SQL.Text:= ScopeC +
       'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line ' +
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
@@ -1505,9 +1554,11 @@ begin
       '  AND r.id NOT IN (SELECT ref_id FROM call_edges) ' +
       '  AND (s.parent_id IS NULL OR s.parent_id NOT IN (' +
       '        SELECT id FROM symbols WHERE name = :n2 AND kind IN (''class'',''interface'',''record'',''type''))) ' +
+      ScopeP +
       'ORDER BY f.path, r.start_line';
     Q.ParamByName('n').AsString:= AName;
     Q.ParamByName('n2').AsString:= AName;
+    if AReachableToFileId > 0 then Q.ParamByName('tf').AsLargeInt:= AReachableToFileId;
     Q.Open;
     while not Q.Eof do
     begin

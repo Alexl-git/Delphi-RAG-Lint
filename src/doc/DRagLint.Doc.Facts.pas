@@ -898,8 +898,18 @@ begin
     // v(ADP3 T3i review round 4): neither is paraphrased here, and no kind list
     // is written here -- the paraphrase that used to sit at this spot named five
     // type kinds and was narrower than the predicate it described.
+    //
+    // USES-SCOPE (INBOX-datacopy 2026-08-06 section 7): ASym.FileId scopes the
+    // bucket to refs made from a file that can REACH this declaration through
+    // the uses graph. A bare name is not evidence on its own -- 'Create' matched
+    // 28 unresolved call refs in one small project and every constructor in the
+    // index claimed all of them, naming routines whose units cannot use the
+    // target at all. Reachability is a Delphi rule, not a guess, so what it
+    // removes is not merely improbable but impossible. Contract + the
+    // NULL-target and per-DB-file-id caveats: the ISymbolStore declaration.
     ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
-                                                 CanBeCallTarget(ASym.Kind));
+                                                 CanBeCallTarget(ASym.Kind),
+                                                 ASym.FileId);
     for RC in ResCallers do
     begin
       FR:= ToFactRef(RC);
@@ -922,6 +932,14 @@ begin
       // symbol's fact would depend on which DB a reference happened to live in.
       // The expression is repeated because it is CODE; the reasoning is not, and
       // lives on CanBeCallTarget's header.
+      // NO uses-scope here, and that is not an oversight: ASym.FileId is a
+      // PRIMARY-store key, and file ids are per-DB, so handing it to another
+      // store would seed the reachable set from an unrelated file (or none) and
+      // silently drop every cross-DB caller. The scope filter is only sound
+      // where the id and the uses graph come from the same DB. The consequence
+      // is that section 7's noise can still arrive from an EXTRA store; fixing
+      // that needs the target unit resolved BY NAME inside each extra store,
+      // which is a separate change.
       ResCallers:= ExStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
                                                     CanBeCallTarget(ASym.Kind));
       for RC in ResCallers do

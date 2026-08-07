@@ -414,8 +414,28 @@ type
     /// paraphrase in this very block until round 4, which was narrower than the
     /// predicate because hover resolves properties, fields, locals and SQL
     /// symbols into the same branch.</para></remarks>
+    /// <param name="AReachableToFileId">USES-SCOPE FILTER (INBOX-datacopy
+    /// 2026-08-06 section 7). Pass the file id of the file DECLARING the symbol
+    /// being asked about and only refs made from a file that can reach it
+    /// through the uses graph -- itself, a direct user, or a transitive one --
+    /// are returned. 0 (the default) disables the filter and restores the
+    /// historic whole-DB scan. The rule it encodes is a Delphi language rule,
+    /// not a heuristic: a call from unit U to a symbol declared in unit T
+    /// requires T in U's uses, directly or (for an inherited member) through
+    /// the unit that does. Without it a bare-name bucket attributes every
+    /// unresolved <c>Create</c> in the index to every constructor in it, which
+    /// is what section 7 measured -- 28 unresolved 'Create' call refs, 0
+    /// call_edges rows, one Called-from list naming five routines in units that
+    /// CANNOT use the target (uZeissRoutines' implementation uses uFileUtils, so
+    /// uFileUtils cannot use uZeissRoutines). Only the '?' bucket is affected;
+    /// resolved call_edges callers never pass through here. PASS 0 FOR AN EXTRA
+    /// (cross-DB) STORE: file ids are per-DB keys, so a primary-store id names a
+    /// different file -- usually none -- in another store's files table, and the
+    /// reachable set would collapse to empty. See the extra-store loop in
+    /// DRagLint.Doc.Facts.</param>
     function FindUnresolvedNameCallers(const AName: string;
-      ACallSitesOnly: Boolean = True): TArray<TResolvedCaller>;
+      ACallSitesOnly: Boolean = True;
+      AReachableToFileId: Int64 = 0): TArray<TResolvedCaller>;
     /// <summary>Find-callees: every call edge whose ref is enclosed by
     /// AEnclosingSymbolId (i.e. every resolved call made from inside that
     /// routine's body).</summary>

@@ -17,13 +17,14 @@ Battery **222/222** green (222 runners, 0 fail).
 
 ### >>> THE EXACT NEXT ACTION
 
-**Step 2a is COMMITTED AND PUSHED** (`4ce699e`), battery **222/222**. `main` is in sync with origin.
-Nothing is pending on disk except `FEATURES.txt`, which is the user's and predates this work.
+**#7 is DONE** (uses-scope filter, battery 223/223). See "STEP 7" below for what shipped and the
+residuals it deliberately leaves.
 
-**Start here: #7 -- constructor `Called from:` misattribution.** The plan is written out below and
-the fix is a one-line guard in `DRagLint.Doc.Facts.pas`.
+**Start here: #3 -- `document` vs `doc-drift` on `<param>`. IT NEEDS THE USER'S ANSWER FIRST**
+(option (a) `--params` skeletons vs option (b) `doc-drift` suppression). Ask before implementing.
 
-**Blocked and needing the user's answer first: #3** (`document` vs `doc-drift` on `<param>`).
+**If #3 is still unanswered, do #5b instead** (`except` handler ending in `exit` still merged with
+the normal path -- there is a SECOND wrong CFG merge route still to find).
 
 ---
 
@@ -36,6 +37,7 @@ the fix is a one-line guard in `DRagLint.Doc.Facts.pas`.
 | 5a | for-loop zero-trip modelling (29 FPs) | `9913ea5` |
 | 9a,9c,5c,1a,2,4 | roll-up, scanned list, dedup, unbuilt-DB notice, prune-by-default, prose `<returns>` | `542dace` |
 | 6 | nested/local routine bodies never walked -> refs missing | `4ce699e` |
+| 7 | constructor `Called from:` misattribution (uses-scope filter) | (this round) |
 
 ---
 
@@ -67,32 +69,51 @@ their own -- only their references.
 
 ---
 
-## NOT DONE -- ordered backlog
+## STEP 7 -- constructor `Called from:` misattribution (DONE, battery 223/223)
 
-### #7 -- constructor `Called from:` misattributed across types (NEXT, plan ready)
+**THE RECORDED PLAN WAS WRONG AND WAS NOT USED.** It said: skip bucket 2 when
+`Length(FindSymbolsByExactName(LastSeg)) > 1`. That would have broken
+`tests/callresolve/run_calledfrom_resolved.ps1`, which deliberately locks that `CallsUnknown` IS
+listed with a ` ?` for `TAlpha.Run` -- and that fixture has exactly TWO symbols named `Run`. There
+is no threshold that separates "`Create`, 6 symbols, worthless" from "`Run`, 2 symbols, locked as
+required" except an arbitrary number. Counting was the wrong axis.
 
-`document --apply` writes `Called from:` lists naming routines that cannot possibly call the
-constructor (proof is structural: `uZeissRoutines`'s implementation uses `uFileUtils`, so
-`uFileUtils` cannot use `uZeissRoutines`).
+**Reproduced before fixing** (and this refuted a plausible alternative): on
+`C:\Projects\.drag-lint\DataCopy.sqlite` there are **28 `call` refs named `Create` and ZERO
+`call_edges` rows for any of them** -- `query find-callers --name Create --resolved` returns 0
+callers. So the pollution is entirely bucket 2; the resolved bucket is not involved.
 
-**Diagnosed.** `DRagLint.Doc.Facts.pas` (~line 878 onward) gathers `Called from:` from TWO buckets:
-1. `FindResolvedCallers(ASym.Id)` -- grounded in `call_edges`. Correct.
-2. `FindUnresolvedNameCallers(LastSeg)` -- name-matching refs with NO `call_edges` row.
+**The fix -- USES-REACHABILITY, not counting.** `FindUnresolvedNameCallers` takes a new
+`AReachableToFileId` (default 0 = the historic whole-DB scan). When set, a recursive CTE over
+`unit_uses` builds the set of files that can SEE the declaring file -- itself, direct users, and
+transitive users -- and the bucket is restricted to refs made from that set. This is the reporter's
+own structural disproof turned into code: a call from unit U to a symbol in unit T requires T in
+U's uses, so what the filter removes is not improbable but *impossible*. Transitive rather than
+direct because an INHERITED member can be called without using the unit that declares it.
 
-For a constructor `LastSeg` is `Create`, so bucket 2 sweeps in EVERY unresolved `Create` call in the
-index (`TStringList.Create`, `TIniFile.Create`, ...). It is already marked `' ?'` by design, but for
-a name that common the marker does not rescue it -- it pollutes essentially every constructor's
-tooltip, which is what humans read in Help Insight.
+Measured on the reporter's corpus: `uZeissRoutines.TZEISSTransfer.Create` went from **15 callers**
+(naming `uFileUtils`, `DPPRoutines`, `uConfigurationService`) to **the 3 sites in
+`uMainZeissCopy`** -- the one unit that actually uses `uZeissRoutines`.
 
-**Planned fix (principled, no hardcoded name list):** before running bucket 2, if
-`Length(AStore.FindSymbolsByExactName(LastSeg)) > 1` then SKIP bucket 2 -- when the index holds more
-than one symbol with that short name, a bare-name match cannot identify THIS one. Covers
-Create/Destroy/Execute/Clear/Add automatically and leaves genuinely unique names working.
-Both store methods already exist (`FindSymbolsByExactName` at Interfaces.pas:78,
-`FindUnresolvedNameCallers` at :417).
+Test: `tests/callresolve/run_calledfrom_uses_scope.ps1` (6 checks, both directions).
 
-Test it the same way as `run_nested_routine_refs.ps1`: assert the noise is gone AND that a
-uniquely-named routine still gets its unverified caller.
+**Residuals -- deliberate, do not "finish" without deciding:**
+
+- **Same-unit and reachable-unit noise survives.** Those 3 remaining `uMainZeissCopy` entries are
+  `TStringList.Create`-style calls; they are in a unit that CAN see the target, so reachability
+  cannot exclude them. Killing those needs the RECEIVER, which the index does record but does not
+  associate: for `Lst:= TStringList.Create(True)` the refs are `read 'TStringList'` at col 9 then
+  `call 'Create'` at col 21, i.e. recoverable only by position arithmetic. A receiver-aware bucket
+  is the real end state.
+- **Extra (cross-DB) stores pass 0 deliberately.** File ids are per-DB keys, so handing a
+  primary-store id to another store would seed the reachable set from an unrelated file and drop
+  every legitimate cross-DB caller. Section 7's noise can therefore still arrive from an extra
+  store; fixing that needs the target unit resolved BY NAME inside each extra store.
+- **`ComputeCoveredBy` (DRagLint.Doc.SymbolFacts, ~2851) still takes the unscoped default.** It has
+  the same pollution exposure and says so in its own comment ("a phantom name-match inside a
+  *Test.pas would assert Covered by"). Scoping it needs a per-hop file id its `Walk` does not carry.
+- **A `.dfm` carve-out was tried and REJECTED, do not re-add it.** Reasoning and the measurement
+  that settles it are in the code comment on the filter itself.
 
 ### #3 -- `document` and `doc-drift` disagree about `<param>` (NEEDS A USER DECISION)
 
@@ -120,6 +141,15 @@ It writes `<projectRoot>\drag-lint.sqlite` by convention instead of resolving th
 that CONTAINS the path. Consequence: docs get generated from one DB and linted against another, and
 the manifest's `exclude` patterns never apply to the DB the IDE actually uses. #1a (resolve-dbs now
 NAMES an unbuilt manifest DB on stderr) shipped; this half did not.
+
+### NEW -- `document --qname --apply` run twice on one class corrupts the file
+
+Filed as `docs/INBOX-document-qname-second-apply-nests-block-on-stale-anchor.md` (found while
+building the #7 fixture). The second apply anchors on the DB's PRE-EDIT `start_line`, so it writes
+its block *inside* the first one: two `<remarks>` opens, malformed XML, and the symbol it was asked
+about left undocumented. Fourth instance of one root cause -- a writer trusting index coordinates
+without verifying what is at them. Workaround: one `document --unit` pass instead of several
+`--qname` applies.
 
 ### #8 -- harvest swallows an unrelated preceding comment
 
@@ -161,10 +191,16 @@ the new report's section 8.
    nothing. Worse, my first repro appeared to CONFIRM it, because `Writeln(X)` treats call arguments
    as possible DEFS rather than reads, so the control variable was never actually read. A repro that
    confirms a hypothesis deserves the same scrutiny as one that refutes it.
+8. **A plan written into THIS document is not pre-verified.** #7's recorded plan would have broken
+   an existing lock test on its first run. Before implementing a plan from here, grep the suite for
+   a test asserting the behaviour the plan proposes to change -- the plan was written with the
+   defect in view, not the suite.
+9. **Normalise every new repo file to CRLF before running the battery**, `.md` as well as `.ps1`;
+   the agent `Write` tool emits lone LF and `run_encoding_guard.ps1` fails the whole battery for it.
 
 ---
 
-## Drafted commit message for the uncommitted step 2a
+## Commit message used for step 2a (historical -- already committed as `4ce699e`)
 
 ```
 fix(index): walk nested routine bodies so their calls reach the reference index
