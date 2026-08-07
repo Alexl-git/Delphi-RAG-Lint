@@ -633,8 +633,10 @@ begin
         { a var passed to a call (or @x) may be a var/out param the callee assigns
           (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
         for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;
-        if (It.Node.NodeType = 'exprCall')
-           and (NodeText(It.Node.ChildByField('entity'), FSrc) = 'exit') then
+        { `exit(v)` assigns Result. IsValuedExit rather than a local test: this
+          site used to ask for NodeType = 'exprCall', but a CFG block stores the
+          STATEMENT node, so it never fired -- see the remarks on IsValuedExit. }
+        if IsValuedExit(It.Node, FSrc) then
         begin
           Idx := FVars.IndexOf('result');
           if Idx >= 0 then begin Result.Must[Idx] := True; Result.May[Idx] := True; end;

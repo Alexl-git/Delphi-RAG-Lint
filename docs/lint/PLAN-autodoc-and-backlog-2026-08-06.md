@@ -10,33 +10,43 @@ Status keys: `[ ]` not started · `[~]` in flight · `[x]` done · `[?]` needs a
 
 ## >>> RESUME POINT (updated 2026-08-07, second pass) -- READ THIS FIRST
 
-**State.** PHASE A is COMPLETE. **PHASE B: B3, B7 and B1 are now DONE.** Battery **227/227**
+**State.** PHASE A is COMPLETE. **PHASE B: B1, B3, B7 and B9 are DONE.** Battery **227/227**
 (~12 min, needs `pwsh`; one runner added for B3). The exe beside the tests
-(`third_party\dll-win64\drag-lint.exe`) is rebuilt from the B1/B3 source -- rebuild only if
-you change `src\` again.
+(`third_party\dll-win64\drag-lint.exe`) is rebuilt from that source -- rebuild only if you
+change `src\` again.
 
 Working tree carries `FEATURES.txt` (another workstream's, **do not commit**) and untracked
 INBOX notes (untracked by convention). Nothing else is outstanding.
 
-**Next action: the rest of PHASE B.** Suggested order: **B9 first** -- it is now cheap and
-may already be gone, because B1's real cause (every `try..except` emitted its body into the
-CFG twice) was exactly the sort of thing that manufactures phantom flow, so re-measure
-`lcount` at `uFileUtils.pas:1045` before writing any code. Then **B2/B10** together (the same
-D-2 rule at two levels), then **B4/B5/B6** (all the same unscoped-bucket family), then **B8**
-(cosmetic).
+**Next action: the rest of PHASE B** -- **B2/B10** together (the same D-2 rule at two levels),
+then **B4/B5/B6** (all the same unscoped-bucket family), then **B8** (cosmetic, and the only
+one of the ten that is purely cosmetic).
 
 **One decision is still waiting on the user, and only one:** A4 deliberately left open whether
 a PRESENT-but-EMPTY `<param>` body deserves its own lower-severity `hint`. It needs a new
 finding kind and a rules-catalogue entry, which adds findings to every consumer's run -- the
 user's call, not a side effect of A4.
 
-**Lesson from this pass, worth carrying:** two of the three items were not what the list said
-they were. B7 was already fixed and the list had simply not been updated -- CHECK BEFORE
-IMPLEMENTING. B1 was filed as "an `except` handler ending in `exit` still merges", which
-framed it as a divergence problem and sent the previous session hunting for a wrong EDGE; the
-actual defect was a wrong NODE SELECTION that duplicated the try body for every handler
-shape, exiting or not. The filed symptom was one visible corner of a much wider bug. Reproduce
-and characterise the defect's real boundary before accepting the filing's framing.
+**Lessons from this pass, worth carrying:**
+
+1. **Three of the four items were not what the list said they were.** B7 was already fixed and
+   the list had simply not been updated -- CHECK BEFORE IMPLEMENTING. B1 was filed as "an
+   `except` handler ending in `exit` still merges", which framed it as a divergence problem and
+   sent the previous session hunting for a wrong EDGE; it was really TWO defects -- a wrong
+   NODE SELECTION duplicating the try body for every handler shape, plus B9 -- and B9 in turn
+   was filed as noise about one variable when it was "no divert statement has ever worked".
+   Reproduce and characterise the real boundary before accepting a filing's framing.
+
+2. **Build the probe.** Three rounds of plausible reasoning about the try CFG were simply
+   wrong. A ~90-line throwaway CFG dumper printed `B6 -> [5]` for a block whose only item is
+   `exit;` and ended the argument in one line. Two probes were written this session (an AST
+   S-expression dumper and the CFG dumper); both are in the session scratchpad. If a third
+   flow defect turns up, promote them into `tools/`.
+
+3. **A fix that removes false positives can add them.** Making `exit` divert exposed two
+   modelling gaps that had been unreachable, and the naive change traded 7 FPs for 4. Measuring
+   before/after on real corpora with two purpose-built binaries -- and READING every changed
+   finding in the source -- is what caught it. Counts alone would have looked like a win.
 
 **One decision is waiting on the user, and only one:** A4 deliberately left open whether a
 PRESENT-but-EMPTY `<param>` body deserves its own lower-severity `hint`. It needs a new
@@ -404,17 +414,56 @@ The report file carries a UTF-8 BOM, and `writeln-in-source` uses a real em dash
 every other rule message uses `--`. That one character is what makes the report non-ASCII.
 Normalise the message and drop the BOM.
 
-### B9 `[ ]` New noise introduced by the loop-bound fix
+### B9 `[x]` New noise introduced by the loop-bound fix -- DONE 2026-08-07.
+The suspicion in the original note was exactly right, and much bigger than one variable
 
-`lcount` at `uFileUtils.pas:1045` -- previously invisible because the loop bound was never
-read; the bound-as-read fix exposed it. Check whether `exit(False)` inside an if-chain is
-being modelled as a divert.
+`exit(False)` was NOT being modelled as a divert. **Neither was anything else**: EmitStmt
+asked "is this a divert?" by comparing a `statement` node's WHOLE TEXT against `'exit'`, and a
+statement node includes its terminating semicolon, so the test read `'exit;' = 'exit'` and was
+always false. **No bare `exit;`, `exit(v);`, `break;` or `continue;` had ever left the flow**
+in any drag-lint release. Each fell through to whatever followed it.
 
-**Do this one FIRST, and MEASURE before writing code.** B1 (fixed 2026-08-07) turned out to
-duplicate the try body of every `try..except` into the CFG, which is exactly the kind of
-phantom flow that manufactures findings like this one. Re-run the measurement on
-`uFileUtils.pas:1045` against the current binary before assuming there is anything left to
-fix.
+It hid because a guard clause's join block normally holds the very assignment the fall-through
+would have skipped, so the wrong edge changed no answer. It stopped hiding where the
+assignment sits BEYOND the join -- which is why it surfaced as `lcount` here and, separately,
+as the `srcsize` half of B1. **B9 and the unexplained half of B1 were one defect.**
+
+Fix: `StatementKeyword` reads the statement's leading identifier (or the entity of its leading
+`exprCall`, which is what also repairs `exit(v)`, whose text never resembled `'exit'` at all).
+
+**Making exit divert exposed two modelling gaps that had been unreachable, and both had to be
+closed for the change to be a net improvement -- measured, not assumed:**
+
+- **`exit(v)` assigns Result.** A check for this already existed in `TDefiniteAssignment`, but
+  it asked for `NodeType = 'exprCall'` while a CFG block stores the STATEMENT node, so it had
+  never fired once. Now `IsValuedExit` in `DRagLint.Analysis.Cfg`, exported so the question has
+  ONE answer; it accepts either node shape.
+- **A divert inside a `try..finally` runs the finally.** `DivertVia` emits a COPY of each
+  enclosing finally body on the divert path -- a copy, not an edge into the block the normal
+  path uses, because sharing it would let divert state flow on into the code AFTER the try,
+  i.e. B1's fall-through one level up. `TLoopCtx` gained `FinallyDepth` so `break`/`continue`
+  replay only the finallys opened INSIDE their loop; a `try..finally` wrapping the whole loop
+  correctly keeps running afterwards.
+
+Measured before/after on three corpora with two binaries built for the purpose:
+
+| corpus | before | after | changed |
+|---|---|---|---|
+| DataCopy | 473 | **465** | -4 `double-free`, -3 `used-before-assignment`, -1 `function-result-not-set`; **0 new** |
+| TableTools | 424 | 424 | nothing |
+| Loader2019 | 3367 | 3366 | -2 `used-before-assignment`, **+1 `object-leak`** |
+
+Every removal was read in the source and confirmed a false positive. The single addition is a
+**REAL LEAK**, previously invisible: `Loader2019.Main.pas` `FormCreate` creates `INIFile` at
+3121 and frees it at 3335, and the `Exit;` at 3142 returns between the two.
+
+Tests: three flowengine cases asserting the EDGE (`tests/flowengine/FlowEngineTests.dpr`,
+61/61) -- deliberately the edge and not a downstream finding, because a rule-level test goes
+green again the moment any rule stops looking while the fall-through survives for the next
+analysis -- plus fixture cases in `object-leak.pas`, `function-result-not-set.pas` and
+`used-before-assignment-clean.pas`, each with a control (an exit OUTSIDE the try still leaks; a
+BARE exit still leaves Result unset), and each verified RED against the intermediate binary
+that had the divert fix but not the gap fixes.
 
 ### B10 `[ ]` Make D-2 a rule the tools follow
 

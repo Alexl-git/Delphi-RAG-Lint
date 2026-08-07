@@ -177,6 +177,175 @@ begin
   finally Cfg.Free; end;
 end;
 
+{ ---- B9: exit / break / continue must LEAVE the flow -------------------------
+
+  EmitStmt decided "is this statement a divert?" by comparing the `statement`
+  node's WHOLE TEXT against 'exit'. That text carries the trailing semicolon, so
+  the comparison was 'exit;' = 'exit' -- always false. No bare `exit;`,
+  `exit(v);`, `break;` or `continue;` had ever diverted: each fell through to
+  whatever came after it.
+
+  It hid because a guard clause's join block usually holds the very assignment
+  the fall-through would have skipped, so the wrong edge changed nothing
+  observable. It stopped hiding where the assignment sits BEYOND the join --
+  DataCopy's CopyFileVerified, where an `except` handler ending in `exit` let the
+  "exception fired before SrcSize was set" state reach the code after the try.
+
+  These assert the EDGE, not a downstream finding, because that is the thing
+  that was wrong: a rule-level test would pass again the moment any rule stopped
+  looking, and the fall-through would still be there for the next analysis. }
+
+function CfgItemText(const ACfg: TCfg; ABlock, AItem: Integer): string;
+var N: TTSNode; S, E, L: Integer;
+begin
+  Result := '';
+  N := ACfg.Blocks[ABlock].Items[AItem].Node;
+  S := Integer(N.StartByte); E := Integer(N.EndByte); L := E - S;
+  if (L <= 0) or (S < 0) or (E > Length(ACfg.Src)) then Exit;
+  Result := LowerCase(Trim(TEncoding.UTF8.GetString(ACfg.Src, S, L)));
+end;
+
+{ Index of the block holding an item whose source text is exactly ATextLower,
+  or -1. }
+function BlockWithItem(const ACfg: TCfg; const ATextLower: string): Integer;
+var B, I: Integer;
+begin
+  Result := -1;
+  for B := 0 to ACfg.BlockCount - 1 do
+    for I := 0 to ACfg.Blocks[B].Items.Count - 1 do
+      if CfgItemText(ACfg, B, I) = ATextLower then Exit(B);
+end;
+
+function ReachesBlock(const ACfg: TCfg; AFrom, ATarget: Integer): Boolean;
+var Seen: TList<Integer>; Q: TQueue<Integer>; B, S: Integer;
+begin
+  Result := False;
+  if (AFrom < 0) or (ATarget < 0) then Exit;
+  Seen := TList<Integer>.Create; Q := TQueue<Integer>.Create;
+  try
+    Q.Enqueue(AFrom); Seen.Add(AFrom);
+    while Q.Count > 0 do
+    begin
+      B := Q.Dequeue;
+      if B = ATarget then Exit(True);
+      for S := 0 to ACfg.Blocks[B].Succ.Count - 1 do
+        if Seen.IndexOf(ACfg.Blocks[B].Succ[S]) < 0 then
+        begin Seen.Add(ACfg.Blocks[B].Succ[S]); Q.Enqueue(ACfg.Blocks[B].Succ[S]); end;
+    end;
+  finally Seen.Free; Q.Free; end;
+end;
+
+procedure TestBareExitDiverts;
+const SRC =
+  'unit u; interface implementation' + sLineBreak +
+  'function P(b: Boolean): Integer; var n: Integer; begin' + sLineBreak +
+  '  result := 0;' + sLineBreak +
+  '  if b then exit;' + sLineBreak +
+  '  n := 5;' + sLineBreak +
+  '  result := n;' + sLineBreak +
+  'end; end.';
+var Cfg: TCfg; ExitBlk, AsgnBlk: Integer;
+begin
+  Cfg := BuildCfgFor(SRC);
+  try
+    Check('bare exit: built + not skipped', (Cfg <> nil) and not Cfg.Skipped);
+    if Cfg = nil then Exit;
+    ExitBlk := BlockWithItem(Cfg, 'exit;');
+    AsgnBlk := BlockWithItem(Cfg, 'n := 5');
+    Check('bare exit: the exit statement is in a block', ExitBlk >= 0);
+    if ExitBlk < 0 then Exit;
+    Check('bare exit: exactly one successor', Cfg.Blocks[ExitBlk].Succ.Count = 1);
+    Check('bare exit: successor is the CFG Exit block',
+          (Cfg.Blocks[ExitBlk].Succ.Count = 1) and (Cfg.Blocks[ExitBlk].Succ[0] = Cfg.ExitIdx));
+    Check('bare exit: does not fall through to the code after the guard',
+          not ReachesBlock(Cfg, ExitBlk, AsgnBlk));
+  finally Cfg.Free; end;
+end;
+
+procedure TestValuedExitDiverts;
+const SRC =
+  'unit u; interface implementation' + sLineBreak +
+  'function P(b: Boolean): Integer; var n: Integer; begin' + sLineBreak +
+  '  if b then exit(0);' + sLineBreak +
+  '  n := 5;' + sLineBreak +
+  '  result := n;' + sLineBreak +
+  'end; end.';
+var Cfg: TCfg; ExitBlk, AsgnBlk: Integer;
+begin
+  Cfg := BuildCfgFor(SRC);
+  try
+    Check('exit(v): built + not skipped', (Cfg <> nil) and not Cfg.Skipped);
+    if Cfg = nil then Exit;
+    ExitBlk := BlockWithItem(Cfg, 'exit(0);');
+    AsgnBlk := BlockWithItem(Cfg, 'n := 5');
+    Check('exit(v): the exit statement is in a block', ExitBlk >= 0);
+    if ExitBlk < 0 then Exit;
+    Check('exit(v): successor is the CFG Exit block',
+          (Cfg.Blocks[ExitBlk].Succ.Count = 1) and (Cfg.Blocks[ExitBlk].Succ[0] = Cfg.ExitIdx));
+    Check('exit(v): does not fall through to the code after the guard',
+          not ReachesBlock(Cfg, ExitBlk, AsgnBlk));
+  finally Cfg.Free; end;
+end;
+
+procedure TestBreakAndContinueDivert;
+const SRC_BREAK =
+  'unit u; interface implementation' + sLineBreak +
+  'procedure P; var n: Integer; begin' + sLineBreak +
+  '  while n > 0 do' + sLineBreak +
+  '  begin' + sLineBreak +
+  '    if n = 1 then break;' + sLineBreak +
+  '    n := 2;' + sLineBreak +
+  '  end;' + sLineBreak +
+  '  n := 3;' + sLineBreak +
+  'end; end.';
+  SRC_CONT =
+  'unit u; interface implementation' + sLineBreak +
+  'procedure P; var n: Integer; begin' + sLineBreak +
+  '  while n > 0 do' + sLineBreak +
+  '  begin' + sLineBreak +
+  '    if n = 1 then continue;' + sLineBreak +
+  '    n := 2;' + sLineBreak +
+  '  end;' + sLineBreak +
+  '  n := 3;' + sLineBreak +
+  'end; end.';
+var Cfg: TCfg; Blk, BodyBlk, HdrBlk: Integer;
+begin
+  Cfg := BuildCfgFor(SRC_BREAK);
+  try
+    Check('break: built + not skipped', (Cfg <> nil) and not Cfg.Skipped);
+    if Cfg = nil then Exit;
+    Blk     := BlockWithItem(Cfg, 'break;');
+    BodyBlk := BlockWithItem(Cfg, 'n := 2');
+    HdrBlk  := BlockWithItem(Cfg, 'n > 0');
+    Check('break: the break statement is in a block', Blk >= 0);
+    if Blk < 0 then Exit;
+    Check('break: exactly one successor', Cfg.Blocks[Blk].Succ.Count = 1);
+    { break leaves the loop entirely: neither the rest of the body nor the
+      header may be reachable from it. }
+    Check('break: rest of the loop body is unreachable from it',
+          not ReachesBlock(Cfg, Blk, BodyBlk));
+    Check('break: the loop header is unreachable from it',
+          not ReachesBlock(Cfg, Blk, HdrBlk));
+  finally Cfg.Free; end;
+
+  Cfg := BuildCfgFor(SRC_CONT);
+  try
+    Check('continue: built + not skipped', (Cfg <> nil) and not Cfg.Skipped);
+    if Cfg = nil then Exit;
+    Blk     := BlockWithItem(Cfg, 'continue;');
+    BodyBlk := BlockWithItem(Cfg, 'n := 2');
+    HdrBlk  := BlockWithItem(Cfg, 'n > 0');
+    Check('continue: the continue statement is in a block', Blk >= 0);
+    if Blk < 0 then Exit;
+    { continue goes DIRECTLY back to the loop header -- not on to the rest of
+      the body. (The body is reachable again THROUGH the header, which is why
+      this asserts the immediate successor rather than reachability.) }
+    Check('continue: exactly one successor', Cfg.Blocks[Blk].Succ.Count = 1);
+    Check('continue: its successor is the loop header',
+          (Cfg.Blocks[Blk].Succ.Count = 1) and (Cfg.Blocks[Blk].Succ[0] = HdrBlk));
+  finally Cfg.Free; end;
+end;
+
 procedure TestSolverForwardFixpoint;
 const SRC =
   'unit u; interface implementation procedure P; var x: Integer; begin' + sLineBreak +
@@ -495,6 +664,9 @@ begin
     TestGotoSkips;
     TestForRecordsLoopVar;
     TestTryFinallyBuilds;
+    TestBareExitDiverts;
+    TestValuedExitDiverts;
+    TestBreakAndContinueDivert;
     TestSolverForwardFixpoint;
     TestDefiniteAssignmentMust;
     TestDefiniteAssignmentMayOnly;

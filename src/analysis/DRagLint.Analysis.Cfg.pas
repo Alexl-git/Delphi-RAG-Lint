@@ -88,6 +88,22 @@ type
 /// <summary>Collect every `defProc` node anywhere under ARoot.</summary>
 function CfgFindProcs(const ARoot: TTSNode): TArray<TTSNode>;
 
+/// <summary>True when ANode is a VALUED exit -- `exit(v)` -- which assigns
+/// Result. A bare `exit;` is False: it leaves Result as it stands.</summary>
+/// <param name="ANode">Either the `exprCall` itself or the `statement` node
+/// wrapping it. Both shapes are accepted deliberately -- see the remarks.</param>
+/// <param name="ASrc">The unit's source bytes.</param>
+/// <remarks>THE SINGLE SOURCE for this question, because asking it in one place
+/// and answering it in another is exactly how it broke. TDefiniteAssignment
+/// carried its own copy that tested `NodeType = 'exprCall'`, but a CFG block
+/// stores the STATEMENT node, so the copy never fired once and every `exit(v)`
+/// looked like it left Result unset. It was invisible only because `exit` did
+/// not divert either, so no path ever reached the routine exit through one.
+/// Fixing the divert made it visible immediately, on three real routines.
+/// <para>The name test is case-INSENSITIVE: Delphi identifiers are, and `Exit`
+/// is written both ways in the same file.</para></remarks>
+function IsValuedExit(const ANode: TTSNode; const ASrc: TBytes): Boolean;
+
 implementation
 
 function NodeStr(const N: TTSNode; const ASrc: TBytes): string;
@@ -103,6 +119,62 @@ end;
 function LowerText(const N: TTSNode; const ASrc: TBytes): string;
 begin
   Result := LowerCase(Trim(NodeStr(N, ASrc)));
+end;
+
+{ The leading identifier of a `statement` node, lowercased -- '' when it does not
+  begin with one.
+
+  B9. EmitStmt used to ask "is this a divert?" by comparing the statement's WHOLE
+  TEXT against 'exit'. A statement node INCLUDES its terminating semicolon, so
+  that comparison read 'exit;' = 'exit' and was always false: no bare `exit;`,
+  `exit(v);`, `break;` or `continue;` had ever left the flow. Each fell through
+  to whatever followed it.
+
+  It stayed invisible because a guard clause's join block normally holds the very
+  assignment the fall-through would have skipped, so the wrong edge changed no
+  answer. It became visible where the assignment sits BEYOND the join -- DataCopy
+  CopyFileVerified, where an `except` handler ending in `exit` let the "exception
+  fired before SrcSize was set" state reach the code after the try and produced
+  used-before-assignment on a variable that is plainly set.
+
+  Reading the leading child rather than stripping the semicolon is what also
+  fixes `exit(0);`, whose text never resembled 'exit' at all. An entity that is
+  not a plain identifier -- `obj.Exit;` -- yields '' and correctly does not
+  divert. }
+function StatementKeyword(const ANode: TTSNode; const ASrc: TBytes): string;
+var
+  C: TTSNode;
+begin
+  Result := '';
+  if ANode.NamedChildCount = 0 then Exit;
+  C := ANode.NamedChild(0);
+  if C.NodeType      = 'identifier' then Result := LowerText(C, ASrc)
+  else if C.NodeType = 'exprCall' then
+  begin
+    C := C.ChildByField('entity');
+    if (not C.IsNull) and (C.NodeType = 'identifier') then Result := LowerText(C, ASrc);
+  end;
+end;
+
+function IsValuedExit(const ANode: TTSNode; const ASrc: TBytes): Boolean;
+var
+  C, E, A: TTSNode;
+begin
+  Result := False;
+  if ANode.IsNull then Exit;
+  C := ANode;
+  { accept the statement wrapper as well as the bare call -- a CFG block stores
+    the statement, every other caller has the call }
+  if C.NodeType = 'statement' then
+  begin
+    if C.NamedChildCount = 0 then Exit;
+    C := C.NamedChild(0);
+  end;
+  if C.NodeType <> 'exprCall' then Exit;
+  E := C.ChildByField('entity');
+  if E.IsNull or (E.NodeType <> 'identifier') or (LowerText(E, ASrc) <> 'exit') then Exit;
+  A := C.ChildByField('args');
+  Result := (not A.IsNull) and (A.NamedChildCount > 0);
 end;
 
 { True when a `for` loop provably runs its body AT LEAST ONCE -- both bounds are
@@ -267,27 +339,81 @@ end;
   edges for control-flow constructs. EmitStmt returns the block where control
   continues, or -1 when control diverged (Exit/Break/Continue/raise). }
 type
-  TLoopCtx = record ContinueIdx, BreakIdx: Integer; end;
+  { FinallyDepth = how many try..finally blocks enclosed the statement that
+    opened this loop. A break/continue replays only the finallys ABOVE that mark
+    -- the ones inside the loop. A try..finally wrapping the whole loop is below
+    it and must NOT run when the loop merely breaks. }
+  TLoopCtx = record ContinueIdx, BreakIdx, FinallyDepth: Integer; end;
 
   TBuilderState = class
   public
     Cfg      : TCfg;
     Loops    : TStack<TLoopCtx>;
     WithDepth: Integer;
+    { Finally BODIES of the try..finally blocks currently enclosing the statement
+      being emitted, outermost first. See DivertVia. }
+    Finallys : TList<TTSNode>;
+    { >0 while emitting an exit-path copy of a finally body, which suspends the
+      list so a divert INSIDE a finally cannot recurse into itself forever. }
+    CopyDepth: Integer;
     constructor Create(ACfg: TCfg);
     destructor Destroy; override;
     function EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;
     function EmitList(ACur: Integer; const AContainer: TTSNode): Integer;
+    /// <summary>The block a divert should jump to, running every enclosing
+    /// finally on the way.</summary>
+    function DivertVia(ATarget, AFromDepth: Integer): Integer;
   end;
 
 constructor TBuilderState.Create(ACfg: TCfg);
 begin
   inherited Create; Cfg := ACfg; Loops := TStack<TLoopCtx>.Create; WithDepth := 0;
+  Finallys := TList<TTSNode>.Create; CopyDepth := 0;
 end;
 
 destructor TBuilderState.Destroy;
 begin
-  Loops.Free; inherited;
+  Finallys.Free; Loops.Free; inherited;
+end;
+
+{ Delphi runs every enclosing finally before an exit/break/continue leaves the
+  region, so the CFG has to as well -- otherwise the resource a finally releases
+  looks unreleased on the divert path. Making `exit` divert at all (B9) is what
+  exposed this: on DataCopy it turned one CSVRoutines guard clause into a phantom
+  object-leak, because the exit reached the routine exit without passing the
+  finally that frees the list.
+
+  A COPY of the finally body is emitted on the divert path rather than an edge
+  into the block the normal path uses. Sharing that block would let the divert
+  state flow onward into the code AFTER the try -- the very fall-through this
+  change removes, reintroduced one level up. The copy is on a DIFFERENT path, so
+  it is not the duplicate-on-one-path defect that B1 was.
+
+  AFromDepth is where replay STOPS: 0 for exit (every enclosing finally runs),
+  and the loop's own mark for break/continue (only the finallys inside the loop
+  run -- one wrapping the loop keeps running afterwards). }
+function TBuilderState.DivertVia(ATarget, AFromDepth: Integer): Integer;
+var
+  I, First, Cur, Nxt: Integer;
+begin
+  Result := ATarget;
+  if (Finallys.Count <= AFromDepth) or (CopyDepth > 0) then Exit;
+  First := -1; Cur := -1;
+  Inc(CopyDepth);
+  try
+    for I := Finallys.Count - 1 downto AFromDepth do { innermost first }
+    begin
+      Nxt := Cfg.NewBlock.Index;
+      if First < 0 then First := Nxt else Cfg.Blocks[Cur].AddSucc(Nxt);
+      Cur := EmitStmt(Nxt, Finallys[I]);
+      { the finally body itself diverts -- it never reaches ATarget }
+      if Cur < 0 then Exit(First);
+    end;
+  finally
+    Dec(CopyDepth);
+  end;
+  Cfg.Blocks[Cur].AddSucc(ATarget);
+  Result := First;
 end;
 
 function TBuilderState.EmitList(ACur: Integer; const AContainer: TTSNode): Integer;
@@ -377,7 +503,7 @@ begin
     BodyIdx := Cfg.NewBlock.Index;
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
     Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
-    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Loops.Push(Ctx);
+    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx); { back-edge }
     Loops.Pop;
@@ -424,7 +550,7 @@ begin
       Cfg.Blocks[ACur].AddSucc(BodyIdx)
     else
       Cfg.Blocks[ACur].AddSucc(HdrIdx);
-    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Loops.Push(Ctx);
+    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -455,7 +581,7 @@ begin
     if not IterN.IsNull then Cfg.Blocks[BodyIdx].EntryDefs := [LowerText(IterN, Cfg.Src)];
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
     Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
-    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Loops.Push(Ctx);
+    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -472,7 +598,7 @@ begin
     if not Cond.IsNull then Cfg.Blocks[TestIdx].AddItem(Cond, WithDepth > 0);
     Cfg.Blocks[TestIdx].AddSucc(BodyIdx);   { loop continues }
     Cfg.Blocks[TestIdx].AddSucc(FollowIdx); { loop exits }
-    Ctx.ContinueIdx := TestIdx; Ctx.BreakIdx := FollowIdx; Loops.Push(Ctx);
+    Ctx.ContinueIdx := TestIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     BodyAfter := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if BodyAfter >= 0 then Cfg.Blocks[BodyAfter].AddSucc(TestIdx);
     Loops.Pop;
@@ -495,7 +621,19 @@ begin
     BodyIdx := Cfg.NewBlock.Index; { try region entry }
     Cfg.Blocks[ACur].AddSucc(BodyIdx);
     FollowIdx := Cfg.NewBlock.Index;
-    TryAfter := EmitStmt(BodyIdx, TryNode);
+    { While the TRY BODY is being emitted, this finally is in scope for any
+      exit/break/continue inside it -- see DivertVia. Pushed only around the
+      body: a divert in the FINALLY itself does not re-run it. }
+    if FinNode.IsNull then TryAfter := EmitStmt(BodyIdx, TryNode)
+    else
+    begin
+      Finallys.Add(FinNode);
+      try
+        TryAfter := EmitStmt(BodyIdx, TryNode);
+      finally
+        Finallys.Delete(Finallys.Count - 1);
+      end;
+    end;
     if not FinNode.IsNull then
     begin
       HdrIdx := Cfg.NewBlock.Index; { finally entry }
@@ -603,15 +741,19 @@ begin
 
   if (K = 'statement') or (K = 'exprCall') or (K = 'exprDot') or (K = 'identifier') then
   begin
-    if K = 'exprCall' then EntTxt := LowerText(ANode.ChildByField('entity'), Cfg.Src)
+    if K      = 'exprCall'  then EntTxt := LowerText(ANode.ChildByField('entity'), Cfg.Src)
+    else if K = 'statement' then EntTxt := StatementKeyword(ANode, Cfg.Src) { B9 -- see its header }
     else EntTxt := LowerText(ANode, Cfg.Src);
     Cfg.Blocks[ACur].AddItem(ANode, WithDepth > 0);
+    { DivertVia, not a bare edge: every enclosing finally runs before control
+      leaves. exit replays them all (depth 0); break/continue replay only those
+      opened INSIDE their loop. }
     if EntTxt = 'exit' then
-    begin Cfg.Blocks[ACur].AddSucc(Cfg.ExitIdx); Exit(-1); end;
+    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Cfg.ExitIdx, 0)); Exit(-1); end;
     if (EntTxt = 'break') and (Loops.Count > 0) then
-    begin Cfg.Blocks[ACur].AddSucc(Loops.Peek.BreakIdx); Exit(-1); end;
+    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.BreakIdx, Loops.Peek.FinallyDepth)); Exit(-1); end;
     if (EntTxt = 'continue') and (Loops.Count > 0) then
-    begin Cfg.Blocks[ACur].AddSucc(Loops.Peek.ContinueIdx); Exit(-1); end;
+    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.ContinueIdx, Loops.Peek.FinallyDepth)); Exit(-1); end;
     Exit(ACur);
   end;
 

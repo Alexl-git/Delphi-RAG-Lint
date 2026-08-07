@@ -4,3 +4,8 @@ function-result-not-set 4
 function-result-not-set 7
 # F3 assigns Result on all paths; P is a procedure -> no findings there
 !function-result-not-set 11
+# B9 -- exit(v) assigns Result, a bare exit; does not.
+# F4: every path sets it, two of them through exit(v) -> no finding
+!function-result-not-set 24
+# F5 CONTROL: the bare exit leaves Result unset on that path -> possible (info)
+function-result-not-set 34

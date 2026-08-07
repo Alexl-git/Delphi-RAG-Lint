@@ -6,3 +6,12 @@ object-leak 8
 !object-leak 19
 # P4: passed to a call (escape) -> no leak
 !object-leak 24
+# B9 -- exit/break inside a try..FINALLY run the finally before leaving, so the
+# object IS freed on the divert path. Before exit diverted at all this could not
+# be got wrong; making it divert is what put the question on the table.
+# P5: guard clause inside try..finally -> no leak
+!object-leak 33
+# P6: break out of a loop, from inside a try..finally -> no leak
+!object-leak 47
+# P7 CONTROL: the exit is OUTSIDE the try, so nothing frees it -> leak
+object-leak 61
