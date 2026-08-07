@@ -18,9 +18,11 @@ change `src\` again.
 Working tree carries `FEATURES.txt` (another workstream's, **do not commit**) and untracked
 INBOX notes (untracked by convention). Nothing else is outstanding.
 
-**Next action: the rest of PHASE B** -- **B2/B10** together (the same D-2 rule at two levels),
-then **B4/B5/B6** (all the same unscoped-bucket family). Those five are all that remain, plus
-the `rules/` line-ending sweep noted under B8.
+**Next action, and it is a VERIFICATION not a fix: B2's code change is written and compiles
+but has never run in an IDE.** See B2 for the exact repro. Everything else in this session was
+verified end to end; that one was not, because it needs a live IDE. Do it first, then **B10**
+(B2's D-2 half), then **B4/B5/B6** (all the same unscoped-bucket family), plus the `rules/`
+line-ending sweep noted under B8.
 
 **One decision is still waiting on the user, and only one:** A4 deliberately left open whether
 a PRESENT-but-EMPTY `<param>` body deserves its own lower-severity `hint`. It needs a new
@@ -330,7 +332,46 @@ Controls are part of the fixture on purpose (P10/P11): a genuine double free ins
 body, and one straddling the try boundary, must still fire -- otherwise a "fix" that merely
 stopped analysing try bodies passes.
 
-### B2 `[ ]` #1b -- the IDE reindex ignores the manifest
+### B2 `[~]` #1b -- the IDE reindex ignores the manifest
+-- CODE CHANGED 2026-08-07, **NOT VERIFIED IN THE IDE**
+
+**Root cause, confirmed in the code and matching the filed evidence.** It is not that the
+reindex ignores the manifest -- `InvokeReindexProject` has called `ResolvePrimaryIndexDb`
+since 2026-08-03, and that resolves manifest-first. The hole is one existence test:
+`ResolveActiveIndexDbs` gates its manifest branch on `TFile.Exists(ManifestDb)`
+(`DragLint.Plugin.DbResolver.pas` ~:521). That is right for a READER -- never point a consumer
+at a DB that is not there -- and **self-defeating for the WRITER**, whose whole job is to
+create it. A section whose DB has never been built fails the test, the resolver falls through
+to the per-.dproj convention, and the reindex builds `<projdir>\drag-lint.sqlite` instead. The
+manifest DB still does not exist, so the next reindex makes the same choice. It is a stable
+loop, which is exactly why DataCopy's section could sit in `drag-lint.json` from `6e66279`
+onward with `C:\Projects\.drag-lint\DataCopy.sqlite` never existing at all, while the IDE
+maintained a project-local DB holding 17 files that were gone from disk
+(`docs/INBOX-datacopy-2026-08-06-manifest-db-never-created-and-doc-lint-defects.md` section 1).
+
+**Change:** `ResolvePrimaryIndexDb` now asks `ManifestDbForFile` DIRECTLY and accepts a path
+that does not exist yet -- that function has no existence check of its own, it answers "which
+section covers this file", which is the writer's question. It also creates the manifest
+`outDir` if missing, since a first-ever build has nowhere to write. Only when no section
+covers the file does it fall back to the readers' resolution and then to the per-project
+convention, so a project outside the manifest is unchanged.
+
+**WHAT IS NOT DONE, and it is the part that matters.** The BPL compiles (`-B`, 0 errors, the
+edited unit really was recompiled) but **this has not been exercised in a running IDE**, which
+is the only place the OTA calls it depends on -- `GetActiveEditorFilePath`,
+`GetActiveProjectFile` -- return anything at all. Do not treat it as shipped. To verify: open a
+manifest-covered project whose DB does not exist (delete `C:\Projects\.drag-lint\DataCopy.sqlite`
+first), run Reindex Project, and confirm from `%TEMP%\drag-lint-reindex.txt` that the
+`Database:` line names the manifest path and not `<projdir>\drag-lint.sqlite`.
+
+**Note:** the package build writes the BPL to `third_party\dll-win64`, so the plugin the IDE
+loads has ALREADY changed on disk. If the IDE misbehaves before this is verified, rebuild the
+BPL from the previous commit.
+
+**Still open under this item:** folding D-2 in (a suspected-stale IDE index should full-reindex
+the PROJECT into the manifest-resolved DB) -- that is B10's half and was not touched.
+
+### B2-original `[ ]` the filed description, kept for reference
 
 It writes `<projectRoot>\drag-lint.sqlite` by convention instead of resolving the manifest
 section that CONTAINS the path. Consequence: docs generated from one DB, linted against

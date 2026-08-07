@@ -2077,12 +2077,56 @@ end;
   call site. Anything that writes an index from the wizard must call THIS. }
 function ResolvePrimaryIndexDb: string;
 var
-  DbList: TArray<string>;
+  DbList: string;
+  Dir   : string;
 begin
   Result:= '';
+  { B2 -- THE WRITE TARGET MAY NOT EXIST YET. That is the entire point of a
+    reindex, and it is why asking ResolveActiveIndexDbs was not enough.
+
+    That function gates its manifest branch on TFile.Exists(ManifestDb), which is
+    correct for a READER -- a consumer must not be pointed at a DB that is not
+    there -- but self-defeating for the WRITER. A manifest section whose DB has
+    never been built fails the existence test, so the resolver falls through to
+    the per-.dproj convention and the reindex creates <projdir>\drag-lint.sqlite
+    instead. The manifest DB then still does not exist, so the next reindex makes
+    the same choice: the section can sit in drag-lint.json indefinitely and
+    nothing ever builds it. Measured on DataCopy -- its section had been in the
+    manifest since 6e66279 and C:\Projects\.drag-lint\DataCopy.sqlite did not
+    exist at all, while the IDE happily maintained a project-local DB holding 17
+    files that were gone from disk. One `index --all --only DataCopy` built the
+    real one in 4.1s, so nothing about the section was ever malformed.
+
+    So the writer asks the MANIFEST directly and accepts a path that is not there
+    yet. ManifestDbForFile does no existence check of its own -- it answers "which
+    section covers this file", which is exactly the question a writer wants. Only
+    when no section covers the file does this fall back to the reader's answer and
+    then to the per-project convention, so a project outside the manifest behaves
+    exactly as before.
+
+    The manifest's outDir may be missing too, on a first ever build. Create it
+    here rather than letting the engine fail on a path it was told to write. }
   try
-    DbList:= ResolveActiveIndexDbs(LoadSettings);
-    if Length(DbList) > 0 then Result:= DbList[0];
+    Result:= ManifestDbForFile(GetActiveEditorFilePath);
+    if Result = '' then Result:= ManifestDbForFile(GetActiveProjectFile);
+  except
+    Result:= '';
+  end;
+  if Result <> '' then
+  begin
+    Dir:= ExtractFilePath(Result);
+    if (Dir <> '') and (not DirectoryExists(Dir)) then ForceDirectories(Dir);
+    Exit;
+  end;
+
+  { No manifest section covers this file -- resolve exactly as the readers do, so
+    a wizard command still writes the DB the LSP displays from. }
+  try
+    for DbList in ResolveActiveIndexDbs(LoadSettings) do
+    begin
+      Result:= DbList;
+      Break;
+    end;
   except
     Result:= '';
   end;
