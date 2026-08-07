@@ -477,8 +477,18 @@ begin
       // covers it. So require evidence of human authorship -- a <summary>, or at
       // least one <param> already written. The moment either appears, a param
       // with no tag IS real drift and is reported again.
+      // v(PHASE A4): "at least one <param> already written" must mean written by
+      // a HUMAN. Since PHASE A3 the engine emits a <param> for every signature
+      // parameter, so a bare `Length(ADoc.Params) > 0` is now true of a block
+      // nothing human ever touched -- which would re-open exactly the defect
+      // this gate was added to close on 2026-08-03 (the tool grading its own
+      // output). An engine-marked param proves nothing about authorship, so it
+      // does not count toward it; a body a human typed does.
+      var HandWrittenParams: Boolean:= False;
+      for DP in ADoc.Params do
+        if not TDocRegions.IsManagedDesc(DP.Desc) then begin HandWrittenParams:= True; Break; end;
       var HumanAuthored: Boolean:=
-        ADoc.HasSummaryTag or (Length(ADoc.Params) > 0) or
+        ADoc.HasSummaryTag or HandWrittenParams or
         (not ContainsText(ADoc.RawBlock, AUTO_TOKEN));
       if HumanAuthored then
         for N in SigNames do

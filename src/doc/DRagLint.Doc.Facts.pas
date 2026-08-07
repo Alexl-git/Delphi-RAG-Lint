@@ -6,7 +6,7 @@ uses
   System.SysUtils, System.Classes, System.IOUtils, System.Math,
   System.Generics.Collections, System.RegularExpressions,
   DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince,
-  DRagLint.Hover.Returns, DRagLint.Doc.Harvest;
+  DRagLint.Hover.Returns;
 
 const
   // Display cap for the <seealso> related-symbol list (ADF T4). At most this many
@@ -18,6 +18,19 @@ const
   OVERRIDDENBY_CAP = 6;
 
 type
+  /// <summary>One signature parameter's harvested MEANING (ruling D-3): the
+  /// text of a comment written beside that parameter INSIDE the parameter
+  /// list.</summary>
+  /// <remarks>A parameter with no such comment gets NO entry here. That is the
+  /// whole of D-3's split: an automatic generator supplies STRUCTURE for every
+  /// parameter (the emitter writes a &lt;param&gt; tag regardless) and MEANING
+  /// only where the source states it. Nothing in this record is ever
+  /// invented.</remarks>
+  TDocParamNote = record
+    Name: string;
+    Text: string;
+  end;
+
   TDocFactRef = record
     Display   : string;   { e.g. 'Unit1.DoThing' }
     Location  : string;   { file name only, e.g. 'U1.pas' -- NO :line (volatile) }
@@ -278,6 +291,11 @@ type
     // regenerated wholesale every run, and prose sitting inside it would be
     // destroyed by the next regeneration.
     HarvestedRemarks : string           ;
+    // v(PHASE A3, ruling D-3): per-parameter MEANING mined from comments inside
+    // the declaration's own parameter list. Sparse -- a parameter the source
+    // says nothing about simply has no entry, and the emitter then writes its
+    // <param> tag with an empty body. See TDocParamNote and MineParamNotes.
+    ParamNotes       : TArray<TDocParamNote>;
     // v(ADP3 T4): the documented symbol's OWN kind, copied verbatim from
     // ASym.Kind by Build. Exactly ONE consumer: RenderFactsBlock selects the
     // reference line's VERB from it, via DRagLint.Core.Model.CanBeCallTarget --
@@ -343,7 +361,12 @@ uses
   // HarvestInterfaceComment. IMPLEMENTATION-side because Doc.Harvest reaches
   // Doc.Regions, which uses THIS unit in its interface -- the cycle is legal
   // only while at least one hop goes through an implementation section.
-  DRagLint.Doc.Harvest;
+  DRagLint.Doc.Harvest,
+  // v(PHASE A3): ExtractParamList only -- MineParamNotes parses the SAME
+  // parameter-list text ParseParamNames already splits for the emitter, so both
+  // read one extraction rather than two that can disagree about where the list
+  // begins and ends.
+  DRagLint.Refactor.DocStub;
 
 function DocDisplayCount(ATotal: Integer): Integer;
 begin
@@ -654,140 +677,123 @@ begin
   end;
 end;
 
-/// <summary>Scans a summary string for the first identifier reference and returns True
-/// when that identifier resolves to a symbol declared in a different unit than the
-/// current context. Used to implement D-5 demotion: if a foreign symbol is the main
-/// subject of the harvested comment, the comment documents an external entity, not
-/// this symbol itself, so it is demoted to remarks.</summary>
-function HasForeignSymbolInSummary(const AStore: ISymbolStore; ACurrentFileId: Integer;
-  const ASummary: string): Boolean;
+// v(PHASE A3, ruling D-3): mines each parameter's MEANING from comments written
+// inside the declaration's own parameter list.
+//
+// WHERE THE TEXT COMES FROM, and why no file is read. The INDEXED signature
+// preserves the parameter list VERBATIM, comments and all -- confirmed against a
+// real index:
+//
+//   "(AFirst: Integer { how many times to repeat }; ASecond: string): Integer"
+//
+// so the meaning is already in hand wherever the author wrote it, with no second
+// source read and no dependency on line numbers that go stale.
+//
+// THE ATTACHMENT RULE, from D-3's own words -- a comment "sitting next to that
+// parameter inside the parameter list, between the commas / parentheses that
+// separate it from its neighbours":
+//
+//   * a comment beside ONE NAME belongs to that name alone
+//         (ALeft { the left edge }, ARight: Integer)
+//   * a comment after the shared TYPE belongs to every name in that group
+//         (ALeft, ARight: Integer { a coordinate, in pixels })
+//   * a name's own comment WINS over its group's, being the more specific of
+//     the two statements about it.
+//
+// Never invents: a parameter the source says nothing about yields no entry at
+// all, which is what leaves its emitted <param> body empty.
+// Strips a leading const/var/out/in qualifier from one name chunk.
+function StripParamQualifier(const AChunk: string): string;
+const
+  QUALIFIERS: array[0..3] of string = ('const ', 'var ', 'out ', 'in ');
 var
-  i, N: Integer;
-  IdStart, IdEnd: Integer;
-  Ident: string;
-  Symbols: TArray<TSymbol>;
+  Q: string;
 begin
-  Result:= False;
-  N:= Length(ASummary);
-  if N = 0 then Exit;
-
-  // Scan for the first identifier in the summary.
-  i:= 1;
-  while (i <= N) and not IsIdentStart(ASummary[i]) do Inc(i);
-  if i > N then Exit; // no identifier found
-
-  IdStart:= i;
-  while (i <= N) and IsIdentPart(ASummary[i]) do Inc(i);
-  IdEnd:= i - 1;
-
-  Ident:= Copy(ASummary, IdStart, IdEnd - IdStart + 1);
-
-  // Look up the identifier in the store.
-  Symbols:= AStore.FindSymbolsByExactName(Ident);
-  if Length(Symbols) = 0 then Exit; // doesn't resolve - it's prose, not a symbol name
-
-  // Check if the first resolved symbol is from a different file. A symbol is foreign
-  // if its FileId does not match the file we're documenting.
-  if Length(Symbols) > 0 then
-    Result:= (Symbols[0].FileId > 0) and (Symbols[0].FileId <> ACurrentFileId);
-end;
-
-// Helper: moves a string to remarks if it contains a foreign symbol identifier.
-// Returns True if the summary was moved to remarks and summary should be cleared.
-function DemoteIfForeignSymbol(const AStore: ISymbolStore; ACurrentFileId: Integer;
-  const ASummary: string; var ARemarks: string): Boolean;
-begin
-  Result:= False;
-  if not HasForeignSymbolInSummary(AStore, ACurrentFileId, ASummary) then Exit;
-  // Move summary to remarks (with blank line separator if remarks exists)
-  if ARemarks <> '' then
-    ARemarks:= ASummary + #10#10 + ARemarks
-  else
-    ARemarks:= ASummary;
-  Result:= True;
-end;
-
-/// <summary>Extracts non-whitespace runs from a string for deduplication comparison,
-/// treating each significant phrase as a dedupable unit. Returns a comma-separated
-/// list of unique significant tokens.</summary>
-function ExtractSignificantTokens(const AText: string): string;
-var
-  Tokens: TStringList;
-  i, N: Integer;
-  InWord: Boolean;
-  CurWord: string;
-begin
-  Tokens:= TStringList.Create;
-  try
-    Tokens.Sorted:= True;
-    Tokens.Duplicates:= dupIgnore;
-    N:= Length(AText);
-    InWord:= False;
-    CurWord:= '';
-    for i:= 1 to N do
+  Result:= Trim(AChunk);
+  for Q in QUALIFIERS do
+    if LowerCase(Result).StartsWith(Q) then
     begin
-      if CharInSet(AText[i], [' ', #9, #10, #13, ',', '.', ';', ':', '(', ')', '[', ']']) then
-      begin
-        if InWord and (Length(CurWord) > 2) then
-          Tokens.Add(LowerCase(CurWord));
-        CurWord:= '';
-        InWord:= False;
-      end
-      else
-      begin
-        CurWord:= CurWord + AText[i];
-        InWord:= True;
-      end;
+      Result:= Trim(Copy(Result, Length(Q) + 1, MaxInt));
+      Break;
     end;
-    if InWord and (Length(CurWord) > 2) then
-      Tokens.Add(LowerCase(CurWord));
-    Result:= Tokens.CommaText;
-  finally
-    Tokens.Free;
-  end;
 end;
 
-/// <summary>Implements D-1 dedupe: when re-running the harvest, prevent duplicate
-/// text accumulation by comparing the newly harvested summary against an existing
-/// one. If they contain mostly the same content, clear the new one to avoid
-/// re-publishing identical prose.</summary>
-procedure DedupeHarvestedSummary(const AExistingSummary: string; var ANewSummary: string);
+// Splits AText on ASep at bracket depth 0. Braces are deliberately NOT depth --
+// ExtractPascalComments removes every comment from a part before any name is read.
+function SplitTopLevel(const AText: string; ASep: Char): TArray<string>;
 var
-  ExistingTokens: string;
-  NewTokens: string;
-  ExistingList: TStringList;
-  NewList: TStringList;
-  i: Integer;
-  DupeCount: Integer;
+  J, D: Integer;
+  Acc : string ;
 begin
-  if AExistingSummary = '' then Exit;
-  if ANewSummary = '' then Exit;
+  Result:= nil;
+  Acc   := '';
+  D     := 0;
+  for J:= 1 to Length(AText) do
+  begin
+    if CharInSet(AText[J], ['(', '[']) then Inc(D)
+    else if CharInSet(AText[J], [')', ']']) then Dec(D);
+    if (AText[J] = ASep) and (D <= 0) then
+    begin
+      Result:= Result + [Acc];
+      Acc   := '';
+    end
+    else Acc:= Acc + AText[J];
+  end;
+  Result:= Result + [Acc];
+end;
 
-  // Extract significant tokens from both strings
-  ExistingTokens:= ExtractSignificantTokens(AExistingSummary);
-  NewTokens:= ExtractSignificantTokens(ANewSummary);
-
-  // If either side has no significant tokens, they're not really comparable
-  if (ExistingTokens = '') or (NewTokens = '') then Exit;
-
-  ExistingList:= TStringList.Create;
-  NewList:= TStringList.Create;
-  try
-    ExistingList.CommaText:= ExistingTokens;
-    NewList.CommaText:= NewTokens;
-
-    // Count how many tokens from the new summary already appear in the existing one
-    DupeCount:= 0;
-    for i:= 0 to NewList.Count - 1 do
-      if ExistingList.IndexOf(NewList[i]) >= 0 then Inc(DupeCount);
-
-    // If more than 50% of the new tokens are duplicates, skip this harvest
-    // to avoid re-publishing the same facts on re-run
-    if (NewList.Count > 0) and (DupeCount * 100 / NewList.Count > 50) then
-      ANewSummary:= '';
-  finally
-    ExistingList.Free;
-    NewList.Free;
+function MineParamNotes(const ASig: string): TArray<TDocParamNote>;
+var
+  ParamList: string        ;
+  Grp      : string        ;
+  NamesPart: string        ;
+  TypePart : string        ;
+  GroupNote: string        ;
+  OwnNote  : string        ;
+  NameText : string        ;
+  Chunk    : string        ;
+  Discard  : string        ;
+  Note     : TDocParamNote ;
+  i, Depth, ColonAt: Integer;
+begin
+  Result   := nil;
+  ParamList:= ExtractParamList(ASig);
+  if Trim(ParamList) = '' then Exit;
+  for Grp in SplitTopLevel(ParamList, ';') do
+  begin
+    if Trim(Grp) = '' then Continue;
+    // Names / type split at the first top-level ':'. An untyped parameter
+    // (`var X`) has none, and then the whole group is names.
+    Depth  := 0;
+    ColonAt:= 0;
+    for i:= 1 to Length(Grp) do
+    begin
+      if CharInSet(Grp[i], ['(', '[']) then Inc(Depth)
+      else if CharInSet(Grp[i], [')', ']']) then Dec(Depth)
+      else if (Grp[i] = ':') and (Depth <= 0) then begin ColonAt:= i; Break; end;
+    end;
+    if ColonAt > 0 then
+    begin
+      NamesPart:= Copy(Grp, 1, ColonAt - 1);
+      TypePart := Copy(Grp, ColonAt + 1, MaxInt);
+    end
+    else
+    begin
+      NamesPart:= Grp;
+      TypePart := '';
+    end;
+    GroupNote:= ExtractPascalComments(TypePart, Discard);
+    for Chunk in SplitTopLevel(NamesPart, ',') do
+    begin
+      OwnNote := ExtractPascalComments(Chunk, NameText);
+      NameText:= StripParamQualifier(NameText);
+      if NameText = '' then Continue;
+      if OwnNote = '' then OwnNote:= GroupNote;   // the name's own statement wins
+      if OwnNote = '' then Continue;              // structure only: nothing to say
+      Note.Name:= NameText;
+      Note.Text:= OwnNote;
+      Result   := Result + [Note];
+    end;
   end;
 end;
 
@@ -924,7 +930,6 @@ procedure HarvestInterfaceComment(const AStore: ISymbolStore; const ASym: TSymbo
 var
   Lines: TArray<string>;
   Res  : THarvestResult;
-  Summary, Remarks: string;
 begin
   if ASym.StartLine <= 0 then Exit;
   try
@@ -953,20 +958,11 @@ begin
     Res:= HarvestScan(Lines, HarvestStartLine(Lines, ASym.ImplStartLine));
 
   if Res.Reason <> hrAccepted then Exit;
-  HarvestText(Res, Summary, Remarks);
-
-  // v(PHASE A1 D-1): dedupe -- drop phrases that already appear in the existing summary
-  if AFacts.HarvestedSummary <> '' then
-    DedupeHarvestedSummary(AFacts.HarvestedSummary, Summary);
-
-  // v(PHASE A1 D-5): foreign-symbol demotion -- if the summary names a foreign
-  // symbol, move it to remarks and clear the summary, because the comment is
-  // about an external entity, not this symbol itself
-  if DemoteIfForeignSymbol(AStore, ASym.FileId, Summary, Remarks) then
-    Summary:= '';
-
-  AFacts.HarvestedSummary:= Summary;
-  AFacts.HarvestedRemarks:= Remarks;
+  HarvestText(Res, AFacts.HarvestedSummary, AFacts.HarvestedRemarks);
+  // v(PHASE A1, ruling D-5): last, and on the TEXT rather than on the scan -- the
+  // question "is this prose about another symbol" is only answerable once the
+  // block has become a summary and a remainder.
+  DemoteForeignSummary(AStore, ASym, AFacts);
 end;
 
 // Detects a Pascal 'deprecated' DIRECTIVE on ASym's declaration and, when
@@ -1121,6 +1117,12 @@ begin
   // existing precedence. Which of the two wins when they disagree is Task 8's
   // question, not this call site's.
   HarvestInterfaceComment(AStore, ASym, Result);
+
+  // v(PHASE A3, ruling D-3): per-parameter MEANING, mined from the comments the
+  // author wrote inside the parameter list. STRUCTURE is the emitter's job and
+  // does not depend on this: a parameter with no note still gets a <param> tag,
+  // with an empty body.
+  Result.ParamNotes:= MineParamNotes(ASym.Signature);
 
   // Called from: RESOLVED caller refs -> display 'EnclosingQName (file)'.
   // v14 (D5) -- THE BUG FIX. Previously this was name-based

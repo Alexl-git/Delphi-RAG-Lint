@@ -28,7 +28,12 @@ type
   /// at [Col, EndCol) of line Line, and DROPS the edit when it does not.
   /// Producers whose coordinates come from the SYMBOL STORE (a snapshot that
   /// goes stale the moment the file is edited) must set it; leaving it '' keeps
-  /// the historical unguarded behaviour for every existing caller.</remarks>
+  /// the historical unguarded behaviour for every existing caller.
+  ///
+  /// v(PHASE A2): ExpectLine extends the SAME guard to the line kinds
+  /// (tekInsertLines / tekDeleteLines), which had none at all -- see
+  /// AnchorIsValid for what it verifies and why a substring test alone is not
+  /// enough. Set BOTH fields to arm it; ExpectLine = 0 is unguarded.</remarks>
   TTextEdit = record
     FilePath  : string;
     Kind      : TTextEditKind;
@@ -37,7 +42,8 @@ type
     EndCol    : Integer;      { tekReplaceInLine: 1-based exclusive end column }
     EndLine   : Integer;
     Text      : string;
-    ExpectText: string;       { tekReplaceInLine only: '' = unguarded (legacy) }
+    ExpectText: string;       { tekReplaceInLine: the span guard; with ExpectLine: the anchor guard }
+    ExpectLine: Integer;      { 1-based ANCHOR line that must still hold ExpectText; 0 = unguarded }
   end;
 
   TTextEditApplier = class
@@ -139,6 +145,65 @@ begin
   Result:= SameText(Copy(ALine, C, EC - C), E.ExpectText);
 end;
 
+{ THE STALE-ANCHOR GUARD, for edits whose Line came from the symbol store.
+
+  ReplaceEditIsValid above answers "does this line still hold the text I am
+  about to replace". It only ever applied to tekReplaceInLine, so the LINE kinds
+  -- insert a block above a declaration, delete the block above it -- had no
+  guard at all. That is the fourth instance of one root cause this repo has now
+  hit: `unused-local`'s fixer destroyed 72 lines; the naming autofix wrote onto
+  `then`/`else` and exited 0; `document --qname --apply` run twice on one class
+  nested the second block inside the first and left the second symbol
+  undocumented, because the store still held the PRE-EDIT start_line, which
+  after the first insert pointed into the middle of the block just written.
+
+  WHY "CONTAINS THE NAME" IS NOT ENOUGH, and the comment test is load-bearing:
+  the stale coordinate in that defect landed on `/// Calls: Create` -- a line
+  that DOES contain the identifier the guard is looking for. So the anchor must
+  also still look like a DECLARATION: a line that starts a comment is never one.
+  Together the two conditions are what makes this structural rather than a
+  spelling check.
+
+  Conservative in the only direction that matters: when the guard cannot
+  confirm the anchor, the edit is DROPPED. Dropping a good edit costs a re-run;
+  writing at a coordinate that has moved corrupts the user's source. }
+function ContainsWholeWord(const AText, AWord: string): Boolean;
+var
+  L, W : string ;
+  P, WL: Integer;
+
+  function IsWordCh(const ACh: Char): Boolean;
+  begin
+    Result:= CharInSet(ACh, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+  end;
+
+begin
+  Result:= False;
+  if AWord = '' then Exit;
+  L := LowerCase(AText);
+  W := LowerCase(AWord);
+  WL:= Length(W);
+  P := Pos(W, L);
+  while P > 0 do
+  begin
+    if ((P = 1) or (not IsWordCh(L[P - 1]))) and
+       ((P + WL > Length(L)) or (not IsWordCh(L[P + WL]))) then Exit(True);
+    P:= Pos(W, L, P + 1);
+  end;
+end;
+
+function AnchorIsValid(const E: TTextEdit; ALines: TStrings): Boolean;
+var
+  S: string;
+begin
+  if (E.ExpectLine <= 0) or (E.ExpectText = '') then Exit(True);  { unguarded }
+  if (E.ExpectLine > ALines.Count) then Exit(False);              { file shrank past it }
+  S:= TrimLeft(ALines[E.ExpectLine - 1]);
+  { A comment line is never a declaration -- see the header above. }
+  if S.StartsWith('//') or S.StartsWith('{') or S.StartsWith('(*') then Exit(False);
+  Result:= ContainsWholeWord(S, E.ExpectText);
+end;
+
 class function TTextEditApplier.Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer;
 var
   Skipped: Integer;
@@ -158,6 +223,7 @@ var
   Lines   : TStringList;
   Touched : Integer;
   Cmp     : IComparer<TTextEdit>;
+  Kept    : TList<TTextEdit>;   { v(PHASE A2): the edits that survived the stale-anchor pre-pass }
   AppliedInFile: Integer;
 begin
   Touched:= 0;
@@ -195,7 +261,28 @@ begin
       Lines:= TStringList.Create;
       try
         Lines.Text:= Content;
-        for E in Group do
+
+        { v(PHASE A2): STALE-ANCHOR PRE-PASS, over the file AS FOUND.
+
+          It runs BEFORE any edit is applied, and that is not a stylistic
+          choice. Edits are applied back-to-front, and the doc repair path emits
+          a DELETE of the old comment span plus an INSERT of the merged one --
+          the delete is processed first, which shifts every line below it. An
+          anchor checked mid-loop would therefore be read at the wrong offset
+          for the insert, and the pair could half-apply: the existing comment
+          deleted, its replacement dropped. Validating everything against the
+          unmutated snapshot makes a pair fail or survive TOGETHER, since both
+          carry the same anchor.
+
+          Only ExpectLine-bearing edits are affected; every historic caller
+          leaves it 0 and reaches the loop below exactly as before. }
+        Kept:= TList<TTextEdit>.Create;
+        try
+          for E in Group do
+            if AnchorIsValid(E, Lines) then Kept.Add(E)
+            else Inc(ASkippedEdits);
+
+        for E in Kept do
         begin
           case E.Kind of
             tekDeleteLines:
@@ -250,6 +337,9 @@ begin
                   Inc(ASkippedEdits);   { line does not exist: out of range, never written }
               end;
           end;
+        end;
+        finally
+          Kept.Free;
         end;
 
         { Nothing survived validation for this file: leave it exactly as found --

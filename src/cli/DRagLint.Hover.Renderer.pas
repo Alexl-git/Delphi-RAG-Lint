@@ -233,6 +233,24 @@ begin
   end;
 end;
 
+// v(PHASE A3): True when AParamsJsonRaw carries at least one <param> whose
+// description has real text once the ownership marker is stripped.
+//
+// Ruling D-3 made a <param> tag STRUCTURAL -- emitted for every signature
+// parameter so that doc-drift can be satisfied and a human has a slot to type
+// into. Rendering must therefore stop treating "a tag exists" as "this
+// parameter is documented", or every tooltip loses the signature-derived
+// name+type block the moment `document --apply` runs over a unit.
+function HasAnyParamDescription(const AParamsJsonRaw: string): Boolean;
+var
+  M: TMatch;
+begin
+  Result:= False;
+  if AParamsJsonRaw = '' then Exit;
+  for M in TRegEx.Create('"name":"([^"]+)","desc":"([^"]*)"').Matches(AParamsJsonRaw) do
+    if Trim(TDocRegions.StripForDisplay(M.Groups[2].Value)) <> '' then Exit(True);
+end;
+
 function RenderSignatureParamsMarkdown(const ASignature: string): string;
 var
   Sig       : string        ;
@@ -339,7 +357,13 @@ begin
       for M in Re.Matches(ADoc.ParamsJsonRaw) do
         // v(ADP3 T1): a managed <param> desc is just AUTO_MARK -- strip it so
         // the row reads "Name -- " rather than leaking the marker.
-        SB.AppendLine('  ' + M.Groups[1].Value + ' -- ' + TDocRegions.StripForDisplay(M.Groups[2].Value));
+        // v(PHASE A3): ... and a row with NOTHING after the dash is skipped
+        // outright. Since ruling D-3 the engine emits a <param> tag for every
+        // signature parameter, body or no body -- that tag exists so doc-drift
+        // can be satisfied and so a human has a slot to type into, not to put
+        // `AValue -- ` in a tooltip. An empty description is not a description.
+        if Trim(TDocRegions.StripForDisplay(M.Groups[2].Value)) <> '' then
+          SB.AppendLine('  ' + M.Groups[1].Value + ' -- ' + TDocRegions.StripForDisplay(M.Groups[2].Value));
     end;
     // v(ADP3 T1): strip the ownership marker before a human sees it.
     var CleanReturns: string:= TDocRegions.StripForDisplay(ADoc.ReturnsText);
@@ -380,7 +404,13 @@ begin
       SB.AppendLine('');
       SB.AppendLine(CleanSummary);
     end;
-    if ADoc.ParamsJsonRaw <> '' then
+    // v(PHASE A3): "has <param> tags" is no longer the same question as "has
+    // param DOCUMENTATION". Since ruling D-3 every signature parameter gets a
+    // tag whether or not the source says anything about it, so keying the
+    // fallback off tag PRESENCE would have replaced the informative
+    // signature-derived block (name AND type) with a list of bare names. The
+    // fallback now keys off whether any tag actually carries text.
+    if HasAnyParamDescription(ADoc.ParamsJsonRaw) then
     begin
       SB.AppendLine(''               );
       SB.AppendLine('**Parameters:**');

@@ -23,6 +23,17 @@ type
 function ExtractParamList(const ASig: string): string;
 function ParseParamNames(const AParamList: string): TArray<string>;
 function SignatureHasReturn(const ASig: string): Boolean;
+/// <summary>Splits AText into the comment text it contains and everything
+/// else: returns the joined comment content, and sets ARest to AText with every
+/// comment removed. Handles the three Pascal spellings ({ }, (* *), //).</summary>
+/// <remarks>ONE implementation, TWO readers, and they must not diverge:
+/// ParseParamNames strips comments out before reading a parameter's NAME (an
+/// indexed signature keeps them verbatim, so `ALeft { the left edge }` would
+/// otherwise become the name), while DRagLint.Doc.Facts.MineParamNotes keeps
+/// the same comments as that parameter's harvested MEANING (ruling D-3). A
+/// second copy of this scan is how the name half and the meaning half would end
+/// up disagreeing about where a comment starts.</remarks>
+function ExtractPascalComments(const AText: string; out ARest: string): string;
 
 implementation
 
@@ -57,6 +68,57 @@ var
 begin
   Lower:= LowerCase(Trim(ASig));
   Result:= Lower.StartsWith('function') or Lower.StartsWith('constructor');
+end;
+
+function ExtractPascalComments(const AText: string; out ARest: string): string;
+var
+  i, N : Integer       ;
+  Note : TStringBuilder;
+  Rest : TStringBuilder;
+  Inner: string        ;
+begin
+  Note:= TStringBuilder.Create;
+  Rest:= TStringBuilder.Create;
+  try
+    i:= 1;
+    N:= Length(AText);
+    while i <= N do
+    begin
+      if (AText[i] = '{') then
+      begin
+        Inner:= '';
+        Inc(i);
+        while (i <= N) and (AText[i] <> '}') do begin Inner:= Inner + AText[i]; Inc(i); end;
+        if i <= N then Inc(i); // the closing brace
+        if Note.Length > 0 then Note.Append(' ');
+        Note.Append(Trim(Inner));
+      end
+      else if (AText[i] = '(') and (i < N) and (AText[i + 1] = '*') then
+      begin
+        Inner:= '';
+        Inc(i, 2);
+        while (i < N) and not ((AText[i] = '*') and (AText[i + 1] = ')')) do begin Inner:= Inner + AText[i]; Inc(i); end;
+        if i < N then Inc(i, 2);
+        if Note.Length > 0 then Note.Append(' ');
+        Note.Append(Trim(Inner));
+      end
+      else if (AText[i] = '/') and (i < N) and (AText[i + 1] = '/') then
+      begin
+        // A // comment inside a WRAPPED parameter list runs to the end of its
+        // source line; the signature has already joined those lines, so the
+        // only safe end is the end of this text.
+        if Note.Length > 0 then Note.Append(' ');
+        Note.Append(Trim(Copy(AText, i + 2, MaxInt)));
+        i:= N + 1;
+      end
+      else begin Rest.Append(AText[i]); Inc(i); end;
+    end;
+    ARest := Trim(Rest.ToString);
+    Result:= Trim(Note.ToString);
+  finally
+    Note.Free;
+    Rest.Free;
+  end;
 end;
 
 // ParseParamNames: parses a param-list string such as
@@ -103,7 +165,17 @@ begin
       Names:= NamesClean.Split([',']);
       for NTrimmed in Names do
       begin
-        var Bare:= Trim(NTrimmed);
+        // v(PHASE A3): a NAME is never a comment. The INDEXED signature keeps
+        // the parameter list verbatim -- comments included -- so
+        // `ALeft { the left edge }, ARight: Integer` used to yield the "name"
+        // `ALeft { the left edge }`, which then reached the emitter and became
+        // `<param name="ALeft { the left edge }">`: malformed, and never equal
+        // to itself on the next run, so the block was rewritten forever. The
+        // comment is not discarded -- MineParamNotes reads the SAME scan for
+        // that parameter's meaning (ruling D-3).
+        var Bare: string;
+        ExtractPascalComments(NTrimmed, Bare);
+        Bare:= Trim(Bare);
         if Bare <> '' then Acc.Add(Bare);
       end;
     end; // for

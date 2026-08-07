@@ -114,8 +114,14 @@ try {
   # whose label claims to prove the emitted shape. A7 and A2 already catch that,
   # but a check must not depend on a sibling to be non-vacuous: read on its own,
   # A3 now says "a block exists AND it omits both tags".
-  Check 'A3 block exists AND has NO <summary> and NO <param> tag (v(ADP3 T3): nothing to say -> omitted, never a blank stub)' `
-    (($block -match '(?m)^\s*///\s') -and (-not ($block -match '<summary>')) -and (-not ($block -match '<param')))
+  # v(PHASE A3, ruling D-3) splits what v(ADP3 T3) treated as one rule. <summary>
+  # still follows omit-when-empty -- an empty one renders a BLANK tooltip, which is
+  # worse than none. <param> no longer does: the tag is STRUCTURE, it states that
+  # the parameter exists and is undocumented, and it is what lets doc-drift's 'has
+  # no <param> tag' finding ever be cleared. The non-vacuity reasoning above is
+  # unchanged -- the block must exist for either claim to mean anything.
+  Check 'A3 block exists AND has NO <summary> but DOES carry the structural <param>' `
+    (($block -match '(?m)^\s*///\s') -and (-not ($block -match '<summary>')) -and ($block -match '<param name='))
   Check 'A4 comment carries <returns>'                 ($block -match '///\s*<returns>')
   Check 'A5 comment carries a Called-from fact (CallsIt)' ($block -match 'Called from:.*missfix\.CallsIt')
 

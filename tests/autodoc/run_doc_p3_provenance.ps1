@@ -101,7 +101,13 @@ try {
   # for params, so the fresh comment carries NO <param name="AText"> tag at
   # all -- see this file's own update note above.
   $paramLine = $lines | Where-Object { $_ -match [regex]::Escape('<param name="AText">') } | Select-Object -First 1
-  Check 'T3: Marked has NO <param name="AText"> tag (nothing hand-written to carry)' ($null -eq $paramLine)
+  # v(PHASE A3, ruling D-3) reverses v(ADP3 T3) here: STRUCTURE ALWAYS, MEANING
+  # ONLY WHERE THE SOURCE CARRIES IT. The old rule -- no <param> unless a human
+  # wrote a description -- was itself the defect: doc-drift reported those tags as
+  # missing while `document` refused to write them, so the two halves could never
+  # converge. The tag is now emitted, engine-marked, with an EMPTY body.
+  Check 'v(PHASE A3, D-3): Marked HAS a <param name="AText"> tag, engine-marked and empty' `
+    (($null -ne $paramLine) -and ($paramLine -match [regex]::Escape('<param name="AText"><!-- drag-lint:auto --></param>'))) $paramLine
 
   $returnsLineMarked = $null
   if ($null -ne $markedBlock) {

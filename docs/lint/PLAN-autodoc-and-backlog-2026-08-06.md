@@ -67,7 +67,7 @@ Implementation notes for D-5, so it is not over-applied:
 Target end state: `document --project --apply` can be run over a whole project and produce
 docs that are correct, idempotent, and that `lint-all` then reports clean.
 
-### A1 `[ ]` Fix the harvest boundary + attribution (#8)
+### A1 `[x]` Fix the harvest boundary + attribution (#8) -- DONE 2026-08-06
 
 Two filed instances, one code path:
 - `docs/INBOX-harvest-swallows-preceding-banner-comment.md` (2026-08-03) -- a banner /
@@ -96,7 +96,27 @@ Do:
 Verify: new runner asserting the banner case, the orphan-note case, and idempotency across
 two consecutive `--apply` runs.
 
-### A2 `[ ]` Make the doc applier verify its anchor
+**SHIPPED.** `tests/autodoc/run_doc_p3_harvest_boundary.ps1` (34 checks) + two fixtures.
+
+- **Boundary** (`DRagLint.Doc.Harvest.HarvestScan`): a blank SOURCE line now ENDS the block,
+  and the gap BELOW it is bounded by `BLANK_GAP_MAX = 1` -- the walk used to cross blank
+  lines without limit, so it merged separate comment blocks and its header's claim to match
+  `FindDocRegionAbove`'s `AllowGap` was false. `HarvestText`'s leading-banner drop STAYS: it
+  catches a banner with no blank line after it, which the boundary rule cannot see.
+- **D-5** (`DRagLint.Doc.Facts.DemoteForeignSummary`): three conditions, all narrow --
+  compound-case spelling, resolves in the index, and EVERY declaration of the name is in
+  another file. `Register`/`Create`/`Backup` (single-cased English words that are also
+  symbols) do NOT demote; the runner asserts both conservatism arms, because a demoter that
+  merely resolved the first identifier would satisfy every positive check and fail these.
+- **D-1 dedupe** (`DRagLint.Doc.Regions.DropAlreadyPresentPhrases`): placed where the
+  duplication actually happens -- `MergeComment`'s repair path, at the ownership handover. A
+  human takes ownership of an engine line by deleting its marker; the harvest is recomputed
+  from a source comment that is still in the file, so without the dedupe the engine re-emits
+  its own copy underneath the human's, permanently, with no marker for `--strip` to find.
+- **D-1 volatility** was ALREADY satisfied before this task (the marker is applied at emit
+  time by `MergeComment`, and a marked tag is regenerated). Nothing was needed.
+
+### A2 `[x]` Make the doc applier verify its anchor -- DONE 2026-08-06
 
 `docs/INBOX-document-qname-second-apply-nests-block-on-stale-anchor.md` (filed today). Two
 `document --qname --apply` runs against one class nest the second block inside the first,
@@ -114,7 +134,26 @@ Do: route the doc applier through `TTextEditApplier.ExpectText` (do not add a se
 verification path). On mismatch, apply D-2 -- reindex the project and retry once -- and if
 it still mismatches, fail loudly. Never write at an unverified coordinate.
 
-### A3 `[ ]` Emit `<param>` structure, harvest param meaning (D-3 + D-4)
+**SHIPPED.** `tests/autodoc/run_doc_p3_stale_anchor.ps1` (14 checks, reproduced RED first)
+plus 6 new cases in `tests/refactor/TextEditTests.dpr` (20/20).
+
+- The guard extends the EXISTING one rather than adding a path: `TTextEdit.ExpectLine` arms
+  `AnchorIsValid` for the LINE kinds, which had no guard at all. `ExpectText` alone is not
+  enough -- the stale coordinate in the filed defect landed on `/// Calls: Create`, a line
+  that DOES contain the name -- so the anchor must also not be a comment line. That pair is
+  what makes it structural.
+- Validation is a PRE-PASS over the file as found. The repair path emits delete+insert as a
+  pair; validating mid-loop would read the insert's anchor at a shifted offset and could
+  half-apply it -- deleting an existing comment and dropping its replacement. Both edits
+  carry the same anchor, so they fail or survive together (asserted).
+- **D-2 recovery is real, not just a message**: `--unit` and `--qname` reindex and RECOMPUTE
+  once, then re-apply; the runner asserts both members end up documented, each above its own
+  declaration. The BATCH paths fail loudly instead and name `--reindex` -- their whole edit
+  set was computed from the same stale snapshot, so re-applying it would refuse identically.
+- `--json` gained an additive `staleAnchorsRefused` key so a machine consumer cannot read
+  success where the text path reports a refusal.
+
+### A3 `[x]` Emit `<param>` structure, harvest param meaning (D-3 + D-4) -- DONE 2026-08-06
 
 Do:
 1. Emit `<param name="X">` for every signature parameter, always, in batch mode.
@@ -128,7 +167,32 @@ Do:
 Verify: a fixture with (a) an undocumented param, (b) a param carrying an inline comment,
 (c) a param with hand-written prose that must survive a re-run, (d) a renamed param.
 
-### A4 `[ ]` Teach `doc-drift` to accept the generated form (#3)
+**SHIPPED.** `tests/autodoc/run_doc_p3_param_structure.ps1` (19 checks) covers A3 and A4 in
+one runner, against one file, because they are two halves of one contradiction.
+
+- **No second source read.** The INDEXED signature preserves the parameter list VERBATIM,
+  comments included -- verified against a real index -- so `MineParamNotes` reads the
+  meaning straight off `ASym.Signature`, with no dependency on line numbers that go stale.
+- Attachment rule per D-3: a comment beside ONE NAME is that name's; a comment after the
+  shared TYPE covers the group; the name's own comment wins. All three asserted.
+- **Two defects surfaced and fixed along the way, both found by the runner, not by review:**
+  (1) `ParseParamNames` did not strip comments, so `ALeft { the left edge }` became the tag
+  NAME -- malformed, and never equal to itself on the next run. The scan is now ONE
+  implementation (`ExtractPascalComments` in `DRagLint.Refactor.DocStub`) read by both the
+  name half and the meaning half. (2) A marked param body was classified
+  `taPreserveStripped` on the second run, so the engine stripped the marker off its OWN
+  output every cycle and quietly handed itself ownership. Resolved EXACTLY rather than
+  heuristically: compare the marked body with what the miner produces NOW -- equal means the
+  engine wrote it (regenerate, fixed point); different means a human typed it (D-4: leave it
+  alone).
+- **Hover had to change too, and this is worth remembering**: "has `<param>` tags" stopped
+  being the same question as "has param DOCUMENTATION". Keying the markdown fallback off tag
+  PRESENCE would have replaced the informative signature-derived block (name AND type) with
+  a list of bare names on every unit `document --apply` had touched, and plain hover would
+  have printed `AValue -- ` rows with nothing after the dash. Both renderers now key off
+  whether a tag carries text (`HasAnyParamDescription`).
+
+### A4 `[x]` Teach `doc-drift` to accept the generated form (#3) -- DONE 2026-08-06
 
 Otherwise A3 changes the wording of the 22 findings instead of clearing them. Locate the
 rule by its message -- grep `has no <param> tag`. A present `<param>` tag inside a managed
@@ -136,11 +200,46 @@ block satisfies "has a tag" whether or not it has a body; a MISSING tag is still
 Decide separately whether an empty body deserves its own lower-severity hint (my view: yes,
 as `hint`, so the to-do stays visible without being a warning).
 
-### A5 `[ ]` Whole-project run + diff review
+**SHIPPED, except that separate decision.** The rule needed almost nothing -- it already
+tested tag PRESENCE, and the parser captures an empty-bodied `<param>`. The one change it
+did need: its `HumanAuthored` gate counted "at least one `<param>` already written" as
+evidence of a human. Since A3 the engine writes one for every parameter, so that term was
+about to become true of a block nothing human ever touched -- which would have re-opened the
+exact defect the gate was added to close on 2026-08-03 (the tool grading its own output).
+Engine-marked params no longer count toward authorship; a hand-written body does.
+
+`[ ]` **STILL OPEN, and deliberately not decided here:** the lower-severity hint for a
+PRESENT-but-EMPTY body. It needs a new finding kind and a rules-catalogue entry, which adds
+findings to every consumer's run -- that is the user's call, not a side effect of A4.
+
+### A5 `[x]` Whole-project run + diff review -- DONE 2026-08-06
 
 Only after A1-A4. On a clean branch, `document --project --apply`, then read the diff, then
 `lint-all` and confirm the `doc-drift` count actually falls. Do NOT run this against
 DataCopy while the tester round is live (see C1).
+
+**RUN AGAINST YADF**, copied to `C:\TEMP\a5_yadf` with a pristine twin beside it, so the
+diff is reviewable and the user's tree is untouched. DataCopy was correctly avoided.
+
+| measure | before | after |
+|---|---|---|
+| `doc-drift` findings | 35 | **11** |
+| total findings | 673 | 649 |
+| `<param>` tags | 50 | 53 |
+| **non-doc source lines lost** | -- | **0** |
+
+The last row is the one that matters and it was checked mechanically: every line of every
+original file that is not a `///` line is still present, in order, across the whole corpus.
+
+The 7 surviving `has no <param> tag` findings are NOT the contradiction #3 described. They
+sit on declarations `document` did not touch -- `YADF.OptionsFrame.pas` is outside
+`YADF.dproj`'s closure, and two `YADF.Layout.pas` routines were skipped by the facts-only
+default. Proven by running `document --unit` on that one file: 3 of them cleared
+immediately. The two halves converge now; they simply have to meet first.
+
+Also confirmed on the real corpus: `YADFOT.Wizard.pas`'s `Register` -- the original banner
+defect -- reads with the genuine eleven-line prose as its `<summary>`, no row of dashes
+anywhere.
 
 ---
 

@@ -115,8 +115,13 @@ try {
     ($null -ne $plainBlock -and $plainBlock -match [regex]::Escape('<returns><!-- drag-lint:auto -->')) $plainBlock
   Check 'Plain gained NO <summary> tag (nothing to say)' `
     ($null -eq $plainBlock -or (-not ($plainBlock -match '<summary>'))) $plainBlock
-  Check 'Plain gained NO <param name="AValue"> tag (no hand-written description)' `
-    ($null -eq $plainBlock -or (-not ($plainBlock -match '<param'))) $plainBlock
+  # v(PHASE A3, ruling D-3) reverses v(ADP3 T3) here: STRUCTURE ALWAYS, MEANING
+  # ONLY WHERE THE SOURCE CARRIES IT. The old rule -- no <param> unless a human
+  # wrote a description -- was itself the defect: doc-drift reported those tags as
+  # missing while `document` refused to write them, so the two halves could never
+  # converge. The tag is now emitted, engine-marked, with an EMPTY body.
+  Check 'Plain gained an engine-marked <param name="AValue"> tag with an EMPTY body' `
+    (($null -ne $plainBlock) -and ($plainBlock -match [regex]::Escape('<param name="AValue"><!-- drag-lint:auto --></param>'))) $plainBlock
 
   # --- dry-run --strip (no --apply), run against the STILL-documented file --
   # (before the real strip below) so there is engine content to report on.
@@ -135,7 +140,7 @@ try {
   # fence -- see the header). This was 4 tags before T3 (Plain used to also
   # carry a marked-empty <summary> and <param>).
   Check 'dry-run --strip reports the exact tag/block counts on stdout' `
-    ($dryRunOut -match 'stripped:\s*2\s*tags,\s*0\s*blocks') $dryRunOut
+    ($dryRunOut -match 'stripped:\s*3\s*tags,\s*0\s*blocks') $dryRunOut
 
   # --- real strip --apply: round-trip back to the pre-apply snapshot ---
   & $exePath document --unit $target --db $db --strip --apply 2>&1 | Out-Null

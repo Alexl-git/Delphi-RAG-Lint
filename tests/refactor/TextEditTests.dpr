@@ -11,8 +11,19 @@ begin
 end;
 function Mk(const AFile: string; AKind: TTextEditKind; ALine, ACol, AEnd: Integer; const AText: string): TTextEdit;
 begin
+  Result:= Default(TTextEdit);   { explicit: ExpectLine must start unguarded }
   Result.FilePath:= AFile; Result.Kind:= AKind; Result.Line:= ALine;
   Result.Col:= ACol; Result.EndLine:= AEnd; Result.Text:= AText;
+end;
+{ v(PHASE A2) line-kind builder carrying the stale-ANCHOR guard: the edit may be
+  written only while line AExpLine still holds AExpText and is not a comment. }
+function MkAnchored(const AFile: string; AKind: TTextEditKind; ALine, AEnd: Integer;
+  const AText: string; AExpLine: Integer; const AExpText: string): TTextEdit;
+begin
+  Result:= Default(TTextEdit);
+  Result.FilePath:= AFile; Result.Kind:= AKind; Result.Line:= ALine;
+  Result.EndLine:= AEnd; Result.Text:= AText;
+  Result.ExpectLine:= AExpLine; Result.ExpectText:= AExpText;
 end;
 { tekReplaceInLine builder: replace 1-based [ACol, AEndCol) on ALine with AText,
   guarded by AExpect ('' = unguarded / legacy behaviour). }
@@ -145,6 +156,72 @@ begin
     Check('applied file still gets a .bak holding the original',
       (Touched = 1) and (Skipped = 0) and TFile.Exists(P + '.bak')
       and (Pos('glyActive:= 1;', TFile.ReadAllText(P + '.bak', TEncoding.ANSI)) > 0));
+
+    { --- v(PHASE A2): the stale-ANCHOR guard on the LINE kinds --------------
+      The line kinds had no guard at all, which is how `document --qname
+      --apply` run twice on one class nested the second block inside the first.
+      The anchor is the declaration line; the guard requires that line to still
+      hold the name AND to not be a comment. }
+
+    { anchor holds -> insert applies }
+    TFile.WriteAllText(P, 'unit u;'#13#10'procedure Ping;'#13#10, TEncoding.ANSI);
+    Edits:= [MkAnchored(P, tekInsertLines, 1, 0, '/// <summary>x</summary>', 2, 'Ping')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('anchored insert applies when the declaration is still at ExpectLine',
+      (Pos('<summary>x</summary>'#13#10'procedure Ping;', After) > 0) and (Skipped = 0));
+
+    { anchor moved (the name is on a DIFFERENT line now) -> dropped }
+    TFile.WriteAllText(P, 'unit u;'#13#10'procedure Other;'#13#10'procedure Ping;'#13#10, TEncoding.ANSI);
+    Edits:= [MkAnchored(P, tekInsertLines, 1, 0, '/// <summary>x</summary>', 2, 'Ping')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('anchored insert SKIPPED when the declaration has moved off ExpectLine',
+      (Pos('<summary>', After) = 0) and (Skipped = 1));
+
+    { THE FILED DEFECT: the stale line now points INSIDE a doc block the last
+      apply wrote, on a line that DOES contain the name. A substring test alone
+      passes here; the comment test is what rejects it. }
+    TFile.WriteAllText(P, 'unit u;'#13#10'/// Calls: Ping'#13#10'procedure Ping;'#13#10, TEncoding.ANSI);
+    Edits:= [MkAnchored(P, tekInsertLines, 1, 0, '/// <summary>x</summary>', 2, 'Ping')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('anchored insert SKIPPED when ExpectLine landed in a COMMENT that names the symbol',
+      (Pos('<summary>', After) = 0) and (Skipped = 1));
+
+    { whole-word, not substring: 'Ping' must not be satisfied by 'Pinger' }
+    TFile.WriteAllText(P, 'unit u;'#13#10'procedure Pinger;'#13#10, TEncoding.ANSI);
+    Edits:= [MkAnchored(P, tekInsertLines, 1, 0, '/// <summary>x</summary>', 2, 'Ping')];
+    Skipped:= -1;
+    TTextEditApplier.Apply(Edits, False, Skipped);
+    Check('anchored guard matches WHOLE WORDS -- Pinger does not satisfy Ping', (Skipped = 1));
+
+    { a DELETE+INSERT pair sharing one stale anchor must fail TOGETHER --
+      otherwise the repair path deletes an existing comment and drops its
+      replacement, which is worse than either half alone. }
+    TFile.WriteAllText(P, 'unit u;'#13#10'/// old doc'#13#10'procedure Other;'#13#10'procedure Ping;'#13#10, TEncoding.ANSI);
+    Edits:= [MkAnchored(P, tekDeleteLines, 2, 2, '', 3, 'Ping'),
+             MkAnchored(P, tekInsertLines, 1, 0, '/// new doc', 3, 'Ping')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('a stale delete+insert PAIR is dropped together -- no half-applied repair',
+      (Pos('/// old doc', After) > 0) and (Pos('/// new doc', After) = 0)
+      and (Skipped = 2) and (Touched = 0));
+
+    { ... and the same pair applies in full when the anchor does hold. }
+    TFile.WriteAllText(P, 'unit u;'#13#10'/// old doc'#13#10'procedure Ping;'#13#10, TEncoding.ANSI);
+    Edits:= [MkAnchored(P, tekDeleteLines, 2, 2, '', 3, 'Ping'),
+             MkAnchored(P, tekInsertLines, 1, 0, '/// new doc', 3, 'Ping')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('the same pair applies in FULL when the anchor holds (de-vacuator)',
+      (Pos('/// new doc', After) > 0) and (Pos('/// old doc', After) = 0)
+      and (Skipped = 0) and (Touched = 1));
 
     if TFile.Exists(P) then TFile.Delete(P);
     if TFile.Exists(P + '.bak') then TFile.Delete(P + '.bak');

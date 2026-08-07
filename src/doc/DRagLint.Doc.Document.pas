@@ -350,6 +350,39 @@ begin
   Result:= LeadingWhitespace(L);
 end;
 
+// v(PHASE A2): arms TTextEditApplier's stale-anchor guard on one doc edit.
+//
+// EVERY coordinate in a doc edit is derived from ASym.StartLine, and that number
+// comes from the STORE -- a snapshot that goes stale the moment anything writes
+// to the file. Two `document --qname --apply` runs against two members of one
+// class is enough: the first insert pushes the second declaration down, the
+// store still says where it USED to be, and that coordinate now points into the
+// middle of the block just written. Filed as
+// docs\INBOX-document-qname-second-apply-nests-block-on-stale-anchor.md; the
+// result was two <remarks> opens, one member's facts inside the other's block,
+// the second member left undocumented, and exit 0.
+//
+// The anchor is the DECLARATION line, and the name is what must still be on it.
+// Both edits of the repair pair (the delete of the old span and the insert of
+// the merged one) get the SAME anchor deliberately: the applier validates the
+// whole file's edits against one pre-mutation snapshot, so a stale pair is
+// dropped together and can never half-apply into a delete with no replacement.
+//
+// NOT a second verification path -- the check itself lives in
+// TTextEditApplier.AnchorIsValid, beside the tekReplaceInLine guard that already
+// fixed this same root cause for the `unused-local` and naming fixers. This
+// function only supplies what to verify.
+procedure StampAnchor(var AEdit: TTextEdit; const ASym: TSymbol);
+begin
+  AEdit.ExpectLine:= ASym.StartLine;
+  AEdit.ExpectText:= ASym.Name;
+  // A symbol with no short name (never observed, but the store is external
+  // input) would arm a guard that can never pass and would silently stop the
+  // verb writing anything. Leave it unguarded instead -- exactly the historic
+  // behaviour -- rather than fail closed on a case that is not the defect.
+  if Trim(AEdit.ExpectText) = '' then AEdit.ExpectLine:= 0;
+end;
+
 // v(ADP3 T3 review round 3, Regression 2): looks ahead from AOpenIx (which
 // Lines[AOpenIx] trims to exactly '<remarks>') for a matching '</remarks>'
 // line. Returns True (with ACloseIx set to that line's index) only when the
@@ -913,6 +946,7 @@ begin
     E.Kind    := tekDeleteLines;
     E.Line    := Existing.StartLine;
     E.EndLine := Existing.EndLine;
+    StampAnchor(E, ASym);
     Result.Edits:= Result.Edits + [E];
 
     E:= Default(TTextEdit);
@@ -920,6 +954,7 @@ begin
     E.Kind    := tekInsertLines;
     E.Line    := Existing.StartLine - 1; // insert AFTER (StartLine-1) => at StartLine
     E.Text    := Merged;
+    StampAnchor(E, ASym);
     Result.Edits:= Result.Edits + [E];
 
     Result.Action:= daExtended;
@@ -984,6 +1019,7 @@ begin
     E.Kind    := tekInsertLines;
     E.Line    := ASym.StartLine - 1; // insert AFTER (StartLine-1) => at StartLine
     E.Text    := Merged;
+    StampAnchor(E, ASym);
     Result.Edits:= Result.Edits + [E];
 
     Result.Action:= daCreated;

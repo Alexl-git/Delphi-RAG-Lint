@@ -122,8 +122,14 @@ Check 'A: document --qname --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 # v(ADP3 T3d2 D8 review round 2, minor 5): anchored with [,}] -- the same
 # unanchored-substring shape removed from run_pipeline_tests.ps1:67 earlier in
 # this task would let "tagsRemoved":12 etc. false-pass a 1-vs-doubled check.
-Check 'A CRITICAL: reports the NON-DOUBLED counts (tagsRemoved:1, blocksRemoved:1, edits:1)' `
-  ($stripOut -match '"tagsRemoved":1[,}]' -and $stripOut -match '"blocksRemoved":1[,}]' -and $stripOut -match '"edits":1[,}]') $stripOut
+# v(PHASE A3): tagsRemoved is now 2, not 1 -- ruling D-3 makes the engine emit a
+# structural <param> for the signature parameter alongside the managed tag this
+# fixture already had, so there is one more engine-owned tag to remove. What the
+# check is FOR is unchanged and is what makes the numbers meaningful: a
+# regression back to the union-with-no-dedup shape DOUBLES them, so the pinned
+# values stay exact rather than becoming a >= test.
+Check 'A CRITICAL: reports the NON-DOUBLED counts (tagsRemoved:2, blocksRemoved:1, edits:1)' `
+  ($stripOut -match '"tagsRemoved":2[,}]' -and $stripOut -match '"blocksRemoved":1[,}]' -and $stripOut -match '"edits":1[,}]') $stripOut
 
 # v(ADP3 T3d2 D8 review round 3, IMPORTANT): skippedCount/skippedFiles are now
 # ALWAYS in --json output (see ReportStrip), including when nothing was

@@ -893,8 +893,17 @@ try {
     'STRUCTURAL 1 (round 3): <param> nested inside <example>'
   $exampleNestParamBlock = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) '^procedure ExampleWithNestedParam\(AV: Integer\);'
   $paramTagCount = ([regex]::Matches($exampleNestParamBlock, '<param name="AV">')).Count
-  Check 'STRUCTURAL 1: no standalone <param name="AV"> fabricated from the nested one (exactly one substring, inside the example)' `
-    ($paramTagCount -eq 1) $exampleNestParamBlock
+  # v(PHASE A3): the COUNT is now 2, and the defect this guards is unchanged.
+  # AV is a real signature parameter, so ruling D-3 gives it a structural
+  # <param> tag of its own -- that is not the fabrication being watched for.
+  # The fabrication was the engine COPYING the nested tag's DESCRIPTION into a
+  # standalone sibling, so that is what is asserted directly: the nested text
+  # appears exactly once (still inside <example>), and the engine's own tag is
+  # empty rather than carrying it.
+  $nestedDescCount = ([regex]::Matches($exampleNestParamBlock, 'nested param desc')).Count
+  Check 'STRUCTURAL 1: the nested <param> description is NOT copied into a standalone sibling' `
+    (($paramTagCount -eq 2) -and ($nestedDescCount -eq 1) -and `
+     ($exampleNestParamBlock -match [regex]::Escape('<param name="AV"><!-- drag-lint:auto --></param>'))) $exampleNestParamBlock
 
   # --- STRUCTURAL 1, formerly a DISCLOSED RESIDUAL: DeprecatedWithNestedReturns
   # / ExampleWithNestedRemarks. PINS FLIPPED by v(ADP3 T3h).

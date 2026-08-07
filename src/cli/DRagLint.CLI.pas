@@ -7375,6 +7375,53 @@ begin
   end;
 end;
 
+// v(PHASE A2 + ruling D-2): the doc verbs' recovery step when the applier's
+// stale-anchor guard refused an edit.
+//
+// TTextEditApplier now verifies that the declaration a doc block is about to be
+// written above is STILL at the coordinate the store gave (see
+// DRagLint.Doc.Document.StampAnchor). A refusal means exactly one thing: the
+// index and the file have diverged. Ruling D-2 says that is not something to
+// report and stop on -- "suspected stale index => REINDEX, immediately... this
+// would not take long, but insures a precise result" -- so the verb reindexes
+// and recomputes ONCE before giving up.
+//
+// Scope: the project when one was named, otherwise the target file's own
+// directory. Not the whole `--all` manifest -- D-2's scope is the PROJECT, and
+// a --unit run has no project, only the file whose coordinates went stale.
+//
+// Returns False when the reindex itself failed, in which case the caller must
+// stop: retrying against an index that could not be rebuilt would just refuse
+// again, and the one thing that must never happen is a write at a coordinate
+// nothing has verified.
+function ReindexAfterStaleAnchor(const AArgs: TArgs; const AFilePath: string): Boolean;
+var
+  IndexArgs: TArgs;
+begin
+  Writeln('doc: the index disagrees with the file on where a declaration is -- reindexing and retrying once (ruling D-2).');
+  IndexArgs         := AArgs;
+  IndexArgs.IndexAll:= False;
+  if AArgs.ProjectPath <> '' then IndexArgs.Path:= ''    // ProjectPath drives the closure
+  // ExpandFileName first: `--unit foo.pas` from the file's own directory gives
+  // ExtractFileDir '' , which would hand the indexer an empty scope and turn a
+  // recoverable staleness into a hard failure.
+  else IndexArgs.Path:= ExtractFileDir(ExpandFileName(AFilePath));
+  Result:= DoIndex(IndexArgs) = 0;
+  if not Result then
+    Writeln('doc: the reindex FAILED. Nothing was written at the unverified coordinate(s).');
+end;
+
+// Reports edits the stale-anchor guard dropped even after the D-2 retry. The
+// message names the remedy, because the state it describes is recoverable and a
+// bare count is not actionable. Returns the verb's exit code.
+function ReportStaleAnchorRefusal(ASkipped: Integer): Integer;
+begin
+  Writeln(Format('doc: REFUSED %d edit(s) -- the declaration is not at the line the index reports, and a reindex did not reconcile them. ' +
+                 'NOTHING was written for those sites. Re-index this scope and re-run; if it persists, the file changed under the run.',
+                 [ASkipped]));
+  Result:= 1;
+end;
+
 // v(ADP3 T3d2 D6): shared strip-reporting path for the three call sites that
 // each independently built the same '--strip' JSON object / 'stripped: N
 // tags, M blocks...' text (DoDocumentUnit, ReportDocBatch,
@@ -7499,7 +7546,25 @@ begin
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
-  if Applied then TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+  if Applied then
+  begin
+    var Skipped: Integer:= 0;
+    TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup, Skipped);
+    // v(PHASE A2 + D-2): a refusal means the index and the file disagree.
+    // Reindex, recompute from the fresh coordinates, and apply once more.
+    if Skipped > 0 then
+    begin
+      Store:= nil; // release the read-only handle before the indexer writes
+      if not ReindexAfterStaleAnchor(AArgs, AArgs.DocUnit) then Exit(1);
+      Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+      if not Ok then Exit(2);
+      Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
+      Skipped:= 0;
+      if Length(Res.Edits) > 0 then
+        TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup, Skipped);
+      if Skipped > 0 then Exit(ReportStaleAnchorRefusal(Skipped));
+    end;
+  end;
 
   if AArgs.AsJson then
   begin
@@ -7539,7 +7604,16 @@ var
   Applied: Boolean    ;
 begin
   Applied:= AArgs.Apply and (Length(ARes.Edits) > 0);
-  if Applied then TTextEditApplier.Apply(ARes.Edits, not AArgs.NoBackup);
+  // v(PHASE A2): the batch paths compute every edit from ONE snapshot, so a
+  // stale-anchor refusal here does not mean "an earlier edit in this run moved
+  // the target" (the single-symbol paths' case, which they recover from by
+  // reindexing and recomputing). It means the DB was already stale before the
+  // run started, and the edit set in hand is built on those same wrong
+  // coordinates -- re-applying it after a reindex would refuse identically.
+  // So this path fails LOUDLY and names the flag that reconciles the two, which
+  // this verb already has: --reindex brackets the run with an index pass.
+  var BatchSkipped: Integer:= 0;
+  if Applied then TTextEditApplier.Apply(ARes.Edits, not AArgs.NoBackup, BatchSkipped);
 
   // v(ADP3 T2): --strip has its own reporting shape (tags/blocks REMOVED),
   // shared by document --project and document-all. v(ADP3 T3d2 D6): routed
@@ -7559,10 +7633,15 @@ begin
       O.AddPair('edits'    , TJSONNumber.Create(Length(ARes.Edits)));
       O.AddPair('applied'  , TJSONBool.Create(Applied));
       O.AddPair('accessorsSkipped', TJSONNumber.Create(ARes.AccessorsSkipped)); // ADP1 T2
+      // v(PHASE A2): ADDITIVE key. A --json consumer must be able to learn that
+      // some sites were refused -- without it the text path reports a refusal
+      // and the machine path silently claims success. 0 on every healthy run.
+      O.AddPair('staleAnchorsRefused', TJSONNumber.Create(BatchSkipped));
       Writeln(O.ToJson);
     finally
       O.Free;
     end;
+    if BatchSkipped > 0 then Exit(1);
     Exit(0);
   end;
 
@@ -7572,6 +7651,14 @@ begin
   // ADP1 T2: report the trivial-accessor skip count (shared by document --project / document-all).
   if ARes.AccessorsSkipped > 0 then Writeln(Format('doc: %d trivial accessor(s) skipped (pass --include-accessors to include)', [ARes.AccessorsSkipped]));
   Result:= 0;
+  // v(PHASE A2): reported LAST so the counts above still print -- a refusal is
+  // partial, not total: the sites whose anchors verified were written.
+  if BatchSkipped > 0 then
+  begin
+    Writeln(Format('doc: REFUSED %d edit(s) -- the declaration is not at the line the index reports. NOTHING was written for those sites. ' +
+                   'Re-run with --reindex (it brackets the run with an index pass), or index this scope and re-run.', [BatchSkipped]));
+    Result:= 1;
+  end;
 end; // function
 
 // AutoDocument (project-wide batch): drag-lint document --project <p.dpr/.dproj>
@@ -7970,7 +8057,27 @@ begin
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
-  if Applied then TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+  if Applied then
+  begin
+    var Skipped: Integer:= 0;
+    TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup, Skipped);
+    // v(PHASE A2 + D-2): THE filed case -- two --qname applies in a row against
+    // one class, no reindex between them. See ReindexAfterStaleAnchor.
+    if Skipped > 0 then
+    begin
+      Store:= nil; // release the read-only handle before the indexer writes
+      if not ReindexAfterStaleAnchor(AArgs, Res.FilePath) then Exit(1);
+      Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+      if not Ok then Exit(2);
+      Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso,
+        AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases,
+        LoadDocMaxCallers, LoadDocComplexityMin);
+      Skipped:= 0;
+      if Length(Res.Edits) > 0 then
+        TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup, Skipped);
+      if Skipped > 0 then Exit(ReportStaleAnchorRefusal(Skipped));
+    end;
+  end;
 
   if AArgs.AsJson then
   begin

@@ -52,13 +52,20 @@ try {
   Check 'apply: .bak written' (Test-Path "$target.bak")
 
   $txt = [IO.File]::ReadAllText($target)
-  # v(ADP3 T3): omit-when-empty -- Add has nothing hand-written/harvested for
-  # <summary> or either <param>, so NEITHER is emitted (a fresh comment never
-  # carries a <param> skeleton, and an empty <summary> is worse than none).
+  # v(ADP3 T3): omit-when-empty for <summary> -- Add has nothing hand-written or
+  # harvested to say, and an empty <summary> renders as a BLANK tooltip, which is
+  # strictly worse than no tooltip. That rule is unchanged.
   Check 'comment: NO <summary> tag (nothing to say)' ($txt -notmatch '<summary>')
   Check 'comment: no "TODO" text anywhere in the file' ($txt -cnotmatch 'TODO')
-  Check 'comment: NO <param name="A"> tag (no hand-written description)' ($txt -notmatch '<param name="A">')
-  Check 'comment: NO <param name="B"> tag (no hand-written description)' ($txt -notmatch '<param name="B">')
+  # v(PHASE A3, ruling D-3): <param> does NOT follow omit-when-empty, and the two
+  # tags differ for a reason. A <param> tag is STRUCTURE -- it says "this
+  # parameter exists and is undocumented", which is true and useful, and it is
+  # what lets doc-drift's "has no <param> tag" finding ever be cleared. A
+  # <summary> has no structural content to carry: empty, it says nothing at all.
+  Check 'comment: <param name="A"> IS emitted -- structure, with an empty body' `
+    ($txt -match [regex]::Escape('<param name="A"><!-- drag-lint:auto --></param>'))
+  Check 'comment: <param name="B"> IS emitted -- structure, with an empty body' `
+    ($txt -match [regex]::Escape('<param name="B"><!-- drag-lint:auto --></param>'))
   Check 'comment: <returns> present (mined A + B case survives)' ($txt -match '///\s*<returns>')
   Check 'comment: <remarks> fenced block present' ($txt.Contains('/// <remarks>') -and $txt.Contains('<!-- drag-lint:auto BEGIN -->') -and $txt.Contains('<!-- drag-lint:auto END -->'))
   Check 'comment: Called from: doc_generate.UseAdd present' ($txt -match 'Called from:.*doc_generate\.UseAdd')

@@ -54,8 +54,17 @@ try {
   Check 'preserved: hand param "Real param desc." verbatim (no AUTO_MARK)' `
     ($txt.Contains('/// <param name="X">Real param desc.</param>') -and `
      ($txt -notmatch [regex]::Escape('<param name="X">') + '.*' + [regex]::Escape('<!-- drag-lint:auto -->')))
-  Check 'v(ADP3 T3): NOT added -- <param name="Y"> has no hand-written description, so no tag at all' `
-    ($txt -notmatch '<param name="Y">')
+  # v(PHASE A3, ruling D-3) REVERSES v(ADP3 T3)'s rule here. This used to assert
+  # that an undocumented param gets NO tag at all, on the ground that no
+  # harvester for param descriptions existed. That omission was itself the
+  # defect: doc-drift reported those same tags as missing while `document`
+  # refused to write them, so the two halves could never converge (22
+  # unclearable findings on one corpus). The rule now is STRUCTURE ALWAYS,
+  # MEANING ONLY WHERE THE SOURCE CARRIES IT -- so Y gets a tag, marked as the
+  # engine's, with an EMPTY body, and X's hand-written description is still
+  # preserved verbatim by the assertion above.
+  Check 'v(PHASE A3, D-3): ADDED -- <param name="Y"> gets an engine-marked tag with an empty body' `
+    ($txt -match [regex]::Escape('<param name="Y"><!-- drag-lint:auto --></param>'))
 
   # Both hand remark lines survive, EACH with a /// prefix (Task 4 fix #1).
   $hasLine1 = ($lines | Where-Object { $_.Trim() -eq '/// First remark line.' }).Count -eq 1

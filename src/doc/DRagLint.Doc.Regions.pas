@@ -509,6 +509,83 @@ begin
     else ASb.AppendLine((APrefix + Trim(Parts[i])).TrimRight);
 end;
 
+// v(PHASE A1, ruling D-1): drops from AHarvested every line whose text is
+// ALREADY present in APresent, so a re-run cannot accumulate the same prose
+// twice. Returns what is left, or '' when everything was a duplicate.
+//
+// THE DUPLICATION IS REAL AND IT IS THE OWNERSHIP HANDOVER. Marked lines are
+// engine-owned and regenerated; ownership passes to a human by DELETING the
+// marker (v(ADP3 T3)), after which MergeComment preserves the line as hand
+// prose. But the harvest is recomputed from a SOURCE comment that is still
+// sitting in the file, so EmitHarvestedRemarks re-emits its own copy beneath
+// the human's -- and the paragraph appears twice, for good, with no marker on
+// the first copy for `--strip` to find. The truncate-at-first-marker rule below
+// cannot see this: by then the line no longer carries a marker.
+//
+// Ruling D-1 is what this implements -- "textually compare and delete identical
+// phrases so the summary does not explode on re-runs" -- and it is deliberately
+// TEXTUAL and deliberately EXACT. Comparison is on whitespace-collapsed,
+// case-folded text; a paraphrase is NOT a duplicate, because dropping prose a
+// human might have edited on purpose would be a silent destruction of their
+// words. Only a line the reader would see twice is removed.
+function DropAlreadyPresentPhrases(const AHarvested, APresent: string): string;
+
+  // Whitespace-collapsed, case-folded view. One reader per side, so the two
+  // cannot normalise differently.
+  function Norm(const S: string): string;
+  var
+    i   : Integer       ;
+    Prev: Boolean       ;
+    Sb  : TStringBuilder;
+  begin
+    Sb:= TStringBuilder.Create;
+    try
+      Prev:= False;
+      for i:= 1 to Length(S) do
+        if CharInSet(S[i], [' ', #9, #10, #13]) then
+        begin
+          if not Prev then Sb.Append(' ');
+          Prev:= True;
+        end
+        else
+        begin
+          Sb.Append(S[i]);
+          Prev:= False;
+        end;
+      Result:= LowerCase(Trim(Sb.ToString));
+    finally
+      Sb.Free;
+    end;
+  end;
+
+var
+  Present: string        ;
+  Line   : string        ;
+  L      : string        ;
+  Kept   : TStringBuilder;
+begin
+  Result:= AHarvested;
+  if (AHarvested = '') or (Trim(APresent) = '') then Exit;
+  Present:= Norm(APresent);
+  if Present = '' then Exit;
+  Kept:= TStringBuilder.Create;
+  try
+    for Line in StringReplace(StringReplace(AHarvested, #13#10, #10, [rfReplaceAll]),
+                              #13, #10, [rfReplaceAll]).Split([#10]) do
+    begin
+      L:= Norm(Line);
+      // A blank separator line carries no text to duplicate; it is kept only
+      // when something survives around it, which the final Trim takes care of.
+      if (L <> '') and (Pos(L, Present) > 0) then Continue;
+      if Kept.Length > 0 then Kept.Append(#10);
+      Kept.Append(Line);
+    end;
+    Result:= Trim(Kept.ToString);
+  finally
+    Kept.Free;
+  end;
+end;
+
 // v(ADP3 T7): the DocInsight contract for this function now lives on its
 // INTERFACE declaration, which is the surface Doc.Harvest compiles against.
 // Restated here it would be a second copy free to drift from the one callers
@@ -1807,6 +1884,31 @@ var
   begin
     Result:= IsEngineOwnedTagText(S);
   end;
+  // v(PHASE A3, ruling D-3): the MEANING mined for parameter AName, or '' when
+  // the source states none. '' is not a failure -- it is the ordinary case, and
+  // it produces a <param> tag with an empty body: structure without meaning.
+  function ParamNoteFor(const AName: string): string;
+  var PN: TDocParamNote;
+  begin
+    Result:= '';
+    for PN in AFacts.ParamNotes do
+      if SameText(PN.Name, AName) then Exit(EscXml(PN.Text));
+  end;
+  // The engine-owned <param> emit. ONE writer for both MergeComment paths (the
+  // fresh insert and the repair), because a <param> that appeared on only one of
+  // them would look like a mining bug rather than a wiring one -- the same
+  // reasoning EmitHarvestedRemarks records for itself.
+  //
+  // Marked, so `document --strip` and the drift check can tell this tag is the
+  // engine's. ClassifyParamAction then reads that marker on the NEXT run:
+  // marked-and-empty is engine-owned (regenerated), marked-with-text is
+  // preserved -- which is exactly ruling D-4's "regenerate the structure, leave
+  // the meaning alone", including a meaning a human typed INSIDE the tag without
+  // removing the marker.
+  function EmitEngineParam(const AName: string): string;
+  begin
+    Result:= EmitTagged('<param name="' + AName + '">' + AUTO_MARK, ParamNoteFor(AName), '</param>');
+  end;
   // v(ADP3 T3 review round 2, Finding 1 -- PARAM ONLY): classifies
   // ownership of one existing <param>'s raw parsed text (S) for the repair
   // path, given whether the tag is literally present at all (AHasTag) --
@@ -2143,6 +2245,17 @@ begin
       // never carries a <param> skeleton at all).
       if AFacts.HarvestedSummary <> '' then
         Sb.AppendLine(EmitTagged('<summary>' + AUTO_MARK, AFacts.HarvestedSummary, '</summary>'));
+      // v(PHASE A3, ruling D-3): STRUCTURE ALWAYS. The comment above used to
+      // read "and <param> never", on the ground that no harvester for parameter
+      // descriptions existed. One does now, and more importantly the omission
+      // was itself a defect: `doc-drift` reported every one of these tags as
+      // missing while `document` refused to write any, so the two halves could
+      // never converge -- 22 unclearable findings on one corpus
+      // (INBOX-datacopy-2026-08-06, section 3). An automatic generator supplies
+      // structure, not meaning; the body is filled only where the source states
+      // it, and is otherwise empty.
+      for P in ASigParams do
+        Sb.AppendLine(EmitEngineParam(P));
       if AHasReturn then
       begin
         var Obs: string:= Trim(ObservedSuffix(AFacts.ReturnCases));
@@ -2275,6 +2388,9 @@ begin
     // existing params first, in signature order where possible
     for P in ASigParams do
     begin
+      // v(PHASE A3): tracks whether the HAND-WRITTEN arm already emitted this
+      // param, so the structural arm below does not write a second tag for it.
+      var ParamEmitted: Boolean:= False;
       for var EP in Eff.Params do
         if SameText(EP.Name, P) then
         begin
@@ -2283,19 +2399,49 @@ begin
             if SameText(SP.Name, P) then begin IsStandaloneParam:= True; Break; end;
           if IsStandaloneParam then
           begin
+            // v(PHASE A3): IS THIS MARKED BODY THE ENGINE'S OWN HARVEST, OR A
+            // HUMAN'S EDIT INSIDE THE ENGINE'S TAG? Before A3 the question could
+            // not arise -- nothing ever filled a <param>, so marked-with-content
+            // could only be a human (Finding 1's taPreserveStripped rule). Now
+            // the miner fills one, and taPreserveStripped applied to ITS OWN
+            // output strips the marker on the second run: the block changes
+            // every cycle (measured: cycle 2 removed four markers) and the
+            // engine quietly hands ownership of its own text to the human.
+            //
+            // The question is answerable EXACTLY rather than by heuristic:
+            // compare the marked body with what the miner produces from the
+            // CURRENT source. Equal means the engine wrote it and the source
+            // still says so -- regenerate, and the run is a fixed point. Not
+            // equal means a human typed something else there, or the source
+            // comment changed under a body someone has since adjusted; ruling
+            // D-4 says leave that meaning alone, so it falls through to the
+            // preserve arm exactly as before.
+            var MinedNow: string:= Trim(ParamNoteFor(P));
+            if (MinedNow <> '') and IsManagedDesc(EP.Desc)
+               and SameText(Trim(StripMark(EP.Desc)), MinedNow) then
+            begin
+              Sb.AppendLine(EmitEngineParam(P));
+              ParamEmitted:= True;
+              Break;
+            end;
             case ClassifyParamAction(EP.Desc, True) of
-              taPreserveStripped: Sb.AppendLine(EmitTagged('<param name="' + P + '">', StripMark(EP.Desc), '</param>'));
-              taPreserveVerbatim: Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>'));
-              taEngineOwned: ; // no harvester for params -- always drop, never regenerate
+              // RULING D-4, the meaning half: a body a human wrote is never
+              // overwritten -- including one typed INSIDE the engine's own tag
+              // without removing the marker (taPreserveStripped).
+              taPreserveStripped: begin Sb.AppendLine(EmitTagged('<param name="' + P + '">', StripMark(EP.Desc), '</param>')); ParamEmitted:= True; end;
+              taPreserveVerbatim: begin Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>')); ParamEmitted:= True; end;
+              taEngineOwned: ;  // engine-owned and empty: fall through and REGENERATE
             end;
           end;
           Break;
         end;
-      // If no EP matched P at all (the inner loop found nothing), or the
-      // match was not genuinely standalone: no <param> tag exists for this
-      // sig param -- nothing hand-written to preserve and no harvester to
-      // fill it, so nothing is emitted for it either (v(ADP3 T3): fresh/
-      // missing params never get a skeleton).
+      // v(PHASE A3, ruling D-3), replacing "fresh/missing params never get a
+      // skeleton": no hand-written tag exists for this signature parameter (no
+      // match at all, a non-standalone match, or an engine-owned empty one), so
+      // the STRUCTURE is (re)generated here. That is D-4's other half -- the
+      // structure part is regenerated on every run, which is what makes a
+      // renamed parameter's tag follow the signature instead of rotting.
+      if not ParamEmitted then Sb.AppendLine(EmitEngineParam(P));
     end;
     // stale hand-typed params: in the comment but not the signature -> flag, keep.
     // v(ADP3 T3b review round 3, STRUCTURAL 1): same standalone-presence
@@ -2613,6 +2759,20 @@ begin
       end;
       Prose:= NormProse; // keep the two views in step -- both branches below read them
     end;
+    // v(PHASE A1, ruling D-1): ... and now drop any harvested line the reader
+    // would otherwise see TWICE -- once as preserved hand prose (or in the
+    // hand-written summary), once regenerated below. See
+    // DropAlreadyPresentPhrases for why the truncate-at-first-marker rule above
+    // cannot catch this: the duplicate copy is the one whose marker a human
+    // removed to take ownership of it.
+    //
+    // Placed AFTER the truncation, deliberately: the two rules compose in one
+    // direction only. Truncation removes the engine's own still-marked tail, and
+    // this then compares what a human genuinely owns against what is about to be
+    // regenerated. Reversed, it would compare against text the truncation was
+    // going to delete anyway and drop harvested prose that had no duplicate.
+    HarvestedForEmit:= DropAlreadyPresentPhrases(HarvestedForEmit,
+                                                 NormProse + #10 + SummaryRaw);
     // v(ADP3 T2 adjacent fix): a SINGLE-LINE hand-written remarks with NO
     // facts to add is re-emitted on ONE line -- '<remarks>prose</remarks>' --
     // exactly like EmitTagged already does for a single-line summary/param/

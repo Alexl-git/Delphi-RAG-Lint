@@ -74,8 +74,13 @@ try {
 
   Check '1. NoDocs has NO <summary> tag (nothing to say)' `
     ($null -eq $noDocsBlock -or (-not ($noDocsBlock -match '<summary>'))) $noDocsBlock
-  Check '1. NoDocs has NO <param> tag (no hand-written description)' `
-    ($null -eq $noDocsBlock -or (-not ($noDocsBlock -match '<param'))) $noDocsBlock
+  # v(PHASE A3, ruling D-3) reverses v(ADP3 T3) here: STRUCTURE ALWAYS, MEANING
+  # ONLY WHERE THE SOURCE CARRIES IT. The old rule -- no <param> unless a human
+  # wrote a description -- was itself the defect: doc-drift reported those tags as
+  # missing while `document` refused to write them, so the two halves could never
+  # converge. The tag is now emitted, engine-marked, with an EMPTY body.
+  Check '1. NoDocs HAS an engine-marked <param> tag with an EMPTY body' `
+    (($null -ne $noDocsBlock) -and ($noDocsBlock -match [regex]::Escape('<param name="AValue"><!-- drag-lint:auto --></param>'))) $noDocsBlock
 
   $noDocsReturns = $null
   if ($null -ne $noDocsBlock) {
