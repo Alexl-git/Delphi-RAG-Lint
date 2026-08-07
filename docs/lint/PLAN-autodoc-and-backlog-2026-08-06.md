@@ -36,15 +36,29 @@ param's text**. Otherwise emit the structure alone.
 and a MEANING part. **Regenerate the structure; leave the meaning alone if present.** A
 hand-written param description is never overwritten.
 
-**Open question I could not resolve from the above (ASK BEFORE PHASE A2):** D-1 fixes the
-*explosion* and *volatility* halves of #8, but not the *misattribution* half. The live
-example is a comment that documents a REMOVAL -- "SourceStampString used to live here. It
+**D-5 -- a comment about a FOREIGN symbol is DEMOTED to `<remarks>`, never discarded.**
+CONFIRMED by the user 2026-08-06; this closes the only question the plan opened. D-1 fixes
+the *explosion* and *volatility* halves of #8 but not the *misattribution* half: the live
+example is a comment documenting a REMOVAL -- "SourceStampString used to live here. It
 MOVED to uFileUtils ..." -- which the harvester attached to the next declaration,
-`TZEISSTransfer.Create`. Under D-1 that summary is still harvested and still wrong; it is
-merely now marked volatile and rewritten each run. My recommendation is a narrow ADDITION
-that does not weaken D-1: keep harvesting, but when the comment's first sentence names a
-symbol that is neither the declaration being documented nor declared in this unit, emit it
-under `<remarks>` rather than `<summary>` (demote, do not discard). Confirm or overrule.
+`TZEISSTransfer.Create`. Under D-1 alone that summary is still harvested and still wrong,
+merely now volatile. So keep harvesting (D-1 stands), but when the comment's first sentence
+names a symbol that is neither the declaration being documented nor declared in this unit,
+emit it under **`<remarks>`** instead of `<summary>`. Demote, do not discard -- the prose is
+still true about something; it is just not this declaration's summary, and a tooltip that
+LEADS with it is what makes the defect harmful.
+
+Implementation notes for D-5, so it is not over-applied:
+- "names a symbol" = an identifier in the first sentence that RESOLVES in the index to a
+  declaration. If it does not resolve, it is prose, not a symbol reference -- leave the
+  comment as the `<summary>`. Be conservative; a false demotion loses a good summary.
+- require the named symbol to be **FOREIGN** (declared in another unit), not merely "not
+  this declaration". Otherwise a legitimate summary that mentions a helper it calls -- an
+  extremely common shape -- would be demoted.
+- both lookups already exist: `FindSymbolsByExactName` (`Core.Interfaces` :78) and
+  `GetFilePath` for the file-id comparison.
+- the demoted text still carries the auto marker per D-1, so a later run can re-promote it
+  if the declaration or the comment changes.
 
 ---
 
@@ -75,8 +89,9 @@ Do:
    are already present, so re-runs do not accumulate.
 3. D-1 volatility: the harvested region carries the auto marker and is rewritten on every
    batch run.
-4. (Pending the open question above) demote a comment whose first sentence names a foreign
-   symbol to `<remarks>`.
+4. **D-5 (confirmed):** demote a comment whose first sentence names a FOREIGN symbol to
+   `<remarks>` instead of making it the `<summary>`. See D-5's implementation notes -- the
+   "foreign, and it must resolve" conditions are what keep it from eating good summaries.
 
 Verify: new runner asserting the banner case, the orphan-note case, and idempotency across
 two consecutive `--apply` runs.
@@ -209,17 +224,21 @@ did.
 
 ## PHASE C -- DataCopy (the consumer project)
 
-### C1 `[ ]` The tester round is live -- do not disturb it
+### C1 `[x]` Merged and shipped to the tester -- do not disturb the round
 
-hg branch `datacopy-hardening-2026-08-05` at rev 33; `default` clean at 17. The user is
-sending `C:\Projects\DataCopy\TEST-INSTRUCTIONS-2026-08-06.txt` to a human tester. If it
-passes: merge to default + final build.
+**Done by a concurrent session while this plan was being written; verified here.** `default`
+is at **rev 47**, SINGLE HEAD, hardening branch merged and closed. Exe
+`Win64\Debug\EXE\DataCopy.exe` v2.1.1.69 went to a human tester for 2026-08-07. Cold-start
+state for that project: `C:\Projects\DataCopy\RESUME-2026-08-06.md`. Next there is triaging
+the tester's report -- not ours unless asked.
 
-### C2 `[ ]` MERGE BLOCKER -- 19 tracked files show `!`
+### C2 `[x]` MERGE BLOCKER -- resolved by the merge above
 
-The user moved 10 retired units into `Backup-20260805\`. Both projects build clean without
-them, which is empirical proof they were dead. Record the move with `hg remove --after`
-BEFORE merging, or the merge carries phantom deletions.
+The 19 `!` files (10 retired units moved to `Backup-20260805\`) are no longer blocking; the
+branch merged cleanly to a single head. Nothing to do.
+
+**Standing caution:** because DataCopy has shipped to a tester, A5 (the whole-project
+document run) must NOT be pointed at it until that round closes.
 
 ### C3 `[ ]` Source work never started
 
