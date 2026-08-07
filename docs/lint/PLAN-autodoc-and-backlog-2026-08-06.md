@@ -8,6 +8,46 @@ Status keys: `[ ]` not started · `[~]` in flight · `[x]` done · `[?]` needs a
 
 ---
 
+## >>> RESUME POINT (updated 2026-08-07) -- READ THIS FIRST
+
+**State.** PHASE A is COMPLETE. `main` = **`24eec74`, pushed, in sync with origin**. Battery
+**226/226** (~13 min, needs `pwsh`). The exe beside the tests
+(`third_party\dll-win64\drag-lint.exe`) is built from that commit -- rebuild only if you
+change `src\`.
+
+Working tree carries `FEATURES.txt` (another workstream's, **do not commit**) and untracked
+INBOX notes (untracked by convention). Nothing else is outstanding.
+
+**Next action: PHASE B**, ten engine defects below, none started. Suggested order, and why:
+
+1. **B3** -- bare parameterless calls in expression position are unrecorded. Same family as
+   the nested-routine gap and the same consequence: `unused-public-symbol` calls live code
+   dead, i.e. the tool tells a user to delete working code. Highest harm of the ten.
+2. **B7** -- `lint-all --json` prints a banner to stdout, so the output does not parse.
+   Small, self-contained, and it blocks anyone scripting a baseline.
+3. **B1** -- an `except` handler ending in `exit` still merges with the normal path. One
+   wrong CFG edge was ALREADY fixed and did NOT clear the symptom, so a second merge route
+   is still unfound. The `finally` equivalent is DELIBERATE -- do not "fix" that one.
+
+Then B2/B10 together (they are the same D-2 rule at two levels), B4/B5/B6 (all the same
+unscoped-bucket family), B8/B9 (cosmetic / small).
+
+**One decision is waiting on the user, and only one:** A4 deliberately left open whether a
+PRESENT-but-EMPTY `<param>` body deserves its own lower-severity `hint`. It needs a new
+finding kind and a rules-catalogue entry, which adds findings to every consumer's run -- the
+user's call, not a side effect of A4.
+
+**Build + verify loop** (the recipe that works; see `delphi-build` for why the alternatives
+do not): write a 3-line wrapper `.bat` (`rsvars` -> `cd` -> `msbuild src\cli\drag-lint.dproj
+/t:Build /p:Config=Debug /p:Platform=Win64`), run it from PowerShell `Start-Process -Wait`
+with output redirected, check `BUILD_EXITCODE=0`, then copy
+`src\cli\Win64\Debug\drag-lint.exe` over `third_party\dll-win64\drag-lint.exe` before
+running any runner.
+
+---
+
+---
+
 ## 0. DECISIONS ALREADY TAKEN BY THE USER (2026-08-06) -- do not re-open
 
 These were given as rulings, not options. Implement to them.
@@ -363,13 +403,19 @@ Both are staked ground rather than requests; neither blocks anything here.
 
 ## Housekeeping
 
-- `[ ]` `main` is **1 commit ahead of origin** (`d21ef58`, the #7 fix). Push was not
-  requested; ask before pushing.
+- `[x]` `main` is **pushed and in sync with origin** at `24eec74` (PHASE A1-A5). The user
+  authorised pushing after each green battery on 2026-08-06.
 - `[ ]` `FEATURES.txt` is modified in the working tree and predates this work -- the user's,
   left alone deliberately.
 - `[ ]` INBOX notes stay UNTRACKED by convention. Seven are open in `docs/`.
-- Battery is **223/223** at `d21ef58`. It needs `pwsh`; ~12 min. Never rebuild the exe
-  mid-battery, and never edit `src\*.pas` mid-battery (some runners compile from source).
+- Battery is **226/226** at `24eec74` (3 new runners since `d21ef58`). It needs `pwsh`;
+  ~13 min. Never rebuild the exe mid-battery, and never edit `src\*.pas` mid-battery (some
+  runners compile from source -- `tests/refactor/*.dpr`, `lintconfig`, `projectchecks`,
+  `rules-catalog`, `sarif`, `searchparse`, `baseline`, `preprocess/run_tolerance`. None
+  compiles `DRagLint.CLI.pas`, so a CLI-only edit is the one safe exception).
+- **The battery's own log is BUFFERED** when redirected with `*>`, so the tail lags by
+  minutes and looks stalled. Read `C:\TEMP\draglint_battery_<stamp>\` instead -- two files
+  per finished runner, written live -- or wait for `results.csv` to appear.
 - Normalise every new/edited repo file to CRLF before running the battery -- the agent
   `Write`/`Edit` tools emit lone LF and `run_encoding_guard.ps1` fails the whole battery
   for it. This bit twice today.
