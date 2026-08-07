@@ -34,9 +34,14 @@ type
   //   ddHarvestDrift          - a MARKED <summary> no longer matches the comment it
   //                             was harvested from: it will be refreshed, or removed
   //                             when the source comment is gone (FIXABLE -- v(ADP3 T9))
+  //   ddParamNoDescription    - a <param> tag that is PRESENT but has an EMPTY body.
+  //                             Reported under its OWN rule id at `hint` severity,
+  //                             NOT as doc-drift -- nothing drifted, the description
+  //                             was simply never written. User ruling 2026-08-07.
   TDocDriftKind = (
     ddParamRenamedOrRemoved,
     ddParamMissing,
+    ddParamNoDescription,
     ddParamVolatileMode,
     ddReturnsButNoValue,
     ddValueButNoReturns,
@@ -500,6 +505,28 @@ begin
             Findings.Add(MakeFinding(ddParamMissing,
               Format('signature param "%s" has no <param> tag', [N]), False, DocLine));
         end;
+
+      // --- 2b. ddParamNoDescription: the tag is THERE but its body is empty. ---
+      // User ruling 2026-08-07, after the volume was put to them explicitly.
+      //
+      // DELIBERATELY OUTSIDE the HumanAuthored gate above, and that is the one
+      // place this parts company with ddParamMissing. That gate exists so the
+      // tool does not grade its own output. Here, grading its own output is the
+      // POINT: since PHASE A3 the engine writes a <param> for every signature
+      // parameter and fills the body only where the source carried a comment
+      // beside that parameter (ruling D-3 -- structure always, meaning only if
+      // the code carries it), so an empty body is the ordinary generated result
+      // and the to-do is for a human. Gating it on human authorship would have
+      // silenced this on exactly the files it exists to annotate.
+      //
+      // Only params in the CURRENT signature count: a tag for a parameter that
+      // no longer exists is ddParamRenamedOrRemoved's finding, and reporting
+      // both would name one stale tag twice.
+      for N in SigNames do
+        for DP in ADoc.Params do
+          if SameText(DP.Name, N) and (TDocRegions.StripForDisplay(DP.Desc) = '') then
+            Findings.Add(MakeFinding(ddParamNoDescription,
+              Format('param "%s" has a <param> tag but no description', [N]), False, DocLine));
 
       // --- 3. ddParamVolatileMode: var/out param documented as input-only. ----
       // BOUNDED: fires ONLY when the param's ';'-group is var/out AND the <param>

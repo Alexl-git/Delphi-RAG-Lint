@@ -59,14 +59,36 @@ if ($null -ne $dd) {
   Assert 'doc-drift fixable=true'                ($dd.fixable -eq $true)
 }
 
+# 2026-08-07: the third documentation built-in gets the same lock as the other
+# two, which is this file's whole purpose. severity=hint and default_enabled=true
+# are BOTH the user's explicit ruling (the volume was put to them first), so they
+# are pinned here rather than left to drift. fixable=false is not a default that
+# was skipped: it is report-only by construction -- there is nothing a fix could
+# write, since ruling D-3 is precisely that the meaning is not in the code.
+$pn = $json.rules | Where-Object { $_.id -eq 'doc-param-no-description' } | Select-Object -First 1
+Assert 'doc-param-no-description present'                 ($null -ne $pn)
+if ($null -ne $pn) {
+  Assert 'doc-param-no-description source=builtin'          ($pn.source -eq 'builtin')
+  Assert 'doc-param-no-description category=documentation'  ($pn.category -eq 'documentation')
+  Assert 'doc-param-no-description default_enabled=true'    ($pn.default_enabled -eq $true)
+  Assert 'doc-param-no-description default_severity=hint'   ($pn.default_severity -eq 'hint')
+  Assert 'doc-param-no-description fixable=false'           ($pn.fixable -ne $true)
+}
+
 # Built-in count grew by EXACTLY 2 (110 pre-milestone -> 112), then +1 more
 # (enum-helper-separate-units, Task 7, 2026-07-07) -> 113. See file header note.
+# 2026-08-07: +1 -> 114, and the documentation category goes 2 -> 3, both from
+# `doc-param-no-description` (a <param> tag present with an EMPTY body, at `hint`,
+# ON by default -- user ruling, see PLAN-autodoc-and-backlog-2026-08-06 A4). This
+# assertion going RED when that rule landed is the assertion working: a rule added
+# to the catalogue without anyone deciding it belongs there is exactly what it is
+# for. Both numbers are bumped together and deliberately.
 $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
-Assert ("built-in rule count = 113 (pre-milestone 110 + 2 doc rules + enum-helper-separate-units); got {0}" -f $builtins.Count) ($builtins.Count -eq 113)
+Assert ("built-in rule count = 114 (pre-milestone 110 + 2 doc rules + enum-helper-separate-units + doc-param-no-description); got {0}" -f $builtins.Count) ($builtins.Count -eq 114)
 
 # The +2 are precisely the two documentation-category built-ins.
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
-Assert ("exactly 2 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 2)
+Assert ("exactly 3 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 3)
 
 Write-Host ''
 if ($fail -gt 0) { Write-Host "docrules-catalog: $fail FAIL" -ForegroundColor Red; exit 1 } else { Write-Host 'docrules-catalog: all pass' -ForegroundColor Green; exit 0 }

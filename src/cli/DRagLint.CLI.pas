@@ -11391,6 +11391,7 @@ begin
   case AKind of
     ddParamRenamedOrRemoved: Result:= 'ddParamRenamedOrRemoved';
     ddParamMissing         : Result:= 'ddParamMissing';
+    ddParamNoDescription   : Result:= 'ddParamNoDescription';
     ddParamVolatileMode    : Result:= 'ddParamVolatileMode';
     ddReturnsButNoValue    : Result:= 'ddReturnsButNoValue';
     ddValueButNoReturns    : Result:= 'ddValueButNoReturns';

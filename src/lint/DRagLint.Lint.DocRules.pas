@@ -256,8 +256,23 @@ begin
         for D in Drifts do
         begin
           F:= Default(TLintFinding);
-          F.RuleId  := 'doc-drift';
-          F.Severity:= 'warning';
+          { ddParamNoDescription is NOT doc-drift. doc-drift is a `warning` and
+            means the doc and the code moved APART; an empty <param> body is not
+            drift -- nothing moved, the description was never written. Folding it
+            in would have made every freshly generated file look like it had
+            regressed, and at warning severity. Its own id, at `hint`. User
+            ruling 2026-08-07; pinned by
+            tests\autodoc\run_doc_param_no_description.ps1. }
+          if D.Kind = ddParamNoDescription then
+          begin
+            F.RuleId  := 'doc-param-no-description';
+            F.Severity:= 'hint';
+          end
+          else
+          begin
+            F.RuleId  := 'doc-drift';
+            F.Severity:= 'warning';
+          end;
           F.Message := D.Detail;
           F.FilePath:= AStore.GetFilePath(ResSym.FileId);
           F.StartLine:= D.Line;

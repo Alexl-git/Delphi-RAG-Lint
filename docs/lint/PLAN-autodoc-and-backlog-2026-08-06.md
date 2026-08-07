@@ -24,10 +24,9 @@ verified end to end; that one was not, because it needs a live IDE. Do it first,
 (B2's D-2 half), then **B4/B5/B6** (all the same unscoped-bucket family), plus the `rules/`
 line-ending sweep noted under B8.
 
-**One decision is still waiting on the user, and only one:** A4 deliberately left open whether
-a PRESENT-but-EMPTY `<param>` body deserves its own lower-severity `hint`. It needs a new
-finding kind and a rules-catalogue entry, which adds findings to every consumer's run -- the
-user's call, not a side effect of A4.
+**No decisions are outstanding.** A4's open question -- the hint for a PRESENT-but-EMPTY
+`<param>` body -- was ruled on 2026-08-07: report it, as a `hint`, ON by default. Shipped as
+`doc-param-no-description`; see A4 for the two design decisions inside it.
 
 **Lessons from this pass, worth carrying:**
 
@@ -266,9 +265,36 @@ about to become true of a block nothing human ever touched -- which would have r
 exact defect the gate was added to close on 2026-08-03 (the tool grading its own output).
 Engine-marked params no longer count toward authorship; a hand-written body does.
 
-`[ ]` **STILL OPEN, and deliberately not decided here:** the lower-severity hint for a
-PRESENT-but-EMPTY body. It needs a new finding kind and a rules-catalogue entry, which adds
-findings to every consumer's run -- that is the user's call, not a side effect of A4.
+`[x]` **DECIDED AND SHIPPED 2026-08-07.** The user's ruling: report it, as a `hint`, **ON by
+default**. The volume was put to them first -- inline param comments are rare, so this is
+roughly one hint per undocumented parameter across a codebase, and `missing-doc` had already
+been switched off for exactly that reason (a measured 1302-finding wave). They chose ON
+anyway; that is their call and it is implemented as asked.
+
+New rule id **`doc-param-no-description`** at `hint`, new drift kind `ddParamNoDescription`.
+Two decisions inside it are worth knowing:
+
+- **It is NOT doc-drift.** doc-drift is a `warning` meaning "the doc and the code moved
+  APART". An empty body is not drift -- nothing moved, the description was never written.
+  Folding it in would have made every freshly generated file look like it had regressed, at
+  warning severity.
+- **It is deliberately NOT gated on human authorship**, which is the one place it parts company
+  with `ddParamMissing`. That gate exists so the tool does not grade its own output; here,
+  grading its own output IS the point -- the engine wrote an empty body because ruling D-3
+  forbids it from inventing meaning, and the to-do is for a human. Gating it would have
+  silenced the rule on exactly the files it exists to annotate.
+
+Only params in the CURRENT signature are considered, so a tag for a parameter that no longer
+exists stays `ddParamRenamedOrRemoved`'s finding and is not named twice.
+
+Test: `tests/autodoc/run_doc_param_no_description.ps1` (8 checks, RED first). It documents a
+real fixture and asserts on the generated block, so it also pins the A3 shape it depends on:
+the param WITH an inline source comment gets a body, the one without gets an empty tag, and a
+parameterless routine produces no `<param>` finding of any kind.
+
+Measured: 0 findings on DataCopy and TableTools today, because the rule fires on `<param>` tags
+that already exist and neither project has had autodoc run on it. The volume appears after
+`document --apply`, which is what the runner demonstrates.
 
 ### A5 `[x]` Whole-project run + diff review -- DONE 2026-08-06
 
