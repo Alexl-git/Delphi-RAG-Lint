@@ -157,9 +157,9 @@ report rather than silently sharing a DB.
 ## What does NOT change
 
 - The `Library` sections (`source: registry-libraries`) and `SQL` (MS\*.sql, a folder walk with an
-  `includeOnly` filter) become **Library-mode** sections. That is what they already do; the mode
-  now has a name.
-- **ORM3 keeps its union DB, by staying a Library-mode section.**
+  `includeOnly` filter) become **Library-scan** sections. That is what they already do; the scan
+  type now has a name.
+- **ORM3 keeps its union DB, by staying a Library-scan section.**
   `C:\Projects\DB\ORM3\drag-lint.sqlite` unions CLIENT and SERVER, and that union is what the
   dead-form investigation needed -- a CLIENT-only DB produced a false "dead form" because the
   callers lived outside it. Calling ORM3 a "library" is semantically odd and is a transitional
