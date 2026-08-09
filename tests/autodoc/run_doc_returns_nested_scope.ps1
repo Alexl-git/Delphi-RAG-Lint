@@ -26,6 +26,21 @@
   The control matters as much as the assertions: the OUTER routine's own returns
   must still be mined. A mask that swallowed the whole body would empty the tag
   and pass any "no nested expression appears" check on its own.
+
+  WHAT THIS DOES *NOT* EXPLAIN -- and the correction it forces (PHASE C)
+  --------------------------------------------------------------------------------
+  FormatSource emits NO <returns> today, and that is NOT a residual masking gap.
+  Its own body -- everything after its `begin` at YADF.Layout.pas:5441 -- runs a
+  ~22-line pipeline of `Result:= SomeStage(Result)`. Result on the RHS is exactly
+  what HasResultMutation detects, and it is asked of the DOCUMENTED routine's own
+  code, so it fires no matter how perfectly the nested scopes are masked. Under
+  the miner's "absence over wrong" policy that routine can never carry a
+  <returns>. Any future report that reads its silence as a mask failure is
+  reading the wrong cause.
+
+  The mutation shape IS covered here now (InnerAccum), because it was the one
+  nested form no fixture exercised: every other nested routine below does a
+  whole-Result ASSIGNMENT, which never reaches HasResultMutation at all.
 #>
 [CmdletBinding()]
 param(
@@ -110,8 +125,29 @@ var
     Result := NestedFwd;
   end;
 
+  // v(PHASE C): a nested routine that MUTATES Result -- Result on the RHS of
+  // its own assignment -- rather than merely assigning it. Every other nested
+  // routine above does a whole-Result assignment, which never reaches
+  // HasResultMutation, so this shape was entirely uncovered.
+  //
+  // It is the YADF.Layout.CurrentLineLeadingWS shape (YADF.Layout.pas:5089,
+  // `Result:= Result + S[i]`), and it fails DESTRUCTIVELY: the miner asks
+  // HasResultMutation of the MASKED code-only view, so a mask that leaks here
+  // does not add a wrong value -- it DELETES the outer <returns> outright,
+  // because the policy is absence over wrong. The 'OuterValue IS reported'
+  // control below is the assertion that catches it; a leak shows up there as
+  // silence, which is indistinguishable from "nothing to say" without it.
+  function InnerAccum(const S: string): string;
+  var
+    j: Integer;
+  begin
+    Result := NestedAccum;
+    for j := 1 to Length(S) do
+      Result := Result + S[j];
+  end;
+
 begin
-  LTemp := InnerInt;
+  LTemp := InnerInt + Length(InnerAccum(ASeed));
   if InnerBool then
     Result := OuterValue
   else
@@ -130,7 +166,7 @@ Write-Host "  rendered: $($ret.Trim())" -ForegroundColor DarkGray
 Write-Host ''
 
 Write-Host 'No nested routine''s return value leaks into the outer <returns>' -ForegroundColor Cyan
-foreach ($leak in 'NestedInt','NestedBool','NestedPtr','NestedDeep','NestedCase','NestedFwd') {
+foreach ($leak in 'NestedInt','NestedBool','NestedPtr','NestedDeep','NestedCase','NestedFwd','NestedAccum') {
   Check "$leak does not appear" (-not ($ret -match $leak))
 }
 
