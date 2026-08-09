@@ -4734,7 +4734,7 @@ procedure InvokeReindexProject(Sender: TObject);
 var
   Cmd    : string;
   OutPath: string;
-  Db, Proj, ProjDir: string; MS: IOTAModuleServices;
+  Db, Proj: string; MS: IOTAModuleServices;
 begin
   { ResolvePrimaryIndexDb, NOT GetActiveProjectDb: the reindex must WRITE the DB
     the LSP and the graph viewer READ. GetActiveProjectDb is ChangeFileExt(proj,
@@ -4744,24 +4744,34 @@ begin
   Proj:= GetActiveProjectFile; Db:= ResolvePrimaryIndexDb;
   if (Proj = '') or (Db = '') then begin ShowMessage('drag-lint: no project/index found.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
-  ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
-  { v(dep-coverage): reindex BOTH (a) the project FOLDER -- so ALL local files,
-    including loose Demo/Test units that are NOT part of the compile closure, keep
-    being indexed exactly as before -- AND (b) the .dproj COMPILE CLOSURE, so
-    search-path dependencies in other folders (DelphiAST, Spring4D, ...) also
-    resolve on hover/refs. Both passes are incremental (mtime/sha skip) + additive,
-    so a file is parsed at most once and nothing already indexed is dropped. A temp
-    .bat sequences them; '|| exit /b 1' stops on the first failure. }
+  { ONE pass, both axes stated explicitly: SCOPE = the active project's .dproj
+    COMPILE CLOSURE (--project), MODE = full REBUILD (--rebuild: the engine calls
+    ClearAllFiles, so every indexed file is dropped before the walk, and
+    --force-reparse is implied).
+
+    This REPLACES the old two-pass folder+closure .bat, and the replacement is not
+    optional: --rebuild clears the WHOLE DB, so a second --rebuild pass would
+    discard the first pass's work, and a folder pass followed by a closure pass
+    would leave the DB holding strictly more than the section it belongs to.
+    Producing exactly what `index --all --only <section>` produces is the point --
+    the manifest section for a .dproj include is a CLOSURE section, so a menu
+    reindex that also swept the project FOLDER made the IDE-built DB diverge from
+    the manifest-built one for the same section.
+
+    The cost is deliberate and worth naming: loose Demo/Test units that sit in the
+    project folder but are NOT in the compile closure are no longer indexed by this
+    action (the old '(a) project FOLDER' pass covered them). That is what
+    project-scoped means; a folder walk is still available as `index <dir>`.
+
+    --rebuild is also the ONLY mechanism that drops rows for source that has left
+    the SCOPE (a unit removed from the .dproj). --prune only knows about source
+    that has left the DISK -- which is why the incremental 'refresh' sibling of
+    this item is deliberately NOT offered until out-of-scope eviction lands. }
   var Plat: string:= GetActiveProjectPlatform;
-  var Bat: string:=
-    '@echo off'#13#10 +
-    Format('"%s" index "%s" --db "%s" --platform %s || exit /b 1'#13#10, [DLExe64, ProjDir, Db, Plat]) +
-    Format('"%s" index --project "%s" --db "%s" --platform %s'#13#10, [DLExe64, Proj, Db, Plat]);
-  var BatPath: string:= TPath.Combine(TPath.GetTempPath, 'drag-lint-reindex.bat');
-  try TFile.WriteAllText(BatPath, Bat, TEncoding.ANSI); except end;
-  Cmd    := Format('cmd.exe /c "%s"', [BatPath]);
+  Cmd:= Format('"%s" index --project "%s" --db "%s" --platform %s --rebuild',
+               [DLExe64, Proj, Db, Plat]);
   OutPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-reindex.txt');
-  DLT('menu', 'enqueue(reindex+lsp-restart): ' + Cmd);
+  DLT('menu', 'enqueue(rebuild+lsp-restart): ' + Cmd);
   { v0.65.1: run through the R2 job queue so a reindex never collides with a
     concurrent lint-all / forms-csv on the project DB. The LSP must be stopped on
     the UI thread BEFORE the indexer takes the exclusive WAL lock to drop the FTS5
@@ -4774,7 +4784,12 @@ begin
   RJob.Title      := 'Reindex ' + ChangeFileExt(ExtractFileName(Proj), '');
   RJob.CoalesceKey:= 'reindex:' + LowerCase(Db);
   RJob.CmdLine    := Cmd;
-  RJob.TimeoutMs  := 600000;   { closure pass can be large on the first run (deps) }
+  RJob.TimeoutMs  := 600000;   { --rebuild force-reparses the whole closure, so EVERY
+                                 run costs what only the first run used to. NOTE: for
+                                 a non-streaming job this value is advisory -- ProcRun
+                                 .RunCaptureStdout drains the pipe to EOF (which blocks
+                                 until the child exits) BEFORE it waits, and never
+                                 terminates the child. }
   RJob.OnPreRun   :=
     procedure
     begin
