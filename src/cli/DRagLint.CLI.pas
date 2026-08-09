@@ -267,6 +267,15 @@ type
     // v0.45: index manifest (Task 9) -- DB selection + size guard
     Force32       : Boolean; // --force32  treat this run as 32-bit for size-guard testing
     ForceReparse  : Boolean; // INBOX 2.3: --force-reparse  ignore the incremental up-to-date skip
+    // The index MODE axis. Orthogonal to SCAN TYPE (project closure vs folder
+    // tree), which is declared by what the target is, not chosen per run.
+    //   Rebuild   -- clear every indexed file from the DB, then walk.
+    //   Recompile -- update in place. THE DEFAULT, so this field records only
+    //                that the flag was given explicitly, which is what makes
+    //                `--rebuild --recompile` detectable as a usage error rather
+    //                than resolved by a silent precedence rule.
+    Rebuild       : Boolean; // --rebuild
+    Recompile     : Boolean; // --recompile (explicit; the default either way)
     SizeGuardMB   : Integer; // --size-guard-mb <n>  override manifest sizeGuardMB (0=warn always)
     SizeGuardMBSet: Boolean; // True when --size-guard-mb was explicitly given
     // v0.46: file-size guard (tree-sitter native stack overflow prevention)
@@ -403,6 +412,13 @@ begin
   Writeln('                               is computed against source that is not there. Scoped to the folders THIS run');
   Writeln('                               walked -- indexing a subfolder never purges the rest. [--no-prune] opts out;');
   Writeln('                               [--prune] forces it for a single-FILE walk, which does not prune by default.');
+  Writeln('                               MODE: [--recompile] (DEFAULT) updates the index in place; [--rebuild] first');
+  Writeln('                               DELETES every indexed file from the DB, then walks -- the way to drop rows for');
+  Writeln('                               source that has left the SCOPE (source that has left the DISK is --prune). It');
+  Writeln('                               deletes rows, not the .sqlite: schema, migrations and settings survive and no');
+  Writeln('                               open handle is dropped. Implies --force-reparse. The two are mutually exclusive.');
+  Writeln('                               NOTE: index --all already recreates each section DB every run, so the mode flags');
+  Writeln('                               change nothing there.');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
@@ -722,6 +738,12 @@ begin
     // INBOX 2.3: re-parse every walked file even when path+mtime+sha are
     // unchanged. --no-skip is the name consumers reached for first; both work.
     else if (A = '--force-reparse') or (A = '--no-skip') then Result.ForceReparse:= True
+    { The MODE axis. --rebuild IMPLIES --force-reparse: after the wipe every file
+      in scope is new to the DB anyway, so the fingerprint gate has nothing left
+      to skip -- setting it keeps the two from ever disagreeing about what was
+      parsed this run. --recompile sets no behaviour: it names the default. }
+    else if A = '--rebuild'   then begin Result.Rebuild:= True; Result.ForceReparse:= True; end
+    else if A = '--recompile' then Result.Recompile:= True
     // INBOX 2.10: exact name lookups are case-INSENSITIVE by default, because
     // Delphi identifiers are. This restores byte-exact matching for a caller who
     // genuinely wants to distinguish TEdit from tEdit. Set on the storage unit's
@@ -2141,6 +2163,38 @@ begin
   else Folders:= [AArgs.Path];
 
   if AArgs.DryRun then begin Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.'); Result:= 0; Exit; end;
+
+  { MODE: --rebuild empties the index of source before the walk, so the run
+    starts from nothing. This is the only way rows for a file that has left the
+    SCOPE can go away -- --prune only knows about files that have left the DISK.
+    --recompile (the default) does nothing here: it names today's behaviour.
+
+    POSITION IS LOAD-BEARING, three times over:
+      * AFTER the --dry-run exit. "Show me what you would do" that empties the
+        index on the way past is the worst available reading of the flag.
+      * AFTER the closure guard above, which exits 2 for a project that resolves
+        to nothing. A mistyped --project must not cost the caller the index they
+        already had.
+      * OUTSIDE the watch loop. A tick that wiped the DB every interval would
+        re-parse the whole scope forever and serve an empty index in between.
+
+    A clear that FAILS (read-only or locked DB) stops the run with exit 2 rather
+    than indexing into a DB that still holds the old rows -- the caller asked for
+    a rebuild and would otherwise get a silent recompile. }
+  if AArgs.Rebuild then
+  begin
+    try
+      var Cleared: Integer:= Store.ClearAllFiles;
+      Writeln(Format('--rebuild: cleared %d indexed file(s) from the database.', [Cleared]));
+    except
+      on E: Exception do
+      begin
+        Writeln(ErrOutput, Format('ERROR: --rebuild could not clear %s: %s: %s',
+                                  [ResolvedDb, E.ClassName, E.Message]));
+        Exit(2);
+      end;
+    end;
+  end;
 
   var Interval:= AArgs.Interval;
   if AArgs.Watch and (Interval <= 0) then Interval:= 5;
@@ -15447,6 +15501,15 @@ begin
     if Args.ShowVersion then begin Writeln('drag-lint ', VERSION); Exit(0); end;
     if Args.Command = 'index' then
     begin
+      { The MODE flags name opposite intents, so passing both is a usage error
+        rather than a precedence rule nobody can remember. Checked HERE so both
+        index forms (single-root/--project and --all) reject it identically. }
+      if Args.Rebuild and Args.Recompile then
+      begin
+        Writeln(ErrOutput, 'ERROR: --rebuild and --recompile are mutually exclusive ' +
+          '(--rebuild clears every indexed file from the DB first; --recompile updates it in place).');
+        Exit(2);
+      end;
       if Args.IndexAll then Result:= DoIndexAll(Args)
       else Result:= DoIndex(Args)
     end

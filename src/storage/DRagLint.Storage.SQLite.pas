@@ -218,6 +218,7 @@ type
       procedure UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
       procedure DeleteStringLiteralsForFile(AFileId: Int64);
       function PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
+      function ClearAllFiles: Integer;
       function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
       // v14 (D5): resolved call-target edges (call_edges table).
       procedure UpsertCallEdge(const AToken: TFileTxToken; const AEdge: TCallEdge);
@@ -2207,6 +2208,55 @@ begin
   finally
     Ids.Free;
     Gone.Free;
+  end;
+end;
+
+{ Empties the index of source. See ISymbolStore.ClearAllFiles for the contract.
+
+  Both choices here are the ones PruneMissingFiles already made, for the same
+  reasons, and this is deliberately the SAME shape rather than a new one:
+
+  * ONE `DELETE FROM files`, not a hand-written sweep of the dependent tables.
+    Every file-owned table declares REFERENCES files(id) ON DELETE CASCADE and
+    Migrate turns PRAGMA foreign_keys ON, so SQLite removes symbols / refs /
+    unit_uses / di_bindings -- and transitively symbol_docs / symbol_trigrams /
+    type_ancestors / type_helpers / symbol_facts / call_edges -- itself. A
+    hand-written list would silently miss the next table someone adds.
+  * string_literals IS deleted explicitly FIRST, because its FTS5 shadow tables
+    are kept in sync by AFTER DELETE triggers, and SQLite fires triggers for
+    rows removed by a foreign-key cascade only when recursive_triggers is on.
+    Left to the cascade the fts5 entries survive their content rows, and
+    `query --text` goes on matching source the DB no longer holds. A whole-table
+    DELETE is used rather than the per-file FQDeleteFileStringLiterals: the
+    trigger fires per row either way, and there is no file id worth looping over
+    when the answer is "all of them".
+
+  One transaction, so a failure part-way leaves the index as it was -- a
+  half-cleared DB is worse than either mode. }
+function TSQLiteSymbolStore.ClearAllFiles: Integer;
+var
+  Q: TFDQuery;
+begin
+  Result:= 0;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT COUNT(*) FROM files';
+    Q.Open;
+    Result:= Q.Fields[0].AsInteger;
+  finally
+    Q.Free;
+  end;
+  if Result = 0 then Exit; { nothing to clear -- do not open a transaction }
+
+  FConn.StartTransaction;
+  try
+    FConn.ExecSQL('DELETE FROM string_literals'); { fire the FTS5 sync triggers }
+    FConn.ExecSQL('DELETE FROM files');           { cascades everything else    }
+    FConn.Commit;
+  except
+    FConn.Rollback;
+    raise;
   end;
 end;
 

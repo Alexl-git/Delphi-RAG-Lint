@@ -121,6 +121,33 @@ type
     /// is merely out of the walk's filter is never touched.</remarks>
     function PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
 
+    /// <summary>Deletes EVERY row in `files` and everything that hangs off it
+    /// (symbols, refs, uses, docs, DI bindings, string literals and their FTS5
+    /// shadow rows, ...), leaving an index that holds no source at all.</summary>
+    /// <returns>The number of `files` rows removed; 0 when the DB was already
+    /// empty.</returns>
+    /// <remarks>The MODE axis of indexing: `--rebuild` calls this before the
+    /// walk so the run starts from nothing, which is the only way a file that
+    /// has LEFT the scope (as opposed to left the disk -- that is
+    /// PruneMissingFiles) can be got rid of.
+    ///
+    /// ROWS, NOT THE FILE. Deleting the .sqlite would be simpler and is wrong
+    /// twice over: the schema, its applied migrations and any settings stored
+    /// beside them would go with it, and the file handle would be dropped
+    /// underneath whoever else has the DB open -- the IDE design-time plugin
+    /// holds one for the whole session.
+    ///
+    /// Tables that do not descend from `files` (the fb_* Firebird metadata
+    /// snapshot, orm_links, schema_meta/meta) are NOT touched: they were not
+    /// produced by a source walk, so a source rebuild has no business
+    /// discarding them.
+    ///
+    /// Not thread-safe; call on the indexing thread with no walk in flight.</remarks>
+    /// <exception cref="EDatabaseError">Raised when the delete cannot be
+    /// applied (a read-only or locked DB). The caller must NOT then proceed to
+    /// index: a half-cleared DB is worse than either mode.</exception>
+    function ClearAllFiles: Integer;
+
     // v0.17: blast-radius pack
     function FindTransitiveCallers(const ASymbolName: string; ADepth: Integer): TArray<TImpactLevel>            ;
     function GetClassSurface(const AQName: string; AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine> ;
