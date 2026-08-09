@@ -1477,8 +1477,25 @@ begin
     // case: a REAL analyzed routine's cyclomatic complexity is
     // architecturally always >= 1, so 0 is an UNAMBIGUOUS "not computed"
     // sentinel (no symbol_facts row, or no matching defProc at index time).
+    // PHASE C B4: the two numbers on this line MEASURE DIFFERENT SCOPES, and
+    // saying so is the whole fix. CyclomaticCountDecisions returns at a nested
+    // `defProc` ("nested routine counted separately"), so the count covers the
+    // OUTER body only; BodyLoc is impl_end - impl_start, the whole
+    // implementation including every nested routine. Presented as a bare pair
+    // they read as one measurement of one thing, and on YADF's FormatSource that
+    // is 'Complexity: 24 (cyclomatic), 603 lines' for a range holding 109
+    // decision keywords across 15 nested routines -- a reader can only conclude
+    // the numbers are wrong.
+    //
+    // Labelled, the SAME pair becomes the useful signal the review pointed at:
+    // a low outer complexity over a long implementation says the work sits in
+    // nested scopes. The labels are unconditional because they are always true;
+    // suppressing them when the body has no nested routine would need a nested
+    // count the index does not record (that is B3's boundary work), and a label
+    // that appears only sometimes is a worse contract than one that always does.
     if (AFacts.Cyclomatic > 0) and (AFacts.Cyclomatic >= AComplexityMin) then
-      Lines.Add(Format('Complexity: %d (cyclomatic), %d lines', [AFacts.Cyclomatic, AFacts.BodyLoc]));
+      Lines.Add(Format('Complexity: %d (cyclomatic, outer body), %d lines (full implementation)',
+                       [AFacts.Cyclomatic, AFacts.BodyLoc]));
     // v(ADP2 T4): Reads/Writes fields -- ONE line, each side omitted when
     // empty, the WHOLE line omitted when both are empty. AFacts.ReadsFields/
     // WritesFields are ALREADY display-ready (capped, ', '-joined, a

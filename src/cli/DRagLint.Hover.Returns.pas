@@ -220,6 +220,20 @@ type
     Depth: Integer;    // block depth OUTSIDE the nested routine
   end;
 
+  // PHASE C B3: a routine HEADER that has been seen but whose `begin` has not.
+  // This used to be a single slot (HavePend/PendNamed/PendLine/...), which is
+  // wrong the moment two headers are open at once -- a nested routine declared
+  // inside another nested routine's declaration part. The inner header
+  // overwrote the outer one, the outer's `begin` then found nothing pending and
+  // pushed no frame, and the OUTER nested body was never masked. There can be
+  // arbitrarily many open headers, so this is a stack.
+  TPendRoutine = record
+    Line : Integer;
+    Col  : Integer;
+    Paren: Integer;
+    Named: Boolean;    // False for `procedure(...)` as a TYPE / anonymous method
+  end;
+
 // Identifiers plus the four symbols the nested-routine detector needs, with
 // Pascal strings and all three comment forms skipped. Comment state carries
 // across lines, which is why this is one pass over the whole body rather than
@@ -569,13 +583,14 @@ function MaskNestedRoutines(const ABodyLines: TArray<string>;
 var
   Toks     : TList<TMaskTok> ;
   Stk      : TStack<TNestFrame>;
+  Pend     : TStack<TPendRoutine>; { B3: headers seen, `begin` not yet }
   Fr       : TNestFrame      ;
+  Pr       : TPendRoutine    ;
   T, Nx    : TMaskTok        ;
   Ti       : Integer         ;
   Depth    : Integer         ;
   Paren    : Integer         ;
-  HeaderSeen, HavePend, PendNamed: Boolean;
-  PendLine, PendCol, PendParen   : Integer;
+  HeaderSeen                     : Boolean;
   X, A, B                        : Integer;
 begin
   SetLength(Result, Length(ABodyLines));
@@ -586,11 +601,11 @@ begin
 
   Toks:= TList<TMaskTok>.Create;
   Stk := TStack<TNestFrame>.Create;
+  Pend:= TStack<TPendRoutine>.Create;
   try
     TokenizeBody(ABodyLines, Toks, ACodeOnly, ANoComments);
     Depth:= 0; Paren:= 0;
-    HeaderSeen:= False; HavePend:= False; PendNamed:= False;
-    PendLine:= 0; PendCol:= 0; PendParen:= 0;
+    HeaderSeen:= False;
     for Ti:= 0 to Toks.Count - 1 do
     begin
       T:= Toks[Ti];
@@ -600,11 +615,13 @@ begin
         else if T.Text = ')' then
         begin
           Dec(Paren);
-          if HavePend and (not PendNamed) and (Paren < PendParen) then HavePend:= False;
+          { The cancellation tests apply to the INNERMOST open header only --
+            that is the one the token can belong to. }
+          if (Pend.Count > 0) and (not Pend.Peek.Named) and (Paren < Pend.Peek.Paren) then Pend.Pop;
         end
         else if T.Text = ';' then
         begin
-          if HavePend and (not PendNamed) and (Paren = PendParen) then HavePend:= False;
+          if (Pend.Count > 0) and (not Pend.Peek.Named) and (Paren = Pend.Peek.Paren) then Pend.Pop;
         end;
         Continue;
       end;
@@ -626,23 +643,38 @@ begin
           Continue;
         end;
         if Stk.Count > 0 then Continue;   // already inside a masked scope
-        PendNamed:= False;
+        Pr.Named:= False;
         if Ti + 1 < Toks.Count then
         begin
           Nx:= Toks[Ti + 1];
-          PendNamed:= Nx.IsWord and (Nx.Text <> 'of');
+          Pr.Named:= Nx.IsWord and (Nx.Text <> 'of');
         end;
-        PendLine:= T.Line; PendCol:= T.Col; PendParen:= Paren;
-        HavePend:= True;
+        Pr.Line:= T.Line; Pr.Col:= T.Col; Pr.Paren:= Paren;
+        { B3: PUSH, do not overwrite. A nested routine declared inside another
+          nested routine's declaration part leaves two headers open at once, and
+          the single slot this replaced kept only the inner one -- so the outer
+          nested body was never masked and its `Result :=` leaked into the
+          DOCUMENTED routine's <returns>. }
+        Pend.Push(Pr);
+        Continue;
+      end;
+      { B3: a body-less header (`function F: T; forward;`) never reaches a
+        `begin`, so its pending entry would otherwise sit on the stack and be
+        consumed by an unrelated later `begin` -- in the worst case the
+        DOCUMENTED routine's own, masking the very body being mined. `forward`
+        is the one such directive that can appear on a NESTED routine. }
+      if (T.Text = 'forward') and (Pend.Count > 0) and Pend.Peek.Named then
+      begin
+        Pend.Pop;
         Continue;
       end;
       if IsBlockOpener(T.Text) then
       begin
-        if HavePend then
+        if Pend.Count > 0 then
         begin
-          Fr.Line:= PendLine; Fr.Col:= PendCol; Fr.Depth:= Depth;
+          Pr:= Pend.Pop;                { the INNERMOST open header }
+          Fr.Line:= Pr.Line; Fr.Col:= Pr.Col; Fr.Depth:= Depth;
           Stk.Push(Fr);
-          HavePend:= False;
         end;
         Inc(Depth);
         Continue;
@@ -665,6 +697,7 @@ begin
       end;
     end;
   finally
+    Pend.Free;
     Stk.Free;
     Toks.Free;
   end;
