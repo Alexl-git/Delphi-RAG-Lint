@@ -420,6 +420,60 @@ try {
   Check '6. the error names both flags' `
     (@($bout | Where-Object { $t = $_.ToString(); ($t -like '*ERROR*') -and ($t -like '*--rebuild*') -and ($t -like '*--recompile*') }).Count -ge 1) `
     (($bout | Select-Object -Last 2) -join ' | ')
+
+  # ==========================================================================
+  # 7. index --all CANNOT honour --recompile: BuildPlanItem recreates each
+  #    section DB before the walk, so every section is a full rebuild. It must
+  #    SAY SO rather than accept the flag and quietly do the opposite -- and it
+  #    must still build, because the index it produces is correct.
+  #
+  #    7b is the assertion that keeps 7a from turning into permanent noise: a
+  #    plain `index --all`, which is ALSO a full rebuild, must stay silent,
+  #    because nobody asked it for anything else.
+  # ==========================================================================
+  $mdb = 'section.sqlite'
+  $cfg = Join-Path $scratch 'manifest.drag-lint.json'
+  @"
+{
+  "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 1 },
+  "indexes": {
+    "outDir": "out",
+    "sections": [
+      { "name": "ModeSection", "db": "$mdb", "include": ["proj\\App.dproj"] }
+    ]
+  }
+}
+"@ | Set-Content $cfg -Encoding ascii
+  $sectionDb = Join-Path $scratch "out\$mdb"
+
+  function WarnLines($Out) {
+    return @($Out | Where-Object { $t = $_.ToString(); ($t -like '*--recompile*') -and (($t -like '*WARNING*') -or ($t -like '*NOTE:*')) })
+  }
+  # stderr-ness: a native command's stderr arrives as ErrorRecord objects once
+  # merged with 2>&1, so this distinguishes the two streams without a temp file.
+  function ErrStream($Out) { return @($Out | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }) }
+
+  $aout = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 --recompile 2>&1)
+  $arc  = $LASTEXITCODE
+  $warned = WarnLines $aout
+  Check '7a. index --all --recompile still exits 0' ($arc -eq 0) "exit=$arc"
+  Check '7a. it WARNS that --recompile has no effect' ($warned.Count -ge 1) `
+    "matched=$($warned.Count); $(($warned | Select-Object -First 1) -join '')"
+  Check '7a. the warning is repeated in the run summary' ($warned.Count -ge 2) `
+    "an --all run scrolls a long way past the first line (matched=$($warned.Count))"
+  Check '7a. the warning goes to STDERR' ((WarnLines (ErrStream $aout)).Count -ge 1) `
+    "stderr records=$((ErrStream $aout).Count)"
+  $asnap = Snap $sectionDb
+  Check '7a. and it still built a correct index' `
+    ((HasContent $asnap) -and ($asnap -like '*app.dpr*') -and ($asnap -like '*formunit.dfm*')) (Leaves $asnap)
+
+  Remove-Item $sectionDb -Force -ErrorAction SilentlyContinue
+  $bout2 = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 2>&1)
+  $brc2  = $LASTEXITCODE
+  Check '7b. a plain index --all exits 0' ($brc2 -eq 0) "exit=$brc2"
+  Check '7b. NO warning when the mode was merely defaulted' ((WarnLines $bout2).Count -eq 0) `
+    "a warning on every run is a warning nobody reads (matched=$((WarnLines $bout2).Count))"
+  Check '7b. the default run built the same index' ((Snap $sectionDb) -eq $asnap) (Leaves (Snap $sectionDb))
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

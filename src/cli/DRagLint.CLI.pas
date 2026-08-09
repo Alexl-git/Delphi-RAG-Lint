@@ -418,7 +418,7 @@ begin
   Writeln('                               deletes rows, not the .sqlite: schema, migrations and settings survive and no');
   Writeln('                               open handle is dropped. Implies --force-reparse. The two are mutually exclusive.');
   Writeln('                               NOTE: index --all already recreates each section DB every run, so the mode flags');
-  Writeln('                               change nothing there.');
+  Writeln('                               change nothing there -- an explicit --recompile WARNS on stderr and continues.');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
@@ -1370,7 +1370,7 @@ end;
   forward-declared rather than moved so the fingerprint policy stays next to the
   comment that explains it. }
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
-  AForceArg, APreprocess: Boolean; const APlatform: string): Boolean; forward;
+  AForceArg, ARebuild, APreprocess: Boolean; const APlatform: string): Boolean; forward;
 
 /// <summary>
 /// Expands a compile closure into the full INDEX scope of a project: the closure
@@ -1523,7 +1523,9 @@ begin
     { INBOX 2.3: same fingerprint gate as the single-root path -- the manifest
       path is the one that builds the big shared indexes, so it is the one where
       a silently stale parse survives longest. }
-    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, APreprocess, AItem.Platform);
+    { ARebuild=False: a manifest section is rebuilt unconditionally (see
+      RecreateSectionDb), so there is no mode to report here. }
+    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, False, APreprocess, AItem.Platform);
 
     // Apply walk filter from the resolved plan item.
     Indexer.SetWalkFilter(AItem.Filter);
@@ -1650,6 +1652,38 @@ var
   PlatFilter: TArray<string>                            ;
   AnyFailed : Boolean                                   ;
   i         : Integer                                   ;
+
+  { --recompile is ACCEPTED here and CANNOT be honoured: BuildPlanItem calls
+    RecreateSectionDb, which deletes each section's .sqlite (plus its WAL/SHM/
+    journal sidecars) before the walk, so every manifest section is built from
+    scratch whatever the caller asked for.
+
+    Saying nothing is not an option. Silently discarding a flag the caller
+    passed EXPLICITLY is the same defect this whole area has been clearing out:
+    the tool does something other than what it was told and reports success.
+    Someone scripts `index --all --recompile`, watches a full rebuild run every
+    night, and never finds out why.
+
+    It WARNS rather than fails, because the run still produces a correct index
+    -- just not an incremental one -- and refusing to do correct work would be
+    the worse outcome. And it fires only on an EXPLICIT --recompile:
+    TArgs.Recompile is set by the flag and never by the default, so a plain
+    `index --all` stays silent. A warning on every run is a warning nobody
+    reads.
+
+    Said twice on purpose -- once up front, once at the end -- because an
+    `index --all` run scrolls a long way past the first line. }
+  procedure NoteRecompileIgnored(ASummary: Boolean);
+  begin
+    if not AArgs.Recompile then Exit;
+    if ASummary then
+      Writeln(ErrOutput, 'NOTE: as warned above, --recompile had no effect: every section was rebuilt from scratch.')
+    else
+      Writeln(ErrOutput, 'WARNING: --recompile has NO EFFECT on `index --all`. Every manifest section ' +
+        'recreates its database before the walk, so this run is a full rebuild of each section. ' +
+        'The index it produces is correct; it simply is not incremental.');
+  end;
+
 begin
   EngineDir:= ExtractFilePath(ParamStr(0));
   ConfigPath:= AArgs.WorkspaceConfig; // --config <path>
@@ -1665,6 +1699,8 @@ begin
 
   ErrMsg:= TManifestIO.Validate(Manifest);
   if ErrMsg <> '' then begin Writeln(ErrOutput, 'ERROR: manifest invalid: ', ErrMsg); Exit(2); end;
+
+  NoteRecompileIgnored(False); { before any section runs, so it is not buried }
 
   // Build platform filter from --platform (reuses CheckPlatform field).
   if AArgs.CheckPlatform <> '' then PlatFilter:= [AArgs.CheckPlatform]
@@ -1755,6 +1791,7 @@ begin
   begin
     AnyFailed:= False;
     for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse) then AnyFailed:= True; end;
+    NoteRecompileIgnored(True);
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1767,6 +1804,7 @@ begin
     Writeln(ErrOutput, 'NOTE: --jobs >1 requires --config <path>; running sequentially.');
     AnyFailed:= False;
     for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse) then AnyFailed:= True; end;
+    NoteRecompileIgnored(True);
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1868,6 +1906,10 @@ begin
 
   OkCount:= TotalSections - FailedCount;
   Writeln(Format('parallel build: %d/%d sections OK (jobs=%d)', [OkCount, TotalSections, EffJobs]));
+  { The child command line is built explicitly and does NOT carry --recompile
+    (see ChildCmdLine above), so this fires once in the parent, not once per
+    spawned worker. }
+  NoteRecompileIgnored(True);
 
   if FailedCount > 0 then Result:= 1 else Result:= 0;
 end; // function
@@ -1970,15 +2012,20 @@ end;
 // mass reindex the project is holding off until the schema settles. Files gain
 // protection as they are next reindexed; --force-reparse covers the rest.
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
-  AForceArg, APreprocess: Boolean; const APlatform: string): Boolean;
+  AForceArg, ARebuild, APreprocess: Boolean; const APlatform: string): Boolean;
 var
   Cur, Prev: string;
 begin
   Cur := IndexerFingerprint(AStore, APreprocess, APlatform);
   Prev:= AStore.GetMetaValue(INDEXER_FP_KEY);
   Result:= AForceArg or ((Prev <> '') and (Prev <> Cur));
+  { Say which of the three reasons actually applies. --rebuild sets ForceReparse
+    (after the wipe every file is new anyway), so reporting it as
+    "--force-reparse" would name a flag the caller never passed and hide the
+    thing that really happened -- the index is about to be emptied. }
   if Result then
-    if AForceArg then Writeln('Force reparse: ON (--force-reparse; ignoring the up-to-date skip)')
+    if ARebuild then Writeln('Rebuild: ON (--rebuild; the index is cleared before the walk, so every file in scope is parsed fresh)')
+    else if AForceArg then Writeln('Force reparse: ON (--force-reparse; ignoring the up-to-date skip)')
     else Writeln(Format('Indexer changed since this DB was built (%s -> %s): re-parsing every file in scope.', [Prev, Cur]));
   AIndexer.SetForceReparse(Result);
   AStore.SetMetaValue(INDEXER_FP_KEY, Cur);
@@ -2042,7 +2089,7 @@ begin
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
   { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
     even when every byte on disk is identical. }
-  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, not AArgs.NoPreprocess, PpPlatform);
+  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform);
 
   { v0.42: cross-dictionary dedup -- exclude any subtree the caller says is
     already covered by another index (library / active-project DB). }
