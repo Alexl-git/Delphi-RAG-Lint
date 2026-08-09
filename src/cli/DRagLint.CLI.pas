@@ -641,6 +641,25 @@ begin
   Result.Depth              := 3;
   Result.MaxCallers         := 5;
   Result.IncludeClassSurface:= True;
+  { PHASE C B5: honour .gitignore/.hgignore BY DEFAULT. This was opt-in behind
+    --use-ignore while a manifest SECTION defaulted UseIgnoreFiles to True
+    (Index.Manifest), so the same product answered the same question two ways
+    depending on which entry point you came through -- and the ad-hoc
+    `drag-lint index <dir> --db <db>` path, which is what a human types and what
+    the IDE plugin runs, was the one that ignored the repo's own rules.
+
+    Measured consequence, and it is the review's B5: YADF's .gitignore has
+    excluded `.private/` since forever, yet five archived files under it were in
+    the index, one an entire pre-fork snapshot of YADF.Layout.pas sharing 30
+    routine names with the live unit. Every name-based bucket -- callers,
+    Used by, Covered by -- was drawing on both, and since attribution renders a
+    BASENAME a reader could not tell which file a row meant.
+
+    A repo's ignore file is a statement about which files are part of the repo,
+    so honouring it is the conservative default, not an aggressive one.
+    --no-use-ignore restores the old behaviour for anyone indexing a tree whose
+    ignore rules exclude sources they nonetheless want indexed. }
+  Result.UseIgnore          := True;
   Result.ContextLines       := 3;
   Result.BenchN             := 20;
   Result.MaxDepth           := 20;        // v14 (D5 T11): call-path BFS safety cap
@@ -769,7 +788,8 @@ begin
       SetLength(Result.IncludeOnlyGlobs, Length(Result.IncludeOnlyGlobs) + 1);
       Result.IncludeOnlyGlobs[High(Result.IncludeOnlyGlobs)]:= ParamStr(i);
     end
-    else if A = '--use-ignore' then Result.UseIgnore:= True
+    else if A = '--use-ignore'    then Result.UseIgnore:= True  { now the default; kept so existing scripts still parse }
+    else if A = '--no-use-ignore' then Result.UseIgnore:= False { PHASE C B5 opt-out }
     else if A = '--no-sql-ms'  then Result.NoSqlMS  := True
     else if (A = '--jobs') and (i < ParamCount) then begin Inc(i); Result.Jobs:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--force32' then Result.Force32:= True
@@ -1868,6 +1888,12 @@ begin
     TWalkFilter.Create (SqlOnlyMS=True, MaxFileKB=2048 by default) so the
     safe defaults are preserved; --no-sql-ms clears SqlOnlyMS;
     --max-file-kb N overrides MaxFileKB (0 = unlimited). }
+  { PHASE C B5: UseIgnore now defaults True, so this branch is effectively always
+    taken. That is a no-op for everything else it sets -- SectionExclude and
+    IncludeOnly are empty by default, SqlOnlyMS lands on the same True that
+    TWalkFilter.Create already gives it, and MaxFileKB is only touched when the
+    caller actually passed --max-file-kb. The condition is left standing rather
+    than deleted because it still documents which flags own this filter. }
   if (Length(AArgs.ExcludeGlobs) > 0) or (Length(AArgs.IncludeOnlyGlobs) > 0) or AArgs.UseIgnore or AArgs.NoSqlMS or AArgs.MaxFileKBSet then
   begin
     var WF: TWalkFilter:= TWalkFilter.Create;
