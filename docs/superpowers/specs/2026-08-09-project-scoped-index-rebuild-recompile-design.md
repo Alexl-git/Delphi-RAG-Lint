@@ -178,6 +178,14 @@ Decided 2026-08-09: *"These are in fact several projects."* The union DB
 `COMMON\` is shared by CLIENT and SERVER, so it is indexed into both DBs. That is the accepted
 duplication.
 
+**A project scan spans folders by construction -- this is the point, not a caveat.** ORM3's code
+lives in CLIENT, SERVER, COMMON, OBJECTS "and maybe some more added in the future".
+`TClosureResolver` follows `uses` across the project's search paths, so those folders arrive
+because the project's units reference them; an earlier `--dry-run` of `Micronite2027.dproj`
+resolved 21 folders this way. Nothing enumerates folders for a project, so **a shared folder added
+later needs no manifest change**. Today's folder root has the opposite property: it must be told
+where to look, and it swallows everything else living under the tree.
+
 **This retires the arrangement the dead-form investigation relied on.** That investigation reached
 a false "dead form" conclusion from a CLIENT-only DB, because the callers lived outside it, and the
 fix at the time was "use the full ORM3 db". After this change there is no full ORM3 db -- so the
