@@ -80,6 +80,26 @@ type
     ///  to resolve still resolves.</remarks>
     function LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string;
       AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
+    /// <summary>Delphi's INNERMOST-FIRST lexical scope walk for a BARE call.
+    /// Starts at the call site's own enclosing routine, looks for a nested
+    /// routine named AName among its direct children, and climbs one lexical
+    /// level at a time while the enclosing scope is itself a routine. Returns
+    /// the target symbol id, or 0 when no scope on the chain declares the
+    /// name.</summary>
+    /// <param name="AEnclosingSymbolId">refs.enclosing_symbol_id of the call
+    ///  site. Since nested routines became symbols this is the NESTED routine
+    ///  for a call written inside one, which is what makes the walk possible.</param>
+    /// <returns>0 when the name is not declared anywhere on the lexical chain --
+    ///  the caller then falls through to receiver typing exactly as before.</returns>
+    /// <remarks>The walk STOPS at the first level that declares the name, which
+    ///  is the whole semantics: a nested routine SHADOWS a same-named method of
+    ///  the enclosing class, and two routines each nesting their own `Twin` are
+    ///  two distinct targets that only the call site's position can separate.
+    ///  It also stops climbing at a class / record / unit parent -- those scopes
+    ///  belong to the receiver-typed and unit-level lookups, which this must
+    ///  neither duplicate nor pre-empt.</remarks>
+    function LookupInLexicalScopes(AEnclosingSymbolId: Int64; const AName: string;
+      out AConfidence: string): Int64;
     /// <summary>Type the receiver expression left of the call. Returns the
     /// receiver TYPE symbol id (0 when the receiver kind is unhandled or its type
     /// is unresolvable). AReceiverExpr is '' for a bare / Self call, in which case
@@ -795,6 +815,69 @@ begin
   end;
 end;
 
+const
+  // A lexical nesting chain deeper than this is not real Delphi. The bound is a
+  // backstop against a corrupt parent link in the symbol table turning the climb
+  // into an infinite loop over a whole-DB pass, not a modelling limit.
+  MAX_LEXICAL_DEPTH = 32;
+
+function TCallResolver.LookupInLexicalScopes(AEnclosingSymbolId: Int64;
+  const AName: string; out AConfidence: string): Int64;
+var
+  ScopeId: Int64          ;
+  Scope  : TSymbol        ;
+  Parent : TSymbol        ;
+  Kids   : TList<TSymbol> ;
+  S      : TSymbol        ;
+  Matches: TList<TSymbol> ;
+  Depth  : Integer        ;
+begin
+  Result     := 0;
+  AConfidence:= '';
+  if (AEnclosingSymbolId <= 0) or (AName = '') then Exit;
+
+  ScopeId:= AEnclosingSymbolId;
+  Depth  := 0;
+  Matches:= TList<TSymbol>.Create;
+  try
+    while (ScopeId > 0) and (Depth < MAX_LEXICAL_DEPTH) do
+    begin
+      Inc(Depth);
+      Matches.Clear;
+      Kids:= ChildrenOf(ScopeId);
+      if Kids <> nil then
+        for S in Kids do
+          if (S.Kind in METHOD_KINDS) and SameText(S.Name, AName) then Matches.Add(S);
+
+      if Matches.Count > 0 then
+      begin
+        // INNERMOST WINS -- and the walk stops here. Climbing past a level that
+        // declares the name is exactly what the compiler does not do, and doing
+        // it would make the four YADF.Layout StartsWordCI routines
+        // indistinguishable again.
+        Result:= Matches[0].Id;
+        // Two routine children of ONE scope sharing a name needs `overload` on a
+        // local routine. Arity is deliberately not consulted to separate them:
+        // B1's arity narrowing is the receiver-typed path's policy, earns its
+        // keep on class overload sets, and has no measured case here. One edge,
+        // marked uncertain, keeps this narrow until such a case turns up.
+        if Matches.Count = 1 then AConfidence:= 'certain' else AConfidence:= 'ambiguous';
+        Exit;
+      end;
+
+      // Climb one lexical level, but only while the enclosing scope is itself a
+      // ROUTINE. A class / record / unit parent ends the chain.
+      Scope:= FStore.GetSymbolById(ScopeId);
+      if (Scope.Id <= 0) or (Scope.ParentId <= 0) then Exit;
+      Parent:= FStore.GetSymbolById(Scope.ParentId);
+      if (Parent.Id <= 0) or not (Parent.Kind in METHOD_KINDS) then Exit;
+      ScopeId:= Parent.Id;
+    end;
+  finally
+    Matches.Free;
+  end;
+end;
+
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
 var
   Encl    : TSymbol;
@@ -807,12 +890,15 @@ begin
   Encl:= FStore.GetSymbolById(ACallRef.EnclosingSymbolId);
 
   // --- Kind 1: bare M / Self.M -> the enclosing routine's owning class.
-  // NOTE on `inherited M`: it has NO dot, so ExtractReceiverExpr returns '' for
-  // it -> it arrives here as a BARE kind-1 call (AReceiverExpr=''). That is SAFE:
-  // LookupMethodOnType walks the own class + its ancestor chain, so it finds the
-  // override on the class (or, when the class doesn't override, the ancestor M) --
-  // one match -> 'certain'. A dedicated ancestor-first branch is therefore
-  // unnecessary; `inherited` never reaches here as a literal receiver token.
+  // NOTE on `inherited M`: it never arrives here at all. MEASURED, because the
+  // lexical scope walk added above would otherwise have a real hazard -- a
+  // nested routine named M is lexically nearer than the ancestor's M, and
+  // binding `inherited M` to it would be flatly wrong. The parser emits NO call
+  // ref for either `inherited M;` or `inherited M(Args);` (verified on the
+  // run_nested_call_resolution fixture: zero refs named Ping/Pong, which are
+  // reached only through `inherited`), so no guard is needed on either path.
+  // An earlier version of this comment claimed `inherited M` reached here as a
+  // bare kind-1 call and resolved on the ancestor chain. It does not.
   if (AReceiverExpr = '') or SameText(AReceiverExpr, 'Self') then
     Exit(Encl.ParentId);
 
@@ -868,7 +954,8 @@ begin
   if ACallRef.NameText = '' then Exit;
 
   // 1. read the source line and extract the receiver expression left of '.M'.
-  Rcv := '';
+  Line := '';
+  Rcv  := '';
   Lines:= LinesOf(ACallRef.FileId);
   if (Lines <> nil) and (ACallRef.StartLine >= 1) and (ACallRef.StartLine <= Lines.Count) then
   begin
@@ -881,6 +968,27 @@ begin
   // argument list reads RIGHT and legitimately spans lines, so this is given the
   // whole file rather than the single line.
   ArgCount:= CountCallArgs(Lines, ACallRef.StartLine, ACallRef.StartCol, ArgsKnown);
+
+  // 1c. NESTED-CALL RESOLUTION: a BARE call is resolved by Delphi's lexical
+  // scope chain BEFORE any receiver typing, because the innermost declaration
+  // wins outright -- a nested routine shadows a same-named method of the
+  // enclosing class, so consulting the class first would answer the wrong one.
+  // Falls through untouched when no scope on the chain declares the name, which
+  // is the common case (an intrinsic, an RTL call, a unit-level routine).
+  if Rcv = '' then
+  begin
+    Target:= LookupInLexicalScopes(ACallRef.EnclosingSymbolId, ACallRef.NameText, Conf);
+    if Target > 0 then
+    begin
+      // ReceiverTypeSymbolId stays 0: a lexical hit has no receiver TYPE. The
+      // field means "the type the receiver was typed to", and inventing the
+      // enclosing routine's class here would be a false claim about a call that
+      // has no receiver at all.
+      Result.TargetSymbolId:= Target;
+      Result.Confidence    := Conf;
+      Exit;
+    end;
+  end;
 
   // 2. type the receiver -> a class/interface/record symbol id.
   TypeId:= TypeReceiver(ACallRef, Rcv);

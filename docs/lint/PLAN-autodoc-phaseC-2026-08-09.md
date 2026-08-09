@@ -10,20 +10,73 @@
 
 ---
 
-## >>> RESUME POINT -- updated 2026-08-09 (END of the SECOND execution session)
+## >>> RESUME POINT -- updated 2026-08-09 (THIRD execution session)
 
-`main` = **`9c64778`, 6 commits UNPUSHED** (the user was told; consent to push was not given).
-Full battery **236/236**.
+### NESTED-CALL RESOLUTION IS DONE. The next action is OPTION 4.
 
-### THE NEXT ACTION IS NESTED-CALL RESOLUTION -- not the live runs, and not option 4
+Delphi's innermost-first lexical scope walk now runs for BARE calls, in
+`TCallResolver.LookupInLexicalScopes` (`src\index\DRagLint.Index.CallResolver.pas`), ahead of
+receiver typing. Test: `tests\autotest\run_nested_call_resolution.ps1` (14 assertions, TDD, RED
+first -- the RED run reproduced the shadowing bug live).
 
-**463 unresolved YADF call refs name a nested routine.** That is ~3x option 4's 167 and it is the
-biggest remaining lever. Nested extraction (`9c64778`) created the symbols; the resolver cannot
-bind to them because Delphi's innermost-first scope walk is not implemented. See the
-NESTED-ROUTINE EXTRACTION section below for the full measurement.
+### THE "463" WAS NAME-KEYED AND WRONG. The real number was 142.
 
-**I previously advised that option 4 was the highest-value next fix. That was wrong**, and the
-measurement is why. Do nested-call resolution first.
+This corrects the previous resume point, which called nested-call resolution "~3x option 4's 167
+and the biggest remaining lever". **It was not.** 463 counted *unresolved refs whose NAME matches
+some nested routine anywhere in the DB* -- the exact name-keyed reasoning this whole workstream
+exists to reject. Measured against the actual scope rule, only **142** were resolvable, which is
+*smaller* than option 4's 167.
+
+Doing it first was still right, for a reason the coverage figure never showed: **it was fixing
+WRONG edges, not just missing ones.** A nested routine shadows a same-named method of the enclosing
+class, and the old resolver answered with the class method. The RED run proved it -- `Emit('x')`
+and `Self.Emit('y')` both produced the same edge to the class method. Coverage work is optional;
+that was a correctness bug.
+
+### Measured on YADF, before -> after (same DB, same corpus)
+
+| | before | after |
+|---|---|---|
+| resolved call edges | 2,983 (37.0%) | **3,125 (38.8%)** |
+| edges targeting a nested routine | 178 | **320** |
+| confidence split | 2,763 certain / 220 ambiguous | **2,905 certain / 220 ambiguous** |
+
++142 edges, **all `certain`, all targeting nested routines, zero new ambiguous**. Total edges and
+edges-to-nested both rose by exactly 142, so on this corpus no pre-existing edge was *rewritten* --
+YADF happens to contain no shadowing case. The fixture does.
+
+### The remainder is ZERO on the metric that means anything
+
+The name-keyed metric still "shows" 321 left. An oracle that re-implements the scope walk in
+Python over the real corpus -- innermost-first, climbing only through routine parents -- reports
+**142 before, 0 after**, on both the accumulated DB and a fresh index. Every bare call the Delphi
+scope rule can resolve now resolves. What the 321 actually are:
+
+- **161 dotted** (`SomeList.Add`) -- RTL targets living in the separate library index.
+  Architectural, cannot resolve from a project DB, unrelated to nesting.
+- **157 bare, in `.private\` ARCHIVE copies** -- a stale older version of `YADF.Layout.pas` where
+  those helpers are unit-level, not nested. Should not be indexed at all; see below.
+- **3 bare, live** -- `Add(info)` on `TList<T>` descendants. Inherited RTL method, same
+  architectural bucket.
+
+### Filed while doing this: ignored files are never EVICTED once indexed
+
+`docs\INBOX-ignored-files-already-indexed-are-never-evicted.md`, gap log class `wrong`.
+`.private/` IS in YADF's `.gitignore` and the ignore engine works -- a FRESH index of the same root
+yields 0 `.private` files. But `C:\Projects\YADF\YADF.sqlite` keeps 5 of them through
+`--force-reparse`, and `--prune` will not take them because the files still exist on disk. B5
+stopped ignored files being ADDED and shipped no repair path for corpora that already had them --
+the same hole B6 closed with a migration. This is why most of the apparent remainder above is an
+artefact, and why the 08-07 gap-log entry classing it `out-of-scope` was the wrong diagnosis.
+
+### Also corrected: `inherited M` never reaches the resolver
+
+`TypeReceiver`'s comment asserted that `inherited M` arrives as a bare kind-1 call and resolves on
+the ancestor chain. **It does not.** The parser emits NO call ref for `inherited M;` or
+`inherited M(Args);` -- verified, zero refs. This mattered: `inherited` is the one shape that looks
+bare while naming the ancestor explicitly, so it was the lexical walk's only real hazard, and it
+needs no guard. The comment is fixed and both forms are pinned in the test as regression pins
+(recorded as such -- they passed on first run).
 
 ### The user's ordering instruction, given twice and unambiguous
 
@@ -32,12 +85,14 @@ to do these tests."* and later *"YADF and DataCopy will wait until all features 
 working to the best of our knowledge."* They also asked for **ONE remeasure at the END**, not after
 each step. The queue, in order:
 
-1. **Nested-call resolution** (463) -- innermost-first scope walk from the CALL SITE outward:
-   the enclosing routine's own nested routines, then each enclosing routine's, then the unit, then
-   uses. `StartsWordCI` has FOUR nested declarations in `YADF.Layout.pas`, so a name-keyed lookup
-   is WRONG BY CONSTRUCTION. Hold it to B1's rule -- narrow, never widen; decline rather than
-   guess, because a wrong edge is worse than a missing one.
-2. **Option 4** -- bare cross-unit calls (167 / 23 ambiguous). Join on `unit_uses.unit_name`.
+1. ~~**Nested-call resolution**~~ -- **DONE** this session. +142 edges, remainder 0. The scope
+   walk stops at a class / record / unit parent, so it neither duplicates nor pre-empts the
+   receiver-typed and unit-level lookups -- which is what leaves item 2 cleanly separable.
+2. **Option 4 -- NEXT** -- bare cross-unit calls (167 resolvable / 23 ambiguous / 18
+   name-coincidences). Join on `unit_uses.unit_name`, NOT `unit_name_norm`. It is now the biggest
+   remaining lever, which is what the corrected 142-vs-167 measurement says. The natural seam is
+   the same `Rcv = ''` branch the lexical walk already occupies: when the walk declines, the unit
+   and uses levels are the next two rungs of the very same chain.
 3. **Intrinsics classification** so `Exit`/`Inc`/`Break`/`Continue`/`SetLength` stop counting as
    unresolved calls at all.
 4. **The five approved doc features** (all five; see below).
