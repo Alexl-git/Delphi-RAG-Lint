@@ -63,8 +63,17 @@ proj\App.dpr          program App; uses Member1 in 'Member1.pas', Member2 in 'Me
 proj\App.dproj        <DCCReference Include="Member1.pas"/> <DCCReference Include="Member2.pas"/>
 proj\Member1.pas      unit Member1; interface uses Member2; implementation end.
 proj\Member2.pas      unit Member2; interface implementation end.
+proj\Member1.dfm      (a form resource beside Member1.pas)
 proj\Loose.pas        unit Loose; interface implementation end.     <- referenced by NOTHING
 ```
+
+**CORRECTION added 2026-08-09 after the first implementation round.** This task's original fixture had no `.dfm`, and that omission was a plan defect, not an implementer one. `TClosureResolver` returns `.pas`/`.inc` only, so a literal switch to the closure DROPS EVERY FORM. Verified on the only closure-built DB in existence: `Loader.sqlite` = 84 files, **dfm 0, dpr 0**, against folder-built `DataCopy.sqlite` and `TableTools.sqlite` carrying 2 `.dfm` each. Task 6 converts ORM3, DataCopy and YADF -- VCL apps full of forms -- so this would have silently zeroed the wizard structure view, DFM event wiring and forms-csv for all of them.
+
+Required in BOTH arms (standalone `--project` and the manifest `smClosure` arm), or the two paths re-split, which is what this task exists to prevent:
+- each closure `.pas`'s **sibling `.dfm`**, when it exists;
+- the **project file itself** (`.dpr` / `.dproj`) -- every `unit-not-in-dpr` finding anchors to it, never to the offending unit.
+
+Note the gap was PRE-EXISTING in the manifest arm; `index --project` did not introduce it, it would have spread it.
 
 Index with `index --project <proj\App.dproj> --db <db>` and assert via python over `files`:
 
