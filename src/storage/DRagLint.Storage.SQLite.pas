@@ -156,6 +156,12 @@ type
       FDerivingAnchor        : Boolean;                    // re-entrancy guard
       procedure Connect(const ADbPath: string; AReadOnly: Boolean);
       procedure PrepareStatements;
+      { PHASE C B6: one-off repair for `files` rows that name ONE file under more
+        than one spelling, plus a re-spelling of any surviving legacy row to the
+        canonical form. Run from Migrate, so it reaches every DB that is opened
+        writable and never a read-only one. See its implementation for why the
+        fresher row is the survivor. }
+      procedure CanonicalizeFilePaths;
       { One-time stderr note when this DB lacks idx_symbols_name_nocase, so a
         consumer paying for the scan is told why. See its implementation. }
       procedure WarnIfNocaseIndexMissing;
@@ -420,6 +426,12 @@ uses
   , DRagLint.Query  .Fuzzy
   , DRagLint.Index.CallResolver // v14 (D5): receiver-typing engine for ResolveCallTargets
   ;
+
+{ Forward only. The definition stays down beside OpenFileTx -- the upsert it
+  exists to serve -- where its full rationale is written; it is announced here
+  because PHASE C B6 gave it two callers that sit ABOVE that point
+  (CanonicalizeFilePaths and FileIsUpToDate). }
+function NormalizeStoredPath(const APath: string): string; forward;
 
 { TSQLiteSymbolStore }
 
@@ -851,7 +863,160 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_helper ON type_helpers(helper_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_target ON type_helpers(target_name)');
   PrepareStatements;
+  { PHASE C B6: AFTER PrepareStatements, because the merge deletes files rows and
+    that has to go through DeleteStringLiteralsForFile (FQDeleteFileStringLiterals)
+    to fire the FTS5 sync triggers -- the same reason PruneMissingFiles deletes
+    string_literals explicitly. FFts5Available is already set by the probe above. }
+  CanonicalizeFilePaths;
 end; // begin
+
+{ PHASE C B6 -- merge `files` rows that name ONE file under several spellings,
+  and retire any surviving legacy spelling.
+
+  Fixing the write path (FQUpsertFile, above) stops NEW splits; it repairs
+  nothing. Double-indexed corpora already exist in the wild -- YADF's had 929 of
+  5,920 symbols on a duplicated pair -- and they are invisible from the outside,
+  because every read query answers from whichever row it happened to find. So
+  the repair has to run on the DB itself, and Migrate is where it belongs: every
+  writable open reaches it, no read-only open does.
+
+  THE SURVIVOR IS THE ROW WITH THE GREATEST parsed_at, and the choice is not
+  cosmetic. In the YADF index the STALE row was id=161 and the CURRENT one was
+  id=7 -- the duplicate was INSERTED later than the row that now holds the fresh
+  extraction, because the original row was re-parsed again afterwards. Picking
+  "the newest row" by id, or "the canonically spelled one", would have kept the
+  333-line-shifted vintage and thrown the current one away. parsed_at is the only
+  column that answers the question actually being asked: which of these rows was
+  extracted most recently?
+
+  The loser's dependent rows go with it through the FK cascade, exactly as in
+  PruneMissingFiles -- and string_literals is deleted explicitly first for the
+  same reason given there (SQLite fires the FTS5 sync triggers for rows removed
+  by a cascade only when recursive_triggers is on, so leaving it to the cascade
+  strands the FTS shadow rows and `query --text` goes on matching deleted code).
+
+  Deletion happens BEFORE the re-spelling: a survivor whose canonical path is
+  currently owned by a doomed row would otherwise collide on the UNIQUE.
+
+  Cheap on the common path -- one scan of a small table, and no transaction is
+  opened at all unless something actually needs repairing. }
+procedure TSQLiteSymbolStore.CanonicalizeFilePaths;
+type
+  TFileRow = record
+    Id      : Int64 ;
+    Path    : string;
+    Canon   : string;
+    ParsedAt: Int64 ;
+  end;
+var
+  Q      : TFDQuery                 ;
+  Rows   : TList<TFileRow>          ;
+  Winner : TDictionary<string, Integer>; { lower(canonical path) -> index into Rows }
+  Doomed : TList<Int64>             ;
+  Rename : TList<Integer>           ;
+  R      : TFileRow                 ;
+  I, W   : Integer                  ;
+  Key    : string                   ;
+  Note   : string                   ;
+
+  { Ranks two candidates for the same file. Freshest extraction first; on a tie
+    prefer the row that is already spelled canonically, and only then the higher
+    id -- so the outcome is deterministic and never depends on row order. }
+  function Beats(const ACand, AHeld: TFileRow): Boolean;
+  begin
+    if ACand.ParsedAt <> AHeld.ParsedAt then Exit(ACand.ParsedAt > AHeld.ParsedAt);
+    if (ACand.Path = ACand.Canon) <> (AHeld.Path = AHeld.Canon) then
+      Exit(ACand.Path = ACand.Canon);
+    Result:= ACand.Id > AHeld.Id;
+  end;
+
+begin
+  if FReadOnly then Exit;
+  Rows  := TList<TFileRow>.Create;
+  Winner:= TDictionary<string, Integer>.Create;
+  Doomed:= TList<Int64>.Create;
+  Rename:= TList<Integer>.Create;
+  try
+    { Collect first, write second -- deleting while a cursor is open on the same
+      table is the shape that produces half-applied sweeps (PruneMissingFiles
+      says the same). }
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      Q.SQL.Text  := 'SELECT id, path, parsed_at FROM files';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        R.Id      := Q.FieldByName('id'       ).AsLargeInt;
+        R.Path    := Q.FieldByName('path'     ).AsString  ;
+        R.ParsedAt:= Q.FieldByName('parsed_at').AsLargeInt;
+        R.Canon   := NormalizeStoredPath(R.Path);
+        Rows.Add(R);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+
+    for I:= 0 to Rows.Count - 1 do
+    begin
+      Key:= LowerCase(Rows[I].Canon);
+      if not Winner.TryGetValue(Key, W) then Winner.Add(Key, I)
+      else if Beats(Rows[I], Rows[W]) then Winner[Key]:= I;
+    end;
+
+    for I:= 0 to Rows.Count - 1 do
+    begin
+      Key:= LowerCase(Rows[I].Canon);
+      Winner.TryGetValue(Key, W);
+      if W <> I then Doomed.Add(Rows[I].Id)
+      else if Rows[I].Path <> Rows[I].Canon then Rename.Add(I);
+    end;
+
+    if (Doomed.Count = 0) and (Rename.Count = 0) then Exit; { the ordinary case }
+
+    FConn.StartTransaction;
+    try
+      for I:= 0 to Doomed.Count - 1 do
+      begin
+        DeleteStringLiteralsForFile(Doomed[I]);                     { fire the FTS5 triggers }
+        FConn.ExecSQL('DELETE FROM files WHERE id = ?', [Doomed[I]]); { cascades the rest }
+      end;
+      for I:= 0 to Rename.Count - 1 do
+        FConn.ExecSQL('UPDATE files SET path = ? WHERE id = ?', [Rows[Rename[I]].Canon, Rows[Rename[I]].Id]);
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+
+    { Say what was done, on stderr so a --json consumer's stdout stays parseable
+      (see IsMachineReadableOutput / EmitStatusLine in the CLI). Silence would be
+      wrong here: this DELETES indexed data, and a user whose symbol counts drop
+      is entitled to know why. }
+    Note:= 'index repair (B6): ';
+    if Doomed.Count > 0 then
+      Note:= Note + Format('merged %d duplicate file row(s) differing only in path case', [Doomed.Count]);
+    if (Doomed.Count > 0) and (Rename.Count > 0) then Note:= Note + '; ';
+    if Rename.Count > 0 then
+      Note:= Note + Format('re-spelled %d path(s) to canonical form', [Rename.Count]);
+    Writeln(ErrOutput, Note);
+    for I:= 0 to Rename.Count - 1 do
+    begin
+      if I >= 5 then
+      begin
+        Writeln(ErrOutput, Format('  ... and %d more', [Rename.Count - 5]));
+        Break;
+      end;
+      Writeln(ErrOutput, '  ' + Rows[Rename[I]].Path + ' -> ' + Rows[Rename[I]].Canon);
+    end;
+  finally
+    Rename.Free;
+    Doomed.Free;
+    Winner.Free;
+    Rows  .Free;
+  end;
+end; // procedure
 
 function TSQLiteSymbolStore.IsSchemaCurrent(out AFound, AExpected: Integer): Boolean;
 var
@@ -903,8 +1068,22 @@ begin
   // path is only reached when no row exists for the given path.
   // ON CONFLICT DO UPDATE is avoided -- Win32 Embarcadero sqlite3.dll is older
   // than 3.24 and rejects that syntax with "near ON: syntax error".
-  FQUpsertFile:= NewQuery( 'UPDATE files SET mtime_unix=:mtime, sha256=:sha, ' +
-    'parsed_at=:parsed, language=:lang WHERE path=:path');
+  // PHASE C B6: match the row CASE-INSENSITIVELY and rewrite its path to the
+  // canonical spelling. The byte-exact `WHERE path=:path` is what split a file
+  // into two rows when the same run was launched as 'c:\...' instead of 'C:\...':
+  // the UPDATE matched nothing, RowsAffected came back 0, and the INSERT below
+  // added a second row. The read path (FQFindFileId) has always been case-
+  // tolerant in exactly this shape, which is why every QUERY went on answering
+  // and only the index silently doubled -- the asymmetry WAS the defect.
+  //
+  // `path=:path` is kept as the first disjunct so the UNIQUE index still serves
+  // the overwhelmingly common already-canonical case; LOWER() cannot use it.
+  // Setting path=:path is what retires a legacy spelling: a row written before
+  // this change is re-spelled the first time its file is re-indexed. Duplicates
+  // are merged by CanonicalizeFilePaths during Migrate, BEFORE any of this runs,
+  // so this UPDATE can never match two rows and collide on the UNIQUE.
+  FQUpsertFile:= NewQuery( 'UPDATE files SET path=:path, mtime_unix=:mtime, sha256=:sha, ' +
+    'parsed_at=:parsed, language=:lang WHERE path=:path OR LOWER(path)=LOWER(:path)');
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, is_helper, start_line, start_col, end_line, end_col, ' +
@@ -1191,9 +1370,14 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT 1 FROM files WHERE path = :p AND mtime_unix = :m ' + 'AND sha256 = :s';
-    { match the canonical stored form (see NormalizeStoredPath) }
-    Q.ParamByName('p').AsString:= StringReplace(APath, '/', '\', [rfReplaceAll]);
+    { Match the canonical stored form (see NormalizeStoredPath), and match it
+      case-insensitively for the same reason FQUpsertFile does: a DB written
+      before B6 can still hold a legacy spelling, and answering "not up to date"
+      for a file that IS up to date would silently re-parse the whole corpus on
+      every run. }
+    Q.SQL.Text:= 'SELECT 1 FROM files WHERE (path = :p OR LOWER(path) = LOWER(:p)) ' +
+                 'AND mtime_unix = :m AND sha256 = :s';
+    Q.ParamByName('p').AsString:= NormalizeStoredPath(APath);
     Q.ParamByName('m').AsLargeInt:= AMtimeUnix;
     Q.ParamByName('s').AsString  := ASha;
     Q.Open;
@@ -1245,9 +1429,26 @@ end; // procedure
 // re-indexing INSERT a duplicate files row (path is UNIQUE, so the differently-
 // spelled path didn't REPLACE) and left stale unit_uses/refs behind. Collapse
 // every spelling to one canonical all-backslash path at the store boundary.
+//
+// PHASE C B6 (2026-08-09): the DRIVE LETTER is folded to upper case here too,
+// for exactly the same reason and by exactly the same mechanism -- 'c:\x' and
+// 'C:\x' name one file on Windows, but files.path carries a byte-exact UNIQUE,
+// so an index run launched from a differently-cased cwd INSERTED a second row.
+// A shell, a script or an IDE plugin produces either spelling without trying.
+// Measured on the YADF corpus: 929 of 5,920 symbols (15.7%) hung off a pair of
+// rows for ONE unit, one vintage stale and one fresh, with nothing anywhere to
+// signal it -- the DB reads as freshly built because the OTHER row is current.
+//
+// The drive letter is the one path segment whose case carries no information,
+// so it is the one that can be folded without consulting the filesystem. The
+// rest of the path is left exactly as the caller spelled it: only the case-
+// insensitive MATCHING below (and the merge in CanonicalizeFilePaths) has to
+// cope with a differently-cased directory or file name, and it does.
 function NormalizeStoredPath(const APath: string): string;
 begin
   Result:= StringReplace(APath, '/', '\', [rfReplaceAll]);
+  if (Length(Result) >= 2) and (Result[2] = ':') and (Result[1] >= 'a') and (Result[1] <= 'z') then
+    Result[1]:= UpCase(Result[1]);
 end;
 
 function TSQLiteSymbolStore.OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
@@ -1279,7 +1480,13 @@ begin
     Q:= TFDQuery.Create(nil);
     try
       Q.Connection:= FConn;
-      Q.SQL.Text:= 'SELECT id FROM files WHERE path = :path';
+      { Case-insensitive for the same reason as the UPDATE above: on a pre-B6 DB
+        whose row is still spelled 'c:\...', the UPDATE has just re-spelled it to
+        NP so an exact match would work -- but if that UPDATE is ever narrowed
+        again, a byte-exact read here would raise "File row not found after
+        upsert" rather than silently duplicating, and this keeps both halves
+        answering the same question. }
+      Q.SQL.Text:= 'SELECT id FROM files WHERE path = :path OR LOWER(path) = LOWER(:path) LIMIT 1';
       Q.ParamByName('path').AsString:= NP;
       Q.Open;
       if Q.IsEmpty then raise Exception.CreateFmt('File row not found after upsert: %s', [NP]);
