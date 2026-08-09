@@ -10,12 +10,57 @@
 
 ---
 
-## >>> RESUME POINT -- updated 2026-08-09 (SECOND execution session)
+## >>> RESUME POINT -- updated 2026-08-09 (END of the SECOND execution session)
 
-**B10, B3 and B8 are now DONE.** The user's instruction this session was explicit: *"Lets do YADF
-and DataCopy test only after all planned autodoc are done. Otherwise there is no use to do these
-tests. Lets finish B8, B10 and B3 first."* So the live runs below are still the next action, but
-they now come AFTER this work, not instead of it.
+`main` = **`9c64778`, 6 commits UNPUSHED** (the user was told; consent to push was not given).
+Full battery **236/236**.
+
+### THE NEXT ACTION IS NESTED-CALL RESOLUTION -- not the live runs, and not option 4
+
+**463 unresolved YADF call refs name a nested routine.** That is ~3x option 4's 167 and it is the
+biggest remaining lever. Nested extraction (`9c64778`) created the symbols; the resolver cannot
+bind to them because Delphi's innermost-first scope walk is not implemented. See the
+NESTED-ROUTINE EXTRACTION section below for the full measurement.
+
+**I previously advised that option 4 was the highest-value next fix. That was wrong**, and the
+measurement is why. Do nested-call resolution first.
+
+### The user's ordering instruction, given twice and unambiguous
+
+*"Lets do YADF and DataCopy test only after all planned autodoc are done. Otherwise there is no use
+to do these tests."* and later *"YADF and DataCopy will wait until all features are polished and
+working to the best of our knowledge."* They also asked for **ONE remeasure at the END**, not after
+each step. The queue, in order:
+
+1. **Nested-call resolution** (463) -- innermost-first scope walk from the CALL SITE outward:
+   the enclosing routine's own nested routines, then each enclosing routine's, then the unit, then
+   uses. `StartsWordCI` has FOUR nested declarations in `YADF.Layout.pas`, so a name-keyed lookup
+   is WRONG BY CONSTRUCTION. Hold it to B1's rule -- narrow, never widen; decline rather than
+   guess, because a wrong edge is worse than a missing one.
+2. **Option 4** -- bare cross-unit calls (167 / 23 ambiguous). Join on `unit_uses.unit_name`.
+3. **Intrinsics classification** so `Exit`/`Inc`/`Break`/`Continue`/`SetLength` stop counting as
+   unresolved calls at all.
+4. **The five approved doc features** (all five; see below).
+5. **FINAL remeasure** -- unresolved buckets, plus how many ` ?` markers remain and why.
+6. **THEN** YADF (git) and DataCopy (hg), branched.
+
+### The five doc features the user approved
+
+1. **`<exception cref="">` generated from mined raises.** VERIFIED: the engine emits that tag only
+   at `Regions.pas` ~2725 to PRESERVE a hand-written one; mined raises render solely as a `Raises:`
+   fact line. It is the one REQUIRED tag in the project's own standard that is never generated.
+2. **`<value>` for properties** -- preserved today, never generated; `PropAccess` (ro/rw/wo) is
+   already in the schema.
+3. **Ownership/lifetime note** when a function returns a newly constructed object (`Result :=
+   TFoo.Create`). The returns miner already collects those expressions.
+4. **Recursion note** from a `call_edges` self-loop.
+5. **`<seealso>` on by default** for overload siblings (exists behind `--seealso`).
+
+ADVISED AGAINST, and the user did not overrule it: auto-generated thread-safety claims and
+inferred `<param>` descriptions. Both guess in the place where a wrong claim does most damage, and
+both contradict the engine's own "absence over wrong" policy.
+
+### B10, B3 and B8 are DONE -- do not re-open them
 
 Baseline before the work: full battery **232/234** at `88a5d9a`. Both failures
 (`run_doc_p3_idempotency_sweep`, `run_doc_p3_preserve_tags`) were proven ENVIRONMENTAL -- each
