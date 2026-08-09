@@ -66,9 +66,20 @@ type
     function FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet): TSymbol;
     /// <summary>Given a resolved receiver TYPE symbol id, look up a method named
     /// AMethodName on the type's own children + its transitive ancestors. Sets
-    /// AConfidence ('certain' one match | 'ambiguous' >1) and returns the target
-    /// method id, or 0 (method not found on the chain).</summary>
-    function LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string; out AConfidence: string): Int64;
+    /// AConfidence ('certain' one surviving candidate | 'ambiguous' >1) and
+    /// returns the target method id, or 0 (method not found on the chain).</summary>
+    /// <param name="AArgCount">Number of arguments at the call site, used to
+    ///  separate OVERLOADS when the name alone matches several (B1). Ignored
+    ///  unless AArgsKnown.</param>
+    /// <param name="AArgsKnown">False when the call site could not be read (an
+    ///  unreadable source file), in which case arity is not consulted at all and
+    ///  the pre-B1 name-only behaviour stands.</param>
+    /// <remarks>Arity NARROWS an existing name match; it never widens one. When
+    ///  it cannot decide -- several candidates of the same arity, or none that
+    ///  fits -- the result is exactly what it was before B1, so a call that used
+    ///  to resolve still resolves.</remarks>
+    function LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string;
+      AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
     /// <summary>Type the receiver expression left of the call. Returns the
     /// receiver TYPE symbol id (0 when the receiver kind is unhandled or its type
     /// is unresolvable). AReceiverExpr is '' for a bare / Self call, in which case
@@ -100,7 +111,34 @@ type
   /// type name TName. Used by receiver kind 6 (cast). False otherwise.</summary>
   function TryParseCastTarget(const AReceiverExpr: string; out ATypeName: string): Boolean;
 
+  /// <summary>B1: counts the arguments passed at a call site. ALine/ACol are
+  /// 1-based and ACol is the column of the CALLEE NAME's first character --
+  /// exactly what refs.start_col stores, for both `M(...)` and `Obj.M(...)`.
+  /// </summary>
+  /// <param name="ALines">The callee's source file. Nil / out-of-range yields
+  ///  AKnown=False.</param>
+  /// <param name="AKnown">False when the site could not be read, or when its
+  ///  argument list never closes within the scan budget. Callers must not
+  ///  consult the count in that case.</param>
+  /// <returns>Top-level argument count; 0 for `M` and for `M()`.</returns>
+  /// <remarks>Scans forward across LINES -- a call whose arguments are spread
+  ///  over several lines is one call. Nested (), [] and string literals do not
+  ///  contribute separators. Pure over ALines.</remarks>
+  function CountCallArgs(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): Integer;
+
+  /// <summary>B1: the range of argument counts a signature accepts. A parameter
+  /// with a DEFAULT is optional, so the range is [required..declared] and a
+  /// signature is not a single number.</summary>
+  /// <param name="ASignature">A stored symbol Signature, e.g.
+  ///  '(const A: string; const B: Integer = 0): string'.</param>
+  /// <returns>False when ASignature is not shaped like a parameter list, in
+  ///  which case the caller must not filter on it.</returns>
+  function SignatureArityRange(const ASignature: string; out AMin, AMax: Integer): Boolean;
+
 implementation
+
+uses
+  System.StrUtils; // B1: StartsText / SplitString, used by SignatureArityRange
 
 const
   // The set of type-defining kinds a receiver can be typed to.
@@ -264,6 +302,278 @@ begin
   end;
 end;
 
+// B1 -------------------------------------------------------------------------
+// Overload separation by argument count. Both helpers are PURE (no store, no
+// cache) so they can be reasoned about on their own; the policy that uses them
+// lives in LookupMethodOnType, which states when they are allowed to decide.
+
+const
+  // A single call's argument list may span lines, but not arbitrarily many. The
+  // budget bounds the damage when a source file is mis-lexed (an unterminated
+  // string, a preprocessor construct we do not model): rather than walking to
+  // EOF for every unbalanced site in a large corpus, give up and report the
+  // count as unknown, which falls back to pre-B1 behaviour.
+  ARGSCAN_MAX_LINES = 60;
+
+function CountCallArgs(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): Integer;
+var
+  Li, Ci  : Integer;
+  Depth   : Integer;
+  Commas  : Integer;
+  Scanned : Integer;
+  InStr   : Boolean;
+  InBrace : Boolean; // { ... }
+  InParStar: Boolean; // (* ... *)
+  Cur     : string ;
+  C       : Char   ;
+  SawArg  : Boolean;
+
+  { Advance one character, crossing to the next line when the current one runs
+    out. False when the budget is spent or the file ends. }
+  function Next: Boolean;
+  begin
+    Inc(Ci);
+    while Ci > Length(Cur) do
+    begin
+      Inc(Li);
+      Inc(Scanned);
+      if (Li >= ALines.Count) or (Scanned > ARGSCAN_MAX_LINES) then Exit(False);
+      Cur:= ALines[Li];
+      Ci := 1;
+      { A line comment ends AT the newline, so crossing a line clears it. }
+      if Ci <= Length(Cur) then Break;
+    end;
+    Result:= True;
+  end;
+
+begin
+  AKnown := False;
+  Result := 0;
+  if (ALines = nil) or (ALine < 1) or (ALine > ALines.Count) or (ACol < 1) then Exit;
+
+  Li := ALine - 1;
+  Cur:= ALines[Li];
+  Ci := ACol;
+  if Ci > Length(Cur) then Exit;
+  Scanned:= 0;
+
+  { 1. step over the callee identifier itself. }
+  while (Ci <= Length(Cur)) and IsIdentPart(Cur[Ci]) do Inc(Ci);
+
+  { 2. skip whitespace and comments to the first significant character -- a call
+       may legally carry a brace comment between the name and its arguments. }
+  InBrace  := False;
+  InParStar:= False;
+  while True do
+  begin
+    if Ci > Length(Cur) then
+    begin
+      if not Next then Exit; { ran out before finding anything significant }
+      Continue;
+    end;
+    C:= Cur[Ci];
+    if InBrace then
+    begin
+      if C = '}' then InBrace:= False;
+      Inc(Ci);
+      Continue;
+    end;
+    if InParStar then
+    begin
+      if (C = '*') and (Ci < Length(Cur)) and (Cur[Ci + 1] = ')') then begin InParStar:= False; Inc(Ci); end;
+      Inc(Ci);
+      Continue;
+    end;
+    if C = '{' then begin InBrace:= True; Inc(Ci); Continue; end;
+    if (C = '(') and (Ci < Length(Cur)) and (Cur[Ci + 1] = '*') then
+    begin InParStar:= True; Inc(Ci, 2); Continue; end;
+    if (C = '/') and (Ci < Length(Cur)) and (Cur[Ci + 1] = '/') then
+    begin { line comment: jump to the next line } Ci:= Length(Cur) + 1; Continue; end;
+    if (C = ' ') or (C = #9) then begin Inc(Ci); Continue; end;
+    Break;
+  end;
+
+  { 3. No '(' means a PAREN-LESS call -- legal in Pascal, and it passes nothing. }
+  if Cur[Ci] <> '(' then
+  begin
+    AKnown:= True;
+    Exit(0);
+  end;
+
+  { 4. Walk the argument list, counting separators at depth 1 only. '[' shares
+       the depth counter because a comma inside an index expression is not an
+       argument separator either. }
+  Depth := 0;
+  Commas:= 0;
+  InStr := False;
+  SawArg:= False;
+  while True do
+  begin
+    if Ci > Length(Cur) then
+    begin
+      if not Next then Exit; { never closed -> AKnown stays False }
+      { a line comment and a string literal both end at the newline }
+      InStr:= False;
+      Continue;
+    end;
+    C:= Cur[Ci];
+
+    if InStr then
+    begin
+      { '' inside a literal is an escaped quote; toggling twice handles it. }
+      if C = '''' then InStr:= False;
+      Inc(Ci);
+      Continue;
+    end;
+    if InBrace then
+    begin
+      if C = '}' then InBrace:= False;
+      Inc(Ci);
+      Continue;
+    end;
+    if InParStar then
+    begin
+      if (C = '*') and (Ci < Length(Cur)) and (Cur[Ci + 1] = ')') then begin InParStar:= False; Inc(Ci); end;
+      Inc(Ci);
+      Continue;
+    end;
+
+    case C of
+      '''': InStr:= True;
+      '{' : InBrace:= True;
+      '(' :
+        if (Ci < Length(Cur)) and (Cur[Ci + 1] = '*') then begin InParStar:= True; Inc(Ci); end
+        else Inc(Depth);
+      '[' : Inc(Depth);
+      ']' : Dec(Depth);
+      ')' :
+        begin
+          Dec(Depth);
+          if Depth = 0 then
+          begin
+            AKnown:= True;
+            if SawArg then Result:= Commas + 1 else Result:= 0;
+            Exit;
+          end;
+        end;
+      ',' : if Depth = 1 then Inc(Commas);
+      '/' : if (Ci < Length(Cur)) and (Cur[Ci + 1] = '/') then
+            begin Ci:= Length(Cur); { skip to EOL; the += 1 below lands past it } end;
+    end;
+
+    { Anything that is not whitespace, and not the opening paren itself, proves
+      the list is non-empty -- so `M()` counts 0 while `M( X )` counts 1. }
+    if (Depth >= 1) and (C <> '(') and (C <> ' ') and (C <> #9) then SawArg:= True;
+
+    Inc(Ci);
+  end;
+end;
+
+function SignatureArityRange(const ASignature: string; out AMin, AMax: Integer): Boolean;
+var
+  I, Depth, Start: Integer;
+  Inner : string ;
+  Groups: TStringList;
+  G, Names: string;
+  InStr : Boolean;
+  HasDefault: Boolean;
+  N, K  : Integer;
+  Part  : string ;
+begin
+  AMin  := 0;
+  AMax  := 0;
+  Result:= False;
+
+  { A routine with NO parameter list has no parens at all ('': Integer' or ''),
+    and accepts exactly zero arguments -- a real answer, not a parse failure. }
+  I:= Pos('(', ASignature);
+  if I = 0 then Exit(True);
+
+  { Balanced extract of the parameter list. A default value can itself contain
+    parens ('= TFoo.Create'), so counting is the only safe way to find the end. }
+  Depth := 0;
+  InStr := False;
+  Start := I + 1;
+  Inner := '';
+  for K:= I to Length(ASignature) do
+  begin
+    if InStr then
+    begin
+      if ASignature[K] = '''' then InStr:= False;
+      Continue;
+    end;
+    case ASignature[K] of
+      '''': InStr:= True;
+      '(' : Inc(Depth);
+      ')' :
+        begin
+          Dec(Depth);
+          if Depth = 0 then
+          begin
+            Inner:= Copy(ASignature, Start, K - Start);
+            Break;
+          end;
+        end;
+    end;
+  end;
+  if Depth <> 0 then Exit; { unbalanced -> refuse to answer }
+  if Trim(Inner) = '' then Exit(True); { '()' -> zero parameters }
+
+  { Split at TOP-LEVEL ';' -- one group per declared parameter clause. }
+  Groups:= TStringList.Create;
+  try
+    Depth := 0;
+    InStr := False;
+    Start := 1;
+    for K:= 1 to Length(Inner) do
+    begin
+      if InStr then
+      begin
+        if Inner[K] = '''' then InStr:= False;
+        Continue;
+      end;
+      case Inner[K] of
+        '''': InStr:= True;
+        '(', '[': Inc(Depth);
+        ')', ']': Dec(Depth);
+        ';': if Depth = 0 then
+             begin
+               Groups.Add(Copy(Inner, Start, K - Start));
+               Start:= K + 1;
+             end;
+      end;
+    end;
+    Groups.Add(Copy(Inner, Start, Length(Inner) - Start + 1));
+
+    for G in Groups do
+    begin
+      if Trim(G) = '' then Continue;
+      HasDefault:= Pos('=', G) > 0;
+      { Names are everything left of the first ':'. An untyped 'var X' group has
+        no colon at all, in which case the whole group is names. }
+      K:= Pos(':', G);
+      if K > 0 then Names:= Copy(G, 1, K - 1) else Names:= G;
+      Names:= Trim(Names);
+      { Drop one leading parameter modifier. }
+      for Part in TArray<string>.Create('const ', 'var ', 'out ') do
+        if StartsText(Part, Names) then
+        begin
+          Names:= Trim(Copy(Names, Length(Part) + 1, MaxInt));
+          Break;
+        end;
+      N:= 0;
+      for Part in SplitString(Names, ',') do
+        if Trim(Part) <> '' then Inc(N);
+      if N = 0 then Continue;
+      Inc(AMax, N);
+      if not HasDefault then Inc(AMin, N);
+    end;
+  finally
+    Groups.Free;
+  end;
+  Result:= True;
+end;
+
 { TCallResolver }
 
 constructor TCallResolver.Create(const AStore: ISymbolStore);
@@ -405,47 +715,84 @@ begin
     if (S.Kind in AKinds) and SameText(S.Name, AName) then Exit(S);
 end;
 
-function TCallResolver.LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string; out AConfidence: string): Int64;
+function TCallResolver.LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string;
+  AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
 var
-  MatchCount: Integer            ;
-  First     : Int64              ;
-  Kids      : TList<TSymbol>     ;
-  S         : TSymbol            ;
-  A         : TTypeAncestor      ;
+  Matches: TList<TSymbol>;
+  Fit    : TList<TSymbol>;
+  Kids   : TList<TSymbol>;
+  S      : TSymbol       ;
+  A      : TTypeAncestor ;
+  Lo, Hi : Integer       ;
 begin
-  Result    := 0;
+  Result     := 0;
   AConfidence:= '';
-  MatchCount := 0;
-  First      := 0;
   if ATypeSymbolId <= 0 then Exit;
-  // 1. the type's own methods.
-  Kids:= ChildrenOf(ATypeSymbolId);
-  if Kids <> nil then
-    for S in Kids do
-      if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then
-      begin
-        Inc(MatchCount);
-        if First = 0 then First:= S.Id;
-      end;
-  // 2. inherited methods along the transitive ancestor chain. A method defined
-  // on an ancestor counts too; overrides on the type itself already counted in
-  // step 1 (so a class + its base each declaring M yields MatchCount>=2 ->
-  // ambiguous, correctly flagging that the concrete target is uncertain).
-  for A in FStore.GetTransitiveAncestors(ATypeSymbolId) do
-  begin
-    if not A.Resolved or (A.SymbolId <= 0) then Continue;
-    Kids:= ChildrenOf(A.SymbolId);
-    if Kids = nil then Continue;
-    for S in Kids do
-      if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then
-      begin
-        Inc(MatchCount);
-        if First = 0 then First:= S.Id;
-      end;
+
+  Matches:= TList<TSymbol>.Create;
+  Fit    := TList<TSymbol>.Create;
+  try
+    // 1. the type's own methods.
+    Kids:= ChildrenOf(ATypeSymbolId);
+    if Kids <> nil then
+      for S in Kids do
+        if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
+    // 2. inherited methods along the transitive ancestor chain. A method defined
+    // on an ancestor counts too; overrides on the type itself already counted in
+    // step 1 (so a class + its base each declaring M yields 2 matches ->
+    // ambiguous, correctly flagging that the concrete target is uncertain).
+    for A in FStore.GetTransitiveAncestors(ATypeSymbolId) do
+    begin
+      if not A.Resolved or (A.SymbolId <= 0) then Continue;
+      Kids:= ChildrenOf(A.SymbolId);
+      if Kids = nil then Continue;
+      for S in Kids do
+        if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
+    end;
+
+    if Matches.Count = 0 then Exit; // not found on the chain -> 0 / '?'
+    if Matches.Count = 1 then
+    begin
+      Result     := Matches[0].Id;
+      AConfidence:= 'certain';
+      Exit;
+    end;
+
+    // B1: several candidates share the name -- an OVERLOAD SET, or a class and
+    // an ancestor both declaring the method. Argument count separates the first
+    // kind and says nothing about the second, which is exactly the intended
+    // reach: before this, `First` won, so for an overload set the LOWEST-id
+    // declaration answered every call site. In YADF that made a 2-arg delegator
+    // whose body calls the 3-arg implementation resolve to ITSELF, documenting a
+    // phantom self-recursion while the real 603-line function recorded no
+    // callers at all.
+    //
+    // A default parameter makes a candidate accept a RANGE, so the test is
+    // containment, not equality.
+    if AArgsKnown then
+      for S in Matches do
+        if SignatureArityRange(S.Signature, Lo, Hi) and (AArgCount >= Lo) and (AArgCount <= Hi) then
+          Fit.Add(S);
+
+    if Fit.Count = 1 then
+    begin
+      Result     := Fit[0].Id;
+      AConfidence:= 'certain';
+      Exit;
+    end;
+
+    // Arity did not settle it. NARROWING ONLY: when several candidates fit, the
+    // first of THOSE is a better guess than the first overall; when none fits
+    // (an unreadable call site, a shape the counter does not model, a signature
+    // it declined to parse) fall back to the pre-B1 answer exactly. Either way
+    // the site still resolves and is still marked uncertain -- arity may improve
+    // an answer, never remove one.
+    if Fit.Count > 1 then Result:= Fit[0].Id else Result:= Matches[0].Id;
+    AConfidence:= 'ambiguous';
+  finally
+    Fit    .Free;
+    Matches.Free;
   end;
-  if MatchCount = 0 then Exit; // not found on the chain -> 0 / '?'
-  Result:= First;
-  if MatchCount = 1 then AConfidence:= 'certain' else AConfidence:= 'ambiguous';
 end;
 
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
@@ -509,6 +856,8 @@ var
   TypeId  : Int64      ;
   Conf    : string     ;
   Target  : Int64      ;
+  ArgCount: Integer    ;
+  ArgsKnown: Boolean   ;
 begin
   Result:= Default(TCallEdge);
   Result.RefId:= ACallRef.Id;
@@ -527,13 +876,19 @@ begin
     Rcv := ExtractReceiverExpr(Line, ACallRef.StartCol);
   end;
 
+  // 1b. B1: count the arguments at this site, from the same cached lines. Unlike
+  // the receiver scan -- which reads LEFT and cannot leave the line -- an
+  // argument list reads RIGHT and legitimately spans lines, so this is given the
+  // whole file rather than the single line.
+  ArgCount:= CountCallArgs(Lines, ACallRef.StartLine, ACallRef.StartCol, ArgsKnown);
+
   // 2. type the receiver -> a class/interface/record symbol id.
   TypeId:= TypeReceiver(ACallRef, Rcv);
   Result.ReceiverTypeSymbolId:= TypeId; // 0 when the receiver type is unknown
   if TypeId <= 0 then Exit; // unhandled shape / unresolvable type -> no edge
 
   // 3. look the method up on the resolved type + its ancestor chain.
-  Target:= LookupMethodOnType(TypeId, ACallRef.NameText, Conf);
+  Target:= LookupMethodOnType(TypeId, ACallRef.NameText, ArgCount, ArgsKnown, Conf);
   if Target <= 0 then Exit; // method not found on the chain -> '?' bucket, no edge
   Result.TargetSymbolId:= Target;
   Result.Confidence    := Conf;

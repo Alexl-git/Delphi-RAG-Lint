@@ -366,7 +366,45 @@ uses
   // parameter-list text ParseParamNames already splits for the emitter, so both
   // read one extraction rather than two that can disagree about where the list
   // begins and ends.
-  DRagLint.Refactor.DocStub;
+  DRagLint.Refactor.DocStub,
+  // PHASE C B2: SignatureArityRange only. The declared parameter count is
+  // already parsed there for B1's overload resolution, and a second parser here
+  // would be a second answer to one question -- the drift channel this repo
+  // keeps paying for. CallResolver reaches only Core.Model / Core.Interfaces,
+  // so this adds no cycle.
+  DRagLint.Index.CallResolver;
+
+// PHASE C B2: '/N' when ASymbolId is one of several routines that share a name
+// under the same parent -- i.e. an OVERLOAD SET -- where N is its DECLARED
+// parameter count. '' otherwise, so every non-overloaded edge renders exactly
+// as before and the tag appears only where it settles a real ambiguity.
+//
+// The count is the DECLARED one, not the required one: a reader matching this
+// against a signature on screen is counting the parameters they can see.
+function OverloadArityTag(const AStore: ISymbolStore; ASymbolId: Int64): string;
+const
+  ROUTINE_KINDS = [skMethod, skConstructor, skDestructor, skFunction, skProcedure];
+var
+  Sym    : TSymbol;
+  Sibs   : TArray<TSymbol>;
+  Same   : Integer;
+  Lo, Hi : Integer;
+begin
+  Result:= '';
+  if (AStore = nil) or (ASymbolId <= 0) then Exit;
+  Sym:= AStore.GetSymbolById(ASymbolId);
+  if (Sym.Id <= 0) or not (Sym.Kind in ROUTINE_KINDS) then Exit;
+  { Same container, same name -- the sibling test 'Overload k of n' already uses
+    (FindAllChildSymbols scopes to a class for methods and to the unit symbol for
+    free routines), so the two facts cannot disagree about what an overload is. }
+  Sibs:= AStore.FindAllChildSymbols(Sym.ParentId);
+  Same:= 0;
+  for var S in Sibs do
+    if (S.Kind in ROUTINE_KINDS) and SameText(S.Name, Sym.Name) then Inc(Same);
+  if Same <= 1 then Exit;
+  if not SignatureArityRange(Sym.Signature, Lo, Hi) then Exit;
+  Result:= '/' + IntToStr(Hi);
+end;
 
 function DocDisplayCount(ATotal: Integer): Integer;
 begin
@@ -1059,7 +1097,21 @@ var
   begin
     Result:= Default(TDocFactRef);
     Result.Display:= ARC.EnclosingQName;
-    if Result.Display = '' then Result.Display:= LastSeg(ASym.QualifiedName) + ' caller';
+    // PHASE C B11: a ref with NO enclosing routine is a DECLARATION-position
+    // mention -- a field's type, a parameter type, a return type. It used to be
+    // rendered as '<TypeName> caller', which names a symbol that does not exist
+    // and conveys nothing: 'Used by: TYadfEncoding caller (YADF.Options.pas)'
+    // was the WHOLE fact for a type whose every use is a declaration. Say what
+    // it is instead. The file is already carried in Location, so the entry reads
+    // 'declaration (YADF.Options.pas)' -- and several declaration-position refs
+    // in one file now fold into that single honest entry rather than repeating a
+    // fabricated one.
+    if Result.Display = '' then Result.Display:= 'declaration';
+    // PHASE C B2: an overload set shares ONE qualified name, so a rendered edge
+    // that names only that name cannot say WHICH overload -- and on a delegating
+    // pair (the shape B1 fixes) it reads as self-recursion.
+    if Result.Display <> 'declaration' then
+      Result.Display:= Result.Display + OverloadArityTag(AStore, ARC.EnclosingSymbolId);
     Result.Location  := ARC.Location;
     Result.Confidence:= ARC.Confidence;
   end;
@@ -1335,7 +1387,18 @@ begin
           var TargetQName: string:= AStore.GetSymbolById(Edge.TargetSymbolId).QualifiedName;
           if TargetQName <> '' then
           begin
-            FinalSet.Add(TargetQName);
+            // PHASE C B2: tag the ARITY when this name is shared by an overload
+            // set. Before B1 the edge itself was wrong (a 3-arg call bound to
+            // the 2-arg overload); now that it is right, the RENDERING is what
+            // still hides it -- 'Calls: YADF.Layout.FormatSource' on a routine
+            // of that very name is a correct edge that reads as recursion.
+            //
+            // ResolvedLeaves keeps the UNSUFFIXED leaf on purpose: it exists to
+            // suppress the body-scan's bare-name duplicate, and the body scan
+            // sees 'FormatSource', not 'FormatSource/3'. Tagging it here would
+            // have re-admitted every resolved callee a second time as a bare
+            // name.
+            FinalSet.Add(TargetQName + OverloadArityTag(AStore, Edge.TargetSymbolId));
             ResolvedLeaves.Add(LastSeg(TargetQName));
           end;
         end;
