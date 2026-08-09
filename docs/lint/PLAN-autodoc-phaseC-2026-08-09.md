@@ -10,7 +10,133 @@
 
 ---
 
-## >>> RESUME POINT -- updated 2026-08-09 (end of the execution session)
+## >>> RESUME POINT -- updated 2026-08-09 (SECOND execution session)
+
+**B10, B3 and B8 are now DONE.** The user's instruction this session was explicit: *"Lets do YADF
+and DataCopy test only after all planned autodoc are done. Otherwise there is no use to do these
+tests. Lets finish B8, B10 and B3 first."* So the live runs below are still the next action, but
+they now come AFTER this work, not instead of it.
+
+Baseline before the work: full battery **232/234** at `88a5d9a`. Both failures
+(`run_doc_p3_idempotency_sweep`, `run_doc_p3_preserve_tags`) were proven ENVIRONMENTAL -- each
+passes in isolation (228 and 54 assertions, exit 0). Both hard-fail when the start-of-run
+`Remove-Item` cannot delete a lingering `.sqlite-wal`; they have no retry. That fragility is worth
+fixing but is not a product defect.
+
+### B10 -- DONE (fixed)
+
+`IsTestRoutine` (`src\doc\DRagLint.Doc.SymbolFacts.pas`) accepted any routine whose DECLARING FILE
+matched `*Test`/`Test*`. YADF's `CodeChars` is a plain helper in `Test\GuardTest.dpr`, so it was
+rendered as a coverer of three `YADF.LineScan` symbols. The file rule is now NECESSARY BUT NOT
+SUFFICIENT: it must be corroborated by (a1) the routine's own name starting with `Test`, or (a2)
+the routine being a method of a fixture-named class. Rule (b), `TTestCase` ancestry, is unchanged
+and still fires independently.
+
+**The resume note said this needed "a per-hop file id the coverage walk lacks". It did not** --
+`Walk` already carries `RC.Location`. The fix is entirely inside `IsTestRoutine`.
+
+(a1) covers every shape in the corpora in play: YADF's tests are free `Test*` procedures in a
+`.dpr`, drag-lint's own `StorageHelperEdgesTests.dpr` is the same, and
+`DRagLint.Refactor.TestStub` GENERATES `Test_<Method>_HappyPath`. Verified on the live YADF index
+(render only): `Covered by` is now exactly the genuine `Test*` procedures, and `CodeChars` still
+appears under `Called from`, which is true.
+
+### B3 -- DONE (no code defect; the recorded diagnosis was WRONG)
+
+The previous resume point said *"a masking gap on that body remains and now shows up as silence."*
+**That is not why `FormatSource` is silent.** Its own body -- everything after its `begin` at
+`YADF.Layout.pas:5441` -- runs ~22 lines of `Result:= SomeStage(Result)`. `Result` on the RHS is
+exactly what `HasResultMutation` detects, and it is asked of the DOCUMENTED routine's own code, so
+it fires no matter how perfectly nested scopes are masked. Under the miner's "absence over wrong"
+policy that routine can never carry a `<returns>`. **Do not re-open this as a masking bug.**
+
+The mask itself was PROVEN complete on the one shape no fixture covered: a nested routine that
+MUTATES `Result` (`Result := Result + S[i]`, the real `CurrentLineLeadingWS` shape at
+`YADF.Layout.pas:5089`). Every pre-existing nested fixture did a whole-`Result` ASSIGNMENT, which
+never reaches `HasResultMutation` at all. That shape now lives in
+`run_doc_returns_nested_scope.ps1` as `InnerAccum`. **It passed on first run** -- it is a
+regression pin, not a TDD-driven fix, and it is recorded as such.
+
+Why it mattered enough to test: a leak there is DESTRUCTIVE, not cosmetic. It would delete the
+outer routine's `<returns>` outright, and the result is silence -- indistinguishable from "nothing
+to say" without the control assertion.
+
+### B8 -- DONE (implemented, this time it stuck)
+
+New `WrapEngineProse` + `DOC_WRAP_COLS = 100` in `src\doc\DRagLint.Doc.Regions.pas`, applied on
+THREE emit paths: `EmitTagged` (tag values), `AppendFact` (the facts block), and
+`EmitHarvestedRemarks` (harvested prose -- the 759-column worst case).
+
+**Why this attempt survived where the first was reverted: OWNERSHIP.** `EmitTagged` wraps only when
+`AUTO_MARK` is in the OPEN TAG. That reuses the existing invariant by which the emitter already
+tells its two arms apart -- the engine arm stamps the marker, the preserve arm carrying a human's
+text does not. The reverted attempt reflowed hand-written values too, which changed the text the
+merge re-parses. Facts-block lines need no such test: they live between `AUTO_BEGIN`/`AUTO_END` and
+are regenerated wholesale.
+
+Idempotency is structural: wrapping is PER LINE and lines already within budget pass through, so
+`Wrap(Wrap(x)) = Wrap(x)`. The join-then-reflow alternative is not a fixed point once the value
+round-trips through the parser, which is the instability that killed attempt one.
+
+`run_doc_p3_decayrouting` DID go red, exactly as predicted -- but only its N7 DISCRIMINATION
+guard, an assertion about the TEST'S OWN setup, with all 43 behavioural pins still green. The
+engine block grew 7 -> 9 lines, so the fixture's quoted region no longer exercised the containment
+loop. Re-derived from real output per the rule the fixture itself states. Now `existing=9
+engineBlock=9`.
+
+New runner: `tests\autodoc\run_doc_p3_wrap.ps1` -- width, word-preservation, AUTHOR-preservation
+(the assertion that separates this implementation from the reverted one), and idempotency.
+
+#### B8 SCOPE RULING by the user, 2026-08-09 -- fact lists are NOT wrapped
+
+Wrapping was first applied to the facts block too, and the full battery answered with 5 failures:
+`run_doc_cap`, `run_doc_p3_callerline`, `run_doc_returns_and_callers`, `run_calledfrom_resolved`,
+`run_callsite_kind_universe`. **None was broken output** -- the content was complete, it had simply
+moved onto a continuation line, and each of those runners reads one fact as one line.
+
+Asked, and the user ruled: *"If it is easier, keep these as a single line with a future option to
+break into individual lines."* So:
+
+- **Wrapped:** `<summary>`, `<remarks>`, harvested prose -- i.e. PROSE, which is what produced the
+  759- and 659-column lines.
+- **NOT wrapped:** `Called from:` / `Calls:` / `Used in units:` / `Raises:` / `Overridden by:` /
+  `Returns:`. These can still exceed 120 columns (262 measured on YADF.LineScan) and that is
+  accepted for now.
+- **The agreed future fix is ONE ENTRY PER LINE, not word-wrap** -- entries stay atomic, greppable,
+  and a diff shows exactly the caller that changed. The six call sites already route through a
+  single `AppendFact` procedure whose body is currently a passthrough, so that change is one place.
+
+Do not "finish" this later by turning word-wrap back on for fact lines; that is the option that was
+considered and declined.
+
+### Not a defect -- checked and dismissed
+
+`document --unit`/`--project` emit NOTHING for a routine with a harvestable `//` comment but no
+facts, while `--qname` emits a full block. That is the DOCUMENTED facts-only gate for batch modes
+("add `--stubs` to keep a fresh comment that has no facts block"), confirmed by giving the fixture
+a `Calls:` fact and watching batch mode insert. It is also why YADF's earlier run documented only
+28 of 52 declarations.
+
+### Still open after this session
+
+- **Break fact lists into logical lines -- ONE ENTRY PER LINE.** The user's words when ruling on
+  B8: *"Add this as a future todo item to break facts into logical lines, but it might come much
+  later to implement."* LOW PRIORITY, explicitly not now. The seam is ready: all six fact call
+  sites already go through `AppendFact` in `src\doc\DRagLint.Doc.Regions.pas`, whose body is a
+  one-line passthrough. Whoever picks it up must also update the five runners that read one fact
+  as one line -- `run_doc_cap`, `run_doc_p3_callerline`, `run_doc_returns_and_callers`,
+  `run_calledfrom_resolved`, `run_callsite_kind_universe` -- which is exactly the set that went red
+  when word-wrap was tried there.
+- **Indexer does not extract NESTED routines as symbols.** `query --name EmitTagged` returns 0
+  exact matches for a real function at `src\doc\DRagLint.Doc.Regions.pas:1882`. Logged in
+  `stats\draglint-gaps.log` as class `unsupported`. The user asked for this as its own todo.
+- The ` ?` uncertainty marker on all-uncertain lists -- STILL UNANSWERED, one line in `JoinRefs`.
+- Call-edge coverage 35.1% on YADF (bare calls to free functions in other units never resolve).
+- B9, and YADF suggestions 2-10 (`<exception cref="">` first).
+
+---
+
+## >>> EARLIER RESUME POINT -- 2026-08-09 (first execution session)
 
 `main` = **`b28518d`, pushed, in sync**. Autodoc suite **69/69**; last FULL battery **233/233**
 at `0c47bc2` (B5 landed after it -- **re-run the full battery once** before the runs below).
