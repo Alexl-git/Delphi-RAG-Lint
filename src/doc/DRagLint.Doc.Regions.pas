@@ -57,6 +57,13 @@ const
   /// on read. Human-facing surfaces call StripForDisplay, never this constant
   /// directly, to hide it (see that function's own comment).
   AUTO_MARK  = '<!-- drag-lint:auto -->';
+  // v(PHASE C, B8): the column budget for ENGINE-OWNED /// prose, prefix
+  // included. 100 is what YADF's hand-written comments already use and what the
+  // review asked generated text to match; the point of the fix is that a
+  // one-word change stops rewriting a 759-column line, so the exact value
+  // matters far less than having one. Hand-written text is never measured
+  // against this -- see WrapEngineProse's ownership note.
+  DOC_WRAP_COLS = 100;
   /// Legacy trailing param marker TEXT. DECLARATION-ONLY as of v(ADP3 T1): no
   /// code reads or writes this constant anymore (the engine never emits it;
   /// IsManagedText/IsManagedDesc never test for it). A pre-v(ADP3) file still
@@ -494,6 +501,87 @@ uses
 // Every line carries APrefix, never a bare embedded newline -- the 5ebde68
 // corruption was exactly an unprefixed interior line turning the rest of a doc
 // block into code.
+// v(PHASE C, B8): greedy word-wrap for ENGINE-OWNED doc prose.
+//
+// WHY PER-LINE, AND WHY THAT IS THE WHOLE IDEMPOTENCY ARGUMENT
+// ------------------------------------------------------------------
+// Each existing line is wrapped INDEPENDENTLY and lines already within budget
+// pass through untouched. That makes the function its own fixed point --
+// Wrap(Wrap(x)) = Wrap(x) -- because every line Wrap produces is, by
+// construction, within budget and therefore survives the next pass unchanged.
+// The alternative (join everything, then re-flow) is NOT a fixed point once the
+// value round-trips through the parser, which preserves interior line breaks:
+// it re-flows differently as the budget interacts with the joined text, and a
+// second --apply becomes a non-empty diff. B8's first attempt died of exactly
+// that class of instability, so the property is stated here rather than left to
+// be rediscovered.
+//
+// A word longer than the budget is emitted on its own over-long line rather
+// than being split mid-token: a 60-character qualified name in a fact list is
+// not improved by being cut in half, and callers that assert a width must
+// exempt the unbreakable case (tests\autodoc\run_doc_p3_wrap.ps1 does).
+//
+// OWNERSHIP IS THE CALLER'S DECISION, NOT THIS FUNCTION'S. It reflows whatever
+// it is handed. Only call it for text the engine generated and will regenerate;
+// reflowing a human's words is a destructive edit dressed as formatting.
+// AFirstBudget is the budget for the FIRST emitted chunk only. It exists
+// because that chunk shares its physical line with the OPEN TAG -- a
+// '<summary><!-- drag-lint:auto -->' is 32 columns of it -- so charging it the
+// same budget as every other line overshoots by exactly the tag's width.
+// Subsequent chunks start at the prefix and get the full budget.
+function WrapEngineProse(const AText: string; ABudget, AFirstBudget: Integer): string;
+var
+  Lines  : TArray<string>;
+  Words  : TArray<string>;
+  Sb     : TStringBuilder;
+  Cur    : string        ;
+  i, w   : Integer       ;
+  First  : Boolean       ;
+  CurBud : Integer       ;
+begin
+  if (ABudget <= 0) or (AFirstBudget <= 0) or (AText = '') then Exit(AText);
+  Lines:= AText.Split([#10]);
+  Sb:= TStringBuilder.Create;
+  try
+    for i:= 0 to High(Lines) do
+    begin
+      if i > 0 then Sb.Append(#10);
+      if i = 0 then CurBud:= AFirstBudget else CurBud:= ABudget;
+      if Length(Lines[i]) <= CurBud then
+      begin
+        Sb.Append(Lines[i]);
+        Continue;
+      end;
+      Words:= Lines[i].Split([' '], TStringSplitOptions.ExcludeEmpty);
+      Cur:= '';
+      First:= True;
+      for w:= 0 to High(Words) do
+      begin
+        if Cur = '' then
+          Cur:= Words[w]
+        else if Length(Cur) + 1 + Length(Words[w]) <= CurBud then
+          Cur:= Cur + ' ' + Words[w]
+        else
+        begin
+          if not First then Sb.Append(#10);
+          Sb.Append(Cur);
+          First:= False;
+          CurBud:= ABudget;   // only the first chunk pays for the open tag
+          Cur:= Words[w];
+        end;
+      end;
+      if Cur <> '' then
+      begin
+        if not First then Sb.Append(#10);
+        Sb.Append(Cur);
+      end;
+    end;
+    Result:= Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+end;
+
 procedure EmitHarvestedRemarks(ASb: TStringBuilder; const APrefix, AHarvested: string);
 var
   Norm : string        ;
@@ -503,6 +591,16 @@ begin
   if AHarvested = '' then Exit;
   Norm := StringReplace(AHarvested, #13#10, #10, [rfReplaceAll]);
   Norm := StringReplace(Norm, #13, #10, [rfReplaceAll]);
+  // v(PHASE C, B8): harvested prose is ENGINE-OWNED without qualification --
+  // it is re-derived from the source // comment on every run and the first line
+  // carries AUTO_MARK -- so it wraps unconditionally, with no ownership test.
+  // This is the path behind B8's worst case (YADF.Layout.pas:103 at 759
+  // columns): the harvester deliberately JOINS a comment's wrapped source lines
+  // with single spaces (run_doc_p3_harvest_text.ps1 pins that join), and until
+  // now nothing ever put the breaks back.
+  Norm := WrapEngineProse(Norm,
+            DOC_WRAP_COLS - Length(APrefix),
+            DOC_WRAP_COLS - Length(APrefix) - Length(AUTO_MARK));
   Parts:= Norm.Split([#10]);
   for i:= 0 to High(Parts) do
     if i = 0 then ASb.AppendLine(APrefix + AUTO_MARK + Trim(Parts[i]))
@@ -1728,6 +1826,27 @@ var
         Result:= Result + ' ?';
     end;
   end;
+  // v(PHASE C, B8): the single emission point for a facts-block line.
+  //
+  // A FACT LIST IS DELIBERATELY NOT WRAPPED, and that is a decision, not an
+  // oversight. B8 wraps engine-owned PROSE (<summary>, <remarks>, harvested
+  // text) because prose is what made a one-word change rewrite a 759-column
+  // line. A fact list is structured data, not prose: 'Called from:' and friends
+  // are read back by tooling and by five pinned runners that treat one fact as
+  // one line, and word-wrapping a comma-joined list mid-entry buys reviewable
+  // diffs at the cost of a format every consumer has to re-learn.
+  //
+  // So these lines can still exceed DOC_WRAP_COLS -- measured at 262 columns on
+  // YADF.LineScan's 'Called from:'. THE PREFERRED FUTURE FIX IS NOT WORD-WRAP:
+  // it is ONE ENTRY PER LINE, which keeps every entry atomic and greppable and
+  // makes a diff show exactly the caller that changed. That change belongs
+  // here, in this one procedure, which is why the call sites route through it
+  // rather than calling Sb.AppendLine directly -- the seam is the deliverable
+  // even though the body is currently a passthrough.
+  procedure AppendFact(const AText: string);
+  begin
+    Sb.AppendLine(APrefix + AText);
+  end;
 begin
   Sb:= TStringBuilder.Create;
   try
@@ -1750,10 +1869,10 @@ begin
       var RefVerb: string;
       if CanBeCallTarget(AFacts.SymbolKind) then RefVerb:= 'Called from: '
       else RefVerb:= 'Used by: ';
-      Sb.AppendLine(APrefix + RefVerb + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
+      AppendFact(RefVerb + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
     end;
     if Length(AFacts.Calls) > 0 then
-      Sb.AppendLine(APrefix + 'Calls: ' + JoinEsc(AFacts.Calls) + MoreSuffix(Length(AFacts.Calls), AFacts.CallsTotal));
+      AppendFact('Calls: ' + JoinEsc(AFacts.Calls) + MoreSuffix(Length(AFacts.Calls), AFacts.CallsTotal));
     // Mined Result:=/Exit() return cases as a FACT line -- emitted ONLY when the
     // caller asks (AIncludeReturns), which MergeComment sets solely for a symbol
     // that ALREADY has a HAND-WRITTEN <returns>. For a managed/empty <returns>
@@ -1769,12 +1888,12 @@ begin
         if Ri > 0 then Rc:= Rc + '; ';
         Rc:= Rc + EscXml(AFacts.ReturnCases[Ri]);
       end;
-      Sb.AppendLine(APrefix + 'Returns: ' + Rc);
+      AppendFact('Returns: ' + Rc);
     end;
     if Length(AFacts.UsedInUnits) > 0 then
-      Sb.AppendLine(APrefix + 'Used in units: ' + JoinEsc(AFacts.UsedInUnits) + MoreSuffix(Length(AFacts.UsedInUnits), AFacts.UsedInTotal));
+      AppendFact('Used in units: ' + JoinEsc(AFacts.UsedInUnits) + MoreSuffix(Length(AFacts.UsedInUnits), AFacts.UsedInTotal));
     if Length(AFacts.Raises) > 0 then
-      Sb.AppendLine(APrefix + 'Raises: ' + JoinEsc(AFacts.Raises));
+      AppendFact('Raises: ' + JoinEsc(AFacts.Raises));
     // v(ADF T3): ground-truth 'deprecated' directive line. Emitted only when
     // AFacts.Deprecated (the directive was actually found on the decl -- see
     // TDocFactsBuilder.DetectDeprecated). A message renders 'Deprecated: <msg>';
@@ -1800,7 +1919,7 @@ begin
     if AFacts.Overrides <> '' then
       Sb.AppendLine(APrefix + 'Overrides: ' + EscXml(AFacts.Overrides));
     if Length(AFacts.OverriddenBy) > 0 then
-      Sb.AppendLine(APrefix + 'Overridden by: ' + JoinEsc(AFacts.OverriddenBy) + MoreSuffix(Length(AFacts.OverriddenBy), AFacts.OverriddenByTotal));
+      AppendFact('Overridden by: ' + JoinEsc(AFacts.OverriddenBy) + MoreSuffix(Length(AFacts.OverriddenBy), AFacts.OverriddenByTotal));
     if AFacts.Implements <> '' then
       Sb.AppendLine(APrefix + 'Implements: ' + EscXml(AFacts.Implements));
     if AFacts.OverloadCount > 1 then
@@ -1884,6 +2003,25 @@ var
   begin
     Norm:= StringReplace(AValue, #13#10, #10, [rfReplaceAll]);
     Norm:= StringReplace(Norm, #13, #10, [rfReplaceAll]);
+    // v(PHASE C, B8): wrap generated prose -- and ONLY generated prose. The
+    // discriminator is AUTO_MARK in the OPEN TAG, which is precisely how this
+    // emitter already distinguishes the two arms that reach it: the engine arm
+    // stamps the marker (e.g. '<summary>' + AUTO_MARK), the preserve arm that
+    // carries a human's text does not (see the <returns> preserve arm, which
+    // passes a bare '<returns>'). Keying on the marker therefore reuses an
+    // existing, already-tested invariant instead of inventing a parallel one,
+    // and it is what makes the reverted first attempt at B8 safe this time:
+    // that one reflowed hand-written values too, which changed the text the
+    // merge re-parses and made doc blocks disappear from
+    // run_doc_p3_decayrouting's fixtures.
+    //
+    // The budget subtracts the prefix (every line carries it) and the closing
+    // tag (the last line carries it, and reserving it for all lines is the
+    // cheap, still-idempotent over-approximation).
+    if Pos(AUTO_MARK, AOpen) > 0 then
+      Norm:= WrapEngineProse(Norm,
+               DOC_WRAP_COLS - Length(APrefix) - Length(AClose),
+               DOC_WRAP_COLS - Length(APrefix) - Length(AClose) - Length(AOpen));
     Parts:= Norm.Split([#10]);
     Result:= APrefix + AOpen;
     for i:= 0 to High(Parts) do
@@ -2302,7 +2440,7 @@ begin
       begin
         var Obs: string:= Trim(ObservedSuffix(AFacts.ReturnCases));
         if Obs <> '' then
-          Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + Obs + '</returns>');
+          Sb.AppendLine(EmitTagged('<returns>' + AUTO_MARK, Obs, '</returns>'));
       end;
       // v(ADP3 T7): the <remarks> element is now also warranted by harvested
       // prose alone -- a symbol can have a second paragraph worth promoting and
@@ -2543,7 +2681,7 @@ begin
         // <returns> is never written).
         var Obs: string:= Trim(ObservedSuffix(AFacts.ReturnCases));
         if Obs <> '' then
-          Sb.AppendLine(APrefix + '<returns>' + AUTO_MARK + Obs + '</returns>');
+          Sb.AppendLine(EmitTagged('<returns>' + AUTO_MARK, Obs, '</returns>'));
       end;
     end;
 

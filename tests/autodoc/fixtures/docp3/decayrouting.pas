@@ -55,7 +55,17 @@ procedure CallsQuotedBlockExact;
 // discrimination check would (correctly) report that it no longer discriminates.
 // Keep the two in step: if the rendered fact lines change again, this quoted
 // copy must change with them, and only the .pos/.pas character may differ.
+//
+// v(PHASE C, B8): the quoted block gained the two <summary> lines below for the
+// same reason it gained `Pure` at T13 -- the real block grew. B8 wraps
+// engine-owned prose at 100 columns, so the harvested summary the engine renders
+// for this symbol is now TWO lines instead of one, and the block measured off
+// the N6 shape went from 7 lines to 9. Without these the existing region is
+// again SHORTER than the block to insert and the early-out, not the scan loop,
+// is what answers -- which is precisely what the discrimination check caught.
 
+/// <summary><!-- drag-lint:auto -->--- N7: the guard's scan loop, NEGATIVE path
+/// ------------------------------</summary>
 /// <remarks></remarks>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
