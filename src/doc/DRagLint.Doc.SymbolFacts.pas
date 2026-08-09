@@ -2649,15 +2649,36 @@ end;
 
 // True when the caller routine identified by (ASymbolId, AQName, ALocation)
 // -- one row of a FindResolvedCallers/FindUnresolvedNameCallers result -- is
-// a TEST routine, by either of two GROUND-TRUTH rules (checked in this
-// order, (a) first since it is a plain string comparison with NO extra store
-// query, while (b) costs one):
+// a TEST routine, by either of two GROUND-TRUTH rules:
 //   (a) its DECLARING FILE's basename matches the '*Test'/'Test*' naming
 //       convention, case-insensitive (the DUnitX corpus-wide convention --
-//       e.g. 'UWidgetTests.pas' or 'TestWidget.pas'). ALocation is already
-//       the bare caller filename (TResolvedCaller.Location's own contract:
-//       "filename only"), so this is a query-free string check.
-//   (b) ONLY when (a) does not match: its ENCLOSING CLASS transitively
+//       e.g. 'UWidgetTests.pas' or 'TestWidget.pas'), AND the routine ITSELF
+//       looks like a test by (a1) its own name carrying the 'Test' prefix, or
+//       (a2) being a method of a class whose name matches the same '*Test'/
+//       '*Tests'/'Test*' fixture convention.
+//
+//       v(B10): the file check ALONE used to be sufficient, and that was the
+//       defect YADF filed. A test file holds helpers as well as tests --
+//       `CodeChars` and `Check` in YADF's Test\GuardTest.dpr are plain local
+//       helpers, and `CodeChars` was rendered as a coverer of three
+//       YADF.LineScan symbols. The file rule is now NECESSARY but not
+//       SUFFICIENT. It is still checked first and still query-free.
+//
+//       (a1) is the load-bearing half and it covers every shape in the corpora
+//       this engine is used on: YADF's tests are free `Test*` procedures in a
+//       .dpr, drag-lint's own StorageHelperEdgesTests.dpr is the same shape,
+//       and DRagLint.Refactor.TestStub GENERATES `Test_<Method>_HappyPath`.
+//       (a2) exists for the attribute-driven DUnitX fixture whose methods need
+//       NOT carry the prefix (`[Test] procedure RoundTrips` on a TFooTests
+//       class); the attribute itself is unreadable here, see the route-(c)
+//       note below, so the FIXTURE CLASS's name stands in for it.
+//
+//       RESIDUAL, disclosed rather than implied: (a2) still admits a non-test
+//       HELPER METHOD declared on a fixture class. That is a much narrower
+//       leak than the file rule (it must be a method, on a test-named class,
+//       in a test-named file) and it is not reachable without the attribute
+//       route; a free helper -- the shape actually filed -- is now excluded.
+//   (b) INDEPENDENT of both file and routine naming: its ENCLOSING CLASS transitively
 //       descends from a class literally named 'TTestCase' (a legacy-DUnit-
 //       style fixture) -- AStore.GetTransitiveAncestors, the SAME ancestry
 //       walk DRagLint.Doc.Facts' Overrides/Implements gather already uses.
@@ -2691,14 +2712,28 @@ var
   Anc      : TTypeAncestor;
 begin
   Result:= False;
-
-  // (a) file-name convention -- query-free.
-  BaseName:= ChangeFileExt(ALocation, '');
-  if StartsText('Test', BaseName) or EndsText('Test', BaseName) then Exit(True);
-
-  // (b) TTestCase ancestry -- only reached when (a) did not already match.
   if ASymbolId <= 0 then Exit;
   Sym:= AStore.GetSymbolById(ASymbolId);
+
+  // (a) file-name convention -- query-free, and NECESSARY-not-sufficient
+  //     (B10). One of (a1)/(a2) must corroborate it.
+  BaseName:= ChangeFileExt(ALocation, '');
+  if StartsText('Test', BaseName) or EndsText('Test', BaseName) then
+  begin
+    // (a1) the routine's own name carries the convention.
+    if StartsText('Test', Sym.Name) then Exit(True);
+    // (a2) or it is a method of a fixture-named class.
+    if Sym.ParentId > 0 then
+    begin
+      ParentSym:= AStore.GetSymbolById(Sym.ParentId);
+      if (ParentSym.Kind = skClass)
+         and (StartsText('Test', ParentSym.Name)
+              or EndsText('Test', ParentSym.Name)
+              or EndsText('Tests', ParentSym.Name)) then Exit(True);
+    end;
+  end;
+
+  // (b) TTestCase ancestry -- reached whenever (a) did not already conclude.
   if Sym.ParentId <= 0 then Exit;
   ParentSym:= AStore.GetSymbolById(Sym.ParentId);
   if ParentSym.Kind <> skClass then Exit;

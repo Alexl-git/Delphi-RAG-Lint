@@ -16,6 +16,10 @@
     * coveredtest.pas    -- unit NAME matches the '*Test' convention (rule a);
                              TTargetTests.TestTarget calls Target, does NOT
                              derive TTestCase (proves rule (a) alone suffices).
+                             ALSO holds ScanHelper -- a free, non-'Test'-named
+                             helper in that same unit that calls Target (B10:
+                             YADF's `CodeChars` in Test\GuardTest.dpr). A FILE-
+                             name rule alone counts it as a test; it is not one.
     * coveredfixture.pas -- unit NAME does NOT match '*Test'/'Test*'; TLegacyCase
                              descends from TTestCase (rule b) and its
                              CheckTarget method calls Target (proves rule (b)
@@ -114,6 +118,11 @@ try {
     Check 'Covered by is exactly {coveredtest.TTargetTests.TestTarget, coveredfixture.TLegacyCase.CheckTarget}' `
       (Test-NamesEqual $coveredSeg @('coveredtest.TTargetTests.TestTarget','coveredfixture.TLegacyCase.CheckTarget'))
     Check 'Covered by does NOT include the non-test caller UseTargetDirectly' ($coveredSeg -notmatch 'UseTargetDirectly')
+    # B10: the file-name rule (a) is NECESSARY but not SUFFICIENT. ScanHelper
+    # lives in coveredtest.pas and calls Target, so the reverse walk reaches it;
+    # only its own NAME (and its lack of a fixture class / TTestCase ancestry)
+    # separates it from TestTarget one declaration above it.
+    Check 'Covered by does NOT include ScanHelper -- a non-test helper inside a *Test-named unit (B10)' ($coveredSeg -notmatch 'ScanHelper')
   }
 
   # --- UseTargetDirectly: has a block (via its own Calls: fact) but NO Covered by ---
