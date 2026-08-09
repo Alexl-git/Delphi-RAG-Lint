@@ -1924,23 +1924,79 @@ begin
   else if AArgs.ProjectPath <> '' then
   begin
     Writeln('Project: ', AArgs.ProjectPath);
+    { A project's index must hold exactly that project's COMPILE CLOSURE.
+
+      This arm used to resolve the project's search-path FOLDERS
+      (TProjectResolver.ResolveProjectOnly) and walk them recursively. That was
+      already the second attempt. The first walked TProjectResolver.Resolve,
+      whose unconditional registry Library/Browsing tail turned
+      `index --project DataCopy.dproj` -- a 12-unit project declaring no search
+      paths of its own -- into a 153-folder scan of the whole RAD Studio source
+      tree, Raize, Spring4D and OmniThreadLibrary's tests\ and examples\: over
+      an hour in, only 3.5% of the indexed files belonged to the project.
+      Dropping the library tail fixed the SCALE but not the KIND of the error --
+      a folder walk has no notion of membership, so every loose .pas beside the
+      .dproj (a unit retired from the project, a scratch copy, a vendored tree
+      that only one config compiles) still landed in the project's index and was
+      then linted, counted by coverage, and offered to the doc engine as project
+      API.
+
+      The manifest's smClosure sections (BuildOneSection, above) have always
+      resolved the real thing. Both paths now go through TClosureResolver, so
+      `index --project X.dproj` and an `include: ["X.dproj"]` manifest section
+      finally agree about what X is. Library units stay out: they live in
+      library-Win32.sqlite / library-Win64.sqlite, which a consumer reaches by
+      passing a second --db. }
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
-      { ResolveProjectOnly, NOT Resolve: Resolve appends the IDE's registry
-        Library/Browsing paths for Win32+Win64, which is right for a COMPILER
-        search path (check-unit, the compile helper) and catastrophic for an
-        indexing scope. Walking that tail turned `index --project DataCopy.dproj`
-        -- a 12-unit project declaring no search paths of its own -- into a
-        153-folder recursive scan of the whole RAD Studio source tree, Raize,
-        Spring4D and OmniThreadLibrary's tests\ and examples\: over an hour in,
-        only 3.5% of the indexed files belonged to the project. All of it is
-        already in library-Win32.sqlite / library-Win64.sqlite, which a consumer
-        reaches by passing a second --db. }
-      Folders:= Resolver.ResolveProjectOnly(AArgs.ProjectPath);
+      var Cl: TClosureResolver:= TClosureResolver.Create(Resolver.ResolveLibraryPaths);
+      try
+        { PP-Task-10: uses-discovery must honour the SAME define profile the
+          indexer was handed above, or the closure and the symbol extraction
+          disagree about which $IFDEF branch is live -- a unit reachable only
+          from an inactive branch would be pulled in and then parsed as though
+          it were not compiled, and vice versa. }
+        Cl.SetPreprocess(not AArgs.NoPreprocess,
+          ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+        var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+        for var W: string in CR.Warnings do Writeln('  ', W);
+
+        { FAIL LOUDLY. A project that resolves to nothing must NOT fall back to
+          a folder walk -- that fallback is the defect above returning -- and
+          must not quietly write an empty index either. Lint, coverage and the
+          doc engine all report a clean bill of health over an empty DB, so a
+          silent empty index is the most dangerous artefact this tool can
+          produce. }
+        if Length(CR.Files) = 0 then
+        begin
+          Writeln(ErrOutput, Format('ERROR: %s resolves to an EMPTY compile closure -- no ' +
+            'DCCReference entries and no resolvable .dpr member units. Refusing to write an ' +
+            'empty index; a folder walk is NOT a fallback (it indexes files the project does ' +
+            'not compile).', [AArgs.ProjectPath]));
+          Exit(2);
+        end;
+
+        Folders:= CR.Files;
+      finally
+        Cl.Free;
+      end; // try
     finally
       Resolver.Free;
-    end;
-    Writeln(Format('Resolved %d unique scan folders:', [Length(Folders)]));
+    end; // try
+
+    { TClosureResolver seeds FROM the project file and never returns it, but the
+      .dpr IS the root of the closure -- it is the file the compiler is handed.
+      Add it back so the program block and its uses list stay indexed. }
+    var ProjSrc: string:= TPath.GetFullPath(AArgs.ProjectPath);
+    if SameText(ExtractFileExt(ProjSrc), '.dproj') then ProjSrc:= TPath.ChangeExtension(ProjSrc, '.dpr');
+    if TFile.Exists(ProjSrc) then Folders:= Folders + [ProjSrc];
+
+    { NOTE: Folders now holds FILES, not directories. The walk loop below already
+      branches on TFile.Exists, but the --prune default at the bottom of the tick
+      keys off TDirectory.Exists and therefore no longer self-arms for --project.
+      Evicting rows for files that have left the closure is a separate concern
+      (project-scoped eviction) and is deliberately not done here. }
+    Writeln(Format('Compile closure: %d file(s):', [Length(Folders)]));
     for F in Folders do Writeln('  ', F);
   end
   else Folders:= [AArgs.Path];
