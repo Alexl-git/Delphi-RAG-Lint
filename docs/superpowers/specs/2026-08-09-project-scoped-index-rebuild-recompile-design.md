@@ -62,36 +62,51 @@ every reindex of YADF.
 | loose `.pas` in the project folder that nothing references | **no** |
 | anything under an ignored path (`.gitignore` etc.) | **no** |
 
-## The three modes
+## Two independent axes: SCAN TYPE and MODE
 
-Named to match the IDE's own vocabulary, because that is where they are invoked from.
+These are different things and conflating them is what made the first draft of this spec awkward
+(it bolted `--rebuild` onto `--library` as a special case). They are orthogonal:
 
-- **`--recompile`** (default for a project): reparse changed files, drop files that vanished from
-  disk, **and evict files that are no longer in scope**. Incremental.
-- **`--rebuild`**: wipe the project's DB **content** and index from scratch. It deletes rows, not
-  the file -- the schema, its migrations and any settings survive, and no file handle is dropped,
-  which matters because the IDE plugin may hold the DB open.
-- **`--library`**: index every unit in a folder **and its subfolders**, with no membership concept
-  at all.
+- **SCAN TYPE -- what is in scope.** `Project` (the `.dproj` closure) or `Library` (a folder and
+  its subfolders, everything).
+- **MODE -- how much is redone.** `Rebuild` (from scratch) or `Recompile` (incremental).
 
-### Why Library is a separate mode and not a project with loose rules
+All four combinations are meaningful:
+
+| | **Recompile** (incremental, default) | **Rebuild** (from scratch) |
+|---|---|---|
+| **Project** scan | the everyday IDE action on the current project | after an engine upgrade, or when the DB is not trusted |
+| **Library** scan | pick up newly installed / updated library units | full re-scan of a library tree |
+
+### Scan type is DECLARED, mode is CHOSEN per run
+
+Scan type is a property of the target, not a flag you toggle: a `.dproj` is a project scan, a
+folder root is a library scan. The manifest section declares it by what it points at, and the IDE
+knows it has a project open. So there is no `--scan` flag to get wrong, and -- the part that
+matters -- **a project can never silently degrade into a library scan.** A missing or unreadable
+`.dproj` fails loudly instead of falling back to "index everything", which would walk the whole
+defect straight back in.
+
+Mode is the run-time choice: `--rebuild`, or `--recompile` (default). Named to match the IDE's own
+vocabulary, because that is where they are invoked from.
+
+### Why Library scan exists at all
 
 In the user's words: *"since we don't know what units will be used, we are forced to index all
 units in the folder+subfolders."* A library has no `.dproj` to ask, and its consumers add and drop
-units on the fly, so there is no member list that could be authoritative. Completeness is the
-correct policy there, and it is the exact opposite of the project rule -- which is why it must be
-a mode you choose, not a fallback the indexer slides into when it cannot find a project file.
-A project that silently degraded to "index everything" would reintroduce the whole defect.
+units on the fly, so no member list could be authoritative. Completeness is the correct policy
+there -- the exact opposite of the project rule, which is why it is a distinct scan type rather
+than a looser setting on the same one.
 
-**Library mode is a SCOPE, so it still needs a freshness choice.** The library DBs are large and a
-full re-scan is expensive, so `--library` is incremental by default and accepts `--library
---rebuild` for a from-scratch pass. Decided rather than asked, because losing incremental library
-indexing would be a regression; say so if you want one Library button and nothing else.
+### Eviction applies to both scan types
 
-Eviction applies in Library mode too, driven by the section's `exclude` globs rather than by
-membership: the `Library` section already excludes `SourceD3`, `Delphi5`, `Delphi7`, `BuildD3`...
-so adding an exclude must remove what it now covers, not leave it behind forever. That is the same
-defect as `.private`, in the other mode.
+Its input is just "what is in scope now":
+
+- **Project scan:** the closure. A unit removed from the `.dproj` is evicted even though the file
+  is still on disk -- which is precisely what prune cannot do.
+- **Library scan:** the folder tree minus the section's `exclude` globs. The `Library` section
+  already excludes `SourceD3`, `Delphi5`, `Delphi7`, `BuildD3`... and today, adding an exclude
+  leaves everything it now covers indexed forever. Same defect as `.private`, other scan type.
 
 **Rebuild is a safety valve, not a correctness requirement.** Once eviction exists, recompile
 converges to the same content as rebuild. Rebuild exists for the cases where the incremental state
@@ -172,11 +187,15 @@ the dead-form investigation made.
   are gone -- symbols and refs with them.
 - **Eviction is scoped**: two projects, two DBs; recompiling one never touches the other.
 - `--rebuild` and `--recompile` converge to identical content on the same input. This is the
-  claim the design rests on, so it is asserted rather than argued.
-- **`--library` indexes what project mode refuses to**: the same fixture's loose unreferenced
-  `.pas` IS present in Library mode. Asserting both directions on one fixture is what proves the
-  two modes are genuinely different policies rather than the same walk with a filter bolted on.
-- Library-mode eviction: add an `exclude` glob covering already-indexed files, recompile, assert
+  claim the design rests on, so it is asserted rather than argued -- and it is asserted for BOTH
+  scan types, since the axes are independent and a bug could easily hit only one pairing.
+- **Library scan indexes what Project scan refuses to**: the same fixture's loose unreferenced
+  `.pas` is ABSENT under Project scan and PRESENT under Library scan. Asserting both directions on
+  one fixture is what proves the two are genuinely different policies rather than the same walk
+  with a filter bolted on.
+- **A project scan never degrades to a library scan**: point it at a missing / malformed `.dproj`
+  and it must fail loudly, not index the folder. This is the guard on the whole design.
+- Library-scan eviction: add an `exclude` glob covering already-indexed files, recompile, assert
   they are gone.
 - The used-but-not-a-member diagnostic fires, names the unit, and is a warning.
 - Full battery green (237 at time of writing).
