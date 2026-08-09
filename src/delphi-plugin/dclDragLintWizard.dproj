@@ -127,6 +127,7 @@
         <DCCReference Include="DragLint.Plugin.Fonts.pas"/>
         <DCCReference Include="..\core\DRagLint.Hover.Contrast.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
         <DCCReference Include="DragLint.Plugin.About.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

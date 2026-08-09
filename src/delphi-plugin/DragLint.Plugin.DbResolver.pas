@@ -40,7 +40,34 @@ uses
   , { TEMP debug telemetry }
     DragLint.Plugin.Settings
   , DRagLint.Plugin.DbProbe
+  , DRagLint.Index.Manifest
   ;
+
+{ v(project-scoped): resolves the ACTIVE PROJECT's .dproj to the ONE index DB the
+  manifest says owns it, matching the project file EXACTLY (see
+  DRagLint.Index.Manifest.ResolveProjectDb). Reads the manifest beside the BPL,
+  the same file ManifestDbForFile uses.
+
+  Separate from ManifestDbForFile because the questions differ. That one asks
+  "which section covers this FILE" and answers with a folder prefix, which is all
+  a .pas can support. This asks "which section IS this project", which a folder
+  prefix CANNOT answer once two projects share a directory -- and several now do
+  (ORM3\PACKAGE, DataCopy, TableTools, YADF, DragLintGraph\src\pkg).
+
+  Returns pdmNone when no section names the project (INCLUDING when the manifest
+  is missing or malformed -- the caller must treat "I could not establish an
+  owner" as a refusal, never as permission to guess) and pdmAmbiguous when more
+  than one does. Only pdmUnique carries a DB, which may not exist yet: a writer
+  legitimately targets a section whose DB has never been built. }
+function ManifestDbForProject(const AProjectFile: string; out ADb: string;
+  out AClaimants: TArray<string>): TProjectDbMatch;
+
+{ The manifest this BPL actually reads. Exposed for DIAGNOSTICS: when a project
+  resolves to no section, the manifest path is half the answer -- in a design-time
+  package GetModuleName(HInstance) is the BPL's OWN directory, so this is the
+  win32 copy, not the one beside the engine exe. Naming it in the failure message
+  is what makes a manifest desync self-evident instead of mysterious. }
+function ManifestPathBesideEngine: string;
 
 { v0.46: returns the manifest section DB whose include folder is an ancestor of
   AFilePath (longest/most-specific match wins), or '' when there is no manifest
@@ -91,6 +118,45 @@ begin
   Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.json';
 end;
 
+function ManifestDbForProject(const AProjectFile: string; out ADb: string;
+  out AClaimants: TArray<string>): TProjectDbMatch;
+var
+  MPath   : string        ;
+  Content : string        ;
+  Manifest: TIndexManifest;
+begin
+  ADb       := '';
+  AClaimants:= nil;
+  Result    := pdmNone;
+  if AProjectFile = '' then Exit;
+
+  MPath:= ManifestPathBesideEngine;
+  if not TFile.Exists(MPath) then
+  begin
+    DLT('dbresolve', 'project resolve: NO MANIFEST at ' + MPath);
+    Exit;
+  end;
+
+  try
+    Content := TFile.ReadAllText(MPath);
+    Manifest:= TManifestIO.ParseText(Content, ExtractFilePath(MPath));
+  except
+    { Not swallowed: a manifest this process cannot read is exactly the state in
+      which a caller must NOT proceed, and the log line is the only place the
+      reason survives. Reported as pdmNone, which every caller treats as "no
+      owner established" -- the safe reading. }
+    on E: Exception do
+    begin
+      DLT('dbresolve', Format('project resolve: manifest UNREADABLE (%s): %s: %s', [MPath, E.ClassName, E.Message]));
+      Exit;
+    end;
+  end; // try
+
+  Result:= ResolveProjectDb(Manifest, AProjectFile, ADb, AClaimants);
+  DLT('dbresolve', Format('project resolve: %s -> match=%d db=%s claimants=%d',
+                          [ExtractFileName(AProjectFile), Ord(Result), ADb, Length(AClaimants)]));
+end; // function
+
 function ManifestDbForFile(const AFilePath: string): string;
 var
   MPath   : string     ;
@@ -116,6 +182,26 @@ var
 begin
   Result:= '';
   if AFilePath = '' then Exit;
+
+  { v(project-scoped): when handed a PROJECT FILE, the manifest can answer
+    exactly, so ask that way first -- folding a .dproj down to its folder throws
+    away the only thing that distinguishes it from its siblings. Falls through to
+    the folder walk below on anything other than a single unambiguous owner, so
+    genuine FOLDER sections (Library, SQL, a whole-tree union) and every ordinary
+    .pas lookup behave exactly as before.
+
+    An AMBIGUOUS project deliberately falls through rather than returning '':
+    this is the READ path (hover, Find Usages), where a slightly-too-broad DB is
+    a cosmetic problem. The WRITE path must not be so relaxed -- see
+    ManifestDbForProject's callers, which refuse. }
+  var PExt: string:= ExtractFileExt(AFilePath);
+  if SameText(PExt, '.dproj') or SameText(PExt, '.dpr') then
+  begin
+    var PDb: string:= '';
+    var PClaimants: TArray<string>:= nil;
+    if ManifestDbForProject(AFilePath, PDb, PClaimants) = pdmUnique then Exit(PDb);
+  end;
+
   MPath:= ManifestPathBesideEngine;
   if not TFile.Exists(MPath) then Exit;
   FileNorm:= LowerCase(IncludeTrailingPathDelimiter(ExtractFilePath(AFilePath)));

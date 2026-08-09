@@ -181,6 +181,54 @@ type
       class function Validate(const AManifest: TIndexManifest): string; static;
   end;
 
+type
+  /// <summary>Outcome of resolving a PROJECT FILE to the manifest section that
+  /// owns it.</summary>
+  /// <remarks>Three outcomes, not two, because the caller must be able to tell
+  /// "no section owns this project" from "several claim it". Collapsing either
+  /// onto a chosen DB is what made a project-scoped rebuild destructive: the
+  /// wrong DB gets cleared and refilled, and the right one is never written.</remarks>
+  TProjectDbMatch = (
+    /// <summary>No section's include list names this project file.</summary>
+    pdmNone,
+    /// <summary>Exactly one section names it; ADb holds that section's DB.</summary>
+    pdmUnique,
+    /// <summary>Two or more sections name it; the caller must refuse, not choose.</summary>
+    pdmAmbiguous);
+
+/// <summary>Resolves a .dpr/.dproj PROJECT FILE to the index DB of the manifest
+/// section that owns it, matching the project file EXACTLY rather than by the
+/// folder it sits in.</summary>
+/// <param name="AManifest">Parsed manifest. Relative include paths are expanded
+/// against its RootDir; a relative section Db against its OutDir.</param>
+/// <param name="AProjectFile">Absolute or relative path to the .dpr/.dproj whose
+/// owning section is wanted. Compared case-insensitively after full-path
+/// normalisation, so '..' segments and case differences do not defeat it.</param>
+/// <param name="ADb">Receives the absolute DB path on pdmUnique; '' otherwise.
+/// The file need not exist -- a section whose DB has never been built still
+/// resolves, which is exactly what an indexer (a WRITER) needs.</param>
+/// <param name="AClaimants">Receives the names of every section naming this
+/// project: one entry on pdmUnique, two or more on pdmAmbiguous, empty on
+/// pdmNone. Give these to the user verbatim; they are the manifest edit needed
+/// to fix an ambiguity.</param>
+/// <returns>pdmUnique, pdmNone or pdmAmbiguous.</returns>
+/// <remarks>Only include entries whose extension is .dpr or .dproj are
+/// considered, so FOLDER sections (Library, SQL, a whole-tree union) can never
+/// match here and keep whatever folder-prefix behaviour the caller applies as
+/// its fallback.
+///
+/// This exists because folder-prefix matching CANNOT distinguish sibling
+/// projects. Several sections legitimately share one directory
+/// (ORM3\PACKAGE holds Interfaces.dproj and TestMicroniteObjects.dproj;
+/// DataCopy holds DataCopy.dproj and SortTest.dproj), and a resolver that folds
+/// each include down to its folder sees one identical key for all of them and
+/// silently keeps whichever came first. Harmless while indexing was additive;
+/// data loss once the caller passes --rebuild, which clears the whole DB.
+///
+/// Pure: no file system access, no globals. Safe to call from any thread.</remarks>
+function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: string;
+  out ADb: string; out AClaimants: TArray<string>): TProjectDbMatch;
+
 /// <summary>Reads the docs.complexity_min threshold used by the doc/hover
 /// verbs (`document --qname/--unit/--project`, `document-all`, and
 /// `hover`). Gates the 'Complexity:' line at RENDER time (v(ADP2 T3) in
@@ -823,6 +871,89 @@ begin
   end;
   TFile.WriteAllText(APath, JsonText, TEncoding.UTF8);
 end;
+
+{ ---------------------------------------------------------------------- }
+{  ResolveProjectDb                                                        }
+{ ---------------------------------------------------------------------- }
+
+{ Case-folded absolute form of APath, with a relative path first anchored to
+  ABaseDir (NOT the process CWD -- manifest includes are documented relative to
+  RootDir, and a resolver whose answer depended on the caller's current
+  directory would be non-deterministic). ExpandFileName rather than
+  TPath.GetFullPath because it collapses '..' segments without raising on a
+  malformed path -- there is nothing useful to do with such an exception here
+  except swallow it, and swallowing is what this codebase's own lint forbids. }
+function NormalizeProjectPath(const APath, ABaseDir: string): string;
+var
+  P: string;
+begin
+  Result:= '';
+  if APath = '' then Exit;
+  P:= APath;
+  if TPath.IsRelativePath(P) and (ABaseDir <> '') then P:= TPath.Combine(ABaseDir, P);
+  Result:= LowerCase(ExpandFileName(P));
+end;
+
+{ Absolute DB path for a section: an empty Db means the documented default
+  <OutDir>\<Name>.sqlite; a relative Db is anchored to OutDir (itself anchored to
+  RootDir when relative); an absolute Db is used as given. }
+function ExpandSectionDb(const AManifest: TIndexManifest; const ASection: TIndexSection): string;
+var
+  OutBase: string;
+begin
+  Result:= ASection.Db;
+  if Result = '' then Result:= ASection.Name + '.sqlite';
+  if not TPath.IsRelativePath(Result) then Exit(ExpandFileName(Result));
+  OutBase:= AManifest.OutDir;
+  if OutBase = '' then OutBase:= AManifest.RootDir
+  else if TPath.IsRelativePath(OutBase) then OutBase:= TPath.Combine(AManifest.RootDir, OutBase);
+  Result:= ExpandFileName(TPath.Combine(OutBase, Result));
+end;
+
+function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: string;
+  out ADb: string; out AClaimants: TArray<string>): TProjectDbMatch;
+var
+  Target : string       ;
+  FoundDb: string       ;
+  Ext    : string       ;
+  Sec    : TIndexSection;
+  I      : Integer      ;
+  J      : Integer      ;
+begin
+  ADb       := '';
+  AClaimants:= nil;
+  Result    := pdmNone;
+  if AProjectFile = '' then Exit;
+
+  Target := NormalizeProjectPath(AProjectFile, '');
+  FoundDb:= '';
+
+  for I:= 0 to High(AManifest.Sections) do
+  begin
+    Sec:= AManifest.Sections[I];
+    for J:= 0 to High(Sec.Include) do
+    begin
+      { FOLDER includes are skipped outright -- they are the fallback's business,
+        not this function's. Only a .dpr/.dproj entry can name a project. }
+      Ext:= ExtractFileExt(Sec.Include[J]);
+      if not (SameText(Ext, '.dproj') or SameText(Ext, '.dpr')) then Continue;
+      if NormalizeProjectPath(Sec.Include[J], AManifest.RootDir) <> Target then Continue;
+
+      SetLength(AClaimants, Length(AClaimants) + 1);
+      AClaimants[High(AClaimants)]:= Sec.Name;
+      if Length(AClaimants) = 1 then FoundDb:= ExpandSectionDb(AManifest, Sec);
+      { One claim per SECTION: a section that lists the same project twice is
+        sloppy, not ambiguous, and must not be reported as a conflict with
+        itself. }
+      Break;
+    end; // for
+  end; // for
+
+  if Length(AClaimants) = 0 then Exit(pdmNone);
+  if Length(AClaimants) >  1 then Exit(pdmAmbiguous);
+  ADb   := FoundDb;
+  Result:= pdmUnique;
+end; // function
 
 { ---------------------------------------------------------------------- }
 {  LoadDocComplexityMin                                                    }

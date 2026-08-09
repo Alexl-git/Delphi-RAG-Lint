@@ -543,6 +543,10 @@ begin
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
+  Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');
+  Writeln('                               exits 2 and names the sections when none or SEVERAL claim the project,');
+  Writeln('                               rather than guessing: `index --rebuild` against a wrongly-picked db');
+  Writeln('                               clears an index that was never meant to be touched.');
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
@@ -14410,10 +14414,16 @@ end; // function
 /// DB list a tool (query/lsp/serve) would open when invoked with no
 /// explicit --db flags.  Useful for scripting and diagnostics.</summary>
 /// <param name="AArgs">Parsed CLI arguments; uses CheckPlatform, WorkspaceConfig,
-///   AsJson.  When DbPaths is non-empty (explicit --db flags) those paths are
-///   printed as-is (matching ResolveConsumerDbs behaviour).</param>
-/// <returns>0 always.</returns>
-/// <remarks>Not thread-safe; call from the main thread only.</remarks>
+///   AsJson, ProjectPath.  When DbPaths is non-empty (explicit --db flags) those
+///   paths are printed as-is (matching ResolveConsumerDbs behaviour).</param>
+/// <returns>0 for the list form (always). For the --project form: 0 and one DB
+/// path on stdout when exactly one section owns the project; 2 when none or
+/// several do, with the reason and the claiming section names on stderr.</returns>
+/// <remarks>--project answers "which single DB should a WRITER target for this
+/// project", via DRagLint.Index.Manifest.ResolveProjectDb -- the same function
+/// the IDE plugin's Rebuild Index action uses, which is what makes that
+/// resolution testable outside the IDE.
+/// Not thread-safe; call from the main thread only.</remarks>
 function DoResolveDbsList(const AArgs: TArgs): Integer;
 var
   Manifest  : TIndexManifest                            ;
@@ -14427,6 +14437,75 @@ var
   J         : TJSONArray                                ;
 begin
   AllPaths:= nil;
+
+  // --- --project <file>: which ONE section owns this project? --------------
+  // Answers a different question from the bare form. The bare form lists every
+  // DB a READER would open; this names the single DB a WRITER must target for
+  // one project, and REFUSES rather than guessing when the manifest does not
+  // say so unambiguously. The IDE's "Rebuild Index" action resolves the same
+  // way through the same function (DRagLint.Index.Manifest.ResolveProjectDb),
+  // so this verb is also how that resolution is regression-tested headlessly --
+  // a design-time BPL cannot be.
+  if AArgs.ProjectPath <> '' then
+  begin
+    EngineDir := ExtractFilePath(ParamStr(0));
+    ConfigPath:= AArgs.WorkspaceConfig;
+    try
+      if ConfigPath <> '' then
+      begin
+        var PContent:= TFile.ReadAllText(ConfigPath);
+        var PRootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
+        Manifest:= TManifestIO.ParseText(PContent, PRootDir);
+      end
+      else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+    except
+      on E: Exception do
+      begin
+        Writeln(ErrOutput, Format('ERROR: could not load the manifest: %s: %s', [E.ClassName, E.Message]));
+        Exit(2);
+      end;
+    end; // try
+
+    var PDb       : string        := '';
+    var PClaimants: TArray<string>:= nil;
+    case ResolveProjectDb(Manifest, AArgs.ProjectPath, PDb, PClaimants) of
+      pdmUnique:
+        begin
+          if AArgs.AsJson then
+          begin
+            var JO: TJSONObject:= TJSONObject.Create;
+            try
+              JO.AddPair('project', AArgs.ProjectPath);
+              JO.AddPair('section', PClaimants[0]     );
+              JO.AddPair('db'     , PDb               );
+              Writeln(JO.ToString);
+            finally
+              JO.Free;
+            end;
+          end
+          else Writeln(PDb);
+          Exit(0);
+        end;
+      pdmAmbiguous:
+        begin
+          // Do NOT pick one. Under `index --rebuild` a wrong DB is cleared and
+          // refilled, so the right one is never written and the wrong one loses
+          // everything it had. Naming the claimants IS the fix instruction.
+          Writeln(ErrOutput, Format('ERROR: %d manifest sections claim %s -- refusing to guess which index it belongs to.',
+                                    [Length(PClaimants), AArgs.ProjectPath]));
+          for P in PClaimants do Writeln(ErrOutput, '  section: ' + P);
+          Writeln(ErrOutput, 'Fix the manifest so exactly one section includes this project file.');
+          Exit(2);
+        end;
+      else
+        begin
+          Writeln(ErrOutput, Format('ERROR: no manifest section includes %s -- there is no index that owns this project.',
+                                    [AArgs.ProjectPath]));
+          Exit(2);
+        end;
+    end; // case
+  end; // if
+
   // --- Resolve the DB list -------------------------------------------------
   if Length(AArgs.DbPaths) > 0 then
   begin

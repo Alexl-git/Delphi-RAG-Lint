@@ -166,6 +166,7 @@ uses
   , DragLint.Plugin.Telemetry
   , { TEMP debug telemetry }
     DragLint.Plugin.DbResolver
+  , DRagLint.Index.Manifest   { TProjectDbMatch: pdmUnique / pdmAmbiguous / pdmNone }
   , DragLint.Plugin.ProcRun
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
@@ -4736,13 +4737,63 @@ var
   OutPath: string;
   Db, Proj: string; MS: IOTAModuleServices;
 begin
-  { ResolvePrimaryIndexDb, NOT GetActiveProjectDb: the reindex must WRITE the DB
-    the LSP and the graph viewer READ. GetActiveProjectDb is ChangeFileExt(proj,
-    '.sqlite'), so on C:\Projects\DataCopy this menu item built DataCopy.sqlite
-    while every consumer queried DataCopy\drag-lint.sqlite -- an hour of indexing
-    that could not change one answer the IDE gave. See ResolvePrimaryIndexDb. }
-  Proj:= GetActiveProjectFile; Db:= ResolvePrimaryIndexDb;
-  if (Proj = '') or (Db = '') then begin ShowMessage('drag-lint: no project/index found.'); Exit; end;
+  { The write target is resolved from the ACTIVE PROJECT FILE, exactly -- NOT via
+    ResolvePrimaryIndexDb, and NOT via GetActiveProjectDb.
+
+    GetActiveProjectDb (ChangeFileExt(proj, '.sqlite')) was the original defect:
+    on C:\Projects\DataCopy this item built DataCopy.sqlite while every consumer
+    queried DataCopy\drag-lint.sqlite -- an hour of indexing that could not change
+    one answer the IDE gave.
+
+    ResolvePrimaryIndexDb fixed that but resolves by FOLDER prefix, which cannot
+    tell sibling projects apart. Since the manifest was converted to per-project
+    closure sections, several folders hold more than one (ORM3\PACKAGE:
+    Interfaces + TestMicroniteObjects; DataCopy: DataCopy + SortTest; also
+    TableTools, YADF, DragLintGraph\src\pkg). All of them fold to one identical
+    key and the first section silently wins. Harmless while indexing was additive
+    -- DATA LOSS now that this command passes --rebuild, which clears the whole
+    DB: the wrong index is emptied and refilled with another project's closure,
+    and the right one is never written.
+
+    So: exact match, and REFUSE on anything less than one unambiguous owner. A
+    wrong DB under --rebuild destroys an index; refusing costs a click. }
+  Proj:= GetActiveProjectFile;
+  if Proj = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
+
+  Db:= '';
+  var Claimants: TArray<string>:= nil;
+  case ManifestDbForProject(Proj, Db, Claimants) of
+    pdmUnique: ; { fall through to the rebuild }
+    pdmAmbiguous:
+      begin
+        var Names: string:= '';
+        for var C: string in Claimants do Names:= Names + #13#10 + '    ' + C;
+        ShowMessage(Format(
+          'drag-lint: %d index sections claim this project, so there is no single'#13#10 +
+          'index to rebuild:'#13#10 + '%s'#13#10#13#10 +
+          'Project: %s'#13#10#13#10 +
+          'Nothing was changed. Rebuilding would have cleared one of these indexes'#13#10 +
+          'and refilled it with the wrong project. Edit drag-lint.json so exactly'#13#10 +
+          'one section includes this project file, then run this again.',
+          [Length(Claimants), Names, Proj]));
+        Exit;
+      end;
+    else
+      begin
+        ShowMessage(Format(
+          'drag-lint: no index section owns this project, so there is nothing to'#13#10 +
+          'rebuild.'#13#10#13#10 +
+          'Project: %s'#13#10 +
+          'Manifest: %s'#13#10#13#10 +
+          'Nothing was changed -- deliberately: rebuilding a nearby index instead'#13#10 +
+          'would clear source that belongs to a different project. Add a section'#13#10 +
+          'for this project to the manifest (or check the manifest parses), then'#13#10 +
+          'run this again.',
+          [Proj, ManifestPathBesideEngine]));
+        Exit;
+      end;
+  end; // case
+
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
   { ONE pass, both axes stated explicitly: SCOPE = the active project's .dproj
     COMPILE CLOSURE (--project), MODE = full REBUILD (--rebuild: the engine calls
@@ -4781,7 +4832,7 @@ begin
     the next hover/completion query. }
   var RJob: TDragLintJob:= TDragLintJob.Create;
   RJob.Kind       := jkReindex;
-  RJob.Title      := 'Reindex ' + ChangeFileExt(ExtractFileName(Proj), '');
+  RJob.Title      := 'Rebuild Index ' + ChangeFileExt(ExtractFileName(Proj), '');
   RJob.CoalesceKey:= 'reindex:' + LowerCase(Db);
   RJob.CmdLine    := Cmd;
   RJob.TimeoutMs  := 600000;   { --rebuild force-reparses the whole closure, so EVERY
@@ -4892,7 +4943,7 @@ begin
   if (Db = '') or not FileExists(Db) then
   begin
     ShowMessage('drag-lint: no index found for this project. ' +
-      'Run drag-lint > Index && Maintenance > Reindex Project first.');
+      'Run drag-lint > Index && Maintenance > Rebuild Index for This Project first.');
     Exit;
   end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
@@ -5045,7 +5096,11 @@ begin
   var SubMaint: TMenuItem:= TMenuItem.Create(RootMenu);
   SubMaint.Caption:= 'Index && Maintenance';
   RootMenu.Add(SubMaint);
-  AddWrappedItem(SubMaint, 'Reindex This Project'        , InvokeReindexProject);
+  { Named "Rebuild Index", not "Reindex": the action CLEARS the project's index
+    and re-parses its whole compile closure. A "Refresh Index" (incremental
+    recompile) item is expected to join it once out-of-scope eviction lands, so
+    the two need names a user can tell apart BEFORE clicking the destructive one. }
+  AddWrappedItem(SubMaint, 'Rebuild Index for This Project', InvokeReindexProject);
   AddWrappedItem(SubMaint, 'Show Resolved DBs (debug)...', InvokeResolveDbs    );
   AddWrappedItem(SubMaint, 'Library Drift Check...'      , InvokeLibraryDrift  );
 
