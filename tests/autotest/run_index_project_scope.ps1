@@ -47,22 +47,49 @@
   Only once the scope is proven small does the expensive assertion run.
 
   FIXTURE (built fresh in a temp workdir)
-    App.dproj / App.dpr     -- program App; uses UsedUnit in 'UsedUnit.pas';
+    App.dproj / App.dpr     -- program App; uses UsedUnit, Main;
     UsedUnit.pas            -- uses Helper
     Helper.pas
+    Main.pas + Main.dfm     -- a FORM: Main.pas is in the closure, Main.dfm is
+                               reachable only as its sibling. The .dfm is the
+                               whole point of the pair -- a lone .dfm with no
+                               .pas could never exercise the sibling rule.
     Orphan.pas              -- in the project folder, referenced by nothing
-    Main.dfm                -- a .dfm sibling (see the closure note below)
 
-  NOTE ON SCOPE SEMANTICS -- project-folder walk, NOT compile closure.
-  TClosureResolver already exists and returns a precise unit closure, but it
-  yields .pas/.inc ONLY: Loader.sqlite, built by the manifest's smClosure path,
-  contains 84 files and ZERO .dpr and ZERO .dfm rows. Switching --project to a
-  pure closure would therefore silently drop every form's DFM from project
-  indexes, breaking the wizard's structure view, DFM event wiring and forms-csv.
-  The project's own folders are walked instead, so .dfm/.dpr keep their coverage;
-  only the REGISTRY library folders are dropped. Orphan.pas being indexed is
-  therefore CORRECT here and is asserted as such -- it documents the deliberate
-  difference from closure mode.
+  SCOPE SEMANTICS -- THE COMPILE CLOSURE, plus .dfm siblings and the project file
+  ------------------------------------------------------------------------------
+  This section previously described a project-folder WALK and asserted Orphan.pas
+  was indexed. That was wrong, and the reasoning that produced it is recorded here
+  rather than deleted, because the second attempt looked so much like a fix.
+
+  Dropping the registry library folders fixed the SCALE of the bug above but not
+  its KIND. A folder walk has no notion of membership: every loose .pas beside the
+  .dproj -- a unit retired from the project, a scratch copy, a vendored tree that
+  only one config compiles -- still landed in the project's index and was then
+  linted, counted by coverage, and offered to the doc engine as project API. The
+  manifest's smClosure sections had always resolved the real thing, so the two
+  paths disagreed about what "a project" even is.
+
+  `index --project` now resolves the COMPILE CLOSURE (TClosureResolver), exactly
+  as the manifest smClosure sections do, and both go through the same
+  ExpandProjectScope helper so they cannot drift apart again. Scope is:
+
+    * the closure     -- project members + everything they reach via `uses`/{$I}
+                         that resolves project-local (library units stay in
+                         library-Win32/Win64.sqlite, reached with a second --db)
+    * sibling .dfm    -- a form's .dfm arrives via {$R *.dfm}, never via `uses`,
+                         so the closure alone would omit it. A pure closure DB
+                         proves the point: Loader.sqlite is 84 files, dfm 0.
+                         Without this the wizard structure view, DFM event wiring
+                         and forms-csv see ZERO forms in a VCL app and report a
+                         clean result -- silence that reads as success.
+    * the project file - the .dpr is the closure's ROOT (TClosureResolver seeds
+                         FROM it and never returns it), and every unit-not-in-dpr
+                         finding anchors to the program file or the .dproj rather
+                         than to the offending unit.
+
+  Orphan.pas is therefore ABSENT on purpose, and that assertion is now inverted:
+  it pins the defect's removal instead of the defect.
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-index-project-scope by default).
 #>
@@ -97,7 +124,8 @@ Write-Ascii (Join-Path $proj 'App.dpr') @'
 program App;
 
 uses
-  UsedUnit in 'UsedUnit.pas';
+  UsedUnit in 'UsedUnit.pas',
+  Main in 'Main.pas';
 
 begin
   DoWork;
@@ -156,6 +184,31 @@ end;
 end.
 '@
 
+Write-Ascii (Join-Path $proj 'Main.pas') @'
+unit Main;
+
+interface
+
+uses
+  Vcl.Forms, Vcl.StdCtrls;
+
+type
+  TfrmMain = class(TForm)
+    btnGo: TButton;
+    procedure btnGoClick(Sender: TObject);
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TfrmMain.btnGoClick(Sender: TObject);
+begin
+end;
+
+end.
+'@
+
 Write-Ascii (Join-Path $proj 'Main.dfm') @'
 object frmMain: TfrmMain
   Left = 0
@@ -184,6 +237,7 @@ Write-Ascii (Join-Path $proj 'App.dproj') @'
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
         <DCCReference Include="UsedUnit.pas"/>
+        <DCCReference Include="Main.pas"/>
     </ItemGroup>
 </Project>
 '@
@@ -193,34 +247,36 @@ $db    = Join-Path $WorkDir 'projscope.sqlite'
 
 # ---------------------------------------------------------------------------
 # ASSERTION 1 (cheap, decisive, runs FIRST): the resolved scan scope.
-# With the bug this prints ~153 folders rooted all over the machine; correct
-# behaviour is a handful, every one under the project folder.
+# With the bug this prints ~153 FOLDERS rooted all over the machine; correct
+# behaviour is a handful of FILES, every one under the project folder. The
+# assertion is about where the entries live, so it survived the folders->closure
+# change untouched -- only the labels moved from "folder" to "scope entry".
 # ---------------------------------------------------------------------------
 Write-Host 'Resolved scan scope (index --project --dry-run)' -ForegroundColor Cyan
 # 2>&1 yields ErrorRecord objects for the stderr lines; ToString() them so the
-# folder-line regex and .Trim() below see plain strings.
+# path-line regex and .Trim() below see plain strings.
 $dry = @((& $Exe index --project $dproj --db $db --platform Win64 --dry-run --quiet 2>&1) |
          ForEach-Object { $_.ToString() })
 $dryExit = $LASTEXITCODE
 Check 'index --project --dry-run exits 0' ($dryExit -eq 0) "exit=$dryExit"
 
-# Folder lines are the two-space-indented entries after "Resolved N unique scan
-# folders:". Match on the drive-letter/UNC shape, not merely on the indent --
+# Scope lines are the two-space-indented entries after "Compile closure: N
+# file(s):". Match on the drive-letter/UNC shape, not merely on the indent --
 # the engine also writes indented stderr status lines ('  FTS5 probe: AVAILABLE')
-# that 2>&1 interleaves here, and those are not folders.
-$folders = @($dry | Where-Object { $_ -match '^\s\s([A-Za-z]:\\|\\\\)' } | ForEach-Object { $_.Trim() })
-$outside = @($folders | Where-Object { $_ -notlike "$proj*" })
+# that 2>&1 interleaves here, and those are not paths.
+$scope   = @($dry | Where-Object { $_ -match '^\s\s([A-Za-z]:\\|\\\\)' } | ForEach-Object { $_.Trim() })
+$outside = @($scope | Where-Object { $_ -notlike "$proj*" })
 
-Write-Host ("  resolved {0} folder(s); {1} outside the project tree" -f $folders.Count, $outside.Count)
-Check 'no scan folder lies outside the project tree' ($outside.Count -eq 0) `
+Write-Host ("  resolved {0} scope entry/entries; {1} outside the project tree" -f $scope.Count, $outside.Count)
+Check 'no scope entry lies outside the project tree' ($outside.Count -eq 0) `
   ("first offenders: " + (($outside | Select-Object -First 5) -join ' | '))
 
-$libLike = @($folders | Where-Object { $_ -match '(?i)embarcadero|\\Raize\\|CatalogRepository|Spring4D|OmniThread' })
-Check 'no IDE library / registry folder in the index scope' ($libLike.Count -eq 0) `
+$libLike = @($scope | Where-Object { $_ -match '(?i)embarcadero|\\Raize\\|CatalogRepository|Spring4D|OmniThread' })
+Check 'no IDE library / registry path in the index scope' ($libLike.Count -eq 0) `
   ("count=" + $libLike.Count + "; e.g. " + (($libLike | Select-Object -First 3) -join ' | '))
 
 # HARD STOP: never start a real index while the scope is machine-wide -- with the
-# bug that runs for hours and would hang the battery rather than fail it.
+# original bug that runs for hours and would hang the battery rather than fail it.
 if ($script:Failed) {
   Write-Host ''
   Write-Host 'Scope assertions failed -- SKIPPING the real index on purpose (it would' -ForegroundColor Yellow
@@ -256,11 +312,13 @@ Check 'ZERO indexed files outside the project tree' ($stray.Count -eq 0) `
 
 function Has([string]$Leaf) { return @($indexed | Where-Object { $_ -like "*\$Leaf" }).Count -ge 1 }
 
-Check 'UsedUnit.pas is indexed'  (Has 'UsedUnit.pas')
-Check 'Helper.pas is indexed'    (Has 'Helper.pas')
-Check 'App.dpr is indexed'       (Has 'App.dpr')       'closure mode drops .dpr; the folder walk must not'
-Check 'Main.dfm is indexed'      (Has 'Main.dfm')      'closure mode drops .dfm; the folder walk must not'
-Check 'Orphan.pas is indexed'    (Has 'Orphan.pas')    'deliberate: project-folder walk, not compile closure'
+Check 'UsedUnit.pas is indexed'  (Has 'UsedUnit.pas')  'a project member'
+Check 'Helper.pas is indexed'    (Has 'Helper.pas')    'reached transitively via uses'
+Check 'Main.pas is indexed'      (Has 'Main.pas')      'the form unit, a project member'
+Check 'App.dpr is indexed'       (Has 'App.dpr')       'the closure ROOT: TClosureResolver seeds from it and never returns it'
+Check 'Main.dfm is indexed'      (Has 'Main.dfm')      'sibling of a closure unit; arrives via {$R *.dfm}, never via uses -- the closure alone omits it'
+Check 'Orphan.pas is NOT indexed' (-not (Has 'Orphan.pas')) `
+  'INVERTED 2026-08-09: a folder walk drags in loose unreferenced units, the compile closure must not'
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

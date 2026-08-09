@@ -1350,6 +1350,99 @@ end;
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
   AForceArg, APreprocess: Boolean; const APlatform: string): Boolean; forward;
 
+/// <summary>
+/// Expands a compile closure into the full INDEX scope of a project: the closure
+/// itself, the sibling .dfm of every closure unit, and the project file(s).
+/// </summary>
+/// <param name="AProjectFile">The .dpr/.dpk/.dproj the closure was resolved from.</param>
+/// <param name="AClosureFiles">TClosureResult.Files, in closure order.</param>
+/// <returns>The scope, closure order first, deduped case-insensitively.</returns>
+/// <remarks>
+/// TWO things TClosureResolver cannot give us, both load-bearing, both learned
+/// the hard way from Loader.sqlite -- the only closure-built DB in existence
+/// before this change -- measuring 84 files with dfm 0 and dpr 0, against
+/// folder-built DataCopy.sqlite / TableTools.sqlite which each carry .dfm rows:
+///
+/// 1. THE SIBLING .dfm. The closure walks `uses` and {$I}, which reach .pas and
+///    .inc only. A VCL form's .dfm is pulled in by {$R *.dfm} and is every bit as
+///    much a compiled input. Without it the wizard's structure view, DFM event
+///    wiring and forms-csv see ZERO forms in a project full of them and report a
+///    clean result -- silence that reads as success.
+///
+/// 2. THE PROJECT FILE. TClosureResolver seeds FROM the .dpr and never returns
+///    it (Resolve reads it, never enqueues it). But the .dpr IS the root of the
+///    closure, and every `unit-not-in-dpr` finding anchors to the program file or
+///    the .dproj rather than to the offending unit -- so leaving them out of scope
+///    drops those findings from their own project's run.
+///
+/// Both arms that index a project (`index --project` and the manifest's
+/// smClosure sections) call this, so the two paths cannot drift apart again.
+/// Caller-supplied excludes are NOT re-applied here: a .dfm sibling belongs to a
+/// unit the closure already admitted, and the project file is the closure's root.
+/// </remarks>
+function ExpandProjectScope(const AProjectFile: string; const AClosureFiles: TArray<string>): TArray<string>;
+var
+  Seen: TDictionary<string, Boolean>;
+  Scope: TList<string>              ;
+  F   : string                      ;
+  Dfm : string                      ;
+
+  procedure AddOnce(const APath: string);
+  begin
+    if APath = '' then Exit;
+    if Seen.ContainsKey(LowerCase(APath)) then Exit;
+    Seen.Add(LowerCase(APath), True);
+    Scope.Add(APath);
+  end;
+
+  // The project SOURCE beside a .dproj: App.dproj -> App.dpr, or App.dpk for a
+  // package project. Returns '' when neither is on disk.
+  function SiblingProjectSource(const ADproj: string): string;
+  begin
+    Result:= TPath.ChangeExtension(ADproj, '.dpr');
+    if TFile.Exists(Result) then Exit;
+    Result:= TPath.ChangeExtension(ADproj, '.dpk');
+    if TFile.Exists(Result) then Exit;
+    Result:= '';
+  end;
+
+begin
+  Seen:= TDictionary<string, Boolean>.Create;
+  Scope:= TList<string>.Create;
+  try
+    for F in AClosureFiles do
+    begin
+      AddOnce(F);
+      if SameText(ExtractFileExt(F), '.pas') then
+      begin
+        Dfm:= TPath.ChangeExtension(F, '.dfm');
+        if TFile.Exists(Dfm) then AddOnce(Dfm);
+      end;
+    end;
+
+    if AProjectFile <> '' then
+    begin
+      var ProjAbs: string:= TPath.GetFullPath(AProjectFile);
+      if SameText(ExtractFileExt(ProjAbs), '.dproj') then
+      begin
+        AddOnce(SiblingProjectSource(ProjAbs));
+        { The .dproj itself has no registered parser today (TDelphi13Parser takes
+          .pas/.dpr/.dpk/.inc), so IndexFile skips it and it contributes no row.
+          It is still named as scope, deliberately: it is where the project's
+          member list lives, it is a legitimate finding anchor, and the day a
+          .dproj parser exists this becomes correct without another scope edit. }
+        AddOnce(ProjAbs);
+      end
+      else if TFile.Exists(ProjAbs) then AddOnce(ProjAbs); // a bare .dpr/.dpk
+    end;
+
+    Result:= Scope.ToArray;
+  finally
+    Scope.Free;
+    Seen.Free;
+  end; // try
+end; // function
+
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False): Boolean;
 var
@@ -1438,7 +1531,10 @@ begin
               ExcludePatterns:= Concat( AItem.Filter.GlobalExclude, AItem.Filter.SectionExclude);
               CR:= Cl.Resolve(F, ExcludePatterns);
               for W in CR.Warnings do Writeln('  ', W);
-              for ProjectFile in CR.Files do Indexer.IndexFile(ProjectFile);
+              { Same scope expansion as `index --project` (sibling .dfm + the
+                project file). Before this, closure sections indexed .pas/.inc
+                only: Loader.sqlite held 84 files, dfm 0, dpr 0. }
+              for ProjectFile in ExpandProjectScope(F, CR.Files) do Indexer.IndexFile(ProjectFile);
             end;
           finally
             Cl.Free;
@@ -1976,20 +2072,17 @@ begin
           Exit(2);
         end;
 
-        Folders:= CR.Files;
+        { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
+          sibling .dfm and the project file(s). See its remarks for why both are
+          load-bearing. Guarded on CR.Files above, NOT on the expansion: a
+          project whose only resolvable input is its own .dpr has no closure. }
+        Folders:= ExpandProjectScope(AArgs.ProjectPath, CR.Files);
       finally
         Cl.Free;
       end; // try
     finally
       Resolver.Free;
     end; // try
-
-    { TClosureResolver seeds FROM the project file and never returns it, but the
-      .dpr IS the root of the closure -- it is the file the compiler is handed.
-      Add it back so the program block and its uses list stay indexed. }
-    var ProjSrc: string:= TPath.GetFullPath(AArgs.ProjectPath);
-    if SameText(ExtractFileExt(ProjSrc), '.dproj') then ProjSrc:= TPath.ChangeExtension(ProjSrc, '.dpr');
-    if TFile.Exists(ProjSrc) then Folders:= Folders + [ProjSrc];
 
     { NOTE: Folders now holds FILES, not directories. The walk loop below already
       branches on TFile.Exists, but the --prune default at the bottom of the tick

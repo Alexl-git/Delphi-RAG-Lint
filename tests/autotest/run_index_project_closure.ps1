@@ -65,11 +65,49 @@ program App;
 
 uses
   Member1 in 'Member1.pas',
-  Member2 in 'Member2.pas';
+  Member2 in 'Member2.pas',
+  FormUnit in 'FormUnit.pas';
 
 begin
   Member1.RunIt;
 end.
+'@
+
+# A FORM: FormUnit.pas is in the closure, FormUnit.dfm is reachable only as its
+# sibling ({$R *.dfm}, never `uses`). Both index arms must pick the .dfm up.
+Write-Ascii (Join-Path $proj 'FormUnit.pas') @'
+unit FormUnit;
+
+interface
+
+type
+  TfrmDemo = class(TObject)
+    procedure btnGoClick(Sender: TObject);
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TfrmDemo.btnGoClick(Sender: TObject);
+begin
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $proj 'FormUnit.dfm') @'
+object frmDemo: TfrmDemo
+  Left = 0
+  Top = 0
+  Caption = 'project-closure fixture'
+  object btnGo: TButton
+    Left = 8
+    Top = 8
+    Caption = 'Go'
+    OnClick = btnGoClick
+  end
+end
 '@
 
 Write-Ascii (Join-Path $proj 'Member1.pas') @'
@@ -139,6 +177,7 @@ Write-Ascii (Join-Path $proj 'App.dproj') @'
         </DelphiCompile>
         <DCCReference Include="Member1.pas"/>
         <DCCReference Include="Member2.pas"/>
+        <DCCReference Include="FormUnit.pas"/>
     </ItemGroup>
 </Project>
 '@
@@ -211,9 +250,11 @@ try {
 
   function Has([string]$Leaf) { return @($indexed | Where-Object { $_ -like "*\$Leaf" }).Count -ge 1 }
 
-  Check 'Member1.pas is indexed' (Has 'Member1.pas') 'DCCReference member'
-  Check 'Member2.pas is indexed' (Has 'Member2.pas') 'reached transitively via uses'
-  Check 'App.dpr is indexed'     (Has 'App.dpr')     'the closure root itself'
+  Check 'Member1.pas is indexed'  (Has 'Member1.pas')  'DCCReference member'
+  Check 'Member2.pas is indexed'  (Has 'Member2.pas')  'reached transitively via uses'
+  Check 'FormUnit.pas is indexed' (Has 'FormUnit.pas') 'the form unit'
+  Check 'FormUnit.dfm is indexed' (Has 'FormUnit.dfm') 'sibling of a closure unit -- arrives via {$R *.dfm}, never via uses'
+  Check 'App.dpr is indexed'      (Has 'App.dpr')      'the closure root itself'
   Check 'Loose.pas is NOT indexed' (-not (Has 'Loose.pas')) `
     'referenced by nothing -- a folder walk drags it in, the closure must not'
 
@@ -240,6 +281,45 @@ try {
   $gfiles = @((& python $py $edb) -join "`n" | ConvertFrom-Json)
   Check 'the guarded run wrote ZERO files rows' ($gfiles.Count -eq 0) `
     ("count=" + $gfiles.Count + "; e.g. " + (($gfiles | Select-Object -First 3) -join ' | '))
+
+  # ==========================================================================
+  # 3. THE OTHER ARM. A manifest smClosure section over the SAME fixture must
+  #    produce the SAME scope. Both arms call ExpandProjectScope; this group is
+  #    what stops them drifting apart again, which is the failure Task 1 exists
+  #    to remove. Before this change the manifest arm indexed .pas/.inc only
+  #    (real evidence: Loader.sqlite, 84 files, dfm 0, dpr 0).
+  # ==========================================================================
+  $mdb = 'section.sqlite'
+  $cfg = Join-Path $scratch 'manifest.drag-lint.json'
+  @"
+{
+  "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 0 },
+  "indexes": {
+    "outDir": "out",
+    "sections": [
+      { "name": "ProjClosure", "db": "$mdb", "include": ["proj\\App.dproj"] }
+    ]
+  }
+}
+"@ | Set-Content $cfg -Encoding ascii
+
+  $mout = & $exePath index --all --config $cfg --only ProjClosure 2>&1
+  $mrc  = $LASTEXITCODE
+  Check 'index --all (smClosure section) exits 0' ($mrc -eq 0) `
+    "exit=$mrc; $(($mout | Select-Object -Last 2) -join ' | ')"
+
+  $mfiles = @((& python $py (Join-Path $scratch "out\$mdb")) -join "`n" | ConvertFrom-Json)
+  Write-Host ("  section indexed {0} file(s): {1}" -f $mfiles.Count,
+    (($mfiles | ForEach-Object { Split-Path $_ -Leaf }) -join ', '))
+  function HasM([string]$Leaf) { return @($mfiles | Where-Object { $_ -like "*\$Leaf" }).Count -ge 1 }
+
+  Check 'section: FormUnit.dfm is indexed'  (HasM 'FormUnit.dfm') 'the manifest arm had dfm 0 before this change'
+  Check 'section: App.dpr is indexed'       (HasM 'App.dpr')      'the manifest arm had dpr 0 before this change'
+  Check 'section: Loose.pas is NOT indexed' (-not (HasM 'Loose.pas'))
+  Check 'both arms resolve the SAME scope' `
+    ((($mfiles | ForEach-Object { $_.ToLower() } | Sort-Object) -join ';') -eq
+     (($indexed | ForEach-Object { $_.ToLower() } | Sort-Object) -join ';')) `
+    "section=$($mfiles.Count) vs --project=$($indexed.Count)"
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
