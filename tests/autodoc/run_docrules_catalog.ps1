@@ -71,8 +71,23 @@ if ($null -ne $pn) {
   Assert 'doc-param-no-description source=builtin'          ($pn.source -eq 'builtin')
   Assert 'doc-param-no-description category=documentation'  ($pn.category -eq 'documentation')
   Assert 'doc-param-no-description default_enabled=true'    ($pn.default_enabled -eq $true)
-  Assert 'doc-param-no-description default_severity=hint'   ($pn.default_severity -eq 'hint')
+  # RAISED hint -> warning by user ruling 2026-08-09 ("If method has params and
+  # they are not documented it should be reported as warning"), superseding the
+  # hint chosen on 2026-08-07. Still pinned here rather than left to drift.
+  Assert 'doc-param-no-description default_severity=warning' ($pn.default_severity -eq 'warning')
   Assert 'doc-param-no-description fixable=false'           ($pn.fixable -ne $true)
+}
+
+# 2026-08-09, same ruling: "If method doesn't have params and they are reported
+# then it is an error." Its own id rather than a doc-drift special case, because
+# one id cannot carry two severities without this catalogue lying about it.
+$pns = $json.rules | Where-Object { $_.id -eq 'doc-param-not-in-signature' } | Select-Object -First 1
+Assert 'doc-param-not-in-signature present'                ($null -ne $pns)
+if ($null -ne $pns) {
+  Assert 'doc-param-not-in-signature source=builtin'         ($pns.source -eq 'builtin')
+  Assert 'doc-param-not-in-signature category=documentation' ($pns.category -eq 'documentation')
+  Assert 'doc-param-not-in-signature default_enabled=true'   ($pns.default_enabled -eq $true)
+  Assert 'doc-param-not-in-signature default_severity=error' ($pns.default_severity -eq 'error')
 }
 
 # Built-in count grew by EXACTLY 2 (110 pre-milestone -> 112), then +1 more
@@ -83,12 +98,15 @@ if ($null -ne $pn) {
 # assertion going RED when that rule landed is the assertion working: a rule added
 # to the catalogue without anyone deciding it belongs there is exactly what it is
 # for. Both numbers are bumped together and deliberately.
+# 2026-08-09: +1 -> 115, documentation 3 -> 4, from `doc-param-not-in-signature`
+# (user ruling; see the block above). Bumped deliberately, together, for the same
+# reason the 2026-08-07 bump was: a rule reaching the catalogue without anyone
+# deciding it belongs there is exactly what these two numbers exist to catch.
 $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
-Assert ("built-in rule count = 114 (pre-milestone 110 + 2 doc rules + enum-helper-separate-units + doc-param-no-description); got {0}" -f $builtins.Count) ($builtins.Count -eq 114)
+Assert ("built-in rule count = 115 (114 + doc-param-not-in-signature); got {0}" -f $builtins.Count) ($builtins.Count -eq 115)
 
-# The +2 are precisely the two documentation-category built-ins.
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
-Assert ("exactly 3 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 3)
+Assert ("exactly 4 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 4)
 
 Write-Host ''
 if ($fail -gt 0) { Write-Host "docrules-catalog: $fail FAIL" -ForegroundColor Red; exit 1 } else { Write-Host 'docrules-catalog: all pass' -ForegroundColor Green; exit 0 }

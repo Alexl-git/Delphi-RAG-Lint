@@ -102,7 +102,19 @@ try {
   Check 'lint-all emits at least one doc-drift finding' ($drift.Count -ge 1)
 
   $msgs = @($drift | ForEach-Object { $_.message })
-  Check 'reports the renamed param "Old" (report-only)'   (($msgs | Where-Object { $_ -like '*Old*' }).Count -ge 1)
+  # PHASE C B7 (user ruling 2026-08-09): "If method doesn't have params and they
+  # are reported then it is an error." A <param> naming a parameter the signature
+  # does not declare left doc-drift for its own id at ERROR severity -- the rest
+  # of doc-drift reports documentation that is INCOMPLETE, this reports
+  # documentation that is FALSE. So it is looked for under the new id, and the
+  # severity is asserted, because moving it without pinning the severity would
+  # lose the whole point of the split.
+  $notInSig = @($findings | Where-Object { $_.rule -eq 'doc-param-not-in-signature' })
+  Check 'reports the renamed param "Old" as doc-param-not-in-signature' `
+    ((@($notInSig | ForEach-Object { $_.message }) | Where-Object { $_ -like '*Old*' }).Count -ge 1)
+  Check '... at ERROR severity' `
+    (($notInSig.Count -gt 0) -and (@($notInSig | Where-Object { $_.severity -ne 'error' }).Count -eq 0)) `
+    ("severities: " + ((@($notInSig | ForEach-Object { $_.severity }) | Sort-Object -Unique) -join ','))
   Check 'reports the spurious <returns> on procedure P'   (($msgs | Where-Object { $_ -like '*returns no value*' }).Count -ge 1)
   Check 'reports the never-raised <exception cref="EFoo">' (($msgs | Where-Object { $_ -like '*EFoo*' }).Count -ge 1)
   Check 'reports the missing <param> for sig param New (still reported, just not fixable)' (($msgs | Where-Object { $_ -like '*New*' }).Count -ge 1)

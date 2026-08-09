@@ -101,10 +101,31 @@ try {
   $humanBlock = Get-DocBlockAbove $lines '^function HumanBlanks\(AValue: Integer\): Integer;'
   Check 'HumanBlanks decl found' ($null -ne $humanBlock)
 
-  Check '4. HumanBlanks <summary></summary> survives byte-identical (unmarked, empty)' `
-    (($lines | Where-Object { $_.Trim() -eq '/// <summary></summary>' }).Count -eq 1)
-  Check '4. HumanBlanks <param name="AValue"></param> survives byte-identical (unmarked, empty)' `
-    (($lines | Where-Object { $_.Trim() -eq '/// <param name="AValue"></param>' }).Count -eq 1)
+  # PHASE C B7 (user rulings 2026-08-09) INVERTS both of these, and the two tags
+  # part company because the rulings treat them differently:
+  #
+  #   "Empty sections are omitted."  -> <summary> carries prose and nothing else,
+  #   so an empty one is a blank DocInsight tooltip. It is REMOVED, and removed
+  #   even though it is unmarked: an empty element has no content to preserve, so
+  #   the ownership rule that protects hand prose has nothing to protect. This is
+  #   what lets a regeneration finally clear tags an older engine emitted (39 of
+  #   them on the YADF corpus, immortal until now).
+  #
+  #   "Autodocument has to produce the param section" -> <param> is STRUCTURAL,
+  #   mirroring the signature, so the tag STAYS. What changes is that the empty
+  #   one is regenerated (and therefore marked) rather than frozen, so a
+  #   description mined later can fill it. The undocumented-ness is reported by
+  #   the LINTER (doc-param-no-description, now warning), not by leaving a blank
+  #   tag in the source.
+  # Scoped to HumanBlanks's OWN block, not the whole file: NoDocs also declares
+  # AValue, so a file-wide count of that tag is 2 and would fail for a reason
+  # that has nothing to do with what is being asserted.
+  Check '4. HumanBlanks empty <summary> is REMOVED (empty sections are omitted)' `
+    ($humanBlock -notmatch '<summary>\s*</summary>') $humanBlock
+  Check '4. HumanBlanks <param name="AValue"> STAYS (structure mirrors the signature)' `
+    ($humanBlock -match '<param name="AValue">') $humanBlock
+  Check '4. ... and it is now engine-marked, so a mined description can fill it' `
+    ($humanBlock -match [regex]::Escape('<param name="AValue"><!-- drag-lint:auto --></param>')) $humanBlock
   # NOTE: HumanBlanks is a real function with a mined return case (Result :=
   # AValue) and NO pre-existing <returns> tag of its own, so it legitimately
   # GAINS a brand-new managed <returns> (Rule 3) -- the doc block as a whole

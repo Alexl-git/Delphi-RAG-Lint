@@ -85,11 +85,17 @@ try {
   # exactly ONE <summary> tag and ONE <returns> tag in the whole file.
   $summaryCount = ([regex]::Matches($block, '<summary>')).Count
   $returnsCount = ([regex]::Matches($block, '<returns>')).Count
-  Check '1. exactly one <summary> tag in Echo3''s block (no duplicate block)' ($summaryCount -eq 1) $block
+  # PHASE C B7 (user ruling 2026-08-09, "Empty sections are omitted"): Echo3's
+  # hand-written <summary> is EMPTY, so it is now removed rather than preserved
+  # -- an empty element has nothing to preserve, which is what finally lets a
+  # regeneration clear tags an older engine emitted. The no-duplicate-block
+  # property this file exists to guard is unchanged and still asserted: whatever
+  # the count is, it must not be TWO.
+  Check '1. no duplicate <summary> tag in Echo3''s block' ($summaryCount -le 1) $block
   Check '1. exactly one <returns> tag in Echo3''s block (no duplicate block)' ($returnsCount -eq 1) $block
 
-  Check '2. human''s <summary></summary> survives byte-identical, unmarked' `
-    (($lines | Where-Object { $_.Trim() -eq '/// <summary></summary>' }).Count -eq 1)
+  Check '2. the empty hand-written <summary> is removed' `
+    (($lines | Where-Object { $_.Trim() -eq '/// <summary></summary>' }).Count -eq 0)
 
   Check '3. managed <returns> present with the mined Observed case' `
     ($block -match [regex]::Escape('<returns><!-- drag-lint:auto -->') + 'Observed:\s*AValue\.')
