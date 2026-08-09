@@ -13,8 +13,11 @@
 
   Drives `index` -> `document --unit --apply` and asserts, from the file
   content:
-    1. ComplexFn's managed block contains 'Complexity: N (cyclomatic), M lines'
-       with N >= 10.
+    1. ComplexFn's managed block contains
+       'Complexity: N (cyclomatic, outer body), M lines (full implementation)'
+       with N >= 10. The scope labels are PHASE C B4: the count stops at a nested
+       routine and the line total does not, so the pair used to read as one
+       measurement of one thing.
     2. TrivialFn's managed block EXISTS (AUTO_BEGIN present, via its
        Called-from fact) but contains NO 'Complexity:' line.
     3. Idempotency: reindex + a second --apply leaves the file byte-identical
@@ -68,8 +71,11 @@ try {
   $complexBlock = Get-DocBlockAbove $lines '^function ComplexFn\(A, B, C: Integer\): Integer;'
   Check 'ComplexFn decl found' ($null -ne $complexBlock)
   Check 'ComplexFn has a managed block (AUTO_BEGIN)' ($complexBlock -match '<!-- drag-lint:auto BEGIN -->')
-  $m = [regex]::Match($complexBlock, 'Complexity: (\d+) \(cyclomatic\), (\d+) lines')
-  Check 'ComplexFn has a Complexity: N (cyclomatic), M lines line' ($m.Success)
+  # PHASE C B4: the two numbers measure DIFFERENT scopes -- cyclomatic stops at a
+  # nested routine, the line count does not -- so each now carries its scope. The
+  # shape assertion tracks that; the VALUES either side of it are unchanged.
+  $m = [regex]::Match($complexBlock, 'Complexity: (\d+) \(cyclomatic, outer body\), (\d+) lines \(full implementation\)')
+  Check 'ComplexFn has a Complexity: N (cyclomatic, outer body), M lines (full implementation) line' ($m.Success)
   if ($m.Success) {
     Check 'ComplexFn Complexity N >= 10 (docs.complexity_min default)' ([int]$m.Groups[1].Value -ge 10)
     Check 'ComplexFn Complexity M lines > 0' ([int]$m.Groups[2].Value -gt 0)

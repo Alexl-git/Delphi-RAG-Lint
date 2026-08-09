@@ -14,7 +14,8 @@
   Drives `index` -> `hover --qname ... --format md` (BEFORE `document`, to
   prove the Phase-2 facts are INDEX-TIME and show up in hover independent of
   whether the symbol has a doc-comment at all) -- asserts the hover markdown
-  carries BOTH 'Complexity: N (cyclomatic), M lines' (N >= 10) and
+  carries BOTH 'Complexity: N (cyclomatic, outer body), M lines (full
+  implementation)' (N >= 10; the scope labels are PHASE C B4) and
   'Reads: FCount   Writes: FCount'.
 
   Then drives `document --unit --apply` and re-hovers. THE CONSISTENCY LOCK:
@@ -105,8 +106,9 @@ try {
   $hoverComplexity1 = Get-FactLine $hoverMd1 'Complexity'
   Check 'hover (pre-document) shows a Complexity: line' ($null -ne $hoverComplexity1) $hoverMd1
   if ($null -ne $hoverComplexity1) {
-    $m = [regex]::Match($hoverComplexity1, 'Complexity: (\d+) \(cyclomatic\), (\d+) lines')
-    Check 'hover Complexity line has the "N (cyclomatic), M lines" shape' ($m.Success) $hoverComplexity1
+    # PHASE C B4: scope labels, same two numbers -- see run_doc_p2_complexity.ps1.
+    $m = [regex]::Match($hoverComplexity1, 'Complexity: (\d+) \(cyclomatic, outer body\), (\d+) lines \(full implementation\)')
+    Check 'hover Complexity line has the "N (cyclomatic, outer body), M lines (full implementation)" shape' ($m.Success) $hoverComplexity1
     if ($m.Success) {
       Check 'hover Complexity N >= 10 (docs.complexity_min default)' ([int]$m.Groups[1].Value -ge 10) $hoverComplexity1
       Check 'hover Complexity M lines > 0' ([int]$m.Groups[2].Value -gt 0) $hoverComplexity1

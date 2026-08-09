@@ -157,8 +157,14 @@ Check 'TThing has a "Used by:" line (a class is USED, not called -- v(ADP3 T4))'
 Check 'Used by: names UseThing (real external caller kept)' ($block -match 'Used by:.*UseThing') $block
 Check 'Used by: does NOT name TThing.Add (own method, self-reference excluded)' `
   (-not ($block -match 'Used by:[^\r\n]*TThing\.Add\b')) $block
+# PHASE C B11: the NULL-enclosing ref is still KEPT -- that is what this check is
+# about and it is unchanged. What changed is how it is SPELLED. It used to render
+# as '<TypeName> caller', naming a symbol that does not exist; a type whose every
+# use is a declaration got 'Used by: TYadfEncoding caller (YADF.Options.pas)' as
+# its entire fact. A declaration-position ref now says so. The file was always
+# carried in the location, so nothing is lost.
 Check 'Used by: includes the unit-scope GThing reference (NULL-enclosing ref kept, not dropped)' `
-  ($block -match 'Used by:[^\r\n]*TThing caller\b') $block
+  ($block -match 'Used by:[^\r\n]*\bdeclaration\b') $block
 Check 'TThing has NO "Called from:" line (v(ADP3 T4) relabel -- a class is never a call target)' `
   (-not ($block -match 'Called from:')) $block
 
