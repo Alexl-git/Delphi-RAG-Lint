@@ -574,13 +574,6 @@ low-token context instead of whole files.
   get_context_bundle (full_surface option), get_type_at_position, lint,
   rename_symbol, run_ast_checks, run_compile_check. (Newer analysis/report/doc
   verbs are CLI-only and shelled out.)
-- Editor setup: docs/editors/vscode-and-zed-mcp.md - copy-paste MCP config for
-  VS Code (%APPDATA%\Code\User\mcp.json, or .vscode/mcp.json per workspace) and
-  Zed ("context_servers" in %APPDATA%\Zed\settings.json). Both consume MCP
-  natively, so this is configuration only - nothing to install.
-- LSP in VS Code / Zed still needs a per-editor launcher extension (TypeScript
-  vscode-languageclient; Rust/WASM for Zed). Not written yet - no engine work
-  required, only packaging. MCP is the supported path meanwhile.
 
 
 --------------------------------------------------------------------------------

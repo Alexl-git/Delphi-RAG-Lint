@@ -10,49 +10,19 @@ Status keys: `[ ]` not started · `[~]` in flight · `[x]` done · `[?]` needs a
 
 ## >>> RESUME POINT (updated 2026-08-07, second pass) -- READ THIS FIRST
 
-**State (handoff 2026-08-07).** PHASE A COMPLETE. **PHASE B: B1, B3, B7, B8, B9 DONE and
-verified; B2 written but NOT verified.** A4's open question was ruled on and shipped. `main` =
-**`1f39156`, pushed, in sync with origin**, battery **229/229** (~12 min, needs `pwsh`). The exe
-beside the tests (`third_party\dll-win64\drag-lint.exe`) is built from that commit -- rebuild
-only if you change `src\` again.
+**State.** PHASE A is COMPLETE. **PHASE B: B1, B3, B7, B8 and B9 are DONE.** Battery **228/228**
+(~12 min, needs `pwsh`; one runner added for B3). The exe beside the tests
+(`third_party\dll-win64\drag-lint.exe`) is rebuilt from that source -- rebuild only if you
+change `src\` again.
 
-**Working tree, all three deliberate:**
-- `FEATURES.txt` -- another workstream's, **do not commit**;
-- `third_party\dll-win64\dclDragLintWizard.bpl` + `.dcp` -- build outputs of the **UNVERIFIED**
-  B2 plugin change. Their source IS committed at `944d373`, so they are regenerable with
-  `_bpl_build.bat`; left uncommitted because the change behind them has never run in an IDE.
-  **Note the IDE loads that BPL from this folder, so it will pick up the change on next start.**
-- untracked INBOX notes -- untracked by convention (8 of them now).
+Working tree carries `FEATURES.txt` (another workstream's, **do not commit**) and untracked
+INBOX notes (untracked by convention). Nothing else is outstanding.
 
-**Commits this session:** `c0a41b8` (B3+B1), `63b836c` (B9), `0983ddc` (B8), `944d373` (B2),
-`1f39156` (the `<param>` hint). All pushed.
-
-**NEXT ACTION IS A VERIFICATION, NOT A FIX: B2's code change is written and compiles but has
-never run in an IDE.** Everything else this session was verified end to end; that one was not,
-because it needs a live IDE and I could not open one. Exact repro, in B2's own section:
-
-1. delete `C:\Projects\.drag-lint\DataCopy.sqlite`;
-2. open a manifest-covered project in RAD Studio;
-3. run **Reindex Project** from the drag-lint menu;
-4. read `%TEMP%\drag-lint-reindex.txt` and confirm the `Database:` line names the MANIFEST path
-   (`C:\Projects\.drag-lint\DataCopy.sqlite`) and **not** `<projdir>\drag-lint.sqlite`.
-
-If the IDE misbehaves, rebuild the BPL from `0983ddc` (the commit before B2) with
-`_bpl_build.bat`.
-
-Then, in order: **B10** (B2's D-2 half -- a suspected-stale index should full-reindex the
-PROJECT into the manifest-resolved DB), **B4/B5/B6** (all the same unscoped-bucket family), and
-the `rules/` line-ending sweep noted under B8.
-
-**Not PHASE B, but genuinely waiting on us:** the DelphiLSP union design ruling --
-`docs/superpowers/specs/2026-08-05-delphilsp-union-design.md`. Nobody can code it until an
-engine-team decision is made (see PHASE D).
-
-**A DIFFERENT WORKSTREAM the user raised at handoff: the CONVERTER.** It is a REGISTERED project
-in its own right (`c:/projects/delphi-rag-lint-converter`, name `Converter`), so start it from
-THAT folder in a fresh session -- it has its own auto-memory partition and its own wiki hot
-cache, and running it from here would file its state under this project. Background for it:
-`docs/lint/DESIGN-table-conversion-visual-aid.md` and `docs/TCXGRID-UNBOUND-GUIDE.md`.
+**Next action, and it is a VERIFICATION not a fix: B2's code change is written and compiles
+but has never run in an IDE.** See B2 for the exact repro. Everything else in this session was
+verified end to end; that one was not, because it needs a live IDE. Do it first, then **B10**
+(B2's D-2 half), then **B4/B5/B6** (all the same unscoped-bucket family), plus the `rules/`
+line-ending sweep noted under B8.
 
 **No decisions are outstanding.** A4's open question -- the hint for a PRESENT-but-EMPTY
 `<param>` body -- was ruled on 2026-08-07: report it, as a `hint`, ON by default. Shipped as
