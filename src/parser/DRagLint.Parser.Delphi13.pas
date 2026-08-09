@@ -1268,7 +1268,12 @@ begin
   end;
 end; // procedure
 
-procedure WalkDeclProc(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string; AAsMethod: Boolean);
+{ v(PHASE C): returns the index of the routine symbol it emitted, or -1 when it
+  emitted nothing (no name node / empty name). Callers that only want the side
+  effect may still invoke it as a statement -- the three pre-existing call sites
+  do. The result exists for NESTED routines: a nested routine's own children must
+  be parented to IT, not to the enclosing class/unit, and that needs its index. }
+function WalkDeclProc(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string; AAsMethod: Boolean): Integer;
 var
   NameNode : TTSNode    ;
   FirstTok : TTSNode    ;
@@ -1278,6 +1283,7 @@ var
   Kind     : TSymbolKind;
   RoutineIdx: Integer   ;
 begin
+  Result:= -1;   { emitted nothing, unless we reach the Emit below }
   NameNode:= ANode.ChildByField('name');
   if NameNode.IsNull then Exit;
   MethName:= NodeText(NameNode, AState.Source);
@@ -1310,6 +1316,7 @@ begin
   { v0.42: Signature = full parameter list + return type (Code-Insight style),
     e.g. '(const A: Integer): Boolean'. Was return-type-only before. }
   RoutineIdx:= AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode));
+  Result:= RoutineIdx;
   // v14 (D5, Task 2): emit each formal parameter as an skParam symbol parented
   // to this routine (RoutineIdx). Nested procs never reach WalkDeclProc (their
   // defProc is skipped at RoutineDepth > 0), so their params cannot leak here.
@@ -1761,6 +1768,11 @@ begin
   // 'TClass.Method' name) are still skipped -- their decl is the source.
   if NodeType = 'defProc' then
   begin
+    { v(PHASE C): THIS routine's own symbol index + qualified name, so the nested
+      routines walked at the tail can be parented to IT rather than to the
+      enclosing class/unit. -1 while unknown. }
+    var SelfIdx  : Integer := -1;
+    var SelfQName: string  := '';
     if AState.RoutineDepth = 0 then
     begin
       var HdrNode:= ANode.ChildByField('header');
@@ -1821,11 +1833,69 @@ begin
           begin
             var RoutineIdx:= FindRoutineSymbolIndex(AState, HdrName, Integer(ANode.StartPoint.row) + 1);
             if RoutineIdx >= 0 then
+            begin
               EmitRoutineLocals(ANode, AState, RoutineIdx, AState.Symbols[RoutineIdx].QualifiedName);
+              SelfIdx  := RoutineIdx;
+              SelfQName:= AState.Symbols[RoutineIdx].QualifiedName;
+            end;
           end;
         end;
       end;
-    end; // if
+    end // if RoutineDepth = 0
+    else
+    begin
+      { v(PHASE C): a NESTED routine now emits a symbol of its own.
+        `query --name EmitTagged` returned 0 matches for a real function at
+        src\doc\DRagLint.Doc.Regions.pas:1882 purely because it is declared
+        inside another routine, and on YADF 4,005 unresolved call refs name no
+        symbol anywhere -- StartsWordCI (93 refs) and EndsWordCI (62) among them,
+        both nested.
+
+        PARENTED TO THE ENCLOSING ROUTINE, which is what AParentSymbolIdx already
+        is here: the nested-walk loop at the tail of this arm passes SelfIdx
+        down. So the qualified name comes out as Unit.Outer.Nested, and THAT is
+        the whole point -- YADF.Layout.pas declares StartsWordCI three times
+        (1925, 2351, 2900), each local to a different routine. They are three
+        distinct routines sharing a name, exactly as the compiler sees them:
+        an unqualified identifier resolves innermost-first, so each call site
+        sees only its own. A flat name-keyed symbol cannot represent that.
+
+        NO FreeRoutineSymbolExists DEDUP, deliberately -- that guard exists to
+        stop an implementation-only free routine duplicating its own interface
+        declaration, and applying it here would collapse the twins above into
+        one symbol.
+
+        The impl range is stamped DIRECTLY on the returned index rather than
+        through SetRoutineImplRange, which matches by NAME across the whole
+        symbol list: with nested routines now present, a name match is no longer
+        unique and could stamp the wrong symbol.
+
+        Section comes from AState and is 'implementation' here, which is what
+        keeps these out of `document --unit/--project` -- DRagLint.Doc.Batch
+        gates the public surface on Section='interface'. `document --qname` still
+        reaches them, so documenting one on purpose remains possible. }
+      var NHdr:= ANode.ChildByField('header');
+      if not NHdr.IsNull then
+      begin
+        var NNameNode:= NHdr.ChildByField('name');
+        if not NNameNode.IsNull then
+        begin
+          var NName:= NodeText(NNameNode, AState.Source);
+          if (NName <> '') and (Pos('.', NName) = 0) then
+          begin
+            SelfIdx:= WalkDeclProc(NHdr, AState, AParentSymbolIdx, AParentQualifiedName, False);
+            if SelfIdx >= 0 then
+            begin
+              SelfQName:= AState.Symbols[SelfIdx].QualifiedName;
+              var NSym:= AState.Symbols[SelfIdx];
+              NSym.ImplStartLine:= Integer(ANode.StartPoint.row) + 1;
+              NSym.ImplEndLine  := Integer(ANode.EndPoint.row) + 1;
+              AState.Symbols[SelfIdx]:= NSym;
+            end;
+          end;
+        end;
+      end;
+    end; // else (nested)
     var BodyNode:= ANode.ChildByField('body');
     if not BodyNode.IsNull then
     begin
@@ -1855,7 +1925,15 @@ begin
       begin
         Inc(AState.RoutineDepth);
         try
-          Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+          { v(PHASE C): pass THIS routine down as the parent, so the nested
+            routine's symbol is qualified by it (Unit.Outer.Nested) instead of by
+            the enclosing class/unit. Falls back to the old parent when this
+            routine emitted no symbol of its own, which keeps a nested routine
+            reachable even inside a method body whose decl lives elsewhere. }
+          if SelfIdx >= 0 then
+            Walk(ANode.NamedChild(i), AState, SelfIdx, SelfQName)
+          else
+            Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
         finally
           Dec(AState.RoutineDepth);
         end;

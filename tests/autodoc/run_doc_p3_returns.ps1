@@ -316,12 +316,26 @@ foreach ($p in @(
   Check ("PRECONDITION: {0}'s indexed impl span {1}..{2} CONTAINS {3} (line {4})" -f `
          $p.Host_, $span[0], $span[1], $p.What, ($ln -join ',')) $ok
 }
-# ... and only if the nested routine is NOT a symbol in its own right. Nested
-# routines are not indexed today; asserting it means the day that changes, this
-# fails and names the fixture rather than going quietly vacuous.
+# v(PHASE C): NESTED ROUTINES ARE NOW INDEXED. This assertion used to pin the
+# OPPOSITE -- "Twice is NOT indexed as its own symbol" -- and its own comment
+# said that the day that changed, it should fail and name the fixture rather
+# than go quietly vacuous. That day came, and it did exactly that.
+#
+# What it was really protecting has NOT changed, and is what it asserts now:
+# Twice's body lies INSIDE LocalHost's, so `Result := X * 5` is physically
+# within the span the miner reads for LocalHost. The nested-scope MASK -- which
+# works on source text, not on symbols -- is still the only thing keeping that
+# value out of LocalHost's <returns>, which is what the NESTED check further
+# down actually tests. Containment is asserted directly rather than inferred
+# from "Twice has no span of its own", which is no longer true.
 $twiceSpan = Get-ImplSpan $db 'Twice'
-Check 'PRECONDITION: the nested routine Twice is NOT indexed as its own symbol' `
-  ($twiceSpan[0] -eq 0) ("span=" + ($twiceSpan -join '..'))
+$hostSpan  = Get-ImplSpan $db 'LocalHost'
+Check 'PRECONDITION: the nested routine Twice IS indexed, with an impl span of its own' `
+  ($twiceSpan[0] -gt 0) ("span=" + ($twiceSpan -join '..'))
+Check 'PRECONDITION: Twice''s span lies INSIDE LocalHost''s, so a mask failure would still surface' `
+  (($twiceSpan[0] -gt 0) -and ($hostSpan[0] -gt 0) -and
+   ($twiceSpan[0] -ge $hostSpan[0]) -and ($twiceSpan[1] -le $hostSpan[1])) `
+  ("twice=" + ($twiceSpan -join '..') + " host=" + ($hostSpan -join '..'))
 
 # (1) The mutation group needs its mutations to actually be inside the span.
 foreach ($p in @(

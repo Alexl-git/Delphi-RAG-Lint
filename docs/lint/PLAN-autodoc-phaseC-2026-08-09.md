@@ -119,7 +119,57 @@ a `Calls:` fact and watching batch mode insert. It is also why YADF's earlier ru
 
 ---
 
-## NESTED-ROUTINE EXTRACTION -- design, investigated 2026-08-09 (NOT yet implemented)
+## NESTED-ROUTINE EXTRACTION -- SHIPPED 2026-08-09, and what it revealed
+
+Implemented in `src\parser\DRagLint.Parser.Delphi13.pas` exactly as the design below predicted.
+Test: `tests\autotest\run_nested_routine_symbols.ps1` (8 assertions, TDD, RED first).
+Battery blast radius was ONE runner, `run_doc_p3_returns`, whose PRECONDITION explicitly pinned
+"the nested routine Twice is NOT indexed as its own symbol" and whose own comment said it should
+fail loudly the day that changed. Re-derived to assert containment instead.
+
+**The originating gap is closed:** `query --name EmitTagged` returns
+`DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitTagged`.
+
+### Measured on YADF (reindexed with --force-reparse; REQUIRED after this upgrade)
+
+| | before | after |
+|---|---|---|
+| symbols | 5,456 | 5,669 |
+| nested routines indexed | 0 | **91** |
+| resolved call edges | 2,828 (35.1%) | **2,983 (37.0%)** |
+| unresolved naming NO symbol anywhere | 4,005 | **3,372** |
+
+`StartsWordCI` is now four distinct symbols -- `YADF.Layout.ReflowLineBreaks.StartsWordCI`,
+`...BreakControlBodies.StartsWordCI`, `...CollapseShortBlocks.StartsWordCI` (+1) -- which is the
+whole point of qualifying by the enclosing routine.
+
+**+155 edges came for free**, with no resolver change: a bare call inside a routine now finds
+SIBLING nested routines through the existing `Encl.ParentId` lookup, because the parent is now the
+enclosing routine.
+
+### >>> THE BIGGEST REMAINING LEVER, discovered by doing this
+
+**463 unresolved call refs name a NESTED routine** -- nearly 3x option 4's 167. The symbols now
+exist; the resolver cannot bind to them, because Delphi's innermost-first scope walk is not
+implemented. Top names: `Add` (165), `StartsWordCI` (42), `OnOff` (30), `EndsWordCI` (29),
+`StartsKW` (22), `EmitText` (18).
+
+Resolving these needs the compiler's actual rule: an unqualified identifier resolves from the
+INNERMOST scope outward -- the current routine's own nested routines, then each ENCLOSING
+routine's, then the unit, then uses. Note `StartsWordCI` has FOUR nested declarations, so a
+name-keyed lookup is wrong by construction; the walk must start at the CALL SITE's enclosing
+routine and climb. Do this BEFORE option 4 -- it is bigger, and the two share the same
+"narrow, never widen" discipline.
+
+### What the remainder is, and it is not project code
+
+Top names still naming no symbol: `Exit` 532, `Inc` 491, `Free` 222, `Append` 200, `Continue` 145,
+`Copy` 121, `High` 111, `Format` 94, `SetLength` 85, `Break` 81. Compiler intrinsics and RTL --
+see the two follow-ups below. This is the floor for any project-only index.
+
+---
+
+## NESTED-ROUTINE EXTRACTION -- original design note (kept; it proved accurate)
 
 The user's instruction: *"Implement: indexer should extract nested routines as symbols... After
 that we'll see if unknown is still remaining... Lets wait with YADF and DataCopy until we resolve
