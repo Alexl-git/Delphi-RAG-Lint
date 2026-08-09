@@ -159,23 +159,62 @@ report rather than silently sharing a DB.
 - The `Library` sections (`source: registry-libraries`) and `SQL` (MS\*.sql, a folder walk with an
   `includeOnly` filter) become **Library-scan** sections. That is what they already do; the scan
   type now has a name.
-- **ORM3 keeps its union DB, by staying a Library-scan section.**
-  `C:\Projects\DB\ORM3\drag-lint.sqlite` unions CLIENT and SERVER, and that union is what the
-  dead-form investigation needed -- a CLIENT-only DB produced a false "dead form" because the
-  callers lived outside it. Calling ORM3 a "library" is semantically odd and is a transitional
-  arrangement, not an endorsement; converting it to two project sections is a separate decision,
-  deliberately not taken here.
+## ORM3 converts to separate projects
+
+Decided 2026-08-09: *"These are in fact several projects."* The union DB
+`C:\Projects\DB\ORM3\drag-lint.sqlite` is replaced by one project section per `.dproj`:
+
+| project | file |
+|---|---|
+| Micronite2027 | `CLIENT\Micronite2027.dproj` |
+| MicroniteMW1Service | `SERVER\MicroniteMW1Service.dproj` |
+| Interfaces | `PACKAGE\Interfaces.dproj` |
+| TestMicroniteObjects | `PACKAGE\TestMicroniteObjects.dproj` |
+| MicroniteTests | `TESTER\Tests\MicroniteTests.dproj` |
+| TestCachedUpdates | `TESTER\CachedUpdates\TestCachedUpdates.dproj` |
+| PdfOcrImportTests | `TESTER\PdfOcrImport\PdfOcrImportTests.dproj` |
+| TEST_uSetupDefaultsFrm | `TESTER\TEST_uSetupDefaultsFrm\TEST_uSetupDefaultsFrm.dproj` |
+
+`COMMON\` is shared by CLIENT and SERVER, so it is indexed into both DBs. That is the accepted
+duplication.
+
+**This retires the arrangement the dead-form investigation relied on.** That investigation reached
+a false "dead form" conclusion from a CLIENT-only DB, because the callers lived outside it, and the
+fix at the time was "use the full ORM3 db". After this change there is no full ORM3 db -- so the
+answer has to come from querying the group, which is why the next section exists rather than
+leaving it as a caveat.
+
+### Cross-project search must be DISCOVERABLE, not remembered
+
+The user's own objection: *"In situations where AI need to work on both projects at once, AI would
+need to know to use 2 index files for a search."* Requiring anyone to remember eight DB paths is
+how the dead-form mistake happens a second time.
+
+- Sections gain an optional **`group`** (e.g. `"ORM3"`).
+- **`resolve-dbs --group ORM3`** returns every DB in that group, for consumers that already accept
+  repeated `--db`.
+- A single-project answer that could plausibly be wrong across projects -- `find-callers`,
+  `unused-public-symbol`, dead-form style reasoning -- should say which DB it searched, so
+  "no callers" is never mistaken for "no callers anywhere".
+
+### Migration -- do not delete the union DB first
+
+`C:\Projects\CLAUDE.md` documents `C:\Projects\DB\ORM3\drag-lint.sqlite` as the canonical ORM3
+index, and the auto-memory references it too. Build the per-project set, verify it, update those
+references, and only then retire the union DB. A half-migrated state where the docs name a DB that
+no longer exists is worse than either end state.
 
 ## Accepted cost: shared units are indexed into every project DB that uses them
 
-`src\core\*` lands in both the CLI DB and the wizard-BPL DB. This is inherent to one-DB-per-project
-and was accepted explicitly.
+`src\core\*` lands in both the CLI DB and the wizard-BPL DB; ORM3's `COMMON\` lands in both CLIENT
+and SERVER. This is inherent to one-DB-per-project and was accepted explicitly.
 
 The sharp edge is not the duplication, it is that **`call_edges.target_symbol_id` is a rowid in ONE
 database** -- cross-DB edges are not representable (architectural, already recorded). So each DB
 answers correctly *for its own project*, and a cross-project question needs several `--db` flags.
-Anyone reading a single project DB and concluding "nothing calls this" is making the same mistake
-the dead-form investigation made.
+Anyone reading a single project DB and concluding "nothing calls this" is making exactly the
+mistake the dead-form investigation made -- which is what `resolve-dbs --group` and the
+which-DB-did-I-search reporting above are there to prevent.
 
 ## Testing
 
