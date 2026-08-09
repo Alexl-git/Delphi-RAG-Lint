@@ -1924,7 +1924,32 @@ var
   // removing the marker.
   function EmitEngineParam(const AName: string): string;
   begin
+    // PHASE C B7, as CLARIFIED by the user 2026-08-09: "Autodocument has to
+    // produce the param section among other things if it does not reflect the
+    // correct situation. Warnings and errors is what Linter produces."
+    //
+    // So <param> is STRUCTURAL and ruling D-3 stands: the tag set mirrors the
+    // signature, always, because the documenter's job is to make the block
+    // reflect the code. It is NOT one of the "empty sections are omitted" cases
+    // -- those are <summary> and <returns>, elements that carry prose and
+    // nothing else, where a blank one is purely a blank tooltip.
+    //
+    // An undocumented parameter is therefore reported by the LINTER, not
+    // silently dropped here: ddParamNoDescription at WARNING (severity set by
+    // the same 2026-08-09 ruling, in DRagLint.Lint.DocRules).
     Result:= EmitTagged('<param name="' + AName + '">' + AUTO_MARK, ParamNoteFor(AName), '</param>');
+  end;
+
+  // PHASE C B7: an element whose body is blank once its marker is removed. Such
+  // an element carries NOTHING TO PRESERVE, so the ownership question that
+  // governs every other merge decision simply does not arise -- dropping it
+  // cannot lose a human's words, because there are none. That is what lets this
+  // clear tags the engine did not write: YADF's corpus holds 78 empty elements
+  // that carry no marker at all, are therefore treated as hand-written, and
+  // survived every regeneration precisely because the merge was protecting them.
+  function IsBlankBody(const AText: string): Boolean;
+  begin
+    Result:= Trim(StripMark(AText)) = '';
   end;
   // v(ADP3 T3 review round 2, Finding 1 -- PARAM ONLY): classifies
   // ownership of one existing <param>'s raw parsed text (S) for the repair
@@ -2335,7 +2360,14 @@ begin
     // located occurrence out of the UNSTRIPPED text precisely so both properties
     // hold at once.
     var SummaryRaw: string:= BodySummary;
-    if StandaloneSummary.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw)) then
+    // PHASE C B7: `and not IsBlankBody` is the added clause. An UNMARKED empty
+    // <summary> used to satisfy the preserve arm and be re-emitted verbatim
+    // forever -- 39 of them in YADF, every one a blank DocInsight tooltip that no
+    // regeneration could clear. Empty means there is nothing to preserve, so the
+    // harvested summary (if any) gets its chance below, and otherwise no tag is
+    // written at all.
+    if StandaloneSummary.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw))
+       and (not IsBlankBody(SummaryRaw)) then
       Sb.AppendLine(EmitTagged('<summary>', SummaryRaw, '</summary>'))
     else if AFacts.HarvestedSummary <> '' then
       Sb.AppendLine(EmitTagged('<summary>' + AUTO_MARK, AFacts.HarvestedSummary, '</summary>'));
@@ -2441,6 +2473,19 @@ begin
               ParamEmitted:= True;
               Break;
             end;
+            // PHASE C B7: an UNMARKED empty tag falls through to be REGENERATED
+            // rather than preserved verbatim. It carries nothing to protect (see
+            // IsBlankBody), and regenerating re-marks it as the engine's, so a
+            // description mined later can fill it. Marked-and-empty already fell
+            // through; this only adds the unmarked case, which the preserve arms
+            // below would otherwise freeze forever -- the property that kept
+            // YADF's empty tags alive through every regeneration.
+            if IsBlankBody(EP.Desc) then
+            begin
+              Sb.AppendLine(EmitEngineParam(P));
+              ParamEmitted:= True;
+              Break;
+            end;
             case ClassifyParamAction(EP.Desc, True) of
               // RULING D-4, the meaning half: a body a human wrote is never
               // overwritten -- including one typed INSIDE the engine's own tag
@@ -2479,10 +2524,15 @@ begin
 
     if AHasReturn then
     begin
-      if ReturnsHandWritten then
-        // hand-written, including a deliberate blank slot -- preserved
-        // verbatim; its mined cases (if any) went into the 'Returns:' fact
-        // line above (IncludeReturns) instead of disturbing this text.
+      // PHASE C B7: the "deliberate blank slot" is no longer honoured. The user's
+      // 2026-08-09 ruling is that an empty section is omitted, and a blank
+      // <returns> is a blank tooltip like any other -- 2 of them in YADF, frozen
+      // by exactly this preserve arm. A hand-written blank falls through to the
+      // engine arm, which refills it from the mined cases or writes nothing.
+      if ReturnsHandWritten and (not IsBlankBody(BodyReturns)) then
+        // hand-written, with content -- preserved verbatim; its mined cases (if
+        // any) went into the 'Returns:' fact line above (IncludeReturns) instead
+        // of disturbing this text.
         Sb.AppendLine(EmitTagged('<returns>', BodyReturns, '</returns>'))
       else
       begin

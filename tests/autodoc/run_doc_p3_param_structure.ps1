@@ -118,6 +118,11 @@ foreach ($p in @(@{N='Plain';B=$blkPlain}, @{N='Noted';B=$blkNoted}, @{N='Groupe
 }
 
 # --- (1) D-3 STRUCTURE: every signature param gets a tag. -------------------
+# Reaffirmed by the user 2026-08-09: "Autodocument has to produce the param
+# section among other things if it does not reflect the correct situation.
+# Warnings and errors is what Linter produces." <param> is structural -- it
+# mirrors the signature -- and is NOT one of the "empty sections are omitted"
+# cases (those are <summary>/<returns>, which carry prose and nothing else).
 Check 'D-3 STRUCTURE: Plain''s undocumented params BOTH get a <param> tag' `
   (($null -ne (Get-ParamBody $blkPlain 'AFirst')) -and ($null -ne (Get-ParamBody $blkPlain 'ASecond'))) `
   ($blkPlain -replace "`n",' | ')

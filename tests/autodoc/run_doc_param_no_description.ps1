@@ -86,7 +86,12 @@ $db = Join-Path $WorkDir 'p.sqlite'
 $doc = [System.IO.File]::ReadAllText($pas)
 Write-Host 'The generated block' -ForegroundColor Cyan
 Check 'APath got a body harvested from its inline comment' ($doc -match 'name="APath">.*the folder to scan')
-Check 'AFlag got a tag with an EMPTY body'                 ($doc -match 'name="AFlag"><!-- drag-lint:auto --></param>')
+# USER RULING 2026-08-09: "Autodocument has to produce the param section ...
+# Warnings and errors is what Linter produces." <param> is STRUCTURAL, so the tag
+# is written for every signature parameter whether or not the source describes it
+# (ruling D-3 stands); what changed is that the linter now says so at WARNING.
+Check 'AFlag got a tag with an EMPTY body (structure is not meaning)' `
+  ($doc -match 'name="AFlag"><!-- drag-lint:auto --></param>')
 
 $raw  = & $Exe lint-all --db $db --json 2>$null
 $find = @()
@@ -99,7 +104,9 @@ Write-Host 'doc-param-no-description' -ForegroundColor Cyan
 Check 'it fires for the param with no description' (@($nd | Where-Object { $_.message -match 'AFlag' }).Count -ge 1) `
   "(got $($nd.Count) finding(s) of this rule)"
 Check 'it does NOT fire for the param that has one'  (@($nd | Where-Object { $_.message -match 'APath' }).Count -eq 0)
-Check 'its severity is hint' (($nd.Count -gt 0) -and (@($nd | Where-Object { $_.severity -ne 'hint' }).Count -eq 0)) `
+# RAISED from hint to warning by the 2026-08-09 ruling: "If method has params and
+# they are not documented it should be reported as warning."
+Check 'its severity is warning' (($nd.Count -gt 0) -and (@($nd | Where-Object { $_.severity -ne 'warning' }).Count -eq 0)) `
   "(severities: $((@($nd | ForEach-Object { $_.severity }) | Sort-Object -Unique) -join ','))"
 Check 'a routine with no parameters produces none of these' `
   (@($nd | Where-Object { $_.message -match 'NoParamsAtAll' }).Count -eq 0)

@@ -265,8 +265,45 @@ begin
             tests\autodoc\run_doc_param_no_description.ps1. }
           if D.Kind = ddParamNoDescription then
           begin
+            { USER RULING 2026-08-09: "If method has params and they are not
+              documented it should be reported as WARNING." That raises this from
+              the `hint` chosen on 2026-08-07.
+
+              The two rulings are consistent once the division of labour is read
+              the way the user stated it -- "Autodocument has to produce the param
+              section ... Warnings and errors is what Linter produces." The
+              DOCUMENTER still writes the tag for every signature parameter
+              (structure must reflect the code, ruling D-3); the LINTER is what
+              says the description is missing, and it says it at warning, not as
+              a hint that is easy to leave forever.
+
+              The rule id stays its own rather than folding into doc-drift: an
+              empty body is not drift -- nothing moved apart, the description was
+              never written -- and the id is already in the catalogue, in
+              baselines, and in consumers' configs. }
             F.RuleId  := 'doc-param-no-description';
-            F.Severity:= 'hint';
+            F.Severity:= 'warning';
+          end
+          else if D.Kind = ddParamRenamedOrRemoved then
+          begin
+            { USER RULING 2026-08-09, stated as three cases:
+                - a routine HAS parameters and they are undocumented -> warning
+                  (ddParamMissing, the doc-drift arm below -- unchanged);
+                - a routine does NOT have a parameter yet one is DOCUMENTED
+                  -> ERROR, which is this arm;
+                - a routine has no parameters and nothing is reported -> correct,
+                  report nothing (no finding is produced, so nothing to do).
+              The middle case is stronger than drift and is deliberately not
+              spelled `doc-drift`: doc-drift is registered at `warning`, and one
+              rule id cannot carry two severities without the catalogue lying
+              about it. Same reasoning that gave ddParamNoDescription its own id.
+
+              It earns `error` on its own terms: the other two cases describe
+              documentation that is INCOMPLETE, while this one describes
+              documentation that is FALSE -- it names a parameter the caller
+              cannot pass, so following it produces code that does not compile. }
+            F.RuleId  := 'doc-param-not-in-signature';
+            F.Severity:= 'error';
           end
           else
           begin

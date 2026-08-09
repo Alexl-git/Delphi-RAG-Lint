@@ -215,12 +215,23 @@ begin
     { --- documentation (ADF milestone) --- }
     B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment', False); // OFF by default -- fires 1302x on drag-lint's own first-run wave; opt in via "enabled"
     B('doc-drift',   'documentation', 'warning', 'DocInsight comment has drifted from the code it documents (--fix repairs the mechanically-safe subset)');
-    { ON by default, at hint severity, by user ruling 2026-08-07. The volume was
-      put to them first: inline param comments are rare, so this is roughly one
-      hint per undocumented parameter across a codebase. Report-only -- there is
-      nothing a fix could write, since the whole point is that the meaning is not
-      in the code (ruling D-3). }
-    B('doc-param-no-description', 'documentation', 'hint', 'A <param> tag is present but has no description -- the parameter''s meaning is still undocumented'); { ON by default; marked fixable via FIXABLE_RULE_IDS -- its --fix applies only the safe subset (facts-block refresh + missing param/returns stubs), never rewriting hand prose }
+    { USER RULING 2026-08-09. Split out of doc-drift so the severity can be
+      ERROR: the rest of doc-drift reports documentation that is INCOMPLETE,
+      while a <param> naming a parameter the signature does not have is
+      documentation that is FALSE -- follow it and the call does not compile.
+      One rule id cannot carry two severities without the catalogue lying, which
+      is why this is its own entry rather than a special case inside doc-drift. }
+    B('doc-param-not-in-signature', 'documentation', 'error', 'A <param> tag names a parameter the routine does not declare');
+    { ON by default. Severity RAISED from hint to WARNING by user ruling
+      2026-08-09 ("If method has params and they are not documented it should be
+      reported as warning"), superseding the hint chosen on 2026-08-07. The
+      volume note from that first ruling still applies and is now warning-loud:
+      inline param comments are rare, so this is roughly one finding per
+      undocumented parameter across a codebase (30 on the YADF corpus). That
+      volume was measured and put to the user before the raise. Report-only --
+      there is nothing a fix could write, since the whole point is that the
+      meaning is not in the code (ruling D-3). }
+    B('doc-param-no-description', 'documentation', 'warning', 'A <param> tag is present but has no description -- the parameter''s meaning is still undocumented'); { ON by default; marked fixable via FIXABLE_RULE_IDS -- its --fix applies only the safe subset (facts-block refresh + missing param/returns stubs), never rewriting hand prose }
 
     { --- metrics (CK class metrics; v0.78) --- }
     B('too-many-children', 'metrics', 'info', 'Class has too many direct subclasses (NOC)', True, [MkParam('threshold','int','10')]);
