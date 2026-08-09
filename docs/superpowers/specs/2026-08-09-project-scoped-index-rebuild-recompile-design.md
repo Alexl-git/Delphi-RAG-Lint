@@ -192,18 +192,30 @@ fix at the time was "use the full ORM3 db". After this change there is no full O
 answer has to come from querying the group, which is why the next section exists rather than
 leaving it as a caveat.
 
-### Cross-project search must be DISCOVERABLE, not remembered
+### Cross-project search: NO new mechanism -- discovery already exists
 
-The user's own objection: *"In situations where AI need to work on both projects at once, AI would
-need to know to use 2 index files for a search."* Requiring anyone to remember eight DB paths is
-how the dead-form mistake happens a second time.
+An earlier draft of this spec proposed a `group` field on sections plus `resolve-dbs --group`.
+**That was dropped as unnecessary machinery**, on the user's challenge: *"Why cant we explain to AI
+that there are several projects that have to be coordinated together. AI knows the project names
+and can find their indexes per names?"*
 
-- Sections gain an optional **`group`** (e.g. `"ORM3"`).
-- **`resolve-dbs --group ORM3`** returns every DB in that group, for consumers that already accept
-  repeated `--db`.
-- A single-project answer that could plausibly be wrong across projects -- `find-callers`,
-  `unused-public-symbol`, dead-form style reasoning -- should say which DB it searched, so
-  "no callers" is never mistaken for "no callers anywhere".
+They are right, and it is already true: `resolve-dbs --platform Win64` already prints every
+configured DB, one per line, and every consumer already accepts repeated `--db`. So discovery is
+one command, and after the split the eight ORM3 DBs are simply eight of its lines.
+
+Two conventions replace the field, at no cost:
+
+- **Name ORM3's sections `ORM3-<Project>`**, so the DB filenames carry the grouping:
+  `ORM3-Micronite2027.sqlite`, `ORM3-MicroniteMW1Service.sqlite`, ... Without this,
+  `Interfaces.sqlite` sits in a flat folder shared with every other project and the name-based
+  lookup this design now relies on becomes ambiguous.
+- **Name the ORM3 project set in `C:\Projects\CLAUDE.md`**, so "these coordinate" is written down
+  once rather than inferred.
+
+The residual risk is unchanged and worth stating plainly: a single-DB answer to `find-callers` /
+`unused-public-symbol` can be wrong across projects. That is what the dead-form investigation hit.
+Documentation is the mitigation chosen here; a "which DB did I search" line on such answers remains
+available if it ever bites again.
 
 ### Migration -- do not delete the union DB first
 

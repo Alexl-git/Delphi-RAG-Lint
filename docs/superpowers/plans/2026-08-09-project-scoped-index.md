@@ -10,6 +10,27 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-09-project-scoped-index-rebuild-recompile-design.md`
 
+## Phasing -- rebuild first, eviction second
+
+Decided 2026-08-09 on the user's observation: **"When we rebuild there is no eviction since we do a
+fresh build."** That is correct, and it means a correct index does not have to wait on the hardest
+task.
+
+- **Phase 1 (Tasks 1, 3, 5, 6, 7):** rebuild only. Correct by construction -- wipe, then index the
+  closure. The IDE's "Reindex project" is a rebuild.
+- **Phase 2 (Tasks 2, 4):** eviction, which is what makes `--recompile` trustworthy, and the
+  non-member warning. Only after eviction lands does the IDE gain a "Refresh index" item.
+
+**Do not ship "Refresh" before eviction.** A refresh that cannot drop a unit removed from the
+`.dproj` is today's defect with a friendlier name.
+
+Rebuild cost, measured 2026-08-09, because "a few seconds" is optimistic for the large ones:
+YADF fresh = 10.3s (124 files); Delphi-RAG-lint self-index = **115s** (670 files). ORM3's union DB
+is 88 MB against Delphi-RAG-lint's 31 MB -- but split per project, each one is far smaller, which
+is what makes rebuild-on-demand viable in the IDE.
+
+**Execute Tasks 1, 3, 6 first. Task 2 and Task 4 are Phase 2 and must not block them.**
+
 ## Global Constraints
 
 - **Encoding:** every `.pas` / `.ps1` file is strict 7-bit ASCII with CRLF. Agent tools emit lone LF -- normalise before committing or `tests\autotest\run_encoding_guard.ps1` fails.
@@ -236,26 +257,28 @@ git commit -m "feat(index): warn when a compiled unit is not a .dproj member"
 
 ---
 
-### Task 5: manifest `group` + `resolve-dbs --group`
+### Task 5: IDE menu -- "Reindex project" is a REBUILD
 
-Retiring ORM3's union DB retires what the dead-form investigation leaned on. Cross-project search must be DISCOVERABLE, not remembered.
+**DROPPED from this plan: the `group` field and `resolve-dbs --group`.** `resolve-dbs --platform
+Win64` already prints every configured DB one per line, and every consumer already accepts repeated
+`--db`, so discovery exists. Naming ORM3's sections `ORM3-<Project>` (Task 6) carries the grouping
+in the filenames instead. See the spec's "Cross-project search" section.
 
 **Files:**
-- Modify: `src/index/DRagLint.Index.Manifest.pas` (`TIndexSection`, JSON parse)
-- Modify: `src/index/DRagLint.Index.DbSelect.pas` and the `resolve-dbs` CLI verb
-- Test: `tests/autotest/run_resolve_dbs_group.ps1` (create)
+- Modify: `src/delphi-plugin/` -- the menu action that currently triggers a reindex
+- Manual verification only (a design-time BPL cannot be exercised headlessly)
 
 **Interfaces:**
-- Produces: `TIndexSection.Group: string` (optional, default `''`); `resolve-dbs --group <name>` prints every DB in that group, one per line, `--json` supported.
+- Consumes: `--rebuild` (Task 3).
 
-- [ ] **Step 1: Write the failing test** -- a temp manifest with 3 sections, 2 sharing `"group": "ORM3"`; `resolve-dbs --group ORM3` must list exactly those 2 DBs, and an unknown group must exit non-zero rather than print nothing (an empty DB list silently scopes every consumer to nothing).
-- [ ] **Step 2: Run it, watch it fail** (`Unknown argument: --group`).
-- [ ] **Step 3: Add `Group` to `TIndexSection` + JSON parse.** Absent key -> `''`.
-- [ ] **Step 4: Add `--group` to `resolve-dbs`.**
-- [ ] **Step 5: Build, deploy, run. Step 6: Commit.**
+- [ ] **Step 1: Find the existing reindex menu action.** `DragLint.Plugin.DbResolver` already resolves the DB from `ProjGroup.ActiveProject` (`GetActiveProjectFilePath`, line ~198/214), so "it must work on whichever ORM3 project is active" is ALREADY satisfied -- activating a different project already selects a different DB. Do not rebuild that; only change what the action passes.
+- [ ] **Step 2: Pass `--rebuild`** on the "Reindex project" action, and pass the ACTIVE project's `.dproj` as `--project`.
+- [ ] **Step 3: Do NOT add a "Refresh index" item yet.** It is a recompile, and recompile without eviction (Phase 2) cannot drop a unit removed from the `.dproj` -- i.e. it would ship today's defect under a friendlier name.
+- [ ] **Step 4: BUILD REQUIRES THE IDE CLOSED.** The design-time BPL is loaded by the running IDE; building it with the IDE open fails on a locked output. Confirm with the user before starting, and follow `C:\Projects\Delphi_IDE_OptionsPage_HOWTO.md`.
+- [ ] **Step 5: Commit.**
 
 ```bash
-git commit -m "feat(config): section groups + resolve-dbs --group for cross-project search"
+git commit -m "feat(plugin): Reindex project performs a full rebuild of the active project"
 ```
 
 ---
@@ -270,8 +293,8 @@ Configuration, not code -- Task 1-4 made it correct; this makes it apply.
 - [ ] **Step 1: Snapshot the current state.** For each affected DB record `SELECT COUNT(*) FROM files` and the sorted path list into `C:\TEMP\` so the conversion's effect is measurable, not asserted.
 **Why this is a conversion and not a re-listing of folders:** ORM3's code spans CLIENT, SERVER, COMMON, OBJECTS and "maybe some more added in the future". A project scan never enumerates folders -- `TClosureResolver` follows `uses` across the project's search paths, so COMMON/OBJECTS arrive because CLIENT's units use them, and a shared folder added later is picked up with **no manifest change**. The current folder root has to be told where to look, which is why it also swallowed everything else living under the tree.
 
-- [ ] **Step 2: Convert ORM3 into 8 project sections**, each with `"group": "ORM3"`, `include` naming one `.dproj`: `CLIENT\Micronite2027.dproj`, `SERVER\MicroniteMW1Service.dproj`, `PACKAGE\Interfaces.dproj`, `PACKAGE\TestMicroniteObjects.dproj`, `TESTER\Tests\MicroniteTests.dproj`, `TESTER\CachedUpdates\TestCachedUpdates.dproj`, `TESTER\PdfOcrImport\PdfOcrImportTests.dproj`, `TESTER\TEST_uSetupDefaultsFrm\TEST_uSetupDefaultsFrm.dproj`. **Keep the existing union `drag-lint.sqlite` section for now** -- it is retired in Task 7, after verification.
-- [ ] **Step 3: Convert DragLint, DataCopy, TableTools, OCRPDF** to `.dproj` includes. `DragLint` -> `src\cli\drag-lint.dproj` (+ separate sections for the wizard `.dpk`, `tests\StorageHelperEdgesTests.dpr`, `tools\corpusscan\CorpusScanDelphi.dpr`), group `DragLint`.
+- [ ] **Step 2: Convert ORM3 into 8 project sections**, each named **`ORM3-<Project>`** so the DB filename carries the grouping (`ORM3-Micronite2027.sqlite`, ...). Without the prefix, `Interfaces.sqlite` sits in a flat folder shared with every other project and the name-based lookup this design relies on becomes ambiguous. `include` names one `.dproj` each: `CLIENT\Micronite2027.dproj`, `SERVER\MicroniteMW1Service.dproj`, `PACKAGE\Interfaces.dproj`, `PACKAGE\TestMicroniteObjects.dproj`, `TESTER\Tests\MicroniteTests.dproj`, `TESTER\CachedUpdates\TestCachedUpdates.dproj`, `TESTER\PdfOcrImport\PdfOcrImportTests.dproj`, `TESTER\TEST_uSetupDefaultsFrm\TEST_uSetupDefaultsFrm.dproj`. **Keep the existing union `drag-lint.sqlite` section for now** -- it is retired in Task 7, after verification.
+- [ ] **Step 3: Convert DragLint, DataCopy, TableTools, OCRPDF** to `.dproj` includes, same `<Repo>-<Project>` naming where a repo has several. `DragLint` -> `src\cli\drag-lint.dproj`, plus separate sections for the wizard `.dpk`, `tests\StorageHelperEdgesTests.dpr` and `tools\corpusscan\CorpusScanDelphi.dpr`.
 - [ ] **Step 4: Leave `Library` and `SQL` as Library-scan sections.** They already are; no edit.
 - [ ] **Step 5: `index --all --dry-run --json`** and diff against Step 1's snapshot. Confirm every section reports `"mode":"closure"` except `Library`/`SQL`.
 - [ ] **Step 6: Commit** the manifest with the before/after file counts in the message.
