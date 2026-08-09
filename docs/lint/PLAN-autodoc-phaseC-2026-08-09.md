@@ -117,6 +117,74 @@ facts, while `--qname` emits a full block. That is the DOCUMENTED facts-only gat
 a `Calls:` fact and watching batch mode insert. It is also why YADF's earlier run documented only
 28 of 52 declarations.
 
+---
+
+## NESTED-ROUTINE EXTRACTION -- design, investigated 2026-08-09 (NOT yet implemented)
+
+The user's instruction: *"Implement: indexer should extract nested routines as symbols... After
+that we'll see if unknown is still remaining... Lets wait with YADF and DataCopy until we resolve
+as many indexer problems and unknowns as possible."*
+
+### The parser already walks them; it deliberately does not EMIT them
+
+`src\parser\DRagLint.Parser.Delphi13.pas`, the `defProc` arm (~line 1762). Nested routines are
+walked at `RoutineDepth > 0` (~line 1853) purely to collect their REFERENCES -- that was a
+deliberate earlier fix, and its comment says so: *"the nested routine still does not emit a SYMBOL
+of its own (its decl is not a unit-level API...)"*. Symbol emission is gated by
+`if AState.RoutineDepth = 0`. So the change is localised, not a new traversal.
+
+### What to change
+
+1. In the nested-walk loop, emit a symbol for the nested routine BEFORE recursing, parented to the
+   ENCLOSING ROUTINE's symbol index (today the loop passes `AParentSymbolIdx` -- the enclosing
+   class/unit -- straight through, which would give a wrong parent).
+2. `QualifiedName` becomes `Unit.Outer.Nested`. This is the whole point: `YADF.Layout.pas` declares
+   `StartsWordCI` THREE times (lines 1925, 2351, 2900), each local to a different routine, and
+   only a qualified name tells them apart.
+3. Pass the new symbol's index down so deeper nesting chains correctly.
+
+### Why this is SAFE for `document` -- verified, do not re-derive
+
+`DRagLint.Doc.Batch.pas:252` gates the public surface on `SameText(Sym.Section, 'interface')`.
+Nested routines are implementation-section, so `--unit` / `--project` / `document-all` skip them
+automatically. `document --qname` bypasses that loop, so a nested routine can still be documented
+ON PURPOSE. Nothing else needs a guard.
+
+### The real cost is symbol-count churn, not the emission
+
+Emitting nested routines also emits their PARAMS (`EmitRoutineLocals` / the `declProc` path), and
+many runners assert symbol counts. Budget the reconciliation, not the parser edit.
+
+### Expected yield -- measured, so it can be checked afterwards
+
+On YADF, 4,005 unresolved call refs name NO symbol anywhere. `StartsWordCI` (93 refs) and
+`EndsWordCI` (62) are in that bucket and ARE nested routines, so they should move. Most of the rest
+will NOT: the top names are `Exit` (532), `Inc` (491), `Free` (222), `Append` (200), `Add` (165),
+`Continue` (145) -- compiler intrinsics and RTL/VCL methods.
+
+### Two follow-ups this exposes, both bigger than they look
+
+- **Intrinsics are counted as unresolved calls and should not be.** `Exit`/`Inc`/`Break`/
+  `Continue`/`SetLength`/`High`/`Assigned` are `System.pas` intrinsics the compiler recognises by
+  name and compiles inline; several have signatures no Pascal declaration can express. They will
+  never be project symbols. A known-intrinsic classification would stop them polluting the
+  denominator -- which is what made "35.1% coverage" read far worse than reality. Against a
+  denominator of calls to project-declared routines, coverage is already **69.7%**.
+- **RTL/VCL calls cannot resolve from a project DB AT ALL.** `Free`/`Add`/`Format` live in the
+  SEPARATE library index (`library-Win32.sqlite` / `library-Win64.sqlite`), and
+  `call_edges.target_symbol_id` is a rowid in ONE database. Cross-DB edges are not representable
+  today. This is architectural and needs a design decision, not a parser fix.
+
+### Also measured: option 4 (bare cross-unit calls), for when it is picked up
+
+167 resolvable / 23 ambiguous / 18 name-coincidences. Coverage 35.1% -> 37.1% raw, 69.7% -> 73.8%
+on project calls; 38 target and 82 caller doc blocks improve. **The recorded "208" was computed
+WITHOUT a visibility check** -- resolving all 208 would create 41 WRONG edges.
+**TRAP, verified:** join on `unit_uses.unit_name` (146/379 rows resolve), NOT `unit_name_norm`,
+which is only the last dotted segment lowercased (`DelphiAST.Classes` -> `classes`, 46/379).
+
+---
+
 ### Still open after this session
 
 - **Break fact lists into logical lines -- ONE ENTRY PER LINE.** The user's words when ruling on
