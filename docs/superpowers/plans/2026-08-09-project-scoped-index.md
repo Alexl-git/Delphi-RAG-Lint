@@ -313,6 +313,45 @@ Configuration, not code -- Task 1-4 made it correct; this makes it apply.
 
 ---
 
+### Task 8 (PHASE 3): update every place the old flags and DB paths are documented
+
+Added 2026-08-09 on the user's instruction: *"we changed the parameters flags and meanings, so we need to update AI instructions and user instructions and make all the necessary documentation updates."*
+
+**This is not tidying.** `C:\Projects\CLAUDE.md` names `C:\Projects\DB\ORM3\drag-lint.sqlite` as the canonical ORM3 index; after Task 7 that file is gone. Documentation that names a DB which no longer exists actively misleads every future session -- which is exactly the failure Task 7 Step 5 is ordered to prevent.
+
+**Files:**
+- Modify: `src/cli/DRagLint.CLI.pas` -- the `index` usage banner (in-product documentation; it currently documents `--force-reparse` and prune-by-default and says nothing about scan types or modes)
+- Modify: `C:\Projects\CLAUDE.md` -- the drag-lint section: index verbs, the ORM3 DB set, project-vs-library scan, `resolve-dbs`
+- Modify: `README.md`, `INSTALL.md`, `AGENT_USAGE_NOTES.md`, `CHANGELOG.md`
+- Modify: `docs/AI-INDEX-FIRST.md`, `docs/AI-USAGE.md`
+- Review: `docs/FIX-2026-08-03-index-project-scope.md` -- may be superseded; if so say so in it rather than deleting it
+- Modify: `C:\Users\alexanderl\.claude\projects\c--Projects-Delphi-RAG-lint\memory\MEMORY.md` and `project_lint_rules_v062.md` / `project_draglint_formscsv.md` where they name the ORM3 union DB
+
+- [ ] **Step 1: Find every mention, do not guess at the list.** `grep -rln "drag-lint index\|--force-reparse\|resolve-dbs\|ORM3\\\\drag-lint.sqlite\|DB\\\\ORM3\\\\drag-lint" --include=*.md .` plus the CLI usage banner. Record the hit list in the ledger so the review can check coverage against it.
+- [ ] **Step 2: Update the CLI usage banner FIRST.** It is what a user sees with no docs at all, and it is the only one that ships inside the binary. Document: scan type is declared by the target (`.dproj` -> project, folder -> library), mode is `--rebuild` / `--recompile` (default), and that a project scan indexes the compile closure and NOTHING else.
+- [ ] **Step 3: Update the AI instructions** (`C:\Projects\CLAUDE.md`, `docs/AI-INDEX-FIRST.md`, `docs/AI-USAGE.md`, `AGENT_USAGE_NOTES.md`). The ORM3 entry must list the eight `ORM3-*` DBs and say that a cross-project question needs several `--db` flags, discoverable via `resolve-dbs --platform <p>`.
+- [ ] **Step 4: Update the user instructions** (`README.md`, `INSTALL.md`) and add a `CHANGELOG.md` entry.
+- [ ] **Step 5: Update the auto-memory** so a future session does not resume against a retired DB path.
+- [ ] **Step 6: Re-run the Step 1 greps** and confirm zero stale hits remain. Commit.
+
+---
+
+### Task 9 (PHASE 4): the live runs -- rebuild, autodocument, rebuild, lint
+
+Ordered by the user 2026-08-09. **See the standing-order note below before starting.**
+
+- [ ] **Step 1: BRANCH FIRST, both repos.** YADF is git (`git checkout -b index-scope-autodoc`); DataCopy is **Mercurial** (`hg branch` or a bookmark). `document --apply` REWRITES SOURCE FILES. DataCopy was shipped to a tester on 2026-08-07 -- an unbranched run there is not recoverable by "undo".
+- [ ] **Step 2: Rebuild each index, WITH TIMING** -- YADF, DataCopy, Delphi-RAG-lint. Record wall-clock, file count, symbol count per project into the ledger. Baselines already measured 2026-08-09: YADF fresh 10.3s / 124 files; Delphi-RAG-lint 115s / 670 files (as a folder root -- the project-scan number will differ and that difference is the point).
+- [ ] **Step 3: Verify scope before trusting anything downstream.** Assert `.private\`, `Backup-*` and cross-repo paths (`C:\Projects\DelphiAST\`) are ABSENT. YADF's accumulated DB held 228 files against 124 real ones; if that is not fixed here, every number after it is measured on the wrong corpus.
+- [ ] **Step 4: `lint-all` BEFORE autodoc** on YADF and DataCopy, and record the finding counts. Without a before, the after means nothing.
+- [ ] **Step 5: Autodocument** YADF and DataCopy (`document --project <dproj> --apply`), committing on the branch.
+- [ ] **Step 6: Rebuild each index again, WITH TIMING**, and compare against Step 2. Autodoc adds `///` comments, so files grow -- this measures what that costs.
+- [ ] **Step 7: `lint-all` again** and diff against Step 4. Report false positives, missing findings, and whether the generated docs are worth keeping.
+
+---
+
 ## Not in scope
 
 Option 4 (bare cross-unit calls, 167 resolvable), intrinsics classification, the five approved doc features and the final remeasure remain queued in `docs/lint/PLAN-autodoc-phaseC-2026-08-09.md`.
+
+**STANDING-ORDER CONFLICT, recorded rather than silently resolved.** The user instructed TWICE that the YADF/DataCopy live runs wait until all autodoc work is finished -- *"YADF and DataCopy will wait until all features are polished and working to the best of our knowledge."* None of the four queued items above is done. Task 9 nevertheless runs those projects, on the user's later and explicit instruction. The consequence to expect: the autodoc output will NOT include the five approved doc features (`<exception cref>`, `<value>`, ownership notes, recursion notes, `<seealso>` by default), so a doc-quality review of the result is judging an engine that is knowingly incomplete. Branching (Step 1) is what keeps that reversible.
