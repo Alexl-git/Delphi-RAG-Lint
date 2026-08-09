@@ -1459,6 +1459,13 @@ var
   Elapsed        : Double                                    ;
   ProjectFile    : string                                    ;
   ExcludePatterns: TArray<string>                            ;
+  { One formatted reason per project file in this section that yielded NO source,
+    e.g. 'project file NOT FOUND: C:\...\X.dproj'. Reasons rather than bare paths
+    so the ERROR line says which of the two failures happened -- a missing file
+    and a file that resolves to nothing want different fixes. Collected rather
+    than raised so one bad root cannot starve the healthy roots of the same
+    section: the section still indexes what it can, then fails. }
+  DeadProjects   : TArray<string>                            ;
 begin
   // Ensure output directory exists before creating the SQLite file.
   var DbDir:= ExtractFilePath(AItem.DbPath);
@@ -1526,11 +1533,38 @@ begin
             Cl.SetPreprocess(APreprocess, SectionProfile);
             for F in AItem.Roots do
             begin
-              if not TFile.Exists(F) then begin Writeln(Format('  (skip, project file not found) %s', [F])); Continue; end;
+              { A project file that is not there is a FAILURE, not a skip. It was
+                a skip, and that is the same silent-success bug the standalone
+                arm's guard exists to kill: a mistyped path in the manifest gave
+                a section that reported success over an index it never wrote. }
+              if not TFile.Exists(F) then
+              begin
+                DeadProjects:= DeadProjects + [Format('project file NOT FOUND: %s', [F])];
+                Writeln('  ', DeadProjects[High(DeadProjects)]);
+                Continue;
+              end;
               // Combine global + section exclude patterns for the closure.
               ExcludePatterns:= Concat( AItem.Filter.GlobalExclude, AItem.Filter.SectionExclude);
               CR:= Cl.Resolve(F, ExcludePatterns);
               for W in CR.Warnings do Writeln('  ', W);
+              { The same fail-loudly rule the standalone `index --project` arm
+                applies (DoIndex), unified here so the two arms agree about
+                FAILURE as well as about scope. Tested on CR.Files, NOT on the
+                expansion: ExpandProjectScope always contributes the project file
+                itself, so an empty closure would otherwise still look like one
+                indexed file and pass for success.
+
+                Unlike the standalone arm this does NOT exit -- `index --all`
+                builds many sections, and one mistyped path must not stop every
+                other index from refreshing. The section is failed instead
+                (Result := False below), which the caller already turns into a
+                non-zero process exit via AnyFailed. }
+              if Length(CR.Files) = 0 then
+              begin
+                DeadProjects:= DeadProjects + [Format('project file resolved 0 source files: %s', [F])];
+                Writeln('  ', DeadProjects[High(DeadProjects)]);
+                Continue;
+              end;
               { Same scope expansion as `index --project` (sibling .dfm + the
                 project file). Before this, closure sections indexed .pas/.inc
                 only: Loader.sqlite held 84 files, dfm 0, dpr 0. }
@@ -1553,6 +1587,18 @@ begin
 
     var PlatSuffix:= '';
     if AItem.Platform <> '' then PlatSuffix:= ' [' + AItem.Platform + ']';
+    { A section whose project file resolved nothing FAILS, and says so in a shape
+      no reader can mistake for "this project is just small". The healthy roots of
+      the same section have already been indexed above, and the sections after
+      this one still run. }
+    if Length(DeadProjects) > 0 then
+    begin
+      for ProjectFile in DeadProjects do
+        Writeln(ErrOutput, Format('ERROR: section %s%s: %s', [AItem.Name, PlatSuffix, ProjectFile]));
+      Writeln(Format('=== %s%s -> %s : FAILED, %d project file(s) yielded no source (files=%d symbols=%d) [%.1fs] ===',
+                     [AItem.Name, PlatSuffix, AItem.DbPath, Length(DeadProjects), Store.CountFiles, Store.CountSymbols, Elapsed]));
+      Exit(False);
+    end;
     Writeln(Format('=== %s%s -> %s : files=%d symbols=%d [%.1fs] ===', [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols, Elapsed]));
     Result:= True;
   except

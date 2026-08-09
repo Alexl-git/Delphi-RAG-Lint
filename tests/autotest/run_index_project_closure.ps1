@@ -320,6 +320,64 @@ try {
     ((($mfiles | ForEach-Object { $_.ToLower() } | Sort-Object) -join ';') -eq
      (($indexed | ForEach-Object { $_.ToLower() } | Sort-Object) -join ';')) `
     "section=$($mfiles.Count) vs --project=$($indexed.Count)"
+
+  # ==========================================================================
+  # 4. THE FAILURE RULE, unified -- but with `index --all` semantics.
+  #    A dead section must fail the RUN without starving the other sections:
+  #    `index --project` is one project so it exits 2, `index --all` is many, and
+  #    one mistyped path must never stop every other index from refreshing.
+  #    Dead is listed FIRST on purpose -- if a future "fail fast" refactor aborts
+  #    the run at the first bad section, assertion (a) is what catches it.
+  #    --jobs 1 pins the sequential path so the assertions do not depend on how
+  #    child-process output interleaves (the parallel path is not covered here).
+  # ==========================================================================
+  $cfg2 = Join-Path $scratch 'manifest2.drag-lint.json'
+  @"
+{
+  "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 1 },
+  "indexes": {
+    "outDir": "out2",
+    "sections": [
+      { "name": "MissingSection", "db": "missing.sqlite", "include": ["proj\\NoSuchProject.dproj"] },
+      { "name": "DeadSection",    "db": "dead.sqlite",    "include": ["empty\\Empty.dproj"] },
+      { "name": "HealthySection", "db": "healthy.sqlite", "include": ["proj\\App.dproj"] }
+    ]
+  }
+}
+"@ | Set-Content $cfg2 -Encoding ascii
+
+  $2out = @((& $exePath index --all --config $cfg2 --jobs 1 2>&1) | ForEach-Object { $_.ToString() })
+  $2rc  = $LASTEXITCODE
+
+  # (b) the run as a whole must not report success
+  Check 'a dead section makes the RUN exit non-zero' ($2rc -ne 0) "exit=$2rc"
+
+  # (c) the failing section is named, and so is its project file
+  $named = @($2out | Where-Object {
+    ($_ -like '*ERROR*') -and ($_ -like '*DeadSection*') -and ($_ -like '*Empty.dproj*') })
+  Check 'the failing section and its project file are named in the output' ($named.Count -ge 1) `
+    ("matched=" + $named.Count + "; " + (($named | Select-Object -First 1) -join ''))
+  $distinct = @($2out | Where-Object { ($_ -like '*DeadSection*') -and ($_ -like '*FAILED*') })
+  Check 'the dead section reports FAILED, not a small file count' ($distinct.Count -ge 1) `
+    (($distinct | Select-Object -First 1) -join '')
+
+  # A project file that is not THERE used to be a silent "(skip, ...)" -- the same
+  # silent-success bug wearing a different hat. It must fail too, and say which of
+  # the two failures it was, because they want different fixes.
+  $missing = @($2out | Where-Object {
+    ($_ -like '*ERROR*') -and ($_ -like '*MissingSection*') -and ($_ -like '*NOT FOUND*') })
+  Check 'a MISSING project file fails its section and says NOT FOUND' ($missing.Count -ge 1) `
+    (($missing | Select-Object -First 1) -join '')
+
+  # (a) THE ONE THAT MATTERS: the healthy section still built, after the dead one
+  $hfiles = @((& python $py (Join-Path $scratch 'out2\healthy.sqlite')) -join "`n" | ConvertFrom-Json)
+  Write-Host ("  healthy section indexed {0} file(s)" -f $hfiles.Count)
+  Check 'the HEALTHY section still indexed its files' ($hfiles.Count -eq $mfiles.Count) `
+    "healthy=$($hfiles.Count) vs expected=$($mfiles.Count) -- one bad section must not starve the others"
+
+  $dfiles = @((& python $py (Join-Path $scratch 'out2\dead.sqlite')) -join "`n" | ConvertFrom-Json)
+  Check 'the dead section wrote no source rows' ($dfiles.Count -eq 0) `
+    ("count=" + $dfiles.Count + "; e.g. " + (($dfiles | Select-Object -First 3) -join ' | '))
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
