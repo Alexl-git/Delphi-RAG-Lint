@@ -10,7 +10,66 @@
 
 ---
 
-## RESUME POINT -- updated 2026-08-09 (execution pass)
+## >>> RESUME POINT -- updated 2026-08-09 (end of the execution session)
+
+`main` = **`b28518d`, pushed, in sync**. Autodoc suite **69/69**; last FULL battery **233/233**
+at `0c47bc2` (B5 landed after it -- **re-run the full battery once** before the runs below).
+
+### THE NEXT ACTION IS THE USER'S ASK, not more fixes
+
+They instructed, verbatim: *"You can run YADF and DataCopy on live projects, just branch out. If
+results will be good, we do need these autodoc comments and reindex there. These documentations
+are very useful."* So:
+
+1. **YADF** (`C:\Projects\YADF`, git): `git checkout -b autodoc-phaseC` -> `drag-lint index` ->
+   `document --project YADF.dproj --apply` -> `index` again -> `lint-all` -> **read the findings
+   and judge false positives / gaps.** Keep the commits on the branch.
+2. **DataCopy** (`C:\Projects\DataCopy`, **Mercurial**, `DataCopy.dproj`, 16 units): same
+   sequence; branch with `hg branch` / bookmark first. NOTE the standing caution in
+   PLAN-autodoc-and-backlog-2026-08-06 C1 -- DataCopy shipped to a tester on 2026-08-07; the
+   user has since explicitly asked for this run, which supersedes it, but branch anyway.
+3. Report back: false positives, missing findings, and whether the docs are worth keeping.
+
+Everything already measured on COPIES is in
+`C:\Projects\YADF\INBOX-drag-lint-phaseC-response-2026-08-09.md` (filed, untracked).
+
+### Shipped this session
+
+B6 (files.path case + repair migration), B1 (arity-aware overloads), B2 (arity tags on rendered
+edges), B11 (no fabricated caller), B3 **partial** (nested-mask pending stack), B4 (labelled
+complexity scopes), B7 (empty PROSE omitted; `<param>` structural; severities), B5 (honour
+`.gitignore` by DEFAULT).
+
+### OUTSTANDING -- B8 and B10
+
+**B8 was implemented and then DELIBERATELY REVERTED. The tree is clean; nothing is half-applied.**
+Wrapping `EmitHarvestedRemarks` works in isolation and fixes the 759-character worst case. The
+long `<summary>`/`<returns>` lines come from `EmitTagged`, and wrapping THAT is entangled: it
+emits its first line UNTRIMMED, `tests/autodoc/run_doc_p3_decayrouting.ps1`'s fixture QUOTES its
+exact output back to the engine to test containment routing, and its empty-value path feeds
+`<remarks>`. The measured effect was doc blocks DISAPPEARING from that fixture -- a routing
+change, not a cosmetic one. Retrying B8 means re-deriving those fixtures in the same pass; budget
+it as its own task, not a tail-end cleanup.
+
+**B10 not started.** `ComputeCoveredBy` needs a per-hop file id its `Walk` does not carry.
+
+### Rulings given 2026-08-09 -- implemented, do not re-litigate
+
+- "Empty sections are omitted" applies to PROSE elements (`<summary>`, `<returns>`) only.
+- "Autodocument has to produce the param section ... Warnings and errors is what Linter
+  produces": `<param>` is STRUCTURAL (D-3 stands); undocumented param ->
+  `doc-param-no-description` at **warning**; a `<param>` for a parameter that does not exist ->
+  `doc-param-not-in-signature` at **error** (new rule).
+
+### One question asked and not yet answered
+
+The ` ?` uncertainty marker renders only on MIXED lists, so an all-guessed caller list is
+indistinguishable from an all-resolved one. One line in `JoinRefs`
+(`src\doc\DRagLint.Doc.Regions.pas`). Needs a ruling.
+
+---
+
+## Earlier resume point (execution pass, kept for the corrections it records)
 
 **B6, B1, B2, B3(partial), B4, B11 are DONE.** Three commits:
 `e261cba` (B6), `0a8fcd6` (B1+B2+B11), `0a67b5f` (B3+B4). Response to YADF filed at
