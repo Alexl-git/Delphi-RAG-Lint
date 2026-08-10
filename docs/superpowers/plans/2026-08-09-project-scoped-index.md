@@ -65,6 +65,36 @@ property, which pulls directly against the count you want reduced.
 `<summary>` on a property is preserved and surfaced -- and generate no `<value>` text. Say the word
 if you want the tag emitted anyway.
 
+### THE NUMBER: 4,478 -> 3,321 findings (-1,157, -26%), errors 3 -> 1
+
+Measured at `74873fc`, after calibration and BEFORE any autodoc.
+
+| rule | before | after | why |
+|---|---|---|---|
+| string-equality-comparison | 406 | **0** | opt-in; it was a census |
+| nil-comparison | 311 | **0** | opt-in; style preference on every nil test |
+| concat-in-loop | 328 | **140** | loop-aware at last; the rest really are in loops |
+| large-magic-number | 304 | **155** | exempt regex now matches its own comment |
+| dataset-open-without-close | 96 | **7** | Destroy-closes modelled; 7 are what the rule is for |
+
+**Two corrections to my own record, both mine to own:**
+
+1. Commit `b760963` is titled "clear the THREE error-severity findings". **It cleared two.** The
+   survivor is `unsafe-shellexecute` at `CLI.pas:3897`. URL-encoding the vault name fixed the real
+   correctness bug (a name with a space, `&` or `#` produced a malformed URI), but the rule flags a
+   NON-LITERAL argument and the argument is still a variable. Arguably correct as written; what it
+   asks for is a fixed literal, which this call cannot have. Decide whether to narrow the rule (a
+   URL-encoded URI on a known scheme is not a shell-injection vector) or accept it. **Do not
+   re-report it as fixed.**
+2. `doc-drift` went 543 -> **573 (+30)**, i.e. UP. Expected, not a regression: the engine now also
+   expects `<exception cref>` tags the source does not yet carry. That is exactly what the autodoc
+   pass clears -- and that pass is blocked on the fabricated-caller defect, so it stays up until
+   that is fixed.
+
+Everything still in the top classes is genuine code debt rather than rule noise: `doc-drift` 573,
+`field-by-name-in-loop` 340, `duplicate-code` 267, `local-var-casing` 212 (store-backed autofix,
+deliberately not run unattended), `cyclomatic` 178 / `cognitive` 162 (metrics, not defects).
+
 ### Rule calibration -- decided from SAMPLED SOURCE, not from counts
 
 Fresh baseline before the work: **4,478 findings** (3 error / 1,291 warning / 3,157 info / 27 hint).
