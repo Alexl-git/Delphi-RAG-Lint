@@ -118,6 +118,63 @@ end;
 /// <returns>True only when a store is present, the constructed type is a
 /// TComponent descendant, and the first constructor argument is present and
 /// is not the literal "nil".</returns>
+/// <summary>True when ATypeText names a type that CANNOT leak, so a
+/// "created but never freed" finding about it would be unfalsifiable: an
+/// INTERFACE (reference-counted by the runtime -- freeing it manually is the
+/// bug) or a RECORD / value type (never heap-allocated; there is no Free to
+/// call).</summary>
+/// <param name="ATypeText">The variable's declared type text, verbatim from the
+/// routine var table. Generic arguments are ignored -- only the head name is
+/// resolved, so IList&lt;TFoo&gt; is judged on IList.</param>
+/// <param name="AStore">Symbol store used to resolve the type's KIND. When nil
+/// or when the type is not indexed, falls back to the naming convention.</param>
+/// <returns>True to SUPPRESS an object-leak finding for this variable.</returns>
+/// <remarks>INDEX-GROUNDED FIRST, convention only as a fallback. Resolving the
+/// kind through the store is what separates this from a name sniff: a CLASS
+/// deliberately named <c>IniFile</c> would be misjudged by an "starts with I"
+/// test, and that class CAN leak. The convention fallback is therefore
+/// deliberately strict -- 'I' followed by an UPPERCASE letter -- and applies
+/// only when the index cannot answer, which is the same absence-over-a-wrong-
+/// verdict policy the ownership fact uses.</remarks>
+function TypeIsRefCountedOrValue(const ATypeText: string;
+  const AStore: ISymbolStore): Boolean;
+var
+  Head: string;
+  P   : Integer;
+  Syms: TArray<TSymbol>;
+  S   : TSymbol;
+begin
+  Result:= False;
+  Head:= Trim(ATypeText);
+  if Head = '' then Exit;
+  { Strip a generic argument list: IList<TFoo> -> IList. The head is what
+    carries the kind; the argument is a different type entirely. }
+  P:= Pos('<', Head);
+  if P > 0 then Head:= Trim(Copy(Head, 1, P - 1));
+  if Head = '' then Exit;
+
+  { Index-grounded: an interface or a record cannot leak. }
+  if AStore <> nil then
+  begin
+    Syms:= AStore.FindSymbolsByExactName(Head);
+    for S in Syms do
+      if S.Kind in [skInterface, skRecord] then Exit(True);
+    { The type IS indexed and is not an interface/record -> it is a class or
+      similar and CAN leak. Trust the index over the convention below. }
+    if Length(Syms) > 0 then Exit(False);
+  end;
+
+  { Fallback: RTL/third-party value types the index does not cover, plus the
+    'I'+uppercase interface convention. TRegEx is named explicitly because it is
+    this rule's single most common false positive (a record constructor, four of
+    twelve sampled findings) and lives in System.RegularExpressions, which a
+    project index does not contain. }
+  if SameText(Head, 'TRegEx') or SameText(Head, 'TMatch') or SameText(Head, 'TMatchCollection')
+     or SameText(Head, 'TGUID') or SameText(Head, 'TPoint') or SameText(Head, 'TRect') then
+    Exit(True);
+  Result:= (Length(Head) >= 2) and (Head[1] = 'I') and CharInSet(Head[2], ['A'..'Z']);
+end;
+
 function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;
   const AStore: ISymbolStore; AFileId: Int64): Boolean;
 var
@@ -881,8 +938,25 @@ var
               end;
             end;
           { a created local still may-open at the routine exit -> possible leak }
+          { v(2026-08-10): NARROWED BY DECLARED TYPE. Sampled 12 of this rule's
+            106 findings on drag-lint's own source: ZERO were leaks. The two
+            dominant shapes are not "missed frees", they are constructs where a
+            leak is IMPOSSIBLE, so no amount of flow analysis could ever clear
+            them and the finding was unfalsifiable:
+
+              * A VALUE TYPE. `Rx := TRegEx.Create(...)` is a RECORD
+                constructor -- nothing is heap-allocated and there is no Free to
+                call. Four of the twelve were TRegEx alone.
+              * AN INTERFACE. `Store: ISymbolStore := TSQLiteStore.Create(...)`
+                is reference-counted by the runtime; freeing it manually would
+                be the bug. Three of the twelve.
+
+            Both are decided from the DECLARED TYPE, which the routine var table
+            already carries -- no new analysis, and no chance of hiding a real
+            leak, because neither shape can leak by construction. }
           for I := 0 to Vars.Count - 1 do
-            if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and EIn2[Cfg.ExitIdx][I] then
+            if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and EIn2[Cfg.ExitIdx][I]
+               and not TypeIsRefCountedOrValue(Vars.Get(I).TypeText, AStore) then
               Emit('object-leak', 'info',
                 Format('Object "%s" may be leaked: created but not freed or transferred on some path.',
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);

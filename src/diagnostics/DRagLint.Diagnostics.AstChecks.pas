@@ -4854,6 +4854,19 @@ var
       T:= LowerCase(NodeStr(N));
       if (Pos('handleexception', T) > 0) or (Pos('showexception', T) > 0)
          or (Pos('log', T) > 0) or (Pos('report', T) > 0) then Exit(True);
+      { v(2026-08-10): a CONSOLE diagnostic is reporting, same as calling a
+        routine with 'log' in its name. This rule already accepted log*/report*,
+        but drag-lint is a CLI: its actual logging idiom is
+        `Writeln(ErrOutput, ...)`, which contains neither substring -- so the
+        rule reported "silently swallowed" on except bodies that visibly print
+        the error. Two of twelve sampled findings were exactly that.
+
+        Matched on 'writeln' rather than 'write' deliberately: bare 'write'
+        appears in ordinary calls (WriteSymbol, TFile.WriteAllText, Rewrite),
+        and accepting those would turn a real swallow into a false negative --
+        the direction that costs more for this rule. }
+      if (Pos('writeln', T) > 0) or (Pos('outputdebugstring', T) > 0)
+         or (Pos('showmessage', T) > 0) then Exit(True);
     end;
     for I:= 0 to N.ChildCount - 1 do
       if HandlesException(N.Child(I)) then Exit(True);

@@ -1,0 +1,26 @@
+# 2026-08-10 object-leak narrowing, decided from the DECLARED TYPE.
+#
+# ActuallyLeaks (line 68) is the CONTROL and the whole point of this fixture:
+# a plain class, created, never freed. It must STILL be reported. The cheapest
+# way to make a narrowing "pass" is to narrow it to nothing, and a sample that
+# found 0 real leaks in 106 findings makes that failure mode very easy to reach
+# by accident.
+#
+# Line 69, not 68: the finding anchors on the ASSIGNMENT (`P := TPlain.Create;`),
+# which is where the object comes into existence, not on the `var P` declaration.
+object-leak 69
+
+# Rx (a TRegEx RECORD, line 50) and Thing (an INTERFACE, line 60) must NOT be
+# reported. Neither can leak by construction -- one is never heap-allocated, the
+# other is reference-counted and freeing it manually would be the actual bug --
+# so the old finding was unfalsifiable: no fix could have cleared it.
+#
+# ProperlyFreed (line 77) must also stay silent; it was already correct and is
+# here so a regression that reports EVERYTHING still fails this file.
+#
+# These are absence assertions on specific lines, which the .expected format
+# cannot express per-line, so the counts are pinned by the positive assertion
+# above being the ONLY object-leak in the file -- verified by the runner
+# reporting the full actual set on mismatch.
+!use-after-free
+!double-free
