@@ -206,6 +206,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas)
       /// Calls: GetEnvironmentVariable
+      /// constructor
       /// Reads: FBDS   Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>

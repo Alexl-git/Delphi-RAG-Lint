@@ -91,6 +91,7 @@ type
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
         /// Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas)
+        /// constructor
         /// Pure
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>

@@ -67,6 +67,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas)
+    /// constructor
     /// Writes: Index, Items, Succ, Pred
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddItem"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddSucc"/>
@@ -134,6 +135,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas)
+    /// constructor
     /// Writes: Blocks, ForVars
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>

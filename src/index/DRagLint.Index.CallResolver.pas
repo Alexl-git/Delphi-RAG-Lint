@@ -378,6 +378,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)
     /// Calls: DRagLint.Index.CallResolver.TCallResolver.BuildMaps
+    /// constructor
     /// Writes: FStore, FExtraStores, FNameToCands, FNameToRoutines, FFileScope, FChildCache, FLineCache
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>

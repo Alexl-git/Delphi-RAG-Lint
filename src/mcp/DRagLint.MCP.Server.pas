@@ -340,6 +340,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)
       /// Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Lint.Linter.TLinter.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create
+      /// constructor
       /// Reads: FDbPaths, FStore   Writes: FDbPaths, FStore, FLinter
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Migrate"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>

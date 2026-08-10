@@ -181,6 +181,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
+      /// constructor
       /// Writes: FLibraryRoots, FStaleGlobs
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>

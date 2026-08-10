@@ -407,6 +407,7 @@ type
       /// Called from: DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas)
       /// Calls: DRagLint.LSP.Server.TLSPServer.Create/1
       /// Overload 1 of 2
+      /// constructor
       /// Recursive
       /// Pure
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.Create"/>
@@ -428,6 +429,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, GetStdHandle, Writeln
       /// Overload 2 of 2
+      /// constructor
       /// Reads: FStores   Writes: FStdIn, FLinter, FStore
       /// Touches: file system
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Migrate"/>

@@ -135,13 +135,21 @@ function SignatureHasReturn(const ASig: string): Boolean;
 /// <param name="ASig">A signature, or (when the indexed signature is empty, as
 /// it is for a parameterless constructor) the declaration line itself.</param>
 /// <returns>True when the declaration is a constructor.</returns>
-/// <remarks>ONE implementation, TWO readers, and they must not diverge:
+/// <remarks>
+/// ONE implementation, TWO readers, and they must not diverge:
 /// DRagLint.Doc.Facts.DetectMethodDirectives sets TDocFacts.IsConstructor from
 /// it so the WRITER can emit the `constructor` facts-block marker, and
 /// DRagLint.Doc.Drift.TDocDrift.Analyze calls it so the CHECKER can exempt a
 /// constructor from the &lt;returns&gt; demand and require the marker instead. A
 /// second spelling of this test would put those two back into the
-/// checker-vs-writer disagreement the marker exists to end.</remarks>
+/// checker-vs-writer disagreement the marker exists to end.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.DetectMethodDirectives (DRagLint.Doc.Facts.pas)
+/// Calls: LowerCase, Trim
+/// Returns: LowerCase(Trim(ASig)).StartsWith('constructor')
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SignatureIsConstructor(const ASig: string): Boolean;
 /// <summary>Splits AText into the comment text it contains and everything
 /// else: returns the joined comment content, and sets ARest to AText with every

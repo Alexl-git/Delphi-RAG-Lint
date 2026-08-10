@@ -101,6 +101,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)
       /// Calls: Format, SameText, TreeSitter.Query.TTSQuery.Create, TSQueryError
+      /// constructor
       /// Complexity: 12 (cyclomatic, outer body), 57 lines (full implementation)
       /// Reads: FId, FExcludeAncestors, FRequireAncestors, FQuery   Writes: FSourcePath, FId, FSeverity, FMessage, FWarnCapture, FEnabled, FRuleId, FExcludeAncestors (+2 more)
       /// Touches: file system

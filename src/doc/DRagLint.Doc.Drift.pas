@@ -128,9 +128,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
-    /// Calls: ContainsText, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile, DRagLint.Doc.Drift.GroupParamNames, DRagLint.Doc.Drift.MakeFinding (+17 more)
+    /// Calls: ContainsText, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile, DRagLint.Doc.Drift.GroupParamNames, DRagLint.Doc.Drift.MakeFinding (+18 more)
     /// Returns: Findings.ToArray
-    /// Complexity: 48 (cyclomatic, outer body), 372 lines (full implementation)
+    /// Complexity: 53 (cyclomatic, outer body), 451 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
     /// <seealso cref="DRagLint.Doc.Drift.DescReadsInputOnly"/>

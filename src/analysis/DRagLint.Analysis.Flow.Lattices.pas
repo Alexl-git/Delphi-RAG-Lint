@@ -64,6 +64,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas)
+    /// constructor
     /// Writes: FVars, FByName
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias"/>
@@ -213,6 +214,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
+    /// constructor
     /// Writes: FVars, FSrc
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Boundary"/>
@@ -333,6 +335,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
+    /// constructor
     /// Writes: FVars, FSrc
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Boundary"/>
@@ -432,6 +435,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
+    /// constructor
     /// Writes: FVars, FSrc
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Boundary"/>
@@ -559,6 +563,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
+    /// constructor
     /// Writes: FVars, FSrc, FOwns
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Boundary"/>

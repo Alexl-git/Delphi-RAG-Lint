@@ -417,7 +417,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)
     /// Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.EscXmlAttr, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.AppendFact, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinEsc, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.MoreSuffix, Format, IsCertain, SameText
-    /// Complexity: 20 (cyclomatic, outer body), 244 lines (full implementation)
+    /// Complexity: 21 (cyclomatic, outer body), 268 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
     /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>

@@ -51,6 +51,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.Create (DRagLint.MCP.Server.pas)
       /// Calls: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll, ParamStr
+      /// constructor
       /// Reads: FLanguage   Writes: FLanguage, FQueryRules
       /// Touches: file system
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll"/>

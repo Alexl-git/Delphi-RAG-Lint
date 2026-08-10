@@ -226,6 +226,7 @@ type
       /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.Create/2 (DRagLint.Core.Indexer.pas)
       /// Calls: default, DRagLint.Core.Interfaces.TWalkFilter.Create, empty, TIndexer
       /// Overload 1 of 2
+      /// constructor
       /// Reads: FParsers   Writes: FStore, FDocConfig, FParsers, FExcludeRoots, FVisited, FVisitedKeys, FIgnoreStack, FPreprocessEnabled (+2 more)
       /// <seealso cref="DRagLint.Core.Interfaces.TWalkFilter.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
@@ -241,6 +242,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: DRagLint.Core.Indexer.TIndexer.Create/3
       /// Overload 2 of 2
+      /// constructor
       /// Pure
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
