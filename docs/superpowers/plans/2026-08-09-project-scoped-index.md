@@ -2,7 +2,64 @@
 
 ---
 
-## >>> RESUME POINT -- 2026-08-09 (end of the implementation session)
+## >>> RESUME POINT -- 2026-08-09 (LATE; supersedes the section below it)
+
+`main` = **`27f4766`, 36 commits UNPUSHED.** Battery **243/244** (sole failure = 4 lone-LF
+`tools/lsp-diag/*.ps1` from a CONCURRENT workstream -- not ours, do not touch).
+
+**PUBLISH LAST.** The user was explicit: the push waits until the leftovers AND the YADF/DataCopy
+tests are done. Do not push early.
+
+**Since the section below:** PHASE 2 shipped (out-of-scope eviction + `RecreateSectionDb` removed, so
+`--recompile` on `index --all` is finally real) - PHASE 3 shipped (10 in-repo docs + `CLAUDE.md` + 4
+memory files; `--no-prune` now reaches `index --all` and is a genuine DRY LOOK that reports what it
+would remove; CLI usage banner rewritten) - 11 orphan DBs deleted (2.6 GB) - BOTH BPLs rebuilt with
+the IDE closed.
+
+### NEXT SESSION, in priority order
+
+1. **PER-FILE ISOLATION -- the load-bearing one.** `CLI.pas:1646` (the `--project` loop) has NO
+   per-file `try/except`; the folder walk (`Indexer.pas:693`) does. That asymmetry is what turned a
+   survivable SKIP into a fatal crash that left a healthy-looking DB with **0 `call_edges`**. Any
+   stack ceiling is eventually exceeded; isolation is what makes exceeding it survivable.
+2. **Fix two miscalibrated rules -- ~500 FALSE POSITIVES, both belong in the RULE not a suppression.**
+   `string-equality-comparison` (406) fires on AST node-type tag comparisons (`NT = 'exprUnary'`,
+   `Parser.Delphi13.pas:302-303`) -- it assumes every string equality wants `SameText`, which is
+   WRONG for a closed vocabulary of literal tags. `dataset-open-without-close` (95) flags
+   `try Q.Open ... finally Q.Free` (`Storage.SQLite.pas:491,524,626`) -- `TDataSet.Destroy` closes
+   before freeing, so no leak exists.
+3. **Fix the `Dynamic: Boolean` parser gap** (`Doc.SymbolFacts.pas:2006`) -- a context-sensitive
+   keyword used as a variable name trips the parser. **drag-lint cannot fully parse its own source.**
+4. **Split `Walk`** (`Parser.Delphi13.pas:1566`) -- the only stack fix that reaches the IDE BPL, since
+   a BPL inherits `bds.exe`'s stack and `{$MAXSTACKSIZE}` cannot. Measure TIME as well as depth.
+5. The used-but-not-a-`.dproj`-member warning (last Phase 2 item).
+6. **PHASE 4 -- BRANCH FIRST** (YADF = git, DataCopy = **hg**; `document --apply` REWRITES SOURCE and
+   DataCopy shipped to a tester 2026-08-07): rebuild+time -> verify scope -> `lint-all` BEFORE ->
+   autodocument -> rebuild+time -> `lint-all` after.
+7. Decide how much of `doc-drift`'s 570 to auto-fix. 28.5% of all findings are mechanically fixable;
+   trust `--fix` on casing/textual rules, NOT blind on doc-drift -- generated `<param>` text is where
+   a wrong claim does most damage.
+8. **THEN publish.**
+
+### Self-lint answer (the user asked: clean, or many warnings?)
+
+`lint-all` on `DragLint-Cli` = **4,496 findings** (info 3,156 / warning 1,310 / hint 27 / **error 3**).
+It drowns by COUNT, but that is **rule miscalibration, not code quality** -- items 2 and 3 above are
+the evidence. True positives worth fixing: `doc-drift` 570, `duplicate-code` 268. Won't-fix:
+`concat-in-loop` 325 (O(n^2) `JsonEscape`, short strings), `large-magic-number` 304.
+
+### IDE
+
+Both BPLs are built and current; the registry loads only the **Win32** one. **Not live-verified** --
+`EResNotFound` and package collisions only surface in a running IDE. Verify with: activate
+`TestMicroniteObjects` (shares a folder with `Interfaces`), run **DragLint > Rebuild Index**, and
+confirm it rebuilds `ORM3-TestMicroniteObjects.sqlite` and NOT `ORM3-Interfaces.sqlite`.
+NOTE: the Win64 build OVERWROTE another workstream's `.bpl`/`.dcp`; prior bytes are backed up under
+the session scratchpad's `win64-backup\`.
+
+---
+
+## >>> EARLIER RESUME POINT -- 2026-08-09 (mid-session)
 
 `main` = **`5429e4a`, 32 commits UNPUSHED** (no consent to push given). Last FULL battery **241/241**
 (taken at `982c08c`). **Ledger with every decision, correction and deferred finding:**
