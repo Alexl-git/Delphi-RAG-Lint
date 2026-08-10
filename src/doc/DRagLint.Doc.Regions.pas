@@ -1624,6 +1624,19 @@ begin
       else OwnsWord:= AFacts.ReturnsOwner;
       Lines.Add('Owns returned: ' + EscXml(OwnsWord));
     end;
+    // Recursion -- ONE word, emitted only on a call_edges SELF-LOOP. It is the
+    // one caller/callee fact the Calls list deliberately discards (it drops the
+    // symbol's own name, because the impl span includes the routine header and
+    // because 'Calls: self' reads as noise), so without this line genuine
+    // recursion is invisible in the docs -- and recursion is exactly what a
+    // reader wants flagged, since it bounds stack depth and termination.
+    //
+    // SELF-loops only; mutual recursion would need a cycle walk and is not
+    // claimed. Placed with 'Owns returned' and 'Pure' because all three are
+    // CONCLUSIONS about the routine itself rather than lists of things it
+    // touches.
+    if AFacts.IsRecursive then
+      Lines.Add('Recursive');
     // v(ADP2 T6): DFM event-wiring -- ONE line, 'Handles: Button1.OnClick',
     // omitted entirely when AFacts.DfmEvent = ''. Already the final display
     // string (index-time), so no cap/threshold logic is needed here.
@@ -1959,15 +1972,32 @@ begin
     // (YYYY-MM-DD), never a guess; one line so the block regenerates idempotently.
     if AFacts.Since <> '' then
       Sb.AppendLine(APrefix + '<since>' + EscXml(AFacts.Since) + '</since>');
-    // v(ADF T4): OPT-IN <seealso> cref lines. AFacts.SeeAlso is EMPTY unless the
-    // caller built the facts with --seealso (TDocFactsBuilder.Build's
-    // AIncludeSeeAlso), so this section renders NOTHING by default -- the
-    // non-seealso managed block is unchanged. Each entry is a real indexed
-    // qualified name (a resolved callee or a sibling), so no '?'-tagged cref is
-    // ever emitted. The list is pre-sorted+capped by Build; one cref per line so
-    // the block regenerates idempotently.
-    for var SeeI:= 0 to High(AFacts.SeeAlso) do
-      Sb.AppendLine(APrefix + '<seealso cref="' + EscXmlAttr(AFacts.SeeAlso[SeeI]) + '"/>');
+    // <seealso> cref lines. Each entry is a real indexed qualified name (a
+    // resolved callee or a sibling), so no '?'-tagged cref is ever emitted. The
+    // list is pre-sorted+capped by Build; one cref per line so the block
+    // regenerates idempotently.
+    //
+    // ON BY DEFAULT since the Phase C doc pass (AFacts.SeeAlso used to be empty
+    // unless --seealso was passed), but -- exactly like 'Pure' above --
+    // SEEALSO NEVER CREATES A BLOCK OF ITS OWN.
+    //
+    // That second half is not a refinement, it is what makes the default safe,
+    // and it was MEASURED rather than predicted: with the flag simply flipped,
+    // run_doc_p2_sql went red on five assertions of the form "NoSql has NO
+    // managed block at all (no fact fires)". A cref list is derived from the
+    // call graph and the sibling scan, so very nearly every declaration in a
+    // real codebase has one -- an unconditional emit therefore hands a managed
+    // block to almost every symbol that had nothing to say, reversing the
+    // long-standing omit-when-empty contract corpus-wide. That is precisely the
+    // block explosion the 'Pure' gate documents having already been caught by
+    // once; this is the same trap through a different door.
+    //
+    // Sb.Length is the same "would this block exist but for me" test the Pure
+    // gate uses. Chaining is consistent: when nothing else fired, Pure did not
+    // append either, so Sb is genuinely empty here.
+    if Sb.Length > 0 then
+      for var SeeI:= 0 to High(AFacts.SeeAlso) do
+        Sb.AppendLine(APrefix + '<seealso cref="' + EscXmlAttr(AFacts.SeeAlso[SeeI]) + '"/>');
     Result:= Sb.ToString.TrimRight([#13, #10]);
   finally
     Sb.Free;

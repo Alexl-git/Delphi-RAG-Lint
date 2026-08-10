@@ -81,7 +81,14 @@ try {
   $after = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: file byte-identical on 2nd --seealso run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 
-  # === Part B: WITHOUT --seealso (opt-in gate) ===
+  # === Part B: the OFF switch ===
+  # <seealso> used to be opt-in behind --seealso, and this arm asserted that
+  # passing nothing produced no seealso line. It is now ON BY DEFAULT -- the
+  # cross-references a reader most wants sat behind a flag nobody passes -- so
+  # the arm that still needs guarding is the OPPOSITE one: --no-seealso must
+  # actually turn it off. A default with no way back is a worse deal than an
+  # opt-in, and this is the only assertion that would notice the new switch
+  # silently doing nothing.
   $scratch2 = Join-Path C:\TEMP 'draglint_docsee_off'
   if (Test-Path $scratch2) { Remove-Item $scratch2 -Recurse -Force }
   New-Item -ItemType Directory -Path $scratch2 | Out-Null
@@ -90,13 +97,13 @@ try {
   Copy-Item $fixture $target2 -Force
 
   & $exePath index $scratch2 --db $db2 2>$null | Out-Null
-  & $exePath document --unit $target2 --db $db2 --apply 2>$null | Out-Null
+  & $exePath document --unit $target2 --db $db2 --apply --no-seealso 2>$null | Out-Null
   $ec2 = $LASTEXITCODE
-  Check 'apply (no --seealso): exit 0' ($ec2 -eq 0)
+  Check 'apply (--no-seealso): exit 0' ($ec2 -eq 0)
 
   $doaBlockOff = Get-DoABlock $target2
-  Check 'DoA (no --seealso) still has managed block' ($doaBlockOff -match '<!-- drag-lint:auto BEGIN -->')
-  Check 'DoA (no --seealso) has NO seealso line' ($doaBlockOff -notmatch '<seealso')
+  Check 'DoA (--no-seealso) still has managed block' ($doaBlockOff -match '<!-- drag-lint:auto BEGIN -->')
+  Check 'DoA (--no-seealso) has NO seealso line' ($doaBlockOff -notmatch '<seealso')
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

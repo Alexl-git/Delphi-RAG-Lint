@@ -274,6 +274,29 @@ type
     // cap/threshold logic needed; RenderFactsBlock maps 'new' to the fuller
     // 'new (caller owns)' display text at render time.
     ReturnsOwner     : string           ;
+    // True when the routine calls ITSELF -- a call_edges self-loop, i.e. an
+    // edge out of this symbol whose target is this same symbol id.
+    //
+    // This is the one caller/callee fact the Calls list DELIBERATELY throws
+    // away. That list drops the symbol's own name, for two good reasons stated
+    // at its own site: the impl span includes the routine header, whose
+    // `Name(` reads as a call to itself, and "Calls: self" says nothing useful
+    // anyway. The consequence was that genuine recursion -- which a reader
+    // very much wants to know about, because it bounds stack depth and
+    // termination -- was invisible in the docs. Stating it as its own fact
+    // gives the reader the information without putting a meaningless entry in
+    // a list of collaborators.
+    //
+    // SELF-loops only. MUTUAL recursion (A calls B calls A) needs a cycle walk
+    // over call_edges and is deliberately out of scope: this fact is exactly
+    // as strong as one edge lookup, and claiming more than that is the kind of
+    // over-reach the "absence over wrong" policy exists to prevent.
+    //
+    // Trustworthy only because B1 landed first. Before arity-aware overload
+    // resolution a 2-arg delegator calling its own 3-arg overload produced an
+    // edge to ITSELF, so a self-loop meant "recursive OR an overload pair" and
+    // this fact would have been wrong on every such pair.
+    IsRecursive      : Boolean          ;
     // v(ADP3 T3): the harvested summary text (Task 7 fills this in by mining
     // an adjacent hand-written // comment; until then it is ALWAYS ''). Added
     // in T3 so MergeComment's omit-when-empty guards are real and compile
@@ -1384,6 +1407,12 @@ begin
       for var Edge in Edges do
         if Edge.TargetSymbolId > 0 then
         begin
+          // The self-loop IS the recursion fact. Detected on the edge set that
+          // is already being walked, so it costs nothing extra, and detected on
+          // the SYMBOL ID rather than the name -- a name test would call an
+          // overload pair recursive, which is precisely the shape B1 had to fix
+          // in the resolver.
+          if Edge.TargetSymbolId = ASym.Id then Result.IsRecursive:= True;
           var TargetQName: string:= AStore.GetSymbolById(Edge.TargetSymbolId).QualifiedName;
           if TargetQName <> '' then
           begin
@@ -1720,36 +1749,69 @@ begin
   // re-run after reindex reproduces the identical list (idempotent).
   if AIncludeSeeAlso then
   begin
-    var SeeSet: TStringList:= TStringList.Create;
+    // TWO SETS, NOT ONE, AND CALLEES WIN THE CAP.
+    //
+    // These were a single sorted set, which meant the cap was decided
+    // ALPHABETICALLY across both categories -- and siblings outnumber callees,
+    // so on a class with many members the genuinely useful entries (what this
+    // routine actually calls) were crowded out by whichever member names happen
+    // to sort first. Both defects were invisible while <seealso> was opt-in;
+    // turning it on by default is what surfaced them.
+    var CalleeSet : TStringList:= TStringList.Create;
+    var SiblingSet: TStringList:= TStringList.Create;
     try
-      SeeSet.Sorted:= True;
-      SeeSet.Duplicates:= dupIgnore;
-      SeeSet.CaseSensitive:= False;
+      for var L in [CalleeSet, SiblingSet] do
+      begin
+        L.Sorted:= True;
+        L.Duplicates:= dupIgnore;
+        L.CaseSensitive:= False;
+      end;
 
       // 1. Resolved callees (qualified, ground-truth via call_edges).
       var SeeEdges: TArray<TCallEdge>:= AStore.GetCallEdgesFromSymbol(ASym.Id);
       for var SE in SeeEdges do
-        if SE.TargetSymbolId > 0 then
+        if (SE.TargetSymbolId > 0) and (SE.TargetSymbolId <> ASym.Id) then
         begin
           var CalleeQName: string:= AStore.GetSymbolById(SE.TargetSymbolId).QualifiedName;
-          if CalleeQName <> '' then SeeSet.Add(CalleeQName);
+          if CalleeQName <> '' then CalleeSet.Add(CalleeQName);
         end;
 
-      // 2. Sibling members of the same parent type (excluding ASym itself).
+      // 2. Sibling members of the same parent TYPE (excluding ASym itself).
+      //
+      // "Type" is now enforced rather than assumed. The previous comment here
+      // read "ParentId <= 0 (a unit-level routine, no parent) yields no
+      // siblings" -- that premise is FALSE: a unit-level routine's parent is the
+      // UNIT symbol, so this harvested every other routine in the file and
+      // called them related. On this repo's own fixture that produced five
+      // alphabetically-first unit-mates with no relationship to the documented
+      // routine whatsoever.
+      //
+      // A class's other methods ARE a defensible "see also"; a unit's other
+      // routines are just a file listing.
       if ASym.ParentId > 0 then
       begin
-        var Siblings: TArray<TSymbol>:= AStore.FindAllChildSymbols(ASym.ParentId);
-        for var Sib in Siblings do
-          if (Sib.Id <> ASym.Id) and (Sib.QualifiedName <> '') then
-            SeeSet.Add(Sib.QualifiedName);
+        var Parent: TSymbol:= AStore.GetSymbolById(ASym.ParentId);
+        if Parent.Kind in [skClass, skInterface, skRecord] then
+        begin
+          var Siblings: TArray<TSymbol>:= AStore.FindAllChildSymbols(ASym.ParentId);
+          for var Sib in Siblings do
+            if (Sib.Id <> ASym.Id) and (Sib.QualifiedName <> '')
+               and (CalleeSet.IndexOf(Sib.QualifiedName) < 0) then
+              SiblingSet.Add(Sib.QualifiedName);
+        end;
       end;
 
-      // CAP at SEEALSO_CAP (deduped, already sorted).
-      var ShownS: Integer:= Min(SeeSet.Count, SEEALSO_CAP);
+      // Callees first, then siblings; each category sorted, so the whole list is
+      // still deterministic and therefore still idempotent across re-runs.
+      var Merged: TArray<string>:= nil;
+      for var C:= 0 to CalleeSet.Count - 1 do Merged:= Merged + [CalleeSet[C]];
+      for var S:= 0 to SiblingSet.Count - 1 do Merged:= Merged + [SiblingSet[S]];
+      var ShownS: Integer:= Min(Length(Merged), SEEALSO_CAP);
       SetLength(Result.SeeAlso, ShownS);
-      for var S:= 0 to ShownS - 1 do Result.SeeAlso[S]:= SeeSet[S];
+      for var S:= 0 to ShownS - 1 do Result.SeeAlso[S]:= Merged[S];
     finally
-      SeeSet.Free;
+      SiblingSet.Free;
+      CalleeSet .Free;
     end;
   end;
 

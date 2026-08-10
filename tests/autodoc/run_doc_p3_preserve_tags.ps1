@@ -567,8 +567,19 @@ try {
     ($nestBlock1 -match [regex]::Escape('<summary>Uses <see cref="Other.RelatedThing"/> for related lookups and'))
   Check 'NestedTagsInSummary: <summary> line 2 (with its inline <exception>) survives verbatim (cycle 1)' `
     ($nestBlock1 -match [regex]::Escape('can raise <exception cref="ENested">a nested, inline description</exception>'))
-  Check 'CRITICAL 1: NO standalone <seealso> fabricated from the inline <see> (cycle 1)' `
-    (-not ($nestBlock1 -match '<seealso'))
+  # CRITICAL 1 asks a precise question: is the inline <see cref="X"/> being
+  # PROMOTED into a standalone <seealso cref="X"/>? RxSee's '(?:see|seealso)'
+  # alternation conflates the two tags, so that promotion would both destroy the
+  # author's <see> and fabricate a <seealso> they never wrote.
+  #
+  # It used to be asked as "no <seealso> appears at all", which was a sound
+  # proxy only while <seealso> was opt-in and therefore never generated. Now
+  # that it is on by default the block legitimately carries engine crefs, and
+  # the proxy answers the wrong question -- it reddened here while the invariant
+  # was perfectly intact. So ask the real one: no <seealso> may carry the INLINE
+  # SEE'S OWN cref, whatever else the engine emits.
+  Check 'CRITICAL 1: the inline <see> cref is NOT promoted to a standalone <seealso> (cycle 1)' `
+    (-not ($nestBlock1 -match '<seealso cref="Other\.RelatedThing"')) $nestBlock1
   $nestExcCount1 = ([regex]::Matches($nestBlock1, [regex]::Escape('<exception cref="ENested">'))).Count
   Check 'CRITICAL 1: <exception cref="ENested"> appears exactly once -- inside the summary only, no standalone duplicate (cycle 1)' `
     ($nestExcCount1 -eq 1)
@@ -593,7 +604,8 @@ try {
   $nestBlock3 = Get-DocBlockAbove $nestLines3 '^procedure NestedTagsInSummary;'
   $nestExcCount3 = ([regex]::Matches($nestBlock3, [regex]::Escape('<exception cref="ENested">'))).Count
   Check 'CRITICAL 1: <exception cref="ENested"> STILL appears exactly once after 3 cycles (did not grow to 2 or 3)' ($nestExcCount3 -eq 1)
-  Check 'CRITICAL 1: still no standalone <seealso> fabricated after 3 cycles' (-not ($nestBlock3 -match '<seealso'))
+  Check 'CRITICAL 1: the inline <see> cref is STILL not promoted after 3 cycles' `
+    (-not ($nestBlock3 -match '<seealso cref="Other\.RelatedThing"')) $nestBlock3
 
   # --- Review round 2: nesting inside <deprecated>/<exception>/<example> themselves (Critical 1 STILL-OPEN gap) ---
   Test-ThreeCycleNesting 'preserve_tags.NestedInDeprecated' '^procedure NestedInDeprecated;' `

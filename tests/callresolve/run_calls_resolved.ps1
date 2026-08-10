@@ -8,14 +8,16 @@
                               both paths (accepted; not asserted either way)
     W.Run;                 -- typed-local receiver -> RESOLVES to
                                callsfacts.TWorker.Run
-    SetLength(Arr, 3);     -- an RTL call with NO matching symbol -> never
-                               resolves -> body-scan FALLBACK must still show it
+    SetLength(Arr, 3);     -- a compiler INTRINSIC -> deliberately NOT a callee
+    ExternalHelper(3);     -- declared nowhere -> never resolves -> body-scan
+                              FALLBACK must still show it
     W.Free;                -- no call_edge, no '(' -> invisible to both paths
 
   After `document --qname callsfacts.TDriver.DoWork --apply`, the Calls line:
     - INCLUDES the RESOLVED qualified callee 'callsfacts.TWorker.Run'
     - EXCLUDES the bare 'Run' (suppressed -- same call site, now shown qualified)
-    - STILL INCLUDES 'SetLength' via the body-scan fallback (nothing lost)
+    - STILL INCLUDES 'ExternalHelper' via the body-scan fallback (nothing lost)
+    - EXCLUDES 'SetLength' (an intrinsic is syntax, not a collaborator)
   A second index+apply must reproduce a BYTE-IDENTICAL file (idempotency).
 
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
@@ -45,7 +47,13 @@ try {
   Check 'apply: .bak written' (Test-Path "$target.bak")
 
   $txt = [IO.File]::ReadAllText($target)
-  $line = ($txt -split "`r?`n" | Where-Object { $_ -match 'Calls:' } | Select-Object -First 1)
+  # The '^\s*///' half is LOAD-BEARING, not decoration. Without it this picked
+  # up the fixture's own header comment, which DISCUSSES what a Calls line looks
+  # like -- so every assertion below ran against prose instead of engine output
+  # and four of them failed while the emitted line was perfectly correct. A
+  # filter that matches the thing it is describing is the shape of a vacuous
+  # test; run_doc_p3_callerline records being bitten by exactly this.
+  $line = ($txt -split "`r?`n" | Where-Object { $_ -match '^\s*///' -and $_ -match 'Calls:' } | Select-Object -First 1)
   Check 'Calls: line present' ($null -ne $line -and $line -ne '')
 
   # --- RESOLVED: W.Run resolves (typed-local receiver) to callsfacts.TWorker.Run.
@@ -59,10 +67,17 @@ try {
   Check 'EXCLUDES bare Run as a separate entry (no double-listing)' `
     (-not ($lineWithoutQualified -match '(?<!\.)\bRun\b'))
 
-  # --- FALLBACK: SetLength never resolves (no matching symbol) -- still present
-  # via the body-scan fallback, so nothing is lost.
-  Check 'STILL INCLUDES SetLength (unresolved, body-scan fallback)' `
-    ($line -match '\bSetLength\b')
+  # --- FALLBACK: ExternalHelper is declared nowhere, so it never resolves --
+  # still present via the body-scan fallback, so nothing is lost.
+  Check 'STILL INCLUDES ExternalHelper (unresolved, body-scan fallback)' `
+    ($line -match '\bExternalHelper\b')
+
+  # --- INTRINSIC: SetLength is in the body but is NOT a collaborator. The pair
+  # of assertions is the point: on its own, the one above passes even if the
+  # fallback bucket were emptied, and this one passes even if Calls were dropped
+  # entirely. Together they say intrinsics -- and only intrinsics -- are filtered.
+  Check 'EXCLUDES SetLength (a compiler intrinsic, not a callee)' `
+    (-not ($line -match '\bSetLength\b'))
 
   # --- D5 fast-follow (T10): SAME-LEAF-NAME, DIFFERENT-QUALIFIED targets. O.Run
   # (typed-local receiver) resolves to callsfacts.TOther.Run -- a DIFFERENT

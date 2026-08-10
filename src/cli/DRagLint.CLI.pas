@@ -309,11 +309,13 @@ type
     // TDocBatchOptions.Strip, and by document --qname directly via
     // TDocStripper.StripSymbolRegion.
     DocStrip   : Boolean; // document [...] --strip
-    // AutoDocument (ADF T4): --seealso opts in the <seealso> doc-source (related
-    // symbols from the call graph + siblings). Off by default. Consumed by
-    // document --qname / --unit / --project / document-all via
-    // TDocBatchOptions.IncludeSeeAlso (and BuildFor's AIncludeSeeAlso).
-    DocSeeAlso : Boolean; // document [...] --seealso
+    // AutoDocument (ADF T4): the <seealso> doc-source (related symbols from the
+    // call graph + siblings). ON BY DEFAULT since the Phase C doc pass; use
+    // --no-seealso to suppress it. Consumed by document --qname / --unit /
+    // --project / document-all via TDocBatchOptions.IncludeSeeAlso (and
+    // BuildFor's AIncludeSeeAlso). --seealso is still accepted, and is now a
+    // no-op that restates the default rather than an error.
+    DocSeeAlso : Boolean; // document [...] --no-seealso to turn OFF
     // AutoDocument (ADF T5): --since opts in the <since> doc-source (git commit
     // date of the decl line). Off by default; git is spawned ONLY when set.
     // DocBaseDir is the repo root for the git lookup ('' -> the file's own dir).
@@ -695,6 +697,18 @@ begin
     --no-use-ignore restores the old behaviour for anyone indexing a tree whose
     ignore rules exclude sources they nonetheless want indexed. }
   Result.UseIgnore          := True;
+  { <seealso> ON BY DEFAULT (Phase C doc pass). It was opt-in behind --seealso,
+    which meant the cross-reference links a reader most wants -- the sibling
+    overloads and the closely related symbols -- were absent from every doc
+    block anyone actually generated, because nobody passes an opt-in flag they
+    have to know about first.
+
+    Unlike --since, this costs nothing to compute: the related set comes from
+    the call graph and the sibling scan, both already in the index. --since is
+    the one that stays opt-in, because it SPAWNS GIT per declaration.
+
+    --no-seealso restores the old behaviour. }
+  Result.DocSeeAlso         := True;
   Result.ContextLines       := 3;
   Result.BenchN             := 20;
   Result.MaxDepth           := 20;        // v14 (D5 T11): call-path BFS safety cap
@@ -951,7 +965,8 @@ begin
     // ADP1: --reindex (CLI self-freshening for document --project --apply).
     else if A = '--reindex' then Result.DocReindex:= True
     // AutoDocument (ADF T4): --seealso opts in the <seealso> doc-source.
-    else if A = '--seealso' then Result.DocSeeAlso:= True
+    else if A = '--seealso' then Result.DocSeeAlso:= True // now the default; kept so existing scripts do not break
+    else if A = '--no-seealso' then Result.DocSeeAlso:= False
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
     // sets the repo root for the git lookup (defaults to the file's own dir).
     else if A = '--since' then Result.DocSince:= True
