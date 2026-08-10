@@ -87,15 +87,49 @@ session's breakdown at all.
 - `field-by-name-in-loop` (340) -- **kept ON.** Sampled and it is real: `Q.FieldByName('id')` per
   row is a genuine per-row linear name search. True debt, not noise.
 
+### >>> THE AUTODOC PASS WAS RUN, MEASURED, AND REVERTED. READ THIS BEFORE RE-RUNNING IT.
+
+Filed as `docs/INBOX-autodoc-caller-list-fabricates-callers-for-common-method-names.md`.
+
+The pass was ready and the output was good -- **1,322 doc edits across 92 files** (third_party
+excluded, same vendored reason as the autofix), with qualified cross-unit callees from the new
+unit-level rung, intrinsics gone, `<exception cref>`, `Recursive`, `Owns returned`, complexity,
+reads/writes, and `<seealso>` leading with real callees.
+
+Then `TQueryRule.Create` came out documented as:
+
+```
+/// Called from: DRagLint.CLI.PrintReferences, ...OpenReadOnlyStore, ...PlanToJson (+102 more)
+```
+
+It is constructed in **one** place. Measured: that symbol has **0 resolved `call_edges`**, and
+there are **537** refs named `Create` corpus-wide. The whole 107-entry list is the NAME BUCKET,
+attributing every unresolved `Create(` site in the codebase to this one constructor. It scales with
+how ordinary the name is -- `Execute`, `Run`, `Add`, `Free`, `Clear`.
+
+**And it reads as verified.** The ` ?` marker is emitted only on MIXED lists, so a 100%-fabricated
+list renders exactly like a fully-resolved one. **This is the evidence that settles the plan's
+long-open ` ?` ruling:** suppressing on uniformity was justified as "a marker on every entry
+distinguishes nothing" -- true within a list, but the reader is deciding whether to trust the LINE,
+and uniformly-guessed is precisely when they need telling.
+
+Two complementary fixes: (1) don't name-bucket callers into a symbol with zero resolved edges when
+the leaf name is ambiguous corpus-wide -- removes the false content; (2) emit ` ?` on a uniformly
+uncertain list, one line in `JoinRefs` -- makes the rest legible.
+
+Reverted with `git checkout -- src/`; nothing remains. **`document --apply` REWRITES SOURCE**, and
+shipping this would have put ~100 false "Called from" entries on every common-named routine in the
+codebase. Buying a lower `doc-drift` count with docs the user cannot trust is the opposite of what
+was asked for.
+
 ### THE NEXT ACTIONS, in order
 
-1. **Re-run `lint-all` and record the new number.** I stopped mine mid-run to free the exe for the
-   battery; the pre-calibration baseline is 4,478. NOTE: a full `lint-all` on this corpus takes
-   **~45 minutes**, which is itself worth treating as a product defect -- a linter nobody can afford
-   to run is not consulted.
-2. **`doc-drift` (543) is now the largest class and the one autodoc exists to fix.** Run safe
-   autofix, then autodocument drag-lint itself, then re-measure. Do NOT blind-run `--fix` on
-   doc-drift: generated `<param>` text is where a wrong claim does most damage.
+1. **Fix the fabricated-caller defect, then re-run the autodoc pass.** The 1,322/92 measurement is
+   the before-picture. `doc-drift` (543) is the largest remaining class and this pass is what clears
+   it.
+2. **Re-run `lint-all` and record the number.** Pre-calibration baseline is 4,478. NOTE: a full run
+   takes **~45 minutes**, itself worth treating as a product defect -- a linter nobody can afford to
+   run is not consulted.
 3. `duplicate-code` (265) and `field-by-name-in-loop` (340) are the real remaining debt.
 4. Split `Walk` (`Parser.Delphi13.pas:1566`) -- still the only stack fix that reaches the IDE BPL.
 5. The used-but-not-a-`.dproj`-member warning (last Phase 2 item).
