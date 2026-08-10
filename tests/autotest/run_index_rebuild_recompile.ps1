@@ -20,8 +20,11 @@
   ---------------------------------------------------------------------------
   Convergence on its own would pass trivially if --rebuild did nothing. Group 3
   pins the difference the flag actually makes: a DB polluted with a file that
-  is NOT in the project's scope keeps that file under --recompile (evicting
-  out-of-scope rows is a separate, later concern) and LOSES it under --rebuild.
+  is NOT in the project's scope, and that lies OUTSIDE the roots this run
+  walked, keeps that file under --recompile and LOSES it under --rebuild.
+  Out-of-scope EVICTION (run_index_scope_eviction.ps1) is bounded to the walked
+  roots exactly as --prune is, so it cannot reach the polluter here -- which is
+  what keeps group 3 a live test of --rebuild rather than of eviction.
 
   THE FTS5 TRAP (group 3d)
   ---------------------------------------------------------------------------
@@ -188,9 +191,10 @@ end.
 '@
 
 # --- fixture 3: the OUT-OF-SCOPE file used to pollute a DB -------------------
-# It sits in neither tree, so no walk of proj\ or lib\ ever reaches it, and
-# --prune never touches it either (prune only removes files that are GONE from
-# disk, and this one exists). Only a rebuild can take it out.
+# It sits in neither tree, so no walk of proj\ or lib\ ever reaches it; --prune
+# never touches it (prune only removes files that are GONE from disk, and this
+# one exists); and out-of-scope eviction never touches it either, because it
+# lies outside the roots either walk covers. Only a rebuild can take it out.
 $outsider = Join-Path $scratch 'Outsider.pas'
 Write-Ascii $outsider @'
 unit Outsider;
@@ -361,13 +365,15 @@ try {
   Sentinel $dbPol 'set' | Out-Null
   $ftsBefore = FtsHits $dbPol 'zzqqoutsidermarker'
 
-  # the CONTROL: --recompile leaves the out-of-scope file alone (evicting it is
-  # a separate concern, deliberately not this flag's job)
+  # the CONTROL: --recompile leaves the out-of-scope file alone, because it sits
+  # OUTSIDE the roots this run walked, and eviction -- like prune -- is bounded
+  # to those roots. Indexing one project must never purge another's rows from a
+  # shared DB.
   $dbPol2 = Join-Path $scratch 'polluted_recompile.sqlite'
   Copy-Item $dbPol $dbPol2 -Force
   & $exePath index --project $dproj --db $dbPol2 --platform Win64 --recompile --quiet 2>&1 | Out-Null
-  Check '3b. CONTROL: --recompile KEEPS the out-of-scope file' ((Snap $dbPol2) -like '*outsider.pas*') `
-    'if this ever fails, the convergence assertions above stopped meaning anything'
+  Check '3b. CONTROL: --recompile KEEPS the out-of-root file' ((Snap $dbPol2) -like '*outsider.pas*') `
+    'if this ever fails, eviction stopped being bounded and the convergence assertions above stopped meaning anything'
 
   # the REBUILD
   $o = & $exePath index --project $dproj --db $dbPol --platform Win64 --rebuild --quiet 2>&1
@@ -422,14 +428,19 @@ try {
     (($bout | Select-Object -Last 2) -join ' | ')
 
   # ==========================================================================
-  # 7. index --all CANNOT honour --recompile: BuildPlanItem recreates each
-  #    section DB before the walk, so every section is a full rebuild. It must
-  #    SAY SO rather than accept the flag and quietly do the opposite -- and it
-  #    must still build, because the index it produces is correct.
+  # 7. THE MANIFEST ARM HONOURS THE MODE AXIS.
   #
-  #    7b is the assertion that keeps 7a from turning into permanent noise: a
-  #    plain `index --all`, which is ALSO a full rebuild, must stay silent,
-  #    because nobody asked it for anything else.
+  #    It did not. BuildPlanItem DELETED each section's .sqlite before the walk,
+  #    so every `index --all` was an unconditional full rebuild, `--recompile`
+  #    was accepted and ignored (it warned and continued), and the file handle
+  #    went out from under anyone holding the DB open -- the IDE design-time
+  #    plugin holds one for a whole session.
+  #
+  #    Now the mode decides: --rebuild clears ROWS (ClearAllFiles, the file and
+  #    its handle survive), --recompile (the default) walks incrementally. The
+  #    warning is gone because the flag no longer lies. What must NOT come back
+  #    is a warning on a run where the mode was merely DEFAULTED -- nobody asked
+  #    for anything else, and a warning on every run is a warning nobody reads.
   # ==========================================================================
   $mdb = 'section.sqlite'
   $cfg = Join-Path $scratch 'manifest.drag-lint.json'
@@ -449,31 +460,43 @@ try {
   function WarnLines($Out) {
     return @($Out | Where-Object { $t = $_.ToString(); ($t -like '*--recompile*') -and (($t -like '*WARNING*') -or ($t -like '*NOTE:*')) })
   }
-  # stderr-ness: a native command's stderr arrives as ErrorRecord objects once
-  # merged with 2>&1, so this distinguishes the two streams without a temp file.
-  function ErrStream($Out) { return @($Out | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }) }
 
-  $aout = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 --recompile 2>&1)
+  # 7a. the baseline: a plain `index --all`, mode defaulted.
+  Remove-Item $sectionDb -Force -ErrorAction SilentlyContinue
+  $aout = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 2>&1)
   $arc  = $LASTEXITCODE
-  $warned = WarnLines $aout
-  Check '7a. index --all --recompile still exits 0' ($arc -eq 0) "exit=$arc"
-  Check '7a. it WARNS that --recompile has no effect' ($warned.Count -ge 1) `
-    "matched=$($warned.Count); $(($warned | Select-Object -First 1) -join '')"
-  Check '7a. the warning is repeated in the run summary' ($warned.Count -ge 2) `
-    "an --all run scrolls a long way past the first line (matched=$($warned.Count))"
-  Check '7a. the warning goes to STDERR' ((WarnLines (ErrStream $aout)).Count -ge 1) `
-    "stderr records=$((ErrStream $aout).Count)"
+  Check '7a. a plain index --all exits 0' ($arc -eq 0) "exit=$arc"
+  Check '7a. NO warning when the mode was merely defaulted' ((WarnLines $aout).Count -eq 0) `
+    "a warning on every run is a warning nobody reads (matched=$((WarnLines $aout).Count))"
   $asnap = Snap $sectionDb
-  Check '7a. and it still built a correct index' `
+  Check '7a. it built a correct index' `
     ((HasContent $asnap) -and ($asnap -like '*app.dpr*') -and ($asnap -like '*formunit.dfm*')) (Leaves $asnap)
 
-  Remove-Item $sectionDb -Force -ErrorAction SilentlyContinue
-  $bout2 = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 2>&1)
+  # 7b. --recompile is HONOURED now: no warning, no wipe, same content. The
+  #     sentinel is the load-bearing part -- it is the only assertion that can
+  #     tell an incremental walk apart from a full rebuild that happens to
+  #     produce the same rows.
+  Sentinel $sectionDb 'set' | Out-Null
+  $bout2 = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 --recompile 2>&1)
   $brc2  = $LASTEXITCODE
-  Check '7b. a plain index --all exits 0' ($brc2 -eq 0) "exit=$brc2"
-  Check '7b. NO warning when the mode was merely defaulted' ((WarnLines $bout2).Count -eq 0) `
-    "a warning on every run is a warning nobody reads (matched=$((WarnLines $bout2).Count))"
-  Check '7b. the default run built the same index' ((Snap $sectionDb) -eq $asnap) (Leaves (Snap $sectionDb))
+  Check '7b. index --all --recompile exits 0' ($brc2 -eq 0) "exit=$brc2"
+  Check '7b. NO warning -- the flag now does what it says' ((WarnLines $bout2).Count -eq 0) `
+    "matched=$((WarnLines $bout2).Count); $(($bout2 | Where-Object { $_.ToString() -like '*--recompile*' } | Select-Object -First 1) -join '')"
+  Check '7b. --recompile did NOT recreate the section DB' ((Sentinel $sectionDb 'get') -eq 'survives-a-rebuild') `
+    "sentinel=$(Sentinel $sectionDb 'get') -- a deleted-and-recreated .sqlite loses it, and drops the handle the IDE plugin holds"
+  Check '7b. and the content is unchanged' ((Snap $sectionDb) -eq $asnap) (Leaves (Snap $sectionDb))
+
+  # 7c. --rebuild on the manifest arm: clears ROWS, keeps the FILE. Pollute the
+  #     section DB with the out-of-root Outsider first, so "cleared" is visible.
+  & $exePath index $outsider --db $sectionDb --platform Win64 --quiet 2>&1 | Out-Null
+  Check '7c. the pollution landed' ((Snap $sectionDb) -like '*outsider.pas*') (Leaves (Snap $sectionDb))
+  $cout = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 --rebuild 2>&1)
+  $crc  = $LASTEXITCODE
+  Check '7c. index --all --rebuild exits 0' ($crc -eq 0) "exit=$crc"
+  Check '7c. --rebuild removed the out-of-scope file' (-not ((Snap $sectionDb) -like '*outsider.pas*')) (Leaves (Snap $sectionDb))
+  Check '7c. --rebuild deletes ROWS, not the DB file' ((Sentinel $sectionDb 'get') -eq 'survives-a-rebuild') `
+    'a dropped-and-recreated DB would lose this schema_meta row (and any settings beside it)'
+  Check '7c. --rebuild converged on the clean section content' ((Snap $sectionDb) -eq $asnap) (Leaves (Snap $sectionDb))
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

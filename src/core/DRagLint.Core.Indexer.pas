@@ -26,6 +26,12 @@ type
       FStore          : ISymbolStore                       ;
       FParsers        : TList<IParser>                     ;
       FSkippedUpToDate: Integer                            ;
+      { The walk's in-scope set: every file a parser claimed, whether or not it
+        was then parsed. Backs IIndexer.VisitedFiles -- see there for why the
+        list is what it is. FVisitedKeys is the lowercase de-dup guard; the same
+        file is reached twice whenever two walked roots overlap. }
+      FVisited        : TList<string>                      ;
+      FVisitedKeys    : TDictionary<string, Boolean>       ;
       FDocConfig      : TDocConfig                         ;
       FExcludeRoots   : TList<string>                      ; { v0.42: normalized lowercase, trailing-sep }
       FWalkFilter     : TWalkFilter                        ; { v0.45: glob/ignore filtering }
@@ -76,6 +82,7 @@ type
       procedure IndexFolder(const APath: string; ARecursive: Boolean = True);
       procedure IndexFile(const AFilePath: string);
       function SkippedUpToDate: Integer;
+      function VisitedFiles: TArray<string>;
       procedure AddExcludeRoot(const APath: string);
       procedure SetForceReparse(AValue: Boolean);
       procedure SetWalkFilter(const AFilter: TWalkFilter);
@@ -98,6 +105,8 @@ begin
   FDocConfig:= ADocConfig;
   FParsers:= TList<IParser>.Create;
   FExcludeRoots:= TList<string>.Create;
+  FVisited     := TList<string>.Create;
+  FVisitedKeys := TDictionary<string, Boolean>.Create;
   FIgnoreStack:= nil;
   { PP-Task-9: safe default -- preprocessing OFF until a caller opts in via
     SetPreprocess. A bare TIndexer (tests, embedders) keeps the pre-Task-9 raw
@@ -119,6 +128,8 @@ destructor TIndexer.Destroy;
 begin
   FParsers.Free;
   FExcludeRoots.Free;
+  FVisited.Free;
+  FVisitedKeys.Free;
   FIgnoreStack.Free;
   FStore:= nil;
   inherited;
@@ -127,6 +138,11 @@ end;
 function TIndexer.SkippedUpToDate: Integer;
 begin
   Result:= FSkippedUpToDate;
+end;
+
+function TIndexer.VisitedFiles: TArray<string>;
+begin
+  Result:= FVisited.ToArray;
 end;
 
 procedure TIndexer.AddExcludeRoot(const APath: string);
@@ -342,6 +358,18 @@ var
 begin
   Parser:= ParserFor(ExtractFileExt(AFilePath));
   if Parser = nil then Exit;
+  { The file is IN SCOPE from here on, and recorded as such BEFORE any of the
+    skips below. Out-of-scope eviction deletes indexed files that are not in this
+    list, so every reason to skip a file that is nonetheless part of the scope --
+    the size guard, the incremental up-to-date check, a parse failure -- must be
+    on this side of the record, or refreshing an index would delete the very
+    files it declined to re-parse. Only "no parser claims this extension" stays
+    out, and such a file never had a row to lose. }
+  if not FVisitedKeys.ContainsKey(LowerCase(AFilePath)) then
+  begin
+    FVisitedKeys.Add(LowerCase(AFilePath), True);
+    FVisited.Add(AFilePath);
+  end;
   { v0.46: file-size guard -- skip files that would overflow the tree-sitter
     native stack. The segfault is not catchable by Delphi (it is a native
     stack overflow, not an OS exception the RTL wraps). Default: 2048 KB.

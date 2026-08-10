@@ -162,6 +162,13 @@ type
         writable and never a read-only one. See its implementation for why the
         fresher row is the survivor. }
       procedure CanonicalizeFilePaths;
+      { The ONE way a scoped sweep (PruneMissingFiles, EvictOutOfScopeFiles)
+        removes files rows: string_literals first, then `files`, all in one
+        transaction. Shared rather than written twice, because the ordering is
+        the kind of detail that is right in the copy someone read and wrong in
+        the copy someone wrote -- and getting it wrong strands FTS5 shadow rows
+        that no ordinary test notices. See the implementation. }
+      procedure DeleteFilesByIds(const AIds: TList<Int64>);
       { One-time stderr note when this DB lacks idx_symbols_name_nocase, so a
         consumer paying for the scan is told why. See its implementation. }
       procedure WarnIfNocaseIndexMissing;
@@ -218,6 +225,7 @@ type
       procedure UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
       procedure DeleteStringLiteralsForFile(AFileId: Int64);
       function PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
+      function EvictOutOfScopeFiles(const ARoots, AInScopeAbsPaths: TArray<string>): TArray<string>;
       function ClearAllFiles: Integer;
       function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
       // v14 (D5): resolved call-target edges (call_edges table).
@@ -2104,10 +2112,56 @@ begin
   FQDeleteFileStringLiterals.ExecSQL;  // triggers cascade the FTS 'delete'
 end;
 
-{ Drops every indexed file that lived under one of ARoots and is no longer on
-  disk. See ISymbolStore.PruneMissingFiles for the contract.
+{ Canonicalizes the roots of a scoped sweep ONCE, for both PruneMissingFiles and
+  EvictOutOfScopeFiles. Three details, each of which was a bug first:
 
-  Two deliberate choices:
+  * ABSOLUTE. Stored paths always are, so a relative root like '.' would match
+    nothing and the sweep would silently do nothing at all.
+  * ALL-BACKSLASH + upper-case drive letter (NormalizeStoredPath), because that
+    is the one spelling files.path is stored in.
+  * A FOLDER ROOT GETS A TRAILING SEPARATOR, so the prefix test below cannot let
+    'C:\Proj\App' swallow 'C:\Proj\AppTools'.
+
+  A root that names a single FILE is deliberately left WITHOUT a separator: that
+  is what makes PathIsUnderSweepRoot match it whole rather than as a prefix. }
+function CanonicalizeSweepRoots(const ARoots: TArray<string>): TArray<string>;
+var
+  I: Integer;
+begin
+  SetLength(Result, Length(ARoots));
+  for I:= 0 to High(ARoots) do
+  begin
+    Result[I]:= ARoots[I];
+    if Result[I] = '' then Continue;
+    try Result[I]:= TPath.GetFullPath(Result[I]); except { unparseable root: use as given } end;
+    Result[I]:= NormalizeStoredPath(Result[I]);
+    if (Result[I][Length(Result[I])] <> '\') and TDirectory.Exists(Result[I]) then
+      Result[I]:= Result[I] + '\';
+  end;
+end;
+
+{ True when APath sits inside one of the walked roots. ARoots must have been
+  through CanonicalizeSweepRoots, and APath must be spelled the way files.path
+  stores it. A folder root carries a trailing separator by then, so the prefix
+  test cannot over-reach; a root that names a single FILE is only ever matched
+  whole, never as a prefix (otherwise root 'C:\a\U.pas' would also claim
+  'C:\a\U.pas.bak'). Case-insensitive: files.path preserves the caller's casing
+  for everything but the drive letter, and Windows does not. }
+function PathIsUnderSweepRoot(const APath: string; const ARoots: TArray<string>): Boolean;
+var
+  R: string;
+begin
+  Result:= False;
+  for R in ARoots do
+  begin
+    if R = '' then Continue;
+    if SameText(APath, R) then Exit(True);
+    if (R[Length(R)] = '\') and SameText(Copy(APath, 1, Length(R)), R) then Exit(True);
+  end;
+end;
+
+{ Removes the given files rows and everything that hangs off them. The ONLY
+  place a scoped sweep deletes files, so the two orderings below are stated once.
 
   * The row deletion is a single `DELETE FROM files`, not a hand-written sweep of
     the dependent tables. Every file-owned table declares
@@ -2116,11 +2170,35 @@ end;
     unit_uses / di_bindings / string_literals -- and transitively symbol_docs,
     symbol_trigrams, type_ancestors, type_helpers, symbol_facts -- itself. A
     hand-written list would silently miss the next table someone adds.
-  * string_literals IS deleted explicitly first, because its FTS5 shadow tables
+  * string_literals IS deleted explicitly FIRST, because its FTS5 shadow tables
     are kept in sync by AFTER DELETE TRIGGERS on that table, and SQLite only
     fires triggers for rows removed by a foreign-key cascade when
     recursive_triggers is on. Leaving it to the cascade would strand the FTS
-    rows and `query --text` would go on matching deleted source. }
+    rows and `query --text` would go on matching deleted source -- a wrong answer
+    with nothing anywhere to signal it.
+
+  One transaction: a half-applied sweep is worse than none. }
+procedure TSQLiteSymbolStore.DeleteFilesByIds(const AIds: TList<Int64>);
+var
+  I: Integer;
+begin
+  if (AIds = nil) or (AIds.Count = 0) then Exit;
+  FConn.StartTransaction;
+  try
+    for I:= 0 to AIds.Count - 1 do
+    begin
+      DeleteStringLiteralsForFile(AIds[I]);                       { fire the FTS5 triggers }
+      FConn.ExecSQL('DELETE FROM files WHERE id = ?', [AIds[I]]); { cascades the rest      }
+    end;
+    FConn.Commit;
+  except
+    FConn.Rollback;
+    raise;
+  end;
+end;
+
+{ Drops every indexed file that lived under one of ARoots and is no longer on
+  disk. See ISymbolStore.PruneMissingFiles for the contract. }
 function TSQLiteSymbolStore.PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
 var
   Q     : TFDQuery      ;
@@ -2129,44 +2207,10 @@ var
   Roots : TArray<string>;
   Gone  : TList<string> ;
   Ids   : TList<Int64>  ;
-  I     : Integer       ;
-
-  { True when APath sits inside one of the walked roots. Compared on the same
-    canonical all-backslash spelling the paths are STORED in. A folder root always
-    carries a trailing separator by the time it gets here, so the prefix test
-    cannot let 'C:\Proj\App' swallow 'C:\Proj\AppTools'; a root that names a
-    single FILE is only ever matched whole, never as a prefix (otherwise root
-    'C:\a\U.pas' would also claim 'C:\a\U.pas.bak'). }
-  function UnderARoot(const APath: string): Boolean;
-  var
-    R: string;
-  begin
-    Result:= False;
-    for R in Roots do
-    begin
-      if R = '' then Continue;
-      if SameText(APath, R) then Exit(True);
-      if (R[Length(R)] = '\') and SameText(Copy(APath, 1, Length(R)), R) then Exit(True);
-    end;
-  end;
-
 begin
   Result:= nil;
   if Length(ARoots) = 0 then Exit;
-
-  { Canonicalize the roots ONCE: absolute (stored paths always are, so a relative
-    root like '.' would otherwise match nothing and prune silently), all-backslash,
-    and folder roots terminated with a separator. }
-  SetLength(Roots, Length(ARoots));
-  for I:= 0 to High(ARoots) do
-  begin
-    Roots[I]:= ARoots[I];
-    if Roots[I] = '' then Continue;
-    try Roots[I]:= TPath.GetFullPath(Roots[I]); except { unparseable root: use as given } end;
-    Roots[I]:= NormalizeStoredPath(Roots[I]);
-    if (Roots[I][Length(Roots[I])] <> '\') and TDirectory.Exists(Roots[I]) then
-      Roots[I]:= Roots[I] + '\';
-  end;
+  Roots:= CanonicalizeSweepRoots(ARoots);
 
   Gone:= TList<string>.Create;
   Ids := TList<Int64>.Create;
@@ -2182,7 +2226,7 @@ begin
       begin
         Fid := Q.FieldByName('id'  ).AsLargeInt;
         Path:= Q.FieldByName('path').AsString  ;
-        if UnderARoot(Path) and (not TFile.Exists(Path)) then
+        if PathIsUnderSweepRoot(Path, Roots) and (not TFile.Exists(Path)) then
         begin Ids.Add(Fid); Gone.Add(Path); end;
         Q.Next;
       end;
@@ -2191,23 +2235,87 @@ begin
     end;
 
     if Ids.Count = 0 then Exit;
-
-    FConn.StartTransaction;
-    try
-      for I:= 0 to Ids.Count - 1 do
-      begin
-        DeleteStringLiteralsForFile(Ids[I]);            { fire the FTS5 triggers }
-        FConn.ExecSQL('DELETE FROM files WHERE id = ?', [Ids[I]]); { cascades the rest }
-      end;
-      FConn.Commit;
-    except
-      FConn.Rollback;
-      raise;
-    end;
+    DeleteFilesByIds(Ids);
     Result:= Gone.ToArray;
   finally
     Ids.Free;
     Gone.Free;
+  end;
+end;
+
+{ Drops every indexed file that lives under one of ARoots and is NOT in the
+  run's scope, whether or not it is still on disk. See
+  ISymbolStore.EvictOutOfScopeFiles for the contract and for why an empty
+  in-scope set is a no-op.
+
+  The predicate is the ONLY thing that differs from PruneMissingFiles -- "not in
+  AInScopeAbsPaths" instead of "not on disk" -- and everything around it (root
+  canonicalization, the collect-then-delete order, the string_literals-first
+  delete) is literally the same code, so the two sweeps cannot drift.
+
+  The in-scope set is hashed on LOWERCASE of the canonical stored spelling. Both
+  halves matter: a caller hands us whatever spelling the walk produced (a
+  differently-cased cwd, a forward slash from a manifest, a relative path from a
+  .dproj), while files.path holds the one NormalizeStoredPath produced at write
+  time. Comparing those two raw was B6's bug, and here it would not merely
+  duplicate a row -- it would EVICT every file whose spelling disagreed. }
+function TSQLiteSymbolStore.EvictOutOfScopeFiles(const ARoots, AInScopeAbsPaths: TArray<string>): TArray<string>;
+var
+  Q      : TFDQuery                    ;
+  Fid    : Int64                       ;
+  Path   : string                      ;
+  Roots  : TArray<string>              ;
+  InScope: TDictionary<string, Boolean>;
+  Gone   : TList<string>               ;
+  Ids    : TList<Int64>                ;
+  S, Key : string                      ;
+begin
+  Result:= nil;
+  if Length(ARoots) = 0 then Exit;
+  { An empty scope evicts NOTHING -- see the interface remarks. A walk that
+    admitted no file is far more likely to be a broken root than a genuine
+    "everything left scope", and the two readings do not cost the same. }
+  if Length(AInScopeAbsPaths) = 0 then Exit;
+  Roots:= CanonicalizeSweepRoots(ARoots);
+
+  InScope:= TDictionary<string, Boolean>.Create;
+  Gone   := TList<string>.Create;
+  Ids    := TList<Int64>.Create;
+  try
+    for S in AInScopeAbsPaths do
+    begin
+      if S = '' then Continue;
+      Key:= S;
+      try Key:= TPath.GetFullPath(Key); except { unparseable: use as given } end;
+      Key:= LowerCase(NormalizeStoredPath(Key));
+      InScope.AddOrSetValue(Key, True);
+    end;
+
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      Q.SQL.Text  := 'SELECT id, path FROM files';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        Fid := Q.FieldByName('id'  ).AsLargeInt;
+        Path:= Q.FieldByName('path').AsString  ;
+        if PathIsUnderSweepRoot(Path, Roots)
+           and (not InScope.ContainsKey(LowerCase(NormalizeStoredPath(Path)))) then
+        begin Ids.Add(Fid); Gone.Add(Path); end;
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+
+    if Ids.Count = 0 then Exit;
+    DeleteFilesByIds(Ids);
+    Result:= Gone.ToArray;
+  finally
+    Ids.Free;
+    Gone.Free;
+    InScope.Free;
   end;
 end;
 

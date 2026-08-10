@@ -121,6 +121,47 @@ type
     /// is merely out of the walk's filter is never touched.</remarks>
     function PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
 
+    /// <summary>Deletes every indexed file whose path lies under one of ARoots
+    /// and is NOT named in AInScopeAbsPaths, together with everything that hangs
+    /// off it (symbols, refs, uses, docs, DI bindings, string literals and their
+    /// FTS5 shadow rows).</summary>
+    /// <param name="ARoots">The roots this run walked. A file outside all of
+    /// them is left alone whatever the scope says: indexing one project must
+    /// never purge another's rows from a shared DB. An empty array evicts
+    /// NOTHING.</param>
+    /// <param name="AInScopeAbsPaths">Every file the run considers in scope --
+    /// for a PROJECT scan the expanded compile closure, for a LIBRARY scan the
+    /// files the walk admitted after its excludes and ignore rules. Absolute
+    /// paths; matched case-insensitively on the same canonical spelling as
+    /// files.path. An EMPTY array evicts NOTHING (see remarks).</param>
+    /// <returns>The paths removed, in the order encountered; empty if none.</returns>
+    /// <remarks>The counterpart to PruneMissingFiles, and the one it cannot
+    /// stand in for: prune deletes a file that has left the DISK, this deletes a
+    /// file that still EXISTS and has left the SCOPE. Nothing did that before,
+    /// so a unit dropped from a .dproj, an archive copy under an ignored folder,
+    /// or a tree a newly added `exclude` glob now covers kept answering queries
+    /// forever -- from source the project does not compile. Measured: the YADF
+    /// index carried 5 `.private\` copies and 104 files from a sibling repo
+    /// through every reindex, and one stale archived copy of a single unit
+    /// accounted for 157 of 321 apparently-unresolved call refs.
+    ///
+    /// AN EMPTY IN-SCOPE SET EVICTS NOTHING, deliberately. "The walk admitted no
+    /// file" is far more often a mistyped root, an unreadable directory or a
+    /// half-failed run than a genuine "everything left scope", and the cost of
+    /// the two readings is not symmetric: guessing wrong here empties a corpus.
+    /// A caller that really means "drop everything" has ClearAllFiles.
+    ///
+    /// Call it AFTER the walk and BEFORE the resolve passes, the ordering
+    /// PruneMissingFiles uses, so unit_uses.target_file_id and the ancestry /
+    /// helper / call edges are recomputed against the survivors instead of being
+    /// left pointing at rows that just went away.
+    ///
+    /// Not thread-safe; call on the indexing thread with no walk in flight.</remarks>
+    /// <exception cref="EDatabaseError">Raised when the delete cannot be applied
+    /// (a read-only or locked DB). The sweep is one transaction, so the index is
+    /// left exactly as it was.</exception>
+    function EvictOutOfScopeFiles(const ARoots, AInScopeAbsPaths: TArray<string>): TArray<string>;
+
     /// <summary>Deletes EVERY row in `files` and everything that hangs off it
     /// (symbols, refs, uses, docs, DI bindings, string literals and their FTS5
     /// shadow rows, ...), leaving an index that holds no source at all.</summary>
@@ -554,6 +595,27 @@ type
     procedure IndexFolder(const APath: string; ARecursive: Boolean = True);
     procedure IndexFile(const AFilePath: string);
     function SkippedUpToDate: Integer;
+    /// <summary>Every file this indexer ADMITTED since it was created -- the
+    /// walk's in-scope set, in the spelling the walk produced.</summary>
+    /// <returns>The admitted paths, in visit order, with duplicates collapsed.</returns>
+    /// <remarks>Feeds ISymbolStore.EvictOutOfScopeFiles for a LIBRARY scan,
+    /// where "in scope" is not a list the caller has -- it is whatever survived
+    /// the exclude globs, the include-only allow-list, the .gitignore/.hgignore
+    /// stack and the built-in directory prunes. Recomputing that outside the
+    /// walk would mean a second copy of every one of those rules; asking the
+    /// walk what it admitted cannot disagree with itself.
+    ///
+    /// ADMITTED, NOT PARSED. A file skipped by the incremental up-to-date check
+    /// is still in scope (that is the whole point of an incremental run), and so
+    /// is one skipped by the file-size guard: it is in the project, merely too
+    /// big to parse, and evicting it would silently delete a unit's symbols
+    /// because the unit grew. A file no PARSER claims is not listed -- it never
+    /// had a row to lose.
+    ///
+    /// CUMULATIVE over the indexer's lifetime, so a --watch loop's later ticks
+    /// see the union of every tick. That errs toward keeping rows, which is the
+    /// safe direction for a deletion predicate.</remarks>
+    function VisitedFiles: TArray<string>;
     // v0.42: register a directory whose subtree must NOT be scanned (used for
     // cross-dictionary dedup -- e.g. exclude folders already covered by the
     // library or active-project indexes). Repeatable.

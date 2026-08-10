@@ -413,13 +413,18 @@ begin
   Writeln('                               is computed against source that is not there. Scoped to the folders THIS run');
   Writeln('                               walked -- indexing a subfolder never purges the rest. [--no-prune] opts out;');
   Writeln('                               [--prune] forces it for a single-FILE walk, which does not prune by default.');
+  Writeln('                               EVERY walk also EVICTS: indexed files that lie under the walked roots, still');
+  Writeln('                               EXIST, and are NO LONGER IN SCOPE -- a unit dropped from the .dproj, a copy');
+  Writeln('                               under an ignored folder, a tree a new [--exclude] now covers -- are deleted');
+  Writeln('                               with their symbols. Prune is the same sweep for source that left the DISK.');
+  Writeln('                               Bounded to the roots THIS run walked, so indexing one project never purges');
+  Writeln('                               another''s rows from a shared DB. Reported only when something was evicted.');
+  Writeln('                               [--no-prune] opts out of BOTH sweeps: it is the one "delete nothing" switch.');
   Writeln('                               MODE: [--recompile] (DEFAULT) updates the index in place; [--rebuild] first');
-  Writeln('                               DELETES every indexed file from the DB, then walks -- the way to drop rows for');
-  Writeln('                               source that has left the SCOPE (source that has left the DISK is --prune). It');
-  Writeln('                               deletes rows, not the .sqlite: schema, migrations and settings survive and no');
-  Writeln('                               open handle is dropped. Implies --force-reparse. The two are mutually exclusive.');
-  Writeln('                               NOTE: index --all already recreates each section DB every run, so the mode flags');
-  Writeln('                               change nothing there -- an explicit --recompile WARNS on stderr and continues.');
+  Writeln('                               DELETES every indexed file from the DB, then walks. It deletes rows, not the');
+  Writeln('                               .sqlite: schema, migrations and settings survive and no open handle is');
+  Writeln('                               dropped. Implies --force-reparse. The two are mutually exclusive, and BOTH');
+  Writeln('                               apply to index --all: each manifest section honours the mode it was given.');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
@@ -1324,23 +1329,74 @@ begin
   end; // for
 end; // begin
 
-// v0.46: a full `index --all` / `--only` is a CLEAN rebuild of each section's
-// DB. Re-running a build into an existing DB doubled symbols: a scoped reindex
-// during development and a separate full reindex both wrote into the same file,
-// and the incremental FileIsUpToDate skip did not catch every file (path-spelling
-// / sha drift between two engine builds), so rows accumulated. Deleting the
-// section DB plus its WAL/SHM/journal sidecars before (re)creating the store
-// guarantees one clean copy. The incremental per-file reindex path (LSP save)
-// still uses FileIsUpToDate against an existing DB and does NOT come through here.
-procedure RecreateSectionDb(const ADbPath: string);
-const
-  Sidecars: array[0..2] of string = ('-wal', '-shm', '-journal');
+{ v0.46 built each `index --all` section by DELETING its .sqlite (plus the
+  -wal/-shm/-journal sidecars) first, because re-running a build into an existing
+  DB doubled symbols. That fixed the doubling and bought three problems with it:
+  every `index --all` was an unconditional full rebuild, so --recompile could
+  only be accepted and ignored; the file handle was dropped underneath anyone
+  holding the DB open, and the IDE design-time plugin holds one for a whole
+  session; and the schema, its migrations and any settings stored beside them
+  were thrown away and rebuilt every run.
+
+  RecreateSectionDb is gone. The MODE decides now, exactly as it does for the
+  single-root `index` arm: --rebuild calls ClearAllFiles (deletes ROWS, keeps the
+  file and its handle), --recompile (the default) walks incrementally and lets
+  out-of-scope eviction remove what has left the section. The doubling that
+  motivated the delete is what eviction now handles properly -- and `selftest
+  recreate` still pins the count. }
+
+/// <summary>The eviction ROOTS for a project scan: the directory of every file
+/// in the expanded scope, plus the project file's own directory, deduped
+/// case-insensitively.</summary>
+/// <param name="AProjectFile">The .dpr/.dpk/.dproj this scope came from; ''
+/// contributes nothing.</param>
+/// <param name="AScope">ExpandProjectScope's result -- FILES, not folders.</param>
+/// <returns>Absolute directory paths; empty when the scope is empty.</returns>
+/// <remarks>Eviction is bounded to these roots, so they decide what a project
+/// reindex is allowed to delete. DIRECTORIES OF THE SCOPE FILES, not just the
+/// project's own folder: a unit dropped from the .dproj may well live in a
+/// shared subfolder, and a root that did not cover it would leave exactly the
+/// rows this exists to remove. The project's own directory is added even when
+/// the closure is empty of files from it, so a project that resolves to nothing
+/// but its own program file still has a root.
+///
+/// The bound is what keeps a shared DB safe: another project's units, indexed
+/// into the same .sqlite from a directory this scope never mentions, lie outside
+/// every root and are never considered.</remarks>
+function ProjectScopeRoots(const AProjectFile: string; const AScope: TArray<string>): TArray<string>;
 var
-  Suffix: string;
+  Seen: TDictionary<string, Boolean>;
+  Dirs: TList<string>               ;
+  F, D: string                      ;
+
+  procedure AddDir(const APath: string);
+  begin
+    if APath = '' then Exit;
+    if Seen.ContainsKey(LowerCase(APath)) then Exit;
+    Seen.Add(LowerCase(APath), True);
+    Dirs.Add(APath);
+  end;
+
 begin
-  if TFile.Exists(ADbPath) then TFile.Delete(ADbPath);
-  for Suffix in Sidecars do
-    if TFile.Exists(ADbPath + Suffix) then TFile.Delete(ADbPath + Suffix);
+  Seen:= TDictionary<string, Boolean>.Create;
+  Dirs:= TList<string>.Create;
+  try
+    for F in AScope do
+    begin
+      D:= ExtractFileDir(F);
+      if D <> '' then AddDir(D);
+    end;
+    if AProjectFile <> '' then
+    begin
+      D:= '';
+      try D:= ExtractFileDir(TPath.GetFullPath(AProjectFile)); except { unparseable: skip } end;
+      if D <> '' then AddDir(D);
+    end;
+    Result:= Dirs.ToArray;
+  finally
+    Dirs.Free;
+    Seen.Free;
+  end;
 end;
 
 /// <summary>PP-Task-9: resolve the define profile the indexer preprocesses
@@ -1513,8 +1569,11 @@ begin
   Result:= False;
 end; // function
 
+{ ARebuild selects the MODE, and False is the default because --recompile is:
+  a caller that passes nothing gets an incremental refresh, not a wipe. See the
+  note where RecreateSectionDb used to live for what this replaced. }
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
-  AForceReparse: Boolean = False): Boolean;
+  AForceReparse: Boolean = False; ARebuild: Boolean = False): Boolean;
 var
   Store          : ISymbolStore                              ;
   Indexer        : IIndexer                                  ;
@@ -1537,19 +1596,37 @@ var
     than raised so one bad root cannot starve the healthy roots of the same
     section: the section still indexes what it can, then fails. }
   DeadProjects   : TArray<string>                            ;
+  { The section's in-scope set and the roots eviction is bounded to. For a
+    closure section both are accumulated across the section's project files; for
+    a folder/library section the walk itself answers the first (VisitedFiles). }
+  SectionScope   : TArray<string>                            ;
+  EvictRoots     : TArray<string>                            ;
+  Evicted        : TArray<string>                            ;
 begin
   // Ensure output directory exists before creating the SQLite file.
   var DbDir:= ExtractFilePath(AItem.DbPath);
   if (DbDir <> '') and (not TDirectory.Exists(DbDir)) then TDirectory.CreateDirectory(DbDir);
 
-  // v0.46: clean rebuild -- drop any prior DB so symbols never accumulate
-  // across runs (see RecreateSectionDb).
-  RecreateSectionDb(AItem.DbPath);
-
   T0:= Now;
   try
     Store:= TSQLiteSymbolStore.Create(AItem.DbPath);
     Store.Migrate;
+
+    { MODE. --rebuild empties the index of source before the walk; --recompile
+      (the default) updates in place and lets the eviction below remove what has
+      left the section. ROWS, not the file: the schema, its migrations and any
+      settings survive, and no open handle is dropped -- the IDE design-time
+      plugin holds one on these very DBs for a whole session, and a background
+      `index --all` used to delete the file out from under it.
+
+      A clear that FAILS aborts the section rather than indexing into a DB that
+      still holds the old rows: the caller asked for a rebuild and would
+      otherwise get a silent recompile reported as success. }
+    if ARebuild then
+    begin
+      var Cleared: Integer:= Store.ClearAllFiles;
+      Writeln(Format('  --rebuild: cleared %d indexed file(s) from %s', [Cleared, AItem.DbPath]));
+    end;
 
     DParser:= TDelphi13Parser.Create;
     // Library sections: shallow (no usage refs -- would ~double the DB size).
@@ -1572,9 +1649,7 @@ begin
     { INBOX 2.3: same fingerprint gate as the single-root path -- the manifest
       path is the one that builds the big shared indexes, so it is the one where
       a silently stale parse survives longest. }
-    { ARebuild=False: a manifest section is rebuilt unconditionally (see
-      RecreateSectionDb), so there is no mode to report here. }
-    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, False, APreprocess, AItem.Platform);
+    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, AItem.Platform);
 
     // Apply walk filter from the resolved plan item.
     Indexer.SetWalkFilter(AItem.Filter);
@@ -1587,10 +1662,15 @@ begin
       begin
         for F in AItem.Roots do
         begin
-          if TDirectory.Exists(F) then Indexer.IndexFolder(F, True)
-          else if TFile.Exists(F) then Indexer.IndexFile(F)
+          if TDirectory.Exists(F) then begin Indexer.IndexFolder(F, True); EvictRoots:= EvictRoots + [F]; end
+          else if TFile.Exists(F) then begin Indexer.IndexFile(F); EvictRoots:= EvictRoots + [F]; end
           else Writeln(Format('  (skip, not found) %s', [F]));
         end;
+        { The in-scope set of a folder walk is whatever the walk ADMITTED, after
+          the exclude globs, the include-only list, the ignore files and the
+          dedup roots. Asking the indexer is the only way to get that without a
+          second copy of all of those rules. }
+        SectionScope:= Indexer.VisitedFiles;
       end;
 
       smClosure:
@@ -1644,6 +1724,12 @@ begin
                 Continue;
               end;
               for ProjectFile in Scope do Indexer.IndexFile(ProjectFile);
+              { Accumulated across the section's project files, so a section that
+                names several projects evicts against the UNION of their scopes.
+                Per-project eviction would have each project delete the previous
+                one's units out of the shared section DB. }
+              SectionScope:= Concat(SectionScope, Scope);
+              EvictRoots  := Concat(EvictRoots  , ProjectScopeRoots(F, Scope));
             end;
           finally
             Cl.Free;
@@ -1653,6 +1739,30 @@ begin
         end; // try
       end; // begin
     end; // case
+
+    { OUT-OF-SCOPE EVICTION -- drop rows for files that still EXIST and are no
+      longer part of this section. Without it a --recompile of a manifest section
+      could only ever ADD, so a unit removed from a .dproj or a tree a new
+      `exclude` now covers would answer queries forever.
+
+      BEFORE the resolve passes, the same ordering PruneMissingFiles uses, so
+      unit_uses.target_file_id and the ancestry / helper / call edges are
+      recomputed against the survivors.
+
+      SKIPPED WHEN A PROJECT FILE FAILED TO RESOLVE. The section is failing
+      anyway (below), and SectionScope then holds only the healthy projects'
+      files -- while EvictRoots may still cover a sibling directory the dead
+      project's units live in. Evicting on a scope that is known to be partial is
+      how a typo in a manifest turns into data loss. }
+    if (Length(DeadProjects) = 0) and (Length(SectionScope) > 0) then
+    begin
+      Evicted:= Store.EvictOutOfScopeFiles(EvictRoots, SectionScope);
+      if Length(Evicted) > 0 then
+      begin
+        Writeln(Format('  scope: evicted %d indexed file(s) no longer in this section:', [Length(Evicted)]));
+        for ProjectFile in Evicted do Writeln('    ', ProjectFile);
+      end;
+    end;
 
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
@@ -1704,36 +1814,13 @@ var
   AnyFailed : Boolean                                   ;
   i         : Integer                                   ;
 
-  { --recompile is ACCEPTED here and CANNOT be honoured: BuildPlanItem calls
-    RecreateSectionDb, which deletes each section's .sqlite (plus its WAL/SHM/
-    journal sidecars) before the walk, so every manifest section is built from
-    scratch whatever the caller asked for.
-
-    Saying nothing is not an option. Silently discarding a flag the caller
-    passed EXPLICITLY is the same defect this whole area has been clearing out:
-    the tool does something other than what it was told and reports success.
-    Someone scripts `index --all --recompile`, watches a full rebuild run every
-    night, and never finds out why.
-
-    It WARNS rather than fails, because the run still produces a correct index
-    -- just not an incremental one -- and refusing to do correct work would be
-    the worse outcome. And it fires only on an EXPLICIT --recompile:
-    TArgs.Recompile is set by the flag and never by the default, so a plain
-    `index --all` stays silent. A warning on every run is a warning nobody
-    reads.
-
-    Said twice on purpose -- once up front, once at the end -- because an
-    `index --all` run scrolls a long way past the first line. }
-  procedure NoteRecompileIgnored(ASummary: Boolean);
-  begin
-    if not AArgs.Recompile then Exit;
-    if ASummary then
-      Writeln(ErrOutput, 'NOTE: as warned above, --recompile had no effect: every section was rebuilt from scratch.')
-    else
-      Writeln(ErrOutput, 'WARNING: --recompile has NO EFFECT on `index --all`. Every manifest section ' +
-        'recreates its database before the walk, so this run is a full rebuild of each section. ' +
-        'The index it produces is correct; it simply is not incremental.');
-  end;
+  { --recompile used to be accepted here and silently ignored -- BuildPlanItem
+    deleted each section's .sqlite before the walk -- so this function carried a
+    WARNING saying so. The flag is honoured now (BuildPlanItem gates on the mode
+    and only --rebuild clears rows), and a warning about a defect that no longer
+    exists is worse than none. What must NOT come back is a note on a run where
+    the mode was merely DEFAULTED: a warning on every run is a warning nobody
+    reads. run_index_rebuild_recompile.ps1 group 7 pins both halves. }
 
 begin
   EngineDir:= ExtractFilePath(ParamStr(0));
@@ -1751,7 +1838,6 @@ begin
   ErrMsg:= TManifestIO.Validate(Manifest);
   if ErrMsg <> '' then begin Writeln(ErrOutput, 'ERROR: manifest invalid: ', ErrMsg); Exit(2); end;
 
-  NoteRecompileIgnored(False); { before any section runs, so it is not buried }
 
   // Build platform filter from --platform (reuses CheckPlatform field).
   if AArgs.CheckPlatform <> '' then PlatFilter:= [AArgs.CheckPlatform]
@@ -1841,8 +1927,7 @@ begin
   if EffJobs <= 1 then
   begin
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse) then AnyFailed:= True; end;
-    NoteRecompileIgnored(True);
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1854,8 +1939,7 @@ begin
   begin
     Writeln(ErrOutput, 'NOTE: --jobs >1 requires --config <path>; running sequentially.');
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse) then AnyFailed:= True; end;
-    NoteRecompileIgnored(True);
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1912,6 +1996,13 @@ begin
       // PP-Task-9: propagate --no-preprocess to the child so a parallel --all
       // build honours the raw all-branch request across every spawned worker.
       if AArgs.NoPreprocess then ChildCmdLine:= ChildCmdLine + ' --no-preprocess';
+      { The MODE has to travel with the section, and did not have to before: when
+        every section was recreated unconditionally there was nothing to
+        propagate. A child that defaulted to --recompile would turn
+        `index --all --rebuild --jobs 4` into an incremental refresh, reported as
+        a rebuild. --rebuild also implies --force-reparse in the child's own
+        ParseArgs, so the reparse travels with it. }
+      if AArgs.Rebuild then ChildCmdLine:= ChildCmdLine + ' --rebuild';
 
       SetLength(ChildCmdBuf, Length(ChildCmdLine) + 1);
       Move(PChar(ChildCmdLine)^, ChildCmdBuf[0], (Length(ChildCmdLine) + 1) * SizeOf(WideChar));
@@ -1957,10 +2048,6 @@ begin
 
   OkCount:= TotalSections - FailedCount;
   Writeln(Format('parallel build: %d/%d sections OK (jobs=%d)', [OkCount, TotalSections, EffJobs]));
-  { The child command line is built explicitly and does NOT carry --recompile
-    (see ChildCmdLine above), so this fires once in the parent, not once per
-    spawned worker. }
-  NoteRecompileIgnored(True);
 
   if FailedCount > 0 then Result:= 1 else Result:= 0;
 end; // function
@@ -2259,8 +2346,9 @@ begin
     { NOTE: Folders now holds FILES, not directories. The walk loop below already
       branches on TFile.Exists, but the --prune default at the bottom of the tick
       keys off TDirectory.Exists and therefore no longer self-arms for --project.
-      Evicting rows for files that have left the closure is a separate concern
-      (project-scoped eviction) and is deliberately not done here. }
+      That is fine: a unit that left the CLOSURE has usually not left the disk,
+      so prune was never the mechanism for it. Out-of-scope eviction, below,
+      is -- and it takes Folders as its in-scope set. }
     Writeln(Format('Compile closure: %d file(s):', [Length(Folders)]));
     for F in Folders do Writeln('  ', F);
   end
@@ -2348,6 +2436,59 @@ begin
       begin
         Writeln(Format('--prune: removed %d file(s) no longer on disk:', [Length(Pruned)]));
         for var PP: string in Pruned do Writeln('  ', PP);
+      end;
+    end;
+
+    { OUT-OF-SCOPE EVICTION -- the other half of --prune, and the half nothing
+      did before. Prune deletes rows for source that left the DISK; this deletes
+      rows for source that still exists and left the SCOPE: a unit dropped from
+      the .dproj, an archive copy under a folder .gitignore covers, a tree a
+      newly added --exclude now matches. Measured on YADF: 5 `.private\` copies
+      and 104 files from a sibling repo survived every reindex, and one stale
+      archived copy of a single unit accounted for 157 of 321 apparently
+      unresolved call refs.
+
+      Runs BEFORE the resolve passes, next to prune and for the same reason.
+
+      THE IN-SCOPE SET DEPENDS ON THE SCAN TYPE:
+        * PROJECT -- Folders IS the expanded compile closure (files, not
+          folders), and the roots are the directories those files live in.
+        * FOLDER/LIBRARY -- the walk answers, via Indexer.VisitedFiles: "in
+          scope" here means whatever survived the excludes, the include-only
+          list and the ignore files, and recomputing that outside the walk would
+          be a second copy of all of them.
+
+      Bounded to the roots THIS run walked, exactly like prune, so indexing one
+      project can never purge another's rows from a shared DB. Reported only
+      when something WAS evicted: a run over a corpus that is already correct has
+      nothing to announce, and `index --all` would otherwise print a line per
+      section saying so.
+
+      --no-prune SUPPRESSES THIS TOO. Out of scope is a strictly wider predicate
+      than gone from disk -- a file the walk cannot find is not in VisitedFiles
+      either -- so an eviction that ignored the flag would delete the very rows
+      --no-prune exists to protect, and the flag would silently stop working.
+      One opt-out for every row-deleting sweep is also the only version of this
+      a caller can remember. }
+    if not AArgs.NoPrune then
+    begin
+      var EvictRoots: TArray<string>;
+      var InScope   : TArray<string>;
+      if AArgs.ProjectPath <> '' then
+      begin
+        InScope   := Folders;
+        EvictRoots:= ProjectScopeRoots(AArgs.ProjectPath, Folders);
+      end
+      else
+      begin
+        InScope   := Indexer.VisitedFiles;
+        EvictRoots:= Folders;
+      end;
+      var Evicted: TArray<string>:= Store.EvictOutOfScopeFiles(EvictRoots, InScope);
+      if Length(Evicted) > 0 then
+      begin
+        Writeln(Format('scope: evicted %d indexed file(s) that are no longer in scope:', [Length(Evicted)]));
+        for var EP: string in Evicted do Writeln('  ', EP);
       end;
     end;
 
@@ -2588,7 +2729,7 @@ begin
     TDirectory.CreateDirectory(OutDir);
     AnyFailed:= False;
     for var PS in Plan.Items do
-      if not BuildPlanItem(PS, AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse) then AnyFailed:= True;
+      if not BuildPlanItem(PS, AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild) then AnyFailed:= True;
 
     if AnyFailed then Result:= 1 else Result:= 0;
   finally
@@ -14947,7 +15088,17 @@ end; // function
 // selftest recreate: build a one-file folder-tree section into a temp DB TWICE
 // via BuildPlanItem and assert the symbol count is identical (not doubled).
 // Regression for the duplicate-symbol bug where re-running index --all into an
-// existing DB accumulated rows. PASS requires Count1 = Count2 > 0.
+// existing DB accumulated rows. PASS requires Count1 = Count2 = Count3 > 0.
+//
+// THE CONTRACT IT PINS HAS CHANGED, AND THE ASSERTION IS THE REASON THE TEST IS
+// STILL HERE. The doubling was originally fixed by DELETING the section .sqlite
+// before every build, so "stable across two builds" was true by construction and
+// this test could not have failed. BuildPlanItem now gates on the MODE instead:
+// build 2 runs in the DEFAULT mode (--recompile) into the DB build 1 left
+// behind, which is exactly the append-into-an-existing-DB situation the
+// duplicate-symbol bug lived in -- so the assertion is finally load-bearing.
+// Build 3 repeats it with ARebuild=True, because the two modes must agree about
+// content and only one of them was ever exercised here.
 function DoSelfTestRecreate: Integer;
 var
   TmpRoot: string      ;
@@ -14959,6 +15110,7 @@ var
   Store  : ISymbolStore;
   Count1 : Int64       ;
   Count2 : Int64       ;
+  Count3 : Int64       ;
 begin
   Result:= 0;
   TmpRoot:= TPath.Combine(TPath.GetTempPath, 'draglint_selftest_recreate_' + IntToStr(Int64(GetTickCount)));
@@ -14996,10 +15148,18 @@ begin
     Count2:= Store.CountSymbols;
     Store:= nil;
 
-    Writeln(Format('recreate: build1=%d build2=%d symbols', [Count1, Count2]));
+    { Build 3: the OTHER mode, over the same DB. }
+    if not BuildPlanItem(Item, Docs, True, False, True { ARebuild }) then begin Writeln('FAIL recreate: third build failed'); Exit (1 ); end;
+    Store:= TSQLiteSymbolStore.Create(DbPath);
+    Store.Migrate;
+    Count3:= Store.CountSymbols;
+    Store:= nil;
+
+    Writeln(Format('recreate: build1=%d build2(recompile)=%d build3(rebuild)=%d symbols', [Count1, Count2, Count3]));
     if Count1 = 0 then begin Writeln('FAIL recreate: no symbols indexed (parser/setup issue)'); Result:= 1; end
-    else if Count1 <> Count2 then begin Writeln(Format('FAIL recreate: symbol count changed on rebuild (%d -> %d)', [Count1, Count2])); Result:= 1; end
-    else Writeln('PASS recreate: stable symbol count across rebuilds');
+    else if Count1 <> Count2 then begin Writeln(Format('FAIL recreate: symbol count changed on a recompile into the existing DB (%d -> %d)', [Count1, Count2])); Result:= 1; end
+    else if Count2 <> Count3 then begin Writeln(Format('FAIL recreate: the two modes disagree about content (recompile=%d rebuild=%d)', [Count2, Count3])); Result:= 1; end
+    else Writeln('PASS recreate: stable symbol count across both modes');
   finally
     Store:= nil;
     try TDirectory.Delete(TmpRoot, True); except end;

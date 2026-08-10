@@ -24,6 +24,12 @@
   A single-FILE walk (`index <file.pas>`) still does not prune: the root is then
   the one file the caller named, so there is nothing to sweep.
 
+  `--no-prune` opts out of OUT-OF-SCOPE EVICTION as well (see
+  run_index_scope_eviction.ps1). "Not in scope" is a strictly wider predicate
+  than "gone from disk" -- a vanished file is not in the walk's in-scope set
+  either -- so an eviction that ignored the flag would delete the very rows the
+  flag exists to protect, and group 1 below would go red for the right reason.
+
   THE SCOPE ASSERTION IS THE LOAD-BEARING ONE. A prune that walked one folder
   but purged rows for every other folder in a shared DB would be far worse than
   the bug it fixes, so the fixture deliberately indexes TWO folders into ONE db,
