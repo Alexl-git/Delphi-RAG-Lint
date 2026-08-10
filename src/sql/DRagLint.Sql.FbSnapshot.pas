@@ -127,7 +127,6 @@ var
   RelMap    : TDictionary<string, Int64>;
   RelId     : Int64                     ;
   RelName   : string                    ;
-  NextId    : Int64                     ;
 
   procedure ConnectFb;
   var

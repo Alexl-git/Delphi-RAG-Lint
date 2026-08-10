@@ -241,7 +241,7 @@ begin
 
   { Convert file URI to local Windows path }
   FileName:= UriStr;
-  if (Length(FileName) > 8) and (LowerCase(Copy(FileName, 1, 8)) = 'file:///') then FileName:= StringReplace(Copy(FileName, 9, MaxInt), '/', '\', [rfReplaceAll]);
+  if (Length(FileName) > 8) and (SameText(Copy(FileName, 1, 8), 'file:///')) then FileName:= StringReplace(Copy(FileName, 9, MaxInt), '/', '\', [rfReplaceAll]);
 
   { v0.29: update the visual diagnostic cache (runs on the LSP reader thread;
     Cache.Update is thread-safe). }
@@ -2953,11 +2953,8 @@ var
   ExePath : string            ;
   OutPath : string            ;
   CmdLine : string            ;
-  Output  : string            ;
-  ExitCode: Integer           ;
   Dlg     : TSaveDialog       ;
   MS      : IOTAModuleServices;
-  AS_     : IOTAActionServices;
 begin
   { Save all so on-disk DFMs match the editor; the engine reads saved files. }
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;

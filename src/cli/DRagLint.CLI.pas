@@ -3250,12 +3250,9 @@ var
   Refs          : TArray<TReference>              ;
   AllRefs       : TArray<TReference>              ;
   DbPath        : string                          ;
-  DbPaths       : TArray<string>                  ;
   Store         : ISymbolStore                    ;
-  StoresByDb    : TDictionary<Int64, ISymbolStore>;
   PathsToScan   : TArray<string>                  ;
   S             : TSymbol                         ;
-  R             : TReference                      ;
   LastStore     : ISymbolStore                    ;
   EffSizeGuardMB: Integer                         ;
 begin
@@ -4857,7 +4854,7 @@ begin
   if AArgs.WiringCoverage then
   begin
     Unres:= Store.FindDiUnresolved;
-    if LowerCase(AArgs.Format) = 'json' then
+    if SameText(AArgs.Format, 'json') then
     begin
       JRoot:= TJSONObject.Create;
       try
@@ -4895,7 +4892,7 @@ begin
     Exit   (2                                                                      );
   end;
 
-  if LowerCase(AArgs.Format) = 'json' then
+  if SameText(AArgs.Format, 'json') then
   begin
     // Shared builder so CLI json and MCP get_wiring return identical data.
     JRoot:= BuildWiringJson(AArgs.QName, Store);
@@ -4950,7 +4947,7 @@ begin
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   Levels:= Store.FindTransitiveCallers(TargetName, Depth);
-  if LowerCase(AArgs.Format) = 'json' then
+  if SameText(AArgs.Format, 'json') then
   begin
     JRoot:= TJSONObject.Create;
     JArr := TJSONArray .Create;
@@ -5034,7 +5031,7 @@ begin
       Writeln(System.SysUtils.Format('(enum %s has no indexed members)', [Syms[0].QualifiedName]));
       Exit(1);
     end;
-    if LowerCase(AArgs.Format) = 'json' then
+    if SameText(AArgs.Format, 'json') then
     begin
       var JEnum:= TJSONObject.Create;
       try
@@ -5074,7 +5071,7 @@ begin
   Lines:= Store.GetClassSurface(AArgs.QName, AArgs.IncludeImpl, AArgs.AllVisibility);
   if Length(Lines) = 0 then begin Writeln('(no surface lines returned)'); Exit (1 ); end;
 
-  if LowerCase(AArgs.Format) = 'json' then
+  if SameText(AArgs.Format, 'json') then
   begin
     JArr:= TJSONArray.Create;
     try
@@ -5117,7 +5114,7 @@ begin
   if not RoOk then Exit(1);
   Syms:= Store.FindSymbolsByFile(AArgs.InFile);
 
-  if LowerCase(AArgs.Format) = 'json' then
+  if SameText(AArgs.Format, 'json') then
   begin
     JArr:= TJSONArray.Create;
     try
@@ -5256,7 +5253,7 @@ begin
     JRoot.AddPair('events'      , JEvents);
     JRoot.AddPair('impact'      , JImpact);
 
-    if LowerCase(AArgs.Format) = 'json' then Writeln(JRoot.Format(2))
+    if SameText(AArgs.Format, 'json') then Writeln(JRoot.Format(2))
     else
     begin
       Writeln(Format('usages of "%s" (width=%s)', [AArgs.Name, Width]));
@@ -5299,7 +5296,7 @@ begin
 
   if Length(Slice) = 0 then begin Writeln(System.SysUtils.Format( 'No slice returned for qname: %s', [AArgs.QName])); Exit(1); end;
 
-  if LowerCase(AArgs.Format) = 'json' then
+  if SameText(AArgs.Format, 'json') then
   begin
     JRoot:= TJSONObject.Create;
     JArr := TJSONArray .Create;
@@ -6608,6 +6605,21 @@ begin
         common in this codebase -- opt in via "enabled": ["boolean-flag-parameter"]
         or --rule boolean-flag-parameter). }
       if AArgs.Rule <> 'boolean-flag-parameter' then DefDisabled:= DefDisabled + ['boolean-flag-parameter'];
+      { string-equality-comparison + nil-comparison ship OFF here too, and they
+        HAVE to be listed on every surface separately: the per-file `lint`, the
+        `lint-project` and the `lint-all` verbs each build this list by hand, so
+        adding a rule to one leaves the same question answered differently
+        depending on which verb you came through. This one matters more than
+        most -- the per-file path is what the IDE plugin runs, so a rule
+        suppressed only in lint-all would still be the noisiest thing a human
+        actually sees.
+        Neither is a defect check: the first fires on EVERY string '=' and
+        cannot tell "meant case-insensitive" from "meant case-sensitive" (its
+        top sites are AST tag comparisons where SameText would be a BUG); the
+        second reports a style preference on every nil test. 406 and 311
+        findings on this repo alone. Opt in with --rule or config "enabled". }
+      if AArgs.Rule <> 'string-equality-comparison' then DefDisabled:= DefDisabled + ['string-equality-comparison'];
+      if AArgs.Rule <> 'nil-comparison' then DefDisabled:= DefDisabled + ['nil-comparison'];
       { v0.79: public-writable-field OFF by default -- FP-sanity over src/ found
         44 findings concentrated in 6/103 files, almost all intentional public
         field-bag "record-like classes" (TCfgBlock/TCfg internal data carriers,
@@ -7058,14 +7070,11 @@ var
     LocalFileId   : Int64                                 ;
     GlobalIdx     : Integer                               ;
     FileIdToGlobal: TDictionary<Int64, Integer>           ;
-    LocalUses     : TList<TUsesEdge>                      ;
     PerStore      : TDictionary<Integer, TList<TUsesEdge>>;
     TargetFid     : Int64                                 ;
-    TargetPath    : string                                ;
     TargetGlobal  : Integer                               ;
     Edge          : TUsesEdge                             ;
     Kv            : TPair<Integer, TList<TUsesEdge>>      ;
-    AssistQ       : TFDQuery                              ;
   begin
     AllFiles:= TList<TFileMeta>.Create;
     StemToGlobal:= TDictionary<string, Integer>.Create;
@@ -9990,7 +9999,7 @@ begin
 
   // Step 3: nothing stale and no forced --full -> noop.
   Stale:= Store.GetStaleFileIds;
-  IsJson:= (LowerCase(AArgs.Format) = 'json') or AArgs.AsJson;
+  IsJson:= (SameText(AArgs.Format, 'json')) or AArgs.AsJson;
   if (Length(Stale) = 0) and (not AArgs.Full) then
   begin
     if IsJson then
@@ -10828,7 +10837,6 @@ var
   Fid  : Int64           ;
   UFrom: string          ;
   UTo  : string          ;
-  Key  : string          ;
   K    : string          ;
   L    : TList<string>   ;
 begin
@@ -11246,8 +11254,6 @@ var
   RefImpl     : TDictionary<string, Boolean>       ;
   IndexedUnits: TDictionary<string, Int64>         ; { stem -> file_id }
   NameCache   : TDictionary<string, TArray<string>>;
-  Syms        : TArray<TSymbol>                    ;
-  S           : TSymbol                            ;
   UnitsForName: TArray<string>                     ;
   U           : string                             ;
   uStem       : string                             ;
@@ -11518,7 +11524,6 @@ var
   Fid        : Int64             ;
   Path       : string            ;
   ThisStem   : string            ;
-  SrcPath    : string            ;
   uStem      : string            ;
   U          : string            ;
   Lines      : TStringList       ;
@@ -11638,7 +11643,6 @@ var
   nMove       : Integer                            ;
   nRemove     : Integer                            ;
   nSkip       : Integer                            ;
-  nApplied    : Integer                            ;
 
   function UnitStemOf(const APath: string): string;
   begin
@@ -12914,7 +12918,7 @@ var
     Vis: string;
   begin
     if AMinVis = '' then Exit(True); // unset = emit ALL leaves (back-compat)
-    if (AMinVis = 'published') and (LowerCase(Trim(ANode.MemberKind)) = 'field') then Exit(False);
+    if (AMinVis = 'published') and (SameText(Trim(ANode.MemberKind), 'field')) then Exit(False);
     Vis:= LowerCase(Trim(ANode.Visibility));
     if AMinVis = 'published' then Exit(Vis = 'published');
     Result:= (Vis = 'published') or (Vis = 'public'); // AMinVis = 'public'
@@ -13446,7 +13450,7 @@ var
     if Vis = '' then Exit(True);
     if ASurface = 'dfm' then
     begin
-      if LowerCase(Trim(ANode.MemberKind)) = 'field' then Exit(False); // DFM streams properties only
+      if SameText(Trim(ANode.MemberKind), 'field') then Exit(False); // DFM streams properties only
       Exit(Vis = 'published');
     end;
     Result:= (Vis = 'published') or (Vis = 'public'); // ASurface = 'pas'

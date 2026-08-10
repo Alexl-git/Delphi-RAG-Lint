@@ -1768,7 +1768,6 @@ var
   var
     Cur: TTSNode;
     Nxt: TTSNode;
-    I  : Integer;
   begin
     Result:= '';
     Cur:= ALhsNode;
@@ -1899,8 +1898,6 @@ var
   var
     I       : Integer;
     J       : Integer;
-    N       : TTSNode;
-    DeclT   : TTSNode;
     NameN   : TTSNode;
     TypeWN  : TTSNode;
     ClassN  : TTSNode;
@@ -1947,7 +1944,7 @@ var
                   Fields:= nil; { ownership transferred to AClasses -- do not free }
                 end;
               finally
-                if Assigned(Fields) then Fields.Free;
+                Fields.Free;
               end;
             end;
           end;
@@ -1970,7 +1967,6 @@ var
     AFieldMaps: TArray<TDictionary<string, Boolean>>);
   var
     I       : Integer;
-    N       : TTSNode;
     HdrNode : TTSNode;
     NameN   : TTSNode;
     FullName: string ;

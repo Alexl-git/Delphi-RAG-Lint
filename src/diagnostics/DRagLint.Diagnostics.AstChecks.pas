@@ -3116,7 +3116,7 @@ begin
   Seen    := TDictionary<string, Boolean>.Create;
   try
     for Path in AFiles do
-      if (LowerCase(ExtractFileExt(Path)) = '.pas') or (LowerCase(ExtractFileExt(Path)) = '.inc') then ExtractFile(Path);
+      if (SameText(ExtractFileExt(Path), '.pas')) or (SameText(ExtractFileExt(Path), '.inc')) then ExtractFile(Path);
 
     for Key in Nodes.Keys do
     begin

@@ -432,9 +432,9 @@ end;
 function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;
 var
   K, EntTxt: string;
-  Cond, ThenN, ElseN, BodyN, StartN, EntityN, IterN, LhsN: TTSNode;
+  Cond, ThenN, ElseN, StartN, EntityN, IterN, LhsN: TTSNode;
   ThenAfter, ElseAfter, JoinIdx, HdrIdx, BodyIdx, FollowIdx, TestIdx, BodyAfter: Integer;
-  TryN, FinN, TryAfter, FinAfter, ExcAfter: Integer;
+  TryAfter, FinAfter, ExcAfter: Integer;
   TryNode, FinNode: TTSNode;
   Ctx: TLoopCtx;
   Rec: TCfgForVar;

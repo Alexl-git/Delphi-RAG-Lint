@@ -957,10 +957,6 @@ var
   TypeName    : string ;
   QName       : string ;
   Target      : string ;
-  Raw         : string ;
-  i           : Integer;
-  C           : Char   ;
-  PrevSpace   : Boolean;
 begin
   Result:= False;
   TypeWrapNode:= ADeclTypeNode.ChildByField('type');

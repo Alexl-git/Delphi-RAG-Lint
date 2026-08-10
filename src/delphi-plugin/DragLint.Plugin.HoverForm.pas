@@ -1581,7 +1581,6 @@ var
   CallersH: Integer  ;
   BodyH   : Integer  ;
   TitleH  : Integer  ;
-  BodyLines: Integer ;
   ShortName: string  ;
   ShownCount: Integer;
   HasTrailer: Boolean;

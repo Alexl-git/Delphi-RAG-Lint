@@ -199,7 +199,7 @@ begin
   end;
 
   { --- Only auto-index when a .dproj is opened --- }
-  if LowerCase(ExtractFileExt(FileName)) <> '.dproj' then Exit;
+  if not SameText(ExtractFileExt(FileName), '.dproj') then Exit;
 
   { v0.47: now that a project is actually loaded, recover any file left overlaid
     on disk by a ghost-check that was interrupted (IDE crash) in a PRIOR session.

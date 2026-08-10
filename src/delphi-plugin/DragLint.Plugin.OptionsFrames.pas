@@ -703,9 +703,9 @@ begin
       Exit; { malformed manifest: show the default rather than raising in Options UI }
     end; // try
     if not (Root is TJSONObject) then Exit;
-    Docs:= TJSONObject(Root).GetValue('docs');
+    Docs:= Root.GetValue('docs');
     if not (Docs is TJSONObject) then Exit;
-    Num:= TJSONObject(Docs).GetValue('max_return_cases');
+    Num:= Docs.GetValue('max_return_cases');
     if Num is TJSONNumber then Result:= TJSONNumber(Num).AsInt;
   finally
     Root.Free;

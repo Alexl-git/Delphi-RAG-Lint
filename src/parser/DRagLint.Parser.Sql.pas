@@ -246,7 +246,6 @@ var
   Start   : Integer;
   Name    : string ;
   TypeText: string ;
-  AbsStart: Integer;
   ColLine : Integer;
   ColCol  : Integer;
 
@@ -254,7 +253,6 @@ var
   var
     Item   : string ;
     Trimmed: string ;
-    P      : Integer;
     J      : Integer;
   begin
     Item:= Copy(AText, AItemStart, AItemEnd - AItemStart + 1);

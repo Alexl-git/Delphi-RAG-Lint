@@ -421,7 +421,7 @@ begin
   if Root = nil then Exit;
   try
     if not (Root is TJSONObject) then Exit;
-    RulesArr:= TJSONObject(Root).GetValue('rules') as TJSONArray;
+    RulesArr:= Root.GetValue('rules') as TJSONArray;
     if RulesArr = nil then Exit;
     SetLength(Result, RulesArr.Count);
     i:= 0;

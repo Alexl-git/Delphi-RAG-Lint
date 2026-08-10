@@ -202,7 +202,7 @@ begin
       // Extract the text between single quotes
       var Token:= Copy(Content, Q + 1, R - Q - 1);
       // We want entries like 'uDemoMain.pas' - ends with .pas
-      if LowerCase(Copy(Token, Length(Token) - 3, 4)) = '.pas' then
+      if SameText(Copy(Token, Length(Token) - 3, 4), '.pas') then
       begin
         Name:= LowerCase(TPath.GetFileNameWithoutExtension(Token));
         if Name <> '' then List.Add(Name);
@@ -312,8 +312,8 @@ begin
   begin
     if (I < 0) or (I >= Length(Lines)) then Continue;
     T:= Trim(Lines[I]);
-    if (LowerCase(Copy(T, 1, 7)) = 'object ') or (LowerCase(Copy(T, 1, 5)) = 'item') then Exit;
-    if LowerCase(Copy(T, 1, 9)) = 'caption =' then
+    if (SameText(Copy(T, 1, 7), 'object ')) or (SameText(Copy(T, 1, 5), 'item')) then Exit;
+    if SameText(Copy(T, 1, 9), 'caption =') then
     begin
       P:= Pos          ('''', T);
       Q:= LastDelimiter('''', T);
@@ -398,8 +398,8 @@ begin
   begin
     if (I < 0) or (I >= Length(Lines)) then Continue;
     T:= Trim(Lines[I]);
-    if LowerCase(Copy(T, 1, 7)) = 'object ' then Exit;
-    if LowerCase(Copy(T, 1, 8)) = 'action =' then
+    if SameText(Copy(T, 1, 7), 'object ') then Exit;
+    if SameText(Copy(T, 1, 8), 'action =') then
     begin
       P:= Pos('=', T);
       Result:= Trim(Copy(T, P + 1, MaxInt));

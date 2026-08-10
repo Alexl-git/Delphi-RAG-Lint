@@ -260,7 +260,7 @@ const
     'disabled', 'enabled', 'autofix', 'severity', 'thresholds', 'naming');
 var
   Json   : string;
-  i, k   : Integer;
+  k   : Integer;
   Existing, OwnedObj, Merged: TJSONObject;
   ExistText: string;
   Pair  : TJSONPair;

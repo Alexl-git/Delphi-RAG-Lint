@@ -2788,7 +2788,6 @@ var
   OwnerId : Int64              ;
   Parent  : TSymbol            ;
   B       : TDiBindingRow      ;
-  L       : TOrmDatasetLink    ;
 
   procedure AddDatasetLinks(ASymbolId: Int64; const ADisplay: string);
   var Lk: TOrmDatasetLink; Cols: string; I: Integer;
