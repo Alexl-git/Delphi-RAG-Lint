@@ -1812,7 +1812,14 @@ begin
         begin
           var Siblings: TArray<TSymbol>:= AStore.FindAllChildSymbols(ASym.ParentId);
           for var Sib in Siblings do
+            { ROUTINE siblings only. A class's children include its FIELDS, and
+              the first run with <seealso> on by default emitted
+              `<seealso cref="...FEnabled"/>` and `...FExcludeAncestors` -- a
+              cross-reference to a private field is not somewhere a reader can
+              usefully be sent, and because the list is capped those entries
+              displaced real ones. "See also" means another CALLABLE. }
             if (Sib.Id <> ASym.Id) and (Sib.QualifiedName <> '')
+               and (Sib.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor])
                and (CalleeSet.IndexOf(Sib.QualifiedName) < 0) then
               SiblingSet.Add(Sib.QualifiedName);
         end;
