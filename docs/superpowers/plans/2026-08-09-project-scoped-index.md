@@ -117,7 +117,74 @@ session's breakdown at all.
 - `field-by-name-in-loop` (340) -- **kept ON.** Sampled and it is real: `Q.FieldByName('id')` per
   row is a genuine per-row linear name search. True debt, not noise.
 
-### >>> THE AUTODOC PASS WAS RUN, MEASURED, AND REVERTED. READ THIS BEFORE RE-RUNNING IT.
+### >>> STATE AT THE CLEAR: `main` = `83f84c5`, 52 commits UNPUSHED, nothing pushed
+
+**A FULL BATTERY IS OWED.** The last complete run was 243/249 at `8256be1`, and its 5 real failures
+(all caller-related) were then fixed and re-verified INDIVIDUALLY -- `run_calledfrom_resolved`,
+`run_callsite_kind_universe`, `run_doc_p3_callerline`, `run_doc_no_self_caller`, `run_doc_multidb`
+and the new `run_doc_no_fabricated_callers` are all green one by one. But no full battery has run
+since `83f84c5`. **Run one before publishing.** (`run_encoding_guard` will still fail on the
+concurrent workstream's 4 lone-LF `tools/lsp-diag/*.ps1` -- not ours.)
+
+Note: `run_doc_no_self_caller` and `run_doc_multidb` FAILED in the battery but PASS individually --
+battery-ordering flakiness worth a look, not a product defect.
+
+### >>> READ FIRST AFTER A CLEAR: a background pipeline may have run
+
+A script was launched at the end of the 2026-08-10 session that does, in order:
+autodoc `--apply` over `src/` (never `third_party/`), BUILD, reindex, `lint-all`.
+
+**Its report is `C:\TEMP\claude\pipeline_report.txt`** and the raw lint output is
+`C:\TEMP\claude\lintall_postdoc.txt`. Read the report before anything else.
+
+- If it says `BUILD OK` -- the autodoc output compiles. Review `git diff -- src/` (it will be
+  large, ~1,300 doc blocks), then commit it. The new `lint-all` number is at the bottom of the
+  report; `doc-drift` should have fallen sharply from 573.
+- If it says `!!! BUILD FAILED` -- **`git checkout -- src/`** and treat the autodoc output as
+  suspect. Nothing else in the repo depends on it.
+- If the report is missing or truncated, the pipeline did not finish; `git status -- src/` tells you
+  whether an apply landed.
+
+The fabricated-caller defect that blocked the previous attempt IS FIXED (below), which is why the
+pass was re-run.
+
+### >>> THE FABRICATED-CALLER BUG -- FOUND, EXPLAINED, FIXED
+
+`TQueryRule.Create`, constructed in exactly ONE place, documented itself with **107 callers**. Two
+defects stacked, and the second was only visible because of the first.
+
+**1. The resolver had no rung for a TYPE-NAME receiver.** `TypeReceiver` handled bare/`Self`, casts,
+locals, params, fields and properties -- it never asked "is this identifier a CLASS?". But
+`Rule := TQueryRule.Create(...)` has a TYPE as its receiver, which is the shape EVERY Delphi
+construction and every class-method call has. So they all resolved to nothing and the constructor
+had zero `call_edges`.
+
+**2. With no edges, the caller list fell through to the unresolved-NAME bucket**, keyed on the leaf
+name. 35 symbols are named `Create` in this index, so every unresolved `Create(` site in the corpus
+was claimed by every constructor. The uses-reachability filter added earlier for this same symptom
+was necessary but insufficient: it removes callers that are IMPOSSIBLE, and within one codebase
+almost everything reaches almost everything.
+
+It also read as authoritative, because the ` ?` marker is suppressed on a uniformly-uncertain list
+and -- with zero resolved callers -- every entry was uncertain.
+
+**Both fixed.** The type-name rung goes LAST among the identifier rungs (a local/param/field
+sharing a type's name shadows it in Delphi, and those are tried first) and reuses the
+FP-conservative `ResolveTypeNameToSymbol`, so an ambiguous type name still yields 0. The name bucket
+is now gated on leaf-name UNIQUENESS -- not a threshold: 1,501 callable names here are unique and
+221 shared, so it keeps working for the majority while shared names stop claiming callers. Overload
+sets count as shared, correctly. Applied to the extra-store fan-out too, where it matters more
+because that path has no reachability filter at all.
+
+MEASURED: `call_edges` **4,339 -> 4,706** (+367, 361 of them `certain`); `TQueryRule.Create` now
+lists exactly `TQueryRuleLoader.LoadAll`.
+
+**Still open, and now better evidenced than ever:** the ` ?` marker is still suppressed on a
+uniformly-uncertain list. With fix 2 the surviving guesses are far fewer and far more plausible, so
+this is no longer urgent -- but "no marker" still means "either verified or entirely guessed". One
+line in `JoinRefs`. Needs your ruling.
+
+### >>> THE EARLIER AUTODOC ATTEMPT WAS REVERTED. This is the history.
 
 Filed as `docs/INBOX-autodoc-caller-list-fabricates-callers-for-common-method-names.md`.
 
