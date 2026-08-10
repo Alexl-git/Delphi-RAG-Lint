@@ -88,6 +88,17 @@ type
       class function ParseIgnoreFile(const APath: string; AIsHg: Boolean): TLayer; static;
       public
         /// <summary><!-- drag-lint:auto -->TIgnoreStack</summary>
+        /// <remarks>
+        /// <!-- drag-lint:auto BEGIN -->
+        /// Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas)
+        /// Pure
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile"/>
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.PopDir"/>
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir"/>
+        /// <!-- drag-lint:auto END -->
+        /// </remarks>
         constructor Create;
         destructor Destroy; override;
 

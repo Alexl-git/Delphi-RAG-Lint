@@ -32,7 +32,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)
-      /// Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, ExtractFileExt, Integer, Move, object, SameText, TreeSitter.TTSParser.Parse
+      /// Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, ExtractFileExt, Integer, Move, object, SameText, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
       /// Reads: FLanguage, FQueryRules
       /// Touches: file system
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
@@ -48,7 +48,7 @@ type
       /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string = ''</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.Create (DRagLint.MCP.Server.pas)
       /// Calls: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll, ParamStr
       /// Reads: FLanguage   Writes: FLanguage, FQueryRules
       /// Touches: file system
@@ -111,6 +111,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: Length(FQueryRules).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas)
       /// Reads: FQueryRules
       /// Pure
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
@@ -126,6 +127,7 @@ type
       /// downstream unless re-enabled via config "enabled" / --enable.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas)
       /// Reads: FQueryRules
       /// Pure
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>

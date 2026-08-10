@@ -41,9 +41,10 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection (DRagLint.Diagnostics.AstChecks.pas) (+44 more)
-    /// Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, Integer, LowerCase, Move, TreeSitter.TTSParser.Parse
+    /// Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, Integer, LowerCase, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
     /// Touches: file system
     /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+    /// <seealso cref="TreeSitter.TTSParser.Create"/>
     /// <seealso cref="TreeSitter.TTSParser.Parse"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <!-- drag-lint:auto END -->
@@ -53,7 +54,7 @@ type
     /// memory, and once at the end of a single-file lint.</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Lint.ClassMetrics.TClassMetrics.Run (DRagLint.Lint.ClassMetrics.pas), DRagLint.CLI.EmitEnumsDelphiConst.FlushBlock (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ? (+7 more)
+    /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Lint.ClassMetrics.TClassMetrics.Run (DRagLint.Lint.ClassMetrics.pas) (+7 more)
     /// Pure
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
     /// <!-- drag-lint:auto END -->

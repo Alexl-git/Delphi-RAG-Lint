@@ -168,6 +168,7 @@ type
     /// Thread-safe if the parse cache is thread-safe for the caller's pattern;
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
     /// Calls: accessor, AClassNode, ALower, ArgsHaveNoEncoding, argument, arguments, ATop, base, based, bound (+116 more)
     /// Returns: nil; Deduped.ToArray
     /// Pure

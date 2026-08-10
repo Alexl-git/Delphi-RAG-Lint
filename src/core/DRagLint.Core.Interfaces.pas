@@ -56,6 +56,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Default(TWalkFilter).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.Create/3 (DRagLint.Core.Indexer.pas), DRagLint.Index.Plan.BuildFilter (DRagLint.Index.Plan.pas)
     /// Calls: Default
     /// Pure
     /// <!-- drag-lint:auto END -->
@@ -65,7 +66,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.OpenExtraStores (DRagLint.CLI.pas), declaration (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas) (+148 more)
+  /// Used by: DRagLint.CLI.OpenExtraStores (DRagLint.CLI.pas), declaration (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+150 more)
   /// Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.PropTree, DRagLint.Core.Indexer, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.CompileCheck, DRagLint.Diagnostics.FlowChecks, DRagLint.Diagnostics.NamingChecks, DRagLint.Doc.Batch (+25 more)
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -226,7 +227,7 @@ type
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas) (+25 more)
+    /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas) (+26 more)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -329,6 +330,16 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetFilePath(AFileId: Int64): string                                           ;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestFiles (DRagLint.CLI.pas), DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas) (+12 more)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetAllFileIds: TArray<Int64>                                                  ; { v0.43: for cycles / cross-file scans }
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <remarks>
@@ -342,8 +353,38 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetReferencesFromFile(AFileId: Int64): TArray<TReference>                     ; { v0.43: uses-audit }
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CountSymbols   : Int64;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CountReferences: Int64;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CountFiles     : Int64;
 
     /// <summary>Deletes every indexed file whose path lies under one of ARoots
@@ -454,6 +495,14 @@ type
     /// produced by a source walk, so a source rebuild has no business
     /// discarding them.
     /// Not thread-safe; call on the indexing thread with no walk in flight.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CountCallEdges"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ClearAllFiles: Integer;
 
@@ -668,6 +717,11 @@ type
     /// the receiver of every 'call' ref and writes a resolved edge (target symbol +
     /// 'certain'|'ambiguous' confidence) for each site it can resolve; unresolved
     /// sites get no row (FP-conservative). Rebuilds all edges each run.</summary>
+    /// <param name="AExtraStores">v21: other open indexes -- the platform
+    /// LIBRARY db in practice -- consulted ONLY for calls this index cannot
+    /// resolve. A hit is recorded as a qualified NAME on refs.external_target,
+    /// never as a call_edges row, because target_symbol_id is a NOT NULL FK
+    /// into THIS db. Empty (the default) keeps the pre-v21 behaviour exactly.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
@@ -678,11 +732,6 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="AExtraStores">v21: other open indexes -- the platform
-    /// LIBRARY db in practice -- consulted ONLY for calls this index cannot
-    /// resolve. A hit is recorded as a qualified NAME on refs.external_target,
-    /// never as a call_edges row, because target_symbol_id is a NOT NULL FK
-    /// into THIS db. Empty (the default) keeps the pre-v21 behaviour exactly.</param>
     procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore> = nil);
     /// <summary>Transitive ancestor closure of the symbol (resolved edges are
     /// walked recursively; unresolved ones are name-only leaves). Cycle-safe,
@@ -1010,7 +1059,7 @@ type
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Convert.Apply.GetConstructorNames (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ToTypeHasGenericCreate (DRagLint.Convert.Apply.pas), DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+13 more)
+    /// Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Convert.Apply.GetConstructorNames (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ToTypeHasGenericCreate (DRagLint.Convert.Apply.pas), DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+14 more)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -1120,6 +1169,16 @@ type
     function GetFileMTime(AFileId: Int64): Int64;
     /// <summary>Returns file_ids whose findings are STALE: last_compiled_unix is
     /// NULL or older than mtime_unix. Pascal source files only.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoRefreshFindings (DRagLint.CLI.pas), DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetStaleFileIds: TArray<Int64>;
 
     // v8: Spring4D DI edges.
@@ -1189,6 +1248,16 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FindDiUnresolved: TArray<TReference>                                       ;
     /// <summary>DFM event handlers of a form/class: its child methods bound to a
     /// component event (kind='event-binding'). NameText is the handler method;
@@ -1410,17 +1479,47 @@ type
     /// Must run OUTSIDE a transaction (SQLite rejects VACUUM in a tx); the
     /// bare autocommit ExecSQL path satisfies this.</summary>
     /// <returns>Count of local_var/param symbols deleted (0 if none remained).</returns>
-    /// <remarks>Not thread-safe; call from the owning thread on a writable store.</remarks>
+    /// <remarks>
+    /// Not thread-safe; call from the owning thread on a writable store.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoPurgeLocals (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PurgeLocals: Int64;
     /// <summary>v14 (D5): every class/interface/record symbol (id, file_id, kind,
     /// name populated). Bulk read that backs TCallResolver's name-candidate map
     /// for receiver typing -- the same candidate set ResolveAncestry builds
     /// inline, exposed so the resolver can prepare it once.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetTypeCandidates: TArray<TSymbol>;
     /// <summary>v14 (D5): every resolved uses-scope edge (file_id -&gt;
     /// target_file_id) from unit_uses where the target is resolved. Backs
     /// TCallResolver's per-file in-scope set (mirrors ResolveAncestry's
     /// FileScope). Unresolved uses rows (NULL target) are excluded.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetUnitScopeEdges: TArray<TFileScopeEdge>;
     /// <summary>Option 4: every UNIT-LEVEL routine -- a procedure/function whose
     /// parent symbol is the unit itself (id, file_id, name, signature, section
@@ -1437,12 +1536,30 @@ type
     /// while a bare call from another unit may bind only to an interface-section
     /// one. Returning both and letting the caller filter keeps that visibility
     /// rule in one place.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetUnitLevelRoutines: TArray<TSymbol>;
     /// <summary>v14 (D5): every call_edges row (ref_id, target_symbol_id,
     /// confidence, receiver_type_symbol_id), unordered. Diagnostic dump backing
     /// the dump-call-edges verb / tests; not for production queries (use
     /// FindResolvedCallers / GetCallEdgesFromSymbol for those).</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DumpAllCallEdges: TArray<TCallEdge>;
     /// <summary>v14 (D5 T9): the ambiguous-calls resolver-coverage diagnostic --
     /// every CALL-SITE ref (kind = REF_KIND_CALL, i.e. exactly what
@@ -1531,7 +1648,21 @@ type
   /// </remarks>
   IParser = interface
     ['{8C45D5A2-1B6E-4C2D-A3E8-9F0E7B41E612}']
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.IParser.FileExtensions"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IParser.Parse"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LanguageName: string                                               ;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Core.Indexer.TIndexer.ParserFor (DRagLint.Core.Indexer.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.IParser.LanguageName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IParser.Parse"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FileExtensions: TArray<string>                                     ;
     /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
     /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
@@ -1578,6 +1709,16 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure IndexFile(const AFilePath: string);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.SetForceReparse"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.SetPreprocess"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SkippedUpToDate: Integer;
     /// <summary>Every file this indexer ADMITTED since it was created -- the
     /// walk's in-scope set, in the spelling the walk produced.</summary>
@@ -1598,6 +1739,14 @@ type
     /// CUMULATIVE over the indexer's lifetime, so a --watch loop's later ticks
     /// see the union of every tick. That errs toward keeping rows, which is the
     /// safe direction for a deletion predicate.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.SetForceReparse"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.SetPreprocess"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     function VisitedFiles: TArray<string>;
     // v0.42: register a directory whose subtree must NOT be scanned (used for

@@ -61,6 +61,7 @@ type
     /// unit-name-matches-file fires when the unit name differs from the file
     /// base name (case-insensitive); program/library roots are skipped.
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
     /// Calls: abbreviations, all, body, ChangeFileExt, CharInSet, checked, ChildByField, COMPARED, contract, Copy (+61 more)
     /// Returns: nil; Deduped.ToArray
     /// Pure

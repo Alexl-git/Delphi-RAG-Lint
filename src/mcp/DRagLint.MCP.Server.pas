@@ -337,13 +337,14 @@ type
       /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create
+      /// Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)
+      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Lint.Linter.TLinter.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create
       /// Reads: FDbPaths, FStore   Writes: FDbPaths, FStore, FLinter
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Migrate"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatFindings"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ADbPaths: TArray<string>);

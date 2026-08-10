@@ -63,6 +63,7 @@ type
     /// <summary><!-- drag-lint:auto -->----- TRoutineVarTable -----</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas)
     /// Writes: FVars, FByName
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias"/>
@@ -87,6 +88,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: FVars.Count.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Boundary (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Join (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TEscape.Bottom (DRagLint.Analysis.Flow.Lattices.pas) (+13 more)
     /// Reads: FVars
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias"/>
@@ -168,7 +170,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity (DRagLint.Doc.SymbolFacts.pas) (+1 more)
-    /// Calls: Default, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInlineVars, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.MarkCaptures, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, FirstIdentChild, Integer, LowerCase, Trim
+    /// Calls: Default, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInlineVars, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.MarkCaptures, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Create, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, FirstIdentChild, Integer, LowerCase, Trim
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeStr"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
@@ -224,26 +226,27 @@ type
     function Direction: TFlowDir;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Equals"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Join"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Bottom: TDefAsgnVal;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Equals"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Boundary: TDefAsgnVal;
@@ -251,13 +254,14 @@ type
     /// <param name="B"><!-- drag-lint:auto type -->const TDefAsgnVal</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Equals"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Join(const A, B: TDefAsgnVal): TDefAsgnVal;
@@ -265,15 +269,15 @@ type
     /// <param name="AIn"><!-- drag-lint:auto type -->const TDefAsgnVal</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Analysis.Cfg.IsValuedExit, DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf
+    /// Calls: DRagLint.Analysis.Cfg.IsValuedExit, DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf
     /// Complexity: 11 (cyclomatic, outer body), 48 lines (full implementation)
     /// Reads: FVars, FSrc
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Cfg.IsValuedExit"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs"/>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Transfer(const ABlock: TCfgBlock; const AIn: TDefAsgnVal): TDefAsgnVal;
@@ -338,25 +342,27 @@ type
     function Direction: TFlowDir;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Direction"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Equals"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Join"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Bottom: TFreedVal;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Direction"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Equals"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Join"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Boundary: TFreedVal;
@@ -364,13 +370,14 @@ type
     /// <param name="B"><!-- drag-lint:auto type -->const TFreedVal</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Direction"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Equals"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Join(const A, B: TFreedVal): TFreedVal;
@@ -378,14 +385,14 @@ type
     /// <param name="AIn"><!-- drag-lint:auto type -->const TFreedVal</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind
+    /// Calls: DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars, FSrc
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind"/>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Boundary"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Transfer(const ABlock: TCfgBlock; const AIn: TFreedVal): TFreedVal;
@@ -430,26 +437,27 @@ type
     function Direction: TFlowDir;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Direction"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Equals"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Join"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Bottom: TArray<Boolean>;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Direction"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Equals"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Boundary: TArray<Boolean>;
@@ -457,13 +465,14 @@ type
     /// <param name="B"><!-- drag-lint:auto type -->const TArray&lt;Boolean&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Direction"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Equals"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Join(const A, B: TArray<Boolean>): TArray<Boolean>;
@@ -472,15 +481,15 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Copy(AIn).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: Copy, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get
+    /// Calls: Copy, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get
     /// Complexity: 14 (cyclomatic, outer body), 41 lines (full implementation)
     /// Reads: FVars, FSrc
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs"/>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Bottom"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TLiveness.Boundary"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>): TArray<Boolean>;
@@ -551,13 +560,14 @@ type
     function Direction: TFlowDir;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Direction"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Equals"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Join"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Bottom: TArray<Boolean>;
@@ -567,13 +577,14 @@ type
     /// <param name="B"><!-- drag-lint:auto type -->const TArray&lt;Boolean&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Create"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Direction"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TEscape.Equals"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Join(const A, B: TArray<Boolean>): TArray<Boolean>;

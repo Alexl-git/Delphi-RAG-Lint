@@ -129,7 +129,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: FoundList.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, Integer, SameText, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.Query.TTSQueryCursor.Execute, TreeSitter.Query.TTSQueryCursor.NextMatch
+      /// Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, Integer, SameText, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.Query.TTSQueryCursor.Create, TreeSitter.Query.TTSQueryCursor.Execute, TreeSitter.Query.TTSQueryCursor.NextMatch
       /// Complexity: 10 (cyclomatic, outer body), 70 lines (full implementation)
       /// Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage
       /// Pure
@@ -137,7 +137,7 @@ type
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
       /// <seealso cref="TreeSitter.Query.TTSQuery.CaptureNameForID"/>
-      /// <seealso cref="TreeSitter.Query.TTSQueryCursor.Execute"/>
+      /// <seealso cref="TreeSitter.Query.TTSQueryCursor.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string): TArray<TLintFinding>;

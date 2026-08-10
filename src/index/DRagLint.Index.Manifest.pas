@@ -59,6 +59,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Default(TIndexSettings).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)
     /// Calls: Default
     /// Pure
     /// <!-- drag-lint:auto END -->
@@ -106,6 +107,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Default(TDocSettings).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)
     /// Calls: Default
     /// Pure
     /// <!-- drag-lint:auto END -->
@@ -222,15 +224,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas) (+7 more)
-      /// Calls: branch, Default, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, GlobalExclude, SameText, Writeln
+      /// Calls: branch, Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, GlobalExclude, SameText, Writeln
       /// Returns: Default(TIndexManifest); GlobalManifest; LocalManifest
       /// Complexity: 24 (cyclomatic, outer body), 129 lines (full implementation)
       /// Touches: file system
+      /// <seealso cref="DRagLint.Index.Manifest.TDocSettings.Defaults"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TIndexSettings.Defaults"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load.MergeSections"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ToJson"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Load(const AEngineDir, AStartDir: string): TIndexManifest; static;
@@ -263,15 +265,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas)
-      /// Calls: Default, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, guard, Include, TJSONArray, TJSONObject
+      /// Calls: Default, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, guard, Include, TJSONArray, TJSONObject
       /// Returns: Default(TIndexManifest)
       /// Complexity: 25 (cyclomatic, outer body), 131 lines (full implementation)
       /// Mutates: ASettingsKeys (out)
       /// <seealso cref="DRagLint.Index.Manifest.JsonStrArr"/>
       /// <seealso cref="DRagLint.Index.Manifest.ParseProjectsIndexing"/>
       /// <seealso cref="DRagLint.Index.Manifest.ParseSection"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TDocSettings.Defaults"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TIndexSettings.Defaults"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ParseTextEx(const AJson, ARootDir: string; out ASettingsKeys: TSettingsKeySet): TIndexManifest; static;

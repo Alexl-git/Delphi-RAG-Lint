@@ -44,6 +44,7 @@ type
     /// <remarks>
     /// Project-wide; call from lint-all only. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
     /// Calls: based, boundary, Caveat, CollectDefProcNodes, CollectIdentifiers, Connected, Copy, Default, DelegateBaseField, DelegationField (+40 more)
     /// Returns: Roots.Count; Default(TMiddleManResult); nil; Findings.ToArray
     /// Complexity: 24 (cyclomatic, outer body), 938 lines (full implementation)

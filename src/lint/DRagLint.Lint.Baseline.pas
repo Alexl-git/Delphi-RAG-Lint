@@ -89,7 +89,7 @@ type
     /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) (+4 more)
+    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas) ?, DRagLint.CLI.DoHover (DRagLint.CLI.pas) ?, DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas) ?, DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ? (+4 more)
     /// Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf
     /// Touches: file system
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>

@@ -137,15 +137,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)
-      /// Calls: CheckTypeAware, default, DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.ShouldKeep, DRagLint.Lint.Linter.TLinter.LintFile (+7 more)
+      /// Calls: default, DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.ShouldKeep, DRagLint.Lint.Linter.TLinter.LintFile (+7 more)
       /// Complexity: 16 (cyclomatic, outer body), 182 lines (full implementation)
       /// Owns returned: new (caller owns)
       /// Touches: file system
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware"/>
       /// <seealso cref="DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check"/>
-      /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplySeverity"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;

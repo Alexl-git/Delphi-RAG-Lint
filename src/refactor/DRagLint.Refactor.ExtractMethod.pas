@@ -152,15 +152,15 @@ type
     /// parameter.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
-    /// Calls: AssignmentTargetIndex, child, CollectExprUses, CollectReadsAndCallDefs, Copy, def, Default, defs, descent, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get (+17 more)
+    /// Calls: AssignmentTargetIndex, child, CollectExprUses, CollectReadsAndCallDefs, Copy, def, Default, defs, descent, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count (+18 more)
     /// Returns: Default(TExtractVars)
     /// Complexity: 17 (cyclomatic, outer body), 332 lines (full implementation)
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get"/>
     /// <seealso cref="DRagLint.Refactor.ExtractMethod.LiveOutOfRun"/>
     /// <seealso cref="DRagLint.Refactor.ExtractMethod.LocateStatementList"/>
     /// <seealso cref="DRagLint.Refactor.ExtractMethod.RoutineBodyList"/>
-    /// <seealso cref="DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars.ProcessStmt"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function ClassifyVars(const ASel: TExtractSelection; ACfg: TCfg;

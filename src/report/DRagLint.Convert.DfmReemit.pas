@@ -67,6 +67,7 @@ type
     /// <summary><!-- drag-lint:auto -->TDfmNode</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Convert.DfmReemit.CloneNode (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas)
     /// Writes: FChildren
     /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Destroy"/>
     /// <!-- drag-lint:auto END -->
@@ -144,11 +145,13 @@ type
 /// respect to the tree-sitter runtime if called concurrently.
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)
-/// Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSParser.Parse, Trim
+/// Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, Trim
 /// Complexity: 10 (cyclomatic, outer body), 53 lines (full implementation)
 /// Mutates: ARoot (out)
 /// <seealso cref="DRagLint.Convert.DfmReemit.NodeText"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Create"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.WalkNodeInto"/>
+/// <seealso cref="TreeSitter.TTSParser.Create"/>
 /// <seealso cref="TreeSitter.TTSParser.Parse"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -176,7 +179,7 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// Components child is left ALONE. Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)
-/// Calls: CloneNode, Copy, Default, DRagLint.Convert.DfmReemit.BareTypeTail, DRagLint.Convert.DfmReemit.EmitBlock, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.PlaceAtPath, DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested, DRagLint.Convert.DfmReemit.ReemitComponent.RemapLeaf, FindLinkFor (+10 more)
+/// Calls: CloneNode, Copy, Default, DRagLint.Convert.DfmReemit.BareTypeTail, DRagLint.Convert.DfmReemit.EmitBlock, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.PlaceAtPath, DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested, DRagLint.Convert.DfmReemit.ReemitComponent.RemapLeaf, DRagLint.Convert.DfmReemit.TDfmNode.Create (+11 more)
 /// Returns: Default(TReemitResult)
 /// Complexity: 14 (cyclomatic, outer body), 275 lines (full implementation)
 /// Pure

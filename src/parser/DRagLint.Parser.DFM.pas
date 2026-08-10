@@ -26,6 +26,7 @@ type
       /// <summary><!-- drag-lint:auto -->TDFMParser</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
       /// Writes: FLanguage
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.FileExtensions"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.LanguageName"/>
@@ -59,15 +60,15 @@ type
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSParser.Parse
+      /// Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
       /// Implements: DRagLint.Core.Interfaces.IParser.Parse
       /// Reads: FLanguage
       /// Pure
       /// <seealso cref="DRagLint.Parser.DFM.CollectParseErrors"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
       /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
+      /// <seealso cref="TreeSitter.TTSParser.Create"/>
       /// <seealso cref="TreeSitter.TTSParser.Parse"/>
-      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
@@ -115,10 +116,11 @@ external 'tree-sitter-dfm';
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas)
-/// Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, given, Integer, Move, TreeSitter.TTSParser.Parse
+/// Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, given, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
 /// Pure
 /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
 /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
+/// <seealso cref="TreeSitter.TTSParser.Create"/>
 /// <seealso cref="TreeSitter.TTSParser.Parse"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

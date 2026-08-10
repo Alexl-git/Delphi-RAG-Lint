@@ -372,14 +372,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas)
-      /// Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.LSP.Server.ContainsPosition, DRagLint.LSP.Server.FindSmallestNamedAt, DRagLint.LSP.Server.NodeTextLocal, Integer, Move, TreeSitter.TTSParser.Parse, Trim
+      /// Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.LSP.Server.ContainsPosition, DRagLint.LSP.Server.FindSmallestNamedAt, DRagLint.LSP.Server.NodeTextLocal, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, Trim
       /// Complexity: 17 (cyclomatic, outer body), 63 lines (full implementation)
       /// Touches: file system
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.LSP.Server.ContainsPosition"/>
       /// <seealso cref="DRagLint.LSP.Server.FindSmallestNamedAt"/>
       /// <seealso cref="DRagLint.LSP.Server.NodeTextLocal"/>
-      /// <seealso cref="TreeSitter.TTSParser.Parse"/>
+      /// <seealso cref="TreeSitter.TTSParser.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IdentifierAtPosition(const APath: string; ALine, ACol: Integer): string;
@@ -401,7 +401,7 @@ type
       /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)
+      /// Called from: DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas)
       /// Calls: DRagLint.LSP.Server.TLSPServer.Create/1
       /// Overload 1 of 2
       /// Recursive

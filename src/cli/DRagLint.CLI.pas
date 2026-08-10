@@ -9,7 +9,7 @@ const
 /// (Args); DoRules (Args); DoLint (Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext, DRagLint.CLI.DoConvertApply (+79 more)
+/// Calls: DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext, DRagLint.CLI.DoConvertApply (+81 more)
 /// Complexity: 91 (cyclomatic, outer body), 170 lines (full implementation)
 /// Pure
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>

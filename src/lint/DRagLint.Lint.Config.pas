@@ -30,7 +30,7 @@ type
     ShortIdentifierCheck    : Boolean;       // master on/off for hungarian-or-short-identifier (default False)
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.ParseArgs (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoTodos (DRagLint.CLI.pas) (+37 more)
+    /// Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.DoScanAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ? (+37 more)
     /// Pure
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -128,13 +128,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
-    /// Calls: Default
+    /// Calls: DRagLint.Lint.Config.TNamingConfig.Default
     /// Touches: file system
+    /// <seealso cref="DRagLint.Lint.Config.TNamingConfig.Default"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyConfigObject"/>
-    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyNamingObject"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Load(const APath, AProfile: string): TLintConfig; static;

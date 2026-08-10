@@ -35,7 +35,8 @@ type
     /// <returns>Findings across the whole index (file paths + lines); empty if none.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile (+25 more)
+    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
+    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+26 more)
     /// Returns: nil; Findings.ToArray
     /// Complexity: 48 (cyclomatic, outer body), 239 lines (full implementation)
     /// Pure
@@ -58,15 +59,15 @@ type
     /// matching no layer are ignored (e.g. RTL/third-party). Never raises.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf, Format, LowerCase, SameText, TJSONArray, TJSONObject, TJSONString, Writeln
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf, Format, LowerCase, SameText, TJSONArray, TJSONObject, TJSONString, Writeln
     /// Returns: nil; Findings.ToArray
     /// Complexity: 29 (cyclomatic, outer body), 139 lines (full implementation)
     /// Touches: file system
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
     /// <seealso cref="DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf"/>
-    /// <seealso cref="DRagLint.Lint.ProjectRules.TProjectLintRules.Run"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function CheckLayering(const AStore: ISymbolStore; const AConfigPath: string): TArray<TLintFinding>;

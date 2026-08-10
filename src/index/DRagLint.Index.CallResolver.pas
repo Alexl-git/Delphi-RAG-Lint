@@ -69,14 +69,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas)
-    /// Calls: LowerCase
+    /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetTypeCandidates, DRagLint.Core.Interfaces.ISymbolStore.GetUnitLevelRoutines, DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges, LowerCase
     /// Reads: FStore, FNameToCands, FNameToRoutines, FFileScope
     /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTypeCandidates"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitLevelRoutines"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Destroy"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure BuildMaps;
@@ -124,6 +124,23 @@ type
     /// extra (library) stores, answering with a QUALIFIED NAME. '' when it
     /// cannot answer unambiguously. See the implementation for why it is
     /// deliberately narrow.</summary>
+    /// <param name="AReceiver"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ACallName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Observed: ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Model.CanBeCallTarget, Pos, SameText, Trim
+    /// Complexity: 14 (cyclomatic, outer body), 53 lines (full implementation)
+    /// Reads: FExtraStores
+    /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveExternally(const AReceiver, ACallName: string): string;
     /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
@@ -331,13 +348,14 @@ type
     /// <param name="AReceiverExpr"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: 0; Encl.ParentId;
     /// ResolveTypeNameToSymbol(CastType, ACallRef.FileId);
+    /// ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId);
     /// ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId);
     /// ResolveTypeNameToSymbol(AReceiverExpr, ACallRef.FileId).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)
-    /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Index.CallResolver.IsIdentPart, DRagLint.Index.CallResolver.IsIdentStart, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind, DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol, DRagLint.Index.CallResolver.TryParseCastTarget, SameText
-    /// Complexity: 12 (cyclomatic, outer body), 77 lines (full implementation)
+    /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Index.CallResolver.IsIdentPart, DRagLint.Index.CallResolver.IsIdentStart, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind, DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol, DRagLint.Index.CallResolver.TryParseCastTarget, Pos, SameText
+    /// Complexity: 19 (cyclomatic, outer body), 110 lines (full implementation)
     /// Reads: FStore
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
@@ -351,11 +369,16 @@ type
   public
     /// <summary>Builds the whole-DB name/scope maps from AStore. Call once.</summary>
     /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="AExtraStores">v21: other open indexes -- in practice the
+    /// platform LIBRARY db -- consulted ONLY when the primary store cannot
+    /// resolve a type. Their symbol ids are meaningless here (ids are per-DB),
+    /// so a hit is recorded as a qualified NAME on the ref
+    /// (refs.external_target), never as a call_edges row.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)
     /// Calls: DRagLint.Index.CallResolver.TCallResolver.BuildMaps
-    /// Writes: FStore, FNameToCands, FNameToRoutines, FFileScope, FChildCache, FLineCache
+    /// Writes: FStore, FExtraStores, FNameToCands, FNameToRoutines, FFileScope, FChildCache, FLineCache
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
@@ -363,11 +386,6 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="AExtraStores">v21: other open indexes -- in practice the
-    /// platform LIBRARY db -- consulted ONLY when the primary store cannot
-    /// resolve a type. Their symbol ids are meaningless here (ids are per-DB),
-    /// so a hit is recorded as a qualified NAME on the ref
-    /// (refs.external_target), never as a call_edges row.</param>
     constructor Create(const AStore: ISymbolStore;
       const AExtraStores: TArray<ISymbolStore> = nil);
     /// <remarks>
@@ -392,8 +410,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)
-    /// Calls: Default, DRagLint.Index.CallResolver.CountCallArgs, DRagLint.Index.CallResolver.ExtractReceiverExpr, DRagLint.Index.CallResolver.TCallResolver.LinesOf, DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes, DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType, DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine, DRagLint.Index.CallResolver.TCallResolver.TypeReceiver
-    /// Complexity: 11 (cyclomatic, outer body), 109 lines (full implementation)
+    /// Calls: Default, DRagLint.Index.CallResolver.CountCallArgs, DRagLint.Index.CallResolver.ExtractReceiverExpr, DRagLint.Index.CallResolver.TCallResolver.LinesOf, DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes, DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType, DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine, DRagLint.Index.CallResolver.TCallResolver.ResolveExternally, DRagLint.Index.CallResolver.TCallResolver.TypeReceiver
+    /// Complexity: 13 (cyclomatic, outer body), 121 lines (full implementation)
+    /// Reads: FExtraStores
     /// Pure
     /// <seealso cref="DRagLint.Index.CallResolver.CountCallArgs"/>
     /// <seealso cref="DRagLint.Index.CallResolver.ExtractReceiverExpr"/>

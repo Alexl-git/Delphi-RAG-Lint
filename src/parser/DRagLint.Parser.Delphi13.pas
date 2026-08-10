@@ -31,6 +31,7 @@ type
       /// <summary><!-- drag-lint:auto -->TDelphi13Parser</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
       /// Writes: FLanguage
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.FileExtensions"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.LanguageName"/>
@@ -64,7 +65,7 @@ type
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, Integer, Move, TreeSitter.TTSParser.Parse
+      /// Calls: Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
       /// Implements: DRagLint.Core.Interfaces.IParser.Parse
       /// Reads: FLanguage, EmitUsageRefs
       /// Pure
@@ -72,7 +73,7 @@ type
       /// <seealso cref="DRagLint.Parser.Delphi13.HarvestStringLiterals"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TWalkState.Create"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.Walk"/>
-      /// <seealso cref="TreeSitter.TTSParser.Parse"/>
+      /// <seealso cref="TreeSitter.TTSParser.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;

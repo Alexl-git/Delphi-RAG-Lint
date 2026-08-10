@@ -29,7 +29,7 @@ type
     /// <returns>One info finding per maximal clone pair, sorted by (FilePath, StartLine).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?
+    /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
     /// Calls: DRagLint.Diagnostics.CloneChecks.RunEngine
     /// Returns: RunEngine([AFile], AMinTokens)
     /// Pure

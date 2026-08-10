@@ -72,7 +72,7 @@ var
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas), DRagLint.CLI.OpenWritableStore (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas) (+47 more)
+  /// Used by: DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas), DRagLint.CLI.OpenWritableStore (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+48 more)
   /// Used in units: DRagLint.CLI, DRagLint.FormsMap, DRagLint.Index.Drift, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Report.Deps, DRagLint.Sql.FbSnapshot, DRagLint.Sql.OrmLinker
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -322,7 +322,7 @@ type
       /// the actionable stale-schema message rather than run a query against a
       /// pre-current schema. Not thread-safe; single owning thread only.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+39 more)
+      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+40 more)
       /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, Migrate, path, SearchText
       /// Reads: FReadOnly   Writes: FReadOnly, FLateAncCache, FAnchorCache, FDerivingAnchor, FFts5Available
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect"/>
@@ -349,7 +349,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas), DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas)
-      /// Calls: busy_timeout, Create, declaration, DeleteStringLiteralsForFile, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropTriggerVerbose, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.PrintTriggerCount, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.TryExec, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, exist (+12 more)
+      /// Calls: busy_timeout, Create, declaration, DeleteStringLiteralsForFile, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropTriggerVerbose, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.PrintTriggerCount, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.TryExec, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, exist (+14 more)
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.Migrate
       /// Reads: FConn, FFts5Available   Writes: FFts5Available
       /// SQL: writes SCHEMA_META
@@ -1371,13 +1371,14 @@ type
       /// </remarks>
       procedure ResolveHelpers;
       // v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
+      /// <param name="AExtraStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto -->v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Index.CallResolver.TCallResolver.Create, DRagLint.Index.CallResolver.TCallResolver.ResolveOne, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ClearCallEdges, DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertCallEdge, O, sites, TCallResolver, unused
+      /// Calls: closes, Default, DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Index.CallResolver.TCallResolver.Create, DRagLint.Index.CallResolver.TCallResolver.ResolveOne, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ClearCallEdges, DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertCallEdge, O, SameText, sites, TCallResolver, universe, unused
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveCallTargets
       /// Reads: FConn
-      /// SQL: writes REFS
+      /// SQL: reads SYMBOLS; writes REFS
       /// Transaction: starts, commits, rolls back
       /// <seealso cref="DRagLint.Core.Model.CallSiteRefKindSql"/>
       /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
@@ -1549,6 +1550,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: FConn.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoSchema (DRagLint.CLI.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.CaptionForHandler (DRagLint.FormsMap.pas), DRagLint.FormsMap.FindComponent (DRagLint.FormsMap.pas), DRagLint.FormsMap.FindFormViaHook (DRagLint.FormsMap.pas) (+8 more)
       /// Reads: FConn
       /// Owns returned: borrowed
       /// Pure

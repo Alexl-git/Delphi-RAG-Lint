@@ -203,6 +203,7 @@ type
     public
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas)
       /// Calls: GetEnvironmentVariable
       /// Reads: FBDS   Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
@@ -292,7 +293,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas)
+      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+4 more)
       /// Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths
       /// Pure
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
@@ -309,6 +310,7 @@ type
       /// <returns>Array of platform names (e.g. Win32, Win64, Android64).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)
       /// Returns: EnumLibraryPlatforms; ['Win32', 'Win64']
       /// Pure
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>

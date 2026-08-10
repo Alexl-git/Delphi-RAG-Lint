@@ -47,6 +47,7 @@ type
     /// distinct rule ids; runs[0].results carries one entry per finding.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
     /// Calls: DRagLint.Output.Sarif.TSarifWriter.BuildResult
     /// Returns: Root.Format(2)
     /// Pure

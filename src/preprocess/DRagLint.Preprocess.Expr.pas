@@ -59,9 +59,10 @@ uses
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoDumpPpEval (DRagLint.CLI.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)
-/// Calls: DRagLint.Preprocess.Expr.TPPExprParser.Init, DRagLint.Preprocess.Expr.Truthy
+/// Calls: DRagLint.Preprocess.Expr.TPPExprParser.Eval, DRagLint.Preprocess.Expr.TPPExprParser.Init, DRagLint.Preprocess.Expr.Truthy
 /// Returns: Truthy(V); False
 /// Pure
+/// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Eval"/>
 /// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Init"/>
 /// <seealso cref="DRagLint.Preprocess.Expr.Truthy"/>
 /// <!-- drag-lint:auto END -->

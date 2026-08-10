@@ -60,8 +60,10 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Cfg.TCfg.BlockCount
     /// Complexity: 17 (cyclomatic, outer body), 64 lines (full implementation)
     /// Mutates: AIn (out), AOut (out)
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Solve(const ACfg: TCfg; const AAnalysis: IDataFlowAnalysis<TValue>;

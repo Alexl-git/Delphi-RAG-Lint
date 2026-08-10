@@ -61,13 +61,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas)
-      /// Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, StripPrefix, UpperCase
+      /// Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, StripPrefix, UpperCase
       /// Complexity: 13 (cyclomatic, outer body), 244 lines (full implementation)
       /// SQL: writes ORM_LINKS
       /// Transaction: starts, commits, rolls back
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink"/>
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Run(const ADbPaths: TArray<string>): TOrmLinkerStats; static;

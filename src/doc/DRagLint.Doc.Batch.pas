@@ -182,14 +182,14 @@ type
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve
+    /// Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths
     /// Returns: AggregateOverFiles(AStore, CR.Files, AOptions)
     /// Pure
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
     /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
     /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Resolve"/>
-    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentAll"/>
-    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentUnit"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function DocumentProject(const AStore: ISymbolStore; const AProjectFile: string;
@@ -207,9 +207,10 @@ type
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Batch.AggregateOverFiles
+    /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Batch.AggregateOverFiles
     /// Returns: AggregateOverFiles(AStore, Paths.ToArray, AOptions)
     /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
     /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentProject"/>

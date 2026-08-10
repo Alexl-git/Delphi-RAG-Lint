@@ -91,7 +91,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: nil; [Finding].</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas)
       /// Calls: CharInSet, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, SameText
       /// Complexity: 33 (cyclomatic, outer body), 172 lines (full implementation)
       /// Pure
@@ -112,7 +112,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
       /// Calls: AnsiUpperCase, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.BuildConditionalRanges, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsInConditionalRegion, StraddlesConditionalRegion
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.BuildConditionalRanges"/>
@@ -303,7 +303,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas) ?
+      /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
       /// Calls: alias, apply, approximation, authoritative, cast, CatOf, CharInSet, Copy, declEnum, Default (+53 more)
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr"/>
@@ -663,7 +663,7 @@ type
       /// <remarks>
       /// Severity info. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/1 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/1 (DRagLint.Diagnostics.AstChecks.pas)
       /// Calls: CountExits, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr, SameText
       /// Returns: nil; Findings.ToArray
       /// Overload 2 of 2
@@ -703,7 +703,7 @@ type
       /// <remarks>
       /// Severity info. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity/1 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)
       /// Calls: CyclomaticOf, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr
       /// Returns: nil; Findings.ToArray
       /// Overload 2 of 2
@@ -766,7 +766,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/1 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)
       /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, operator, Score, separately
       /// Overload 2 of 2
       /// Pure
@@ -796,7 +796,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
+      /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
       /// Calls: CollectClassMethods, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor.CheckCtors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor.CollectClasses, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FlagCalls, Format, HasVirtualAttr, Integer, LowerCase, NodeStr, SameText, Walk
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor.CheckCtors"/>

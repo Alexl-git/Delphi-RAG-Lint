@@ -27,15 +27,15 @@ uses
 /// exit on first source file found -- no full enumeration of large roots.
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDrift (DRagLint.CLI.pas)
-/// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Index.Drift.DirHasSource, DRagLint.Index.Drift.NormPath, DRagLint.Index.Drift.NormRoot, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create
+/// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Index.Drift.DirHasSource, DRagLint.Index.Drift.NormPath, DRagLint.Index.Drift.NormRoot, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create
 /// Returns: nil; Missing
 /// Complexity: 12 (cyclomatic, outer body), 66 lines (full implementation)
 /// Pure
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Index.Drift.DirHasSource"/>
 /// <seealso cref="DRagLint.Index.Drift.NormPath"/>
 /// <seealso cref="DRagLint.Index.Drift.NormRoot"/>
-/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>): TArray<string>;

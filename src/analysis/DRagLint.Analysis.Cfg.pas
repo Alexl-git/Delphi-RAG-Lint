@@ -133,6 +133,7 @@ type
     /// <summary><!-- drag-lint:auto -->TCfg</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas)
     /// Writes: Blocks, ForVars
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
@@ -156,6 +157,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: TCfgBlock.Create(Blocks.Count).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.Cfg.TBuilderState.DivertVia (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas)
     /// Calls: DRagLint.Analysis.Cfg.TCfgBlock.Create
     /// Reads: Blocks
     /// Owns returned: new (caller owns)
@@ -171,6 +173,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Blocks.Count.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver&lt;TValue&gt;.Solve (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Refactor.ExtractMethod.LiveOutOfRun (DRagLint.Refactor.ExtractMethod.pas)
     /// Reads: Blocks
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
@@ -213,12 +216,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
-    /// Calls: DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm, DRagLint.Analysis.Cfg.TBuilderState.Create, DRagLint.Analysis.Cfg.TBuilderState.EmitStmt
+    /// Calls: DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm, DRagLint.Analysis.Cfg.TBuilderState.Create, DRagLint.Analysis.Cfg.TBuilderState.EmitStmt, DRagLint.Analysis.Cfg.TCfg.Create
     /// Owns returned: new (caller owns)
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TBuilderState.Create"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TBuilderState.EmitStmt"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Build(const AProc: TTSNode; const ASrc: TBytes): TCfg;

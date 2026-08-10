@@ -33,6 +33,7 @@ type
     /// <returns>All flow findings for the file.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
     /// Calls: alternatives, AssignmentBaseIndex, AssignmentTargetIndex, bail, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy, cycles, Default (+28 more)
     /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); Findings.ToArray
     /// Complexity: 17 (cyclomatic, outer body), 567 lines (full implementation)
