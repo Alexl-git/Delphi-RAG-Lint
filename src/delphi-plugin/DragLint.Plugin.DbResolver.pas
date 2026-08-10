@@ -92,6 +92,13 @@ function FindOwningProject(const AFilePath: string): string;
 { Returns the absolute path of the active editor's file, or '' if none. }
 function GetActiveEditorFilePath: string;
 
+{ The .dproj of the project group's ACTIVE project, or '' if none. Exposed
+  because it is the tiebreak every project-scoped resolution needs, and callers
+  outside this unit were otherwise reaching for FindOwningProject -- which
+  returns the FIRST .dproj in a directory and is therefore the wrong answer in
+  exactly the shared-folder case that matters. }
+function GetActiveProjectFilePath: string;
+
 { Returns the primary DB path for an arbitrary .dproj (or '' for none).
   Uses the template from Settings. Result may point at a file that does
   not yet exist. }

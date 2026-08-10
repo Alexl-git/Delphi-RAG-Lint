@@ -41,6 +41,7 @@ uses
   , DRagLint.Core   .Interfaces
   , DRagLint.Core   .Indexer
   , DRagLint.Storage.SQLite
+  , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in }
   , DRagLint.Parser .Delphi13
   , DRagLint.Parser .DFM
   , DRagLint.Parser .Sql
@@ -14470,6 +14471,18 @@ begin
     end; // try
 
     Paths:= ResolveReadDbs(Manifest, AArgs.ProjectPath, AArgs.InFile);
+
+    { Then reorder by what the indexes ACTUALLY CONTAIN. The manifest can only say
+      which sections plausibly cover a file; once two projects share a directory
+      that is not enough to choose, and a consumer reading only the first entry
+      gets an index that does not hold the file at all. The active project's DB
+      stays as the tiebreak, which is what ORM3's COMMON\ units need. }
+    var ActiveDb: string:= '';
+    var ActClaimants: TArray<string>:= nil;
+    if AArgs.ProjectPath <> '' then
+      if ResolveProjectDb(Manifest, AArgs.ProjectPath, ActiveDb, ActClaimants) <> pdmUnique then ActiveDb:= '';
+    Paths:= OrderDbsByMembership(Paths, ActiveDb, AArgs.InFile, DbContainsFile);
+
     if AArgs.AsJson then
     begin
       J:= TJSONArray.Create;

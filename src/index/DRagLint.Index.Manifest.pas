@@ -279,6 +279,48 @@ function ResolveFolderDb(const AManifest: TIndexManifest; const AFilePath: strin
 function ResolveReadDbs(const AManifest: TIndexManifest;
   const AActiveProjectFile, AEditorFile: string): TArray<string>;
 
+type
+  /// <summary>"Does the index at ADbPath contain a files row for AFilePath?"</summary>
+  /// <remarks>A callback so the ordering rules stay pure and testable while the
+  /// actual SQL lives with the storage layer. Implementations must normalise both
+  /// sides the way the store does (DRagLint.Storage.FileMembership.DbContainsFile
+  /// is the real one).</remarks>
+  TDbContainsFileFunc = reference to function(const ADbPath, AFilePath: string): Boolean;
+
+/// <summary>Reorders candidate DBs so the ones that ACTUALLY CONTAIN AFilePath
+/// come first, with AActiveProjectDb winning ties.</summary>
+/// <param name="ACandidates">Candidate DBs in preference order (typically the
+/// output of ResolveReadDbs). Returned unchanged when nothing contains the
+/// file.</param>
+/// <param name="AActiveProjectDb">The active project's DB, used ONLY to break
+/// ties between DBs that all contain the file. May be ''.</param>
+/// <param name="AFilePath">The open file whose owning index is wanted.</param>
+/// <param name="AContains">Membership probe; when nil the candidates are
+/// returned unchanged.</param>
+/// <returns>A permutation of ACandidates -- same members, never fewer. Callers
+/// that read only Result[0] get the DB that can actually answer.</returns>
+/// <remarks>WHY MEMBERSHIP AND NOT "WHICH PROJECT IS ACTIVE".
+///
+/// Preferring the active project (the previous rule) is right for a file INSIDE
+/// that project and wrong for every other file. Most consumers pass the whole
+/// list to the engine and are unharmed, but a consumer that reads only the first
+/// entry -- TDragLintStructureForm.ResolveDbForFile -- then queries an index that
+/// does not contain the open file at all, and gets silence rather than an error.
+/// "Callers tolerate an extra DB" only holds for callers that read more than one.
+///
+/// The active project stays as the TIEBREAK because membership genuinely is not
+/// unique: ORM3's COMMON\ units belong to the client AND the server closure, so
+/// two DBs legitimately contain the same file and something has to choose.
+///
+/// Order is otherwise STABLE, so the existing preference survives among equals
+/// and the no-match case is byte-identical to the old behaviour -- which is what
+/// keeps library-source browsing working.
+///
+/// Pure apart from AContains. Cost is one probe per candidate (small list).</remarks>
+function OrderDbsByMembership(const ACandidates: TArray<string>;
+  const AActiveProjectDb, AFilePath: string;
+  const AContains: TDbContainsFileFunc): TArray<string>;
+
 /// <summary>Reads the docs.complexity_min threshold used by the doc/hover
 /// verbs (`document --qname/--unit/--project`, `document-all`, and
 /// `hover`). Gates the 'Complexity:' line at RENDER time (v(ADP2 T3) in
@@ -1079,6 +1121,61 @@ begin
     SetLength(Result, Length(Result) + 1);
     Result[High(Result)]:= FolderDb;
   end;
+end; // function
+
+{ ---------------------------------------------------------------------- }
+{  OrderDbsByMembership                                                    }
+{ ---------------------------------------------------------------------- }
+
+function OrderDbsByMembership(const ACandidates: TArray<string>;
+  const AActiveProjectDb, AFilePath: string;
+  const AContains: TDbContainsFileFunc): TArray<string>;
+var
+  Holders: TArray<string>;
+  Others : TArray<string>;
+  Db     : string        ;
+  I      : Integer       ;
+  ActIdx : Integer       ;
+begin
+  Result:= ACandidates;
+  if (Length(ACandidates) < 2) or (AFilePath = '') or (not Assigned(AContains)) then Exit;
+
+  Holders:= nil;
+  Others := nil;
+  for Db in ACandidates do
+  begin
+    if AContains(Db, AFilePath) then
+    begin
+      SetLength(Holders, Length(Holders) + 1);
+      Holders[High(Holders)]:= Db;
+    end
+    else
+    begin
+      SetLength(Others, Length(Others) + 1);
+      Others[High(Others)]:= Db;
+    end;
+  end; // for
+
+  { Nothing holds the file: leave the caller's order completely alone. This is
+    the library-source case, and "unchanged" is the whole promise. }
+  if Length(Holders) = 0 then Exit;
+
+  { Tie-break among holders ONLY -- promote the active project's DB to the front
+    of the holders. A file in two closures (ORM3\COMMON) is a real tie, not a
+    defect, and this is the one signal that resolves it. }
+  ActIdx:= -1;
+  if AActiveProjectDb <> '' then
+    for I:= 0 to High(Holders) do
+      if SameText(Holders[I], AActiveProjectDb) then begin ActIdx:= I; Break; end;
+
+  if ActIdx > 0 then
+  begin
+    Db:= Holders[ActIdx];
+    for I:= ActIdx downto 1 do Holders[I]:= Holders[I - 1];
+    Holders[0]:= Db;
+  end;
+
+  Result:= Holders + Others;
 end; // function
 
 { ---------------------------------------------------------------------- }

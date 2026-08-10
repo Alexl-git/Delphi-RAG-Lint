@@ -13,6 +13,7 @@ uses
   DRagLint.Core.Indexer in '..\core\DRagLint.Core.Indexer.pas',
   DRagLint.Storage.Schema in '..\storage\DRagLint.Storage.Schema.pas',
   DRagLint.Storage.SQLite in '..\storage\DRagLint.Storage.SQLite.pas',
+  DRagLint.Storage.FileMembership in '..\storage\DRagLint.Storage.FileMembership.pas',
   DRagLint.Parser.Delphi13 in '..\parser\DRagLint.Parser.Delphi13.pas',
   DRagLint.Parser.SpringDI in '..\parser\DRagLint.Parser.SpringDI.pas',
   DRagLint.Parser.DFM in '..\parser\DRagLint.Parser.DFM.pas',

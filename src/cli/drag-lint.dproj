@@ -110,6 +110,7 @@
         <DCCReference Include="..\core\DRagLint.Core.Indexer.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.Schema.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.SQLite.pas"/>
+        <DCCReference Include="..\storage\DRagLint.Storage.FileMembership.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.Delphi13.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.SpringDI.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DFM.pas"/>

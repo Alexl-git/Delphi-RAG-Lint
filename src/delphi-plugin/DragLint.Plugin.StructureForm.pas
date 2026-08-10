@@ -236,20 +236,97 @@ begin
   end;
 end; // function
 
-function ResolveDbForFile: string;
-{ v0.42: the Structure outline must query the SAME database the rest of the
-  plugin uses for the active file. Reuse the shared DbResolver and take the
-  primary (first, highest-priority) DB. Empty => let the exe self-resolve. }
 var
-  Dbs: TArray<string>;
+  { The file the Structure form is currently showing, mirrored out of
+    TDragLintStructureForm.FCurrentFile by RefreshForFile so the unit-level
+    ResolveDbForFile can see it. }
+  GStructureCurrentFile: string = '';
+
+  { Memo for ResolveDbForFile: one engine round-trip per file, not per menu
+    click. Nine call sites share this function and most fire from popup handlers,
+    so an unmemoised spawn would be paid again for every Find Usages, Fix-all and
+    Document-it on the same file. Invalidated by path, so switching files (or
+    switching active project, which changes the answer) re-probes. }
+  GDbForFileKey  : string = '';
+  GDbForFileValue: string = '';
+
+function ResolveDbForOpenFile(const AFilePath: string): string;
+{ v0.42: the Structure outline must query a database that ACTUALLY CONTAINS the
+  active file -- this is the one caller in the plugin that uses a SINGLE db
+  rather than passing the whole list to the engine, so if the first entry is
+  wrong there is no second chance and the result is silence, not an error.
+
+  v(project-scoped): resolving that db is no longer a pure path/manifest
+  question. Since the manifest was split per project, two projects can share a
+  directory, and which of their indexes holds a given file is a property of the
+  INDEX CONTENT -- only a `files` lookup can answer it. The engine does that
+  (resolve-dbs --in <file> --project <active>, which orders by membership and
+  breaks ties with the active project), so ask it rather than guess here: the
+  BPL has no SQLite of its own, and giving a design-time package a FireDAC
+  dependency to run one SELECT is a far worse trade than one cached spawn.
+
+  Falls back to the old take-the-first-resolved-db behaviour when the engine
+  cannot answer, so nothing regresses to empty. Empty => let the exe
+  self-resolve. }
+var
+  Dbs       : TArray<string>;
+  Key       : string        ;
+  Cmd       : string        ;
+  Output    : string        ;
+  Lines     : TArray<string>;
+  L         : string        ;
+  ActiveProj: string        ;
 begin
   Result:= '';
   try
-    Dbs:= ResolveActiveIndexDbs(LoadSettings);
-    if Length(Dbs) > 0 then Result:= Dbs[0];
+    { QUALIFIED: TDragLintStructureForm has a method of the same name, and this is
+      a unit-level function that must not accidentally shadow-resolve to it. }
+    ActiveProj:= DragLint.Plugin.DbResolver.GetActiveProjectFilePath;
+    Key:= LowerCase(AFilePath) + '|' + LowerCase(ActiveProj);
+    if (Key = GDbForFileKey) and (GDbForFileValue <> '') then Exit(GDbForFileValue);
+
+    if AFilePath <> '' then
+    begin
+      Cmd:= Format('"%s" resolve-dbs --in "%s"', [ResolveExePath, AFilePath]);
+      if ActiveProj <> '' then Cmd:= Cmd + Format(' --project "%s"', [ActiveProj]);
+      Output:= '';
+      if RunAndCaptureStdout(Cmd, Output, 15000) = 0 then
+      begin
+        Lines:= Output.Split([#13#10, #10], TStringSplitOptions.ExcludeEmpty);
+        for L in Lines do
+          if (Trim(L) <> '') and TFile.Exists(Trim(L)) then
+          begin
+            Result:= Trim(L);
+            Break;
+          end;
+      end;
+    end;
+
+    { Fallback: the resolver's own order, exactly as before. }
+    if Result = '' then
+    begin
+      Dbs:= ResolveActiveIndexDbs(LoadSettings);
+      if Length(Dbs) > 0 then Result:= Dbs[0];
+    end;
+
+    if Result <> '' then
+    begin
+      GDbForFileKey  := Key;
+      GDbForFileValue:= Result;
+    end;
   except
     Result:= '';
   end;
+end;
+
+{ Zero-arg form for the call sites that have no file to hand (they act on the
+  form's current file). Deliberately NOT an overload of ResolveDbForOpenFile: a
+  same-named pair here needs the `overload` directive on both, and getting that
+  wrong produced a cascade of confusing errors elsewhere in the unit. Two names
+  cost nothing. }
+function ResolveDbForFile: string;
+begin
+  Result:= ResolveDbForOpenFile(GStructureCurrentFile);
 end;
 
 { ---- TDragLintStructureForm ---- }
@@ -423,6 +500,10 @@ var
   DbPath : string;
 begin
   FCurrentFile:= AFilePath;
+  { Mirror it unit-level: ResolveDbForFile is a plain function (it predates the
+    form and is called from handlers that have no Self), and it now needs to know
+    WHICH file it is resolving for. }
+  GStructureCurrentFile:= AFilePath;
   if AFilePath = '' then
   begin
     FLblFile.Caption:= '(no active editor)';
@@ -438,7 +519,7 @@ begin
   StructureCache.InvalidateForFile(AFilePath);
   FDiags:= Cache.GetForFile(AFilePath);
   ExePath:= ResolveExePath;
-  DbPath := ResolveDbForFile;
+  DbPath := ResolveDbForOpenFile(AFilePath); { explicit: do not depend on the mirror being set first }
   FSyms:= StructureCache.GetSymbolsForFile(AFilePath, ExePath, DbPath);
 
   DLT(

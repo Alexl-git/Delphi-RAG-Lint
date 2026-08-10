@@ -243,6 +243,114 @@ Check 'read: an ambiguous active project falls back to the folder db, not a refu
   (($rAmb.Exit -eq 0) -and ($rAmb.Lines.Count -eq 1) -and ($rAmb.Lines[0] -like '*Union.sqlite')) `
   "exit=$($rAmb.Exit) $($rAmb.Lines -join ' | ')"
 
+# --- 6c: ordering by real INDEX MEMBERSHIP ---------------------------------
+# Everything above resolves from the manifest alone. This block asserts the part
+# that depends on DB CONTENT: which index actually holds the open file.
+#
+# Why it matters: TDragLintStructureForm.ResolveDbForFile consumes ONE db (the
+# first). "Consumers tolerate an extra db" is only true of consumers that read
+# more than one -- that one reads Dbs[0] and gets silence, not an error, when the
+# first entry does not contain the file. So these DBs are REAL, built by the real
+# indexer, with real files rows.
+$memDir = Join-Path $WorkDir 'mem'
+New-Item -ItemType Directory -Path $memDir -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $memDir 'AlphaOnly.pas') `
+  -Value "unit AlphaOnly;`r`ninterface`r`nimplementation`r`nend." -Encoding Ascii
+Set-Content -LiteralPath (Join-Path $memDir 'BetaOnly.pas') `
+  -Value "unit BetaOnly;`r`ninterface`r`nimplementation`r`nend." -Encoding Ascii
+Set-Content -LiteralPath (Join-Path $memDir 'Shared.pas') `
+  -Value "unit Shared;`r`ninterface`r`nimplementation`r`nend." -Encoding Ascii
+Set-Content -LiteralPath (Join-Path $memDir 'Stranger.pas') `
+  -Value "unit Stranger;`r`ninterface`r`nimplementation`r`nend." -Encoding Ascii
+foreach ($p in 'PA', 'PB') {
+  Set-Content -LiteralPath (Join-Path $memDir "$p.dproj") -Value '<Project/>' -Encoding Ascii
+}
+
+$dbA = Join-Path $WorkDir 'PA.sqlite'
+$dbB = Join-Path $WorkDir 'PB.sqlite'
+# Single-FILE index walks give exact control over membership:
+#   PA holds AlphaOnly + Shared;  PB holds BetaOnly + Shared;  neither holds Stranger.
+foreach ($pair in @(@($dbA, 'AlphaOnly.pas'), @($dbA, 'Shared.pas'),
+                    @($dbB, 'BetaOnly.pas'),  @($dbB, 'Shared.pas'))) {
+  & $Exe index (Join-Path $memDir $pair[1]) --db $pair[0] *> $null
+}
+Check 'membership fixture: both project DBs were built' `
+  ((Test-Path -LiteralPath $dbA) -and (Test-Path -LiteralPath $dbB)) ''
+
+# TWO manifests, differing only in SECTION ORDER. Not fixture padding -- it is
+# forced by the shape of the thing under test, in two ways worth stating:
+#
+#   1. ResolveReadDbs offers exactly two candidates: the ACTIVE project's db and
+#      the FOLDER-matched db. The non-active sibling's db is only ever reachable
+#      as the folder match. (A real limitation, recorded in the task report:
+#      with three siblings in one folder the third is never a candidate at all.)
+#   2. Both sibling .dproj includes fold to the SAME folder, so the folder rule's
+#      longest-prefix comparison is a tie and its strict '>' keeps the FIRST
+#      section. Which sibling is the folder match is therefore decided by
+#      declaration order -- so swapping the order is what swaps the candidate.
+#
+# Hence: PA-first exercises "PA is the folder match", PB-first the mirror image.
+function New-MemManifest([string]$Tag, [string]$First, [string]$Second) {
+  $j = @"
+{
+  "settings": { "defaultPlatform": "Win64" },
+  "indexes": {
+    "outDir": "$outJson",
+    "sections": [
+      { "name": "$First",  "db": "$First.sqlite",  "include": ["$($memDir.Replace('\','\\'))\\$First.dproj"] },
+      { "name": "$Second", "db": "$Second.sqlite", "include": ["$($memDir.Replace('\','\\'))\\$Second.dproj"] }
+    ]
+  }
+}
+"@
+  $path = Join-Path $WorkDir "mem-$Tag.json"
+  Set-Content -LiteralPath $path -Value $j -Encoding Ascii
+  $path
+}
+$memCfgA = New-MemManifest 'a' 'PA' 'PB'   # folder match -> PA
+$memCfgB = New-MemManifest 'b' 'PB' 'PA'   # folder match -> PB
+
+function Resolve-Mem([string]$EditorFile, [string]$ProjPath, [string]$Cfg) {
+  $out = Join-Path $WorkDir 'mout.txt'
+  $err = Join-Path $WorkDir 'merr.txt'
+  $a = @('resolve-dbs', '--in', $EditorFile, '--config', $Cfg)
+  if ($ProjPath) { $a += @('--project', $ProjPath) }
+  $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru `
+         -RedirectStandardOutput $out -RedirectStandardError $err
+  ,@(Get-Content -LiteralPath $out -ErrorAction SilentlyContinue |
+     Where-Object { $_.Trim() -ne '' })
+}
+
+# THE assertion: AlphaOnly.pas is in PA only. With PB ACTIVE, PA must lead
+# anyway, because PB does not contain the file at all. Pre-fix: PB led.
+$mA = Resolve-Mem (Join-Path $memDir 'AlphaOnly.pas') (Join-Path $memDir 'PB.dproj') $memCfgA
+Check 'membership: the db that CONTAINS the file leads, even when the other project is active' `
+  (($mA.Count -ge 1) -and ($mA[0] -like '*PA.sqlite')) ($mA -join ' | ')
+
+# The same swap the other way round, so the assertion cannot be passing by
+# accident of ordering.
+$mB = Resolve-Mem (Join-Path $memDir 'BetaOnly.pas') (Join-Path $memDir 'PA.dproj') $memCfgB
+Check 'membership: and symmetrically the other way round' `
+  (($mB.Count -ge 1) -and ($mB[0] -like '*PB.sqlite')) ($mB -join ' | ')
+
+# Tie: Shared.pas is in BOTH dbs -> the ACTIVE project breaks it. Both spellings,
+# so each case really has two holders to choose between.
+$mT1 = Resolve-Mem (Join-Path $memDir 'Shared.pas') (Join-Path $memDir 'PB.dproj') $memCfgA
+Check 'membership tie: a file in BOTH dbs resolves to the ACTIVE project (PB)' `
+  (($mT1.Count -eq 2) -and ($mT1[0] -like '*PB.sqlite')) ($mT1 -join ' | ')
+$mT2 = Resolve-Mem (Join-Path $memDir 'Shared.pas') (Join-Path $memDir 'PA.dproj') $memCfgB
+Check 'membership tie: same file, other project active, other db (PA)' `
+  (($mT2.Count -eq 2) -and ($mT2[0] -like '*PA.sqlite')) ($mT2 -join ' | ')
+
+# No holder: nothing contains Stranger.pas -> order untouched, list not shortened
+# (this is the library-source case that must not regress).
+$mN = Resolve-Mem (Join-Path $memDir 'Stranger.pas') (Join-Path $memDir 'PB.dproj') $memCfgA
+Check 'membership: with NO db containing the file, the active-project order is unchanged' `
+  (($mN.Count -eq 2) -and ($mN[0] -like '*PB.sqlite')) ($mN -join ' | ')
+
+Check 'membership: reordering is a permutation -- no candidate is dropped' `
+  (($mA.Count -eq 2) -and ($mB.Count -eq 2)) "A=$($mA.Count) B=$($mB.Count)"
+
 # --- 6: --json carries the section name ------------------------------------
 $j = Resolve-Project (Join-Path $shared 'Alpha.dproj') -Json
 $obj = $null
