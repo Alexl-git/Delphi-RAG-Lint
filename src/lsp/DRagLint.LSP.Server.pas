@@ -401,7 +401,7 @@ type
       /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas), DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas), DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) (+66 more)
+      /// Called from: DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)
       /// Calls: DRagLint.LSP.Server.TLSPServer.Create/1
       /// Overload 1 of 2
       /// Recursive

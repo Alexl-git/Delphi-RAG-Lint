@@ -66,7 +66,7 @@ type
     /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+80 more)
+    /// Called from: DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas)
     /// Writes: Index, Items, Succ, Pred
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddItem"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddSucc"/>
@@ -89,7 +89,6 @@ type
     /// <param name="AOpaque"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas)
     /// Reads: Items
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddSucc"/>
@@ -102,7 +101,6 @@ type
     /// <param name="AToIdx"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Analysis.Cfg.TBuilderState.DivertVia (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas)
     /// Reads: Succ
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddItem"/>
@@ -135,10 +133,7 @@ type
     /// <summary><!-- drag-lint:auto -->TCfg</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+80 more)
-    /// Calls: DRagLint.Analysis.Cfg.TCfg.Create
     /// Writes: Blocks, ForVars
-    /// Recursive
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Destroy"/>
@@ -189,7 +184,7 @@ type
     /// after construction; required by backward analyses (liveness).</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas) ?
+    /// Called from: DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
     /// Reads: Blocks
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>

@@ -283,7 +283,7 @@ type
       /// <returns>New TJSONObject; caller must free.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Save (DRagLint.Index.Manifest.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas) ?
+      /// Called from: DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Save (DRagLint.Index.Manifest.pas)
       /// Calls: DRagLint.Index.Manifest.ProjectsIndexingToStr
       /// Returns: TJSONObject.Create
       /// Complexity: 12 (cyclomatic, outer body), 100 lines (full implementation)

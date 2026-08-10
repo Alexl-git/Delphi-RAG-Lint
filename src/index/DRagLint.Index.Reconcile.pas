@@ -180,7 +180,7 @@ type
       /// <param name="AStaleGlobs"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+65 more)
+      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
       /// Writes: FLibraryRoots, FStaleGlobs
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>

@@ -60,7 +60,6 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
     /// Complexity: 17 (cyclomatic, outer body), 64 lines (full implementation)
     /// Mutates: AIn (out), AOut (out)
     /// <!-- drag-lint:auto END -->

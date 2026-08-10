@@ -67,10 +67,7 @@ type
     /// <summary><!-- drag-lint:auto -->TDfmNode</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Convert.DfmReemit.TDfmNode.Create (DRagLint.Convert.DfmReemit.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+60 more)
-    /// Calls: DRagLint.Convert.DfmReemit.TDfmNode.Create
     /// Writes: FChildren
-    /// Recursive
     /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Destroy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>

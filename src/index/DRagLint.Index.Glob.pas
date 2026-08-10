@@ -34,7 +34,7 @@ type
       /// <returns>True if AName matches APattern.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.Coverage.IsBuiltinPrune (DRagLint.Index.Coverage.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.Reconcile.IsStaleName (DRagLint.Index.Reconcile.pas) (+7 more)
+      /// Called from: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.Coverage.IsBuiltinPrune (DRagLint.Index.Coverage.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.Reconcile.IsStaleName (DRagLint.Index.Reconcile.pas) (+2 more)
       /// Calls: DRagLint.Index.Glob.GlobMatch, DRagLint.Index.Glob.Normalize
       /// Returns: GlobMatch(Normalize(AName), Normalize(APattern))
       /// Pure

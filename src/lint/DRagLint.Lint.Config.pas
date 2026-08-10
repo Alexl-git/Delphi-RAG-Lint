@@ -63,7 +63,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Config.TLintConfig.IsAutoFix (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.ShouldKeep (DRagLint.Lint.Config.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesAudit.UnitsDefining (DRagLint.CLI.pas) ?, DRagLint.CLI.ErrorSignatures (DRagLint.CLI.pas) ? (+5 more)
+    /// Called from: DRagLint.Lint.Config.TLintConfig.IsAutoFix (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.ShouldKeep (DRagLint.Lint.Config.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.ErrorSignatures (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveEndpointIds (DRagLint.CLI.pas) ? (+2 more)
     /// Calls: SameText, Trim
     /// Pure
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
@@ -101,7 +101,6 @@ type
     /// <param name="AReplace"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas)
     /// Calls: DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef, unchanged
     /// Complexity: 15 (cyclomatic, outer body), 63 lines (full implementation)
     /// Reads: FDisabled, FEnabled, FAutoFix, FThreshNames, FThreshValues   Writes: FDisabled, FEnabled, FAutoFix, FThreshNames, FThreshValues
@@ -232,7 +231,6 @@ type
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas)
     /// Calls: Trim
     /// Reads: FEnabled   Writes: FEnabled
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
@@ -247,7 +245,6 @@ type
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas)
     /// Calls: Trim
     /// Reads: FDisabled   Writes: FDisabled
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>

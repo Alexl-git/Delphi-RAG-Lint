@@ -73,7 +73,7 @@ type
     ['{6B9F8AC4-3F19-4E1A-9D38-1A2C3B7EF501}']
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+32 more)
+    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+28 more)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -96,7 +96,7 @@ type
     /// <param name="AExpected"><!-- drag-lint:auto type -->out Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenWritableStore (DRagLint.CLI.pas) ?
+    /// Called from: DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -226,7 +226,7 @@ type
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas) (+27 more)
+    /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas) (+25 more)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -295,7 +295,7 @@ type
     /// <param name="ACalleeName"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) (+3 more)
+    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) (+2 more)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -320,7 +320,7 @@ type
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoHelpersOf (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas) (+59 more)
+    /// Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoHelpersOf (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas) (+58 more)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -463,7 +463,7 @@ type
     /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) ?
+    /// Called from: DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -477,7 +477,7 @@ type
     /// <param name="AAllVisibility"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) ?
+    /// Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -489,7 +489,7 @@ type
     /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSlice (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) ?
+    /// Called from: DRagLint.CLI.DoSlice (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -529,7 +529,7 @@ type
     /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas) ?, DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) ? (+1 more)
+    /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -808,7 +808,7 @@ type
     /// <param name="ATag"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) ?
+    /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -821,7 +821,7 @@ type
     /// <param name="APublicOnly"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc (DRagLint.Lint.DocRules.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) ?
+    /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc (DRagLint.Lint.DocRules.pas)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -993,7 +993,7 @@ type
     /// <param name="ALimit"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems (DRagLint.LSP.Completion.pas), DRagLint.Resolver.TypeAt.FindGenericBaseAnywhere (DRagLint.Resolver.TypeAt.pas) ?
+    /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems (DRagLint.LSP.Completion.pas)
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -1307,6 +1307,19 @@ type
     /// different file -- usually none -- in another store's files table, and the
     /// reachable set would collapse to empty. See the extra-store loop in
     /// DRagLint.Doc.Facts.</param>
+    /// <param name="AOwnerTypeName">v20: the LEAF NAME of the type that owns the
+    /// target ('TOnlyOnce' for TOnlyOnce.Create), or '' for a free routine and
+    /// for any caller that cannot supply it. Non-empty enables the RECEIVER
+    /// filter: a ref is kept only when its call site was written against this
+    /// type, was unqualified, or was `Self`.
+    /// 
+    /// '' preserves the pre-v20 behaviour exactly, so an existing caller is not
+    /// silently changed by adding the parameter. Rows whose receiver_text is
+    /// NULL are ALWAYS kept: NULL means the DB has never been resolved by a v20
+    /// engine, and treating "not recorded" as "no receiver" would drop every
+    /// genuine caller on a stale index. Reindex to make the filter effective --
+    /// do not loosen the predicate, the same rule the uses-scope filter carries
+    /// a few lines below.</param>
     /// <remarks>
     /// v(ADP3 T3i review round 4): THIS DECLARATION IS THE SINGLE
     /// SOURCE for what ACallSitesOnly means and for who may pass it. The
@@ -1354,19 +1367,6 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="AOwnerTypeName">v20: the LEAF NAME of the type that owns the
-    /// target ('TOnlyOnce' for TOnlyOnce.Create), or '' for a free routine and
-    /// for any caller that cannot supply it. Non-empty enables the RECEIVER
-    /// filter: a ref is kept only when its call site was written against this
-    /// type, was unqualified, or was `Self`.
-    ///
-    /// '' preserves the pre-v20 behaviour exactly, so an existing caller is not
-    /// silently changed by adding the parameter. Rows whose receiver_text is
-    /// NULL are ALWAYS kept: NULL means the DB has never been resolved by a v20
-    /// engine, and treating "not recorded" as "no receiver" would drop every
-    /// genuine caller on a stale index. Reindex to make the filter effective --
-    /// do not loosen the predicate, the same rule the uses-scope filter carries
-    /// a few lines below.</param>
     function FindUnresolvedNameCallers(const AName: string;
       ACallSitesOnly: Boolean = True;
       AReachableToFileId: Int64 = 0;

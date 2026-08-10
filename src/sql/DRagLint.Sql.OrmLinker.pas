@@ -60,7 +60,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: Default       (TOrmLinkerStats).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintProject (DRagLint.CLI.pas) ?, DRagLint.CLI.Run (DRagLint.CLI.pas) ?
+      /// Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas)
       /// Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, StripPrefix, UpperCase
       /// Complexity: 13 (cyclomatic, outer body), 244 lines (full implementation)
       /// SQL: writes ORM_LINKS

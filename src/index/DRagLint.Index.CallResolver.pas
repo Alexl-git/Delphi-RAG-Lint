@@ -346,10 +346,9 @@ type
     /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ? (+155 more)
-    /// Calls: DRagLint.Index.CallResolver.TCallResolver.BuildMaps, DRagLint.Index.CallResolver.TCallResolver.Create
+    /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)
+    /// Calls: DRagLint.Index.CallResolver.TCallResolver.BuildMaps
     /// Writes: FStore, FNameToCands, FNameToRoutines, FFileScope, FChildCache, FLineCache
-    /// Recursive
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
@@ -381,7 +380,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)
     /// Calls: Default, DRagLint.Index.CallResolver.CountCallArgs, DRagLint.Index.CallResolver.ExtractReceiverExpr, DRagLint.Index.CallResolver.TCallResolver.LinesOf, DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes, DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType, DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine, DRagLint.Index.CallResolver.TCallResolver.TypeReceiver
-    /// Complexity: 11 (cyclomatic, outer body), 103 lines (full implementation)
+    /// Complexity: 11 (cyclomatic, outer body), 109 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Index.CallResolver.CountCallArgs"/>
     /// <seealso cref="DRagLint.Index.CallResolver.ExtractReceiverExpr"/>
@@ -407,7 +406,7 @@ type
   /// <!-- drag-lint:auto BEGIN -->
   /// Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)
   /// Calls: Copy, DRagLint.Index.CallResolver.IsIdentPart, Trim
-  /// Complexity: 26 (cyclomatic, outer body), 65 lines (full implementation)
+  /// Complexity: 34 (cyclomatic, outer body), 96 lines (full implementation)
   /// Pure
   /// <seealso cref="DRagLint.Index.CallResolver.IsIdentPart"/>
   /// <!-- drag-lint:auto END -->
