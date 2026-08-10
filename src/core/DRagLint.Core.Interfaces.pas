@@ -112,14 +112,19 @@ type
     /// <param name="ARoots">The roots just walked. A file outside all of them is
     /// left alone no matter what: indexing one subfolder must never purge the
     /// rest of the DB. An empty array prunes NOTHING.</param>
-    /// <returns>The paths removed, in the order encountered; empty if none.</returns>
+    /// <param name="ADryRun">True COMPUTES the sweep and deletes NOTHING: the
+    /// same paths come back, the index is left exactly as it was. This is what
+    /// makes `--no-prune` a preview rather than a silent no-op -- a caller about
+    /// to sweep a multi-gigabyte corpus can see the list first.</param>
+    /// <returns>The paths removed -- or, under ADryRun, the paths that WOULD be
+    /// removed -- in the order encountered; empty if none.</returns>
     /// <remarks>An incremental walk adds new files and refreshes changed ones but
     /// has no notion of a file that went away, so rows for deleted/moved/renamed
     /// source outlive it and keep feeding the linter -- findings get reported
     /// against paths that do not exist, and the totals used to judge a cleanup are
     /// wrong. "Does not exist on disk" is the only deletion predicate; a file that
     /// is merely out of the walk's filter is never touched.</remarks>
-    function PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
+    function PruneMissingFiles(const ARoots: TArray<string>; ADryRun: Boolean = False): TArray<string>;
 
     /// <summary>Deletes every indexed file whose path lies under one of ARoots
     /// and is NOT named in AInScopeAbsPaths, together with everything that hangs
@@ -134,7 +139,13 @@ type
     /// files the walk admitted after its excludes and ignore rules. Absolute
     /// paths; matched case-insensitively on the same canonical spelling as
     /// files.path. An EMPTY array evicts NOTHING (see remarks).</param>
-    /// <returns>The paths removed, in the order encountered; empty if none.</returns>
+    /// <param name="ADryRun">True COMPUTES the sweep and deletes NOTHING: the
+    /// same paths come back, the index is left exactly as it was. `--no-prune`
+    /// passes it, which is what turns that flag from a silent no-op into the
+    /// preview the CLI help promises -- eviction over the shared Library
+    /// corpora is otherwise unreviewable before the fact.</param>
+    /// <returns>The paths removed -- or, under ADryRun, the paths that WOULD be
+    /// removed -- in the order encountered; empty if none.</returns>
     /// <remarks>The counterpart to PruneMissingFiles, and the one it cannot
     /// stand in for: prune deletes a file that has left the DISK, this deletes a
     /// file that still EXISTS and has left the SCOPE. Nothing did that before,
@@ -160,7 +171,8 @@ type
     /// <exception cref="EDatabaseError">Raised when the delete cannot be applied
     /// (a read-only or locked DB). The sweep is one transaction, so the index is
     /// left exactly as it was.</exception>
-    function EvictOutOfScopeFiles(const ARoots, AInScopeAbsPaths: TArray<string>): TArray<string>;
+    function EvictOutOfScopeFiles(const ARoots, AInScopeAbsPaths: TArray<string>;
+      ADryRun: Boolean = False): TArray<string>;
 
     /// <summary>Deletes EVERY row in `files` and everything that hangs off it
     /// (symbols, refs, uses, docs, DI bindings, string literals and their FTS5

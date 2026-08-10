@@ -224,8 +224,9 @@ type
       procedure DeleteDiBindingsForFile(AFileId: Int64);
       procedure UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
       procedure DeleteStringLiteralsForFile(AFileId: Int64);
-      function PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
-      function EvictOutOfScopeFiles(const ARoots, AInScopeAbsPaths: TArray<string>): TArray<string>;
+      function PruneMissingFiles(const ARoots: TArray<string>; ADryRun: Boolean = False): TArray<string>;
+      function EvictOutOfScopeFiles(const ARoots, AInScopeAbsPaths: TArray<string>;
+        ADryRun: Boolean = False): TArray<string>;
       function ClearAllFiles: Integer;
       function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
       // v14 (D5): resolved call-target edges (call_edges table).
@@ -2198,8 +2199,13 @@ begin
 end;
 
 { Drops every indexed file that lived under one of ARoots and is no longer on
-  disk. See ISymbolStore.PruneMissingFiles for the contract. }
-function TSQLiteSymbolStore.PruneMissingFiles(const ARoots: TArray<string>): TArray<string>;
+  disk. See ISymbolStore.PruneMissingFiles for the contract.
+
+  ADryRun stops between the COLLECT and the DELETE, which is the only honest
+  place for it: the returned list is then produced by the same predicate over
+  the same rows the real sweep would have deleted, so a preview cannot disagree
+  with the run it previews. }
+function TSQLiteSymbolStore.PruneMissingFiles(const ARoots: TArray<string>; ADryRun: Boolean = False): TArray<string>;
 var
   Q     : TFDQuery      ;
   Fid   : Int64         ;
@@ -2235,6 +2241,7 @@ begin
     end;
 
     if Ids.Count = 0 then Exit;
+    if ADryRun then Exit(Gone.ToArray);
     DeleteFilesByIds(Ids);
     Result:= Gone.ToArray;
   finally
@@ -2259,7 +2266,8 @@ end;
   .dproj), while files.path holds the one NormalizeStoredPath produced at write
   time. Comparing those two raw was B6's bug, and here it would not merely
   duplicate a row -- it would EVICT every file whose spelling disagreed. }
-function TSQLiteSymbolStore.EvictOutOfScopeFiles(const ARoots, AInScopeAbsPaths: TArray<string>): TArray<string>;
+function TSQLiteSymbolStore.EvictOutOfScopeFiles(const ARoots, AInScopeAbsPaths: TArray<string>;
+  ADryRun: Boolean = False): TArray<string>;
 var
   Q      : TFDQuery                    ;
   Fid    : Int64                       ;
@@ -2310,6 +2318,8 @@ begin
     end;
 
     if Ids.Count = 0 then Exit;
+    { The DRY LOOK stops here: same predicate, same rows, nothing deleted. }
+    if ADryRun then Exit(Gone.ToArray);
     DeleteFilesByIds(Ids);
     Result:= Gone.ToArray;
   finally

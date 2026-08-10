@@ -403,28 +403,32 @@ begin
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
   Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--dry-run [--json]] [--jobs <n>]');
-  Writeln('                               any index form also takes [--force-reparse] (alias --no-skip): re-parse every');
-  Writeln('                               walked file even when path+mtime+sha are unchanged. Needed once per DB after an');
-  Writeln('                               engine upgrade that extracts something new -- see INBOX 2.3.');
-  Writeln('                               a FOLDER walk PRUNES BY DEFAULT: indexed files that lie under the walked folders');
-  Writeln('                               and NO LONGER EXIST on disk (deleted/moved/renamed source) are deleted together');
-  Writeln('                               with their symbols/refs/uses/docs. Otherwise those rows outlive their files and');
-  Writeln('                               every reference-derived answer (find-callers, unused-public-symbol, doc facts)');
-  Writeln('                               is computed against source that is not there. Scoped to the folders THIS run');
-  Writeln('                               walked -- indexing a subfolder never purges the rest. [--no-prune] opts out;');
-  Writeln('                               [--prune] forces it for a single-FILE walk, which does not prune by default.');
-  Writeln('                               EVERY walk also EVICTS: indexed files that lie under the walked roots, still');
-  Writeln('                               EXIST, and are NO LONGER IN SCOPE -- a unit dropped from the .dproj, a copy');
-  Writeln('                               under an ignored folder, a tree a new [--exclude] now covers -- are deleted');
-  Writeln('                               with their symbols. Prune is the same sweep for source that left the DISK.');
-  Writeln('                               Bounded to the roots THIS run walked, so indexing one project never purges');
-  Writeln('                               another''s rows from a shared DB. Reported only when something was evicted.');
-  Writeln('                               [--no-prune] opts out of BOTH sweeps: it is the one "delete nothing" switch.');
-  Writeln('                               MODE: [--recompile] (DEFAULT) updates the index in place; [--rebuild] first');
-  Writeln('                               DELETES every indexed file from the DB, then walks. It deletes rows, not the');
+  Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr>');
+  Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
+  Writeln('                               members, the project-local units they transitively use, each one''s sibling');
+  Writeln('                               .dfm, its {$I} includes, and the project file -- and NOTHING else. A loose');
+  Writeln('                               .pas nobody references, and anything on a Delphi Library/Browsing path, stay');
+  Writeln('                               OUT. A FOLDER target indexes the whole tree instead.');
+  Writeln('                               MODE is CHOSEN PER RUN. [--recompile] (DEFAULT) updates the index in place;');
+  Writeln('                               [--rebuild] first empties it of source, then walks. It deletes ROWS, not the');
   Writeln('                               .sqlite: schema, migrations and settings survive and no open handle is');
   Writeln('                               dropped. Implies --force-reparse. The two are mutually exclusive, and BOTH');
   Writeln('                               apply to index --all: each manifest section honours the mode it was given.');
+  Writeln('                               [--force-reparse] (alias --no-skip): re-parse every walked file even when');
+  Writeln('                               path+mtime+sha are unchanged. Needed once per DB after an engine upgrade that');
+  Writeln('                               extracts something new -- see INBOX 2.3.');
+  Writeln('                               EVERY walk SWEEPS, and both halves delete symbols/refs/uses/docs with the');
+  Writeln('                               file: PRUNE drops indexed files that left the DISK; EVICTION drops files that');
+  Writeln('                               STILL EXIST and left the SCOPE -- a unit dropped from the .dproj, a copy under');
+  Writeln('                               an ignored folder, a tree a new [--exclude] now covers. Rows that outlive');
+  Writeln('                               their scope make every reference-derived answer (find-callers,');
+  Writeln('                               unused-public-symbol, doc facts) wrong. Bounded to the roots THIS run walked,');
+  Writeln('                               so indexing one project never purges another''s rows from a shared DB, and');
+  Writeln('                               reported only when there is something to report. [--prune] forces the sweep');
+  Writeln('                               for a single-FILE walk, which does not sweep by default. [--no-prune] is the');
+  Writeln('                               one "delete nothing" switch, and it is a DRY LOOK: both sweeps are still');
+  Writeln('                               COMPUTED and REPORTED as "would remove" (count + a capped sample of paths),');
+  Writeln('                               nothing is deleted. Take it before a big run. Applies to index --all too.');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
@@ -1569,11 +1573,48 @@ begin
   Result:= False;
 end; // function
 
+{ How many paths a sweep report prints before it stops counting out loud. A
+  sweep over the shared Library corpora can name six figures of files, and a
+  preview nobody can scroll is not a preview: the COUNT is the number an
+  operator decides on, the sample only has to make the list recognisable. }
+const
+  SWEEP_SAMPLE_MAX = 20;
+
+/// <summary>Prints a sweep's paths under an already-printed headline: at most
+///  SWEEP_SAMPLE_MAX of them, then a "... and N more" tail.</summary>
+/// <param name="APaths">The removed -- or, for a dry look, would-be-removed --
+///  paths. Empty prints nothing.</param>
+/// <param name="AIndent">Leading whitespace, so the manifest arm's per-section
+///  indentation and the single-root arm's flush output both read correctly.</param>
+/// <remarks>Shared by prune and eviction, real and dry, so the four reports
+///  cannot drift into four different shapes.</remarks>
+procedure PrintSweepSample(const APaths: TArray<string>; const AIndent: string);
+var
+  i: Integer;
+begin
+  for i:= 0 to High(APaths) do
+  begin
+    if i >= SWEEP_SAMPLE_MAX then
+    begin
+      Writeln(Format('%s... and %d more', [AIndent, Length(APaths) - SWEEP_SAMPLE_MAX]));
+      Break;
+    end;
+    Writeln(AIndent, APaths[i]);
+  end;
+end; // procedure
+
 { ARebuild selects the MODE, and False is the default because --recompile is:
   a caller that passes nothing gets an incremental refresh, not a wipe. See the
   note where RecreateSectionDb used to live for what this replaced. }
+{ ANoPrune is the caller's --no-prune, and it had to become a parameter: this
+  function did not receive it, so `index --all` evicted UNCONDITIONALLY while
+  the help text promised one "delete nothing" switch for both arms. It does not
+  suppress the sweep, it makes it DRY -- the section still computes what it
+  would have removed and reports it, which is the only way an operator can
+  review an eviction over the multi-gigabyte Library sections before approving
+  it. }
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
-  AForceReparse: Boolean = False; ARebuild: Boolean = False): Boolean;
+  AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False): Boolean;
 var
   Store          : ISymbolStore                              ;
   Indexer        : IIndexer                                  ;
@@ -1753,14 +1794,22 @@ begin
       anyway (below), and SectionScope then holds only the healthy projects'
       files -- while EvictRoots may still cover a sibling directory the dead
       project's units live in. Evicting on a scope that is known to be partial is
-      how a typo in a manifest turns into data loss. }
+      how a typo in a manifest turns into data loss.
+
+      --no-prune MAKES IT DRY, IT DOES NOT MAKE IT SILENT. The sweep is still
+    computed and still reported -- as "would remove" -- and nothing is deleted.
+    A flag that merely skipped the call would leave an operator facing a
+    multi-gigabyte Library sweep with no way to see what it is about to take. }
     if (Length(DeadProjects) = 0) and (Length(SectionScope) > 0) then
     begin
-      Evicted:= Store.EvictOutOfScopeFiles(EvictRoots, SectionScope);
+      Evicted:= Store.EvictOutOfScopeFiles(EvictRoots, SectionScope, ANoPrune);
       if Length(Evicted) > 0 then
       begin
-        Writeln(Format('  scope: evicted %d indexed file(s) no longer in this section:', [Length(Evicted)]));
-        for ProjectFile in Evicted do Writeln('    ', ProjectFile);
+        if ANoPrune then
+          Writeln(Format('  scope: WOULD REMOVE %d indexed file(s) no longer in this section (suppressed by --no-prune):', [Length(Evicted)]))
+        else
+          Writeln(Format('  scope: evicted %d indexed file(s) no longer in this section:', [Length(Evicted)]));
+        PrintSweepSample(Evicted, '    ');
       end;
     end;
 
@@ -1927,7 +1976,7 @@ begin
   if EffJobs <= 1 then
   begin
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild) then AnyFailed:= True; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -1939,7 +1988,7 @@ begin
   begin
     Writeln(ErrOutput, 'NOTE: --jobs >1 requires --config <path>; running sequentially.');
     AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild) then AnyFailed:= True; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune) then AnyFailed:= True; end;
     if AnyFailed then Result:= 1 else Result:= 0;
     Exit;
   end;
@@ -2003,6 +2052,11 @@ begin
         a rebuild. --rebuild also implies --force-reparse in the child's own
         ParseArgs, so the reparse travels with it. }
       if AArgs.Rebuild then ChildCmdLine:= ChildCmdLine + ' --rebuild';
+      { And so does --no-prune, for the same reason: the child re-parses its own
+        arguments, so a flag left off this line simply does not exist over there
+        -- `index --all --no-prune --jobs 4` would evict from every section it
+        was told not to touch, and report nothing. }
+      if AArgs.NoPrune then ChildCmdLine:= ChildCmdLine + ' --no-prune';
 
       SetLength(ChildCmdBuf, Length(ChildCmdLine) + 1);
       Move(PChar(ChildCmdLine)^, ChildCmdBuf[0], (Length(ChildCmdLine) + 1) * SizeOf(WideChar));
@@ -2423,19 +2477,33 @@ begin
       "delete everything under this root that is missing" is not a sentence that
       makes sense for one path the caller just named. Deletion is still bounded
       to the walked roots either way. }
-    var WantPrune: Boolean:= AArgs.Prune;
-    if not AArgs.NoPrune then
-      for F in Folders do
-        if TDirectory.Exists(F) then begin WantPrune:= True; Break; end;
-    if AArgs.NoPrune then WantPrune:= False;
+    { --no-prune MAKES THE SWEEP DRY, it no longer skips it: the same predicate
+      over the same rows still runs, the result is still reported -- as "would
+      remove" -- and nothing is deleted. A flag that deleted nothing and said
+      nothing left the caller with no way to see what the sweep is about to
+      take, which is the whole reason to reach for it before a big run. }
+    var WalksAFolder: Boolean:= False;
+    for F in Folders do
+      if TDirectory.Exists(F) then begin WalksAFolder:= True; Break; end;
+    var DrySweep : Boolean:= AArgs.NoPrune                ;
+    var WantPrune: Boolean:= AArgs.Prune or WalksAFolder  ;
     if WantPrune then
     begin
-      var Pruned: TArray<string>:= Store.PruneMissingFiles(Folders);
-      if Length(Pruned) = 0 then Writeln('--prune: no vanished files to remove.')
+      var Pruned: TArray<string>:= Store.PruneMissingFiles(Folders, DrySweep);
+      if Length(Pruned) = 0 then
+      begin
+        { Only the real sweep says "nothing to do": a --no-prune run that found
+          nothing has nothing to preview, and a line per run is a line nobody
+          reads. }
+        if not DrySweep then Writeln('--prune: no vanished files to remove.');
+      end
       else
       begin
-        Writeln(Format('--prune: removed %d file(s) no longer on disk:', [Length(Pruned)]));
-        for var PP: string in Pruned do Writeln('  ', PP);
+        if DrySweep then
+          Writeln(Format('--prune: WOULD REMOVE %d file(s) no longer on disk (suppressed by --no-prune):', [Length(Pruned)]))
+        else
+          Writeln(Format('--prune: removed %d file(s) no longer on disk:', [Length(Pruned)]));
+        PrintSweepSample(Pruned, '  ');
       end;
     end;
 
@@ -2469,8 +2537,8 @@ begin
       either -- so an eviction that ignored the flag would delete the very rows
       --no-prune exists to protect, and the flag would silently stop working.
       One opt-out for every row-deleting sweep is also the only version of this
-      a caller can remember. }
-    if not AArgs.NoPrune then
+      a caller can remember. Suppresses the DELETE, not the LOOK: like prune
+      above, the sweep is computed and reported as "would remove". }
     begin
       var EvictRoots: TArray<string>;
       var InScope   : TArray<string>;
@@ -2484,11 +2552,14 @@ begin
         InScope   := Indexer.VisitedFiles;
         EvictRoots:= Folders;
       end;
-      var Evicted: TArray<string>:= Store.EvictOutOfScopeFiles(EvictRoots, InScope);
+      var Evicted: TArray<string>:= Store.EvictOutOfScopeFiles(EvictRoots, InScope, DrySweep);
       if Length(Evicted) > 0 then
       begin
-        Writeln(Format('scope: evicted %d indexed file(s) that are no longer in scope:', [Length(Evicted)]));
-        for var EP: string in Evicted do Writeln('  ', EP);
+        if DrySweep then
+          Writeln(Format('scope: WOULD REMOVE %d indexed file(s) that are no longer in scope (suppressed by --no-prune):', [Length(Evicted)]))
+        else
+          Writeln(Format('scope: evicted %d indexed file(s) that are no longer in scope:', [Length(Evicted)]));
+        PrintSweepSample(Evicted, '  ');
       end;
     end;
 
@@ -2729,7 +2800,7 @@ begin
     TDirectory.CreateDirectory(OutDir);
     AnyFailed:= False;
     for var PS in Plan.Items do
-      if not BuildPlanItem(PS, AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild) then AnyFailed:= True;
+      if not BuildPlanItem(PS, AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune) then AnyFailed:= True;
 
     if AnyFailed then Result:= 1 else Result:= 0;
   finally
