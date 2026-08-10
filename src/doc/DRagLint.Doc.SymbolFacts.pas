@@ -2003,18 +2003,30 @@ end;
 // its ancestor node shape (assignment/exprCall/args/...).
 procedure WalkSqlLiterals(const N: TTSNode; const ASrc: TBytes; AReads, AWrites: TStringList);
 var
-  Text   : string ;
-  Dynamic: Boolean;
-  I      : Integer;
+  Text     : string ;
+  { Named IsDynamic, not Dynamic. `dynamic` is a Delphi CONTEXT-SENSITIVE
+    keyword -- legal as an identifier, and a method directive elsewhere -- and
+    the vendored tree-sitter grammar treats it as reserved outright. So this one
+    declaration made drag-lint fail to parse its OWN source, and it was the
+    source of 2 of the 3 error-severity findings in the entire self-lint.
+
+    This is a WORKAROUND, not the fix. The grammar is the thing that is wrong,
+    and it stays wrong for every other codebase that names a variable Dynamic;
+    the parser is shipped here as a prebuilt library with no grammar sources in
+    the tree, so correcting it needs an upstream regeneration this repo cannot
+    currently do. Logged as an `unsupported` gap. Renaming buys drag-lint a
+    clean parse of itself and buys nothing for anyone else. }
+  IsDynamic: Boolean;
+  I        : Integer;
 begin
   if N.IsNull then Exit;
   if N.NodeType = 'defProc' then Exit; // nested routine -- analyzed separately, on its own
   if IsTopOfConcatRun(N, ASrc) then
   begin
     Text:= '';
-    Dynamic:= False;
-    CollectConcatRun(N, ASrc, Text, Dynamic);
-    if (not Dynamic) and ClassifySqlText(Text) then
+    IsDynamic:= False;
+    CollectConcatRun(N, ASrc, Text, IsDynamic);
+    if (not IsDynamic) and ClassifySqlText(Text) then
       ExtractSqlTables(Text, AReads, AWrites);
     Exit; // never re-descend into an already-consumed run
   end;

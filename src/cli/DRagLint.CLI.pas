@@ -22,6 +22,7 @@ uses
   , System.SysUtils
   , System.Classes
   , System.IOUtils
+  , System.NetEncoding { TNetEncoding.URL -- encodes the vault name into the obsidian:// URI }
   , System.JSON
   , System.StrUtils
   , System.DateUtils
@@ -3889,7 +3890,13 @@ begin
   // (3) Launch. obsidian:// URI is handled by Obsidian's registered
   //     protocol handler. ShellExecute with the URI returns whatever
   //     handler is registered for it.
-  Uri:= 'obsidian://open?vault=' + BaseName;
+  { BaseName is URL-ENCODED, not concatenated raw. It comes from a user-supplied
+    path, and a vault name holding a space, '&' or '#' produced a malformed URI
+    that the protocol handler would truncate or misread -- so this is a
+    correctness fix first and the answer to unsafe-shellexecute second. Encoding
+    at the point of assembly is also the only place it can be done once and be
+    right for every caller of this URI. }
+  Uri:= 'obsidian://open?vault=' + TNetEncoding.URL.Encode(BaseName);
   ShellExecute(0, 'open', PChar(Uri), nil, nil, SW_SHOWNORMAL);
   Writeln('  Launched Obsidian. Vault path: ', AbsPath);
 end; // procedure
