@@ -134,6 +134,11 @@ type
     Path            : string        ;
     DbPath          : string        ;
     DbPaths         : TArray<string>;
+    { v21: --library-db, repeatable. Extra indexes consulted ONLY for calls the
+      primary index cannot resolve; a hit is recorded as a qualified NAME on
+      refs.external_target. Explicit rather than auto-opened from the manifest
+      so `index` never silently changes what it reads. }
+    LibraryDbs      : TArray<string>;
     ExcludeUnder    : TArray<string>; // v0.42: --exclude-under <dir> (repeatable)
     Deep            : Boolean       ; // v0.42: emit identifier usage refs
     DeepExplicit    : Boolean       ; // --deep/--shallow was given on the cmd line
@@ -408,7 +413,12 @@ begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
   Writeln('Usage:');
-  Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]]');
+  Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
+  Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
+  Writeln('                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,');
+  Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
+  Writeln('                               cross-DB rung runs last), so adding a library can never change an edge that already existed.');
+  Writeln('                               Answers only when exactly ONE type and ONE member match; absence beats a guess.');
   Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--dry-run] [--watch [--interval N]]');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
@@ -749,6 +759,12 @@ begin
       Result.DbPath:= ParamStr(i);
       SetLength(Result.DbPaths, Length(Result.DbPaths) + 1);
       Result.DbPaths[High(Result.DbPaths)]:= ParamStr(i);
+    end
+    else if (A = '--library-db') and (i < ParamCount) then
+    begin
+      Inc(i);
+      SetLength(Result.LibraryDbs, Length(Result.LibraryDbs) + 1);
+      Result.LibraryDbs[High(Result.LibraryDbs)]:= ParamStr(i);
     end
     else if (A = '--name') and (i < ParamCount) then begin Inc(i); Result.Name:= ParamStr(i); end
     else if ((A = '--in') or (A = '--file')) and (i < ParamCount) then begin Inc(i); Result.InFile:= ParamStr(i); end
@@ -2291,6 +2307,34 @@ begin
   AStore.SetMetaValue(INDEXER_FP_KEY, Cur);
 end;
 
+{ v21: opens --library-db paths as read-only extra stores for cross-DB call
+  resolution. Failures are SKIPPED with a warning rather than fatal: a missing or
+  stale library index must degrade the answer, never break the index run -- the
+  primary index is still perfectly valid without it. }
+function OpenLibraryStores(const AArgs: TArgs): TArray<ISymbolStore>;
+var
+  P: string;
+  S: ISymbolStore;
+begin
+  Result:= nil;
+  for P in AArgs.LibraryDbs do
+  begin
+    if not TFile.Exists(P) then
+    begin
+      Writeln(ErrOutput, '  (library-db skipped, not found) ', P);
+      Continue;
+    end;
+    try
+      S:= TSQLiteSymbolStore.Create(P);
+      Result:= Result + [S];
+      Writeln('  + library-db ', P);
+    except
+      on E: Exception do
+        Writeln(ErrOutput, '  (library-db skipped, ', E.ClassName, ') ', P);
+    end;
+  end;
+end;
+
 function DoIndex(const AArgs: TArgs): Integer;
 var
   Store    : ISymbolStore                              ;
@@ -2637,7 +2681,7 @@ begin
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
-    Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
+    Store.ResolveCallTargets(OpenLibraryStores(AArgs)); { v14 (D5) + v21 cross-DB }
     Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
@@ -2683,6 +2727,9 @@ begin
   Store.ResolveUnitUseTargets;
   Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
   Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
+  { IndexDictionary has no TArgs -- the dictionary builders (--scan-libraries)
+    are the LIBRARY side, and consulting a library from a library is not a shape
+    v21 supports. Default (no extra stores) = pre-v21 behaviour. }
   Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));

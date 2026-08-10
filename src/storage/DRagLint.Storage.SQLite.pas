@@ -1386,7 +1386,7 @@ type
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertCallEdge"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure ResolveCallTargets;
+      procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
       /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
       /// <remarks>
@@ -2657,6 +2657,23 @@ begin
     cached per-file line array), so this is a write of a value that was being
     computed and dropped. }
   TryExec('ALTER TABLE refs ADD COLUMN receiver_text TEXT');
+  { v21: the EXTERNAL call target, BY QUALIFIED NAME, for a call this DB cannot
+    own an edge to.
+
+    WHY BY NAME. call_edges.target_symbol_id is `NOT NULL REFERENCES symbols(id)`
+    -- a hard FK into THIS database. A library symbol (System.JSON.TJSONArray.
+    Create, a DevExpress or Spring method) has no row here, so no edge to it can
+    exist, and cross-DB resolution had nowhere to put its answer. Making the FK
+    nullable and adding target_qname/target_db was the alternative and was
+    REJECTED: 28 sites read target_symbol_id and 5 join call_edges to symbols, and
+    a single missed NULL check silently drops or miscounts edges. Recording the
+    name on the REF is additive -- call_edges keeps exactly the meaning it has
+    today, and every existing consumer is untouched.
+
+    NULL means "not resolved externally", which covers both "resolved locally"
+    (the edge says so) and "not resolved at all". It is deliberately NOT a
+    substitute for a local edge: a ref never carries both. }
+  TryExec('ALTER TABLE refs ADD COLUMN external_target TEXT');
   { v11 (M1): direct ancestor edges (one row per heritage entry). Created here
     rather than in SCHEMA_DDL to avoid renumbering the FTS5 split index; it is
     plain DDL that must always exist (independent of FTS5 availability).
@@ -7545,7 +7562,7 @@ begin
   end; // try
 end; // procedure
 
-procedure TSQLiteSymbolStore.ResolveCallTargets;
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
@@ -7569,7 +7586,7 @@ begin
   ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
   DummyTok:= Default(TFileTxToken);
   Written := 0;
-  Resolver:= TCallResolver.Create(Self); // prepare name/scope maps ONCE
+  Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
   Q         := TFDQuery.Create(nil);
   UpdRcv    := TFDQuery.Create(nil);
   QIsRoutine:= TFDQuery.Create(nil);
@@ -7580,12 +7597,13 @@ begin
       and for the same reason: this runs inside the one big transaction below,
       where a fresh statement per row would dominate the pass. }
     UpdRcv.Connection:= FConn;
-    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r WHERE id = :id';
+    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x WHERE id = :id';
     { DataType MUST be set before Prepare. FireDAC cannot infer a parameter's
       type from the SQL alone and fails at execute with "Parameter [R] data type
       is unknown" -- which surfaces as a FATAL that aborts the whole index run,
       not as a skipped update. }
     UpdRcv.ParamByName('r' ).DataType:= ftString;
+    UpdRcv.ParamByName('x' ).DataType:= ftString;
     UpdRcv.ParamByName('id').DataType:= ftLargeint;
     UpdRcv.Prepare;
 
@@ -7671,6 +7689,10 @@ begin
           engine". A consumer that treats NULL as "bare" would silently restore
           the old fabrication on a stale DB -- reindex, do not reinterpret. }
         UpdRcv.ParamByName('r' ).AsString   := Edge.ReceiverText;
+        { v21: NULL when there is no external answer, so "not resolved
+          externally" stays distinguishable from "resolved to an empty name". }
+        if Edge.ExternalTarget <> '' then UpdRcv.ParamByName('x').AsString:= Edge.ExternalTarget
+        else UpdRcv.ParamByName('x').Clear;
         UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
         UpdRcv.ExecSQL;
         if Edge.TargetSymbolId > 0 then

@@ -261,6 +261,10 @@ type
     // they are what the leaf-name caller bucket draws from. TargetSymbolId = 0
     // does not mean "no receiver to record".
     ReceiverText        : string;
+    // v21: the qualified NAME of a target in ANOTHER index (RTL/VCL/DevExpress/
+    // Spring), set only when TargetSymbolId = 0. A ref never carries both: a
+    // local edge always wins, and cross-DB resolution runs last.
+    ExternalTarget      : string;
   end;
 
   /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see

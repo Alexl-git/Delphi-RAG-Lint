@@ -5,9 +5,13 @@ interface
 const
   { v20: refs.receiver_text -- the call-site receiver, so an unresolved call can
     be attributed to the type it was actually written against instead of to every
-    symbol sharing its leaf name. Retrofitted by a Migrate() ALTER (see there),
-    so it must NOT be referenced from SCHEMA_DDL below -- read the INVARIANT. }
-  SCHEMA_VERSION = 20;
+    symbol sharing its leaf name.
+    v21: refs.external_target -- the qualified NAME of a call target that lives in
+    another index (RTL/VCL/DevExpress/Spring), which call_edges structurally
+    cannot hold because target_symbol_id is a NOT NULL FK into THIS DB.
+    Both are retrofitted by Migrate() ALTERs (see there), so neither may be
+    referenced from SCHEMA_DDL below -- read the INVARIANT. }
+  SCHEMA_VERSION = 21;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.

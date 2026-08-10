@@ -47,6 +47,8 @@ type
   TCallResolver = class
   strict private
     FStore      : ISymbolStore;
+    { v21: consulted ONLY on primary-store miss; see the constructor's param doc. }
+    FExtraStores: TArray<ISymbolStore>;
     // Lowercased simple type name -> candidate class/interface/record symbols.
     FNameToCands: TObjectDictionary<string, TList<TSymbol>>;
     // Option 4: lowercased routine name -> candidate UNIT-LEVEL routines (free
@@ -118,6 +120,11 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
+    /// <summary>v21: resolves a call the primary index could not, against the
+    /// extra (library) stores, answering with a QUALIFIED NAME. '' when it
+    /// cannot answer unambiguously. See the implementation for why it is
+    /// deliberately narrow.</summary>
+    function ResolveExternally(const AReceiver, ACallName: string): string;
     /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->Observed: TList&lt;TSymbol&gt;.Create.</returns>
@@ -356,7 +363,13 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    constructor Create(const AStore: ISymbolStore);
+    /// <param name="AExtraStores">v21: other open indexes -- in practice the
+    /// platform LIBRARY db -- consulted ONLY when the primary store cannot
+    /// resolve a type. Their symbol ids are meaningless here (ids are per-DB),
+    /// so a hit is recorded as a qualified NAME on the ref
+    /// (refs.external_target), never as a call_edges row.</param>
+    constructor Create(const AStore: ISymbolStore;
+      const AExtraStores: TArray<ISymbolStore> = nil);
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Reads: FLineCache, FChildCache, FFileScope, FNameToRoutines, FNameToCands   Writes: FStore
@@ -949,10 +962,12 @@ end;
 
 { TCallResolver }
 
-constructor TCallResolver.Create(const AStore: ISymbolStore);
+constructor TCallResolver.Create(const AStore: ISymbolStore;
+  const AExtraStores: TArray<ISymbolStore>);
 begin
   inherited Create;
   FStore      := AStore;
+  FExtraStores:= AExtraStores;
   FNameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FNameToRoutines:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
@@ -1511,6 +1526,87 @@ begin
       Result.TargetSymbolId:= Target;
       Result.Confidence    := Conf;
     end;
+  end;
+
+  // 5. v21 CROSS-DB, and it runs LAST for a reason: only a call this index could
+  // not resolve locally is offered to another index. A local answer always wins,
+  // so adding a library store can never change an edge that already existed.
+  //
+  // The answer is a qualified NAME, not an id. call_edges.target_symbol_id is a
+  // NOT NULL FK into THIS db's symbols, so an edge to a library symbol cannot be
+  // written at all; the name lands on refs.external_target instead. See the v21
+  // note in Migrate for why the alternative (nullable FK + target_qname) was
+  // rejected.
+  if (Result.TargetSymbolId = 0) and (Length(FExtraStores) > 0) then
+    Result.ExternalTarget:= ResolveExternally(Rcv, ACallRef.NameText);
+end;
+
+{ v21. Consults the extra (library) stores for a call the primary index could not
+  resolve, and answers with a QUALIFIED NAME.
+
+  Deliberately narrow, because a wrong external name is a wrong FACT rendered in
+  documentation, and this runs with no uses-scope filter at all:
+    * a TYPE-NAME receiver only. A value receiver ('Q.Open') would need the
+      variable's type, which lives in the PRIMARY index and already failed to
+      resolve there -- guessing across a library would be inventing.
+    * the type leaf must name exactly ONE type in that store, and it must own
+      exactly ONE member with this call's name. Two candidates means the answer
+      is a guess, and absence beats a wrong name -- the same FP-conservative
+      posture ResolveTypeNameToSymbol takes locally.
+  Returns '' whenever any of that fails, which is the common case and is fine:
+  the ref simply stays unresolved, exactly as it was before v21. }
+function TCallResolver.ResolveExternally(const AReceiver, ACallName: string): string;
+var
+  Store  : ISymbolStore ;
+  Leaf   : string       ;
+  Cands  : TArray<TSymbol>;
+  S, M   : TSymbol      ;
+  TypeSym: TSymbol      ;
+  Found  : Integer      ;
+  Members: TArray<TSymbol>;
+  Hit    : TSymbol      ;
+  MemHits: Integer      ;
+begin
+  Result:= '';
+  if (Trim(AReceiver) = '') or (Trim(ACallName) = '') then Exit;
+  if SameText(AReceiver, 'Self') then Exit; { the enclosing class is a LOCAL question }
+
+  { A dotted receiver contributes its LAST segment -- 'System.JSON.TJSONArray'
+    names TJSONArray; the leading segments are a unit qualifier. }
+  Leaf:= AReceiver;
+  if Pos('.', Leaf) > 0 then
+  begin
+    var Segs: TArray<string>:= Leaf.Split(['.']);
+    Leaf:= Segs[High(Segs)];
+  end;
+  if Leaf = '' then Exit;
+
+  for Store in FExtraStores do
+  begin
+    if Store = nil then Continue;
+    Cands:= Store.FindSymbolsByExactName(Leaf);
+    Found:= 0;
+    TypeSym:= Default(TSymbol);
+    for S in Cands do
+      if S.Kind in [skClass, skInterface, skRecord] then
+      begin
+        Inc(Found);
+        if Found > 1 then Break;
+        TypeSym:= S;
+      end;
+    if Found <> 1 then Continue;          { absent or ambiguous -> no answer }
+
+    Members:= Store.FindAllChildSymbols(TypeSym.Id);
+    MemHits:= 0;
+    Hit:= Default(TSymbol);
+    for M in Members do
+      if SameText(M.Name, ACallName) and CanBeCallTarget(M.Kind) then
+      begin
+        Inc(MemHits);
+        if MemHits > 1 then Break;
+        Hit:= M;
+      end;
+    if MemHits = 1 then Exit(Hit.QualifiedName);
   end;
 end;
 

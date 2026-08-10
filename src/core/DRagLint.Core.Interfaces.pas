@@ -678,7 +678,12 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure ResolveCallTargets;
+    /// <param name="AExtraStores">v21: other open indexes -- the platform
+    /// LIBRARY db in practice -- consulted ONLY for calls this index cannot
+    /// resolve. A hit is recorded as a qualified NAME on refs.external_target,
+    /// never as a call_edges row, because target_symbol_id is a NOT NULL FK
+    /// into THIS db. Empty (the default) keeps the pre-v21 behaviour exactly.</param>
+    procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore> = nil);
     /// <summary>Transitive ancestor closure of the symbol (resolved edges are
     /// walked recursively; unresolved ones are name-only leaves). Cycle-safe,
     /// hop-capped.</summary>
