@@ -128,6 +128,21 @@ function ParseParamDecls(const AParamList: string): TArray<TParamDecl>;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SignatureHasReturn(const ASig: string): Boolean;
+/// <summary>True when ASig declares a CONSTRUCTOR -- i.e. its first word is
+/// `constructor`. The declaration TEXT is the only ground truth for this: the
+/// parser indexes a constructor as kind `method`, so TSymbol.Kind cannot
+/// answer it.</summary>
+/// <param name="ASig">A signature, or (when the indexed signature is empty, as
+/// it is for a parameterless constructor) the declaration line itself.</param>
+/// <returns>True when the declaration is a constructor.</returns>
+/// <remarks>ONE implementation, TWO readers, and they must not diverge:
+/// DRagLint.Doc.Facts.DetectMethodDirectives sets TDocFacts.IsConstructor from
+/// it so the WRITER can emit the `constructor` facts-block marker, and
+/// DRagLint.Doc.Drift.TDocDrift.Analyze calls it so the CHECKER can exempt a
+/// constructor from the &lt;returns&gt; demand and require the marker instead. A
+/// second spelling of this test would put those two back into the
+/// checker-vs-writer disagreement the marker exists to end.</remarks>
+function SignatureIsConstructor(const ASig: string): Boolean;
 /// <summary>Splits AText into the comment text it contains and everything
 /// else: returns the joined comment content, and sets ARest to AText with every
 /// comment removed. Handles the three Pascal spellings ({ }, (* *), //).</summary>
@@ -184,6 +199,11 @@ var
 begin
   Lower:= LowerCase(Trim(ASig));
   Result:= Lower.StartsWith('function') or Lower.StartsWith('constructor');
+end;
+
+function SignatureIsConstructor(const ASig: string): Boolean;
+begin
+  Result:= LowerCase(Trim(ASig)).StartsWith('constructor');
 end;
 
 function ExtractPascalComments(const AText: string; out ARest: string): string;

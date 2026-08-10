@@ -338,7 +338,7 @@ type
     /// APrefix), from AFacts. Sections: Called from (or Used by, see below) /
     /// Calls / Used in units /
     /// Raises / Deprecated / Overrides / Overridden by / Implements / Overload
-    /// k of n / abstract / virtual / Complexity / Reads/Writes fields / Owns
+    /// k of n / abstract / virtual / constructor / Complexity / Reads/Writes fields / Owns
     /// returned / Handles / SQL tables touched / Covered by / Since / SeeAlso.
     /// Empty sections omitted; '' when there are no facts. Displayed
     /// counts below
@@ -2228,6 +2228,30 @@ begin
       Sb.AppendLine(APrefix + 'abstract');
     if AFacts.IsVirtual then
       Sb.AppendLine(APrefix + 'virtual');
+    // v(2026-08-10, owner ruling): the `constructor` marker -- a bare one-word
+    // line, the same shape and the same neighbourhood as abstract/virtual, and
+    // kind-selected off AFacts.SymbolKind rather than off any directive probe.
+    //
+    // It exists because doc-drift STOPPED demanding a <returns> tag on a
+    // constructor (see DRagLint.Doc.Drift's HasReturn comment): a constructor
+    // declares no return type, so the writer could never emit that tag and the
+    // finding could never be cleared. The ruling was to have the engine state
+    // the fact it actually knows -- this declaration is a constructor -- and
+    // have the linter check for THAT instead.
+    //
+    // Deliberately in the managed facts block rather than in <summary>: the
+    // block is the one region the engine fully owns and regenerates, so the
+    // marker self-heals through the ordinary `--apply` path and needs no
+    // second ownership rule. A <summary> is the author's, and MergeComment's
+    // standing rule is that the engine never invents summary prose.
+    //
+    // CONSEQUENCE, stated plainly: every documented constructor's facts block
+    // changes, so the first run after this lands reports ddFactsBlockStale
+    // across the corpus and one autodoc pass clears it. A constructor that
+    // previously had NO managed block at all (no callers, nothing else to say)
+    // now gains one carrying just this line.
+    if AFacts.IsConstructor then
+      Sb.AppendLine(APrefix + 'constructor');
     // v(ADP2 T9): the six Phase-2 fact lines (Complexity / Reads-Writes
     // fields / Owns returned / Handles / SQL tables touched / Covered by)
     // are rendered by the SHARED FormatPhase2FactLines helper -- the SAME

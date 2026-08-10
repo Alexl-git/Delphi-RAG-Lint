@@ -149,6 +149,17 @@ type
     // whenever the 'abstract' directive is present, independent of override.
     IsAbstract       : Boolean          ;
     IsVirtual        : Boolean          ;
+    // v(2026-08-10, owner ruling): True when the declaration is a CONSTRUCTOR.
+    // Derived from the declaration TEXT via SignatureIsConstructor (see
+    // DetectMethodDirectives), NOT from ASym.Kind -- the parser indexes a
+    // constructor as skMethod, so the kind cannot answer it.
+    //
+    // Drives the bare `constructor` marker line in the managed facts block
+    // (RenderFactsBlock), which exists because doc-drift no longer demands a
+    // <returns> tag a constructor can never have. Writer and checker read this
+    // one fact through one function, so they cannot disagree about what a
+    // constructor is.
+    IsConstructor    : Boolean          ;
     // v(ADP2 T3): the routine's McCabe cyclomatic complexity and implementation
     // body line count, read back verbatim from the index-time symbol_facts row
     // (ISymbolStore.GetSymbolFacts -- see DRagLint.Doc.SymbolFacts.
@@ -1294,20 +1305,33 @@ end;
 //
 // Matches whole-word, case-insensitive; a bare declaration with none of these
 // words yields all three False (never fabricated).
+// v(2026-08-10): ACONSTRUCTOR rides along on the SAME declaration-line read
+// rather than getting a probe of its own, because the index cannot answer the
+// question: the parser stores a constructor as kind `method` (verified against
+// a live DB -- `TThing.Create` indexes as "kind": "method"), so ASym.Kind is
+// NOT a constructor test and every kind-based attempt at one is dead code.
+// The declaration TEXT is the only ground truth available here, exactly as it
+// already is for virtual/abstract/override above -- and folding it in costs no
+// extra file read.
 procedure DetectMethodDirectives(const AStore: ISymbolStore; const ASym: TSymbol;
-  out AVirtual, AAbstract, AOverride: Boolean);
+  out AVirtual, AAbstract, AOverride, AConstructor: Boolean);
 var
   Line: string;
 begin
-  AVirtual := False;
-  AAbstract:= False;
-  AOverride:= False;
+  AVirtual    := False;
+  AAbstract   := False;
+  AOverride   := False;
+  AConstructor:= ASym.Kind = skConstructor; // honoured if the parser ever sets it
   if ASym.StartLine <= 0 then Exit;
   Line:= ReadDeclLine(AStore.GetFilePath(ASym.FileId), ASym.StartLine);
   if Line = '' then Exit;
   AVirtual := TRegEx.IsMatch(Line, '\b(virtual|dynamic)\b', [roIgnoreCase]);
   AAbstract:= TRegEx.IsMatch(Line, '\babstract\b', [roIgnoreCase]);
   AOverride:= TRegEx.IsMatch(Line, '\boverride\b', [roIgnoreCase]);
+  // SignatureIsConstructor, not a local regex: the doc-drift checker asks the
+  // same question through the same function, and a second spelling of "is this
+  // a constructor" is precisely how a checker and a writer drift apart.
+  AConstructor:= AConstructor or SignatureIsConstructor(Line);
 end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -1983,10 +2007,11 @@ begin
     // (implicitly) virtual, and Overrides is the more informative line, so the
     // two are never both rendered for the same decl (per the task's design
     // decision).
-    var DVirtual, DAbstract, DOverride: Boolean;
-    DetectMethodDirectives(AStore, ASym, DVirtual, DAbstract, DOverride);
-    Result.IsAbstract:= DAbstract;
-    Result.IsVirtual := DVirtual and not DOverride;
+    var DVirtual, DAbstract, DOverride, DCtor: Boolean;
+    DetectMethodDirectives(AStore, ASym, DVirtual, DAbstract, DOverride, DCtor);
+    Result.IsAbstract   := DAbstract;
+    Result.IsVirtual    := DVirtual and not DOverride;
+    Result.IsConstructor:= DCtor;
   end;
 
   // SeeAlso (opt-in): related-symbol crefs for the <seealso> doc-source. Only

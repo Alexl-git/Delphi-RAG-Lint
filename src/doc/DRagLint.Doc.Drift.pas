@@ -27,8 +27,15 @@ type
   //   ddValueButNoReturns     - a function with no <returns> (FIXABLE only when a
   //                             return case is minable -- v(ADP3 T3d); see that
   //                             signal's own call site below for D2/D3)
+  //   ddConstructorNotMarked  - a constructor's doc never says 'constructor' (FIXABLE).
+  //                             Replaces the old, UNSATISFIABLE demand for a
+  //                             <returns> on a constructor -- see HasReturn's
+  //                             comment in Analyze.
   //   ddReturnTypeChanged     - a <c>type</c> token in <returns> != the sig return type (bounded)
-  //   ddExceptionNotRaised    - an <exception cref> not in the body's actual Raises facts
+  //   ddExceptionNotRaised    - an <exception cref> not in the body's actual Raises
+  //                             facts. Graded ONLY on a decl that HAS a body
+  //                             (ImplStartLine > 0); an interface method has no
+  //                             body to observe -- see the rule's own comment.
   //   ddIdentifierGone        - a <c>/<paramref> code identifier no longer present (bounded)
   //   ddFactsBlockStale       - the managed facts block differs from a fresh render (FIXABLE)
   //   ddHarvestDrift          - a MARKED <summary> no longer matches the comment it
@@ -50,6 +57,7 @@ type
     ddParamVolatileMode,
     ddReturnsButNoValue,
     ddValueButNoReturns,
+    ddConstructorNotMarked,
     ddReturnTypeChanged,
     ddExceptionNotRaised,
     ddIdentifierGone,
@@ -451,6 +459,7 @@ var
   Groups    : TArray<string>         ;
   Facts     : TDocFacts              ;
   HasReturn : Boolean                ;
+  IsCtor    : Boolean                ;
   RetType   : string                 ;
   DocLine   : Integer                ;
   DP        : TDocParam              ;
@@ -489,10 +498,39 @@ begin
       // 'function' keyword, so SignatureHasReturn misses it and class functions
       // carry skMethod). Facts.ReturnType is the truth; keep the sig/kind checks
       // as a fallback. Same policy as TDocumenter.BuildFor.
-      HasReturn:= (Facts.ReturnType <> '')
-                  or (RetType <> '')
-                  or SignatureHasReturn(Sig)
-                  or (ASym.Kind in [skFunction, skConstructor]);
+      // v(2026-08-10, owner ruling): a CONSTRUCTOR is excluded here, and the
+      // exclusion is the whole point. A constructor declares no return type, so
+      // Facts.ReturnType is '' and TDocumenter/MergeComment emit no <returns>
+      // for it -- while this rule, counting it as value-returning, demanded
+      // one. The finding was UNSATISFIABLE BY CONSTRUCTION: no `--apply` or
+      // `--fix` run could ever clear it, because the writer has nothing to
+      // write. It accounted for 7 of drag-lint's own 13 residual doc-drift
+      // findings, every one of them a constructor.
+      //
+      // The house pattern, once more: a CHECKER and a WRITER disagreeing --
+      // here about KIND. The rule was not measuring the documentation, it was
+      // measuring its own disagreement with the emitter.
+      //
+      // What replaces it is rule 5b below: the engine SAYS `constructor` in
+      // the managed facts block (see TDocRegions.RenderFactsBlock, beside the
+      // `abstract`/`virtual` markers) and the linter verifies THAT -- a claim
+      // the writer can actually satisfy. Pinned by
+      // tests\autodoc\run_doc_ctor_bodyless.ps1.
+      //
+      // The exclusion is a SIGNATURE test, not a kind test, and that detail is
+      // load-bearing: the parser indexes a constructor as skMethod, so the
+      // obvious `ASym.Kind <> skConstructor` guard is dead code that silently
+      // changes nothing. SignatureHasReturn is what actually fires here -- it
+      // returns True for any declaration whose first word is `function` OR
+      // `constructor`, and for a parameterless constructor the indexed
+      // Signature is '' so EffectiveSignature falls back to the declaration
+      // line, which reads `constructor Create;`.
+      IsCtor   := SignatureIsConstructor(Sig);
+      HasReturn:= not IsCtor
+                  and ((Facts.ReturnType <> '')
+                       or (RetType <> '')
+                       or SignatureHasReturn(Sig)
+                       or (ASym.Kind = skFunction));
 
       // --- 1. ddParamRenamedOrRemoved: a documented <param> not in the sig. ----
       for DP in ADoc.Params do
@@ -582,7 +620,15 @@ begin
                   Format('var/out param "%s" documented as input-only', [GN]), False, DocLine));
 
       // --- 4. ddReturnsButNoValue: <returns> on a procedure. -------------------
-      if (Trim(ADoc.ReturnsText) <> '') and (not HasReturn) then
+      // EXEMPT FOR A CONSTRUCTOR, and this exemption is the necessary other
+      // half of removing it from HasReturn (rule 5). Without it, this rule
+      // would inherit HasReturn = False and start reporting every constructor
+      // an author HAD documented with a <returns> as "returns no value" --
+      // trading the old unsatisfiable finding for a new false one, on the very
+      // declarations whose authors did the most work. The ruling was that a
+      // constructor is not graded on <returns> AT ALL; that means in both
+      // directions, not just the one that showed up in the counts.
+      if (Trim(ADoc.ReturnsText) <> '') and (not HasReturn) and (not IsCtor) then
         Findings.Add(MakeFinding(ddReturnsButNoValue,
           'documented <returns> but the routine returns no value', False, DocLine));
 
@@ -646,6 +692,30 @@ begin
           'function returns a value but has no <returns> tag',
           (not ADoc.HasReturnsTag) and (Length(Facts.ReturnCases) > 0), DocLine));
 
+      // --- 5b. ddConstructorNotMarked: a constructor's doc does not say so. ---
+      // The replacement for the unsatisfiable <returns> demand removed from
+      // HasReturn above (see its comment). The owner's ruling: a constructor
+      // should not be asked for a return tag it can never have, but its
+      // documentation SHOULD identify it as a constructor -- so the engine
+      // writes the word and this rule checks for it.
+      //
+      // The whole RawBlock is searched, not just the managed facts block: an
+      // author who wrote "Constructor. Takes ownership of ..." in their own
+      // <summary> has already said it, and a rule that ignored their prose to
+      // insist on the engine's marker line would be grading OWNERSHIP rather
+      // than documentation -- the exact mistake that produced 514 false
+      // findings when the <seealso> option differed between checker and
+      // writer. Case-insensitive for the same reason: `constructor` (the
+      // engine's marker, lowercase like `abstract`/`virtual`) and
+      // "Constructor" (an author opening a sentence) are the same claim.
+      //
+      // FIXABLE: the engine's own facts block carries the marker, so a
+      // regenerating `--fix` satisfies this mechanically -- unlike the
+      // <returns> demand it replaces, which nothing could satisfy.
+      if IsCtor and (not ContainsText(ADoc.RawBlock, 'constructor')) then
+        Findings.Add(MakeFinding(ddConstructorNotMarked,
+          'constructor documentation does not identify it as a constructor', True, DocLine));
+
       // --- 6. ddReturnTypeChanged: a <c>Type</c> in <returns> != the sig type. -
       // BOUNDED TWICE. "Has <c> markup" was not a tight enough bound: DocInsight
       // asks for <c> around CROSS-REFERENCES in prose, so a perfectly correct
@@ -676,8 +746,25 @@ begin
     end;
 
     // --- 7. ddExceptionNotRaised: <exception cref> not in the body's Raises. ---
+    // v(2026-08-10, owner ruling): ONLY graded when the declaration HAS a body.
+    // TDocFactsBuilder populates Facts.Raises exclusively inside its
+    // `if ASym.ImplStartLine > 0` gate, so for a bodyless declaration --
+    // an INTERFACE method above all, but equally an abstract method or a
+    // forward -- Facts.Raises is empty BY CONSTRUCTION. The rule was therefore
+    // not observing an absent raise; it was observing that it had never
+    // looked, and then reporting that as a defect in the documentation.
+    //
+    // Worse, it fired precisely where the tag is most correct: an interface
+    // method's <exception cref> IS the contract its implementors must honour,
+    // and the interface is the only place that contract can be stated. Two of
+    // drag-lint's own five residual findings were ISymbolStore methods
+    // documenting exactly that.
+    //
+    // The same ImplStartLine test the facts builder uses, deliberately: one
+    // notion of "has a body", not two that can drift apart. Pinned by
+    // tests\autodoc\run_doc_ctor_bodyless.ps1.
     for DE in ADoc.Exceptions do
-      if Trim(DE.TypeName) <> '' then
+      if (Trim(DE.TypeName) <> '') and (ASym.ImplStartLine > 0) then
       begin
         var Raised: Boolean:= False;
         for var RC in Facts.Raises do
