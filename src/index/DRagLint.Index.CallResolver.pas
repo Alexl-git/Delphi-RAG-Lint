@@ -1321,6 +1321,39 @@ begin
   if TryParseCastTarget(AReceiverExpr, CastType) then
     Exit(ResolveTypeNameToSymbol(CastType, ACallRef.FileId));
 
+  // --- Kind 7 (v20b): a UNIT-QUALIFIED TYPE receiver, 'Unit.TType.M' /
+  //     'System.JSON.TJSONArray.Create'. Mandatory Delphi whenever two used units
+  //     export the same type name -- exactly when a developer reaches for it --
+  //     so it is idiomatic, not exotic.
+  //
+  //     Before this rung the loop below exited on the FIRST '.', so such a site
+  //     never reached the type-name rung and formed no edge at all. It surfaced
+  //     only through the unresolved-name bucket, i.e. a REAL caller presented as
+  //     uncertain (' ?').
+  //
+  //     Handled by taking the LAST segment as the type name: the leading segments
+  //     are a unit qualifier, and ResolveTypeNameToSymbol is already file-scoped
+  //     and FP-conservative (one certain candidate or nothing), so a wrong unit
+  //     cannot silently bind. Only fires when EVERY segment is a plain
+  //     identifier -- a real expression ('Arr[i].Foo', a cast) still falls
+  //     through to the guard below, which is where it belongs.
+  if Pos('.', AReceiverExpr) > 0 then
+  begin
+    var AllIdent: Boolean:= True;
+    for var Seg in AReceiverExpr.Split(['.']) do
+    begin
+      if (Seg = '') or (not IsIdentStart(Seg[1])) then begin AllIdent:= False; Break; end;
+      for var j:= 1 to Length(Seg) do
+        if not IsIdentPart(Seg[j]) then begin AllIdent:= False; Break; end;
+      if not AllIdent then Break;
+    end;
+    if AllIdent then
+    begin
+      var Segs: TArray<string>:= AReceiverExpr.Split(['.']);
+      Exit(ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId));
+    end;
+  end;
+
   // The remaining handled kinds require a simple identifier receiver.
   if not IsIdentStart(AReceiverExpr[1]) then Exit; // dotted / complex -> unhandled
   for var i:= 1 to Length(AReceiverExpr) do

@@ -60,12 +60,17 @@ try {
   # --- the real callers SURVIVE ----------------------------------------------
   Check 'REAL: MakeOne is listed' ($calledFrom -match 'receiver_bucket\.MakeOne') $calledFrom
   # MakeQualified writes receiver_bucket.TOnlyOnce.Create -- a FULL DOTTED CHAIN.
-  # The filter must match its LAST SEGMENT; comparing the whole receiver string
-  # would drop a genuine caller. (The resolver itself does not resolve a dotted
-  # receiver -- TypeReceiver bails on any '.' -- so this caller reaches the list
-  # only through this bucket, which is exactly why the rule matters.)
-  Check 'REAL: MakeQualified survives (fully qualified receiver, last-segment match)' `
+  # v20b added the unit-qualified TYPE rung to TypeReceiver, so this now RESOLVES
+  # to a certain call_edge rather than only surviving the bucket's last-segment
+  # match. Both paths are still worth keeping: the rung makes it a fact, the
+  # last-segment match is what stops the FILTER from discarding it on the way.
+  Check 'REAL: MakeQualified survives (fully qualified receiver)' `
     ($calledFrom -match 'receiver_bucket\.MakeQualified') $calledFrom
+  # And because both callers now resolve, the whole list is CERTAIN -- no ' ?'.
+  # This is the assertion that would catch the qualified rung silently regressing
+  # back to bucket-only, which the name check above would not.
+  Check 'both callers are RESOLVED (no uncertainty marker anywhere on the line)' `
+    ($calledFrom -notmatch '\?') $calledFrom
 
   # --- the fabricated callers are GONE ---------------------------------------
   # NoiseGeneric constructs TArray<string>. Its receiver ends in '>', which the
