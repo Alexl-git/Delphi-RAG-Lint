@@ -62,6 +62,12 @@ uses
 function ManifestDbForProject(const AProjectFile: string; out ADb: string;
   out AClaimants: TArray<string>): TProjectDbMatch;
 
+{ v(project-scoped): the ordered DB list a READER should open for AEditorFile with
+  AActiveProjectFile active -- the active project's section DB first, then the
+  folder-matched DB (see DRagLint.Index.Manifest.ResolveReadDbs for why BOTH).
+  Empty when the manifest is missing/unreadable or nothing matches. }
+function ManifestReadDbs(const AActiveProjectFile, AEditorFile: string): TArray<string>;
+
 { The manifest this BPL actually reads. Exposed for DIAGNOSTICS: when a project
   resolves to no section, the manifest path is half the answer -- in a design-time
   package GetModuleName(HInstance) is the BPL's OWN directory, so this is the
@@ -118,67 +124,64 @@ begin
   Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.json';
 end;
 
+{ Loads + parses the manifest beside the BPL. Returns False when it is absent or
+  unparseable -- never raises, and never silently: the telemetry line is the only
+  place the reason survives, because a design-time package has nowhere to print.
+  Every caller treats False as "no owner could be established", which is the safe
+  reading on both the read and the write path. }
+function TryLoadManifest(out AManifest: TIndexManifest): Boolean;
+var
+  MPath  : string;
+  Content: string;
+begin
+  Result   := False;
+  AManifest:= Default(TIndexManifest);
+  MPath:= ManifestPathBesideEngine;
+  if not TFile.Exists(MPath) then
+  begin
+    DLT('dbresolve', 'NO MANIFEST at ' + MPath);
+    Exit;
+  end;
+  try
+    Content  := TFile.ReadAllText(MPath);
+    AManifest:= TManifestIO.ParseText(Content, ExtractFilePath(MPath));
+    Result   := True;
+  except
+    on E: Exception do
+      DLT('dbresolve', Format('manifest UNREADABLE (%s): %s: %s', [MPath, E.ClassName, E.Message]));
+  end; // try
+end; // function
+
 function ManifestDbForProject(const AProjectFile: string; out ADb: string;
   out AClaimants: TArray<string>): TProjectDbMatch;
 var
-  MPath   : string        ;
-  Content : string        ;
   Manifest: TIndexManifest;
 begin
   ADb       := '';
   AClaimants:= nil;
   Result    := pdmNone;
   if AProjectFile = '' then Exit;
-
-  MPath:= ManifestPathBesideEngine;
-  if not TFile.Exists(MPath) then
-  begin
-    DLT('dbresolve', 'project resolve: NO MANIFEST at ' + MPath);
-    Exit;
-  end;
-
-  try
-    Content := TFile.ReadAllText(MPath);
-    Manifest:= TManifestIO.ParseText(Content, ExtractFilePath(MPath));
-  except
-    { Not swallowed: a manifest this process cannot read is exactly the state in
-      which a caller must NOT proceed, and the log line is the only place the
-      reason survives. Reported as pdmNone, which every caller treats as "no
-      owner established" -- the safe reading. }
-    on E: Exception do
-    begin
-      DLT('dbresolve', Format('project resolve: manifest UNREADABLE (%s): %s: %s', [MPath, E.ClassName, E.Message]));
-      Exit;
-    end;
-  end; // try
+  if not TryLoadManifest(Manifest) then Exit;
 
   Result:= ResolveProjectDb(Manifest, AProjectFile, ADb, AClaimants);
   DLT('dbresolve', Format('project resolve: %s -> match=%d db=%s claimants=%d',
                           [ExtractFileName(AProjectFile), Ord(Result), ADb, Length(AClaimants)]));
 end; // function
 
+function ManifestReadDbs(const AActiveProjectFile, AEditorFile: string): TArray<string>;
+var
+  Manifest: TIndexManifest;
+begin
+  Result:= nil;
+  if not TryLoadManifest(Manifest) then Exit;
+  Result:= ResolveReadDbs(Manifest, AActiveProjectFile, AEditorFile);
+  DLT('dbresolve', Format('read resolve: proj=%s file=%s -> %d db(s)',
+                          [ExtractFileName(AActiveProjectFile), ExtractFileName(AEditorFile), Length(Result)]));
+end; // function
+
 function ManifestDbForFile(const AFilePath: string): string;
 var
-  MPath   : string     ;
-  Content : string     ;
-  OutDir  : string     ;
-  FileNorm: string     ;
-  Db      : string     ;
-  IncRaw  : string     ;
-  IncNorm : string     ;
-  BestDb  : string     ;
-  RootVal : TJSONValue ;
-  V       : TJSONValue ;
-  IdxVal  : TJSONValue ;
-  SecsVal : TJSONValue ;
-  IncVal  : TJSONValue ;
-  Indexes : TJSONObject;
-  Sec     : TJSONObject;
-  Sections: TJSONArray ;
-  Includes: TJSONArray ;
-  I       : Integer    ;
-  J       : Integer    ;
-  BestLen : Integer    ;
+  Manifest: TIndexManifest;
 begin
   Result:= '';
   if AFilePath = '' then Exit;
@@ -202,65 +205,13 @@ begin
     if ManifestDbForProject(AFilePath, PDb, PClaimants) = pdmUnique then Exit(PDb);
   end;
 
-  MPath:= ManifestPathBesideEngine;
-  if not TFile.Exists(MPath) then Exit;
-  FileNorm:= LowerCase(IncludeTrailingPathDelimiter(ExtractFilePath(AFilePath)));
-  try
-    Content:= TFile      .ReadAllText   (MPath  );
-    RootVal:= TJSONObject.ParseJSONValue(Content);
-    if not (RootVal is TJSONObject) then Exit;
-    try
-      IdxVal:= TJSONObject(RootVal).GetValue('indexes');
-      if not (IdxVal is TJSONObject) then Exit;
-      Indexes:= TJSONObject(IdxVal);
-
-      OutDir:= '';
-      V:= Indexes.GetValue('outDir');
-      if V is TJSONString then OutDir:= TJSONString(V).Value;
-
-      SecsVal:= Indexes.GetValue('sections');
-      if not (SecsVal is TJSONArray) then Exit;
-      Sections:= TJSONArray(SecsVal);
-
-      BestDb:= '';
-      BestLen:= -1;
-      for I:= 0 to Sections.Count - 1 do
-      begin
-        if not (Sections.Items[I] is TJSONObject) then Continue;
-        Sec:= TJSONObject(Sections.Items[I]);
-
-        IncVal:= Sec.GetValue('include');
-        if not (IncVal is TJSONArray) then Continue; { skip library sections }
-        Includes:= TJSONArray(IncVal);
-
-        Db:= '';
-        V:= Sec.GetValue('db');
-        if V is TJSONString then Db:= TJSONString(V).Value;
-        if Db = '' then Continue;
-
-        for J:= 0 to Includes.Count - 1 do
-        begin
-          if not (Includes.Items[J] is TJSONString) then Continue;
-          IncRaw:= TJSONString(Includes.Items[J]).Value;
-          { an include may be a folder OR a .dproj/.dpr -- use its folder }
-          if SameText(ExtractFileExt(IncRaw), '.dproj') or SameText(ExtractFileExt(IncRaw), '.dpr') then IncRaw:= ExtractFilePath(IncRaw);
-          IncNorm:= LowerCase(IncludeTrailingPathDelimiter(IncRaw));
-          { file under this include folder? longest match = most specific }
-          if (Length(IncNorm) > 1) and (Pos(IncNorm, FileNorm) = 1) and (Length(IncNorm) > BestLen) then
-          begin
-            if TPath.IsRelativePath(Db) and (OutDir <> '') then BestDb:= TPath.Combine(OutDir, Db)
-            else BestDb:= Db;
-            BestLen:= Length(IncNorm);
-          end;
-        end; // for
-      end; // for
-      Result:= BestDb;
-    finally
-      RootVal.Free;
-    end; // try
-  except
-    Result:= '';
-  end; // try
+  { The folder walk itself now lives in DRagLint.Index.Manifest.ResolveFolderDb.
+    It used to be a hand-rolled TJSONObject traversal here -- a SECOND copy of
+    logic the engine already had, which is how the two drifted into disagreeing
+    about which section covers a file. One implementation, and it is the one the
+    headless tests exercise. }
+  if not TryLoadManifest(Manifest) then Exit;
+  Result:= ResolveFolderDb(Manifest, AFilePath);
 end; // function
 
 function GetActiveEditorFilePath: string;
@@ -596,17 +547,43 @@ begin
   ProjPath:= FindOwningProject(EditorPath);
   if ProjPath = '' then ProjPath:= GetActiveProjectFilePath;
 
-  { v0.46: the manifest is the source of truth. If a manifest section's include
-    folder covers the active file, use THAT clean DB and skip the per-.dproj
-    template/ancestor/sibling walk -- otherwise a stale per-project DB sitting
-    next to a sub-project .dproj (e.g. CLIENT\drag-lint.sqlite) shadows the
-    manifest's ORM3-root DB and shows phantom/duplicated symbols. The library DB
-    is still appended below. }
-  ManifestDb:= ManifestDbForFile(EditorPath);
-  if ManifestDb = '' then ManifestDb:= ManifestDbForFile(ProjPath);
-  if (ManifestDb <> '') and TFile.Exists(ManifestDb) then
+  { v0.46: the manifest is the source of truth. If a manifest section covers the
+    active file, use THAT clean DB and skip the per-.dproj template/ancestor/
+    sibling walk -- otherwise a stale per-project DB sitting next to a sub-project
+    .dproj (e.g. CLIENT\drag-lint.sqlite) shadows the manifest's DB and shows
+    phantom/duplicated symbols. The library DB is still appended below.
+
+    v(project-scoped): ask by ACTIVE PROJECT FIRST, then by folder. Keying only
+    off the editor file was right while one folder meant one section; since the
+    manifest was split per project it silently answered from a SIBLING project's
+    index -- ORM3\PACKAGE\*.pas resolved to ORM3-Interfaces.sqlite whatever was
+    active, and ORM3's COMMON\ units belong to the client AND the server project,
+    so no rule keyed on the file alone can pick between them. A wrong hover is
+    worse than an absent one: nothing signals the mistake.
+
+    ManifestReadDbs returns BOTH (project DB first, folder DB second) rather than
+    replacing one with the other, so an editor file OUTSIDE the active project --
+    library or third-party source, browsed with a project open -- is still
+    answered by the folder match exactly as before.
+
+    NOTE the argument: GetActiveProjectFilePath, NOT ProjPath. ProjPath above may
+    have come from FindOwningProject, which returns TDirectory.GetFiles(dir,
+    '*.dproj')[0] -- the FIRST project file in the directory. In a shared folder
+    that is precisely the wrong one, and passing it here would have reproduced the
+    bug this change exists to remove while looking like a fix. }
+  var ActiveProj: string:= GetActiveProjectFilePath;
+  var ReadDbs: TArray<string>:= ManifestReadDbs(ActiveProj, EditorPath);
+  ManifestDb:= '';
+  for P in ReadDbs do
+    if (ManifestDb = '') and TFile.Exists(P) then ManifestDb:= P;
+
+  if ManifestDb <> '' then
   begin
-    AddUnique(Result, ManifestDb);
+    { Every resolved DB that EXISTS is offered, primary first; consumers accept
+      repeated --db. Absent ones are dropped: a reader must never be pointed at a
+      file that is not there. }
+    for P in ReadDbs do
+      if TFile.Exists(P) then AddUnique(Result, P);
 
     { v0.95+: auto-include M2022.sqlite as reference DB when working on ORM3\CLIENT files.
       Brought-in units from Micronite2022 need symbol resolution from the source project

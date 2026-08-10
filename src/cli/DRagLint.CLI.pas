@@ -547,6 +547,11 @@ begin
   Writeln('                               exits 2 and names the sections when none or SEVERAL claim the project,');
   Writeln('                               rather than guessing: `index --rebuild` against a wrongly-picked db');
   Writeln('                               clears an index that was never meant to be touched.');
+  Writeln('  drag-lint resolve-dbs --in <file.pas> [--project <file.dproj>] [--config <path>] [--json]');
+  Writeln('                               the READ list (what hover / Find Usages / the LSP would open for that');
+  Writeln('                               file): the ACTIVE PROJECT''s db first, then the folder-matched db.');
+  Writeln('                               Omit --project to model "no project active". Same resolution the IDE');
+  Writeln('                               uses, so this is how it is verified without an IDE.');
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
@@ -14437,6 +14442,47 @@ var
   J         : TJSONArray                                ;
 begin
   AllPaths:= nil;
+
+  // --- --in <file>: what would a READER open, with this project active? ----
+  // Mirrors the IDE's read-side resolution (hover / Find Usages / LSP) exactly:
+  // same function, DRagLint.Index.Manifest.ResolveReadDbs. --project may be
+  // omitted to model "no active project", which is how the fallback behaviour
+  // gets asserted. Prints the ordered list, one path per line; exit 0 always,
+  // an empty list printing nothing.
+  if AArgs.InFile <> '' then
+  begin
+    EngineDir := ExtractFilePath(ParamStr(0));
+    ConfigPath:= AArgs.WorkspaceConfig;
+    try
+      if ConfigPath <> '' then
+      begin
+        var RContent:= TFile.ReadAllText(ConfigPath);
+        var RRootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
+        Manifest:= TManifestIO.ParseText(RContent, RRootDir);
+      end
+      else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+    except
+      on E: Exception do
+      begin
+        Writeln(ErrOutput, Format('ERROR: could not load the manifest: %s: %s', [E.ClassName, E.Message]));
+        Exit(2);
+      end;
+    end; // try
+
+    Paths:= ResolveReadDbs(Manifest, AArgs.ProjectPath, AArgs.InFile);
+    if AArgs.AsJson then
+    begin
+      J:= TJSONArray.Create;
+      try
+        for P in Paths do J.Add(P);
+        Writeln(J.ToString);
+      finally
+        J.Free;
+      end;
+    end
+    else begin for P in Paths do Writeln(P); end;
+    Exit(0);
+  end; // if
 
   // --- --project <file>: which ONE section owns this project? --------------
   // Answers a different question from the bare form. The bare form lists every

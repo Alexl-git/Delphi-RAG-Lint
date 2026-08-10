@@ -229,6 +229,56 @@ type
 function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: string;
   out ADb: string; out AClaimants: TArray<string>): TProjectDbMatch;
 
+/// <summary>Resolves any file to a section DB by FOLDER: the section whose
+/// include folder is the most specific ancestor of AFilePath wins.</summary>
+/// <param name="AManifest">Parsed manifest. Relative includes are expanded against
+/// its RootDir.</param>
+/// <param name="AFilePath">File whose covering section is wanted.</param>
+/// <returns>Absolute DB path of the longest-matching section, or '' when no
+/// section's include folder is an ancestor.</returns>
+/// <remarks>A .dpr/.dproj include is folded to ITS FOLDER here on purpose -- this
+/// is the coarse fallback used for an ordinary .pas, which no exact rule can
+/// place. Ties go to the FIRST section (the comparison is a strict '&gt;'), which
+/// is precisely why this must not be the only rule once two projects share a
+/// folder: see ResolveProjectDb and ResolveReadDbs.
+///
+/// Pure: no file system access. Safe to call from any thread.</remarks>
+function ResolveFolderDb(const AManifest: TIndexManifest; const AFilePath: string): string;
+
+/// <summary>Ordered list of DBs a READER (hover, Find Usages, LSP) should open
+/// for AEditorFile, preferring the index of the ACTIVE PROJECT.</summary>
+/// <param name="AManifest">Parsed manifest.</param>
+/// <param name="AActiveProjectFile">The .dproj currently active in the IDE, or ''
+/// when none is. Resolved with ResolveProjectDb, so only an unambiguous owner
+/// counts.</param>
+/// <param name="AEditorFile">The file being edited/queried; may be ''.</param>
+/// <returns>Up to two paths: the active project's DB first (when it resolves
+/// uniquely), then the folder-matched DB for AEditorFile when that is different.
+/// Either may be absent; the result may be empty.</returns>
+/// <remarks>ORDER IS THE ANSWER, and both entries earn their place.
+///
+/// The active project comes FIRST because the editor file alone cannot decide:
+/// ORM3's COMMON\ units belong to BOTH the client and the server project, so a
+/// folder rule answers such a file from whichever section happens to be listed
+/// first, no matter what the developer is actually building. The active project
+/// is the only signal available here that says which of several equally valid
+/// answers is the wanted one.
+///
+/// The folder match is KEPT, not replaced, because the editor file is often
+/// outside the active project entirely -- browsing library or third-party source
+/// with a project open is routine. Dropping it would trade wrong answers for no
+/// answers on exactly those files. A reader passes both to the engine and the
+/// first DB that can answer does.
+///
+/// Deliberately NOT file-to-project membership, which is the fully correct key
+/// and needs the index to say which project claims a given .pas. That is a
+/// larger mechanism and its own task; the active project gets the common case
+/// right at a fraction of the cost.
+///
+/// Pure: no file system access. Safe to call from any thread.</remarks>
+function ResolveReadDbs(const AManifest: TIndexManifest;
+  const AActiveProjectFile, AEditorFile: string): TArray<string>;
+
 /// <summary>Reads the docs.complexity_min threshold used by the doc/hover
 /// verbs (`document --qname/--unit/--project`, `document-all`, and
 /// `hover`). Gates the 'Complexity:' line at RENDER time (v(ADP2 T3) in
@@ -953,6 +1003,82 @@ begin
   if Length(AClaimants) >  1 then Exit(pdmAmbiguous);
   ADb   := FoundDb;
   Result:= pdmUnique;
+end; // function
+
+{ ---------------------------------------------------------------------- }
+{  ResolveFolderDb / ResolveReadDbs                                        }
+{ ---------------------------------------------------------------------- }
+
+function ResolveFolderDb(const AManifest: TIndexManifest; const AFilePath: string): string;
+var
+  FileNorm: string       ;
+  IncRaw  : string       ;
+  IncNorm : string       ;
+  Sec     : TIndexSection;
+  BestLen : Integer      ;
+  I       : Integer      ;
+  J       : Integer      ;
+begin
+  Result:= '';
+  if AFilePath = '' then Exit;
+  FileNorm:= LowerCase(IncludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(AFilePath))));
+  BestLen := -1;
+
+  for I:= 0 to High(AManifest.Sections) do
+  begin
+    Sec:= AManifest.Sections[I];
+    { A section with no include list (registry-libraries) has nothing to match. }
+    for J:= 0 to High(Sec.Include) do
+    begin
+      IncRaw:= Sec.Include[J];
+      if IncRaw = '' then Continue;
+      { An include may be a folder OR a project file -- use the project's folder. }
+      if SameText(ExtractFileExt(IncRaw), '.dproj') or SameText(ExtractFileExt(IncRaw), '.dpr') then
+        IncRaw:= ExtractFilePath(IncRaw);
+      if IncRaw = '' then Continue;
+      if TPath.IsRelativePath(IncRaw) and (AManifest.RootDir <> '') then
+        IncRaw:= TPath.Combine(AManifest.RootDir, IncRaw);
+      IncNorm:= LowerCase(IncludeTrailingPathDelimiter(ExpandFileName(IncRaw)));
+      { Length > 1 rejects a degenerate root-only include, which would otherwise
+        be an ancestor of everything. }
+      if (Length(IncNorm) > 1) and (Pos(IncNorm, FileNorm) = 1) and (Length(IncNorm) > BestLen) then
+      begin
+        Result := ExpandSectionDb(AManifest, Sec);
+        BestLen:= Length(IncNorm);
+      end;
+    end; // for
+  end; // for
+end; // function
+
+function ResolveReadDbs(const AManifest: TIndexManifest;
+  const AActiveProjectFile, AEditorFile: string): TArray<string>;
+var
+  ProjDb   : string        ;
+  FolderDb : string        ;
+  Claimants: TArray<string>;
+begin
+  Result:= nil;
+
+  { Only an UNAMBIGUOUS owner is preferred. An ambiguous project falls through to
+    the folder rule rather than refusing: this is the READ path, where a slightly
+    too-broad DB is a cosmetic problem, not the destructive one the WRITE path
+    faces. }
+  ProjDb:= '';
+  if ResolveProjectDb(AManifest, AActiveProjectFile, ProjDb, Claimants) <> pdmUnique then ProjDb:= '';
+  if ProjDb <> '' then
+  begin
+    SetLength(Result, 1);
+    Result[0]:= ProjDb;
+  end;
+
+  { Kept as a SECOND entry, never as an override: an editor file outside the
+    active project (library / third-party source) is answered by nothing else. }
+  FolderDb:= ResolveFolderDb(AManifest, AEditorFile);
+  if (FolderDb <> '') and (not SameText(FolderDb, ProjDb)) then
+  begin
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)]:= FolderDb;
+  end;
 end; // function
 
 { ---------------------------------------------------------------------- }

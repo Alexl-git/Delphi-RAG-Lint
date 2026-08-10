@@ -2108,8 +2108,24 @@ begin
     The manifest's outDir may be missing too, on a first ever build. Create it
     here rather than letting the engine fail on a path it was told to write. }
   try
-    Result:= ManifestDbForFile(GetActiveEditorFilePath);
-    if Result = '' then Result:= ManifestDbForFile(GetActiveProjectFile);
+    { v(project-scoped): ACTIVE PROJECT first. This function's whole contract is
+      "the DB a wizard command WRITES is the DB the LSP READS", and the read side
+      (DbResolver.ResolveActiveIndexDbs) now prefers the active project's section.
+      Asking editor-file-first here would break that invariant for exactly the
+      folders that motivated the change -- a .pas in ORM3\PACKAGE folder-matches
+      ORM3-Interfaces whichever project is active, so auto-document and lint-all
+      would write to one index while hover read from another.
+
+      Falls back to the file/folder route unchanged when no project is active or
+      none owns it unambiguously. }
+    var WDb: string:= '';
+    var WClaimants: TArray<string>:= nil;
+    if ManifestDbForProject(GetActiveProjectFile, WDb, WClaimants) = pdmUnique then Result:= WDb
+    else
+    begin
+      Result:= ManifestDbForFile(GetActiveEditorFilePath);
+      if Result = '' then Result:= ManifestDbForFile(GetActiveProjectFile);
+    end;
   except
     Result:= '';
   end;

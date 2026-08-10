@@ -56,6 +56,19 @@
     matching survives case differences and '..' segments in the path
     --json emits the section name alongside the db
 
+  and for READ resolution (resolve-dbs --in <file>, what hover / Find Usages /
+  the LSP would open -- the same defect on the read side, same cause):
+
+    a .pas in a shared folder resolves to the ACTIVE project's db FIRST, and
+      follows the active project when it changes (same file, different answer)
+    the folder-matched db is KEPT as a second entry, never replaced -- an editor
+      file outside the active project (library source browsed with a project
+      open) must not go from a wrong answer to no answer
+    with NO active project, the folder behaviour is unchanged
+    an AMBIGUOUS active project falls back to the folder db rather than
+      refusing: on the READ path a too-broad db is cosmetic, whereas the WRITE
+      path refuses (above), and the two must not be confused
+
   Exit code: 0 on full pass, 1 on any failure.
 
   Usage: pwsh -File tests\autotest\run_project_db_resolve.ps1
@@ -170,6 +183,65 @@ New-Item -ItemType Directory -Path (Join-Path $shared 'sub') -Force | Out-Null
 $n = Resolve-Project $weird
 Check 'match survives case differences and a ".." segment' `
   (($n.Exit -eq 0) -and ($n.Stdout.Trim() -like '*Alpha.sqlite')) "exit=$($n.Exit) $($n.Stdout.Trim())"
+
+# --- 6b: READ resolution prefers the ACTIVE PROJECT ------------------------
+# The read-side half of the same defect. A .pas can only be folder-matched, so
+# with two projects in one folder every file there resolved to whichever section
+# came first, regardless of what the developer had active. ORM3's COMMON\ units
+# genuinely belong to two projects at once, so no rule keyed on the file alone
+# can pick between them -- the active project is the tiebreak.
+function Resolve-Read([string]$EditorFile, [string]$ProjPath) {
+  $out = Join-Path $WorkDir 'rout.txt'
+  $err = Join-Path $WorkDir 'rerr.txt'
+  $a = @('resolve-dbs', '--in', $EditorFile, '--config', $cfg)
+  if ($ProjPath) { $a += @('--project', $ProjPath) }
+  $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru `
+         -RedirectStandardOutput $out -RedirectStandardError $err
+  $lines = @(Get-Content -LiteralPath $out -ErrorAction SilentlyContinue |
+             Where-Object { $_.Trim() -ne '' })
+  [pscustomobject]@{ Exit = $p.ExitCode; Lines = $lines }
+}
+
+# A source file in the SHARED folder -- folder-matchable only.
+$sharedPas = Join-Path $shared 'Common.pas'
+Set-Content -LiteralPath $sharedPas -Value 'unit Common;' -Encoding Ascii
+
+$rAlpha = Resolve-Read $sharedPas (Join-Path $shared 'Alpha.dproj')
+Check 'read: shared-folder .pas resolves to the ACTIVE project db FIRST' `
+  (($rAlpha.Lines.Count -ge 1) -and ($rAlpha.Lines[0] -like '*Alpha.sqlite')) ($rAlpha.Lines -join ' | ')
+
+$rBeta = Resolve-Read $sharedPas (Join-Path $shared 'Beta.dproj')
+# THE assertion: same file, different active project, different primary db.
+Check 'read: the SAME .pas follows the active project when it changes' `
+  (($rBeta.Lines.Count -ge 1) -and ($rBeta.Lines[0] -like '*Beta.sqlite')) ($rBeta.Lines -join ' | ')
+
+Check 'read: the folder db is KEPT as a fallback entry, not replaced' `
+  ((($rAlpha.Lines -join ';') -like '*Union.sqlite*')) ($rAlpha.Lines -join ' | ')
+
+# No active project -> unchanged folder behaviour.
+$rNone = Resolve-Read $sharedPas $null
+Check 'read: with NO active project it falls back to the folder db alone' `
+  (($rNone.Lines.Count -eq 1) -and ($rNone.Lines[0] -like '*Union.sqlite')) ($rNone.Lines -join ' | ')
+
+# Editor file OUTSIDE the active project entirely (browsing library source):
+# the active project db still leads, and nothing regresses to empty.
+$outside = Join-Path $WorkDir 'elsewhere\Lib.pas'
+New-Item -ItemType Directory -Path (Split-Path $outside) -Force | Out-Null
+Set-Content -LiteralPath $outside -Value 'unit Lib;' -Encoding Ascii
+$rOut = Resolve-Read $outside (Join-Path $shared 'Alpha.dproj')
+Check 'read: a file outside the active project still yields the project db' `
+  (($rOut.Lines.Count -ge 1) -and ($rOut.Lines[0] -like '*Alpha.sqlite')) ($rOut.Lines -join ' | ')
+
+$rOutNone = Resolve-Read $outside $null
+Check 'read: outside file with no active project yields nothing (no bogus match)' `
+  ($rOutNone.Lines.Count -eq 0) ($rOutNone.Lines -join ' | ')
+
+# An AMBIGUOUS active project must not poison the read path -- it falls through
+# to the folder rule (cosmetic there), unlike the write path which refuses.
+$rAmb = Resolve-Read $sharedPas (Join-Path $shared 'Delta.dproj')
+Check 'read: an ambiguous active project falls back to the folder db, not a refusal' `
+  (($rAmb.Exit -eq 0) -and ($rAmb.Lines.Count -eq 1) -and ($rAmb.Lines[0] -like '*Union.sqlite')) `
+  "exit=$($rAmb.Exit) $($rAmb.Lines -join ' | ')"
 
 # --- 6: --json carries the section name ------------------------------------
 $j = Resolve-Project (Join-Path $shared 'Alpha.dproj') -Json
