@@ -29,11 +29,24 @@ type
       FEnabled        : Boolean        ;
       FRuleId         : string         ;
       FExcludeAncestors: TArray<string>;
+      { The MIRROR of FExcludeAncestors: node kinds at least one of which must be
+        an ancestor for the match to count at all. Empty = no requirement, which
+        is every existing rule, so this changes nothing that does not ask for it.
+
+        Added for concat-in-loop, whose id, comment and message all say "in a
+        loop" while its query matched `S := S + X` ANYWHERE -- 328 findings on
+        drag-lint's own source, most of them single-shot concatenations that are
+        not quadratic in anything. A rule that cannot express its own
+        precondition cannot be calibrated; this is that precondition. }
+      FRequireAncestors: TArray<string>;
       { True if the picked node (or any ancestor up to the root) is one of the
         node kinds in FExcludeAncestors -- used to suppress a match that sits in
         a structural context the rule should not flag (e.g. an integer literal
         that IS the value of a const definition, for large-magic-number). }
       function InExcludedAncestor(const ANode: TTSNode): Boolean;
+      { True when FRequireAncestors is empty (no requirement) or the node has an
+        ancestor of one of those kinds. }
+      function HasRequiredAncestor(const ANode: TTSNode): Boolean;
     public
       constructor Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
       destructor Destroy; override;
@@ -88,6 +101,24 @@ begin
   end;
 end;
 
+function TQueryRule.HasRequiredAncestor(const ANode: TTSNode): Boolean;
+var
+  Cur: TTSNode;
+  Rq : string ;
+begin
+  { No requirement declared -> every match qualifies. This is the path every
+    pre-existing rule takes, so the feature cannot change their behaviour. }
+  if Length(FRequireAncestors) = 0 then Exit(True);
+  Result:= False;
+  Cur:= ANode;
+  while not Cur.IsNull do
+  begin
+    for Rq in FRequireAncestors do
+      if SameText(Cur.NodeType, Rq) then Exit(True);
+    Cur:= Cur.Parent;
+  end;
+end;
+
 constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
 var
   ErrOff : UInt32       ;
@@ -125,6 +156,14 @@ begin
       if Assigned(ExArr) then
         for ExVal in ExArr do
           FExcludeAncestors:= FExcludeAncestors + [ExVal.Value];
+      { Optional structural REQUIREMENT ("require_ancestor"): the match counts
+        only inside one of these node kinds. E.g. concat-in-loop lists the three
+        loop kinds, so `S := S + X` executed once no longer reports a quadratic
+        cost that a single execution cannot have. }
+      ExArr:= JSON.GetValue('require_ancestor') as TJSONArray;
+      if Assigned(ExArr) then
+        for ExVal in ExArr do
+          FRequireAncestors:= FRequireAncestors + [ExVal.Value];
     finally
       JSON.Free;
     end;
@@ -333,6 +372,7 @@ begin
       { Structural exemption (JSON "exclude_if_ancestor"): drop the match when the
         picked node lives inside one of the excluded node kinds. }
       if InExcludedAncestor(Picked) then Continue;
+      if not HasRequiredAncestor(Picked) then Continue;
 
       Finding:= Default(TLintFinding);
       Finding.RuleId  := FId;

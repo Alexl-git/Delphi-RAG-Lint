@@ -4460,6 +4460,35 @@ var
     Result:= True;
   end;
 
+  { DESTROYING a dataset closes it. TDataSet.Destroy calls Close before it frees
+    anything, so `try Q.Open ... finally Q.Free end` leaks no cursor and is a
+    perfectly ordinary Delphi idiom -- the same one the RTL's own examples use.
+
+    The rule did not model this, and that single omission was 95 of the findings
+    on this repo alone (Storage.SQLite.pas:491, 524, 626 among them). Every one
+    told the reader to add a Close that the language already guarantees. A rule
+    whose advice is redundant is not a lesser bug than one whose advice is
+    wrong: it costs the same attention and it teaches the reader to skim.
+
+    Free / Destroy / DisposeOf as a method call, and FreeAndNil(X) as a free
+    function, all mean the same thing here. }
+  function IsDestroyingCall(const N: TTSNode; out AVar: string): Boolean;
+  var
+    M   : string ;
+    Ent, Args, A0: TTSNode;
+  begin
+    if DotMethod(N, AVar, M) then
+      Exit(SameText(M, 'Free') or SameText(M, 'Destroy') or SameText(M, 'DisposeOf'));
+    Result:= False;
+    if N.NodeType <> 'exprCall' then Exit;
+    Ent:= N.ChildByField('entity');
+    if Ent.IsNull or (Ent.NodeType <> 'identifier') or not SameText(NodeStr(Ent), 'FreeAndNil') then Exit;
+    Args:= N.ChildByField('args');
+    if Args.IsNull or (Args.NamedChildCount < 1) then Exit;
+    A0:= Args.NamedChild(0);
+    if A0.NodeType = 'identifier' then begin AVar:= LowerCase(NodeStr(A0)); Result:= True; end;
+  end;
+
   procedure WalkBody(const N: TTSNode; AInFinally: Boolean);
   var
     I   : Integer;
@@ -4478,6 +4507,10 @@ var
     else if IsActiveAssign(N, True, V) then
     begin if not Opened.ContainsKey(V) then Opened.Add(V, N.StartPoint); end
     else if IsActiveAssign(N, False, V) and AInFinally then ClosedInFinally.AddOrSetValue(V, True);
+    { Checked SEPARATELY, not as an else-arm: the branch above already consumed
+      the DotMethod result for the Open/Close names, and a Free would otherwise
+      fall through it. }
+    if AInFinally and IsDestroyingCall(N, V) then ClosedInFinally.AddOrSetValue(V, True);
     if N.NodeType = 'try' then
     begin
       Lf:= False;

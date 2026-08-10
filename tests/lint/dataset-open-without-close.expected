@@ -1,3 +1,17 @@
-# Bad opens Q without a finally Close (11); Good closes in finally (19) clean
+# Bad opens Q with no protection at all (11) -- fires.
+# Good closes in finally (19) -- clean.
+#
+# Free / FreeAndNil / DisposeOf in a finally (38, 51, 63) are all CLEAN:
+# TDataSet.Destroy closes before it frees, so no cursor leaks. The rule did not
+# model this, and it was 95 of the findings on drag-lint's own source -- every
+# one advising a Close the language already performs.
+#
+# 78 is the CONTROL that keeps the fix honest: a Free OUTSIDE any finally
+# protects nothing on the exception path, so it must STILL fire. Without it,
+# "recognise Free" and "switch the rule off" would look identical here.
 dataset-open-without-close 11
 !dataset-open-without-close 19
+!dataset-open-without-close 38
+!dataset-open-without-close 51
+!dataset-open-without-close 63
+dataset-open-without-close 78

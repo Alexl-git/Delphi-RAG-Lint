@@ -84,7 +84,7 @@ begin
     B('missing-inherited-dtor',        'bug-patterns', 'warning', 'Destructor without an inherited call');
     B('float-equality-comparison',     'bug-patterns', 'warning', 'Floating-point value compared with =');
     B('length-zero-compare',           'bug-patterns', 'info',    'Length(s) compared to 0 -- use s = '''' / s <> ''''');
-    B('string-equality-comparison',    'bug-patterns', 'info',    'String compared with = -- consider SameText/SameStr semantics');
+    B('string-equality-comparison',    'bug-patterns', 'info',    'String compared with = -- consider SameText/SameStr semantics', False); { OFF by default -- it fires on EVERY string equality, so it is a census rather than a defect check: 406 findings on drag-lint's own source, the largest single rule in the report, and the top sites are AST node-type tag comparisons (NT = 'exprUnary') where case-sensitivity is exactly what is wanted and SameText would be WRONG. It cannot tell "meant case-insensitive, wrote =" from "meant case-sensitive, wrote =", and without that distinction it carries no signal. Kept for a deliberate case-sensitivity audit; opt in via "enabled" }
     B('format-argument-count',         'bug-patterns', 'error',   'Format() argument count does not match the specifiers');
     B('format-specifier-type-mismatch','bug-patterns', 'error',   'Format() specifier type does not match the literal argument');
     B('loop-executes-at-most-once',    'bug-patterns', 'warning', 'Loop body starts with Exit/Break/raise -- runs at most once');

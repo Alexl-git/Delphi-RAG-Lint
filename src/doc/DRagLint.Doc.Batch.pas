@@ -180,15 +180,33 @@ begin
      skClass, skInterface, skRecord, skEnum, skTypeAlias];
 end;
 
-// True when the result's edits carry a managed facts block (AUTO_BEGIN appears
-// in any insert-text) -- i.e. the merged comment has an index-grounded block,
-// not a pure all-TODO create.
+// True when the result's edits carry INDEX-GROUNDED content -- something mined
+// from the code, as opposed to a pure all-TODO create.
+//
+// The facts fence (AUTO_BEGIN) was the only thing this looked for, which was
+// complete only while the fence was the ONLY place mined content could appear.
+// It no longer is: a mined raise becomes an engine-owned <exception cref>, and
+// a mined return becomes an engine-owned <returns>, both of which sit OUTSIDE
+// the fence. A routine whose one fact was a raise therefore produced a perfectly
+// good comment and had it dropped here -- invisible in `document --unit` and
+// `--project` while `--qname` emitted it, which is the same
+// two-halves-disagree shape this file has been bitten by before.
+//
+// <param> is deliberately NOT counted even though it carries the same ownership
+// marker. It is emitted STRUCTURALLY for every parameter of every routine (ruling
+// D-3) and mines nothing, so counting it would admit exactly the empty-skeleton
+// create this gate exists to drop -- and would do it for nearly every routine in
+// a codebase.
 function HasManagedBlock(const ARes: TDocumentResult): Boolean;
 var
   E: TTextEdit;
 begin
   for E in ARes.Edits do
+  begin
     if System.Pos(AUTO_BEGIN, E.Text) > 0 then Exit(True);
+    if System.Pos('<exception cref="', E.Text) > 0 then Exit(True);
+    if System.Pos('<returns>' + AUTO_MARK, E.Text) > 0 then Exit(True);
+  end;
   Result := False;
 end;
 

@@ -1,5 +1,19 @@
-# S := S + ... at lines 13 and 14; SL := / SL.Add (22, 24) must not fire
+# Line 13 is INSIDE the `for` -- quadratic, fires.
+#
+# Line 14 (`S := S + 'more';`) sits AFTER the loop and used to fire too. It no
+# longer does, and that is the point of the rule's calibration: one
+# concatenation executed once cannot be O(n^2) in anything, yet the rule's id,
+# its comment and its message all say "in a loop". Firing there was 328 findings
+# on drag-lint's own source claiming a cost the code does not pay.
+#
+# The loop requirement is expressed as "require_ancestor" in the sidecar json,
+# because "has an ancestor of kind K" is a property of the path to the root and
+# a tree-sitter pattern can only describe a subtree shape.
+#
+# 22 and 24 are the TStringList alternative the message recommends -- they must
+# stay clean, and they are what keeps this from being a test that a disabled
+# rule would also pass.
 concat-in-loop 13
-concat-in-loop 14
+!concat-in-loop 14
 !concat-in-loop 22
 !concat-in-loop 24

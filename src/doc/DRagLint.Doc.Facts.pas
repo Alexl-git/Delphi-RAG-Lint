@@ -620,7 +620,24 @@ begin
       // Peek past spaces for a '(' -> this is a call site.
       K:= J;
       while (K <= N) and (ALine[K] = ' ') do Inc(K);
-      if (K <= N) and (ALine[K] = '(') and not IsCallSkipWord(Ident) then
+      // A DOTTED call contributes NOTHING to the bare-name bucket. This scan
+      // matches `Identifier(`, so it captured only the LAST SEGMENT of a dotted
+      // call: `raise EFreshError.Create('boom')` produced a callee literally
+      // named `Create`, and every `Obj.Free` / `Q.Open` in the corpus did the
+      // same. Those entries are not merely useless, they are WRONG -- a bare
+      // `Create` in a Calls list reads as a call to some routine named Create,
+      // when what the source says is "a method named Create on some type".
+      //
+      // The bucket exists for calls the RESOLVER could not bind. For a dotted
+      // call the resolver had a receiver and failed to type it, so the honest
+      // answer is silence, not a method name detached from its receiver -- the
+      // same "absence over wrong" rule the resolver itself follows when it
+      // refuses to bind a dotted call to a unit-level routine. A dotted call
+      // that DOES resolve is unaffected: it is added, qualified, by the
+      // call_edges pass before this fallback runs.
+      var PrevCh: Char:= ' ';
+      if I > 1 then PrevCh:= ALine[I - 1];
+      if (K <= N) and (ALine[K] = '(') and (PrevCh <> '.') and not IsCallSkipWord(Ident) then
         AAcc.Add(Ident);
       I:= J;
       Continue;

@@ -1618,6 +1618,46 @@ begin
   end;
 end; // procedure
 
+{ PER-FILE ISOLATION -- index one file, surviving a failure in it.
+
+  The two index paths disagreed about whether a parse failure is fatal, and that
+  disagreement, not the parse failure itself, is what produced the worst outcome
+  this project has had. The folder walk (Indexer.WalkAndIndex) wraps every
+  IndexFile in a try/except and prints SKIP; the project-closure loop below did
+  not. So the SAME bad file -- PDFlibStampAnnot.pas, whose 810-operand
+  concatenation chain overflowed the parser's recursive Walk -- was a survivable
+  SKIP with exit 0 through one path, and a fatal 0xC0000005 through the other.
+
+  The fatal arm was the damaging one precisely because it looked fine: no FATAL
+  line, no ERROR line, and a DB that passed every health check while holding 0
+  call_edges, so find-callers / reverse-calltree / butterfly and every
+  edge-based lint rule silently answered nothing on the flagship project.
+
+  ANY recursion ceiling is eventually exceeded by some input; the MAXSTACKSIZE
+  directive raised this one by roughly 46x and an iterative Walk will raise it
+  further, but neither makes a corpus safe. Isolation is what makes exceeding it
+  survivable, which is why this is the primary fix and the stack work is only
+  the mitigation. (The directive is named without its braces on purpose: written
+  in full inside a brace comment it TERMINATES the comment and breaks the
+  build.)
+
+  Deliberately does NOT fail the section, matching the folder walk exactly: one
+  unparseable file out of hundreds should cost that file, not the index. The
+  SKIP line is the record, and it goes to the same place the walk's does. }
+function IndexOneFileTolerant(const AIndexer: IIndexer; const APath: string): Boolean;
+begin
+  Result:= True;
+  try
+    AIndexer.IndexFile(APath);
+  except
+    on E: Exception do
+    begin
+      Writeln(Format('  SKIP %s: %s: %s', [APath, E.ClassName, E.Message]));
+      Result:= False;
+    end;
+  end;
+end;
+
 { ARebuild selects the MODE, and False is the default because --recompile is:
   a caller that passes nothing gets an incremental refresh, not a wipe. See the
   note where RecreateSectionDb used to live for what this replaced. }
@@ -1719,7 +1759,10 @@ begin
         for F in AItem.Roots do
         begin
           if TDirectory.Exists(F) then begin Indexer.IndexFolder(F, True); EvictRoots:= EvictRoots + [F]; end
-          else if TFile.Exists(F) then begin Indexer.IndexFile(F); EvictRoots:= EvictRoots + [F]; end
+          { A single-FILE root gets the same isolation the folder walk gives every
+            file it visits -- without it, the one arm of this case statement that
+            does not go through WalkAndIndex was still unprotected. }
+          else if TFile.Exists(F) then begin IndexOneFileTolerant(Indexer, F); EvictRoots:= EvictRoots + [F]; end
           else Writeln(Format('  (skip, not found) %s', [F]));
         end;
         { The in-scope set of a folder walk is whatever the walk ADMITTED, after
@@ -1779,7 +1822,9 @@ begin
                 Writeln('  ', DeadProjects[High(DeadProjects)]);
                 Continue;
               end;
-              for ProjectFile in Scope do Indexer.IndexFile(ProjectFile);
+              { Per file, not per project: one unparseable unit costs itself, and
+                the other N-1 members of the closure still index. }
+              for ProjectFile in Scope do IndexOneFileTolerant(Indexer, ProjectFile);
               { Accumulated across the section's project files, so a section that
                 names several projects evicts against the UNION of their scopes.
                 Per-project eviction would have each project delete the previous
@@ -9385,7 +9430,23 @@ begin
     AArgs, Findings, [
       'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter',
       'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy',
-      'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier', 'missing-doc'],
+      'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier', 'missing-doc',
+      { string-equality-comparison ships OFF for the same reason as the rest of
+        this list, and it is the largest single contributor the list has ever
+        had: 406 findings on drag-lint's own source. It fires on EVERY '=' whose
+        operands are both strings, which makes it a census of string comparisons
+        rather than a report of defects, and its top sites are AST node-type tag
+        comparisons (NT = 'exprUnary') where case-sensitivity is precisely what
+        is wanted -- SameText there would be a BUG. Catalog default_enabled=False
+        alone does not suppress CLI output, so it must be listed here too. }
+      'string-equality-comparison',
+      { nil-comparison ships OFF for the same reason: 311 findings, and its
+        message is "prefer Assigned(X) over X <> nil". Both forms are correct
+        Delphi and the codebase uses `<> nil` deliberately on non-object
+        pointers, where Assigned reads as an object test. It reports a STYLE
+        PREFERENCE on every nil test in the program, which is a census, not a
+        defect report. Opt in via "enabled" for a deliberate sweep. }
+      'nil-comparison'],
     { The roll-up counts EVERY severity, not just error-vs-everything-else. It
       used to be `if error then Inc(EC) else Inc(WC)`, so a run of 62 hint + 138
       info + 79 warning reported "0 error(s), 279 warning(s)" -- the one number a
