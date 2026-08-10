@@ -15,8 +15,6 @@
     "outDir": "C:\\Projects\\.drag-lint",
     "exclude": ["*BACKUP*", "*_OLD*.pas", "* - Copy.pas", "*- Copy.PAS", "*-Copy.PAS", "Win64", "*-????-??-?? ??.??.??.pas"],
     "sections": [
-      { "name": "ORM3", "db": "C:\\Projects\\DB\\ORM3\\drag-lint.sqlite",
-        "include": ["C:\\Projects\\DB\\ORM3"], "useIgnoreFiles": true },
       { "name": "ORM3-Micronite2027", "db": "ORM3-Micronite2027.sqlite",
         "include": ["C:\\Projects\\DB\\ORM3\\CLIENT\\Micronite2027.dproj"], "useIgnoreFiles": true },
       { "name": "ORM3-MicroniteMW1Service", "db": "ORM3-MicroniteMW1Service.sqlite",
