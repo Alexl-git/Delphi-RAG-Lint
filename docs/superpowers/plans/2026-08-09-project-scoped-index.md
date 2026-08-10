@@ -16,8 +16,28 @@ memory files; `--no-prune` now reaches `index --all` and is a genuine DRY LOOK t
 would remove; CLI usage banner rewritten) - 11 orphan DBs deleted (2.6 GB) - BOTH BPLs rebuilt with
 the IDE closed.
 
+### DOCUMENTATION IS **NOT** FINISHED -- the user said so explicitly, correcting me
+
+My handoff said "PHASE 3 shipped", and that overstated it. **Phase 3 only fixed docs that NAMED
+DELETED DBs.** It did not touch:
+
+- the **570 `doc-drift` warnings** -- missing `<param>` / `<returns>` on drag-lint's own public
+  surface, the single largest true-positive rule in the self-lint;
+- whatever else the user has in mind. Their words: *"Documentation-related warnings are not yet
+  completed. We still have to finish few steps."*
+
+**ASK THEM which steps they mean before assuming.** Do not treat the doc work as done, and do not
+silently equate "docs updated for renamed DBs" with "documentation complete" -- that is exactly the
+conflation being corrected here.
+
+Related and still queued in the OTHER workstream (`docs/lint/PLAN-autodoc-phaseC-2026-08-09.md`):
+the five approved doc features (`<exception cref>` from mined raises, `<value>` for properties, an
+ownership note when a function returns a newly constructed object, a recursion note from a
+`call_edges` self-loop, `<seealso>` on by default). Those may well be the "few steps".
+
 ### NEXT SESSION, in priority order
 
+0. **Finish the documentation work above** -- scope it with the user first.
 1. **PER-FILE ISOLATION -- the load-bearing one.** `CLI.pas:1646` (the `--project` loop) has NO
    per-file `try/except`; the folder walk (`Indexer.pas:693`) does. That asymmetry is what turned a
    survivable SKIP into a fatal crash that left a healthy-looking DB with **0 `call_edges`**. Any
