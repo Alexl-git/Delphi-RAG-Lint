@@ -90,7 +90,7 @@ findings (here: clean).
 2. Put them in the same directory.
 3. Index a Delphi project:
    ```
-   drag-lint index C:\Projects\MyApp --db myapp.sqlite
+   drag-lint index C:\Projects\MyApp\MyApp.dproj --db myapp.sqlite
    ```
 4. Query symbols:
    ```
@@ -98,6 +98,27 @@ findings (here: clean).
    drag-lint surface --qname Unit.TFoo --db myapp.sqlite
    drag-lint impact --qname Unit.TFoo.DoBar --db myapp.sqlite
    ```
+
+### Scan type and mode: two independent axes
+
+**Scan TYPE is declared by the target, not by a flag:**
+
+| Target | Type | What lands in the DB |
+|---|---|---|
+| `.dpr` / `.dproj` | **Project** | exactly the **compile closure** - the project's members, the project-local units they use transitively, each unit's sibling `.dfm`, the `{$I}` include files, and the project file. Units resolved through a Delphi **Library/Browsing** path are excluded (they belong to the library index), and loose unreferenced files in the project folder are excluded. |
+| a folder | **Library** | every scannable file under the tree (subject to excludes). |
+
+**MODE is chosen per run, independently of type:**
+
+| Mode | Meaning |
+|---|---|
+| `--recompile` (default) | incremental - only content-changed files are re-parsed, then the resolve passes re-run. |
+| `--rebuild` | from scratch. A safety valve, not a correctness requirement: on the same input both modes converge to identical content. |
+
+Prefer **one DB per project**: a project DB answers questions about that project
+exactly. A question that spans projects needs several `--db` flags -
+`drag-lint resolve-dbs --platform <p>` lists every configured DB, and
+`resolve-dbs --project <x.dproj>` / `--in <x.pas>` resolves a single target.
 
 ### Indexing the Delphi RTL/VCL libraries
 

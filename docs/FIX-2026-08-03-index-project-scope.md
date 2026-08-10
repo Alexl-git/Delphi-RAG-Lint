@@ -1,5 +1,17 @@
 # Fix: `index --project` indexed the whole machine, and the wizard wrote a DB nobody read
 
+> **Superseded 2026-08-09 (historical record -- do not follow as guidance).**
+> Project scope was restructured that day: **scan TYPE is now declared by the
+> target** (an `include`/argument ending `.dpr`/`.dproj` = project, a folder =
+> library) and **MODE is chosen per run** (`--rebuild` vs `--recompile`, the
+> default). A project index is now defined as exactly the **compile closure**
+> (members + transitively-used project-local units + sibling `.dfm` + `{$I}`
+> includes + the project file; Library/Browsing-path units and loose
+> unreferenced files excluded). The per-repo union DBs named below --
+> including `DataCopy.sqlite` -- were deleted in favour of one DB per project
+> (`<Repo>-<Project>.sqlite` under `C:\Projects\.drag-lint\`). Current
+> behaviour: `docs/INDEXING-AND-DB-ARCHITECTURE.md` and `docs/SCAN-DATABASES.md`.
+
 **Date:** 2026-08-03. **Trigger:** the user reindexed `C:\Projects\DataCopy\DataCopy.dproj`
 from the IDE menu and it was still running after an hour on a project of 42 source files.
 

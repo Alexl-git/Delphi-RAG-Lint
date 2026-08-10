@@ -2,8 +2,9 @@
 
 **Applies to:** drag-lint **1.1.0-alpha** · index **schema_version 17** ·
 tree-sitter grammars delphi13 **14** / dfm **14**.
-Verified 2026-07-15 against the live ORM3 index (`C:\Projects\DB\ORM3\drag-lint.sqlite`,
-schema 16, 29 tables) and the engine at
+Verified 2026-07-15 against the then-live ORM3 union index (`C:\Projects\DB\ORM3\drag-lint.sqlite`,
+schema 16, 29 tables -- that DB was **retired and deleted on 2026-08-09**; see the
+note in section 1) and the engine at
 `third_party\dll-win64\drag-lint.exe`; schema **v17** (`symbols.prop_access`,
 see §6) verified 2026-07-20 against `SCHEMA_VERSION` in
 `src/storage/DRagLint.Storage.Schema.pas` and the shipped exe's CLI usage
@@ -54,6 +55,17 @@ Key properties:
   library DBs). The *manifest* decides which trees map to which DB; *consumers*
   auto-select the right set per platform.
 
+> **2026-08-09: one DB per project.** The old per-repo *union* DBs were retired
+> and their files deleted -- `C:\Projects\DB\ORM3\drag-lint.sqlite`,
+> `Delphi-RAG-lint.sqlite`, `TableTools.sqlite`, `OCRPDF.sqlite`,
+> `DataCopy.sqlite`, `Delphi-RAG-Lint-Graph.sqlite`, `M2022.sqlite`,
+> `active-projects.sqlite`, `convrules-worktree.sqlite`, `library.sqlite`,
+> `projects.sqlite`, `samples.sqlite`. Each is replaced by
+> `<Repo>-<Project>.sqlite` under `C:\Projects\.drag-lint\` (ORM3 alone is eight
+> DBs). Consequence for consumers: **a cross-project question needs several
+> `--db` flags** -- a single-DB `find-callers` cannot see callers that live in
+> another project.
+
 ---
 
 ## 2. What "indexing" actually does
@@ -83,12 +95,37 @@ After the per-file pass, **resolve passes** run across the whole DB to turn
 name-based refs into resolved `call_edges` and to attribute refs to their
 enclosing symbol. This is why a partial re-index still re-resolves edges.
 
+### Scan type vs mode -- two independent axes
+
+**Scan TYPE is declared by the target**, never chosen on the command line:
+
+- an `include` entry (or `index` argument) ending **`.dpr` / `.dproj`** -> a
+  **Project** scan;
+- a **folder** (or `source: registry-libraries`) -> a **Library** scan.
+
+A **project index is exactly the compile closure**: the `.dproj` members, the
+project-local units they use transitively, each unit's sibling `.dfm`, the
+`{$I}` include files, and the project file itself. Two exclusions follow from
+that definition and are deliberate:
+
+- units resolved through a Delphi **Library/Browsing** path are NOT in the
+  project DB -- they belong to the library index;
+- loose, unreferenced `.pas` files sitting in the project folder are NOT
+  indexed -- they are not part of the compile closure.
+
+**MODE is chosen per run**, orthogonally to type:
+
+- `--recompile` (**default**) -- incremental; only content-hash-changed files
+  are re-parsed, then the resolve passes re-run.
+- `--rebuild` -- from scratch. A safety valve, not a correctness requirement:
+  on the same input both modes converge to identical DB content.
+
 ### Indexing commands (the common ones)
 
 | Command | Purpose |
 |---|---|
-| `index <path> [--db F]` | Index a directory/file into DB `F` (incremental). |
-| `index --project <x.dproj> [--db F]` | Index exactly a project's members. |
+| `index <path> [--db F]` | Index a target into DB `F`. A `.dpr`/`.dproj` target = project scan; a folder = library scan. `--recompile` (default) / `--rebuild`. |
+| `index --project <x.dproj> [--db F]` | Index exactly a project's compile closure. |
 | `index --all [--only S1,S2] [--platform p] [--jobs n]` | Index every manifest section (or just the named ones). `--jobs 0` = all cores. |
 | `index --all --dry-run [--json]` | Preview what would be indexed -- no writes. |
 | `index --scan-libraries-win` | Index the RTL/VCL/DevExpress **library** paths (Win32+Win64). |
@@ -116,23 +153,29 @@ beside the engine: `third_party\dll-win64\drag-lint.json` (a copy also sits at
     "outDir": "C:\\Projects\\.drag-lint",       // where non-absolute DBs land
     "exclude": ["*BACKUP*", "*_OLD*.pas", "* - Copy.pas", "Win64"],
     "sections": [
-      { "name": "ORM3", "db": "C:\\Projects\\DB\\ORM3\\drag-lint.sqlite",
-        "include": ["C:\\Projects\\DB\\ORM3"], "useIgnoreFiles": true },
+      /* PROJECT sections -- the include ends .dproj/.dpr, so the scan is a
+         compile closure and the DB covers exactly one project. */
+      { "name": "ORM3-Micronite2027", "db": "ORM3-Micronite2027.sqlite",
+        "include": ["C:\\Projects\\DB\\ORM3\\CLIENT\\Micronite2027.dproj"],
+        "useIgnoreFiles": true },
+      { "name": "DragLint-Cli", "db": "DragLint-Cli.sqlite",
+        "include": ["C:\\Projects\\Delphi-RAG-lint\\src\\cli\\drag-lint.dproj"] },
+      /* LIBRARY section -- the include is a folder, so the whole tree is scanned. */
       { "name": "SQL",  "db": "C:\\Projects\\DB\\SQL\\drag-lint-sql.sqlite",
         "include": ["C:\\Projects\\DB\\SQL"], "includeOnly": ["MS*.SQL"] },
-      { "name": "DragLint", "db": "Delphi-RAG-lint.sqlite",
-        "include": ["C:\\Projects\\Delphi-RAG-lint"] },
       { "name": "Library", "source": "registry-libraries",
         "platforms": ["Win32", "Win64"], "db": "library-{platform}.sqlite" }
-      /* ...Loader, TableTools, OCRPDF, DragLintGraph... */
+      /* ...seven more ORM3-*, DragLint-Wizard/Tests/CorpusScan, Loader,
+         TableTools-*, OCRPDF-*, DataCopy-*, DragLintGraph-*, YADF*... */
     ]
   }
 }
 ```
 
-- Each **section** maps a set of source roots (`include`, optionally filtered by
+- Each **section** maps a set of targets (`include`, optionally filtered by
   `includeOnly`) to **one DB**. A DB path may be absolute or relative to
-  `outDir`.
+  `outDir`. The kind of target -- `.dproj`/`.dpr` vs folder -- is what makes the
+  section a project section or a library section.
 - `exclude` globs drop backup/copy/other-platform noise everywhere.
 - The `Library` section is special: `source: registry-libraries` reads the RAD
   Studio Library/Browsing paths from the registry, and `{platform}` templating
@@ -148,14 +191,23 @@ call the same resolver the manifest drives, filtered by platform. To see exactly
 what they'd use:
 
 ```
-drag-lint resolve-dbs --platform win64
+drag-lint resolve-dbs --platform win64              # every configured DB
+drag-lint resolve-dbs --project C:\...\MyApp.dproj  # the DB covering one project
+drag-lint resolve-dbs --in C:\...\MyUnit.pas        # the DB covering one file
 ```
 
-On this box (win64) that yields, in order: the ORM3 project DB, the SQL DB, the
-per-project DBs under `.drag-lint\` (Loader, TableTools, Delphi-RAG-lint,
-DragLintGraph, OCRPDF), and the **Win64 library** DB. A consumer merges results
-across all of them, so a symbol defined in the RTL resolves even when you query
-from a project unit. You can still force a specific set with repeated `--db`.
+On this box (win64) `--platform` yields the eight `ORM3-*` project DBs, the SQL
+DB, the remaining per-project DBs under `.drag-lint\` (`DragLint-*`, `Loader`,
+`TableTools-*`, `OCRPDF-*`, `DataCopy-*`, `DragLintGraph-*`, `YADF*`), and the
+**Win64 library** DB. A consumer merges results across all of them, so a symbol
+defined in the RTL resolves even when you query from a project unit. You can
+still force a specific set with repeated `--db`.
+
+> **Per-project DBs change how you ask cross-project questions.** `find-callers`
+> against one project DB reports only the callers inside that project. If the
+> question spans projects, pass every relevant `--db` (or omit `--db` and let the
+> manifest resolver supply the full set) -- otherwise a confident-looking answer
+> is simply incomplete.
 
 **"Project" vs "external" boundary:** a DB is "yours" (project) if it was built
 from your source roots; the library DB is "external". Some rules and reports use
@@ -237,7 +289,9 @@ Field-by-field semantics, defaults, and worked examples:
 | Preview what would be indexed | `drag-lint index --all --dry-run` |
 | Rebuild just one project's DB | `drag-lint index --all --only <Section>` |
 | Reindex a changed folder incrementally | `drag-lint index <changedDir> --db <F>` |
+| Force a from-scratch pass | add `--rebuild` (default is `--recompile`) |
 | See which DBs a query will use | `drag-lint resolve-dbs --platform <p>` |
+| Find the DB for one project / one file | `drag-lint resolve-dbs --project <x.dproj>` / `--in <x.pas>` |
 | Refresh compiler findings | `drag-lint refresh-findings --project <x> --db <F> [--full]` |
 | Shrink an oversized DB | `drag-lint purge-locals --db <F>` |
 

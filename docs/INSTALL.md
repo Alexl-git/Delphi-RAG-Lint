@@ -89,12 +89,21 @@ drag-lint queries one or more `.sqlite` files. Two scopes matter:
 
 ### a) Per-project DB (deep — enables Find Usages of variables)
 ```
-drag-lint index "C:\Projects\DB\ORM3" --db "C:\Projects\DB\ORM3\drag-lint.sqlite" --deep
+drag-lint index "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" --db "C:\Projects\.drag-lint\ORM3-Micronite2027.sqlite" --deep
 ```
+- **The target declares the scan type.** A `.dpr`/`.dproj` target indexes exactly
+  that project's **compile closure** (members + transitively-used project-local
+  units + sibling `.dfm` + `{$I}` includes + the project file); units resolved
+  through a Delphi Library/Browsing path and loose unreferenced files in the
+  folder are excluded. A **folder** target indexes the whole tree instead.
+- **Mode is separate from type:** `--recompile` (default, incremental) or
+  `--rebuild` (from scratch).
+- One DB per project is the current layout on this machine; the old per-repo
+  union DBs were retired and deleted on 2026-08-09.
 - `--deep` records identifier **usages** (reads/writes/attributes), so Find
   Usages works for variables/components, not just calls. Use it for *your* code.
 - Re-indexing is incremental (mtime+sha skip). To force a full rebuild after
-  switching deep/shallow, delete the `.sqlite` first.
+  switching deep/shallow, use `--rebuild` (or delete the `.sqlite` first).
 
 ### b) Library DB (shallow — definitions/calls, queried by the AI/hover)
 ```

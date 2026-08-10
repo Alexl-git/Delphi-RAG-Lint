@@ -15,11 +15,17 @@ query the **drag-lint** SQLite index BEFORE Grep. Grep is the fallback only for
 text-level matches, non-Delphi files, or code no index covers.
 
 - exe: `<path>\drag-lint.exe`
-- DBs (pass each with its own `--db`, repeatable):
-  - project: `<project>\drag-lint.sqlite` (deep — has usages)
-  - library: `<bpl-dir>\drag-lint-library.sqlite` (shallow — RTL/VCL/3rd-party)
-  - or the scan-all set under `C:\Projects\.drag-lint\` (`active-projects.sqlite`,
-    `projects.sqlite`, `library.sqlite`)
+- DBs (pass each with its own `--db`, repeatable): there is **one DB per
+  project**, named `<Repo>-<Project>.sqlite`, plus one **library** DB per
+  platform (`library-Win32.sqlite` / `library-Win64.sqlite`, shallow --
+  RTL/VCL/3rd-party).
+- **Do not guess the path -- ask:** `drag-lint resolve-dbs --platform <p>` lists
+  every configured DB; `... resolve-dbs --project <file.dproj>` or
+  `... resolve-dbs --in <file.pas>` resolves the one covering a given target.
+  Omitting `--db` entirely lets the manifest resolver pick the full set.
+- **A cross-project question needs several `--db` flags.** With per-project DBs,
+  `find-callers` against one DB reports only that project's callers -- a
+  confident single-DB answer can be wrong across projects.
 
 ### Pick the right command
 | Question | Command |
@@ -83,7 +89,14 @@ not yet shipped.
 
 ### Keeping the index fresh
 - The IDE plugin reindexes each file on save (incremental, `--deep`).
-- For a from-scratch rebuild: `drag-lint scan-all` (reads `.drag-lint.json`).
+- **Scan type is declared by the target; mode is chosen per run.** A `.dpr` /
+  `.dproj` target indexes exactly that project's **compile closure** (members +
+  transitively-used project-local units + sibling `.dfm` + `{$I}` includes +
+  the project file; Library/Browsing-path units and loose unreferenced files are
+  excluded). A **folder** target indexes the whole tree. Independently:
+  `--recompile` (default, incremental) or `--rebuild` (from scratch).
+- Rebuild everything from the manifest: `drag-lint index --all --jobs 0`;
+  one section only: `drag-lint index --all --only <Section>`.
 - Deep DBs (projects) have `read`/`write` usage refs; shallow DBs (libraries)
   have calls/types only — so use `usages` against a **deep** project DB.
 - **GUI path (IDE plugin):** the **Indexer** page under **Tools > Options >

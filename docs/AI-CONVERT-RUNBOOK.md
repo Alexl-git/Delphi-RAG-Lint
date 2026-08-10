@@ -37,7 +37,7 @@ Three DBs matter (paths on this machine):
 
 | DB | What it holds | Path |
 |----|---------------|------|
-| App DB | your project's own source (forms, units) -- has the **instances** | `C:\Projects\DB\ORM3\drag-lint.sqlite` |
+| App DB | your project's own source (forms, units) -- has the **instances** | `C:\Projects\.drag-lint\ORM3-Micronite2027.sqlite` (one DB per project) |
 | Library Win32 | 3rd-party libraries incl. **DevExpress `cx`** types | `C:\Projects\.drag-lint\library-Win32.sqlite` |
 | Library Win64 | 3rd-party libraries (fewer -- `cx` NOT present as of this writing) | `C:\Projects\.drag-lint\library-Win64.sqlite` |
 

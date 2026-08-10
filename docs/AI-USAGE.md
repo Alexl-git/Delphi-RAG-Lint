@@ -24,14 +24,25 @@ You can drive it two ways, both backed by the same engine:
 1. Download `drag-lint.exe` + the three `tree-sitter*.dll` files from
    [Releases](https://github.com/Alexl-git/Delphi-RAG-Lint/releases) and keep
    them in the same folder (put it on PATH for convenience).
-2. Build an index of your project:
+2. Build an index. **Prefer one DB per project** -- point `index` at the
+   `.dproj`, and it stores exactly that project's compile closure:
    ```
-   drag-lint index C:\path\to\project --db C:\path\to\project\drag-lint.sqlite
+   drag-lint index C:\path\to\MyApp.dproj --db C:\path\to\MyApp.sqlite
    ```
-   - `--project Foo.dproj` to index exactly a project's units, or
+   - The **target declares the scan type**: a `.dpr`/`.dproj` gives a *project*
+     scan (compile closure -- members + transitively-used project-local units +
+     sibling `.dfm` + `{$I}` includes + the project file; Library/Browsing-path
+     units and loose unreferenced files are excluded), a **folder** gives a
+     *library* scan of the whole tree.
+   - The **mode is chosen per run**: `--recompile` (default, incremental) or
+     `--rebuild` (from scratch).
    - `--scan-libraries` to index the installed RTL/VCL/DevExpress/Spring4D.
    - `--watch [--interval N]` to keep it fresh as you edit.
 3. Point every query at that `--db`. Re-run `index` after large code changes.
+   With per-project DBs, a **cross-project** question (typically `find-callers`)
+   needs **several `--db` flags** -- or omit `--db` and let the manifest
+   resolver supply the full set. Use `drag-lint resolve-dbs --platform <p>` to
+   list them, or `--project <x.dproj>` / `--in <x.pas>` to resolve just one.
 
 ---
 
@@ -360,9 +371,9 @@ in 2b.
 **Index / DB management**
 | Verb | What it does |
 |------|--------------|
-| `index <path>` | build/refresh an index (`--project`, `--scan-libraries`, `--watch`, `--deep`) |
+| `index <path>` | build/refresh an index; a `.dpr`/`.dproj` target = project (compile-closure) scan, a folder = library scan. `--recompile` (default) / `--rebuild`; also `--project`, `--scan-libraries`, `--watch`, `--deep` |
 | `index --all` | build every DB in the manifest (`--only`, `--platform`, `--jobs`, `--dry-run`) |
-| `resolve-dbs` | print the consumer DB list a query/lsp/serve would use (`--platform`) |
+| `resolve-dbs` | print the consumer DB list a query/lsp/serve would use (`--platform`), or resolve the single DB covering one target (`--project <x.dproj>`, `--in <x.pas>`) |
 | `reconcile-project <App.dproj>` | sync project member list; flag stale used units (`--apply`) |
 | `library-drift` | registry roots missing from the library index (exit 2 = drift) |
 | `workspace index\|status\|add` | multi-project workspace operations |

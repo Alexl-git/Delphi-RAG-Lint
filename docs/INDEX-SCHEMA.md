@@ -27,7 +27,8 @@ Schema history, one line per step:
 All facts in this document were cross-checked against the DDL in
 `src/storage/DRagLint.Storage.SQLite.pas` and
 `src/storage/DRagLint.Storage.Schema.pas`, and against a live index
-(`C:\Projects\DB\ORM3\drag-lint.sqlite`) **re-indexed with the v18 engine on
+(the ORM3 union DB `C:\Projects\DB\ORM3\drag-lint.sqlite`, retired and deleted
+2026-08-09 in favour of one DB per project) **re-indexed with the v18 engine on
 2026-07-23** (`schema_version = 18`, verified both via `drag-lint schema --db
 <path> --format text` and a direct read-only `SELECT value FROM schema_meta
 WHERE key='schema_version'` -- the two agree). The row counts in the "Table of

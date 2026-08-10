@@ -5,6 +5,42 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Project-scoped indexing: scan type vs mode, and one DB per project (2026-08-09)
+
+- **Scan TYPE and MODE are two independent axes.** TYPE is **declared by the
+  target**: an `include` entry (or `index` argument) ending `.dpr`/`.dproj`
+  makes a **project** section, a folder makes a **library** section. MODE is
+  **chosen per run**: `--rebuild` (from scratch) or `--recompile` (incremental,
+  the default). Neither implies the other.
+- **A project index is exactly the compile closure**: the `.dproj` members, the
+  project-local units they use transitively, each unit's sibling `.dfm`, the
+  `{$I}` include files, and the project file. Units resolved through a Delphi
+  **Library/Browsing** path are excluded (they belong to the library index);
+  loose unreferenced files in the project folder are excluded.
+- **Per-repo union DBs retired; one DB per project.** DBs now live under
+  `C:\Projects\.drag-lint\` as `<Repo>-<Project>.sqlite`. ORM3's union DB
+  (`C:\Projects\DB\ORM3\drag-lint.sqlite`) is replaced by eight project DBs
+  (`ORM3-Micronite2027`, `ORM3-MicroniteMW1Service`, `ORM3-Interfaces`,
+  `ORM3-TestMicroniteObjects`, `ORM3-MicroniteTests`, `ORM3-TestCachedUpdates`,
+  `ORM3-PdfOcrImportTests`, `ORM3-TEST_uSetupDefaultsFrm`); this repo's own
+  self-index is now `DragLint-Cli.sqlite` (plus `DragLint-Wizard`,
+  `DragLint-Tests`, `DragLint-CorpusScan`).
+- **Deleted DB files** (any doc or script naming them is stale):
+  `Delphi-RAG-lint.sqlite`, `TableTools.sqlite`, `OCRPDF.sqlite`,
+  `DataCopy.sqlite`, `Delphi-RAG-Lint-Graph.sqlite`, `M2022.sqlite`,
+  `active-projects.sqlite`, `convrules-worktree.sqlite`, `library.sqlite`,
+  `projects.sqlite`, `samples.sqlite`, and the ORM3 union DB above.
+- **`resolve-dbs` is how you find a DB.** `--platform <p>` lists every
+  configured DB; `--project <file.dproj>` and `--in <file.pas>` resolve the one
+  covering a given target. **Cross-project questions need several `--db`
+  flags** -- with per-project DBs, a single-DB `find-callers` answer can be
+  wrong across projects.
+- Docs updated: `README.md`, `docs/INDEXING-AND-DB-ARCHITECTURE.md`,
+  `docs/SCAN-DATABASES.md`, `docs/AI-INDEX-FIRST.md`, `docs/AI-USAGE.md`,
+  `docs/INSTALL.md`, `docs/AI-CONVERT-RUNBOOK.md`,
+  `docs/editors/vscode-and-zed-mcp.md`, `docs/INDEX-SCHEMA.md`;
+  `docs/FIX-2026-08-03-index-project-scope.md` marked superseded.
+
 ## v1.2.2-alpha -- 2026-08-03
 
 ### Auto-Document Phase 3 -- provenance, comment harvesting, four new facts (schema v19)
