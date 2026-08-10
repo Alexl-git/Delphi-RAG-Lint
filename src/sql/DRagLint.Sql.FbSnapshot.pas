@@ -45,6 +45,12 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), declaration (DRagLint.Sql.FbSnapshot.pas), DRagLint.Sql.FbSnapshot.TFbSnapshot.Run (DRagLint.Sql.FbSnapshot.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Sql.FbSnapshot
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFbSnapshotStats = record
     Relations : Integer;
     Columns   : Integer;
@@ -54,8 +60,30 @@ type
     SnapshotAt: Int64  ;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFbSnapshot = class
     public
+      /// <param name="AConnectionString"><!-- drag-lint:auto --></param>
+      /// <param name="ASqliteStore"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: Default       (TFbSnapshotStats).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintProject (DRagLint.CLI.pas) ?, DRagLint.CLI.Run (DRagLint.CLI.pas) ?
+      /// Calls: Copy, DateTimeToUnix, Default, DRagLint.Sql.FbSnapshot.ClearPriorSnapshot, DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks, DRagLint.Sql.FbSnapshot.TableExists, DRagLint.Sql.FbSnapshot.TFbSnapshot.Run.ConnectFb, Pos, Trim, UpCase, UpperCase, Writeln
+      /// Complexity: 11 (cyclomatic, outer body), 299 lines (full implementation)
+      /// SQL: writes FB_COLUMNS, FB_DATASETS, FB_ENUM_VALUES, FB_FIELD_INFO, FB_RELATIONS
+      /// Transaction: starts, commits, rolls back
+      /// <seealso cref="DRagLint.Sql.FbSnapshot.ClearPriorSnapshot"/>
+      /// <seealso cref="DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks"/>
+      /// <seealso cref="DRagLint.Sql.FbSnapshot.TableExists"/>
+      /// <seealso cref="DRagLint.Sql.FbSnapshot.TFbSnapshot.Run.ConnectFb"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Run(const AConnectionString: string; const ASqliteStore: TSQLiteSymbolStore): TFbSnapshotStats; static;
   end;
 

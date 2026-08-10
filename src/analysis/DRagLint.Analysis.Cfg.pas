@@ -17,9 +17,15 @@ uses
 type
   /// <summary>One element of a basic block: a simple-statement or condition AST
   /// node, plus an opacity flag.</summary>
-  /// <remarks>Opaque items live inside a `with` statement; their identifier
+  /// <remarks>
+  /// Opaque items live inside a `with` statement; their identifier
   /// reads are not trusted (a `with` aliases fields), so definite-assignment
-  /// ignores their uses and liveness treats them as using everything.</remarks>
+  /// ignores their uses and liveness treats them as using everything.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Analysis.Cfg.TCfgBlock.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.AddItem (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Transfer (DRagLint.Analysis.Flow.Lattices.pas) (+2 more)
+  /// Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCfgItem = record
     Node  : TTSNode;
     Opaque: Boolean;
@@ -27,6 +33,12 @@ type
 
   /// <summary>A `for`-loop control variable plus the index of the block control
   /// reaches after the loop, for the loop-var-after-loop check.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas)
+  /// Used in units: DRagLint.Analysis.Cfg
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCfgForVar = record
     VarName  : string;
     FollowIdx: Integer;
@@ -34,9 +46,15 @@ type
 
   /// <summary>A maximal run of simple items with a single entry and single
   /// exit, plus its CFG successor/predecessor block indices.</summary>
-  /// <remarks>Block 0 is the synthetic Entry, block 1 the synthetic Exit; both
+  /// <remarks>
+  /// Block 0 is the synthetic Entry, block 1 the synthetic Exit; both
   /// have empty `Items`. `EntryDefs` names vars defined unconditionally on
-  /// entry to this block (used for the `foreach` iterator).</remarks>
+  /// entry to this block (used for the `foreach` iterator).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas) (+6 more)
+  /// Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Flow.Lattices, DRagLint.Analysis.Liveness, DRagLint.Refactor.ExtractMethod
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCfgBlock = class
   public
     Index    : Integer;
@@ -44,18 +62,67 @@ type
     EntryDefs: TArray<string>;
     Succ     : TList<Integer>;
     Pred     : TList<Integer>;
+    /// <summary><!-- drag-lint:auto -->TCfgBlock</summary>
+    /// <param name="AIndex"><!-- drag-lint:auto --></param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+80 more)
+    /// Writes: Index, Items, Succ, Pred
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddItem"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddSucc"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(AIndex: Integer);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Reads: Items, Succ, Pred
+    /// Pure
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddItem"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddSucc"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Append an item (an assignment / call / condition node).</summary>
+    /// <param name="ANode"><!-- drag-lint:auto --></param>
+    /// <param name="AOpaque"><!-- drag-lint:auto --></param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas)
+    /// Reads: Items
+    /// Pure
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddSucc"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.Create"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddItem(const ANode: TTSNode; AOpaque: Boolean);
     /// <summary>Record an edge from this block to block AToIdx (no duplicates).</summary>
+    /// <param name="AToIdx"><!-- drag-lint:auto --></param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.Cfg.TBuilderState.DivertVia (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas)
+    /// Reads: Succ
+    /// Pure
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddItem"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.Create"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddSucc(AToIdx: Integer);
   end;
 
   /// <summary>The control-flow graph of one routine body.</summary>
-  /// <remarks>Caller owns the instance and must Free it. When `Skipped` is True
+  /// <remarks>
+  /// Caller owns the instance and must Free it. When `Skipped` is True
   /// the routine contains `goto`/labels/`asm` and analyses must bail (return no
-  /// findings) -- the graph would otherwise need unsound edges.</remarks>
+  /// findings) -- the graph would otherwise need unsound edges.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver&lt;TValue&gt;.Solve (DRagLint.Analysis.DataFlow.pas) (+5 more)
+  /// Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Liveness, DRagLint.Refactor.ExtractMethod
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCfg = class
   public
     Blocks     : TObjectList<TCfgBlock>;
@@ -65,27 +132,114 @@ type
     Src        : TBytes;
     Skipped    : Boolean;
     ForVars    : TList<TCfgForVar>;
+    /// <summary><!-- drag-lint:auto -->TCfg</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+80 more)
+    /// Calls: DRagLint.Analysis.Cfg.TCfg.Create
+    /// Writes: Blocks, ForVars
+    /// Recursive
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Destroy"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.NewBlock"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Reads: ForVars, Blocks
+    /// Pure
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Create"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.NewBlock"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Create a fresh empty block, append it, and return it.</summary>
+    /// <returns><!-- drag-lint:auto -->Observed: TCfgBlock.Create(Blocks.Count).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Analysis.Cfg.TCfgBlock.Create
+    /// Reads: Blocks
+    /// Owns returned: new (caller owns)
+    /// Pure
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.Create"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Create"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function NewBlock: TCfgBlock;
+    /// <returns><!-- drag-lint:auto -->Observed: Blocks.Count.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Reads: Blocks
+    /// Pure
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Create"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Destroy"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.NewBlock"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BlockCount: Integer;
     /// <summary>Fill every block's `Pred` list from the `Succ` lists. Call once
     /// after construction; required by backward analyses (liveness).</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas) ?
+    /// Reads: Blocks
+    /// Pure
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Create"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Destroy"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.NewBlock"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ComputePreds;
   end;
 
   /// <summary>Builds a <see cref="TCfg"/> from a `defProc` node.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
+  /// Used in units: DRagLint.Diagnostics.FlowChecks, DRagLint.Refactor.ExtractMethod
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCfgBuilder = class
   public
     /// <summary>Build the CFG of the routine AProc (a `defProc`). Returns a CFG
     /// whose Skipped is True for goto/asm routines.</summary>
     /// <param name="AProc">The `defProc` AST node.</param>
     /// <param name="ASrc">The unit's source bytes (for identifier text).</param>
+    /// <returns><!-- drag-lint:auto -->Observed: TCfg.Create.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
+    /// Calls: DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm, DRagLint.Analysis.Cfg.TBuilderState.Create, DRagLint.Analysis.Cfg.TBuilderState.EmitStmt
+    /// Owns returned: new (caller owns)
+    /// Pure
+    /// <seealso cref="DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TBuilderState.Create"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TBuilderState.EmitStmt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Build(const AProc: TTSNode; const ASrc: TBytes): TCfg;
   end;
 
 /// <summary>Collect every `defProc` node anywhere under ARoot.</summary>
+/// <param name="ARoot"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Diagnostics.FlowChecks.FindCalleeDefProc (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas)
+/// Calls: DRagLint.Analysis.Cfg.CfgFindProcs.Walk
+/// Pure
+/// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs.Walk"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CfgFindProcs(const ARoot: TTSNode): TArray<TTSNode>;
 
 /// <summary>True when ANode is a VALUED exit -- `exit(v)` -- which assigns
@@ -93,7 +247,10 @@ function CfgFindProcs(const ARoot: TTSNode): TArray<TTSNode>;
 /// <param name="ANode">Either the `exprCall` itself or the `statement` node
 /// wrapping it. Both shapes are accepted deliberately -- see the remarks.</param>
 /// <param name="ASrc">The unit's source bytes.</param>
-/// <remarks>THE SINGLE SOURCE for this question, because asking it in one place
+/// <returns><!-- drag-lint:auto -->Observed: False; (not A.IsNull) and (A.NamedChildCount
+/// &gt; 0).</returns>
+/// <remarks>
+/// THE SINGLE SOURCE for this question, because asking it in one place
 /// and answering it in another is exactly how it broke. TDefiniteAssignment
 /// carried its own copy that tested `NodeType = 'exprCall'`, but a CFG block
 /// stores the STATEMENT node, so the copy never fired once and every `exit(v)`
@@ -101,7 +258,14 @@ function CfgFindProcs(const ARoot: TTSNode): TArray<TTSNode>;
 /// not divert either, so no path ever reached the routine exit through one.
 /// Fixing the divert made it visible immediately, on three real routines.
 /// <para>The name test is case-INSENSITIVE: Delphi identifiers are, and `Exit`
-/// is written both ways in the same file.</para></remarks>
+/// is written both ways in the same file.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas)
+/// Calls: DRagLint.Analysis.Cfg.LowerText
+/// Pure
+/// <seealso cref="DRagLint.Analysis.Cfg.LowerText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsValuedExit(const ANode: TTSNode; const ASrc: TBytes): Boolean;
 
 implementation

@@ -14,24 +14,109 @@ type
   TBaseline = class
   strict private
     /// <summary>Lowercased, backslash-normalized file path.</summary>
+    /// <param name="APath"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: LowerCase(StringReplace(APath, '/', '\',
+    /// [rfReplaceAll])).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf (DRagLint.Lint.Baseline.pas)
+    /// Calls: LowerCase, StringReplace
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.SourceLineText"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Write"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function NormPath(const APath: string): string; static;
     /// <summary>Reads (and caches in ACache) the trimmed text of line ALine
     /// (1-based) from AFile; '' if the file/line is unavailable.</summary>
+    /// <param name="AFile"><!-- drag-lint:auto --></param>
+    /// <param name="ALine"><!-- drag-lint:auto --></param>
+    /// <param name="ACache"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: ''; Trim(Lines[ALine - 1]).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf (DRagLint.Lint.Baseline.pas)
+    /// Calls: Trim
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Write"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function SourceLineText(const AFile: string; ALine: Integer;
       const ACache: TDictionary<string, TArray<string>>): string; static;
     /// <summary>Fingerprints with an occurrence ordinal appended pre-hash, so two
     /// findings on identical-text lines in the same (rule,file) disambiguate.</summary>
+    /// <param name="AFindings"><!-- drag-lint:auto --></param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Lint.Baseline.TBaseline.Filter (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Fingerprint (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Write (DRagLint.Lint.Baseline.pas)
+    /// Calls: DRagLint.Lint.Baseline.TBaseline.NormPath, DRagLint.Lint.Baseline.TBaseline.SourceLineText, IntToStr, LowerCase
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.SourceLineText"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Write"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function FingerprintsOf(const AFindings: TArray<TLintFinding>): TArray<string>; static;
   public
     /// <summary>Fingerprint for one finding (occurrence ordinal 0). Stable across
     /// line-number shifts; changes only when rule, file, or the line text change.</summary>
+    /// <param name="AFinding"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: Fps[0].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.SourceLineText"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Write"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Fingerprint(const AFinding: TLintFinding): string; static;
     /// <summary>Writes the findings' fingerprints to APath as
     /// { "version":1, "fingerprints":[...] }.</summary>
+    /// <param name="APath"><!-- drag-lint:auto --></param>
+    /// <param name="AFindings"><!-- drag-lint:auto --></param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) (+4 more)
+    /// Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.SourceLineText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure Write(const APath: string; const AFindings: TArray<TLintFinding>); static;
     /// <summary>Returns only findings whose fingerprint is absent from the
     /// baseline at APath. If APath is missing/unreadable, returns AFindings
     /// unchanged.</summary>
+    /// <param name="APath"><!-- drag-lint:auto --></param>
+    /// <param name="AFindings"><!-- drag-lint:auto --></param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
+    /// Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.SourceLineText"/>
+    /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Write"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Filter(const APath: string; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>; static;
   end;
 

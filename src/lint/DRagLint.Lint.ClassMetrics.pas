@@ -26,8 +26,10 @@ type
   /// returns 'info' findings for classes exceeding the configured threshold: the
   /// Chidamber-Kemerer suite (DIT/NOC/CBO/RFC/LCOM4), the coupling pair
   /// fan-out (Ce) / fan-in (Ca), and the middle-man delegation signal.</summary>
-  /// <remarks>Stateless; project-wide -- invoke from the lint-all store path only
-  /// (not lint-project or the per-file LSP). Reads the store read-only; never raises.</remarks>
+  /// <remarks>
+  /// Stateless; project-wide -- invoke from the lint-all store path only
+  /// (not lint-project or the per-file LSP). Reads the store read-only; never raises.
+  /// </remarks>
   TClassMetrics = class
   public
     /// <summary>Computes the per-class metrics (CK: DIT/NOC/CBO/RFC/LCOM4; the
@@ -39,7 +41,20 @@ type
     /// <param name="ACfg">Active lint config (supplies per-rule thresholds).</param>
     /// <param name="ARuleId">Single-rule filter for --rule; '' evaluates every metric.</param>
     /// <returns>'info' findings anchored at each offending class declaration.</returns>
-    /// <remarks>Project-wide; call from lint-all only. Never raises.</remarks>
+    /// <remarks>
+    /// Project-wide; call from lint-all only. Never raises.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: based, boundary, Caveat, CollectDefProcNodes, CollectIdentifiers, Connected, Copy, Default, DelegateBaseField, DelegationField (+40 more)
+    /// Returns: Roots.Count; Default(TMiddleManResult); nil; Findings.ToArray
+    /// Complexity: 24 (cyclomatic, outer body), 938 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
+    /// <seealso cref="DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory"/>
+    /// <seealso cref="DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildMemberMap"/>
+    /// <seealso cref="DRagLint.Lint.ClassMetrics.TClassMetrics.Run.ComputeAllFanIn"/>
+    /// <seealso cref="DRagLint.Lint.ClassMetrics.TClassMetrics.Run.ComputeCBO"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Run(const AStore: ISymbolStore; const ACfg: TLintConfig;
       const ARuleId: string = ''): TArray<TLintFinding>;
   end;

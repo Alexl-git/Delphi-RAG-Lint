@@ -56,6 +56,16 @@ uses
 /// compilerversion -> 37) for version-style comparisons. Must not be nil.</param>
 /// <returns>True/False. A number result is True iff non-zero; a boolean result
 /// is returned as-is. ANY parse error or exception returns False (conservative).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoDumpPpEval (DRagLint.CLI.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)
+/// Calls: DRagLint.Preprocess.Expr.TPPExprParser.Init, DRagLint.Preprocess.Expr.Truthy
+/// Returns: Truthy(V); False
+/// Pure
+/// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Init"/>
+/// <seealso cref="DRagLint.Preprocess.Expr.Truthy"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EvalPPExpr(const AExpr: string; const ADefines: TDictionary<string,Boolean>; const ANumeric: TDictionary<string,Integer>): Boolean;
 
 implementation

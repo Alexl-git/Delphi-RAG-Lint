@@ -31,6 +31,19 @@ type
     /// <param name="AStore">Optional symbol store; nil on the bare lint path.</param>
     /// <param name="AFileId">File id within AStore (0 when no store).</param>
     /// <returns>All flow findings for the file.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: alternatives, AssignmentBaseIndex, AssignmentTargetIndex, bail, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy, cycles, Default (+28 more)
+    /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); Findings.ToArray
+    /// Complexity: 17 (cyclomatic, outer body), 567 lines (full implementation)
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.FindCalleeDefProc"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.ParamClearlyNonOwning"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore = nil;
       AFileId: Int64 = 0): TArray<TLintFinding>;
   end;

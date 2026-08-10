@@ -35,7 +35,8 @@ uses
 
 type
   /// <summary>One flattened property of the enumerated tree.</summary>
-  /// <remarks>Path is the dotted route from the root class down to this leaf
+  /// <remarks>
+  /// Path is the dotted route from the root class down to this leaf
   /// (e.g. 'Font.Color'); a top-level property is just its own name. TypeName is
   /// the bare declared type ('TColor', 'Integer'), or 'unknown' when it could not
   /// be parsed/resolved. DeclaredIn is the qualified name of the class in which
@@ -80,7 +81,12 @@ type
   /// section's visibility) -- see Walk's field loop and
   /// ResolveConstVisibilityByProximity for how the effective visibility is
   /// recovered from the nearest visibility-bearing sibling instead of being
-  /// fabricated.</remarks>
+  /// fabricated.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.PropTree.BuildPropTree.Walk (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas), DRagLint.Convert.Rules.PathExists (DRagLint.Convert.Rules.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPropNode = record
     Path        : string;   // dotted, e.g. 'Font.Color'
     TypeName    : string;   // 'TColor'; 'unknown' if unresolvable
@@ -93,7 +99,8 @@ type
   end;
 
   /// <summary>Tuning knobs for BuildPropTree.</summary>
-  /// <remarks>Depth caps recursion into class-typed properties (the caller applies
+  /// <remarks>
+  /// Depth caps recursion into class-typed properties (the caller applies
   /// its own default -- typically 6 -- before calling; a Depth &lt;= 0 yields only
   /// the root class's own + inherited properties, no recursion). ToPersistent,
   /// when True (the CLI default), stops the ancestor climb at a class named
@@ -104,7 +111,12 @@ type
   /// MUST start with `Opts:= Default(TPropTreeOptions);` before assigning any
   /// field, so a field the caller does not explicitly set (today or after a
   /// future field is added) is deterministically False/0/'' rather than
-  /// whatever garbage happened to be on the stack.</remarks>
+  /// whatever garbage happened to be on the stack.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas) (+2 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.PropTree
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPropTreeOptions = record
     Depth       : Integer;
     ToPersistent: Boolean;
@@ -117,11 +129,17 @@ type
   end;
 
   /// <summary>The flattened deep-property tree of a class.</summary>
-  /// <remarks>RootType is the bare class name ('TOuter'), or '' when the class
+  /// <remarks>
+  /// RootType is the bare class name ('TOuter'), or '' when the class
   /// qname did not resolve (in which case Nodes is empty). Nodes are in
   /// enumeration order (own properties before recursed children). Truncated is
   /// True when the Depth cap stopped a class-typed expansion that would otherwise
-  /// have recursed further.</remarks>
+  /// have recursed further.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit.TreeFor (DRagLint.CLI.pas) (+9 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPropTree = record
     RootType : string;
     Nodes    : TArray<TPropNode>;
@@ -140,7 +158,8 @@ type
 /// <param name="AOpts">Depth cap and the ToPersistent ancestor-stop switch.</param>
 /// <returns>The flattened tree. RootType='' with empty Nodes when AClassQName
 /// resolves to no class-kind symbol.</returns>
-/// <remarks>Own properties come from FindAllChildSymbols(classId) filtered to
+/// <remarks>
+/// Own properties come from FindAllChildSymbols(classId) filtered to
 /// property-kind; inherited properties are gathered by walking the ancestor
 /// closure (GetTransitiveAncestors) and enumerating each ancestor class's
 /// property children. An ancestor edge the INDEXER left UNRESOLVED (it declines
@@ -214,7 +233,16 @@ type
 /// guessed outright. A field leaf's Kind ('class' vs 'scalar') is still decided
 /// by a scope-UNAWARE name lookup -- deliberately, see Walk's field loop.
 /// Borrows AStore; performs no I/O of its own.
-/// Not thread-safe with respect to concurrent mutation of the store.</remarks>
+/// Not thread-safe with respect to concurrent mutation of the store.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoConvertApply.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree (DRagLint.CLI.pas) (+1 more)
+/// Calls: AddId, BodyOf, ClassChain, Climb, ClimbFrom, ClosureClassIds, CollectFields, CollectProps, CrossesGuiFramework, Default (+21 more)
+/// Returns: List.ToArray; Climb(AClass); Ids.ToArray; Default(TPropTree)
+/// Pure
+/// <seealso cref="DRagLint.Convert.PropTree.BuildPropTree.ResolveClassByQName"/>
+/// <seealso cref="DRagLint.Convert.PropTree.BuildPropTree.Walk"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
   const AOpts: TPropTreeOptions): TPropTree;
 

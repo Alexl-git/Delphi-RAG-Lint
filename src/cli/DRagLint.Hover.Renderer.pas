@@ -15,6 +15,16 @@ uses
   DRagLint.Core.Model
   ;
 
+/// <param name="ASym"><!-- drag-lint:auto --></param>
+/// <param name="ADoc"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Trim
+/// Pure
+/// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 
 /// <summary>Renders a symbol's hover popup as markdown: qualified-name
@@ -38,18 +48,59 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 /// caller-computes pattern; keeps this unit decoupled from
 /// DRagLint.Doc.Facts/DRagLint.Storage, which DoHover/HandleHover already
 /// have open).</param>
+/// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown, itself
+/// Complexity: 13 (cyclomatic, outer body), 107 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
+/// <seealso cref="DRagLint.Hover.Renderer.HasAnyParamDescription"/>
+/// <seealso cref="DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil; const AFactLines: TArray<string> = nil): string;
 
+/// <param name="ASym"><!-- drag-lint:auto --></param>
+/// <param name="ADoc"><!-- drag-lint:auto --></param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, IfThen
+/// Overload 1 of 2
+/// Pure
+/// <seealso cref="DRagLint.Core.Model.DocFormatToStr"/>
+/// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
+/// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string; overload;
 
 // v0.43: turn a proc-like signature -- e.g. '(AOwner: TComponent;
 // AFldrSystID: Int64): Boolean' -- into an IDE-style markdown block listing
 // each parameter name + type on its own line, plus the return type. Returns ''
 // when the signature has no parameter list (containers, fields, properties).
+/// <param name="ASignature"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: ''; SB.ToString.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas) ?
+/// Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Format, Pos, StartsText, Trim
+/// Complexity: 16 (cyclomatic, outer body), 82 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Hover.Renderer.LastTopLevelColon"/>
+/// <seealso cref="DRagLint.Hover.Renderer.SplitTopLevel"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderSignatureParamsMarkdown(const ASignature: string): string;
 
-/// <summary>One parsed parameter from a routine signature: the leading
-/// const/var/out modifier (if any), the parameter name, and its type text.</summary>
+  /// <summary>One parsed parameter from a routine signature: the leading
+  /// const/var/out modifier (if any), the parameter name, and its type text.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Hover.Renderer.ParseSignatureParams (DRagLint.Hover.Renderer.pas)
+  /// Used in units: DRagLint.Hover.Renderer
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 type
   TParamPart = record
     Modifier: string;
@@ -57,17 +108,23 @@ type
     TypeText: string;
   end;
 
-/// <summary>One mined `Result:= &lt;Expr>` / `Exit(&lt;Expr>)` return expression,
-/// as produced by the Task 2 returns-miner.</summary>
+  /// <summary>One mined `Result:= &lt;Expr>` / `Exit(&lt;Expr>)` return expression,
+  /// as produced by the Task 2 returns-miner.</summary>
 type
   TReturnFact = record
     Expr: string ;
     Line: Integer;   // absolute 1-based source line the RHS was mined from; 0 if unknown
   end;
 
-/// <summary>Structured hover model: the parsed pieces of a symbol's
-/// signature, doc-comment, and mined return facts, ready for a renderer to
-/// lay out / color without re-parsing a flat string.</summary>
+  /// <summary>Structured hover model: the parsed pieces of a symbol's
+  /// signature, doc-comment, and mined return facts, ready for a renderer to
+  /// lay out / color without re-parsing a flat string.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), declaration (DRagLint.Hover.Renderer.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Hover.Renderer
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 type
   THoverModel = record
     QualifiedName: string             ;
@@ -89,6 +146,17 @@ type
 /// no parameter list.</summary>
 /// <param name="ASignature">The routine's raw signature text.</param>
 /// <returns>One TParamPart per parameter name, in declaration order.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas)
+/// Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Pos, StartsText, Trim
+/// Returns: Parts.ToArray
+/// Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Hover.Renderer.LastTopLevelColon"/>
+/// <seealso cref="DRagLint.Hover.Renderer.SplitTopLevel"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseSignatureParams(const ASignature: string): TArray<TParamPart>;
 
 /// <summary>Assembles a THoverModel from an indexed symbol, its parsed
@@ -103,6 +171,16 @@ function ParseSignatureParams(const ASignature: string): TArray<TParamPart>;
 /// line each RHS was mined from (for click-to-navigate). Pass nil/[] for none;
 /// entries default to 0 (unknown) when shorter than AReturnRhs.</param>
 /// <returns>A populated THoverModel.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas)
+/// Calls: DRagLint.Hover.Renderer.KindQualifier, DRagLint.Hover.Renderer.ParseSignatureParams, DRagLint.Hover.Renderer.ReturnTypeFromSig
+/// Pure
+/// <seealso cref="DRagLint.Hover.Renderer.KindQualifier"/>
+/// <seealso cref="DRagLint.Hover.Renderer.ParseSignatureParams"/>
+/// <seealso cref="DRagLint.Hover.Renderer.ReturnTypeFromSig"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUnitFile: string; const AReturnRhs: TArray<string>; const AReturnLines: TArray<Integer> = nil): THoverModel;
 
 /// <summary>Serializes a structured THoverModel to the hover JSON shape:
@@ -114,6 +192,16 @@ function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUni
 /// (as FormatPhase2FactLines produced them) emitted as a `"facts":[...]` array
 /// so the structured IDE popup can render them; pass nil/[] for none.</param>
 /// <returns>A single-line JSON object string.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, from, IntToStr, parallel
+/// Returns: SB.ToString
+/// Overload 2 of 2
+/// Pure
+/// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
+/// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderHoverJson(const AModel: THoverModel; const AFactLines: TArray<string>): string; overload;
 
 implementation

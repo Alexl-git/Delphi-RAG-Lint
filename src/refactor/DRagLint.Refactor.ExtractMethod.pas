@@ -35,17 +35,28 @@ type
   /// selection was resolved to a safe, contiguous statement run. eoRefused:
   /// resolution failed or the shape is unsafe; see the accompanying reason
   /// string returned alongside.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Refactor.ExtractMethod.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExtractOutcome = (eoOK, eoRefused);
 
   /// <summary>A resolved, validated selection: a contiguous run of complete
   /// statements at one nesting level, inside exactly one enclosing routine,
   /// free of escaping control flow.</summary>
-  /// <remarks>FirstItem/LastItem index into the flattened statement list of
+  /// <remarks>
+  /// FirstItem/LastItem index into the flattened statement list of
   /// the single statement-list node that directly contains the run (i.e. the
   /// named children of that 'block'/'statements' node) -- NOT a global index
   /// across the whole routine. StartLine/StartCol/EndLine/EndCol are the
   /// 1-based line/column span from the first statement's start to the last
-  /// statement's end, as reported by tree-sitter's StartPoint/EndPoint.</remarks>
+  /// statement's end, as reported by tree-sitter's StartPoint/EndPoint.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
+  /// Used in units: DRagLint.Refactor.ExtractMethod
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExtractSelection = record
     Proc      : TTSNode;
     IsMethod  : Boolean;
@@ -63,13 +74,19 @@ type
   /// vars become value parameters of the new method (Inputs), which single
   /// var (if any) becomes its return value (OutputIdx), and which vars stay
   /// purely local to the new method's body (Internals).</summary>
-  /// <remarks>See TExtractMethodRefactoring.ClassifyVars for the algorithm.
+  /// <remarks>
+  /// See TExtractMethodRefactoring.ClassifyVars for the algorithm.
   /// Refuse is set (non-empty) rather than guessing whenever the run needs
   /// more than one escaping value (Extract Method supports a single Result
   /// only) or an Input/Output's declared type is unknown (empty TypeText,
   /// e.g. an inline `var x := ...` local with no recorded type text) -- a
   /// new method parameter or return type cannot be synthesized without it.
-  /// All fields are undefined when Refuse &lt;> ''.</remarks>
+  /// All fields are undefined when Refuse &lt;> ''.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
+  /// Used in units: DRagLint.Refactor.ExtractMethod
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExtractVars = record
     /// <summary>Var-table indices that become value parameters of the new
     /// method, in the order each was first used (read) within the run.</summary>
@@ -96,6 +113,12 @@ type
   /// tasks) synthesizes the new method and emits the edit set. Every
   /// uncertain precondition refuses with a specific reason rather than
   /// guessing -- see the module comment.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExtractMethodRefactoring = class
   public
     /// <summary>Classifies ASel's variables into Inputs/Output/Internals for
@@ -110,7 +133,8 @@ type
     /// <returns>A TExtractVars with Refuse = '' on success, or a specific
     /// non-empty Refuse reason (see TExtractVars remarks) with every other
     /// field undefined.</returns>
-    /// <remarks>Algorithm: `defs` = every whole-var assignment target
+    /// <remarks>
+    /// Algorithm: `defs` = every whole-var assignment target
     /// (AssignmentTargetIndex) anywhere in the run, including inside
     /// compound statements (if/case/loop/try bodies are walked recursively
     /// with per-branch MUST-defined state; see ProcessStmt); upward-exposed
@@ -125,7 +149,20 @@ type
     /// the routine, or when an Input/Output has empty TypeText. Internals =
     /// defs minus Inputs minus the Output. Identifiers not in AVars (Self,
     /// fields, globals) are skipped entirely -- they need no
-    /// parameter.</remarks>
+    /// parameter.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
+    /// Calls: AssignmentTargetIndex, child, CollectExprUses, CollectReadsAndCallDefs, Copy, def, Default, defs, descent, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get (+17 more)
+    /// Returns: Default(TExtractVars)
+    /// Complexity: 17 (cyclomatic, outer body), 332 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get"/>
+    /// <seealso cref="DRagLint.Refactor.ExtractMethod.LiveOutOfRun"/>
+    /// <seealso cref="DRagLint.Refactor.ExtractMethod.LocateStatementList"/>
+    /// <seealso cref="DRagLint.Refactor.ExtractMethod.RoutineBodyList"/>
+    /// <seealso cref="DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars.ProcessStmt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ClassifyVars(const ASel: TExtractSelection; ACfg: TCfg;
       AVars: TRoutineVarTable; const ASrc: TBytes): TExtractVars;
 
@@ -140,14 +177,40 @@ type
     /// extraction is refused; '' on success.</param>
     /// <returns>nil when refused (ARefuse non-empty); a non-empty edit array
     /// when the extraction succeeds (ARefuse = '').</returns>
-    /// <remarks>Task 2 implements selection resolution and the refuse guards
+    /// <remarks>
+    /// Task 2 implements selection resolution and the refuse guards
     /// only: every selection that passes all safety checks still refuses
-    /// with 'not-yet-implemented' (Tasks 3-4 add classification + synthesis).</remarks>
+    /// with 'not-yet-implemented' (Tasks 3-4 add classification + synthesis).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)
+    /// Calls: began, Default, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ArgListText, DRagLint.Refactor.ExtractMethod.ClassHasMemberNamed, DRagLint.Refactor.ExtractMethod.EmitInternalDeletions (+17 more)
+    /// Returns: nil; ' + OutName + '; Edits.ToArray
+    /// Complexity: 30 (cyclomatic, outer body), 226 lines (full implementation)
+    /// Mutates: ARefuse (out)
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
+    /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBuilder.Build"/>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build"/>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Build(const AFile: string; AFromLine, AToLine: Integer;
       const ANewName: string; out ARefuse: string): TArray<TTextEdit>;
 
     /// <summary>Human-readable preview of the edit set, matching the other
     /// refactorings' dry-run rendering (delegates to TTextEditApplier).</summary>
+    /// <param name="AEdits"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: TTextEditApplier.RenderDryRun(AEdits).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)
+    /// Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun
+    /// Pure
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun"/>
+    /// <seealso cref="DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build"/>
+    /// <seealso cref="DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RenderDryRun(const AEdits: TArray<TTextEdit>): string;
   end;
 
@@ -161,6 +224,20 @@ type
   /// <param name="ARefuse">Specific reason on eoRefused; '' on eoOK.</param>
   /// <returns>eoOK if a safe, contiguous single-routine statement run was
   /// found; eoRefused otherwise.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Called from: DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
+  /// Calls: based, Default, directive, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ByteOfLineEnd, DRagLint.Refactor.ExtractMethod.ByteOfLineStart, DRagLint.Refactor.ExtractMethod.CollectEnclosingProcs, DRagLint.Refactor.ExtractMethod.ContainsGotoOrLabel (+17 more)
+  /// Returns: eoRefused; eoOK
+  /// Complexity: 37 (cyclomatic, outer body), 224 lines (full implementation)
+  /// Mutates: ASel (out), ARefuse (out)
+  /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
+  /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBuilder.Build"/>
+  /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+  /// <seealso cref="DRagLint.Refactor.ExtractMethod.ByteOfLineEnd"/>
+  /// <seealso cref="DRagLint.Refactor.ExtractMethod.ByteOfLineStart"/>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   function ResolveExtractSelection(const AFile: string; AFromLine, AToLine: Integer;
     out ASel: TExtractSelection; out ARefuse: string): TExtractOutcome;
 

@@ -12,9 +12,32 @@ type
   strict private
     /// <summary>Maps a drag-lint severity to a SARIF level. error->error,
     /// warning->warning, everything else (info/hint/unknown)->note.</summary>
+    /// <param name="ASeverity"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: 'error'; 'warning'; 'note'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Output.Sarif.TSarifWriter.BuildResult (DRagLint.Output.Sarif.pas)
+    /// Calls: SameText
+    /// Pure
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function SarifLevel(const ASeverity: string): string; static;
     /// <summary>Builds one SARIF result object for a finding. Caller owns it
     /// (added into a results array which frees it).</summary>
+    /// <param name="AFinding"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Output.Sarif.TSarifWriter.ToJson (DRagLint.Output.Sarif.pas)
+    /// Calls: DRagLint.Output.Sarif.TSarifWriter.SarifLevel, Max
+    /// Owns returned: new (caller owns)
+    /// Pure
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildResult(const AFinding: TLintFinding): TJSONObject; static;
   public
     /// <summary>Renders the findings as a SARIF 2.1.0 run.</summary>
@@ -22,6 +45,15 @@ type
     /// <param name="AToolVersion">Value for tool.driver.version (the drag-lint VERSION).</param>
     /// <returns>Pretty-printed SARIF JSON. runs[0].tool.driver.rules lists the
     /// distinct rule ids; runs[0].results carries one entry per finding.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Output.Sarif.TSarifWriter.BuildResult
+    /// Returns: Root.Format(2)
+    /// Pure
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ToJson(const AFindings: TArray<TLintFinding>; const AToolVersion: string): string; static;
   end;
 

@@ -12,6 +12,12 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), declaration (DRagLint.Resolver.TypeAt.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas) (+2 more)
+  /// Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.Resolver.TypeAt
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTypeAtResult = record
     FileName   : string    ;
     Line       : Integer   ;
@@ -28,6 +34,12 @@ type
     ResolvedStoreIndex: Integer;   // index into the AStores array the Resolved symbol came from; -1 if none
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTypeAtResolver = class
     public
       /// <summary>Resolves the symbol referenced at a file position, searching
@@ -42,10 +54,82 @@ type
       /// <returns>The resolution result. OwnerTypeFallback is True when the LHS
       /// type resolved but the member could not be found on it or any base;
       /// ResolvedStoreIndex names the store the resolved symbol came from.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) (+2 more)
+      /// Calls: by, children, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindContainingSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindEnclosingRoutineByImpl, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Resolver.TypeAt.FindGenericBaseAnywhere, DRagLint.Resolver.TypeAt.FindTypeAnywhere, DRagLint.Resolver.TypeAt.InferLocalVarType, DRagLint.Resolver.TypeAt.ParseGenericBase (+10 more)
+      /// Overload 1 of 2
+      /// Complexity: 37 (cyclomatic, outer body), 193 lines (full implementation)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindContainingSymbol"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindEnclosingRoutineByImpl"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.FindGenericBaseAnywhere"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Resolve(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer)         : TTypeAtResult; overload;
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="ALine"><!-- drag-lint:auto --></param>
+      /// <param name="ACol"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed:
+      /// Resolve(TArray&lt;ISymbolStore&gt;.Create(AStore), AFile, ALine, ACol).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4
+      /// Overload 2 of 2
+      /// Pure
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.ExtractTokenAt"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.RenderJson"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.RenderText"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Resolve(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer)                  : TTypeAtResult; overload;
+      /// <param name="ALine"><!-- drag-lint:auto --></param>
+      /// <param name="ACol"><!-- drag-lint:auto --></param>
+      /// <param name="APrecedingDot"><!-- drag-lint:auto --></param>
+      /// <param name="ALhs"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: ''; Copy(ALine, Start, EndIdx -
+      /// Start).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)
+      /// Calls: CharInSet, Copy
+      /// Complexity: 12 (cyclomatic, outer body), 30 lines (full implementation)
+      /// Mutates: APrecedingDot (out), ALhs (out)
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.RenderJson"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.RenderText"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ExtractTokenAt(const ALine: string; ACol: Integer; out APrecedingDot: Boolean; out ALhs: string): string       ;
+      /// <param name="AResult"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas)
+      /// Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format
+      /// Pure
+      /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.ExtractTokenAt"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.RenderJson"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function RenderText(const AResult: TTypeAtResult)                                                        : string       ;
+      /// <param name="AResult"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
+      /// Calls: Format, StringReplace
+      /// Pure
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.ExtractTokenAt"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.RenderText"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function RenderJson(const AResult: TTypeAtResult)                                                        : string       ;
   end;
 

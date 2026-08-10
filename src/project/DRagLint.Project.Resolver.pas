@@ -22,24 +22,208 @@ type
   //   - folders containing each unit listed in the .dpr's `uses X in 'path'`
   //     clauses (one level deep)
   // All $(BDS) and similar macros are expanded.
+  /// <summary><!-- drag-lint:auto -->Resolves the set of folders that should be scanned
+  /// for a Delphi project. Inputs: a .dproj path. Outputs: deduplicated folder list
+  /// combining: - the .dproj's own folder - DCC_UnitSearchPath entries from the .dproj -
+  /// Library and Browsing paths from registry (Win32 + Win64, HKCU + HKLM) - folders
+  /// containing each unit listed in the .dpr's `uses X in 'path'` clauses (one level
+  /// deep) All $(BDS) and similar macros are expanded.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), declaration (DRagLint.Index.Coverage.pas), declaration (DRagLint.Index.DbSelect.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), declaration (DRagLint.Index.Plan.pas)
+  /// Used in units: DRagLint.Doc.Batch, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectResolver = class
     strict private
       FBDS            : string                          ;
       FCurrentPlatform: string                          ; // what $(Platform) expands to right now
       FEnvVars        : TDictionary<string, string>     ; // RAD Studio "Environment Variables" (e.g. DXVCL), loaded lazily
       FEnvVarsLoaded  : Boolean                          ;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro (DRagLint.Project.Resolver.pas)
+      /// Calls: UpperCase
+      /// Reads: FEnvVarsLoaded, FEnvVars   Writes: FEnvVarsLoaded
+      /// Touches: registry
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure EnsureEnvVarsLoaded                     ;
+      /// <param name="AName"><!-- drag-lint:auto --></param>
+      /// <param name="AValue"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: AValue &lt;&gt; ''.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Project.Resolver.TProjectResolver.ExpandMacros (DRagLint.Project.Resolver.pas)
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded, GetEnvironmentVariable, UpperCase
+      /// Reads: FEnvVars
+      /// Mutates: AValue (out)
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ResolveNamedMacro(const AName: string; out AValue: string): Boolean;
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas)
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro, Pos, StringReplace, until
+      /// Reads: FBDS, FCurrentPlatform
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ExpandMacros(const APath: string): string;
+      /// <param name="AList"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths (DRagLint.Project.Resolver.pas)
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ExpandMacros, SameText
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ExpandMacros"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure AddFolderIfReal(AList: TList<string>; const APath: string);
+      /// <param name="AList"><!-- drag-lint:auto --></param>
+      /// <param name="ASemicolonList"><!-- drag-lint:auto --></param>
+      /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths (DRagLint.Project.Resolver.pas)
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, DRagLint.Project.Resolver.TProjectResolver.ExpandMacros
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ExpandMacros"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure AddSemicolonList(AList: TList<string>; const ASemicolonList: string; const ABaseDir: string);
+      /// <summary><!-- drag-lint:auto -->Enumerates every platform subkey under
+      /// ...\BDS\37.0\Library across both hives and registry views, deduplicated
+      /// case-insensitively. These are the names Delphi itself registers (Win32, Win64,
+      /// Android64, iOSDevice64, ...).</summary>
+      /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique, HKEY, SameText
+      /// Touches: registry
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function EnumLibraryPlatforms: TArray<string>;
+      /// <param name="AList"><!-- drag-lint:auto --></param>
+      /// <param name="APlatforms"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths (DRagLint.Project.Resolver.pas)
+      /// Calls: DRagLint.Project.Resolver.ReadRegPathInto, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList, HKEY
+      /// Writes: FCurrentPlatform
+      /// <seealso cref="DRagLint.Project.Resolver.ReadRegPathInto"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>);
+      /// <param name="ADprojPath"><!-- drag-lint:auto --></param>
+      /// <param name="AList"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders (DRagLint.Project.Resolver.pas)
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList, Format
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ReadDProj       (const ADprojPath: string; AList: TList<string>);
+      /// <param name="ADprPath"><!-- drag-lint:auto --></param>
+      /// <param name="AList"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders (DRagLint.Project.Resolver.pas)
+      /// Calls: Copy, DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, Pos, PosEx
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ReadDprUsesPaths(const ADprPath  : string; AList: TList<string>);
+      /// <summary><!-- drag-lint:auto -->The project's OWN folders, shared by Resolve and
+      /// ResolveProjectOnly: the .dproj search paths plus the directories named by the
+      /// main source's `in '...'` clauses. Deliberately contains no registry lookup --
+      /// that tail is what separates a compiler search path from an indexing scope, and
+      /// it is added by Resolve alone.</summary>
+      /// <param name="ADprojPath"><!-- drag-lint:auto --></param>
+      /// <param name="AList"><!-- drag-lint:auto --></param>
+      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveProjectOnly (DRagLint.Project.Resolver.pas)
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ReadDProj, DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadDProj"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure CollectProjectFolders(const ADprojPath: string; AList: TList<string>);
     public
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: GetEnvironmentVariable
+      /// Reads: FBDS   Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Reads: FEnvVars
+      /// Pure
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
       /// <summary>The COMPILER search path for ADprojPath: the project's own
       /// folders PLUS the IDE's registry Library/Browsing paths for Win32 and
@@ -48,10 +232,23 @@ type
       /// <param name="ADprojPath">Absolute path to the .dproj.</param>
       /// <returns>Deduplicated existing folders, project folders first.</returns>
       /// <exception cref="Exception">Raised when ADprojPath does not exist.</exception>
-      /// <remarks>NOT an indexing scope. The registry tail is the whole machine's
+      /// <remarks>
+      /// NOT an indexing scope. The registry tail is the whole machine's
       /// library -- 151 folders on a typical box -- so walking what this returns
       /// indexes the entire RTL/VCL and every installed component's source. Use
-      /// <see cref="ResolveProjectOnly"/> to index a project.</remarks>
+      /// <see cref="ResolveProjectOnly"/> to index a project.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders, DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths
+      /// Returns: List.ToArray
+      /// Pure
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Resolve(const ADprojPath: string): TArray<string>;
       /// <summary>The INDEXING scope for ADprojPath: the project's own folders
       /// only -- its .dproj search paths, the directories named by the .dpr's
@@ -60,14 +257,23 @@ type
       /// <param name="ADprojPath">Absolute path to the .dproj.</param>
       /// <returns>Deduplicated existing folders. Typically 1-5 entries.</returns>
       /// <exception cref="Exception">Raised when ADprojPath does not exist.</exception>
-      /// <remarks>Split out from <see cref="Resolve"/> on 2026-08-03: `index
+      /// <remarks>
+      /// Split out from <see cref="Resolve"/> on 2026-08-03: `index
       /// --project` had been walking Resolve's registry tail, which turned a
       /// 12-unit project into a 153-folder scan duplicating library-Win32.sqlite
       /// and library-Win64.sqlite wholesale. Library coverage belongs in those
-      /// shared indexes; a consumer reaches it by passing a second --db.</remarks>
-      /// <remarks>A .dproj search path that itself points into a library tree IS
-      /// still returned -- that is an explicit statement by the project author,
-      /// unlike the registry tail, which no project asked for.</remarks>
+      /// shared indexes; a consumer reaches it by passing a second --db.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders
+      /// Returns: List.ToArray
+      /// Pure
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ResolveProjectOnly(const ADprojPath: string): TArray<string>;
       // Library/Browsing paths from registry only - no .dproj required.
       // Useful for "index everything Delphi knows about" without a project.
@@ -75,17 +281,62 @@ type
       //   AAllPlatforms = True  -> every platform subkey under ...\BDS\37.0\Library
       //     (Android*, iOS*, Linux64, OSX*, Win64x, ...), which additionally pulls
       //     in the Posix / Androidapi / iOSapi / Macapi platform source trees.
+      /// <summary><!-- drag-lint:auto -->Library/Browsing paths from registry only - no
+      /// .dproj required. Useful for "index everything Delphi knows about" without a
+      /// project. AAllPlatforms = False -&gt; Win32 + Win64 only (the IDE's native
+      /// targets). AAllPlatforms = True -&gt; every platform subkey under
+      /// ...\BDS\37.0\Library (Android*, iOS*, Linux64, OSX*, Win64x, ...), which
+      /// additionally pulls in the Posix / Androidapi / iOSapi / Macapi platform source
+      /// trees.</summary>
+      /// <param name="AAllPlatforms"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas)
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths
+      /// Pure
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ResolveLibraryPaths(AAllPlatforms: Boolean = False): TArray<string>;
       /// <summary>Returns every platform name registered under BDS\37.0\Library,
       /// deduplicated case-insensitively. Wraps the private EnumLibraryPlatforms.
       /// Returns at least ['Win32','Win64'] as a fallback when the registry is empty.</summary>
       /// <returns>Array of platform names (e.g. Win32, Win64, Android64).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Returns: EnumLibraryPlatforms; ['Win32', 'Win64']
+      /// Pure
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function EnumRegistryPlatforms: TArray<string>;
       /// <summary>Returns the resolved Library + Browsing search paths for one
       /// specific platform, as absolute folder paths. Probes HKCU + HKLM,
       /// both 32-bit and 64-bit registry views.</summary>
       /// <param name="APlatform">Platform subkey name, e.g. 'Win32', 'Win64'.</param>
       /// <returns>Deduplicated array of existing absolute folder paths.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems (DRagLint.Lint.ProjectChecks.pas) ?
+      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths
+      /// Returns: List.ToArray
+      /// Pure
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ReadPlatformLibraryPaths(const APlatform: string): TArray<string>;
   end;
 

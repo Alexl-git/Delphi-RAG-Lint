@@ -11,13 +11,19 @@ type
   /// Supports '*' (any non-separator run), '?' (one char), and '**' (any run
   /// including path separators). Matching is case-insensitive (Windows) and
   /// anchored (whole-string match).</summary>
-  /// <remarks>v0.46: matching is performed by a direct, linear two-pointer
+  /// <remarks>
+  /// v0.46: matching is performed by a direct, linear two-pointer
   /// wildcard algorithm (no regex translation, no per-call regex compilation,
   /// no backtracking-stack recursion). This makes a single match allocation-
   /// free and worst-case O(name*pattern), which is what keeps the .gitignore /
   /// .hgignore tree walk from degrading to a multi-minute hang (or crashing the
   /// process) on large trees where Matches is invoked tens of millions of
-  /// times. Not thread-safe state is involved: Matches is a pure function.</remarks>
+  /// times. Not thread-safe state is involved: Matches is a pure function.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.ShouldPruneDir (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile (DRagLint.Index.Closure.pas), DRagLint.Index.Coverage.IsBuiltinPrune (DRagLint.Index.Coverage.pas) (+4 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Index.Closure, DRagLint.Index.Coverage, DRagLint.Index.IgnoreFiles, DRagLint.Index.Reconcile, DRagLint.Lint.ProjectRules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGlob = class
     public
       /// <summary>Match AName against APattern. '*' = any run of non-separator
@@ -26,12 +32,34 @@ type
       /// <param name="AName">The file name or path to test.</param>
       /// <param name="APattern">The glob pattern (may contain *, ?, **).</param>
       /// <returns>True if AName matches APattern.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.Coverage.IsBuiltinPrune (DRagLint.Index.Coverage.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.Reconcile.IsStaleName (DRagLint.Index.Reconcile.pas) (+7 more)
+      /// Calls: DRagLint.Index.Glob.GlobMatch, DRagLint.Index.Glob.Normalize
+      /// Returns: GlobMatch(Normalize(AName), Normalize(APattern))
+      /// Pure
+      /// <seealso cref="DRagLint.Index.Glob.GlobMatch"/>
+      /// <seealso cref="DRagLint.Index.Glob.Normalize"/>
+      /// <seealso cref="DRagLint.Index.Glob.TGlob.MatchesAny"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Matches(const AName, APattern: string): Boolean; static;
 
       /// <summary>Return True if AName matches any pattern in APatterns.</summary>
       /// <param name="AName">The file name or path to test.</param>
       /// <param name="APatterns">Array of glob patterns.</param>
       /// <returns>True if AName matches at least one pattern.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.ShouldPruneDir (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile (DRagLint.Index.Closure.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf (DRagLint.Lint.ProjectRules.pas)
+      /// Calls: DRagLint.Index.Glob.GlobMatch, DRagLint.Index.Glob.Normalize
+      /// Returns: False
+      /// Pure
+      /// <seealso cref="DRagLint.Index.Glob.GlobMatch"/>
+      /// <seealso cref="DRagLint.Index.Glob.Normalize"/>
+      /// <seealso cref="DRagLint.Index.Glob.TGlob.Matches"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function MatchesAny(const AName: string; const APatterns: TArray<string>): Boolean; static;
   end;
 

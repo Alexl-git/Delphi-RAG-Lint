@@ -36,6 +36,11 @@ type
   TEnumHelperMethod = (ehmToByte, ehmFromByte, ehmToInteger, ehmFromInteger, ehmToString, ehmFromString);
 
   /// <summary>The set of helper methods requested for one generation run.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumHelperMethods = set of TEnumHelperMethod;
 
   /// <summary>Strategy for the generated ToString method: tsmRtti defers to
@@ -44,12 +49,23 @@ type
   /// emits an explicit case statement over a `&lt;Enum>Descriptions`-style
   /// literal per member (readable display text, but must be kept in sync by
   /// hand if members are added).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TToStringMode = (tsmRtti, tsmCase);
 
   /// <summary>Result of resolving an enum type by qualified name ahead of
   /// generating a helper for it. Found=False means the qname did not resolve
   /// to an skEnum symbol; every other field is then undefined and callers
   /// must not act on it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
+  /// Used in units: DRagLint.Refactor.EnumHelper
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumHelperResolve = record
     /// <summary>True when AEnumQName resolved to exactly one skEnum symbol.</summary>
     Found: Boolean;
@@ -114,6 +130,12 @@ type
   /// text for a Byte-family record helper, ready for the PLACE stage to
   /// splice into the target unit. Pure text -- no file positions here (those
   /// live on TEnumHelperResolve).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
+  /// Used in units: DRagLint.Refactor.EnumHelper
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumHelperGen = record
     /// <summary>The `T&lt;Enum>Helper = record helper for T&lt;Enum> ... end;`
     /// type declaration block (CRLF-joined, no trailing line break).</summary>
@@ -137,11 +159,22 @@ type
   /// safety guard; a normal Delphi unit always has one); no edits.
   /// ehaNotFound: AEnumQName did not resolve to an skEnum symbol; no
   /// edits.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Refactor.EnumHelper.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumHelperAction = (ehaBuilt, ehaExists, ehaNoImplSection, ehaNotFound);
 
   /// <summary>Result of TEnumHelperRefactoring.Build: either a ready-to-apply
   /// set of text edits (Action=ehaBuilt) or a refusal with a human-readable
   /// reason and no edits.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Refactor.EnumHelper
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumHelperResult = record
     /// <summary>What Build decided. See TEnumHelperAction.</summary>
     Action: TEnumHelperAction;
@@ -165,6 +198,12 @@ type
   /// record helper implementing the requested conversion methods, and places
   /// the result via text edits. Resolve (Task 2) + Generate (Task 3) + Build
   /// / PLACE (this task) are all implemented.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumHelperRefactoring = class
   public
     /// <summary>Resolves AEnumQName to its declaring enum symbol, its members
@@ -178,6 +217,20 @@ type
     /// resolves via the store's qualified-name lookup.</param>
     /// <returns>A TEnumHelperResolve with Found=False when AEnumQName does
     /// not resolve to exactly one skEnum symbol.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?
+    /// Calls: b, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.EnumHelper.DetectExplicitOrdinal, DRagLint.Refactor.EnumHelper.ReadDeclSpan
+    /// Returns: Default(TEnumHelperResolve)
+    /// Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Resolve(const AStore: ISymbolStore; const AEnumQName: string): TEnumHelperResolve; static;
 
     /// <summary>Synthesizes the Byte-family record-helper declaration and
@@ -201,6 +254,18 @@ type
     /// <returns>A TEnumHelperGen with DeclText/BodiesText in CRLF, 7-bit
     /// ASCII text, and NeedsTypInfo reflecting whether RTTI ToString/
     /// FromString were emitted.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
+    /// Calls: Default, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase, so
+    /// Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue))
+    /// Complexity: 20 (cyclomatic, outer body), 164 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase"/>
+    /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build"/>
+    /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Generate(const AResolve: TEnumHelperResolve;
       const AMethods: TEnumHelperMethods; const AToStringMode: TToStringMode): TEnumHelperGen; static;
 
@@ -230,6 +295,20 @@ type
     /// when the enum's unit has no `implementation` keyword at all;
     /// otherwise ehaBuilt with 2 or 3 ready-to-apply TTextEdits (decl,
     /// bodies, and -- only when needed -- a System.TypInfo uses edit).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas)
+    /// Calls: BodiesLine, breaks, clause, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Refactor.EnumHelper.FindImplementationLine, DRagLint.Refactor.EnumHelper.IndentLines, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (+13 more)
+    /// Returns: Default(TEnumHelperResult)
+    /// Complexity: 23 (cyclomatic, outer body), 193 lines (full implementation)
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+    /// <seealso cref="DRagLint.Refactor.EnumHelper.FindImplementationLine"/>
+    /// <seealso cref="DRagLint.Refactor.EnumHelper.IndentLines"/>
+    /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Build(const AStore: ISymbolStore; const AEnumQName: string;
       const AMethods: TEnumHelperMethods; const AToStringMode: TToStringMode): TEnumHelperResult; static;
   end;

@@ -254,6 +254,13 @@ uses
 /// applied: entries are Pascal identifiers / qualified names, which never
 /// contain a comma.</summary>
 /// <param name="AItems">Field/table/test qualified names, in display order.</param>
+/// <returns><!-- drag-lint:auto -->Observed: string.Join(',', AItems).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas)
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SymbolFactsCsvJoin(const AItems: TArray<string>): string;
 
 /// <summary>Splits a symbol_facts CSV TEXT column back into its entries.
@@ -261,6 +268,13 @@ function SymbolFactsCsvJoin(const AItems: TArray<string>): string;
 /// yields an empty array (never a 1-element array holding '').</summary>
 /// <param name="ACsv">A raw symbol_facts TEXT column value, e.g. as returned
 /// by ISymbolStore.GetSymbolFacts.</param>
+/// <returns><!-- drag-lint:auto -->Observed: SplitString(ACsv, ',').</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: SplitString, Trim
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
 
 /// <summary>LAZILY computes the 'Covered by:' fact for ASym at DOC/HOVER
@@ -285,6 +299,17 @@ function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
 /// a resolved-only reverse tree misses the realistic DUnitX case). '' when
 /// ASym.Id &lt;= 0, ASym is not routine-like, or no caller (at any hop) is
 /// detected as a test -- see IsTestRoutine for the two detection rules.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
+/// Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk, DRagLint.Doc.SymbolFacts.JoinCappedDisplay, IsTestRoutine, LastSegment
+/// Returns: ''; JoinCappedDisplay(Capped, COVERED_BY_CAP)
+/// Pure
+/// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
+/// <seealso cref="DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk"/>
+/// <seealso cref="DRagLint.Doc.SymbolFacts.JoinCappedDisplay"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): string;
 
 /// <summary>v(ADP3 T14): the DI/ORM wiring string for ASym -- '; '-joined
@@ -295,18 +320,54 @@ function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): stri
 /// <param name="ASym">The symbol to describe. A method is wired through its
 /// owning class, so ASym.ParentId is followed for the DI lookup.</param>
 /// <returns>The stored wire string, or ''.</returns>
-/// <remarks>A pure JOIN over already-indexed tables -- no AST analysis at all,
+/// <remarks>
+/// A pure JOIN over already-indexed tables -- no AST analysis at all,
 /// so a failed parse cannot suppress it. CONTROLLER OVERRIDE, computed lazily
 /// at render time like ComputeCoveredBy and for the same class of reason:
 /// orm_links is written by a separate post-index pass, so an index-time column
 /// would be empty on every first index and stale-by-dead-id afterwards. See the
-/// implementation's own header for the full argument.</remarks>
+/// implementation's own header for the full argument.
+/// <!-- drag-lint:auto -->COMPUTED AT RENDER TIME, NOT INDEX TIME -- a deliberate deviation from
+/// the plan, and the SECOND fact to need it after ADP2 T5's CoveredBy, for the same class of
+/// reason: the data does not exist yet when the facts loop runs. * orm_links is written by a
+/// SEPARATE pass (DRagLint.Sql.OrmLinker, the `orm-link` command), which starts with `DELETE FROM
+/// orm_links` and rebuilds. It is not part of `index` at all. An index-time wiring column would
+/// therefore be EMPTY on every first index, and could only pick the links up on a later reindex --
+/// which re-inserts the Delphi symbols with NEW ids, leaving the orm_links rows (whose
+/// delphi_symbol_id has no FK and so is never cascaded) pointing at symbols that no longer exist.
+/// The fact would be reliably wrong rather than occasionally stale. * di_bindings IS written during
+/// the same index pass, so that half could have been index-time; splitting one fact across two
+/// computation times to save one query would be a worse trade than the query. symbol_facts.wiring
+/// therefore stays UNWRITTEN/RESERVED, exactly as symbol_facts.covered_by does -- see
+/// TDocFacts.CoveredBy's own field comment.
+///
+/// A METHOD IS WIRED THROUGH ITS CLASS. `Registered as:` is a property of the registered type, so
+/// for a method the lookup uses the owning class's name (ASym.ParentId); for a class symbol it uses
+/// its own. The dataset link is looked up for both the symbol and its parent, since orm-link may
+/// attach either.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
+/// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDiBindingsForImpl, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Doc.SymbolFacts.ComputeWiring.AddDatasetLinks, Format, Trim
+/// Returns: ''; string.Join('; ', Entries.ToStringArray)
+/// Complexity: 11 (cyclomatic, outer body), 71 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDiBindingsForImpl"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <seealso cref="DRagLint.Doc.SymbolFacts.ComputeWiring.AddDatasetLinks"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ComputeWiring(const AStore: ISymbolStore; const ASym: TSymbol): string;
 
 type
   /// <summary>Index-time analyzer that derives a TSymbolFacts row for one
   /// routine symbol -- the single call site the indexer uses for every fact
   /// group Phase 2 will ever add (see the unit banner comment).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+  /// Used in units: DRagLint.Core.Indexer
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSymbolFactsAnalyzer = class
     public
       /// <summary>Analyzes ASym's body and returns the TSymbolFacts row to
@@ -338,7 +399,8 @@ type
       /// facts that need a cross-symbol lookup (e.g. DFM event bindings, SQL
       /// table references). Unused by Task 3.</param>
       /// <returns>A TSymbolFacts record with Present=True.</returns>
-      /// <remarks>ADP2 T3: Cyclomatic is 0 when no defProc in AFilePath's tree
+      /// <remarks>
+      /// ADP2 T3: Cyclomatic is 0 when no defProc in AFilePath's tree
       /// starts at ASym.ImplStartLine (e.g. AFilePath unreadable/unparseable) --
       /// absence over a wrong number, never fabricated. BodyLoc is always
       /// ImplEndLine - ImplStartLine (clamped to >= 0), independent of the AST.
@@ -373,7 +435,19 @@ type
       /// principle (a wrong 'new' invites a double-free) -- see
       /// AnalyzeReturnsOwner/WalkReturnsOwnerSites/ClassifyReturnSite (this
       /// unit's implementation section) for the full site-collection +
-      /// unanimity + object-type-gate ruleset.</remarks>
+      /// unanimity + object-type-gate ruleset.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+      /// Calls: Default, DRagLint.Analysis.Cfg.CfgFindProcs, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches, DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity, Integer
+      /// Returns: Default(TSymbolFacts)
+      /// Pure
+      /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf"/>
+      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent"/>
+      /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts; static;
   end;
 

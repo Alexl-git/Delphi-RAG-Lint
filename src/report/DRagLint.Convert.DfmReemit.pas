@@ -31,11 +31,17 @@ type
   /// <summary>The kind of one leaf or sub-node of a parsed DFM object: a scalar
   /// property, an event binding, a nested sub-object, a collection (item list),
   /// or a binary/data blob.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmNodeKind = (dnkScalar, dnkEvent, dnkSubObject, dnkCollection, dnkBinary);
 
   /// <summary>One node of the in-memory DFM object model: a property, event,
   /// nested object, or collection.</summary>
-  /// <remarks>Name is the property/event name, or the nested object's instance
+  /// <remarks>
+  /// Name is the property/event name, or the nested object's instance
   /// name. ClassName_ is populated only for dnkSubObject nodes that are nested
   /// `object`s (the DFM class after the ':'). ValueText is the RAW property value
   /// text as it appears in the DFM (verbatim, for round-trip fidelity) and is ''
@@ -44,7 +50,12 @@ type
   /// node). A scalar/event/collection/binary node is a LEAF (no children); a
   /// dnkCollection's/dnkBinary's whole `&lt; ... &gt;` / `{ ... }` text is stored
   /// verbatim in ValueText, not modelled as child nodes. Only a dnkSubObject has
-  /// children: its properties + nested objects.</remarks>
+  /// children: its properties + nested objects.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas) (+3 more)
+  /// Used in units: DRagLint.Convert.DfmReemit
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmNode = class
   strict private
     FChildren: TObjectList<TDfmNode>;
@@ -53,7 +64,24 @@ type
     Kind      : TDfmNodeKind;
     ValueText : string;
     ClassName_: string;
+    /// <summary><!-- drag-lint:auto -->TDfmNode</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Convert.DfmReemit.TDfmNode.Create (DRagLint.Convert.DfmReemit.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+60 more)
+    /// Calls: DRagLint.Convert.DfmReemit.TDfmNode.Create
+    /// Writes: FChildren
+    /// Recursive
+    /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Reads: FChildren
+    /// Pure
+    /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The owned child nodes (properties, nested objects, or items).</summary>
     property Children: TObjectList<TDfmNode> read FChildren;
@@ -62,13 +90,19 @@ type
   /// <summary>A structured report of what the re-emit did and what needs human
   /// attention. WARN-level: Dropped, Mismatched, OwnedParts. Silent: Ignored (an
   /// acknowledged #ignore).</summary>
-  /// <remarks>Dropped=unmapped F props/events with a NON-default value (potential
+  /// <remarks>
+  /// Dropped=unmapped F props/events with a NON-default value (potential
   /// loss). Ignored=#ignore'd F props (acknowledged, no warn). Mismatched=binary/
   /// complex values whose F/T resolved types differ (WARN, not copied). Created=
   /// intermediate T sub-objects synthesized for moved-depth (Style/Active/Font).
   /// OwnedParts=nested owned parts (fields/columns) needing their own #convert
   /// rules (WARN). Notes=free-form (e.g. a relocated collection). Each entry is an
-  /// ASCII, human-readable string.</remarks>
+  /// ASCII, human-readable string.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Convert.DfmReemit.pas)
+  /// Used in units: DRagLint.Convert.DfmReemit
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReemitReport = record
     Dropped   : TArray<string>;
     Ignored   : TArray<string>;
@@ -80,10 +114,16 @@ type
 
   /// <summary>The result of ReemitComponent: the emitted T object block plus the
   /// report, or a hard-failure flag.</summary>
-  /// <remarks>DfmText is the well-formed T `object` block (2-space indentation),
+  /// <remarks>
+  /// DfmText is the well-formed T `object` block (2-space indentation),
   /// valid only when Ok. Ok is False only on a HARD failure: an unparseable F
   /// block, or no #convert header in the rules. Error carries the reason when Ok
-  /// is False.</remarks>
+  /// is False.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReemitResult = record
     DfmText: string;
     Report : TReemitReport;
@@ -99,11 +139,22 @@ type
 /// OWNS and must Free it. Set to nil on failure.</param>
 /// <returns>True when the block parsed into a single root object; False on a
 /// binary DFM, an empty block, or a parse with no top-level object.</returns>
-/// <remarks>Pure: no file I/O. Uses the same tree-sitter-dfm grammar the indexer
+/// <remarks>
+/// Pure: no file I/O. Uses the same tree-sitter-dfm grammar the indexer
 /// uses (node types object/property/identifier_value/qualified_identifier/
 /// quoted_string/char_code/string), but captures property VALUES verbatim (the
 /// indexer's TDFMParser is lossy -- symbols/refs only). Not thread-safe with
-/// respect to the tree-sitter runtime if called concurrently.</remarks>
+/// respect to the tree-sitter runtime if called concurrently.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)
+/// Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSParser.Parse, Trim
+/// Complexity: 10 (cyclomatic, outer body), 53 lines (full implementation)
+/// Mutates: ARoot (out)
+/// <seealso cref="DRagLint.Convert.DfmReemit.NodeText"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.WalkNodeInto"/>
+/// <seealso cref="TreeSitter.TTSParser.Parse"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 
 /// <summary>Re-emit an F component's DFM object block as the T equivalent, driven
@@ -115,7 +166,8 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// <param name="AToTree">The T type's flattened property tree (BuildPropTree).</param>
 /// <returns>A TReemitResult: on success, the emitted T block in DfmText plus the
 /// structured Report; on hard failure, Ok=False with Error set.</returns>
-/// <remarks>Only MAPPED properties are assigned -- there is NO auto-carry by
+/// <remarks>
+/// Only MAPPED properties are assigned -- there is NO auto-carry by
 /// same-name. Every property PRESENT in the F DFM is a non-default value (DFM
 /// omits defaults); an unmapped present property with no rule goes to
 /// Report.Dropped (WARN, a genuine potential loss); a #ignore'd property goes to
@@ -124,7 +176,20 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// when F/T leaf types resolve to the same type, else Report.Mismatched (not
 /// copied). A nested owned part (a non-Controls/Components child) without its own
 /// #convert rules is left unconverted + Report.OwnedParts. A nested Controls/
-/// Components child is left ALONE. Pure; deterministic; no I/O.</remarks>
+/// Components child is left ALONE. Pure; deterministic; no I/O.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)
+/// Calls: CloneNode, Copy, Default, DRagLint.Convert.DfmReemit.BareTypeTail, DRagLint.Convert.DfmReemit.EmitBlock, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.PlaceAtPath, DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested, DRagLint.Convert.DfmReemit.ReemitComponent.RemapLeaf, FindLinkFor (+10 more)
+/// Returns: Default(TReemitResult)
+/// Complexity: 14 (cyclomatic, outer body), 275 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Convert.DfmReemit.BareTypeTail"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.EmitBlock"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.ParseDfmBlock"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.PlaceAtPath"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
   const AFromTree, AToTree: TPropTree): TReemitResult;
 

@@ -35,6 +35,12 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), declaration (DRagLint.Sql.OrmLinker.pas), DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Sql.OrmLinker
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOrmLinkerStats = record
     ClassLinks: Integer;
     IfaceLinks: Integer;
@@ -42,8 +48,28 @@ type
     ComputedAt: Int64  ;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOrmLinker = class
     public
+      /// <param name="ADbPaths"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: Default       (TOrmLinkerStats).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintProject (DRagLint.CLI.pas) ?, DRagLint.CLI.Run (DRagLint.CLI.pas) ?
+      /// Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, StripPrefix, UpperCase
+      /// Complexity: 13 (cyclomatic, outer body), 244 lines (full implementation)
+      /// SQL: writes ORM_LINKS
+      /// Transaction: starts, commits, rolls back
+      /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink"/>
+      /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Run(const ADbPaths: TArray<string>): TOrmLinkerStats; static;
   end;
 

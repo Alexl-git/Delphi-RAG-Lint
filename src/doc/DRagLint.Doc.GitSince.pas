@@ -27,6 +27,12 @@ unit DRagLint.Doc.GitSince;
 interface
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
+  /// Used in units: DRagLint.Doc.Facts
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGitSince = class
   public
     /// <summary>Authoring date of the commit that INTRODUCED the declaration
@@ -45,14 +51,24 @@ type
     /// (no git, untracked file, uncommitted line, non-zero exit, empty/
     /// unparseable output, timeout, or exception). NEVER a guessed or wrong
     /// date.</returns>
-    /// <remarks>Degrades silently: absence over a wrong fact. Spawns a git
+    /// <remarks>
+    /// Degrades silently: absence over a wrong fact. Spawns a git
     /// subprocess -- the caller must gate this behind the --since opt-in so a
     /// batch run without --since never pays the per-decl process cost.
     /// IDEMPOTENCY: --contents blames the WORKING-TREE line against HEAD's
     /// history, so a declaration keeps its introducing-commit date even after
     /// document --apply inserts comment lines above it; author-time (not the
     /// drifting committer-time) is used, so re-committing the fixture never
-    /// changes the emitted date.</remarks>
+    /// changes the emitted date.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
+    /// Calls: DRagLint.Doc.GitSince.ParsePorcelainAuthorDate, DRagLint.Doc.GitSince.SpawnGit, Format, Trim
+    /// Returns: ''; ParsePorcelainAuthorDate(Output)
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.GitSince.ParsePorcelainAuthorDate"/>
+    /// <seealso cref="DRagLint.Doc.GitSince.SpawnGit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function FirstCommitDate(const ARepoDir, AFile: string; ALine: Integer): string;
   end;
 

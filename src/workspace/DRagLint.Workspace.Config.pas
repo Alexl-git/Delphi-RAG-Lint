@@ -11,11 +11,23 @@ uses
   ; { v0.42: lets TJSONArray.GetValue inline (was H2443) }
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Workspace.Config
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TWorkspaceProject = record
     Path   : string ;
     ScanDir: Boolean;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), declaration (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Workspace.Config
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TWorkspaceConfig = record
     Name    : string                   ;
     Projects: TArray<TWorkspaceProject>;
@@ -23,10 +35,50 @@ type
     RootDir : string                   ; // populated after Load -- absolute dir containing config
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TWorkspaceConfigIO = class
     public
+      /// <summary><!-- drag-lint:auto -->TWorkspaceConfigIO</summary>
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: Default(TWorkspaceConfig).</returns>
+      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?
+      /// Calls: Default, TJSONArray, TJSONObject
+      /// Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.FindWorkspaceRoot"/>
+      /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function LoadFromFile(const APath: string): TWorkspaceConfig; static;
+      /// <param name="AConfig"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix.TryEdit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.FindWorkspaceRoot"/>
+      /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class procedure SaveToFile(const AConfig: TWorkspaceConfig; const APath: string); static;
+      /// <param name="AStartDir"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: ''; Dir.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile"/>
+      /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function FindWorkspaceRoot(const AStartDir: string): string; static;
   end;
 

@@ -17,6 +17,12 @@ uses
 
 type
   /// <summary>One project-owned source file and its optional sibling .dfm.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Project.Coherence.pas)
+  /// Used in units: DRagLint.Project.Coherence
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectMember = record
     /// <summary>The .pas path as given (casing preserved).</summary>
     UnitPath: string;
@@ -26,13 +32,20 @@ type
     HasDfm: Boolean;
   end;
 
-  /// <summary>Pairs each .pas path in AUnitPaths with its sibling .dfm (same
-  /// base name, same directory) when that .dfm exists on disk. The `.pas`
-  /// extension check is case-insensitive; non-`.pas` entries pass through
-  /// unchanged with HasDfm = False. Pure aside from the TFile.Exists disk
-  /// check.</summary>
-  /// <param name="AUnitPaths">Paths to pair, typically a project's compile closure.</param>
-  /// <returns>One TProjectMember per input path, in the same order.</returns>
+/// <summary>Pairs each .pas path in AUnitPaths with its sibling .dfm (same
+/// base name, same directory) when that .dfm exists on disk. The `.pas`
+/// extension check is case-insensitive; non-`.pas` entries pass through
+/// unchanged with HasDfm = False. Pure aside from the TFile.Exists disk
+/// check.</summary>
+/// <param name="AUnitPaths">Paths to pair, typically a project's compile closure.</param>
+/// <returns>One TProjectMember per input path, in the same order.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
+/// Calls: SameText
+/// Touches: file system
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PairDfmSiblings(const AUnitPaths: TArray<string>): TArray<TProjectMember>;
 
 implementation

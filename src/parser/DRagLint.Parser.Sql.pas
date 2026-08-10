@@ -48,10 +48,51 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFirebirdSqlParser = class(TInterfacedObject, IParser)
     public
+      /// <summary><!-- drag-lint:auto -->---- TFirebirdSqlParser ----</summary>
+      /// <returns><!-- drag-lint:auto -->Observed: 'firebird-sql'.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IParser.LanguageName
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.Sql.TFirebirdSqlParser.FileExtensions"/>
+      /// <seealso cref="DRagLint.Parser.Sql.TFirebirdSqlParser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function LanguageName: string                                               ;
+      /// <returns><!-- drag-lint:auto -->Observed: ['.sql'].</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IParser.FileExtensions
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.Sql.TFirebirdSqlParser.LanguageName"/>
+      /// <seealso cref="DRagLint.Parser.Sql.TFirebirdSqlParser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function FileExtensions: TArray<string>                                     ;
+      /// <param name="ASource"><!-- drag-lint:auto --></param>
+      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: Default(TParseResult).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: Default, DRagLint.Parser.Sql.ComputeLineCol, DRagLint.Parser.Sql.FindMatchingParen, DRagLint.Parser.Sql.ParseColumnList, DRagLint.Parser.Sql.ReadSqlExceptionMessage, DRagLint.Parser.Sql.StripCommentsAndStrings, DRagLint.Parser.Sql.TSqlState.AddRef, DRagLint.Parser.Sql.TSqlState.AddSymbol, DRagLint.Parser.Sql.TSqlState.Create
+      /// Implements: DRagLint.Core.Interfaces.IParser.Parse
+      /// Complexity: 14 (cyclomatic, outer body), 151 lines (full implementation)
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.Sql.ComputeLineCol"/>
+      /// <seealso cref="DRagLint.Parser.Sql.FindMatchingParen"/>
+      /// <seealso cref="DRagLint.Parser.Sql.ParseColumnList"/>
+      /// <seealso cref="DRagLint.Parser.Sql.ReadSqlExceptionMessage"/>
+      /// <seealso cref="DRagLint.Parser.Sql.StripCommentsAndStrings"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
   end;
 

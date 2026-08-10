@@ -19,8 +19,19 @@ uses
 
 type
   /// <summary>How a used unit was resolved (or urvNone when unresolvable).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Lint.ProjectChecks.Parse.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnitResolveVia = (urvNone, urvProjectMember, urvLibrary, urvAlias, urvRtlNamespace);
   /// <summary>Result of ResolveUsedUnit: whether the unit resolves, and via which source.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Lint.ProjectChecks.Parse.pas)
+  /// Used in units: DRagLint.Lint.ProjectChecks.Parse
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnitResolution = record
     Resolvable: Boolean;
     Via       : TUnitResolveVia;
@@ -28,41 +39,119 @@ type
 
 /// <summary>Normalize a unit name or file path to a bare lower-case unit-name
 /// segment, used on BOTH sides of every membership comparison so they match.</summary>
-/// <remarks>Only a known SOURCE extension (.pas/.dpk/.dpr) is stripped; a dotted
+/// <param name="AName"><!-- drag-lint:auto --></param>
+/// <remarks>
+/// Only a known SOURCE extension (.pas/.dpk/.dpr) is stripped; a dotted
 /// namespace like 'Foo.ViewModel' must NOT lose '.ViewModel' to ChangeFileExt
 /// (FP-9). 'Foo.ViewModel' and 'Foo.ViewModel.pas' both -> 'viewmodel';
-/// 'System.SysUtils' -> 'sysutils' (matches the index's last-segment norm).</remarks>
+/// 'System.SysUtils' -> 'sysutils' (matches the index's last-segment norm).
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit (DRagLint.Lint.ProjectChecks.Parse.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable (DRagLint.Lint.ProjectChecks.pas)
+/// Calls: ChangeFileExt, Copy, ExtractFileExt, ExtractFileName, LastDelimiter, LowerCase
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NormUnit(const AName: string): string;
 
 /// <summary>Blank out Pascal comments -- { ... }, (* ... *), and // ... -- in
 /// place, preserving overall length and every line-break so byte offsets and
 /// line numbers stay valid. String literals ('...') are left intact.</summary>
+/// <param name="ASrc"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: ASrc.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Lint.ProjectChecks.Parse.ParseUsesFromContent (DRagLint.Lint.ProjectChecks.Parse.pas)
+/// Calls: DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout.Blank
+/// Complexity: 23 (cyclomatic, outer body), 53 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout.Blank"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StripPasCommentsKeepLayout(const ASrc: string): string;
 
 /// <summary>Extract unit names from the uses/contains/requires clauses in the
 /// given .dpr/.dpk source text. Form-name hints and compiler directives are
 /// scrubbed first so they are never mis-read as units (FP-8).</summary>
+/// <param name="AContent"><!-- drag-lint:auto --></param>
 /// <param name="AUsesStartLine">Receives the 1-based line of the first clause.</param>
+/// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames (DRagLint.Lint.ProjectChecks.Parse.pas)
+/// Calls: DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout, SameText
+/// Mutates: AUsesStartLine (out)
+/// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseUsesFromContent(const AContent: string; out AUsesStartLine: Integer): TArray<string>;
 
 /// <summary>Read a .dpr/.dpk file and extract its uses-clause unit names.</summary>
+/// <param name="AProgramPath"><!-- drag-lint:auto --></param>
+/// <param name="AUsesStartLine"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed:
+/// ParseUsesFromContent(TFile.ReadAllText(AProgramPath), AUsesStartLine).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas)
+/// Calls: DRagLint.Lint.ProjectChecks.Parse.ParseUsesFromContent
+/// Mutates: AUsesStartLine (out)
+/// Touches: file system
+/// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.ParseUsesFromContent"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExtractUsesNames(const AProgramPath: string; out AUsesStartLine: Integer): TArray<string>;
 
 /// <summary>Read the .pas/.dpk &lt;DCCReference Include="..."/&gt; entries from a .dproj.</summary>
+/// <param name="ADprojPath"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas)
+/// Calls: ExtractFileExt, SameText
+/// Touches: file system
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadDCCReferences(const ADprojPath: string): TArray<string>;
 
 /// <summary>Find the sibling .dpr or .dpk for a .dproj, or '' if none exists.</summary>
+/// <param name="ADprojPath"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas)
+/// Calls: ChangeFileExt, ExtractFileName, ExtractFilePath
+/// Touches: file system
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindSiblingProgramFile(const ADprojPath: string): string;
 
 /// <summary>True if AUnitName is a classic Delphi unit alias (WinTypes, WinProcs,
 /// DbiTypes, DbiProcs, DbiErrs) -- the compiler maps these to a real unit, so a
 /// `uses` of one is always resolvable.</summary>
+/// <param name="AUnitName"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: False.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit (DRagLint.Lint.ProjectChecks.Parse.pas)
+/// Calls: LowerCase, Trim
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsStandardUnitAlias(const AUnitName: string): Boolean;
 
 /// <summary>True if AUnitName is an RTL/framework unit by namespace (System.*,
 /// Vcl.*, Fmx.*, Winapi.*, Data.*, Datasnap.*, Soap.*, Web.*, FireDAC.*) or a
 /// classic bare RTL name (Forms, SysUtils, Classes, Windows, ...). Belt-and-
 /// suspenders so incomplete library-index coverage never false-flags core RTL.</summary>
+/// <param name="AUnitName"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: False.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit (DRagLint.Lint.ProjectChecks.Parse.pas)
+/// Calls: LowerCase, StartsText, Trim
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsRtlNamespaceUnit(const AUnitName: string): Boolean;
 
 /// <summary>Decide whether a used unit resolves to something known. Order:
@@ -71,6 +160,16 @@ function IsRtlNamespaceUnit(const AUnitName: string): Boolean;
 /// <param name="AUnitName">Verbatim used unit name, e.g. 'Bde.DBTables'.</param>
 /// <param name="AIsProjectMember">Given a normalized stem, is it an indexed project unit?</param>
 /// <param name="AIsInLibrary">Given a normalized stem, is it in the platform library DB?</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable (DRagLint.Lint.ProjectChecks.pas)
+/// Calls: AIsInLibrary, AIsProjectMember, DRagLint.Lint.ProjectChecks.Parse.IsRtlNamespaceUnit, DRagLint.Lint.ProjectChecks.Parse.IsStandardUnitAlias, DRagLint.Lint.ProjectChecks.Parse.NormUnit
+/// Pure
+/// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.IsRtlNamespaceUnit"/>
+/// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.IsStandardUnitAlias"/>
+/// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.NormUnit"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveUsedUnit(const AUnitName: string;
   const AIsProjectMember, AIsInLibrary: TFunc<string, Boolean>): TUnitResolution;
 

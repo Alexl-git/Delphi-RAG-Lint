@@ -40,8 +40,22 @@ uses
 /// chunks carry lowercased Dir + trimmed Args + span + 0-based Line. Comments and
 /// string literals are skipped (their bytes stay inside surrounding text chunks);
 /// unknown dollar-directives become passthrough TEXT chunks.</returns>
-/// <remarks>Concatenating every chunk's [SrcStart, SrcEnd) span, in order,
-/// reproduces the whole input UTF-8 byte stream exactly (no gaps, no overlaps).</remarks>
+/// <remarks>
+/// Concatenating every chunk's [SrcStart, SrcEnd) span, in order,
+/// reproduces the whole input UTF-8 byte stream exactly (no gaps, no overlaps).
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)
+/// Calls: Default, DRagLint.Preprocess.Lexer.IsAsciiLetter, DRagLint.Preprocess.Lexer.IsKnownKeyword, DRagLint.Preprocess.Lexer.LexDirectives.FlushText, DRagLint.Preprocess.Lexer.LexDirectives.LineAt, DRagLint.Preprocess.Lexer.SliceToStr, LowerCase, Trim
+/// Returns: Chunks.ToArray
+/// Complexity: 47 (cyclomatic, outer body), 186 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Preprocess.Lexer.IsAsciiLetter"/>
+/// <seealso cref="DRagLint.Preprocess.Lexer.IsKnownKeyword"/>
+/// <seealso cref="DRagLint.Preprocess.Lexer.LexDirectives.FlushText"/>
+/// <seealso cref="DRagLint.Preprocess.Lexer.LexDirectives.LineAt"/>
+/// <seealso cref="DRagLint.Preprocess.Lexer.SliceToStr"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LexDirectives(const AInput: string): TArray<TPPChunk>;
 
 implementation

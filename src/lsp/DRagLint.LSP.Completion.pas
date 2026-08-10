@@ -21,24 +21,179 @@ uses
 
 type
   // v0.20: LSP response builders for completion, signatureHelp, diagnostics.
+  /// <summary><!-- drag-lint:auto -->v0.20: LSP response builders for completion,
+  /// signatureHelp, diagnostics.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleSignatureHelp (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)
+  /// Used in units: DRagLint.LSP.Server
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspCompletion = class
     public
+      /// <param name="AKind"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: 7; 22; 8; 13; 20; 2.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas)
+      /// Complexity: 13 (cyclomatic, outer body), 17 lines (full implementation)
+      /// Pure
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function MapSymbolKindToLspKind(AKind: TSymbolKind): Integer;
       // ASevText is the string severity stored in TLintFinding.Severity
       // ('error', 'warning', 'info', 'hint').
+      /// <param name="ASevText"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: 1; 2; 3; 4.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto -->ASevText is the string severity stored in TLintFinding.Severity
+      /// ('error', 'warning', 'info', 'hint').
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
+      /// Calls: SameText
+      /// Pure
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function MapLintSeverityToLspSeverity(const ASevText: string): Integer;
       // v0.26: map compiler finding severity ('Error'|'Warning'|'Hint'|
       // 'Information') to LSP DiagnosticSeverity (1=Error, 2=Warning,
       // 3=Information, 4=Hint).
+      /// <summary><!-- drag-lint:auto -->v0.26: map compiler finding severity
+      /// ('Error'|'Warning'|'Hint'| 'Information') to LSP DiagnosticSeverity (1=Error,
+      /// 2=Warning, 3=Information, 4=Hint).</summary>
+      /// <param name="ASev"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: 1; 2; 3; 4.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
+      /// Calls: SameText
+      /// Pure
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function MapCompilerSeverityToLspSeverity(const ASev: string)                                       : Integer    ;
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="ALine"><!-- drag-lint:auto --></param>
+      /// <param name="ACol"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: TJSONArray.Create.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas)
+      /// Calls: CharInSet, Copy, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByPrefix, DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem, DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4
+      /// Complexity: 20 (cyclomatic, outer body), 65 lines (full implementation)
+      /// Owns returned: new (caller owns)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByPrefix"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildCompletionItems(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer): TJSONArray ;
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="ALine"><!-- drag-lint:auto --></param>
+      /// <param name="ACol"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: nil; EmptySigHelp; TJSONObject.Create.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.LSP.Server.TLSPServer.HandleSignatureHelp (DRagLint.LSP.Server.pas)
+      /// Calls: CharInSet, Copy, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.LSP.Completion.TLspCompletion.StripParamModifier, DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4, Pos, SplitString, Trim
+      /// Complexity: 39 (cyclomatic, outer body), 197 lines (full implementation)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.StripParamModifier"/>
+      /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildSignatureHelp(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer)  : TJSONObject;
       // v0.26: AStore is optional; when supplied, compiler_findings for this file
       // are merged into the result alongside lint findings.
+      /// <summary><!-- drag-lint:auto -->v0.26: AStore is optional; when supplied,
+      /// compiler_findings for this file are merged into the result alongside lint
+      /// findings.</summary>
+      /// <param name="ALinter"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: TJSONArray.Create.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)
+      /// Calls: CheckTypeAware, default, DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.ShouldKeep, DRagLint.Lint.Linter.TLinter.LintFile (+7 more)
+      /// Complexity: 16 (cyclomatic, outer body), 182 lines (full implementation)
+      /// Owns returned: new (caller owns)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors"/>
+      /// <seealso cref="DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check"/>
+      /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplySeverity"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
     private
+      /// <param name="ASym"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems (DRagLint.LSP.Completion.pas)
+      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.LSP.Completion.TLspCompletion.MapSymbolKindToLspKind
+      /// Owns returned: new (caller owns)
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc"/>
+      /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MapSymbolKindToLspKind"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function MakeCompletionItem(const ASym: TSymbol; const AStore: ISymbolStore): TJSONObject;
+      /// <summary><!-- drag-lint:auto -->TLspCompletion</summary>
+      /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Owns returned: new (caller owns)
+      /// Pure
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MapCompilerSeverityToLspSeverity"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function EmptySigHelp                                                       : TJSONObject;
+      /// <param name="AName"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas)
+      /// Calls: Copy, StartsText, Trim
+      /// Pure
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.EmptySigHelp"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function StripParamModifier(const AName: string)                            : string     ;
   end;
 

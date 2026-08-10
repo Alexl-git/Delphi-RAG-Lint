@@ -9,59 +9,67 @@ interface
 /// <summary>Distinct right-hand sides of `Result := &lt;rhs>` and value-form
 /// `Exit(&lt;rhs>)` in ABodyLines, in first-seen source order.</summary>
 /// <param name="ABodyLines">The routine's implementation body lines
-///   (impl_start_line..impl_end_line), one string per source line.</param>
+/// (impl_start_line..impl_end_line), one string per source line.</param>
 /// <param name="AQualifiedName">The documented routine's QUALIFIED name
-///   (TSymbol.QualifiedName -- 'returns.TBox.ClassLag', not 'ClassLag'). Used
-///   only to confirm that a span whose first line is not the header
-///   nevertheless begins at THIS routine's header, which is a test the SIMPLE
-///   name cannot carry: two classes with a method of the same name sit
-///   adjacent in the implementation section and their headers' last components
-///   are identical. Pass '' when there is no name to give, which costs the
-///   recovery of such a span and never mis-attributes one.</param>
+/// (TSymbol.QualifiedName -- 'returns.TBox.ClassLag', not 'ClassLag'). Used
+/// only to confirm that a span whose first line is not the header
+/// nevertheless begins at THIS routine's header, which is a test the SIMPLE
+/// name cannot carry: two classes with a method of the same name sit
+/// adjacent in the implementation section and their headers' last components
+/// are identical. Pass '' when there is no name to give, which costs the
+/// recovery of such a span and never mis-attributes one.</param>
 /// <returns>Distinct RHS strings, trimmed, dedup'd. EMPTY when none was found
-///   AND empty when the routine mutates Result in a way this enumeration
-///   cannot express -- see the remarks.</returns>
-/// <remarks>Not authoritative -- a display aid. It says nothing rather than
-///   something it cannot state correctly, because the same text is read through
-///   Help Insight and LSP hover:
-///   <para>* WHOLE-Result assignments only. `Result.Field := x` and
-///   `Result[i] := x` build the result, they are not return values, and
-///   enumerating them does not scale (one real case populates 42 fields).</para>
-///   <para>* NOTHING AT ALL when Result is mutated by Inc/Dec/SetLength or by a
-///   self-referential `Result := ... Result ...`. The whole-Result assignments
-///   are then only a seed, and naming the seed alone claims a value the routine
-///   provably does not return. That test reads CODE ONLY -- comments and string
-///   literals are blanked first, because suppression DELETES documentation and
-///   a `{ old: Inc(Result); }` mutates nothing.</para>
-///   <para>* NOTHING for an RHS that does not END on its own line (unbalanced
-///   parentheses, a trailing binary operator). The capture is single-line; the
-///   alternative to silence is shipping half an expression.</para>
-///   <para>* NOTHING MINED OUT OF A COMMENT. v(ADP3 T4f, register K23): mining
-///   reads a view with all three comment forms blanked and string literals
-///   KEPT, so a `{ Result := Result + 1; }` is no longer published as a return
-///   value while a function that really returns a literal still is. Removing a
-///   comment mid-expression leaves a gap, since columns must survive for the
-///   nested-scope mask; the gap is marked with COMMENT_MASK and closed in the
-///   captured RHS afterwards, so the rendered sentence has no hole in it AND an
-///   expression the author simply spaced out is reproduced verbatim.</para>
-///   <para>* A nested routine's Result belongs to that nested routine. The
-///   caller passes the ENCLOSING routine's whole impl span, so local routines
-///   and anonymous methods live inside those lines; their scopes are masked out
-///   before mining. (This unit used to claim the caller's span excluded them.
-///   It never did.)</para>
-///   <para>* NOTHING when the span is STALE -- unless it can be proved to be
-///   this routine's span. impl_start_line is normally the header line; an index
-///   built before the last edit can start it earlier. The header is therefore
-///   also accepted as the body's LEAD token (token 0, or the routine keyword of
-///   a `class function`, whose `class` token comes first) -- but ONLY when the
-///   dotted chain it declares is a component-wise TAIL of AQualifiedName.
-///   Without that check the anchor latches onto whatever routine the span
-///   happens to head, and the output then names a DIFFERENT routine's return
-///   values: measured on one live index, 85 of the 100 spans the anchor was
-///   eligible for headed some other routine. Checking the SIMPLE name only is
-///   not enough either -- `TAlpha.Same` and `TBeta.Same` share it, and such
-///   pairs are adjacent in the implementation section, which is where a stale
-///   span lands.</para></remarks>
+/// AND empty when the routine mutates Result in a way this enumeration
+/// cannot express -- see the remarks.</returns>
+/// <remarks>
+/// Not authoritative -- a display aid. It says nothing rather than
+/// something it cannot state correctly, because the same text is read through
+/// Help Insight and LSP hover:
+/// <para>* WHOLE-Result assignments only. `Result.Field := x` and
+/// `Result[i] := x` build the result, they are not return values, and
+/// enumerating them does not scale (one real case populates 42 fields).</para>
+/// <para>* NOTHING AT ALL when Result is mutated by Inc/Dec/SetLength or by a
+/// self-referential `Result := ... Result ...`. The whole-Result assignments
+/// are then only a seed, and naming the seed alone claims a value the routine
+/// provably does not return. That test reads CODE ONLY -- comments and string
+/// literals are blanked first, because suppression DELETES documentation and
+/// a `{ old: Inc(Result); }` mutates nothing.</para>
+/// <para>* NOTHING for an RHS that does not END on its own line (unbalanced
+/// parentheses, a trailing binary operator). The capture is single-line; the
+/// alternative to silence is shipping half an expression.</para>
+/// <para>* NOTHING MINED OUT OF A COMMENT. v(ADP3 T4f, register K23): mining
+/// reads a view with all three comment forms blanked and string literals
+/// KEPT, so a `{ Result := Result + 1; }` is no longer published as a return
+/// value while a function that really returns a literal still is. Removing a
+/// comment mid-expression leaves a gap, since columns must survive for the
+/// nested-scope mask; the gap is marked with COMMENT_MASK and closed in the
+/// captured RHS afterwards, so the rendered sentence has no hole in it AND an
+/// expression the author simply spaced out is reproduced verbatim.</para>
+/// <para>* A nested routine's Result belongs to that nested routine. The
+/// caller passes the ENCLOSING routine's whole impl span, so local routines
+/// and anonymous methods live inside those lines; their scopes are masked out
+/// before mining. (This unit used to claim the caller's span excluded them.
+/// It never did.)</para>
+/// <para>* NOTHING when the span is STALE -- unless it can be proved to be
+/// this routine's span. impl_start_line is normally the header line; an index
+/// built before the last edit can start it earlier. The header is therefore
+/// also accepted as the body's LEAD token (token 0, or the routine keyword of
+/// a `class function`, whose `class` token comes first) -- but ONLY when the
+/// dotted chain it declares is a component-wise TAIL of AQualifiedName.
+/// Without that check the anchor latches onto whatever routine the span
+/// happens to head, and the output then names a DIFFERENT routine's return
+/// values: measured on one live index, 85 of the 100 spans the anchor was
+/// eligible for headed some other routine. Checking the SIMPLE name only is
+/// not enough either -- `TAlpha.Same` and `TBeta.Same` share it, and such
+/// pairs are adjacent in the implementation section, which is where a stale
+/// span lands.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
+/// Calls: DRagLint.Hover.Returns.MineReturnExpressionsEx
+/// Pure
+/// <seealso cref="DRagLint.Hover.Returns.MineReturnExpressionsEx"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MineReturnExpressions(const ABodyLines: TArray<string>;
   const AQualifiedName: string): TArray<string>;
 
@@ -69,6 +77,12 @@ type
   /// <summary>A mined return expression plus the 0-based index (within
   /// ABodyLines) of the line it was FIRST seen on -- so the caller can turn it
   /// into an absolute source line (ImplStartLine + LineOffset) for navigation.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Hover.Returns.MineReturnExpressionsEx (DRagLint.Hover.Returns.pas)
+  /// Used in units: DRagLint.Hover.Returns
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReturnMined = record
     Expr      : string ;
     LineOffset: Integer;
@@ -79,13 +93,26 @@ type
 /// popup can make each return value clickable and jump to its source line.</summary>
 /// <param name="ABodyLines">The routine's implementation body lines.</param>
 /// <param name="AQualifiedName">The documented routine's QUALIFIED name -- see
-///   MineReturnExpressions.</param>
+/// MineReturnExpressions.</param>
 /// <returns>Distinct mined returns with their first-seen line offset. Expr is
-///   always the LITERAL source RHS: the IDE plugin matches on that string to
-///   find the line to navigate to, so nothing may be prefixed onto it.</returns>
-/// <remarks>Same suppression rules as MineReturnExpressions -- see there.
-///   Masking never changes the line COUNT, so LineOffset still indexes
-///   ABodyLines.</remarks>
+/// always the LITERAL source RHS: the IDE plugin matches on that string to
+/// find the line to navigate to, so nothing may be prefixed onto it.</returns>
+/// <remarks>
+/// Same suppression rules as MineReturnExpressions -- see there.
+/// Masking never changes the line COUNT, so LineOffset still indexes
+/// ABodyLines.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Hover.Returns.MineReturnExpressions (DRagLint.Hover.Returns.pas)
+/// Calls: DRagLint.Hover.Returns.CollapseCommentGaps, DRagLint.Hover.Returns.ExitRhs, DRagLint.Hover.Returns.HasResultMutation, DRagLint.Hover.Returns.MaskNestedRoutines, DRagLint.Hover.Returns.ResultRhs
+/// Returns: nil; Ordered.ToArray
+/// Pure
+/// <seealso cref="DRagLint.Hover.Returns.CollapseCommentGaps"/>
+/// <seealso cref="DRagLint.Hover.Returns.ExitRhs"/>
+/// <seealso cref="DRagLint.Hover.Returns.HasResultMutation"/>
+/// <seealso cref="DRagLint.Hover.Returns.MaskNestedRoutines"/>
+/// <seealso cref="DRagLint.Hover.Returns.ResultRhs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MineReturnExpressionsEx(const ABodyLines: TArray<string>;
   const AQualifiedName: string): TArray<TReturnMined>;
 

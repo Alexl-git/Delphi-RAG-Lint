@@ -40,9 +40,16 @@ uses
 /// need not exist; only the candidate backup paths are probed).</param>
 /// <returns>"APath.BCK1" if unused, else "APath.BCK2", etc. -- the first n
 /// (starting at 1) whose backup path is not already occupied.</returns>
-/// <remarks>Pure with respect to its inputs but reads the filesystem (FileExists
+/// <remarks>
+/// Pure with respect to its inputs but reads the filesystem (FileExists
 /// probes); not atomic -- a concurrent writer could race this, which is
-/// acceptable for drag-lint's single-user CLI usage.</remarks>
+/// acceptable for drag-lint's single-user CLI usage.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Convert.Backup.BackupFiles (DRagLint.Convert.Backup.pas)
+/// Calls: IntToStr
+/// Touches: file system
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NextBackupName(const APath: string): string;
 
 /// <summary>Copies each file in APaths to its own NextBackupName sibling.</summary>
@@ -51,11 +58,20 @@ function NextBackupName(const APath: string): string;
 /// <param name="AMappings">Receives one "orig -> backup" string per file in
 /// APaths, in the same order, suitable for WriteRecoveryRecord and for the
 /// human-readable report.</param>
-/// <remarks>Each file gets its OWN next-free n via NextBackupName -- the .pas
+/// <remarks>
+/// Each file gets its OWN next-free n via NextBackupName -- the .pas
 /// and .dfm of the same unit may end up with different n's if one of them
 /// already has stray .BCK files from an earlier run. Raises if a source file
 /// does not exist or the copy fails (TFile.Copy); callers should backup BEFORE
-/// any conversion write so a failed backup aborts before anything is touched.</remarks>
+/// any conversion write so a failed backup aborts before anything is touched.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
+/// Calls: DRagLint.Convert.Backup.NextBackupName, Format
+/// Mutates: AMappings (out)
+/// Touches: file system
+/// <seealso cref="DRagLint.Convert.Backup.NextBackupName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BackupFiles(const APaths: TArray<string>; out AMappings: TArray<string>);
 
 /// <summary>Appends a timestamped recovery block to "recovery.txt" in
@@ -69,15 +85,22 @@ procedure BackupFiles(const APaths: TArray<string>; out AMappings: TArray<string
 /// run, recorded in the block header.</param>
 /// <param name="AMappings">The "orig -> backup" lines from BackupFiles, one
 /// per touched file, recorded under the header line.</param>
-/// <remarks>Block format:
+/// <remarks>
+/// Block format:
 /// <code>
 /// [&lt;timestamp&gt;] convert-apply --rules &lt;rulesfile&gt;
-///   &lt;origPas&gt; -&gt; &lt;backupPas&gt;
-///   &lt;origDfm&gt; -&gt; &lt;backupDfm&gt;
+/// &lt;origPas&gt; -&gt; &lt;backupPas&gt;
+/// &lt;origDfm&gt; -&gt; &lt;backupDfm&gt;
 /// </code>
 /// MUST be called BEFORE the conversion write -- see this unit's header remarks:
 /// a crash between this call and the actual write still leaves a complete
-/// recovery map pointing at the (untouched) .BCK backups.</remarks>
+/// recovery map pointing at the (untouched) .BCK backups.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
+/// Calls: Format
+/// Touches: file system
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
   const AMappings: TArray<string>);
 
@@ -91,14 +114,21 @@ procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
 /// <param name="AMappings">The "orig -> backup" lines from BackupFiles; only the
 /// .pas/.dfm backup targets are rendered into the comment's "backup:" line (in
 /// the order given).</param>
-/// <remarks>Comment format:
+/// <remarks>
+/// Comment format:
 /// <code>
-/// // drag-lint convert-apply &lt;timestamp&gt;
-/// //   backup: &lt;backupPas&gt; / &lt;backupDfm&gt; ; rules: &lt;rulesfile&gt;
+/// drag-lint convert-apply &lt;timestamp&gt;
+/// backup: &lt;backupPas&gt; / &lt;backupDfm&gt; ; rules: &lt;rulesfile&gt;
 /// </code>
 /// Reads and rewrites APasPath as ANSI text with CRLF line endings, matching
 /// the rest of the codebase's strict-ASCII/CRLF source-file convention -- this
-/// must run AFTER the conversion write (it stamps the already-converted file).</remarks>
+/// must run AFTER the conversion write (it stamps the already-converted file).
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
+/// Calls: ExtractFileExt, Format, SameText
+/// Touches: file system
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure PrependConvertComment(const APasPath, ATimestamp, ARulesFile: string;
   const AMappings: TArray<string>);
 

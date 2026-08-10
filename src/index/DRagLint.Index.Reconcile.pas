@@ -25,9 +25,20 @@ uses
 
 type
   /// <summary>Identifies which reconcile set an item belongs to.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Index.Reconcile.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReconcileKind = (rkMissing, rkExtra, rkStale);
 
   /// <summary>One item in a reconcile report.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDpr (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDproj (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Reconcile
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReconcileItem = record
     /// <summary>Kind of finding: missing / extra / stale.</summary>
     Kind: TReconcileKind;
@@ -44,6 +55,12 @@ type
   end;
 
   /// <summary>Output of TProjectReconciler.Analyze.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), declaration (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Reconcile
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReconcileResult = record
     /// <summary>Files used (in closure) but not listed in .dpr/.dproj.</summary>
     Missing: TArray<TReconcileItem>;
@@ -59,8 +76,14 @@ type
 
   /// <summary>Compares a Delphi project's stated member list against its actual
   /// compile closure and reports Missing / Extra / Stale units.</summary>
-  /// <remarks>Not thread-safe; construct and use from a single thread.
-  /// Owns nothing after construction (no resources to free).</remarks>
+  /// <remarks>
+  /// Not thread-safe; construct and use from a single thread.
+  /// Owns nothing after construction (no resources to free).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectReconciler = class
     strict private
       FLibraryRoots: TArray<string>;
@@ -69,15 +92,83 @@ type
       // Parse the .dpr uses clause; return absolute paths for each listed unit.
       // Uses the same logic as TClosureResolver.ParseDprUses but returns only
       // the file paths (we need the absolute-path set, not unit names).
+      /// <summary><!-- drag-lint:auto -->Parse the .dpr uses clause; return absolute
+      /// paths for each listed unit. Uses the same logic as TClosureResolver.ParseDprUses
+      /// but returns only the file paths (we need the absolute-path set, not unit names).</summary>
+      /// <param name="ADprPath"><!-- drag-lint:auto --></param>
+      /// <param name="AMembers"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)
+      /// Calls: Copy, DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember, LowerCase, Pos, SameText
+      /// Complexity: 16 (cyclomatic, outer body), 95 lines (full implementation)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure CollectDprMembers(const ADprPath: string; AMembers: TDictionary<string, string>);
 
       // Parse the .dproj DCCReference ItemGroup; add absolute paths.
+      /// <summary><!-- drag-lint:auto -->Parse the .dproj DCCReference ItemGroup; add
+      /// absolute paths.</summary>
+      /// <param name="ADprojPath"><!-- drag-lint:auto --></param>
+      /// <param name="AMembers"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)
+      /// Calls: DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember, LowerCase
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure CollectDprojMembers(const ADprojPath: string; AMembers: TDictionary<string, string>);
 
       // Resolve a path token relative to ABaseDir.
+      /// <summary><!-- drag-lint:auto -->Resolve a path token relative to ABaseDir.</summary>
+      /// <param name="AToken"><!-- drag-lint:auto --></param>
+      /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: ''; TPath.GetFullPath(AToken);
+      /// TPath.GetFullPath(TPath.Combine(ABaseDir, AToken)).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers (DRagLint.Index.Reconcile.pas)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ResolveMember(const AToken, ABaseDir: string): string;
 
       // Build a relative path from ABase to AFile (backslash sep).
+      /// <summary><!-- drag-lint:auto -->Build a relative path from ABase to AFile
+      /// (backslash sep).</summary>
+      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="ABase"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: Copy(NormFile, Length(NormBase) + 1,
+      /// MaxInt); NormFile.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)
+      /// Calls: Copy, SameText
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function MakeRelPath(const AFile, ABase: string): string;
     public
       /// <summary>Create a reconciler.
@@ -85,6 +176,19 @@ type
       /// from the closure (pass TProjectResolver.ResolveLibraryPaths).
       /// AStaleGlobs: extra stale glob patterns (e.g. from manifest indexes.exclude)
       /// applied on top of the built-in heuristics.</summary>
+      /// <param name="ALibraryRoots"><!-- drag-lint:auto --></param>
+      /// <param name="AStaleGlobs"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+65 more)
+      /// Writes: FLibraryRoots, FStaleGlobs
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(const ALibraryRoots, AStaleGlobs: TArray<string>);
 
       /// <summary>Read-only analysis: compare the .dpr/.dproj member list against
@@ -92,6 +196,21 @@ type
       /// AProjectFile may be a .dpr or .dproj; the sibling file is auto-detected.</summary>
       /// <param name="AProjectFile">Absolute or relative path to .dpr or .dproj.</param>
       /// <returns>TReconcileResult with populated Missing, Extra, and Stale arrays.</returns>
+      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
+      /// Calls: DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Index.Reconcile.IsStaleName, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase, SameText
+      /// Complexity: 11 (cyclomatic, outer body), 125 lines (full implementation)
+      /// Reads: FLibraryRoots, FStaleGlobs
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Resolve"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.IsStaleName"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Analyze(const AProjectFile: string): TReconcileResult;
 
       /// <summary>Apply: add Missing units to .dpr uses clause and .dproj
@@ -102,19 +221,40 @@ type
       /// Re-running after Apply reports 0 Missing.</summary>
       /// <param name="AProjectFile">Path to .dpr or .dproj.</param>
       /// <param name="AResult">Result from a prior Analyze call.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
+      /// Calls: DRagLint.Index.Reconcile.EditDpr, DRagLint.Index.Reconcile.EditDproj, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Index.Reconcile.EditDpr"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.EditDproj"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Apply(const AProjectFile: string; const AResult: TReconcileResult);
   end;
 
-  /// <summary>True when the file's base name (including extension) matches a
-  /// built-in stale heuristic or any pattern in AExtraGlobs.
-  /// Built-in glob patterns (case-insensitive): *_OLD*, * - Copy*, *-Copy*,
-  /// *BACKUP*, *-bad*. Additionally detects a date-stamp suffix: underscore
-  /// followed by 8 digits (e.g. _20230828) via TRegEx (replaces the old
-  /// non-functional *_20######* glob -- TGlob treats # as a literal).
-  /// Matching uses TGlob.Matches + TRegEx on the base name only.</summary>
-  /// <param name="AFileName">Base file name (e.g. 'uFoo_OLD_20230828.pas').</param>
-  /// <param name="AExtraGlobs">Additional glob patterns (e.g. manifest excludes).</param>
-  /// <returns>True if the name looks stale.</returns>
+/// <summary>True when the file's base name (including extension) matches a
+/// built-in stale heuristic or any pattern in AExtraGlobs.
+/// Built-in glob patterns (case-insensitive): *_OLD*, * - Copy*, *-Copy*,
+/// *BACKUP*, *-bad*. Additionally detects a date-stamp suffix: underscore
+/// followed by 8 digits (e.g. _20230828) via TRegEx (replaces the old
+/// non-functional *_20######* glob -- TGlob treats # as a literal).
+/// Matching uses TGlob.Matches + TRegEx on the base name only.</summary>
+/// <param name="AFileName">Base file name (e.g. 'uFoo_OLD_20230828.pas').</param>
+/// <param name="AExtraGlobs">Additional glob patterns (e.g. manifest excludes).</param>
+/// <returns>True if the name looks stale.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)
+/// Calls: DRagLint.Index.Glob.TGlob.Matches
+/// Returns: False
+/// Touches: file system
+/// <seealso cref="DRagLint.Index.Glob.TGlob.Matches"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsStaleName(const AFileName: string; const AExtraGlobs: TArray<string>): Boolean;
 
 implementation

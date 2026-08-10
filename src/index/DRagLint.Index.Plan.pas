@@ -19,6 +19,11 @@ uses
 
 type
   /// <summary>How a manifest section's file set is gathered.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Index.Plan.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPlanSectionMode = (
     /// <summary>All files under the listed include folders (recursive walk).</summary>
     smFolderTree,
@@ -29,6 +34,12 @@ type
 
   /// <summary>Concrete resolved build plan for one index section (or one platform
   /// expansion of a library section).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas) (+3 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPlanSection = record
     /// <summary>Section name from the manifest (same for all platform expansions).</summary>
     Name: string;
@@ -49,30 +60,48 @@ type
   end; // record
 
   /// <summary>Complete concrete build plan resolved from a TIndexManifest.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas) (+2 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIndexPlan = record
     /// <summary>Ordered list of resolved plan sections (library sections are
     /// expanded one entry per platform).</summary>
     Items: TArray<TPlanSection>;
   end;
 
-  /// <summary>Resolve a manifest into a concrete build plan. APlatformsFilter nil
-  /// = all platforms a library section requests; non-nil restricts library
-  /// expansion to the intersection with APlatformsFilter. AResolver supplies
-  /// registry platform enumeration and per-platform library path reads.</summary>
-  /// <param name="AManifest">Parsed, validated manifest. Must have RootDir set.</param>
-  /// <param name="APlatformsFilter">Optional whitelist of platform names. Pass nil
-  /// to accept all platforms the section declares. Caller owns the array lifetime.</param>
-  /// <param name="AResolver">Resolver instance; caller owns + must not free until
-  /// after this function returns. Must not be nil.</param>
-  /// <returns>Fully populated TIndexPlan.</returns>
-  /// <remarks>
-  /// Mode classification:
-  ///   Source='registry-libraries' -> smLibrary (one TPlanSection per platform).
-  ///   Any Include entry ending with .dpr/.dproj (case-insensitive) -> smClosure.
-  ///   Otherwise -> smFolderTree.
-  /// DedupAgainst='*' -> union of ALL other sections' roots.
-  /// Not thread-safe; call from a single thread.
-  /// </remarks>
+/// <summary>Resolve a manifest into a concrete build plan. APlatformsFilter nil
+/// = all platforms a library section requests; non-nil restricts library
+/// expansion to the intersection with APlatformsFilter. AResolver supplies
+/// registry platform enumeration and per-platform library path reads.</summary>
+/// <param name="AManifest">Parsed, validated manifest. Must have RootDir set.</param>
+/// <param name="APlatformsFilter">Optional whitelist of platform names. Pass nil
+/// to accept all platforms the section declares. Caller owns the array lifetime.</param>
+/// <param name="AResolver">Resolver instance; caller owns + must not free until
+/// after this function returns. Must not be nil.</param>
+/// <returns>Fully populated TIndexPlan.</returns>
+/// <remarks>
+/// Mode classification:
+/// Source='registry-libraries' -> smLibrary (one TPlanSection per platform).
+/// Any Include entry ending with .dpr/.dproj (case-insensitive) -> smClosure.
+/// Otherwise -> smFolderTree.
+/// DedupAgainst='*' -> union of ALL other sections' roots.
+/// Not thread-safe; call from a single thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas)
+/// Calls: Default, DRagLint.Index.Manifest.TIndexManifest.FindSection, DRagLint.Index.Plan.BuildFilter, DRagLint.Index.Plan.ClassifyMode, DRagLint.Index.Plan.CollectRootsByName, DRagLint.Index.Plan.CollectRootsExcept, DRagLint.Index.Plan.ExpandDbPath, DRagLint.Index.Plan.PlatformAllowed, DRagLint.Index.Plan.ResolveRoots, DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths
+/// Returns: Default(TIndexPlan)
+/// Complexity: 14 (cyclomatic, outer body), 121 lines (full implementation)
+/// Touches: file system
+/// <seealso cref="DRagLint.Index.Manifest.TIndexManifest.FindSection"/>
+/// <seealso cref="DRagLint.Index.Plan.BuildFilter"/>
+/// <seealso cref="DRagLint.Index.Plan.ClassifyMode"/>
+/// <seealso cref="DRagLint.Index.Plan.CollectRootsByName"/>
+/// <seealso cref="DRagLint.Index.Plan.CollectRootsExcept"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolvePlan(const AManifest: TIndexManifest; const APlatformsFilter: TArray<string>; AResolver: TProjectResolver): TIndexPlan;
 
 implementation

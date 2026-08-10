@@ -105,39 +105,46 @@ type
     /// <summary>Runs the dead-code rules against a single .pas file and
     /// returns one TLintFinding per violation.</summary>
     /// <param name="AFile">Absolute path to the .pas source file.</param>
+    /// <param name="AMinCaseBranches"><!-- drag-lint:auto --></param>
+    /// <param name="AMaxBoolOps"><!-- drag-lint:auto --></param>
+    /// <param name="AMaxUnitLines"><!-- drag-lint:auto --></param>
+    /// <param name="AMaxChainHops"><!-- drag-lint:auto --></param>
     /// <returns>Array of findings (severity 'warning'); empty when the file is
     /// clean or could not be parsed.</returns>
-    /// <remarks>Rules implemented: unused-parameter, identical-then-else,
+    /// <exception cref="bug"><!-- drag-lint:auto --></exception>
+    /// <exception cref="wraps"><!-- drag-lint:auto --></exception>
+    /// <remarks>
+    /// Rules implemented: unused-parameter, identical-then-else,
     /// referenced-never-set, redundant-parentheses, commented-out-code, and
     /// function-result-ignored.
     /// unused-parameter guards (parameters NOT flagged even if unreferenced):
-    ///   - var/out parameters (caller-visible side effects).
-    ///   - Self (implicit class parameter).
-    ///   - Methods whose INTERFACE-SECTION declaration (declProc) carries virtual,
-    ///     dynamic, override, message, or abstract directives (contract-bound
-    ///     signatures; the parameter cannot be freely removed). Detection uses a
-    ///     two-pass approach: pass 1 collects the bare method names of all
-    ///     contract-bound declProc nodes (via procAttribute children), and pass 2
-    ///     skips any defProc whose unqualified name matches the collected set.
-    ///     NOTE: in Delphi implementation bodies (defProc), the override/virtual
-    ///     directives are NOT repeated -- they exist only on the interface-section
-    ///     declProc. This two-pass design correctly handles that grammar structure.
-    ///   - Routines with an 'asm' body (assembler block).
-    ///   - VCL/FMX event handlers: a routine whose FIRST parameter is named
-    ///     'Sender' (case-insensitive) is treated as an event handler -- all of
-    ///     its parameters are fixed by the event-type signature and cannot be
-    ///     freely removed. The entire method is skipped. Additionally, any
-    ///     individual parameter named 'Sender' (any position) is also skipped
-    ///     as a defensive secondary guard (some handlers list Sender later).
-    ///   - external routines: these never reach the body pass at all. An
-    ///     'external' declaration (both interface-section and implementation-
-    ///     section forms, e.g. `procedure Foo(A: Integer); external 'x.dll';`)
-    ///     is parsed by tree-sitter as a body-less declProc, NOT a defProc, so
-    ///     CheckUnusedParams (which only visits defProc nodes) is never invoked
-    ///     for it. Verified empirically: an external routine with an obviously-
-    ///     unused parameter produces zero unused-parameter findings. This is
-    ///     deliberate -- the external body is in a foreign module and the
-    ///     parameter cannot be removed.
+    /// - var/out parameters (caller-visible side effects).
+    /// - Self (implicit class parameter).
+    /// - Methods whose INTERFACE-SECTION declaration (declProc) carries virtual,
+    /// dynamic, override, message, or abstract directives (contract-bound
+    /// signatures; the parameter cannot be freely removed). Detection uses a
+    /// two-pass approach: pass 1 collects the bare method names of all
+    /// contract-bound declProc nodes (via procAttribute children), and pass 2
+    /// skips any defProc whose unqualified name matches the collected set.
+    /// NOTE: in Delphi implementation bodies (defProc), the override/virtual
+    /// directives are NOT repeated -- they exist only on the interface-section
+    /// declProc. This two-pass design correctly handles that grammar structure.
+    /// - Routines with an 'asm' body (assembler block).
+    /// - VCL/FMX event handlers: a routine whose FIRST parameter is named
+    /// 'Sender' (case-insensitive) is treated as an event handler -- all of
+    /// its parameters are fixed by the event-type signature and cannot be
+    /// freely removed. The entire method is skipped. Additionally, any
+    /// individual parameter named 'Sender' (any position) is also skipped
+    /// as a defensive secondary guard (some handlers list Sender later).
+    /// - external routines: these never reach the body pass at all. An
+    /// 'external' declaration (both interface-section and implementation-
+    /// section forms, e.g. `procedure Foo(A: Integer); external 'x.dll';`)
+    /// is parsed by tree-sitter as a body-less declProc, NOT a defProc, so
+    /// CheckUnusedParams (which only visits defProc nodes) is never invoked
+    /// for it. Verified empirically: an external routine with an obviously-
+    /// unused parameter produces zero unused-parameter findings. This is
+    /// deliberate -- the external body is in a foreign module and the
+    /// parameter cannot be removed.
     /// Known limitation: interface-method implementations are not detected
     /// syntactically (requires a symbol store). If an interface method body slips
     /// through with an unused parameter it will be reported; this is an acceptable
@@ -148,18 +155,29 @@ type
     /// referenced-never-set fires on a private or strict-private class field that
     /// is read in at least one method body of the same class but never assigned
     /// anywhere in the class. Guards (fields NOT flagged):
-    ///   - Fields outside private/strict-private sections (protected/public/
-    ///     published may be written from descendant units).
-    ///   - Fields on classes whose direct ancestor name ends with 'Form', 'Frame',
-    ///     or equals 'TComponent'/'TDataModule'/'TCustomForm' (case-insensitive) --
-    ///     DFM/RTTI streaming writes these fields invisibly.
-    ///   - Fields in the implicit-first section (published DFM component dump):
-    ///     a declField that is a direct child of declClass with no enclosing
-    ///     declSection is skipped.
-    ///   - Fields with 0 reads AND 0 writes (scope of unused-private-member,
-    ///     Task 6).
+    /// - Fields outside private/strict-private sections (protected/public/
+    /// published may be written from descendant units).
+    /// - Fields on classes whose direct ancestor name ends with 'Form', 'Frame',
+    /// or equals 'TComponent'/'TDataModule'/'TCustomForm' (case-insensitive) --
+    /// DFM/RTTI streaming writes these fields invisibly.
+    /// - Fields in the implicit-first section (published DFM component dump):
+    /// a declField that is a direct child of declClass with no enclosing
+    /// declSection is skipped.
+    /// - Fields with 0 reads AND 0 writes (scope of unused-private-member,
+    /// Task 6).
     /// Thread-safe if the parse cache is thread-safe for the caller's pattern;
-    /// the checker itself has no shared mutable state.</remarks>
+    /// the checker itself has no shared mutable state.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: accessor, AClassNode, ALower, ArgsHaveNoEncoding, argument, arguments, ATop, base, based, bound (+116 more)
+    /// Returns: nil; Deduped.ToArray
+    /// Pure
+    /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
+    /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>
+    /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectContractDecls"/>
+    /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectLocalFunctions"/>
+    /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.Visit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; AMinCaseBranches: Integer = 2;
       AMaxBoolOps: Integer = 4; AMaxUnitLines: Integer = 2000;
       AMaxChainHops: Integer = 4): TArray<TLintFinding>;

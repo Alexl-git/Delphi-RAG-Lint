@@ -15,6 +15,12 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDelphi13Parser = class(TInterfacedObject, IParser)
     strict private
       FLanguage: PTSLanguage;
@@ -22,9 +28,53 @@ type
       { v0.42: deep scan -> emit identifier usage refs (read/write/attribute).
       Set by the indexer from the --deep/--shallow flag before parsing. }
       EmitUsageRefs: Boolean;
+      /// <summary><!-- drag-lint:auto -->TDelphi13Parser</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Writes: FLanguage
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.FileExtensions"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.LanguageName"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create;
+      /// <returns><!-- drag-lint:auto -->Observed: 'delphi13'.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IParser.LanguageName
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Create"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.FileExtensions"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function LanguageName: string                                               ;
+      /// <returns><!-- drag-lint:auto -->Observed: ['.pas', '.dpr', '.dpk', '.inc'].</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IParser.FileExtensions
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Create"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.LanguageName"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function FileExtensions: TArray<string>                                     ;
+      /// <param name="ASource"><!-- drag-lint:auto --></param>
+      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, Integer, Move, TreeSitter.TTSParser.Parse
+      /// Implements: DRagLint.Core.Interfaces.IParser.Parse
+      /// Reads: FLanguage, EmitUsageRefs
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.Delphi13.CollectParseErrors"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.HarvestStringLiterals"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.TWalkState.Create"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.Walk"/>
+      /// <seealso cref="TreeSitter.TTSParser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
   end;
 

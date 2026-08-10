@@ -12,12 +12,19 @@ uses
 
 type
   /// <summary>Iteration direction of a data-flow analysis.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Direction (DRagLint.Analysis.Flow.Lattices.pas) (+1 more)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFlowDir = (fdForward, fdBackward);
 
   /// <summary>A monotone data-flow analysis over a CFG.</summary>
-  /// <remarks>TValue is the lattice element (e.g. a variable bitset). `Join`
+  /// <remarks>
+  /// TValue is the lattice element (e.g. a variable bitset). `Join`
   /// must be commutative/associative and monotone; `Transfer` monotone. The
-  /// solver terminates because the lattice has finite height.</remarks>
+  /// solver terminates because the lattice has finite height.
+  /// </remarks>
   IDataFlowAnalysis<TValue> = interface
     /// <summary>Forward (Entry-&gt;Exit) or backward (Exit-&gt;Entry).</summary>
     function Direction: TFlowDir;
@@ -27,10 +34,16 @@ type
     /// backward) -- e.g. params assigned-on-entry, or vars live-at-exit.</summary>
     function Boundary: TValue;
     /// <summary>Meet of two predecessor/successor contributions.</summary>
+    /// <param name="A"><!-- drag-lint:auto --></param>
+    /// <param name="B"><!-- drag-lint:auto --></param>
     function Join(const A, B: TValue): TValue;
     /// <summary>Effect of one block on the in-value.</summary>
+    /// <param name="ABlock"><!-- drag-lint:auto --></param>
+    /// <param name="AIn"><!-- drag-lint:auto --></param>
     function Transfer(const ABlock: TCfgBlock; const AIn: TValue): TValue;
     /// <summary>Lattice equality (fixpoint test).</summary>
+    /// <param name="A"><!-- drag-lint:auto --></param>
+    /// <param name="B"><!-- drag-lint:auto --></param>
     function Equals(const A, B: TValue): Boolean;
   end;
 
@@ -40,6 +53,18 @@ type
     /// <summary>Solve AAnalysis over ACfg. Returns False (and leaves AIn/AOut
     /// empty) when ACfg.Skipped. Otherwise AIn[b]/AOut[b] hold the per-block
     /// fixpoint values.</summary>
+    /// <param name="ACfg"><!-- drag-lint:auto --></param>
+    /// <param name="AAnalysis"><!-- drag-lint:auto --></param>
+    /// <param name="AIn"><!-- drag-lint:auto --></param>
+    /// <param name="AOut"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
+    /// Complexity: 17 (cyclomatic, outer body), 64 lines (full implementation)
+    /// Mutates: AIn (out), AOut (out)
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Solve(const ACfg: TCfg; const AAnalysis: IDataFlowAnalysis<TValue>;
       out AIn, AOut: TArray<TValue>): Boolean;
   end;

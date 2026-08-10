@@ -10,20 +10,131 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)
+  /// Used in units: DRagLint.Core.Indexer, DRagLint.Doc.Document
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocCommentScanner = class
     public
       /// <summary>Walk the source, return all comment regions sorted by StartLine.</summary>
+      /// <param name="ASource"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: TList&lt;TDocCommentRegion&gt;.Create.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas)
+      /// Calls: DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.MergeAdjacentSameKind, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Peek, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.StartLineComment
+      /// Complexity: 31 (cyclomatic, outer body), 175 lines (full implementation)
+      /// Owns returned: new (caller owns)
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentScanner.Scan.MergeAdjacentSameKind"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Peek"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentScanner.Scan.StartLineComment"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Scan(const ASource: string): TList<TDocCommentRegion>;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.NormalizeContainerBody (DRagLint.Doc.Regions.pas) (+2 more)
+  /// Used in units: DRagLint.Core.Indexer, DRagLint.Doc.Document, DRagLint.Doc.Regions
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocCommentParser = class
     public
+      /// <param name="ARaw"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)
+      /// Calls: Copy, DRagLint.Parser.DocComments.EnsureParserRegexes, DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned, DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace, FillChar, Pos, StartsText, Trim
+      /// Complexity: 22 (cyclomatic, outer body), 180 lines (full implementation)
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DocComments.EnsureParserRegexes"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ParseXmlDoc(const ARaw: string)                         : TParsedDoc; static;
+      /// <param name="ARaw"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)
+      /// Calls: Copy, DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace, DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc.FlushTag, FillChar, LowerCase, Pos, Trim, TrimLeft
+      /// Complexity: 16 (cyclomatic, outer body), 177 lines (full implementation)
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc.FlushTag"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ParsePasDoc(const ARaw: string)                         : TParsedDoc; static;
+      /// <param name="ARaw"><!-- drag-lint:auto --></param>
+      /// <param name="AKind"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose (DRagLint.Parser.DocComments.pas)
+      /// Calls: DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace, DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix, FillChar
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ParseOneline(const ARaw: string; AKind: TDocCommentKind): TParsedDoc; static;
+      /// <param name="ARaw"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: ParseOneline(ARaw, dckLooseLine).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)
+      /// Calls: DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline, DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix, FillChar, StartsText, TrimLeft
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ParseLoose(const ARaw: string)                          : TParsedDoc; static;
 
+      /// <summary><!-- drag-lint:auto -->TDocCommentParser</summary>
+      /// <param name="ALine"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline (DRagLint.Parser.DocComments.pas)
+      /// Calls: Copy, TrimLeft
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function StripXmlDocPrefix(const ALine: string): string; static;
+      /// <param name="S"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: Re.Replace(Trim(S), ' ').</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Doc.Regions.NormalizeContainerBody (DRagLint.Doc.Regions.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)
+      /// Calls: Trim
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CollapseWhitespace(const S: string)   : string; static;
 
       /// <summary>The text ParseXmlDoc actually matches its tag regexes
@@ -33,15 +144,44 @@ type
       /// produced it (the leading /// already gone, interior spacing intact).</param>
       /// <returns>The cleaned text. Character offsets into it are the offsets
       /// every TMatch this unit produces reports.</returns>
-      /// <remarks>v(ADP3 T3h): extracted from ParseXmlDoc's own body (no
+      /// <remarks>
+      /// v(ADP3 T3h): extracted from ParseXmlDoc's own body (no
       /// behaviour change) so a CALLER that needs to locate a tag occurrence by
       /// offset can build the identical text instead of approximating it --
       /// TDocRegions.StandaloneBodyOf reads a located occurrence's body back out
       /// of this, and an offset computed against a differently-normalized copy
       /// would silently read the wrong characters. ONE definition, matching the
-      /// same reasoning as EnsureParserRegexes' single set of patterns.</remarks>
+      /// same reasoning as EnsureParserRegexes' single set of patterns.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Doc.Regions.TDocRegions.StandaloneBodyOf (DRagLint.Doc.Regions.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)
+      /// Calls: DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildCleaned(const ARaw: string): string; static;
 
+      /// <param name="ARegion"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: ParseXmlDoc(ARegion.RawText);
+      /// ParseOneline(ARegion.RawText, ARegion.Kind); ParsePasDoc(ARegion.RawText);
+      /// ParseLoose (ARegion.RawText).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas)
+      /// Calls: DRagLint.Parser.DocComments.EnsureParserRegexes, DRagLint.Parser.DocComments.HasAnyRecognizedTag, DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose, DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline, DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc, DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc, FillChar
+      /// Complexity: 16 (cyclomatic, outer body), 97 lines (full implementation)
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DocComments.EnsureParserRegexes"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.HasAnyRecognizedTag"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline"/>
+      /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Dispatch(const ARegion: TDocCommentRegion): TParsedDoc; static;
   end;
 

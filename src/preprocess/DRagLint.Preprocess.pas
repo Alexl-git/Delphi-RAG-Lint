@@ -81,8 +81,18 @@ uses
 /// <returns>A new TBytes with Length = Length(AUtf8) exactly (the offset-identity
 /// invariant). Active-branch bytes are copied verbatim; inactive-branch and
 /// directive bytes are replaced by spaces with LF (byte 10) preserved.</returns>
-/// <remarks>No shared mutable state -- each call builds its own defines
-/// dictionary and IF stack.</remarks>
+/// <remarks>
+/// No shared mutable state -- each call builds its own defines
+/// dictionary and IF stack.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)
+/// Calls: DRagLint.Preprocess.Preprocess/2
+/// Returns: Preprocess(AUtf8, Opts)
+/// Overload 1 of 2
+/// Recursive
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes; overload;
 
 /// <summary>PP-Task-6: runs the preprocessor over AUtf8 with include handling
@@ -99,6 +109,15 @@ function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes
 /// against; '' disables resolution -> every include blanks).</param>
 /// <returns>A new TBytes with Length = Length(AUtf8) exactly. The {$I}
 /// directive is always blanked, never spliced.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.Preprocess.PreprocessInto, DRagLint.Preprocess.Tolerance.ApplyTolerances, LowerCase
+/// Overload 2 of 2
+/// Pure
+/// <seealso cref="DRagLint.Preprocess.PreprocessInto"/>
+/// <seealso cref="DRagLint.Preprocess.Tolerance.ApplyTolerances"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; overload;
 
 implementation

@@ -14,6 +14,11 @@ uses
   DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Refactor.TextEdit.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTextEditKind = (tekInsertInLine, tekInsertLines, tekDeleteLines, tekReplaceInLine);
 
   /// <summary>One text edit. tekInsertInLine: insert Text into line Line at
@@ -21,7 +26,8 @@ type
   /// Line (0 = top). tekDeleteLines: delete lines Line..EndLine inclusive.
   /// tekReplaceInLine: on line Line, replace the characters in 1-based columns
   /// [Col, EndCol) (EndCol exclusive) with Text (Text may be '' to delete).</summary>
-  /// <remarks>ExpectText is the OPTIONAL stale-position guard for
+  /// <remarks>
+  /// ExpectText is the OPTIONAL stale-position guard for
   /// tekReplaceInLine (ignored by every other kind). When it is non-empty the
   /// applier verifies -- case-insensitively, Delphi identifiers being
   /// case-insensitive -- that the file AS IT IS ON DISK really holds ExpectText
@@ -29,11 +35,15 @@ type
   /// Producers whose coordinates come from the SYMBOL STORE (a snapshot that
   /// goes stale the moment the file is edited) must set it; leaving it '' keeps
   /// the historical unguarded behaviour for every existing caller.
-  ///
   /// v(PHASE A2): ExpectLine extends the SAME guard to the line kinds
   /// (tekInsertLines / tekDeleteLines), which had none at all -- see
   /// AnchorIsValid for what it verifies and why a substring test alone is not
-  /// enough. Set BOTH fields to arm it; ExpectLine = 0 is unguarded.</remarks>
+  /// enough. Set BOTH fields to arm it; ExpectLine = 0 is unguarded.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.HandleProc (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas) (+17 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Diagnostics.AstChecks, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Doc.Strip, DRagLint.Lint.DocRules, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.NamingFix, DRagLint.Refactor.TextEdit
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTextEdit = record
     FilePath  : string;
     Kind      : TTextEditKind;
@@ -46,11 +56,21 @@ type
     ExpectLine: Integer;      { 1-based ANCHOR line that must still hold ExpectText; 0 = unguarded }
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ReportStrip (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas) (+7 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Refactor.ExtractMethod
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTextEditApplier = class
   public
     /// <summary>Applies edits per file, back-to-front by line, preserving ANSI
     /// + CRLF + (optional) .bak backup. Returns files touched.</summary>
-    /// <remarks>Edits are validated before they are written: a
+    /// <param name="AEdits"><!-- drag-lint:auto --></param>
+    /// <param name="AWriteBackups"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: Apply(AEdits, AWriteBackups, Skipped).</returns>
+    /// <remarks>
+    /// Edits are validated before they are written: a
     /// tekReplaceInLine whose Col lies past end-of-line is REJECTED (it would
     /// otherwise degrade into a silent append), and one carrying a non-empty
     /// ExpectText is rejected unless the current line really holds that text at
@@ -59,7 +79,16 @@ type
     /// A file whose every edit was rejected is NOT rewritten and gets NO .bak --
     /// it is not counted as touched either. This matters beyond tidiness: the
     /// write path re-serializes through a TStringList (ANSI + CRLF normalization),
-    /// so an unconditional rewrite would modify a file that no edit had changed.</remarks>
+    /// so an unconditional rewrite would modify a file that no edit had changed.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+3 more)
+    /// Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3
+    /// Overload 1 of 2
+    /// Pure
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer; overload;
     /// <summary>Same as Apply(AEdits, AWriteBackups), additionally reporting how
     /// many edits the pre-write validation dropped.</summary>
@@ -73,12 +102,44 @@ type
     /// written.</param>
     /// <returns>Number of files ACTUALLY modified -- a file whose every edit was
     /// rejected is not rewritten, backed up, or counted.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/2 (DRagLint.Refactor.TextEdit.pas)
+    /// Calls: Copy, DRagLint.Refactor.TextEdit.AnchorIsValid, DRagLint.Refactor.TextEdit.EditTopLine, DRagLint.Refactor.TextEdit.ReplaceEditIsValid, preserving
+    /// Returns: Touched
+    /// Overload 2 of 2
+    /// Complexity: 33 (cyclomatic, outer body), 162 lines (full implementation)
+    /// Mutates: ASkippedEdits (out)
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Refactor.TextEdit.AnchorIsValid"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.EditTopLine"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.ReplaceEditIsValid"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean;
       out ASkippedEdits: Integer): Integer; overload;
     /// <summary>Human-readable preview of the edit set.</summary>
+    /// <param name="AEdits"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas) (+5 more)
+    /// Calls: Format
+    /// Pure
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RenderDryRun(const AEdits: TArray<TTextEdit>): string;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFindUnitRefactoring = class
   public
     /// <summary>Computes edits to add the unit declaring AName to AInFile's uses
@@ -86,6 +147,22 @@ type
     /// when it is already imported. Empty result + AResolvedUnit='' when AName is
     /// unresolvable. Inserts into the implementation uses if present, else the
     /// interface uses, else a fresh implementation uses block.</summary>
+    /// <param name="AStore"><!-- drag-lint:auto --></param>
+    /// <param name="AName"><!-- drag-lint:auto --></param>
+    /// <param name="AInFile"><!-- drag-lint:auto --></param>
+    /// <param name="AResolvedUnit"><!-- drag-lint:auto --></param>
+    /// <param name="AAlreadyUsed"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: Build(AStore, AStore, AName, AInFile,
+    /// AResolvedUnit, AAlreadyUsed).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas)
+    /// Calls: DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/6
+    /// Overload 1 of 2
+    /// Pure
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Build(const AStore: ISymbolStore; const AName, AInFile: string;
       out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>; overload;
     /// <summary>Same as the single-store overload, but resolves AName's
@@ -95,10 +172,38 @@ type
     /// TYPE and target FILE are indexed in different --db stores (e.g.
     /// drag-lint convert-apply, where the To type may live in a different
     /// index than the form being converted).</summary>
+    /// <param name="ANameStore"><!-- drag-lint:auto --></param>
+    /// <param name="AUnitStore"><!-- drag-lint:auto --></param>
+    /// <param name="AName"><!-- drag-lint:auto --></param>
+    /// <param name="AInFile"><!-- drag-lint:auto --></param>
+    /// <param name="AResolvedUnit"><!-- drag-lint:auto --></param>
+    /// <param name="AAlreadyUsed"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: nil; [Edit].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/5 (DRagLint.Refactor.TextEdit.pas)
+    /// Calls: AUnitStore, ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, ExtractFileName, file, LowerCase, SameText, Trim
+    /// Overload 2 of 2
+    /// Complexity: 28 (cyclomatic, outer body), 120 lines (full implementation)
+    /// Mutates: AResolvedUnit (out), AAlreadyUsed (out)
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
       out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>; overload;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoSafeDelete (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSafeDeleteRefactoring = class
   public
     /// <summary>Edits to delete the declaration (and impl body, for a routine)
@@ -106,6 +211,22 @@ type
     /// FindCallersByName(short name) -- FindReferencesTo is unreliable (refs.
     /// symbol_id is NULL in the index). Returns empty + ARefuseReason when the
     /// symbol is referenced or not found.</summary>
+    /// <param name="AStore"><!-- drag-lint:auto --></param>
+    /// <param name="AQName"><!-- drag-lint:auto --></param>
+    /// <param name="ARefuseReason"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: nil; Edits.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoSafeDelete (DRagLint.CLI.pas)
+    /// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.TextEdit.LastSeg, Format
+    /// Complexity: 10 (cyclomatic, outer body), 56 lines (full implementation)
+    /// Mutates: ARefuseReason (out)
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.LastSeg"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Build(const AStore: ISymbolStore; const AQName: string;
       out ARefuseReason: string): TArray<TTextEdit>;
   end;

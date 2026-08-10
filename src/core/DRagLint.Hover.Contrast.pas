@@ -13,15 +13,36 @@ uses
 /// <param name="AForeground">Text color (system colors are resolved via ColorToRGB).</param>
 /// <param name="ABackground">Background color behind the text.</param>
 /// <returns>Ratio in [1.0, 21.0]: 1.0 identical, 21.0 black-on-white.</returns>
-/// <remarks>Order-independent (lighter/darker sorted internally).</remarks>
+/// <remarks>
+/// Order-independent (lighter/darker sorted internally).
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoContrastSelfTest (DRagLint.CLI.pas), DRagLint.Hover.Contrast.EnsureReadable (DRagLint.Hover.Contrast.pas)
+/// Calls: DRagLint.Hover.Contrast.RelLuminance
+/// Returns: (Hi + 0.05) / (Lo + 0.05)
+/// Pure
+/// <seealso cref="DRagLint.Hover.Contrast.RelLuminance"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ContrastRatio(AForeground, ABackground: TColor): Double;
 
 /// <summary>Return AForeground if it already clears AMinRatio against
 /// ABackground; otherwise nudge its lightness away from the background until it
 /// does (clamped at black/white).</summary>
+/// <param name="AForeground"><!-- drag-lint:auto --></param>
+/// <param name="ABackground"><!-- drag-lint:auto --></param>
 /// <param name="AMinRatio">WCAG floor: 4.5 body text, 3.0 large/bold.</param>
 /// <returns>A color guaranteed to meet AMinRatio against ABackground.</returns>
-/// <remarks>Hue is preserved where possible so "keyword blue" stays blue.</remarks>
+/// <remarks>
+/// Hue is preserved where possible so "keyword blue" stays blue.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoContrastSelfTest (DRagLint.CLI.pas)
+/// Calls: ColorToRGB, DRagLint.Hover.Contrast.ContrastRatio, DRagLint.Hover.Contrast.RelLuminance, EnsureRange, GetBValue, GetGValue, GetRValue, RGB, TColor
+/// Returns: AForeground; clWhite
+/// Pure
+/// <seealso cref="DRagLint.Hover.Contrast.ContrastRatio"/>
+/// <seealso cref="DRagLint.Hover.Contrast.RelLuminance"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EnsureReadable(AForeground, ABackground: TColor; AMinRatio: Double = 4.5): TColor;
 
 implementation

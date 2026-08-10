@@ -34,7 +34,8 @@ uses
 
 type
   /// <summary>The kind of a single parsed conversion rule.</summary>
-  /// <remarks>rkUnuse=#unuse (drop a unit from the uses clause); rkRemove=#remove
+  /// <remarks>
+  /// rkUnuse=#unuse (drop a unit from the uses clause); rkRemove=#remove
   /// (drop a property from PAS+DFM, or DFM-only); rkMigrate=#migrate (replace an
   /// identifier, reFind's ' -&gt; ' form); rkConvert=#convert (declare the
   /// From-&gt;To type pair a block converts, adding target units); rkLink=#link
@@ -46,17 +47,22 @@ type
   /// NOT mapped -- suppresses the unmapped-non-default WARN for that FromPath).
   /// rkUse=#use (ADD a unit to the uses clause -- companion to #unuse).
   /// rkUseSwap=#useswap (replace Old with one-or-more New units; UnitName=Old,
-  /// UnitsAdd=the New list; canonically #unuse Old + #use New...).</remarks>
+  /// UnitsAdd=the New list; canonically #unuse Old + #use New...).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Convert.Rules.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre, rkIgnore, rkUse, rkUseSwap);
 
   /// <summary>One parsed conversion rule. A flat record; only the fields relevant
   /// to <see cref="Kind"/> are populated (the rest stay '').</summary>
-  /// <remarks>Field usage by Kind:
+  /// <remarks>
+  /// Field usage by Kind:
   /// rkUnuse -&gt; UnitName.
   /// rkRemove -&gt; PropName + DfmOnly (True for '#remove DFM: X').
   /// rkMigrate -&gt; Scope (optional 'Class:' or 'obj.' receiver prefix -- see
-  ///   below), Old (the LHS identifier), New (the RHS identifier), UnitsAdd
-  ///   (0+ trailing uses-units).
+  /// below), Old (the LHS identifier), New (the RHS identifier), UnitsAdd
+  /// (0+ trailing uses-units).
   /// rkConvert -&gt; FromType, ToType, UnitsAdd (0+ target units to add).
   /// rkLink -&gt; ToPath (LHS of '&lt;-'), FromPath (RHS of '&lt;-').
   /// rkDefault -&gt; ToPath, Value (RHS of '=').
@@ -69,7 +75,12 @@ type
   /// identifier. We fold BOTH into a single Scope string kept verbatim (e.g.
   /// 'TForm1:' or 'DataSet.' or 'TForm1: DataSet.'); Old holds only the bare
   /// old identifier after the last such prefix. This preserves the receiver
-  /// intent without over-modelling it in Batch 1 (validation ignores Scope).</remarks>
+  /// intent without over-modelling it in Batch 1 (validation ignores Scope).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.HasConvertFor (DRagLint.Convert.DfmReemit.pas) (+4 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConversionRule = record
     Kind: TRuleKind;
     FromType, ToType, ToPath, FromPath, Old, New, Scope, UnitName, PropName, Value, Text, Search, Replace: string;
@@ -79,9 +90,15 @@ type
   end;
 
   /// <summary>One parse-or-validation error, anchored to a source line.</summary>
-  /// <remarks>LineNo is the 1-based source line; Message is a human-readable,
+  /// <remarks>
+  /// LineNo is the 1-based source line; Message is a human-readable,
   /// ASCII-only description (e.g. 'unknown directive: #frobnicate' or
-  /// 'link ToPath not found in --to tree: Bogus.Path').</remarks>
+  /// 'link ToPath not found in --to tree: Bogus.Path').
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateConversionRules (DRagLint.Convert.Rules.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Rules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleError = record
     LineNo : Integer;
     Message: string;
@@ -89,14 +106,20 @@ type
 
   /// <summary>The full parsed rule set: the recognised rules plus any parse
   /// errors captured while reading them.</summary>
-  /// <remarks>Rules holds every RECOGNISED rule in source order. ParseErrors
+  /// <remarks>
+  /// Rules holds every RECOGNISED rule in source order. ParseErrors
   /// holds one entry per UNKNOWN '#directive' line (or other total-parser
   /// rejection) -- the parser NEVER raises, so a malformed input still yields a
   /// well-formed ruleset with the problems recorded here. ValidateConversionRules
   /// folds these ParseErrors into its returned error list, so a caller that runs
   /// the validator sees parse + validation problems together. (ADDED FIELD vs the
   /// Task-2 brief's minimal shape -- documented as acceptable there; Task 3 reads
-  /// Rules and may inspect ParseErrors but is not broken by its presence.)</remarks>
+  /// Rules and may inspect ParseErrors but is not broken by its presence.)
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas) (+1 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConversionRuleSet = record
     Rules      : TArray<TConversionRule>;
     ParseErrors: TArray<TRuleError>;
@@ -110,7 +133,8 @@ type
 /// <returns>A TConversionRuleSet whose Rules are the recognised rules (each with
 /// its 1-based LineNo) and whose ParseErrors carry any unknown-directive lines.
 /// An empty/whitespace-only input yields empty Rules and empty ParseErrors.</returns>
-/// <remarks>Directive grammar (all case-INSENSITIVE on the leading '#word'):
+/// <remarks>
+/// Directive grammar (all case-INSENSITIVE on the leading '#word'):
 /// '#use &lt;unit&gt;' (add a unit); '#useswap &lt;Old&gt; -&gt; &lt;New1&gt; [, &lt;New2&gt; ...]' (replace a unit with one-or-more units);
 /// '#unuse &lt;unit&gt;'; '#remove &lt;prop&gt;' / '#remove DFM: &lt;prop&gt;'
 /// (DFM-only); '#migrate [&lt;Class&gt; :] [&lt;obj&gt; .] &lt;old&gt; -&gt;
@@ -121,7 +145,19 @@ type
 /// intentionally unmapped -- suppresses its unmapped-non-default warning).
 /// A NON-'#' line containing ' -&gt; ' is a raw PCRE
 /// rule (Search -&gt; Replace). Any other '#word' is an unknown directive
-/// recorded in ParseErrors. Pure; deterministic; no I/O.</remarks>
+/// recorded in ParseErrors. Pure; deterministic; no I/O.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)
+/// Calls: CharInSet, Copy, Default, DRagLint.Convert.Rules.ParseConversionRules.AddError, DRagLint.Convert.Rules.ParseConversionRules.AddRule, DRagLint.Convert.Rules.ParseConversionRules.Directive, DRagLint.Convert.Rules.SplitHeadAndUnits, DRagLint.Convert.Rules.SplitLines, DRagLint.Convert.Rules.SplitMigrateLhs, Insert, Pos, SameText, Trim
+/// Complexity: 25 (cyclomatic, outer body), 215 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.AddError"/>
+/// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.AddRule"/>
+/// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.Directive"/>
+/// <seealso cref="DRagLint.Convert.Rules.SplitHeadAndUnits"/>
+/// <seealso cref="DRagLint.Convert.Rules.SplitLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseConversionRules(const AText: string): TConversionRuleSet;
 
 /// <summary>Validates a parsed rule set against the real property trees of the
@@ -135,7 +171,8 @@ function ParseConversionRules(const AText: string): TConversionRuleSet;
 /// skip target-path checks.</param>
 /// <returns>Zero-length array = valid. Otherwise one TRuleError per problem, in
 /// source order (parse errors first, then validation errors).</returns>
-/// <remarks>Checks performed: for each rkLink, ToPath must exist as some
+/// <remarks>
+/// Checks performed: for each rkLink, ToPath must exist as some
 /// AToTree.Nodes[].Path and FromPath must exist as some AFromTree.Nodes[].Path;
 /// for each rkDefault, ToPath must exist in AToTree. A path equal to the literal
 /// '???' is an explicit-unfilled STUB marker (emitted by the Batch-1 scaffolder)
@@ -146,7 +183,18 @@ function ParseConversionRules(const AText: string): TConversionRuleSet;
 /// (rkUnuse/rkRemove/rkMigrate/rkNote/rkPcre) are not path-checked in Batch 1.
 /// rkIgnore is not path-checked either -- a #ignore for a non-existent F path is
 /// tolerated (it simply matches nothing), never a hard error.
-/// Pure; deterministic; no I/O.</remarks>
+/// Pure; deterministic; no I/O.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)
+/// Calls: DRagLint.Convert.Rules.PathExists, DRagLint.Convert.Rules.ValidateConversionRules.Add, DRagLint.Convert.Rules.ValidateConversionRules.IsStub, Format, Trim
+/// Returns: Errs.ToArray
+/// Complexity: 15 (cyclomatic, outer body), 62 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Convert.Rules.PathExists"/>
+/// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.Add"/>
+/// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.IsStub"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ValidateConversionRules(const ARules: TConversionRuleSet;
   const AFromTree, AToTree: TPropTree): TArray<TRuleError>;
 

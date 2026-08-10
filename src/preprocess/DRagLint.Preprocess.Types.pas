@@ -13,11 +13,22 @@ uses
 
 type
   /// <summary>A lexed chunk: plain text or a recognized compiler directive.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Preprocess.Types.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPChunkKind = (ckText, ckDirective);
 
   /// <summary>One chunk from the directive lexer. Value is set for ckText;
   /// Dir (lowercased keyword) + Args for ckDirective. SrcStart/SrcEnd are byte
   /// offsets into the input; Line is 0-based (matches lexer.js lineAt).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Preprocess, DRagLint.Preprocess.Lexer
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPChunk = record
     Kind    : TPPChunkKind;
     Value   : string ;
@@ -31,6 +42,12 @@ type
   /// <summary>The active define profile for one preprocess run. Defines are
   /// lowercased symbol names; NumericDefines maps a lowercased name to an
   /// integer (for {$IF CompilerVersion >= 37} style checks).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.SetPreprocess (DRagLint.Core.Indexer.pas) (+7 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Index.Closure, DRagLint.Preprocess, DRagLint.Preprocess.Profile, DRagLint.Preprocess.Types
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDefineProfile = record
     Defines       : TArray<string>;
     NumericDefines: TArray<TPair<string, Integer>>;
@@ -59,6 +76,12 @@ type
   /// array[..]-of-T last record field) get the ';' by REPLACING one adjacent
   /// whitespace byte -- offset-identity preserved trivially. Default False
   /// (opt-in, matching preprocess.js options.tolerances).
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), declaration (DRagLint.Preprocess.Types.pas), DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas), declaration (DRagLint.Preprocess.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Preprocess, DRagLint.Preprocess.Types
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPOptions = record
     Profile    : TDefineProfile;
     IncludeMode: string        ;
@@ -72,6 +95,13 @@ type
 /// preprocess.js's options.nearSearch !== false default). Use this instead of
 /// Default(TPPOptions) when constructing options so the widened include search
 /// is on unless a caller explicitly opts out.</summary>
+/// <returns><!-- drag-lint:auto -->Observed: Default(TPPOptions).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: Default
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TPPOptionsDefault: TPPOptions;
 
 implementation

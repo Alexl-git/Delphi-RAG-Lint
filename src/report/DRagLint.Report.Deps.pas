@@ -11,11 +11,22 @@ type
   /// dgUnknown = unresolved/not-indexed unit whose name matched no known
   /// group; dgOther = resolved to a library file that matched no known
   /// group.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDepsGroup = (dgRTL, dgDevExpress, dgSpring4D, dgFireDAC, dgOther, dgUnknown);
 
   /// <summary>Per-external-unit rollup: which project units import it, in
   /// which sections, whether the index resolved it to an actual library
   /// file, and the shortest import chain from any project source.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)
+  /// Used in units: DRagLint.Report.Deps
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDepsExternal = record
     /// <summary>Verbatim external unit name as it appears in the uses clause.</summary>
     UnitName: string;
@@ -42,6 +53,12 @@ type
   end;
 
   /// <summary>One project-unit -&gt; external-unit uses edge.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)
+  /// Used in units: DRagLint.Report.Deps
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDepsEdge = record
     /// <summary>Importing project unit (verbatim uses-clause name of the
     /// source file's own unit, i.e. the file's stem).</summary>
@@ -65,6 +82,12 @@ type
   end;
 
   /// <summary>Whole-report totals.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Report.Deps.pas)
+  /// Used in units: DRagLint.Report.Deps
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDepsSummary = record
     /// <summary>Distinct external units across the whole report.</summary>
     ExternalUnitCount: Integer;
@@ -78,6 +101,12 @@ type
 
   /// <summary>Full third-party dependency report: summary totals, the
   /// per-external rollup, and the flat edge list.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Report.Deps
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDepsReport = record
     Summary: TDepsSummary;
     /// <summary>Sorted: group ascending, then UsedByCount descending, then
@@ -88,6 +117,12 @@ type
   end;
 
   /// <summary>Tuning knobs for BuildDepsReport.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Report.Deps
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDepsOptions = record
     /// <summary>BFS depth cap for shortest-path computation. Default 3.</summary>
     Depth: Integer;
@@ -104,21 +139,68 @@ type
 /// <summary>True when APath is a Delphi library/RTL/3rd-party path (lowercased
 /// path contains '\embarcadero\', '\program files', or '\dcc\'). The canonical
 /// project-vs-library path test; shared with find-unit.</summary>
+/// <param name="APath"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: (Pos('\embarcadero\', L) &gt; 0) or
+/// (Pos('\program files', L) &gt; 0) or (Pos('\dcc\', L) &gt; 0).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.WalkBfs (DRagLint.Report.Deps.pas)
+/// Calls: LowerCase, Pos
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsLibraryPath(const APath: string): Boolean;
 
 /// <summary>Classifies an external unit into a display group by resolved library
 /// path root first, then unit-name prefix (cx*/dx*/dxBar*->DevExpress; Spring.*->
 /// Spring4D; FireDAC.*->FireDAC; System/Winapi/Vcl/FMX/Data/Soap/Xml->RTL).</summary>
+/// <param name="AUnitName"><!-- drag-lint:auto --></param>
+/// <param name="AResolvedPath"><!-- drag-lint:auto --></param>
+/// <param name="AResolved"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: dgUnknown; dgRTL; dgDevExpress; dgSpring4D;
+/// ClassifyByName(AUnitName); dgOther.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas)
+/// Calls: DRagLint.Report.Deps.ClassifyByName, LowerCase, Pos
+/// Complexity: 12 (cyclomatic, outer body), 17 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Report.Deps.ClassifyByName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ClassifyDepsGroup(const AUnitName, AResolvedPath: string; AResolved: Boolean): TDepsGroup;
 
 /// <summary>Lowercase group label for output ('RTL','DevExpress','Spring4D',
 /// 'FireDAC','other','unknown').</summary>
+/// <param name="AGroup"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: 'RTL'; 'DevExpress'; 'Spring4D'; 'FireDAC';
+/// 'other'; 'unknown'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoDepsReport.RenderCsv (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderJson (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas)
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DepsGroupStr(AGroup: TDepsGroup): string;
 
 /// <summary>Builds the third-party dependency report from the index's uses-graph.
 /// Borrows AStores (does not open/free them). Classifies each used unit as project
 /// vs external (unresolved OR library-path), groups externals, and computes the
 /// per-external rollup + the flat edge list + summary. No I/O.</summary>
+/// <param name="AStores"><!-- drag-lint:auto --></param>
+/// <param name="AOpts"><!-- drag-lint:auto --></param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas)
+/// Calls: CompareText, Copy, DRagLint.Report.Deps.GroupOrd, DRagLint.Report.Deps.IsLibraryPath, DRagLint.Report.Deps.LoadFilesAndEdges, DRagLint.Report.Deps.WalkBfs, LowerCase, Pos
+/// Complexity: 30 (cyclomatic, outer body), 181 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Report.Deps.GroupOrd"/>
+/// <seealso cref="DRagLint.Report.Deps.IsLibraryPath"/>
+/// <seealso cref="DRagLint.Report.Deps.LoadFilesAndEdges"/>
+/// <seealso cref="DRagLint.Report.Deps.WalkBfs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildDepsReport(const AStores: TArray<ISymbolStore>;
   const AOpts: TDepsOptions): TDepsReport;
 

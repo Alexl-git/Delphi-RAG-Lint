@@ -11,9 +11,41 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDeadCodeFinder = class
     public
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="AKind"><!-- drag-lint:auto --></param>
+      /// <param name="AIncludePrivate"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: AStore.FindSymbolsWithNoCallers(AKind,
+      /// AIncludePrivate).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)
+      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithNoCallers
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithNoCallers"/>
+      /// <seealso cref="DRagLint.Refactor.DeadCode.TDeadCodeFinder.RenderText"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Find(const AStore: ISymbolStore; const AKind: string; AIncludePrivate: Boolean): TArray<TSymbol>;
+      /// <param name="ASymbols"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: Sb.ToString.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)
+      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+      /// <seealso cref="DRagLint.Refactor.DeadCode.TDeadCodeFinder.Find"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function RenderText(const ASymbols: TArray<TSymbol>; const AStore: ISymbolStore)        : string         ;
   end;
 

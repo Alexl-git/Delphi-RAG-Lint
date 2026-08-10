@@ -5,11 +5,18 @@ interface
 const
   VERSION = '1.2.2-alpha';
 
-/// <summary>TODO: describe.</summary>
-/// <returns>TODO: describe.</returns>
+/// <returns><!-- drag-lint:auto -->Observed: 2; DoIndexAll(Args); DoIndex(Args); DoQuery
+/// (Args); DoRules (Args); DoLint (Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), Config.IndexesFrame.TIndexesFrame.RunEngine (Config.IndexesFrame.pas), Run caller (drag-lint-config.dpr), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas) (+6 more)
+/// Calls: DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext, DRagLint.CLI.DoConvertApply (+79 more)
+/// Complexity: 91 (cyclomatic, outer body), 170 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
+/// <seealso cref="DRagLint.CLI.DoBenchContext"/>
+/// <seealso cref="DRagLint.CLI.DoButterfly"/>
+/// <seealso cref="DRagLint.CLI.DoCallGraph"/>
+/// <seealso cref="DRagLint.CLI.DoCallPath"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;
@@ -9385,7 +9392,9 @@ begin
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
   { ADF Task 8: doc-drift -- store-backed (needs the doc graph + Raises facts);
     ON by default. Its --fix subset is applied in FinalizeAndOutput (Store passed). }
-  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store);
+  { The seealso flag MUST match what `document` wrote the managed blocks under,
+    or the staleness compare measures the option difference, not drift. }
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso);
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   Findings:= Findings + DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths, Cfg.ThresholdFor('duplicate-code', 90));
@@ -9563,7 +9572,9 @@ begin
   { ADF Task 8: doc-drift -- store-backed; ON by default. --fix subset applied in
     FinalizeAndOutput (Store passed below). }
   if (AArgs.Rule = '') or (AArgs.Rule = 'doc-drift') then
-    Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store);
+    { The seealso flag MUST match what `document` wrote the managed blocks under,
+    or the staleness compare measures the option difference, not drift. }
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso);
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,

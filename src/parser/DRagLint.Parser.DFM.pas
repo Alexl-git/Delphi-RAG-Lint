@@ -13,13 +13,63 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDFMParser = class(TInterfacedObject, IParser)
     strict private
       FLanguage: PTSLanguage;
     public
+      /// <summary><!-- drag-lint:auto -->TDFMParser</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Writes: FLanguage
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.FileExtensions"/>
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.LanguageName"/>
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create;
+      /// <returns><!-- drag-lint:auto -->Observed: 'dfm'.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IParser.LanguageName
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Create"/>
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.FileExtensions"/>
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function LanguageName: string                                               ;
+      /// <returns><!-- drag-lint:auto -->Observed: ['.dfm'].</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IParser.FileExtensions
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Create"/>
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.LanguageName"/>
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function FileExtensions: TArray<string>                                     ;
+      /// <param name="ASource"><!-- drag-lint:auto --></param>
+      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSParser.Parse
+      /// Implements: DRagLint.Core.Interfaces.IParser.Parse
+      /// Reads: FLanguage
+      /// Pure
+      /// <seealso cref="DRagLint.Parser.DFM.CollectParseErrors"/>
+      /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
+      /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
+      /// <seealso cref="TreeSitter.TTSParser.Parse"/>
+      /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
   end;
 
@@ -28,6 +78,12 @@ type
   /// HandlerName -- e.g. `object Button1: TButton ... OnClick = Button1Click`
   /// yields (ObjectName='Button1', EventProp='OnClick',
   /// HandlerName='Button1Click'). Produced by ExtractDfmEventBindings.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.WalkProperty (DRagLint.Parser.DFM.pas)
+  /// Used in units: DRagLint.Doc.SymbolFacts, DRagLint.Parser.DFM
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmEventBinding = record
     ObjectName : string;
     EventProp  : string;
@@ -56,6 +112,16 @@ external 'tree-sitter-dfm';
 /// method-name identifier, in document order. Empty for a binary DFM (first
 /// byte $FF -- the text-DFM grammar cannot parse it; mirrors TDFMParser.
 /// Parse's own guard) or a DFM with no event bindings at all.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas)
+/// Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, given, Integer, Move, TreeSitter.TTSParser.Parse
+/// Pure
+/// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
+/// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
+/// <seealso cref="TreeSitter.TTSParser.Parse"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
 
 implementation

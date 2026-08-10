@@ -59,11 +59,21 @@ uses
 /// <param name="ABytes">The preprocessed source bytes; edited in place.</param>
 /// <returns>The number of ';' replacements performed (0 when nothing
 /// matched or no line had an eligible whitespace byte).</returns>
-/// <remarks>Deliberately conservative: Rule A requires an earlier ';' on
+/// <remarks>
+/// Deliberately conservative: Rule A requires an earlier ';' on
 /// the same line AND a declaration-keyword follower; Rule B requires an
 /// 'end' follower. Lines already ending in ';' are never touched. Not
 /// thread-safe with respect to ABytes (in-place edit); the compiled match
-/// patterns are created once per process and are read-only thereafter.</remarks>
+/// patterns are created once per process and are read-only thereafter.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)
+/// Calls: DRagLint.Preprocess.Tolerance.EnsureRegexes, DRagLint.Preprocess.Tolerance.StripCodeLine
+/// Complexity: 27 (cyclomatic, outer body), 83 lines (full implementation)
+/// Mutates: ABytes (var)
+/// <seealso cref="DRagLint.Preprocess.Tolerance.EnsureRegexes"/>
+/// <seealso cref="DRagLint.Preprocess.Tolerance.StripCodeLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyTolerances(var ABytes: TBytes): Integer;
 
 implementation

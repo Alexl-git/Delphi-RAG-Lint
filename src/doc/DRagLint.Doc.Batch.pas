@@ -36,6 +36,12 @@ type
   /// facts-only policy: drop pure all-TODO creates, keep facts-backed or
   /// previously-documented decls. The remaining flags are threaded for later
   /// doc-source tasks and are inert here.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), declaration (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+2 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocBatchOptions = record
     Stubs            : Boolean; // opt-in TODO summaries; default False = facts-only
     /// <summary>v(ADP3 T2): --strip. When True the batch REMOVES engine output
@@ -94,6 +100,12 @@ type
   /// edit does not shift a later declaration's line numbers. DeclCount is the
   /// number of public interface-section documentable declarations considered;
   /// DocCount is how many of them contributed at least one edit.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), declaration (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+3 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocBatchResult = record
     Edits    : TArray<TTextEdit>;
     DeclCount: Integer;
@@ -113,6 +125,12 @@ type
     BlocksRemoved: Integer;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocBatch = class
   public
     /// <summary>Documents every public (interface-section) declaration in
@@ -131,7 +149,21 @@ type
     /// <param name="AUnitFile">Path (relative or absolute) to the unit's source file, as stored/resolvable in the index.</param>
     /// <param name="AOptions">Batch options; Stubs gates the facts-only filter, AccessorTrivialMaxLines/IncludeAccessors gate the trivial-accessor filter.</param>
     /// <returns>Aggregated edits + DeclCount (public decls seen, after the accessor filter) + DocCount (decls contributing an edit) + AccessorsSkipped.</returns>
-    /// <remarks>Not thread-safe; call from the owning thread only.</remarks>
+    /// <remarks>
+    /// Not thread-safe; call from the owning thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Batch.HasManagedBlock, DRagLint.Doc.Batch.IsDocumentableKind, DRagLint.Doc.Batch.IsTrivialAccessor, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Strip.TDocStripper.StripFile, SameText
+    /// Returns: Default(TDocBatchResult)
+    /// Complexity: 12 (cyclomatic, outer body), 109 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Doc.Batch.HasManagedBlock"/>
+    /// <seealso cref="DRagLint.Doc.Batch.IsDocumentableKind"/>
+    /// <seealso cref="DRagLint.Doc.Batch.IsTrivialAccessor"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function DocumentUnit(const AStore: ISymbolStore; const AUnitFile: string;
       const AOptions: TDocBatchOptions): TDocBatchResult;
 
@@ -146,7 +178,20 @@ type
     /// <param name="AProjectFile">Path to the .dpr or .dproj whose closure to document.</param>
     /// <param name="AOptions">Batch options; Stubs gates the facts-only filter.</param>
     /// <returns>Aggregated edits over the closure + summed DeclCount/DocCount.</returns>
-    /// <remarks>Not thread-safe; call from the owning thread only.</remarks>
+    /// <remarks>
+    /// Not thread-safe; call from the owning thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas)
+    /// Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve
+    /// Returns: AggregateOverFiles(AStore, CR.Files, AOptions)
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
+    /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Resolve"/>
+    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentAll"/>
+    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentUnit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function DocumentProject(const AStore: ISymbolStore; const AProjectFile: string;
       const AOptions: TDocBatchOptions): TDocBatchResult;
 
@@ -158,7 +203,19 @@ type
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AOptions">Batch options; Stubs gates the facts-only filter.</param>
     /// <returns>Aggregated edits over the whole index + summed DeclCount/DocCount.</returns>
-    /// <remarks>Not thread-safe; call from the owning thread only.</remarks>
+    /// <remarks>
+    /// Not thread-safe; call from the owning thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas)
+    /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Batch.AggregateOverFiles
+    /// Returns: AggregateOverFiles(AStore, Paths.ToArray, AOptions)
+    /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
+    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentProject"/>
+    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentUnit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function DocumentAll(const AStore: ISymbolStore;
       const AOptions: TDocBatchOptions): TDocBatchResult;
   end;

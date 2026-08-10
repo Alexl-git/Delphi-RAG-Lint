@@ -18,6 +18,18 @@ uses
 /// <param name="AStore">Open symbol store to query.</param>
 /// <returns>A new TJSONObject { qname, implementations[], resolved_at[],
 /// event_handlers[] }. The caller owns and must free it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
+/// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDiResolveSites, DRagLint.Core.Interfaces.ISymbolStore.FindEventHandlersForForm, DRagLint.Core.Interfaces.ISymbolStore.FindImplementationsOf, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath
+/// Returns: TJSONObject.Create
+/// Pure
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDiResolveSites"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindEventHandlersForForm"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindImplementationsOf"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildWiringJson(const AQName: string;
   const AStore: ISymbolStore): TJSONObject;
 

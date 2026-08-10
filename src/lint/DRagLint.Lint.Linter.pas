@@ -18,13 +18,59 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), declaration (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas), declaration (DRagLint.MCP.Server.pas) (+1 more)
+  /// Used in units: DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLinter = class
     strict private
       FLanguage  : PTSLanguage                                             ;
       FQueryRules: TArray<TQueryRule>                                      ;
+      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)
+      /// Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, ExtractFileExt, Integer, Move, object, SameText, TreeSitter.TTSParser.Parse
+      /// Reads: FLanguage, FQueryRules
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+      /// <seealso cref="DRagLint.Lint.Linter.CheckDfmCredentials"/>
+      /// <seealso cref="DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs"/>
+      /// <seealso cref="DRagLint.Lint.Linter.CollectDfmParseErrors"/>
+      /// <seealso cref="DRagLint.Lint.Linter.EmptyBranchIsCommented"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function CheckFileImpl(const AFilePath: string): TArray<TLintFinding>;
     public
+      /// <summary><!-- drag-lint:auto -->TLinter</summary>
+      /// <param name="ARulesDir"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+73 more)
+      /// Calls: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll, ParamStr
+      /// Reads: FLanguage   Writes: FLanguage, FQueryRules
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Destroy"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.ExternalRuleCount"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(const ARulesDir: string = '');
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Reads: FQueryRules
+      /// Pure
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.ExternalRuleCount"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.LintFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
       /// <summary>Lints a single file, dispatching by extension. A <c>.dfm</c> is parsed
       /// with the tree-sitter DFM grammar and only genuine grammar errors surface (as
@@ -32,12 +78,63 @@ type
       /// through the built-in walks plus the external <c>.scm</c> query rules.</summary>
       /// <param name="AFilePath">Path to an existing file.</param>
       /// <returns>All findings for the file; empty array if clean.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
+      /// Calls: DRagLint.Lint.Linter.TLinter.CheckFileImpl
+      /// Returns: CheckFileImpl(AFilePath)
+      /// Pure
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Destroy"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.ExternalRuleCount"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function LintFile(const AFilePath: string): TArray<TLintFinding>                          ;
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="ARecursive"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: All.ToArray.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
+      /// Calls: DRagLint.Lint.Linter.TLinter.CheckFileImpl, Format, Writeln
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Destroy"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.ExternalRuleCount"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function LintFolder(const APath: string; ARecursive: Boolean = True): TArray<TLintFinding>;
+      /// <returns><!-- drag-lint:auto -->Observed: Length(FQueryRules).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Reads: FQueryRules
+      /// Pure
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Destroy"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.LintFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ExternalRuleCount: Integer                                                       ;
       /// <summary>Rule ids of loaded .scm rules whose sidecar json declared
       /// "enabled": false (ship off-by-default). Findings from these are dropped
       /// downstream unless re-enabled via config "enabled" / --enable.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Reads: FQueryRules
+      /// Pure
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Destroy"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.ExternalRuleCount"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.LintFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function DefaultDisabledRuleIds: TArray<string>                                          ;
   end;
 

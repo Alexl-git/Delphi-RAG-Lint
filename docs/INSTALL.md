@@ -10,7 +10,7 @@ SQLite index, no cloud, no Python/Node at runtime.
 |---|---|---|
 | `drag-lint.exe` | The engine: indexer, query CLI, and the LSP server the plugin talks to | next to the plugin BPL |
 | `dclDragLintWizard.bpl` | The RAD Studio IDE plugin (menu, dock panel, hover, diagnostics) | `third_party\dll-win32\` |
-| `drag-lint-library.sqlite` | The shared **library** index (RTL/VCL/DevExpress/Spring4D/…) | next to the BPL |
+| `library-Win32.sqlite` / `library-Win64.sqlite` | The shared **library** index (RTL/VCL/DevExpress/Spring4D/…), one per platform | `C:\Projects\.drag-lint\` (also read next to the BPL) |
 | `drag_lint_graph.exe` | Standalone graph viewer | next to the BPL (already copied) |
 | `DragLintGraph*.bpl` (×3) | Graph **component** packages (optional — to drop the graph control on your own forms) | `Delphi-RAG-Lint-Graph\bin\Win32\` |
 
@@ -107,11 +107,17 @@ drag-lint index "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" --db "C:\Projec
 
 ### b) Library DB (shallow — definitions/calls, queried by the AI/hover)
 ```
-drag-lint index --scan-libraries --db "third_party\dll-win32\drag-lint-library.sqlite"
+drag-lint index --scan-libraries --db "C:\Projects\.drag-lint\library-Win32.sqlite"
+drag-lint index --scan-libraries --db "C:\Projects\.drag-lint\library-Win64.sqlite"
 ```
 - Defaults **shallow** (no usage refs) — usage refs would ~double the ~1.3 GB
   library DB, and you query libraries by *definition/call*, not usage.
 - Includes `.inc` files (so include-file symbols like `csmRed` are findable).
+- **One library DB per platform.** The IDE plugin looks for `library-Win32.sqlite`
+  then `library-Win64.sqlite` beside the BPL, and still falls back to the legacy
+  single-file `drag-lint-library.sqlite` if neither exists, so older installs keep
+  working (`DRagLint.Plugin.DbResolver`). New installs should build the
+  per-platform pair.
 
 ### c) One command for everything: `index --all`
 drag-lint reads a named-index manifest (`drag-lint.json`, with `settings` +

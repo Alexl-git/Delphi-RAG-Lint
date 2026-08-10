@@ -31,6 +31,24 @@ type
       // Compare .dproj <DCCReference Include="..."/> entries vs the matching
       // .dpr/.dpk's `uses` clause. Returns findings for every unit that is
       // present on one side but not the other.
+      /// <summary><!-- drag-lint:auto -->Compare .dproj &lt;DCCReference
+      /// Include="..."/&gt; entries vs the matching .dpr/.dpk's `uses` clause. Returns
+      /// findings for every unit that is present on one side but not the other.</summary>
+      /// <param name="ADprojPath"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: Findings.ToArray.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
+      /// Calls: Default, DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames, DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences, ExtractFileName, ExtractFilePath, Format, SameText, StartsText
+      /// Complexity: 24 (cyclomatic, outer body), 96 lines (full implementation)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.NormUnit"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CheckUnitsInDpr( const ADprojPath: string): TArray<TLintFinding>;
       /// <summary>Flags every `uses X` whose unit X resolves to no known unit
       /// (project member / platform library / standard alias / RTL namespace).
@@ -39,6 +57,21 @@ type
       /// <param name="AStore">Open project symbol store (the project scope).</param>
       /// <param name="ALibDbPath">Platform library SQLite DB; '' skips the library source.</param>
       /// <returns>One warning per unresolvable used unit.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
+      /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems, ExtractFileName, Format, LowerCase, StartsText
+      /// Returns: nil; Findings.ToArray
+      /// Complexity: 10 (cyclomatic, outer body), 163 lines (full implementation)
+      /// SQL: reads FILES
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.NormUnit"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CheckUsedUnitResolvable(const AStore: ISymbolStore;
         const ALibDbPath: string): TArray<TLintFinding>;
   end;

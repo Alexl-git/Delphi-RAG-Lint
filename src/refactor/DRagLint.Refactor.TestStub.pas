@@ -11,10 +11,35 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas), declaration (DRagLint.Refactor.TestStub.pas), DRagLint.Refactor.TestStub.TTestStubGenerator.Generate (DRagLint.Refactor.TestStub.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTestFramework = (tfDUnitX, tfDUnit);
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTestStubGenerator = class
     public
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="AQName"><!-- drag-lint:auto --></param>
+      /// <param name="AFramework"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: ''; Sb.ToString.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas)
+      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Refactor.TestStub.TSG_LastSegment, DRagLint.Refactor.TestStub.TSG_SecondLastSegment
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.Refactor.TestStub.TSG_LastSegment"/>
+      /// <seealso cref="DRagLint.Refactor.TestStub.TSG_SecondLastSegment"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Generate(const AStore: ISymbolStore; const AQName: string; AFramework: TTestFramework): string;
   end;
 

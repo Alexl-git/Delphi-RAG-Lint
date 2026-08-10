@@ -47,7 +47,8 @@ type
     /// <param name="AFileId">File id within AStore (ignored when AStore=nil).</param>
     /// <returns>Array of findings (all severity 'info'); empty when the file is
     /// clean or could not be parsed.</returns>
-    /// <remarks>Thread-safe if the parse cache is thread-safe for the caller's
+    /// <remarks>
+    /// Thread-safe if the parse cache is thread-safe for the caller's
     /// use pattern; the checker itself has no shared mutable state.
     /// Prefix matching is case-SENSITIVE (so a 'PName' param fails the lowercase
     /// 'p' ParamPrefix and is flagged). The field-name-prefix guard is
@@ -58,7 +59,15 @@ type
     /// local-var-casing fires only for variables declared inside a defProc body
     /// (not unit-level var sections or class fields).
     /// unit-name-matches-file fires when the unit name differs from the file
-    /// base name (case-insensitive); program/library roots are skipped.</remarks>
+    /// base name (case-insensitive); program/library roots are skipped.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: abbreviations, all, body, ChangeFileExt, CharInSet, checked, ChildByField, COMPARED, contract, Copy (+61 more)
+    /// Returns: nil; Deduped.ToArray
+    /// Pure
+    /// <seealso cref="DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const ANaming: TNamingConfig;
       const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
   end;

@@ -19,6 +19,12 @@ type
   /// <summary>Outcome of one compile run: the parsed findings, the compiler
   /// process exit code (0 = clean), and the raw merged stdout/stderr text (kept
   /// for diagnostics and fallback parsing).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), declaration (DRagLint.Diagnostics.CompileCheck.pas) (+2 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Diagnostics.CompileCheck
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCompileCheckResult = record
     Findings  : TArray<TCompilerFinding>;
     ExitCode  : Integer                 ;
@@ -27,10 +33,16 @@ type
 
   /// <summary>Compiles a Delphi target out-of-process and turns the compiler's
   /// textual output into structured findings.</summary>
-  /// <remarks>Stateless and thin (class methods only): spawn -> capture -> parse.
+  /// <remarks>
+  /// Stateless and thin (class methods only): spawn -> capture -> parse.
   /// Used by the CLI compile-check / check-unit / ghost-check commands and the
   /// IDE plugin's live + ghost compile. Not thread-safe (shares no instance
-  /// state, but each call spawns a process and reads its pipe synchronously).</remarks>
+  /// state, but each call spawns a process and reads its pipe synchronously).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas) (+1 more)
+  /// Used in units: DRagLint.CLI, DRagLint.MCP.Server
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCompileChecker = class
     public
       /// <summary>Compiles ATarget and returns the parsed compiler findings.</summary>
@@ -46,47 +58,167 @@ type
       /// dedup, existence-filter) to avoid cmdline overflow, and injected via DCC_UnitSearchPath
       /// env var. Empty string means use the .dproj default (typically Win64).</param>
       /// <returns>Findings, raw stdout, and the compiler exit code.</returns>
-      /// <remarks>By default runs an INCREMENTAL compile (msbuild /t:Make; dcc64
+      /// <remarks>
+      /// By default runs an INCREMENTAL compile (msbuild /t:Make; dcc64
       /// without -B): only changed units and their dependents are recompiled, so it
       /// is fast on large projects. Units that fail to compile lack a valid DCU and
       /// are always re-checked, so current errors are never skipped. Pass
       /// AFullBuild=True to force msbuild /t:Build (or dcc64 -B), recompiling every
       /// unit so findings are reported even for units DCC would otherwise skip as
-      /// already up to date. Not thread-safe.</remarks>
+      /// already up to date. Not thread-safe.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ? (+2 more)
+      /// Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture, ExtractFileExt, Format, LowerCase, PChar, SameText, SetEnvironmentVariable
+      /// Returns: Default(TCompileCheckResult)
+      /// Complexity: 17 (cyclomatic, outer body), 103 lines (full implementation)
+      /// Pure
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Run(const ATarget: string; const AFullBuild: Boolean = False; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''; const ATargetPlatform: string = ''): TCompileCheckResult;
       /// <summary>Runs an arbitrary, already-shell-wrapped compiler command line
       /// (a cmd.exe invocation that calls rsvars then dcc and merges stderr) and
       /// parses its findings.</summary>
       /// <param name="ACmd">The full command line to execute.</param>
       /// <returns>Parsed findings, raw output, and the exit code.</returns>
-      /// <remarks>Used by check-unit for the single-unit shadow-overlay compile.</remarks>
+      /// <remarks>
+      /// Used by check-unit for the single-unit shadow-overlay compile.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas)
+      /// Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture
+      /// Returns: Default(TCompileCheckResult)
+      /// Pure
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function RunCommand(const ACmd: string): TCompileCheckResult;
       /// <summary>Parses one line of compiler output into a finding.</summary>
       /// <param name="ALine">A single output line.</param>
       /// <param name="AFinding">Receives the parsed finding when the line matches.</param>
       /// <returns>True if the line was a recognized finding.</returns>
-      /// <remarks>Recognizes the RAD Studio msbuild dcc wrapper format
+      /// <remarks>
+      /// Recognizes the RAD Studio msbuild dcc wrapper format
       /// (path(line[,col]): severity code: message) and the native dcc64 format
-      /// (path(line) Severity: code message).</remarks>
+      /// (path(line) Severity: code message).
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas)
+      /// Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SeverityFromCode, letter, StrToIntDef, Trim, word
+      /// Returns: False; True
+      /// Mutates: AFinding (out)
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.SeverityFromCode"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ParseLine(const ALine: string; out AFinding: TCompilerFinding): Boolean;
       /// <summary>Persists findings into the symbol DB, resolving each finding's
       /// path to a files.id where it is indexed (NULL file_id otherwise).</summary>
       /// <param name="AStore">Open symbol store to insert into.</param>
       /// <param name="AFindings">Findings to persist.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
+      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.InsertCompilerFinding
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.InsertCompilerFinding"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class procedure InsertFindings(const AStore: ISymbolStore; const AFindings: TArray<TCompilerFinding>);
     private
       /// <summary>Resolve IDE library paths for a given platform from the registry,
       /// minimized to compiled-DCU dirs (deduped and existence-filtered) to fit the
       /// command-line limit. Returns a semicolon-separated path list, or empty if
       /// none found or any error occurs (best-effort).</summary>
+      /// <param name="APlatform"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)
+      /// Calls: blanked, dirs, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf, filter, flags, GetShortPathName, long, LowerCase, Pos, PWideChar, SetString, StringReplace, Trim, Win32
+      /// Complexity: 14 (cyclomatic, outer body), 103 lines (full implementation)
+      /// Touches: file system, registry
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ResolveIdeLibraryPath(const APlatform: string): string;
       /// <summary>Spawns ACmd via CreateProcessW with stdout+stderr redirected;
       /// optionally applies an environment variable block (for DCC_UnitSearchPath injection);
       /// returns the process exit code and the merged output in AOutput.</summary>
+      /// <param name="ACmd"><!-- drag-lint:auto --></param>
+      /// <param name="AEnvBlock"><!-- drag-lint:auto --></param>
+      /// <param name="AOutput"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: -1; Integer(ExitCode).</returns>
+      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas)
+      /// Calls: AnsiString, CloseHandle, CreatePipe, CreateProcessW, FillChar, GetExitCodeProcess, GetStdHandle, Integer, PWideChar, ReadFile, SetHandleInformation, UniqueString, WaitForSingleObject
+      /// Mutates: AOutput (out)
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function SpawnAndCapture(const ACmd: string; AEnvBlock: Pointer; out AOutput: string): Integer;
       /// <summary>Canonicalizes a raw severity word (error/fatal/warning/hint/
       /// information) to 'Error'/'Warning'/'Hint'/'Information'.</summary>
+      /// <param name="ARaw"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: 'Error'; 'Warning'; 'Hint';
+      /// 'Information'; ARaw.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine (DRagLint.Diagnostics.CompileCheck.pas)
+      /// Calls: LowerCase
+      /// Pure
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function NormalizeSeverity(const ARaw: string): string;
+      /// <summary><!-- drag-lint:auto -->Maps a DCC message code (e.g. 'H2219', 'W1000',
+      /// 'E2003', 'F2613') to its severity WORD via the leading letter -- H-&gt;hint,
+      /// W-&gt;warning, E/F-&gt;error. The code letter is authoritative for msbuild lines
+      /// like "Hint warning H2219" where the severity word ("warning") disagrees with the
+      /// real severity (Hint). Falls back to AFallbackWord when the code is
+      /// empty/unrecognized.</summary>
+      /// <param name="ACode"><!-- drag-lint:auto --></param>
+      /// <param name="AFallbackWord"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: 'hint'; 'warning'; 'error';
+      /// AFallbackWord.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine (DRagLint.Diagnostics.CompileCheck.pas)
+      /// Calls: UpCase
+      /// Pure
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
+      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function SeverityFromCode(const ACode, AFallbackWord: string): string;
   end;
 

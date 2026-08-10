@@ -36,6 +36,14 @@ uses
 /// <param name="APlatform">'Win64' or 'Win32' (case-insensitive). Empty or
 /// unknown defaults to Win64.</param>
 /// <returns>Lowercased built-in define names.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas)
+/// Calls: SameText
+/// Owns returned: new (caller owns)
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlatformBuiltins(const APlatform: string): TArray<string>;
 
 /// <summary>Resolves the active TDefineProfile for a specific project + config:
@@ -53,6 +61,17 @@ function PlatformBuiltins(const APlatform: string): TArray<string>;
 /// treated as Release).</param>
 /// <returns>The resolved define profile (Defines populated, deduped,
 /// lowercased).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas)
+/// Calls: DRagLint.Preprocess.Profile.AddDccDefines, DRagLint.Preprocess.Profile.CfgAliasFor, DRagLint.Preprocess.Profile.DccDefineInGroup, DRagLint.Preprocess.Profile.PlatformBuiltins
+/// Touches: file system
+/// <seealso cref="DRagLint.Preprocess.Profile.AddDccDefines"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.CfgAliasFor"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.DccDefineInGroup"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.PlatformBuiltins"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProfileFromDproj(const ADprojPath, APlatform, AConfig: string): TDefineProfile;
 
 implementation

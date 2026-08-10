@@ -25,9 +25,20 @@ uses
 
 type
   /// <summary>Governs how projects are partitioned when building indexes.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Index.Manifest.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectsIndexing = (piPerProject, piPerGroup, piSingle);
 
   /// <summary>Top-level settings block from the drag-lint manifest.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas)
+  /// Used in units: DRagLint.Index.Manifest
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIndexSettings = record
     /// <summary>How project folders map to index DBs.</summary>
     CurrentProjectsIndexing: TProjectsIndexing;
@@ -45,10 +56,23 @@ type
     /// Override via CLI: --max-file-kb N (0 = unlimited).</summary>
     MaxParseFileKB: Integer;
     /// <summary>Returns a record with all fields set to their documented defaults.</summary>
+    /// <returns><!-- drag-lint:auto -->Observed: Default(TIndexSettings).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: Default
+    /// Pure
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Defaults: TIndexSettings; static;
   end; // record
 
   /// <summary>Doc-generation settings, parsed from the manifest 'docs' object.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas)
+  /// Used in units: DRagLint.Index.Manifest
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocSettings = record
     /// <summary>Max distinct return cases enumerated in a generated &lt;returns&gt;
     /// (the "Observed: ..." list). Default 20. 0 or negative disables enumeration
@@ -79,14 +103,42 @@ type
     /// next `document` run with no reindex required.</summary>
     ComplexityMin: Integer;
     /// <summary>Record with all fields at documented defaults (MaxReturnCases=20, MaxCallers=5, AccessorTrivialMaxLines=2, ComplexityMin=10).</summary>
+    /// <returns><!-- drag-lint:auto -->Observed: Default(TDocSettings).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: Default
+    /// Pure
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Defaults: TDocSettings; static;
   end; // record
 
   /// <summary>Which top-level settings keys were explicitly present in a parsed JSON block.
   /// Used by the merge logic to distinguish "absent" (keep global) from "present but default".</summary>
+  /// <param name="skCurrentProjectsIndexing"><!-- drag-lint:auto --></param>
+  /// <param name="skDefaultPlatform"><!-- drag-lint:auto --></param>
+  /// <param name="skSizeGuardMB"><!-- drag-lint:auto --></param>
+  /// <param name="skEnginePath"><!-- drag-lint:auto --></param>
+  /// <param name="skMaxJobs"><!-- drag-lint:auto --></param>
+  /// <param name="skMaxParseFileKB"><!-- drag-lint:auto --></param>
+  /// <param name="skMaxReturnCases"><!-- drag-lint:auto --></param>
+  /// <param name="skMaxCallers"><!-- drag-lint:auto --></param>
+  /// <param name="skAccessorTrivialMaxLines"><!-- drag-lint:auto --></param>
+  /// <param name="skComplexityMin"><!-- drag-lint:auto --></param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), declaration (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases, skMaxCallers, skAccessorTrivialMaxLines, skComplexityMin );
 
   /// <summary>Describes one named index section within the manifest.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.CLI.DetectPlatformFromDproj (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), declaration (DRagLint.Index.Manifest.pas) (+7 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.Manifest, DRagLint.Index.Plan
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIndexSection = record
     /// <summary>Unique human-readable name used to identify and reference this section.</summary>
     Name: string;
@@ -114,6 +166,12 @@ type
   end; // record
 
   /// <summary>Complete parsed and merged manifest for a drag-lint installation.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas) (+20 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Manifest, DRagLint.Index.Plan
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIndexManifest = record
     /// <summary>Absolute directory of the resolved config file (used to expand relative paths).</summary>
     RootDir: string;
@@ -132,10 +190,25 @@ type
     /// <param name="AName">Section name to look up.</param>
     /// <param name="ASection">Receives a copy of the matched section.</param>
     /// <returns>True if found; False otherwise.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Index.Manifest.TManifestIO.Validate (DRagLint.Index.Manifest.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)
+    /// Calls: Default, SameText
+    /// Returns: True; False
+    /// Reads: Sections
+    /// Mutates: ASection (out)
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FindSection(const AName: string; out ASection: TIndexSection): Boolean;
   end; // record
 
   /// <summary>Load, parse, validate and save drag-lint index manifests.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+11 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Manifest
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TManifestIO = class
     public
       /// <summary>Load and merge: reads the global config beside AEngineDir, then
@@ -146,12 +219,39 @@ type
       /// <param name="AStartDir">Directory to begin the upward local-config search.</param>
       /// <returns>Merged TIndexManifest. RootDir is set to the local config dir if found,
       /// else to AEngineDir.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas) (+7 more)
+      /// Calls: branch, Default, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, GlobalExclude, SameText, Writeln
+      /// Returns: Default(TIndexManifest); GlobalManifest; LocalManifest
+      /// Complexity: 24 (cyclomatic, outer body), 129 lines (full implementation)
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load.MergeSections"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ToJson"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Load(const AEngineDir, AStartDir: string): TIndexManifest; static;
 
       /// <summary>Parse a manifest from JSON text and set RootDir to ARootDir.</summary>
       /// <param name="AJson">Raw JSON string (UTF-8 or ASCII).</param>
       /// <param name="ARootDir">Absolute directory associated with this JSON (used for relative paths).</param>
       /// <returns>Populated TIndexManifest.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas) (+3 more)
+      /// Calls: DRagLint.Index.Manifest.TManifestIO.ParseTextEx
+      /// Returns: ParseTextEx(AJson, ARootDir, Keys)
+      /// Pure
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ToJson"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Validate"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ParseText(const AJson, ARootDir: string): TIndexManifest; static;
 
       /// <summary>Parse a manifest from JSON text, also returning which top-level settings
@@ -160,6 +260,20 @@ type
       /// <param name="ARootDir">Absolute directory associated with this JSON (used for relative paths).</param>
       /// <param name="ASettingsKeys">Receives the set of settings keys that were present.</param>
       /// <returns>Populated TIndexManifest.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas)
+      /// Calls: Default, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, guard, Include, TJSONArray, TJSONObject
+      /// Returns: Default(TIndexManifest)
+      /// Complexity: 25 (cyclomatic, outer body), 131 lines (full implementation)
+      /// Mutates: ASettingsKeys (out)
+      /// <seealso cref="DRagLint.Index.Manifest.JsonStrArr"/>
+      /// <seealso cref="DRagLint.Index.Manifest.ParseProjectsIndexing"/>
+      /// <seealso cref="DRagLint.Index.Manifest.ParseSection"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ParseTextEx(const AJson, ARootDir: string; out ASettingsKeys: TSettingsKeySet): TIndexManifest; static;
 
       /// <summary>Serialise AManifest to a JSON object. Caller owns the returned object and
@@ -167,27 +281,72 @@ type
       /// DedupAgainst ['*'] is emitted as the bare string "*".</summary>
       /// <param name="AManifest">Manifest to serialise.</param>
       /// <returns>New TJSONObject; caller must free.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Save (DRagLint.Index.Manifest.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas) ?
+      /// Calls: DRagLint.Index.Manifest.ProjectsIndexingToStr
+      /// Returns: TJSONObject.Create
+      /// Complexity: 12 (cyclomatic, outer body), 100 lines (full implementation)
+      /// Owns returned: new (caller owns)
+      /// Pure
+      /// <seealso cref="DRagLint.Index.Manifest.ProjectsIndexingToStr"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ToJson(const AManifest: TIndexManifest): TJSONObject; static;
 
       /// <summary>Serialise AManifest to a .drag-lint.json file at APath.</summary>
       /// <param name="AManifest">Manifest to write.</param>
       /// <param name="APath">Destination file path.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: DRagLint.Index.Manifest.TManifestIO.ToJson
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ToJson"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Validate"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class procedure Save(const AManifest: TIndexManifest; const APath: string); static;
 
       /// <summary>Validate the manifest and return the first human-readable error,
       /// or '' if the manifest is valid.</summary>
       /// <param name="AManifest">Manifest to validate.</param>
       /// <returns>Empty string if valid; first error message otherwise.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas)
+      /// Calls: DRagLint.Index.Manifest.TIndexManifest.FindSection, Format
+      /// Returns: ''; Format('Section %d has an empty name', [I]); Format('Duplicate section name: "%s"', [Sec.Name]); Format('Section "%s" has no include paths and source is not registry-libraries', [Sec.Name]); Format('Section "%s" dedupAgainst references unknown section "%s"', [Sec.Name, DA])
+      /// Complexity: 14 (cyclomatic, outer body), 63 lines (full implementation)
+      /// Pure
+      /// <seealso cref="DRagLint.Index.Manifest.TIndexManifest.FindSection"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Validate(const AManifest: TIndexManifest): string; static;
   end;
 
 type
   /// <summary>Outcome of resolving a PROJECT FILE to the manifest section that
   /// owns it.</summary>
-  /// <remarks>Three outcomes, not two, because the caller must be able to tell
+  /// <remarks>
+  /// Three outcomes, not two, because the caller must be able to tell
   /// "no section owns this project" from "several claim it". Collapsing either
   /// onto a chosen DB is what made a project-scoped rebuild destructive: the
-  /// wrong DB gets cleared and refilled, and the right one is never written.</remarks>
+  /// wrong DB gets cleared and refilled, and the right one is never written.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Index.Manifest.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectDbMatch = (
     /// <summary>No section's include list names this project file.</summary>
     pdmNone,
@@ -212,11 +371,11 @@ type
 /// pdmNone. Give these to the user verbatim; they are the manifest edit needed
 /// to fix an ambiguity.</param>
 /// <returns>pdmUnique, pdmNone or pdmAmbiguous.</returns>
-/// <remarks>Only include entries whose extension is .dpr or .dproj are
+/// <remarks>
+/// Only include entries whose extension is .dpr or .dproj are
 /// considered, so FOLDER sections (Library, SQL, a whole-tree union) can never
 /// match here and keep whatever folder-prefix behaviour the caller applies as
 /// its fallback.
-///
 /// This exists because folder-prefix matching CANNOT distinguish sibling
 /// projects. Several sections legitimately share one directory
 /// (ORM3\PACKAGE holds Interfaces.dproj and TestMicroniteObjects.dproj;
@@ -224,8 +383,17 @@ type
 /// each include down to its folder sees one identical key for all of them and
 /// silently keeps whichever came first. Harmless while indexing was additive;
 /// data loss once the caller passes --rebuild, which clears the whole DB.
-///
-/// Pure: no file system access, no globals. Safe to call from any thread.</remarks>
+/// Pure: no file system access, no globals. Safe to call from any thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas)
+/// Calls: DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.NormalizeProjectPath, ExtractFileExt, SameText
+/// Returns: pdmNone; pdmUnique
+/// Complexity: 10 (cyclomatic, outer body), 43 lines (full implementation)
+/// Mutates: ADb (out), AClaimants (out)
+/// <seealso cref="DRagLint.Index.Manifest.ExpandSectionDb"/>
+/// <seealso cref="DRagLint.Index.Manifest.NormalizeProjectPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: string;
   out ADb: string; out AClaimants: TArray<string>): TProjectDbMatch;
 
@@ -236,13 +404,22 @@ function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: s
 /// <param name="AFilePath">File whose covering section is wanted.</param>
 /// <returns>Absolute DB path of the longest-matching section, or '' when no
 /// section's include folder is an ancestor.</returns>
-/// <remarks>A .dpr/.dproj include is folded to ITS FOLDER here on purpose -- this
+/// <remarks>
+/// A .dpr/.dproj include is folded to ITS FOLDER here on purpose -- this
 /// is the coarse fallback used for an ordinary .pas, which no exact rule can
 /// place. Ties go to the FIRST section (the comparison is a strict '&gt;'), which
 /// is precisely why this must not be the only rule once two projects share a
 /// folder: see ResolveProjectDb and ResolveReadDbs.
-///
-/// Pure: no file system access. Safe to call from any thread.</remarks>
+/// Pure: no file system access. Safe to call from any thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas)
+/// Calls: DRagLint.Index.Manifest.ExpandSectionDb, ExpandFileName, ExtractFileExt, ExtractFilePath, IncludeTrailingPathDelimiter, LowerCase, Pos, SameText
+/// Returns: ''; ExpandSectionDb(AManifest, Sec)
+/// Complexity: 13 (cyclomatic, outer body), 39 lines (full implementation)
+/// Touches: file system
+/// <seealso cref="DRagLint.Index.Manifest.ExpandSectionDb"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveFolderDb(const AManifest: TIndexManifest; const AFilePath: string): string;
 
 /// <summary>Ordered list of DBs a READER (hover, Find Usages, LSP) should open
@@ -255,36 +432,48 @@ function ResolveFolderDb(const AManifest: TIndexManifest; const AFilePath: strin
 /// <returns>Up to two paths: the active project's DB first (when it resolves
 /// uniquely), then the folder-matched DB for AEditorFile when that is different.
 /// Either may be absent; the result may be empty.</returns>
-/// <remarks>ORDER IS THE ANSWER, and both entries earn their place.
-///
+/// <remarks>
+/// ORDER IS THE ANSWER, and both entries earn their place.
 /// The active project comes FIRST because the editor file alone cannot decide:
 /// ORM3's COMMON\ units belong to BOTH the client and the server project, so a
 /// folder rule answers such a file from whichever section happens to be listed
 /// first, no matter what the developer is actually building. The active project
 /// is the only signal available here that says which of several equally valid
 /// answers is the wanted one.
-///
 /// The folder match is KEPT, not replaced, because the editor file is often
 /// outside the active project entirely -- browsing library or third-party source
 /// with a project open is routine. Dropping it would trade wrong answers for no
 /// answers on exactly those files. A reader passes both to the engine and the
 /// first DB that can answer does.
-///
 /// Deliberately NOT file-to-project membership, which is the fully correct key
 /// and needs the index to say which project claims a given .pas. That is a
 /// larger mechanism and its own task; the active project gets the common case
 /// right at a fraction of the cost.
-///
-/// Pure: no file system access. Safe to call from any thread.</remarks>
+/// Pure: no file system access. Safe to call from any thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas)
+/// Calls: DRagLint.Index.Manifest.ResolveFolderDb, DRagLint.Index.Manifest.ResolveProjectDb, project, SameText
+/// Pure
+/// <seealso cref="DRagLint.Index.Manifest.ResolveFolderDb"/>
+/// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveReadDbs(const AManifest: TIndexManifest;
   const AActiveProjectFile, AEditorFile: string): TArray<string>;
 
 type
   /// <summary>"Does the index at ADbPath contain a files row for AFilePath?"</summary>
-  /// <remarks>A callback so the ordering rules stay pure and testable while the
+  /// <param name="ADbPath"><!-- drag-lint:auto --></param>
+  /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+  /// <remarks>
+  /// A callback so the ordering rules stay pure and testable while the
   /// actual SQL lives with the storage layer. Implementations must normalise both
   /// sides the way the store does (DRagLint.Storage.FileMembership.DbContainsFile
-  /// is the real one).</remarks>
+  /// is the real one).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Index.Manifest.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDbContainsFileFunc = reference to function(const ADbPath, AFilePath: string): Boolean;
 
 /// <summary>Reorders candidate DBs so the ones that ACTUALLY CONTAIN AFilePath
@@ -299,24 +488,29 @@ type
 /// returned unchanged.</param>
 /// <returns>A permutation of ACandidates -- same members, never fewer. Callers
 /// that read only Result[0] get the DB that can actually answer.</returns>
-/// <remarks>WHY MEMBERSHIP AND NOT "WHICH PROJECT IS ACTIVE".
-///
+/// <remarks>
+/// WHY MEMBERSHIP AND NOT "WHICH PROJECT IS ACTIVE".
 /// Preferring the active project (the previous rule) is right for a file INSIDE
 /// that project and wrong for every other file. Most consumers pass the whole
 /// list to the engine and are unharmed, but a consumer that reads only the first
 /// entry -- TDragLintStructureForm.ResolveDbForFile -- then queries an index that
 /// does not contain the open file at all, and gets silence rather than an error.
 /// "Callers tolerate an extra DB" only holds for callers that read more than one.
-///
 /// The active project stays as the TIEBREAK because membership genuinely is not
 /// unique: ORM3's COMMON\ units belong to the client AND the server closure, so
 /// two DBs legitimately contain the same file and something has to choose.
-///
 /// Order is otherwise STABLE, so the existing preference survives among equals
 /// and the no-match case is byte-identical to the old behaviour -- which is what
 /// keeps library-source browsing working.
-///
-/// Pure apart from AContains. Cost is one probe per candidate (small list).</remarks>
+/// Pure apart from AContains. Cost is one probe per candidate (small list).
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas)
+/// Calls: AContains, closures, SameText
+/// Returns: ACandidates; Holders + Others
+/// Complexity: 11 (cyclomatic, outer body), 49 lines (full implementation)
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OrderDbsByMembership(const ACandidates: TArray<string>;
   const AActiveProjectDb, AFilePath: string;
   const AContains: TDbContainsFileFunc): TArray<string>;
@@ -338,6 +532,14 @@ function OrderDbsByMembership(const ACandidates: TArray<string>;
 /// failure (missing files, malformed JSON) falls back to 10
 /// (TDocSettings.Defaults.ComplexityMin), so a doc/hover verb never errors
 /// out over a manifest problem.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.Index.Manifest.TManifestIO.Load, ExtractFilePath, ParamStr
+/// Returns: 10; DocManifest.Docs.ComplexityMin
+/// Pure
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadDocComplexityMin: Integer;
 
 implementation

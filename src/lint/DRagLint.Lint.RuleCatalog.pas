@@ -14,6 +14,12 @@ uses
 
 type
   /// <summary>A single configurable parameter of a rule (threshold or naming knob).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleParam = record
     Name      : string;  // config key (e.g. 'threshold', 'class_prefix')
     ParamType : string;  // 'int' | 'string' | 'stringlist' | 'bool'
@@ -21,6 +27,12 @@ type
   end;
 
   /// <summary>One catalogued rule.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize (DRagLint.Lint.RuleCatalog.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleInfo = record
     Id             : string;
     Category       : string;  // one of the 12 canonical buckets
@@ -32,24 +44,85 @@ type
   end;
 
   /// <summary>Per-category and total rule counts for the catalog summary.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), declaration (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize (DRagLint.Lint.RuleCatalog.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCatalogSummary = record
     Total      : Integer;
     Categories : Integer;
     PerCategory: TArray<TPair<string, Integer>>;  // (category, count), category order = first-seen
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleCatalog = class
   public
     /// <summary>The in-code registry of all built-in rules (no .scm).</summary>
+    /// <returns><!-- drag-lint:auto -->Observed: L.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: code, codebase, DRagLint.Lint.RuleCatalog.MkParam, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.MkParam"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuiltinRegistry: TArray<TRuleInfo>; static;
     /// <summary>Full catalog: built-ins + external .scm rules from ARulesDir
     /// (default &lt;exe-dir&gt;\rules). Deduped by id (builtin wins). Sorted by
     /// (category, id). When ACategory&lt;&gt;'' only that category is returned.</summary>
+    /// <param name="ARulesDir"><!-- drag-lint:auto --></param>
+    /// <param name="ACategory"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: Res.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
+    /// Calls: CompareText, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, ParamStr, SameText
+    /// Complexity: 14 (cyclomatic, outer body), 80 lines (full implementation)
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildCatalog(const ARulesDir: string = '';
       const ACategory: string = ''): TArray<TRuleInfo>; static;
     /// <summary>Totals + per-category counts over ACatalog.</summary>
+    /// <param name="ACatalog"><!-- drag-lint:auto --></param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Summarize(const ACatalog: TArray<TRuleInfo>): TCatalogSummary; static;
     /// <summary>Category bucket for an external .scm rule id; 'other' if unmapped.</summary>
+    /// <param name="AId"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: 'bug-patterns'; 'resource-lifetime';
+    /// 'security'; 'platform'; 'structure'; 'dead-code'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas)
+    /// Calls: MatchStr
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ScmCategory(const AId: string): string; static;
   end;
 

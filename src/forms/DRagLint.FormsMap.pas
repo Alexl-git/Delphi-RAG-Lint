@@ -25,6 +25,12 @@ uses
 
 type
   /// <summary>One navigable form (a .dfm root that descends from a form base).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.FormsMap.LoadInventory (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.NavPath (DRagLint.FormsMap.pas), DRagLint.FormsMap.CalledFrom (DRagLint.FormsMap.pas), DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas)
+  /// Used in units: DRagLint.FormsMap
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFormNode = record
     FormClass   : string ; // e.g. TfrmMAIN (the form symbol's signature)
     FormName    : string ; // e.g. frmMAIN  (the design-time Name)
@@ -38,19 +44,32 @@ type
   /// <summary>A launch edge: form FromClass opens form ToClass; Caption is the
   /// resolved control caption to press, or '(via Routine)' when no captioned
   /// control binds the launching routine.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.FormsMap.BuildEdges.TryAddEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.NavPath (DRagLint.FormsMap.pas), DRagLint.FormsMap.DetectRoot (DRagLint.FormsMap.pas), DRagLint.FormsMap.CalledFrom (DRagLint.FormsMap.pas)
+  /// Used in units: DRagLint.FormsMap
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFormEdge = record
     FromClass: string;
     ToClass  : string;
     Caption  : string;
   end;
 
-  /// <summary>Lists distinct parent forms that directly launch AToClass, each as its
-  /// form Name with the resolved caption in parentheses; ';'-separated. Caption is
-  /// omitted when the edge caption is a '(via ...)' gap marker.</summary>
-  /// <param name="AEdges">All launch edges built by BuildEdges.</param>
-  /// <param name="AClassToNode">Class-name to TFormNode lookup.</param>
-  /// <param name="AToClass">The form class whose callers we want.</param>
-  /// <returns>Semicolon-separated list, e.g. "frmList (Edit Item)" or "".</returns>
+/// <summary>Lists distinct parent forms that directly launch AToClass, each as its
+/// form Name with the resolved caption in parentheses; ';'-separated. Caption is
+/// omitted when the edge caption is a '(via ...)' gap marker.</summary>
+/// <param name="AEdges">All launch edges built by BuildEdges.</param>
+/// <param name="AClassToNode">Class-name to TFormNode lookup.</param>
+/// <param name="AToClass">The form class whose callers we want.</param>
+/// <returns>Semicolon-separated list, e.g. "frmList (Edit Item)" or "".</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas)
+/// Calls: Copy, SameText
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CalledFrom(AEdges: TList<TFormEdge>; AClassToNode: TDictionary<string, TFormNode>; const AToClass: string): string;
 
 /// <summary>Generates the navigation-map CSV text.</summary>
@@ -62,6 +81,16 @@ function CalledFrom(AEdges: TList<TFormEdge>; AClassToNode: TDictionary<string, 
 /// <returns>The full CSV text (RFC 4180 dialect, CRLF rows).</returns>
 /// <exception cref="Exception">If the index cannot be opened or no root can be
 /// resolved.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.FormsMap.GenerateFormsCsv/3 (DRagLint.FormsMap.pas), DRagLint.CLI.DoFormsCsv (DRagLint.CLI.pas)
+/// Calls: DRagLint.FormsMap.GenerateFormsCsv/3
+/// Returns: GenerateFormsCsv([ADbPath], AProjectFile, ARootForm)
+/// Overload 1 of 2
+/// Recursive
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): string; overload;
 
 /// <summary>Generates the forms navigation-map CSV. ADbPaths[0] is the project
@@ -74,6 +103,16 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 /// <returns>ANSI CSV text incl. the FORMS_CSV_ALGORITHM provenance footer.</returns>
 /// <exception cref="Exception">If ADbPaths is empty, the index cannot be opened,
 /// or no root can be resolved.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.FormsMap.GenerateFormsCsvCore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create
+/// Returns: GenerateFormsCsvCore(Primary, Extras, AProjectFile, ARootForm, ADbPaths[0])
+/// Overload 2 of 2
+/// Pure
+/// <seealso cref="DRagLint.FormsMap.GenerateFormsCsvCore"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GenerateFormsCsv(const ADbPaths: TArray<string>; const AProjectFile, ARootForm: string): string; overload;
 
 implementation

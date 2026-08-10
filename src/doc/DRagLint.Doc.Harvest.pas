@@ -94,15 +94,26 @@ uses
 
 type
   /// <summary>Why a candidate comment block was rejected, or hrAccepted.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Doc.Harvest.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THarvestReason = (hrAccepted, hrNone, hrBanner, hrCommentedCode, hrTrailer,
                     hrEmpty, hrNonAscii, hrNestedBrace);
 
   /// <summary>One boundary scan's verdict and the block it found.</summary>
-  /// <remarks>RawLines / StartLine / EndLine describe the block for EVERY
+  /// <remarks>
+  /// RawLines / StartLine / EndLine describe the block for EVERY
   /// verdict except hrNone, which reports an empty block and zeroed line
   /// numbers -- there was nothing to describe. A rejected-but-present block
   /// still reports its extent so a caller can say WHICH comment it declined,
-  /// and so Task 9's strip round-trip has the range to delete.</remarks>
+  /// and so Task 9's strip round-trip has the range to delete.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas), declaration (DRagLint.Doc.Harvest.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.Harvest
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THarvestResult = record
     Reason   : THarvestReason;
     RawLines : TArray<string>;  // the candidate comment lines, markers still on
@@ -122,6 +133,19 @@ type
 /// nothing can be above the first line) yield hrNone rather than an error:
 /// callers pass line numbers from an index that may lag the file on disk.</param>
 /// <returns>The verdict and the accumulated block. Never raises.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas)
+/// Calls: DRagLint.Doc.Harvest.ClassifyLine, DRagLint.Doc.Harvest.ContainsEndSemi, DRagLint.Doc.Harvest.ContainsWord, DRagLint.Doc.Harvest.IsEndStop, DRagLint.Doc.Harvest.IsSeparatorOnly, DRagLint.Doc.Harvest.SeparatorShare, Pos, Trim
+/// Complexity: 43 (cyclomatic, outer body), 135 lines (full implementation)
+/// Pure
+/// <seealso cref="DRagLint.Doc.Harvest.ClassifyLine"/>
+/// <seealso cref="DRagLint.Doc.Harvest.ContainsEndSemi"/>
+/// <seealso cref="DRagLint.Doc.Harvest.ContainsWord"/>
+/// <seealso cref="DRagLint.Doc.Harvest.IsEndStop"/>
+/// <seealso cref="DRagLint.Doc.Harvest.IsSeparatorOnly"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarvestResult;
 
 /// <summary>Transforms an ACCEPTED THarvestResult into DocInsight-ready text:
@@ -133,22 +157,42 @@ function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarv
 /// lines joined with single spaces, XML-escaped.</param>
 /// <param name="ARemarks">The remaining paragraphs, one per line, separated by a
 /// blank line (#10#10). '' when the block is a single paragraph.</param>
-/// <remarks>Returns PLAIN TEXT with #10 separators and does NOT re-prefix
+/// <remarks>
+/// Returns PLAIN TEXT with #10 separators and does NOT re-prefix
 /// anything with '///'. That is deliberate: TDocRegions.MergeComment's
 /// EmitTagged already splits on newlines and re-prefixes every continuation line
 /// (the 5ebde68 corruption fix), and a second prefixer would either double the
 /// marker or fight it.
-///
 /// Escaping uses DRagLint.Doc.Regions.EscXml -- the same escaper every mined
 /// fact goes through -- rather than a local copy, so the ampersand-first pass
 /// order cannot drift between the two. Harvested prose needs it MORE than mined
-/// identifiers do: it is arbitrary human text.</remarks>
+/// identifiers do: it is arbitrary human text.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas)
+/// Calls: CharInSet, Copy, DRagLint.Doc.Harvest.CollapseSpaces, DRagLint.Doc.Harvest.SeparatorShare, DRagLint.Doc.Harvest.StripMarkers, DRagLint.Doc.Regions.EscXml, Trim
+/// Complexity: 25 (cyclomatic, outer body), 107 lines (full implementation)
+/// Mutates: ASummary (out), ARemarks (out)
+/// <seealso cref="DRagLint.Doc.Harvest.CollapseSpaces"/>
+/// <seealso cref="DRagLint.Doc.Harvest.SeparatorShare"/>
+/// <seealso cref="DRagLint.Doc.Harvest.StripMarkers"/>
+/// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure HarvestText(const AResult: THarvestResult; out ASummary, ARemarks: string);
 
 /// <summary>The stable uppercase spelling of a reason, as printed by
 /// `selftest harvest` and asserted by tests/autodoc/run_doc_p3_harvest_scan.ps1.
 /// Lives here rather than at the print site so the enum and its wire form
 /// cannot drift apart.</summary>
+/// <param name="AReason"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: 'ACCEPTED'; 'NONE'; 'BANNER';
+/// 'COMMENTEDCODE'; 'TRAILER'; 'EMPTY'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas)
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HarvestReasonToString(const AReason: THarvestReason): string;
 
 implementation

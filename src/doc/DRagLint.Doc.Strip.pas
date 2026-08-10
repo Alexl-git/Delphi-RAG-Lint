@@ -22,6 +22,12 @@ uses
 type
   /// <summary>Result of stripping one file's engine-owned doc-comment
   /// content.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), declaration (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripFile (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Doc.Strip
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TStripResult = record
     FilePath     : string;             // echoes the input path
     TagsRemoved  : Integer;             // marked <summary>/<param>/<returns> lines dropped (rules 1 + 3)
@@ -34,6 +40,12 @@ type
   /// .pas file. Ownership is marker-keyed only -- the same rule the write path
   /// (TDocRegions.MergeComment) uses -- so a hand-written tag or a genuinely
   /// hand-written multi-line &lt;remarks&gt; block is never touched.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocStripper = class
   public
     /// <summary>Reads AFilePath (ANSI, same reader TDocumenter.BuildForSymbol
@@ -45,34 +57,34 @@ type
     /// read). Removal rules, applied only within a contiguous run of ///
     /// lines (a "doc region"):
     /// 1. A line carrying AUTO_MARK inside a &lt;summary&gt;/&lt;param
-    ///    ...&gt;/&lt;returns&gt; tag: drop it, and any following ///
-    ///    continuation lines up to and including the one carrying the
-    ///    matching close tag (a marked tag can span lines via EmitTagged).
-    ///    EXCEPTION (v(ADP3 T3) review round 2, Finding 1 -- param-only): a
-    ///    marked &lt;param&gt; whose post-marker body is NON-EMPTY is left
-    ///    completely untouched instead -- `document --apply` now preserves
-    ///    that exact shape (a human edited inside the tag without removing
-    ///    the marker), so strip must agree and never destroy it. A marked
-    ///    &lt;summary&gt;/&lt;returns&gt; is always dropped regardless of
-    ///    content -- marked means engine-owned for those two, full stop.
+    /// ...&gt;/&lt;returns&gt; tag: drop it, and any following ///
+    /// continuation lines up to and including the one carrying the
+    /// matching close tag (a marked tag can span lines via EmitTagged).
+    /// EXCEPTION (v(ADP3 T3) review round 2, Finding 1 -- param-only): a
+    /// marked &lt;param&gt; whose post-marker body is NON-EMPTY is left
+    /// completely untouched instead -- `document --apply` now preserves
+    /// that exact shape (a human edited inside the tag without removing
+    /// the marker), so strip must agree and never destroy it. A marked
+    /// &lt;summary&gt;/&lt;returns&gt; is always dropped regardless of
+    /// content -- marked means engine-owned for those two, full stop.
     /// 2. A line carrying AUTO_BEGIN: drop it through the line carrying
-    ///    AUTO_END, inclusive.
+    /// AUTO_END, inclusive.
     /// 3. Legacy: a line whose trimmed form ends with AUTO_PARAM -- drop it
-    ///    (pre-v(ADP3) managed param; declaration-only elsewhere, this rule is
-    ///    its only remaining consumer, kept so an old file self-heals).
+    /// (pre-v(ADP3) managed param; declaration-only elsewhere, this rule is
+    /// its only remaining consumer, kept so an old file self-heals).
     /// 4. If rules 1-3 ACTUALLY DELETED SOMETHING inside a
-    ///    &lt;remarks&gt;/&lt;/remarks&gt; pair, and nothing non-blank
-    ///    survives between them afterward, drop that pair too. Both halves
-    ///    of the test matter: a pair rules 1-3 never touched at all -- e.g. a
-    ///    hand-written empty pair, or one whose only interior line is a bare
-    ///    '///' -- is left completely alone, tags and any interior content
-    ///    together, rather than deleting the tags around content that was
-    ///    never engine-owned in the first place.
+    /// &lt;remarks&gt;/&lt;/remarks&gt; pair, and nothing non-blank
+    /// survives between them afterward, drop that pair too. Both halves
+    /// of the test matter: a pair rules 1-3 never touched at all -- e.g. a
+    /// hand-written empty pair, or one whose only interior line is a bare
+    /// '///' -- is left completely alone, tags and any interior content
+    /// together, rather than deleting the tags around content that was
+    /// never engine-owned in the first place.
     /// 5. If the above leaves a doc region with no /// lines at all, the
-    ///    region is already fully covered by the ranges above -- no
-    ///    additional edit is needed, and no stray blank line is introduced
-    ///    (the deletions cover exactly the /// lines, never the blank line
-    ///    that separated the region from surrounding code).
+    /// region is already fully covered by the ranges above -- no
+    /// additional edit is needed, and no stray blank line is introduced
+    /// (the deletions cover exactly the /// lines, never the blank line
+    /// that separated the region from surrounding code).
     /// A malformed marker (e.g. AUTO_BEGIN with no matching AUTO_END in the
     /// same region, or AUTO_MARK not immediately inside a recognized opening
     /// tag) is left untouched -- absence over a wrong removal.</summary>
@@ -81,6 +93,19 @@ type
     /// the computed Edits (tekDeleteLines ranges, ascending by line). Edits
     /// is empty when AFilePath carries no engine-owned content, or does not
     /// exist.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas)
+    /// Calls: Default, DRagLint.Doc.Strip.BuildDeleteEdits, DRagLint.Doc.Strip.IsDocLine, DRagLint.Doc.Strip.StripRegion, DRagLint.Doc.Strip.TryLoadLines
+    /// Returns: Default(TStripResult)
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.Strip.BuildDeleteEdits"/>
+    /// <seealso cref="DRagLint.Doc.Strip.IsDocLine"/>
+    /// <seealso cref="DRagLint.Doc.Strip.StripRegion"/>
+    /// <seealso cref="DRagLint.Doc.Strip.TryLoadLines"/>
+    /// <seealso cref="DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function StripFile(const AFilePath: string): TStripResult;
 
     /// <summary>Same removal rules as StripFile, scoped to the ONE doc region
@@ -139,6 +164,20 @@ type
     /// <returns>Same shape as StripFile, but Edits (and the Tags/Blocks
     /// counts) cover only the single doc region above ADeclLine; empty when
     /// no such region is found.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas)
+    /// Calls: Default, DRagLint.Core.Model.DocRegionFitsDecl, DRagLint.Core.Model.DocRegionInGapWindow, DRagLint.Doc.Strip.BuildDeleteEdits, DRagLint.Doc.Strip.IsBlankSourceLine, DRagLint.Doc.Strip.IsDocLine, DRagLint.Doc.Strip.StripRegion, DRagLint.Doc.Strip.TryLoadLines
+    /// Returns: Default(TStripResult)
+    /// Complexity: 11 (cyclomatic, outer body), 95 lines (full implementation)
+    /// Mutates: ARegionStartLine (out), ARegionEndLine (out)
+    /// <seealso cref="DRagLint.Core.Model.DocRegionFitsDecl"/>
+    /// <seealso cref="DRagLint.Core.Model.DocRegionInGapWindow"/>
+    /// <seealso cref="DRagLint.Doc.Strip.BuildDeleteEdits"/>
+    /// <seealso cref="DRagLint.Doc.Strip.IsBlankSourceLine"/>
+    /// <seealso cref="DRagLint.Doc.Strip.IsDocLine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function StripSymbolRegion(const AFilePath: string; ADeclLine: Integer;
       out ARegionStartLine, ARegionEndLine: Integer;
       const ASymStartLines: TArray<Integer>): TStripResult;

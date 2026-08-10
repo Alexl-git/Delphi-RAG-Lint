@@ -21,6 +21,12 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIndexer = class(TInterfacedObject, IIndexer)
     strict private
       FStore          : ISymbolStore                       ;
@@ -45,11 +51,107 @@ type
       /// output with one line per file. The file is still indexed from its RAW
       /// UTF-8 bytes (old behaviour) -- a preprocess exception never hard-fails
       /// the run.</summary>
+      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <param name="AError"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+      /// Calls: bytes, Format, Writeln
+      /// Reads: FPreprocessFellBack   Writes: FPreprocessFellBack
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
+      /// <param name="AExtension"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: nil.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
+      /// Calls: LowerCase, SameText
+      /// Reads: FParsers
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ParserFor(const AExtension: string): IParser;
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbols"><!-- drag-lint:auto --></param>
+      /// <param name="ARefs"><!-- drag-lint:auto --></param>
+      /// <param name="AErrors"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+      /// Calls: Format, Writeln
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.ShouldPruneDir (DRagLint.Core.Indexer.pas)
+      /// Calls: LowerCase, StartsStr
+      /// Reads: FExcludeRoots
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function IsUnderExcludeRoot  (const APath: string): Boolean;
+      /// <param name="ADir"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: True; False.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
+      /// Calls: DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot, DRagLint.Index.Glob.TGlob.MatchesAny, ExcludeTrailingPathDelimiter, ExtractFileName, file, IncludeTrailingPathDelimiter, indexed, LowerCase, Name, Pos
+      /// Reads: FWalkFilter
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot"/>
+      /// <seealso cref="DRagLint.Index.Glob.TGlob.MatchesAny"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ShouldPruneDir      (const ADir : string): Boolean;
+      /// <summary><!-- drag-lint:auto -->v0.42: SQL files are scanned only when they
+      /// match the MS*.SQL convention (the Micronite Firebird DDL scripts) -- per user,
+      /// those are the only SQL files worth indexing. Every other .sql is skipped so the
+      /// index isn't polluted by ad-hoc query scripts. Non-.sql files always pass this
+      /// gate. v0.45: gate is conditional on FWalkFilter.SqlOnlyMS; when False all SQL
+      /// pass.</summary>
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: StartsText('MS', Name).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
+      /// Calls: ExtractFileExt, ExtractFileName, SameText, StartsText
+      /// Reads: FWalkFilter
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function SqlFileAllowedFilter(const APath: string): Boolean;
       /// <summary>v13 (v0.82): resolve a ref's innermost enclosing routine.
       /// Among ASymbols of routine kind (method/function/procedure/constructor/
@@ -61,6 +163,18 @@ type
       /// <param name="AIdxToId">Array-index -&gt; inserted DB id map built by the symbols loop.</param>
       /// <param name="ALine">The ref's StartLine.</param>
       /// <returns>The enclosing routine's DB id, or 0 when the line is in no routine body.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+      /// Returns: 0; DbId
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ResolveEnclosingSymbolId(const ASymbols: TArray<TSymbol>;
         const AIdxToId: TDictionary<Integer, Int64>; ALine: Integer): Int64;
       /// <summary>v(ADP2 T2): 1-based, inclusive line-range slice of ALines
@@ -73,19 +187,196 @@ type
       /// <param name="AToLine">Last body line, 1-based (Sym.ImplEndLine).</param>
       /// <returns>ALines[AFromLine..AToLine] clipped to bounds; nil when the
       /// clipped range is empty (e.g. ALines is empty).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
+      /// <param name="ADir"><!-- drag-lint:auto --></param>
+      /// <param name="ARecursive"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFolder (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
+      /// Calls: DRagLint.Core.Indexer.TIndexer.IndexFile, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ShouldPruneDir, DRagLint.Core.Indexer.TIndexer.SqlFileAllowedFilter, DRagLint.Core.Indexer.TIndexer.WalkAndIndex, DRagLint.Index.Glob.TGlob.MatchesAny, DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored, DRagLint.Index.IgnoreFiles.TIgnoreStack.PopDir, DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir, excludes (+8 more)
+      /// Complexity: 15 (cyclomatic, outer body), 64 lines (full implementation)
+      /// Reads: FIgnoreStack, FWalkFilter
+      /// Recursive
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ParserFor"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ShouldPruneDir"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.SqlFileAllowedFilter"/>
+      /// <seealso cref="DRagLint.Index.Glob.TGlob.MatchesAny"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure WalkAndIndex(const ADir: string; ARecursive: Boolean);
     public
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="AParsers"><!-- drag-lint:auto --></param>
+      /// <param name="ADocConfig"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.Create/2 (DRagLint.Core.Indexer.pas) (+63 more)
+      /// Calls: default, empty, TIndexer
+      /// Overload 1 of 2
+      /// Reads: FParsers   Writes: FStore, FDocConfig, FParsers, FExcludeRoots, FVisited, FVisitedKeys, FIgnoreStack, FPreprocessEnabled (+2 more)
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig); overload;
+      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="AParsers"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: DRagLint.Core.Indexer.TIndexer.Create/3
+      /// Overload 2 of 2
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>); overload;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Reads: FParsers, FExcludeRoots, FVisited, FVisitedKeys, FIgnoreStack   Writes: FStore
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="ARecursive"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: DRagLint.Core.Indexer.TIndexer.WalkAndIndex
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.IndexFolder
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.WalkAndIndex"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure IndexFolder(const APath: string; ARecursive: Boolean = True);
+      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
+      /// Calls: DateTimeToUnix, Delphi, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ReportProgress, DRagLint.Core.Indexer.TIndexer.ResolveEnclosingSymbolId, DRagLint.Core.Indexer.TIndexer.SliceBodyLines, DRagLint.Core.Interfaces.IParser.Parse (+29 more)
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.IndexFile
+      /// Complexity: 25 (cyclomatic, outer body), 303 lines (full implementation)
+      /// Reads: FVisitedKeys, FVisited, FWalkFilter, FForceReparse, FStore, FPreprocessEnabled, FProfile, FDocConfig   Writes: FSkippedUpToDate
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+      /// <seealso cref="DRagLint.Core.Indexer.FindDocRegionAbove"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ParserFor"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ReportProgress"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure IndexFile(const AFilePath: string);
+      /// <returns><!-- drag-lint:auto -->Observed: FSkippedUpToDate.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.SkippedUpToDate
+      /// Reads: FSkippedUpToDate
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function SkippedUpToDate: Integer;
+      /// <returns><!-- drag-lint:auto -->Observed: FVisited.ToArray.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.VisitedFiles
+      /// Reads: FVisited
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function VisitedFiles: TArray<string>;
+      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: ExcludeTrailingPathDelimiter, IncludeTrailingPathDelimiter, LowerCase
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot
+      /// Reads: FExcludeRoots
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure AddExcludeRoot(const APath: string);
+      /// <param name="AValue"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.SetForceReparse
+      /// Writes: FForceReparse
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SetForceReparse(AValue: Boolean);
+      /// <param name="AFilter"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: FreeAndNil
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.SetWalkFilter
+      /// Reads: FIgnoreStack, FWalkFilter   Writes: FWalkFilter, FIgnoreStack
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SetWalkFilter(const AFilter: TWalkFilter);
+      /// <param name="AEnabled"><!-- drag-lint:auto --></param>
+      /// <param name="AProfile"><!-- drag-lint:auto --></param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.SetPreprocess
+      /// Writes: FPreprocessEnabled, FProfile, FPreprocessFellBack
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
   end;
 

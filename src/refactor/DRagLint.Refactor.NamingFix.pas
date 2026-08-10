@@ -10,10 +10,24 @@ uses
 
 type
   /// <summary>Target casing styles, matching TNamingConfig's textual vocabulary.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNameStyle = (nsPascalCase, nsCamelCase, nsUpperCase);
 
 /// <summary>Maps a TNamingConfig case string ('PascalCase' | 'camelCase' |
 /// 'UPPER_CASE') to a TNameStyle. Unknown/empty -> nsPascalCase.</summary>
+/// <param name="AConfigCase"><!-- drag-lint:auto --></param>
+/// <returns><!-- drag-lint:auto -->Observed: nsCamelCase; nsUpperCase; nsPascalCase.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
+/// Calls: SameText
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StyleFromConfigText(const AConfigCase: string): TNameStyle;
 
 /// <summary>Returns AOldName re-cased to AStyle WITHOUT changing its letters or
@@ -23,10 +37,18 @@ function StyleFromConfigText(const AConfigCase: string): TNameStyle;
 /// <param name="AOldName">The offending identifier verbatim.</param>
 /// <param name="AStyle">Target style.</param>
 /// <returns>The re-cased identifier.</returns>
-/// <remarks>DECISION: phase-1 is pure re-casing only -- no separator
+/// <remarks>
+/// DECISION: phase-1 is pure re-casing only -- no separator
 /// insertion. UPPER_CASE therefore yields e.g. MAXCOUNT, not MAX_COUNT
 /// (word-boundary detection is a phase-2 concern; this keeps phase-1
-/// collision-free and mechanical).</remarks>
+/// collision-free and mechanical).
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
+/// Calls: Copy, LowerCase, UpperCase
+/// Returns: UpperCase(AOldName); LowerCase(AOldName[1]) + Copy(AOldName, 2, MaxInt); UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string;
 
 /// <summary>Returns APrefix + Cap(AOldName): the identifier with the naming-convention
@@ -38,6 +60,14 @@ function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string
 /// <param name="AOldName">The offending identifier verbatim.</param>
 /// <param name="APrefix">The configured prefix (e.g. 'F', 'p', 'T'); '' disables.</param>
 /// <returns>The prefixed identifier, or AOldName unchanged if already prefixed/empty input.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
+/// Calls: CharInSet, Copy, SameText, UpperCase
+/// Returns: APrefix + UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 
 /// <summary>Turns naming findings -- the 3 phase-1 re-casing rules
@@ -67,7 +97,8 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// the target file(s) and the caller should surface a "reindex and re-run"
 /// hint; those sites were NOT written.</param>
 /// <returns>The applied edit set (empty if nothing was fixable).</returns>
-/// <remarks>Re-casing (phase 1) is collision-free in a case-insensitive language
+/// <remarks>
+/// Re-casing (phase 1) is collision-free in a case-insensitive language
 /// (the new name is just a different casing of the same letters), but
 /// ConflictReason is still run as defense-in-depth against a same-named sibling.
 /// Prefix-adding (phase 2) genuinely CHANGES the identifier, so it is NOT
@@ -89,7 +120,20 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// was indexed those coordinates point at unrelated text (observed: an
 /// identifier glued onto the `then`/`else` keywords, exit code 0). Any edit
 /// whose span is out of range or does not hold the expected identifier is
-/// DROPPED and counted in ASkippedCount -- never written.</remarks>
+/// DROPPED and counted in ASkippedCount -- never written.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
+/// Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf, DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.LocalNameCollides, DRagLint.Refactor.NamingFix.ReadIdentifierAt, DRagLint.Refactor.NamingFix.ResolveSymbolAt, DRagLint.Refactor.NamingFix.StyleFromConfigText, DRagLint.Refactor.NamingFix.SynthesizeCasedName, DRagLint.Refactor.NamingFix.SynthesizePrefixedName (+15 more)
+/// Returns: nil; Edits.ToArray
+/// Complexity: 28 (cyclomatic, outer body), 222 lines (full implementation)
+/// Mutates: AFixCount (out), ASkippedCount (out)
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.LocalNameCollides"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.ReadIdentifierAt"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.ResolveSymbolAt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
   out AFixCount: Integer; out ASkippedCount: Integer): TArray<TTextEdit>;

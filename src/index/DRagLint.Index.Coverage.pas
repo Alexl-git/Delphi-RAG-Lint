@@ -24,6 +24,11 @@ uses
 
 type
   /// <summary>Classification of a folder relative to the index manifest.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Index.Coverage.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCoverageKind = (
     /// <summary>Folder is covered by exactly one non-library section.</summary>
     ckIndexed,
@@ -37,6 +42,12 @@ type
     ckUnassigned);
 
   /// <summary>Coverage classification result for one immediate child folder.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Coverage
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCoverageItem = record
     /// <summary>Absolute path of the child folder.</summary>
     Folder: string;
@@ -46,32 +57,51 @@ type
     Detail: string;
   end;
 
-  /// <summary>Classify each immediate child folder of ARoot by how AManifest
-  /// covers it. Read-only (filesystem + manifest). AResolver supplies library
-  /// roots.</summary>
-  /// <param name="AManifest">Parsed manifest. RootDir must be set for relative
-  /// include paths to resolve correctly.</param>
-  /// <param name="ARoot">Absolute path of the directory whose immediate children
-  /// are to be classified. Must exist.</param>
-  /// <param name="AResolver">Project resolver used to query registry library roots.
-  /// Caller owns and must not free until after this function returns.</param>
-  /// <returns>Array of TCoverageItem, one per immediate child directory of ARoot,
-  /// in filesystem enumeration order. Empty when ARoot has no child directories.</returns>
-  /// <remarks>
-  /// Classification order (first match wins):
-  ///   1. ckIndexed  - child is under exactly one non-library section root.
-  ///   2. ckOverlap  - child is under two or more non-library section roots.
-  ///   3. ckExcluded - child leaf name matches a built-in prune name or any
-  ///                   global or section exclude glob (TGlob.Matches on leaf).
-  ///   4. ckLibrary  - child is under a Delphi registry library root.
-  ///   5. ckUnassigned - none of the above.
-  /// Not thread-safe; call from the owning thread only.
-  /// </remarks>
+/// <summary>Classify each immediate child folder of ARoot by how AManifest
+/// covers it. Read-only (filesystem + manifest). AResolver supplies library
+/// roots.</summary>
+/// <param name="AManifest">Parsed manifest. RootDir must be set for relative
+/// include paths to resolve correctly.</param>
+/// <param name="ARoot">Absolute path of the directory whose immediate children
+/// are to be classified. Must exist.</param>
+/// <param name="AResolver">Project resolver used to query registry library roots.
+/// Caller owns and must not free until after this function returns.</param>
+/// <returns>Array of TCoverageItem, one per immediate child directory of ARoot,
+/// in filesystem enumeration order. Empty when ARoot has no child directories.</returns>
+/// <remarks>
+/// Classification order (first match wins):
+/// 1. ckIndexed - child is under exactly one non-library section root.
+/// 2. ckOverlap - child is under two or more non-library section roots.
+/// 3. ckExcluded - child leaf name matches a built-in prune name or any
+/// global or section exclude glob (TGlob.Matches on leaf).
+/// 4. ckLibrary - child is under a Delphi registry library root.
+/// 5. ckUnassigned - none of the above.
+/// Not thread-safe; call from the owning thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas)
+/// Calls: Default, DRagLint.Index.Coverage.IsBuiltinPrune, DRagLint.Index.Coverage.IsUnderRoot, DRagLint.Index.Coverage.NormPath, DRagLint.Index.Glob.TGlob.Matches, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths, LowerCase, paths
+/// Returns: nil; Results.ToArray
+/// Complexity: 21 (cyclomatic, outer body), 185 lines (full implementation)
+/// Touches: file system
+/// <seealso cref="DRagLint.Index.Coverage.IsBuiltinPrune"/>
+/// <seealso cref="DRagLint.Index.Coverage.IsUnderRoot"/>
+/// <seealso cref="DRagLint.Index.Coverage.NormPath"/>
+/// <seealso cref="DRagLint.Index.Glob.TGlob.Matches"/>
+/// <seealso cref="DRagLint.Index.Plan.ResolvePlan"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ComputeCoverage(const AManifest: TIndexManifest; const ARoot: string; AResolver: TProjectResolver): TArray<TCoverageItem>;
 
 /// <summary>Return the lowercase display string for a TCoverageKind value.</summary>
 /// <param name="K">The coverage kind to convert.</param>
 /// <returns>'indexed', 'overlap', 'excluded', 'library', or 'unassigned'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas)
+/// Returns: 'indexed'; 'overlap'; 'excluded'; 'library'; 'unassigned'
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CoverageKindStr(K: TCoverageKind): string;
 
 implementation

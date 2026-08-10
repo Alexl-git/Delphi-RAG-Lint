@@ -13,7 +13,16 @@ uses
 /// <param name="ADefaultCode">The command's pre-existing exit code, used when
 /// AFailOn is '' (preserves today's behavior).</param>
 /// <returns>0 or 1 per the policy, or ADefaultCode when AFailOn is ''.</returns>
-/// <remarks>Pure function; no state; thread-safe.</remarks>
+/// <remarks>
+/// Pure function; no state; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
+/// Calls: DRagLint.Output.ExitCode.SeverityRank, SameText
+/// Returns: 0
+/// Pure
+/// <seealso cref="DRagLint.Output.ExitCode.SeverityRank"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExitCodeFor(const AFindings: TArray<TLintFinding>; const AFailOn: string; ADefaultCode: Integer): Integer;
 
 implementation

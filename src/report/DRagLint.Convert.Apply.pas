@@ -64,6 +64,12 @@ type
   /// <summary>One component instance selected for conversion: its DFM instance
   /// name, its current (From) class, and the class it is being converted to
   /// (To), per the matching #convert rule.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)
+  /// Used in units: DRagLint.Convert.Apply
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConvertInstance = record
     InstanceName: string;
     FromType    : string;
@@ -78,6 +84,12 @@ type
   /// the per-instance notes from the DFM re-emit engine (DRagLint.Convert.
   /// DfmReemit); Warnings lists non-fatal problems found while building the
   /// plan.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Convert.Apply.pas)
+  /// Used in units: DRagLint.Convert.Apply
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TApplyReport = record
     Converted   : TArray<string>;
     AccessSites : TArray<string>;
@@ -91,13 +103,19 @@ type
   /// apply (see DRagLint.Refactor.TextEdit.TTextEditApplier.Apply /
   /// RenderDryRun), the human-readable Report, and Ok/Error signalling
   /// whether a plan could be built at all.</summary>
-  /// <remarks>Ok=False means no edits were computed (e.g. the .pas/.dfm file
+  /// <remarks>
+  /// Ok=False means no edits were computed (e.g. the .pas/.dfm file
   /// was not found, or no instance matched a #convert rule -- possibly because
   /// --only filtered everything out); Error then carries an ASCII diagnostic
   /// message. Ok=True does not imply every instance converted cleanly --
   /// per-instance problems are surfaced via Report.Todos / Report.Warnings
   /// even when Ok=True (e.g. a field declaration that could not be located, or
-  /// a ToType whose unit could not be resolved for the uses-add).</remarks>
+  /// a ToType whose unit could not be resolved for the uses-add).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TApplyResult = record
     Edits : TArray<TTextEdit>;
     Report: TApplyReport;
@@ -107,7 +125,8 @@ type
 
   /// <summary>Outcome of CheckFreshness: whether the F and T types' indexed
   /// source is safe to trust for this convert-apply run.</summary>
-  /// <remarks>Fresh=True only when BOTH the From and To types are indexed
+  /// <remarks>
+  /// Fresh=True only when BOTH the From and To types are indexed
   /// (ResolveClassQName resolves a qualified name) AND their declaring
   /// source files are up to date on disk (ISymbolStore.FileIsUpToDate,
   /// comparing the CURRENT on-disk mtime+sha256 against what was indexed).
@@ -119,7 +138,12 @@ type
   /// silently get an EMPTY tree (no properties, no events) rather than an
   /// error. Both are guard failures for the same reason: the conversion plan
   /// would be built from a property tree that does not reflect the type's
-  /// real current shape.</remarks>
+  /// real current shape.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFreshnessResult = record
     Fresh  : Boolean;
     Reasons: TArray<string>;
@@ -139,13 +163,23 @@ type
 /// disk. Fresh=False with one or more human-readable Reasons entries
 /// otherwise (see TFreshnessResult's remarks for the two distinct failure
 /// causes).</returns>
-/// <remarks>Pure read-only: computes the on-disk mtime (unix seconds) and
+/// <remarks>
+/// Pure read-only: computes the on-disk mtime (unix seconds) and
 /// sha256 of each type's declaring source file (mirroring DRagLint.Core.
 /// Indexer's own incremental-skip basis: raw bytes, ANSI-decoded for the
 /// sha) and asks the store whether that exact (mtime, sha) pair is what is
 /// indexed. A type with no #convert rule in ARules at all is treated as
 /// vacuously fresh (nothing to check) -- callers should have already
-/// validated ARules has at least one #convert rule before reaching here.</remarks>
+/// validated ARules has at least one #convert rule before reaching here.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
+/// Calls: Default, DRagLint.Convert.Apply.BareTypeTail, DRagLint.Convert.Apply.CheckTypeFreshness
+/// Returns: Default(TFreshnessResult)
+/// Pure
+/// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
+/// <seealso cref="DRagLint.Convert.Apply.CheckTypeFreshness"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
 
 /// <summary>Builds the full convert-apply plan for one unit: locates the
@@ -190,6 +224,20 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// Ok=False only on a hard failure (missing .pas/.dfm, or zero instances
 /// matched); Ok=True with per-instance problems noted in Report.Warnings
 /// otherwise (including every instance skipped by a re-emit failure).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
+/// Calls: below, BuildPropTree, converted, Default, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile, DRagLint.Convert.Apply.BuildApplyPlan.TreeFor, DRagLint.Convert.Apply.FindConstructionSites, DRagLint.Convert.Apply.FindConvertInstances, DRagLint.Convert.Apply.FindDfmInstanceSymbol, DRagLint.Convert.Apply.FindMemberAccessSites (+23 more)
+/// Returns: Default(TApplyResult)
+/// Complexity: 33 (cyclomatic, outer body), 380 lines (full implementation)
+/// Touches: file system
+/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile"/>
+/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.TreeFor"/>
+/// <seealso cref="DRagLint.Convert.Apply.FindConstructionSites"/>
+/// <seealso cref="DRagLint.Convert.Apply.FindConvertInstances"/>
+/// <seealso cref="DRagLint.Convert.Apply.FindDfmInstanceSymbol"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 
@@ -203,7 +251,8 @@ function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADf
 /// <param name="AOnly">Optional allow-list of instance names; when non-empty,
 /// only instances whose name appears here are returned.</param>
 /// <returns>One TConvertInstance per matching component, in the order found.</returns>
-/// <remarks>Scans for lines shaped like 'object &lt;Name&gt;: &lt;Class&gt;' (any
+/// <remarks>
+/// Scans for lines shaped like 'object &lt;Name&gt;: &lt;Class&gt;' (any
 /// indentation depth, so both top-level and nested components are found -- a
 /// nested instance is as convertible as a top-level one). A line is recognised
 /// as an object header when, after trimming leading whitespace, it starts with
@@ -212,7 +261,17 @@ function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADf
 /// trailing comment) is tolerated. Lines that don't match this shape (property
 /// lines, 'end', inherited/inline headers) are skipped -- this is a location
 /// scan only, not a full DFM parse (Task 3's ParseDfmBlock/ReemitComponent do
-/// the real per-instance re-emit). Pure; deterministic; no I/O.</remarks>
+/// the real per-instance re-emit). Pure; deterministic; no I/O.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)
+/// Calls: Default, DRagLint.Convert.Apply.FindConvertRuleFor, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.TryParseObjectHeader, Trim
+/// Returns: nil; List.ToArray
+/// Pure
+/// <seealso cref="DRagLint.Convert.Apply.FindConvertRuleFor"/>
+/// <seealso cref="DRagLint.Convert.Apply.InOnlyList"/>
+/// <seealso cref="DRagLint.Convert.Apply.TryParseObjectHeader"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindConvertInstances(const ADfmText: string; const ARules: TConversionRuleSet;
   const AOnly: TArray<string>): TArray<TConvertInstance>;
 

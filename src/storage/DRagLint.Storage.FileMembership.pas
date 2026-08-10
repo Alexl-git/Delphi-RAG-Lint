@@ -25,7 +25,8 @@ interface
 /// <param name="AFilePath">Absolute path of the source file to look for.</param>
 /// <returns>True only on a definite match; False on no-match AND on every
 /// failure to determine one.</returns>
-/// <remarks>PATH NORMALISATION mirrors the storage layer exactly, because the
+/// <remarks>
+/// PATH NORMALISATION mirrors the storage layer exactly, because the
 /// stored spelling is not the caller's spelling. Rows are written through
 /// NormalizeStoredPath (DRagLint.Storage.SQLite): forward slashes folded to
 /// backslashes and the DRIVE LETTER upper-cased, with the rest of the path left
@@ -33,17 +34,22 @@ interface
 /// a BYTE-EXACT match first -- which the UNIQUE index on files.path serves -- and
 /// only then retries COLLATE NOCASE for a differently-cased directory or file
 /// name.
-///
 /// The exact-first order is not a micro-optimisation, it is this codebase's
 /// standing rule: SQLite cannot serve a NOCASE comparison from a BINARY index,
 /// so a NOCASE-only lookup degrades to a scan on every index built before the
 /// NOCASE indexes existed. The retry runs only where the answer would otherwise
 /// be a false "no".
-///
 /// Opens READ-ONLY and closes before returning: an IDE-side caller must not hold
 /// a handle that a concurrent `index --all` would have to drop.
-///
-/// Thread-safe: no shared state; each call owns its connection.</remarks>
+/// Thread-safe: no shared state; each call owns its connection.
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.Storage.FileMembership.NormalizeForLookup, index
+/// Returns: False; not Q.Eof
+/// SQL: reads FILES
+/// Touches: file system
+/// <seealso cref="DRagLint.Storage.FileMembership.NormalizeForLookup"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
 
 implementation

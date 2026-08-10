@@ -38,6 +38,11 @@ type
   //                             Reported under its OWN rule id at `hint` severity,
   //                             NOT as doc-drift -- nothing drifted, the description
   //                             was simply never written. User ruling 2026-08-07.
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Doc.Drift.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocDriftKind = (
     ddParamRenamedOrRemoved,
     ddParamMissing,
@@ -58,12 +63,18 @@ type
   /// prose-free fix; v(ADP3 T3) update: ddParamMissing is report-only, see
   /// MakeFinding's own call site for why), and the doc/decl line it anchors
   /// to.</summary>
-  /// <remarks>v(ADP3 T3d): Fixable is a PER-FINDING answer, not a per-kind
+  /// <remarks>
+  /// v(ADP3 T3d): Fixable is a PER-FINDING answer, not a per-kind
   /// constant. ddValueButNoReturns reports it True only when the engine can
   /// actually satisfy that instance (a return case is minable and no
   /// hand-written blank &lt;returns&gt; slot is in the way); the same kind on a
   /// function with nothing minable is report-only. Consumers must read this
-  /// field, never infer fixability from Kind.</remarks>
+  /// field, never infer fixability from Kind.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Drift, DRagLint.Lint.DocRules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocDriftFinding = record
     Kind   : TDocDriftKind;
     Detail : string       ;
@@ -79,6 +90,12 @@ type
   /// ddIdentifierGone) fire ONLY on high-confidence exact matches -- a false
   /// drift finding is worse than a missed one, so when the signal is ambiguous
   /// the engine stays silent.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Lint.DocRules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocDrift = class
   public
     /// <summary>Analyzes ADoc against ASym's live signature and body facts,
@@ -93,8 +110,29 @@ type
     /// <param name="ASym">The documented symbol (routine).</param>
     /// <param name="ADoc">The parsed DocInsight comment currently on the decl.</param>
     /// <returns>The drift findings, in a stable per-signal order.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
+    /// Calls: ContainsText, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile, DRagLint.Doc.Drift.GroupParamNames, DRagLint.Doc.Drift.MakeFinding (+17 more)
+    /// Returns: Findings.ToArray
+    /// Complexity: 48 (cyclomatic, outer body), 368 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
+    /// <seealso cref="DRagLint.Doc.Drift.DescReadsInputOnly"/>
+    /// <seealso cref="DRagLint.Doc.Drift.EffectiveSignature"/>
+    /// <seealso cref="DRagLint.Doc.Drift.ExtractCodeIdents"/>
+    /// <seealso cref="DRagLint.Doc.Drift.ExtractCTokens"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    /// <param name="AIncludeSeeAlso">Must match the flag the DOCUMENTER used when
+    /// it wrote the managed block (`document`'s --seealso, default True since the
+    /// seealso-on-by-default change). The staleness test regenerates the block and
+    /// compares, so a checker that regenerates WITHOUT &lt;seealso&gt; while the
+    /// writer emitted it reports every such block as stale: that mismatch produced
+    /// 514 false 'managed facts block is out of date' findings on this repo, while
+    /// `document --unit` on the same files reported "nothing to document".</param>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
-      const ADoc: TParsedDoc): TArray<TDocDriftFinding>;
+      const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean = True): TArray<TDocDriftFinding>;
   end;
 
 implementation
@@ -404,7 +442,7 @@ end;
 // ---------------------------------------------------------------------------
 
 class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
-  const ADoc: TParsedDoc): TArray<TDocDriftFinding>;
+  const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean): TArray<TDocDriftFinding>;
 var
   Findings  : TList<TDocDriftFinding>;
   Sig       : string                 ;
@@ -426,7 +464,11 @@ begin
     if ADoc.StartLine > 0 then DocLine:= ADoc.StartLine else DocLine:= ASym.StartLine;
 
     // Body facts (for the exception-raised check and the fresh facts-block).
-    Facts:= TDocFactsBuilder.Build(AStore, ASym);
+    // AIncludeSeeAlso is THREADED, never defaulted here: the fresh block this
+    // builds is compared byte-for-byte (whitespace-collapsed) against the block
+    // the DOCUMENTER wrote, so the two must be generated under the same options
+    // or the comparison measures the option difference instead of drift.
+    Facts:= TDocFactsBuilder.Build(AStore, ASym, AIncludeSeeAlso);
 
     // Findings 1-6 are param/return drift and make sense ONLY for a routine.
     // On a class/interface/record/type-alias/const/var/property/field symbol,

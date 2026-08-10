@@ -30,12 +30,21 @@ uses
 /// <returns>A bitset over 0..AVars.Count-1: True where the var is live
 /// immediately after the item. Always a fresh array -- never aliases the
 /// solver's internal AOut array.</returns>
-/// <remarks>Solves TLiveness once via TDataFlowSolver, then replays the same
+/// <remarks>
+/// Solves TLiveness once via TDataFlowSolver, then replays the same
 /// per-item backward transfer TLiveness.Transfer uses -- starting from the
 /// block's live-OUT and applying items Count-1 downto AItemIdx+1 -- so the
 /// result is exactly what the block-level fixpoint would have produced had
 /// the block ended at AItemIdx. Returns all-False (sized to AVars.Count) if
-/// ACfg.Skipped or the indices are out of range.</remarks>
+/// ACfg.Skipped or the indices are out of range.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Refactor.ExtractMethod.LiveOutOfRun (DRagLint.Refactor.ExtractMethod.pas)
+/// Calls: DRagLint.Analysis.Liveness.LiveAtBoundary
+/// Returns: LiveAtBoundary(ACfg, AVars, ASrc, ABlockIdx, AItemIdx, False)
+/// Pure
+/// <seealso cref="DRagLint.Analysis.Liveness.LiveAtBoundary"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LiveAfterItem(const ACfg: TCfg; AVars: TRoutineVarTable; const ASrc: TBytes;
   ABlockIdx, AItemIdx: Integer): TArray<Boolean>;
 
@@ -53,9 +62,18 @@ function LiveAfterItem(const ACfg: TCfg; AVars: TRoutineVarTable; const ASrc: TB
 /// <returns>A bitset over 0..AVars.Count-1: True where the var is live
 /// immediately before the item. Always a fresh array -- never aliases the
 /// solver's internal arrays.</returns>
-/// <remarks>Equivalent to LiveAfterItem(..., AItemIdx) with one more backward
+/// <remarks>
+/// Equivalent to LiveAfterItem(..., AItemIdx) with one more backward
 /// step (AItemIdx's own kill-then-gen) applied, matching TLiveness.Transfer's
-/// per-item order: kill the whole-var def first, then add its uses.</remarks>
+/// per-item order: kill the whole-var def first, then add its uses.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Refactor.ExtractMethod.LiveOutOfRun.AddExitEdge (DRagLint.Refactor.ExtractMethod.pas)
+/// Calls: DRagLint.Analysis.Liveness.LiveAtBoundary
+/// Returns: LiveAtBoundary(ACfg, AVars, ASrc, ABlockIdx, AItemIdx, True)
+/// Pure
+/// <seealso cref="DRagLint.Analysis.Liveness.LiveAtBoundary"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LiveBeforeItem(const ACfg: TCfg; AVars: TRoutineVarTable; const ASrc: TBytes;
   ABlockIdx, AItemIdx: Integer): TArray<Boolean>;
 

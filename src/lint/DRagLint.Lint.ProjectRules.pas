@@ -33,15 +33,42 @@ type
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
     /// <param name="ARuleId">If non-empty, only that rule id is evaluated.</param>
     /// <returns>Findings across the whole index (file paths + lines); empty if none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile (+25 more)
+    /// Returns: nil; Findings.ToArray
+    /// Complexity: 48 (cyclomatic, outer body), 239 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Run(const AStore: ISymbolStore; const ARuleId: string = ''): TArray<TLintFinding>;
     /// <summary>Flags forbidden cross-layer 'uses' edges per a layer-config JSON file.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
     /// <param name="AConfigPath">Path to a layers JSON file (see remarks); missing/invalid -> no findings.</param>
     /// <returns>'layering-violation' findings; empty if none.</returns>
-    /// <remarks>Config: { "layers":[{"name":"UI","match":["*.UI.*"]},...], "allow":[{"from":"UI","to":["Business"]},...] }.
+    /// <remarks>
+    /// Config: { "layers":[{"name":"UI","match":["*.UI.*"]},...], "allow":[{"from":"UI","to":["Business"]},...] }.
     /// A unit's layer is the first whose match-globs accept its (qualified) unit name. Default-deny among
     /// DEFINED layers: a use A(layerX)->B(layerY), X&lt;&gt;Y, is a violation unless Y is in allow[X]. Units
-    /// matching no layer are ignored (e.g. RTL/third-party). Never raises.</remarks>
+    /// matching no layer are ignored (e.g. RTL/third-party). Never raises.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf, Format, LowerCase, SameText, TJSONArray, TJSONObject, TJSONString, Writeln
+    /// Returns: nil; Findings.ToArray
+    /// Complexity: 29 (cyclomatic, outer body), 139 lines (full implementation)
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+    /// <seealso cref="DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf"/>
+    /// <seealso cref="DRagLint.Lint.ProjectRules.TProjectLintRules.Run"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckLayering(const AStore: ISymbolStore; const AConfigPath: string): TArray<TLintFinding>;
   end;
 

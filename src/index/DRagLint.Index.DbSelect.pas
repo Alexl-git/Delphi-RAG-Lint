@@ -25,23 +25,39 @@ uses
 type
   /// <summary>Resolves the ordered DB list a consumer should open when
   /// no --db flags are given.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDbSelect = class
     public
       /// <summary>Ordered DB list a consumer should open when no --db is given:
       /// every NON-library section's DbPath, followed by the single
-      /// library-{platform} DB matching APlatform.  Only paths that EXIST on
-      /// disk are returned (when ARequireExists=True).  Project DBs first,
+      /// library-{platform} DB matching APlatform. Only paths that EXIST on
+      /// disk are returned (when ARequireExists=True). Project DBs first,
       /// library DB last (cross-DB resolution order).</summary>
       /// <param name="AManifest">Parsed manifest supplying section info and settings.</param>
       /// <param name="APlatform">Platform token used to pick the library-{platform} DB
-      ///   (e.g. 'Win32', 'Win64').  Empty string matches no library section.</param>
+      /// (e.g. 'Win32', 'Win64'). Empty string matches no library section.</param>
       /// <param name="AResolver">Project resolver for platform enumeration;
-      ///   caller owns the lifetime.</param>
+      /// caller owns the lifetime.</param>
       /// <param name="ARequireExists">When True (default), only existing files are
-      ///   returned.  Pass False in selftests to assert resolved paths without
-      ///   requiring the DB files to be built.</param>
+      /// returned. Pass False in selftests to assert resolved paths without
+      /// requiring the DB files to be built.</param>
       /// <returns>Ordered array of absolute DB paths: non-library sections first,
-      ///   library-{platform} last.</returns>
+      /// library-{platform} last.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?
+      /// Calls: DRagLint.Index.DbSelect.TDbSelect.Resolve.Append, DRagLint.Index.Plan.ResolvePlan, SameText
+      /// Returns: OutList
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Index.DbSelect.TDbSelect.Resolve.Append"/>
+      /// <seealso cref="DRagLint.Index.Plan.ResolvePlan"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Resolve(const AManifest: TIndexManifest; const APlatform: string; AResolver: TProjectResolver; ARequireExists: Boolean = True): TArray<string>; static;
   end;
 

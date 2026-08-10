@@ -16,17 +16,16 @@ type
   /// daRemoved = there was one, it was entirely engine-owned, and everything
   /// that fed it is now gone, so the right edit is a pure DELETE with nothing
   /// reinserted.</summary>
-  /// <remarks>v(ADP3 T3k, register D1): daRemoved is new. A pure deletion used
+  /// <remarks>
+  /// v(ADP3 T3k, register D1): daRemoved is new. A pure deletion used
   /// to report daExtended, so `document --apply` printed "extended -- 1 edit(s)"
   /// and --json said "action":"extended" for an operation that REMOVES a
   /// comment. A consumer could not tell a repair from a removal -- the two have
   /// opposite meanings for anyone deciding whether to review the diff.
-  ///
   /// APPENDED, not inserted: every existing member keeps its ordinal, so
   /// nothing that persisted or compared an ordinal can shift underneath. This
   /// follows the convention T3d2 set for --strip's JSON -- additive, and stated
   /// in the contract note at the emitting site.
-  ///
   /// CONTRACT CHANGE, and it is the sanctioned one for this task: the emitted
   /// action string for a deletion changes from "extended" to "removed" on both
   /// the --json and the text path. Exactly one runner pinned the old value for a
@@ -34,15 +33,24 @@ type
   /// already called it "a single delete"); that expectation moved as part of
   /// this fix. Every other "extended" pin in the suite is a real repair and is
   /// untouched.
-  ///
   /// EVERY consumer that tests for daExtended must decide about daRemoved
   /// explicitly. There are three, all updated: the two report sites in
   /// DRagLint.CLI.pas, and DRagLint.Doc.Batch.pas's Keep filter -- which had to
   /// admit daRemoved, because a deletion edit carries no text and therefore no
   /// managed fence, so HasManagedBlock is False for it and a batch run would
-  /// otherwise have silently STOPPED removing decayed blocks.</remarks>
+  /// otherwise have silently STOPPED removing decayed blocks.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: declaration (DRagLint.Doc.Document.pas)
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocumentAction = (daCreated, daExtended, daUnchanged, daNotFound, daRemoved);
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), declaration (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) (+2 more)
+  /// Used in units: DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Lint.DocRules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocumentResult = record
     Action  : TDocumentAction   ;
     QName   : string            ;
@@ -51,6 +59,12 @@ type
     Edits   : TArray<TTextEdit> ;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)
+  /// Used in units: DRagLint.Doc.Batch, DRagLint.Lint.DocRules
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocumenter = class
   public
     /// <summary>Resolves AQName in the index and computes the DocInsight
@@ -64,8 +78,16 @@ type
     /// caller applies them.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AQName">Fully qualified symbol name, e.g. Unit.TType.Method.</param>
+    /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto --></param>
+    /// <param name="AIncludeSince"><!-- drag-lint:auto --></param>
+    /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
+    /// <param name="AExtraStores"><!-- drag-lint:auto --></param>
+    /// <param name="AMaxReturnCases"><!-- drag-lint:auto --></param>
+    /// <param name="AMaxCallers"><!-- drag-lint:auto --></param>
+    /// <param name="AComplexityMin"><!-- drag-lint:auto --></param>
     /// <returns>The classified action plus file/line and the computed edits.</returns>
-    /// <remarks>Does not write files; TTextEditApplier.Apply performs any I/O.
+    /// <remarks>
+    /// Does not write files; TTextEditApplier.Apply performs any I/O.
     /// AIncludeSeeAlso threads the --seealso opt-in into the facts builder; when
     /// False (the default overload) no &lt;seealso&gt; crefs are generated.
     /// AIncludeSince / ABaseDir thread the --since opt-in (git &lt;since&gt;
@@ -86,13 +108,39 @@ type
     /// method, all sharing one qualified_name) this still documents only the
     /// first-declared overload -- unchanged, existing behavior. Callers
     /// iterating actual resolved rows (e.g. one per overload) should call
-    /// BuildForSymbol directly instead (see its remarks).</remarks>
+    /// BuildForSymbol directly instead (see its remarks).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas) ?
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Doc.Document.TDocumenter.BuildForSymbol
+    /// Returns: Default(TDocumentResult)
+    /// Overload 1 of 2
+    /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string;
       AIncludeSeeAlso: Boolean; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
       AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5; AComplexityMin: Integer = 10): TDocumentResult; overload;
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
     /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
+    /// <param name="AStore"><!-- drag-lint:auto --></param>
+    /// <param name="AQName"><!-- drag-lint:auto --></param>
+    /// <returns><!-- drag-lint:auto -->Observed: BuildFor(AStore, AQName, False).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas) ?
+    /// Calls: DRagLint.Doc.Document.TDocumenter.BuildFor/9
+    /// Overload 2 of 2
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
     /// <summary>Computes the DocInsight comment edits for an ALREADY-RESOLVED
     /// symbol ASym: builds index-grounded facts, scans the existing doc-comment
@@ -106,12 +154,33 @@ type
     /// and documenting the others never -- see adp1-bugA-brief.md.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="ASym">The already-resolved symbol to document (its own file/line).</param>
+    /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto --></param>
+    /// <param name="AIncludeSince"><!-- drag-lint:auto --></param>
+    /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
+    /// <param name="AExtraStores"><!-- drag-lint:auto --></param>
+    /// <param name="AMaxReturnCases"><!-- drag-lint:auto --></param>
+    /// <param name="AMaxCallers"><!-- drag-lint:auto --></param>
+    /// <param name="AComplexityMin"><!-- drag-lint:auto --></param>
     /// <returns>The classified action plus file/line and the computed edits.</returns>
-    /// <remarks>Does not write files; TTextEditApplier.Apply performs any I/O.
+    /// <remarks>
+    /// Does not write files; TTextEditApplier.Apply performs any I/O.
     /// AIncludeSeeAlso / AIncludeSince / ABaseDir / AExtraStores /
     /// AMaxReturnCases / AMaxCallers / AComplexityMin have the same meaning as
     /// on BuildFor's full overload (see its remarks). Result.QName is
-    /// ASym.QualifiedName.</remarks>
+    /// ASym.QualifiedName.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas)
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove, DRagLint.Doc.Document.NormalizeCommentLines (+12 more)
+    /// Returns: Default(TDocumentResult)
+    /// Complexity: 20 (cyclomatic, outer body), 357 lines (full implementation)
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Doc.Document.CommentLinesContain"/>
+    /// <seealso cref="DRagLint.Doc.Document.CommentLinesEqual"/>
+    /// <seealso cref="DRagLint.Doc.Document.CommentLinesIndentEqual"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
@@ -128,6 +197,20 @@ type
     /// <param name="AFound">OUT: True when the symbol + its file were resolved.</param>
     /// <param name="AHasDoc">OUT: True when a doc-comment was found above the decl.</param>
     /// <returns>The parsed on-disk doc (Default/empty when AHasDoc is False).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas) ?
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.FindDocRegionAbove, DRagLint.Parser.DocComments.TDocCommentParser.Dispatch, DRagLint.Parser.DocComments.TDocCommentScanner.Scan, TDocCommentKind
+    /// Returns: Default(TParsedDoc); TDocCommentParser.Dispatch(Region)
+    /// Mutates: ASym (out), AFound (out), AHasDoc (out)
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Doc.Document.FindDocRegionAbove"/>
+    /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ExistingDocFor(const AStore: ISymbolStore; const AQName: string;
       out ASym: TSymbol; out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
   end;

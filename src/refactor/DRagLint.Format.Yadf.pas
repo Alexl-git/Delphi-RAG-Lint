@@ -10,17 +10,65 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), declaration (DRagLint.Format.Yadf.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Format.Yadf
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFormatResult = record
     ExitCode  : Integer;
     StdoutText: string ;
     Success   : Boolean;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoFormat (DRagLint.CLI.pas)
+  /// Used in units: DRagLint.CLI
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TYadfFormatter = class
     public
+      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="AYadfPath"><!-- drag-lint:auto --></param>
+      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenWritableStore (DRagLint.CLI.pas) ? (+110 more)
+      /// Calls: DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture
+      /// Touches: file system
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Format(const AFile: string; const AYadfPath: string = ''): TFormatResult;
+      /// <returns><!-- drag-lint:auto -->Observed: ''; RegPath; KNOWN_RELEASE;
+      /// KNOWN_DEBUG.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Calls: Trim
+      /// Touches: file system, registry
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function FindYadfPath                                             : string       ;
     private
+      /// <param name="ACmd"><!-- drag-lint:auto --></param>
+      /// <param name="ATimeoutMs"><!-- drag-lint:auto --></param>
+      /// <param name="AOutput"><!-- drag-lint:auto --></param>
+      /// <returns><!-- drag-lint:auto -->Observed: -1; -2; Integer(ExitCode).</returns>
+      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)
+      /// Calls: AnsiString, CloseHandle, CreatePipe, CreateProcessW, FillChar, GetExitCodeProcess, GetStdHandle, Integer, PWideChar, ReadFile, SetHandleInformation, TerminateProcess, UniqueString, WaitForSingleObject
+      /// Mutates: AOutput (out)
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function SpawnAndCapture(const ACmd: string; ATimeoutMs: DWORD; out AOutput: string): Integer;
   end;
 

@@ -21,16 +21,28 @@ type
   /// <summary>One signature parameter's harvested MEANING (ruling D-3): the
   /// text of a comment written beside that parameter INSIDE the parameter
   /// list.</summary>
-  /// <remarks>A parameter with no such comment gets NO entry here. That is the
+  /// <remarks>
+  /// A parameter with no such comment gets NO entry here. That is the
   /// whole of D-3's split: an automatic generator supplies STRUCTURE for every
   /// parameter (the emitter writes a &lt;param&gt; tag regardless) and MEANING
   /// only where the source states it. Nothing in this record is ever
-  /// invented.</remarks>
+  /// invented.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas)
+  /// Used in units: DRagLint.Doc.Facts
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocParamNote = record
     Name: string;
     Text: string;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas)
+  /// Used in units: DRagLint.Doc.Facts
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocFactRef = record
     Display   : string;   { e.g. 'Unit1.DoThing' }
     Location  : string;   { file name only, e.g. 'U1.pas' -- NO :line (volatile) }
@@ -47,6 +59,12 @@ type
   /// <summary>Index-grounded facts about one symbol, for the managed
   /// DocInsight remarks block. All lists are capped for display; the *Total
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+5 more)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocFacts = record
     CalledFrom     : TArray<TDocFactRef>;
     Calls          : TArray<string>     ;
@@ -334,6 +352,12 @@ type
     SymbolKind       : TSymbolKind      ;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.LSP.Server
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocFactsBuilder = class
   public
     /// <summary>Builds the grounded facts for ASym from the index. When
@@ -365,6 +389,20 @@ type
     /// carries the true distinct count so the renderer can add '(+N more)'. 0 or
     /// negative shows no callers (CalledFrom stays empty, total unaffected).
     /// Default 5.</param>
+    /// <returns><!-- drag-lint:auto -->Observed: Default(TDocFacts).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
+    /// Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+27 more)
+    /// Complexity: 75 (cyclomatic, outer body), 839 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Build(const AStore: ISymbolStore; const ASym: TSymbol;
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
@@ -374,6 +412,14 @@ type
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
   /// UNLESS ATotal > 15, in which case only the first 10 are kept and the caller
   /// appends '(+N more)' with N = ATotal - 10. Returns how many to display.</summary>
+  /// <param name="ATotal"><!-- drag-lint:auto --></param>
+  /// <returns><!-- drag-lint:auto -->Observed: 10.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
+  /// Pure
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   function DocDisplayCount(ATotal: Integer): Integer;
 
 implementation

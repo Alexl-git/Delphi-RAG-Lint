@@ -15,17 +15,43 @@ uses
   DRagLint.Core.Model;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
+  /// Used in units: DRagLint.LSP.Completion
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCloneChecker = class
   public
     /// <summary>Within-file clones in AFile.</summary>
     /// <param name="AFile">Path to the .pas file to scan.</param>
     /// <param name="AMinTokens">Minimum clone length in normalized tokens.</param>
     /// <returns>One info finding per maximal clone pair, sorted by (FilePath, StartLine).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas) ?
+    /// Calls: DRagLint.Diagnostics.CloneChecks.RunEngine
+    /// Returns: RunEngine([AFile], AMinTokens)
+    /// Pure
+    /// <seealso cref="DRagLint.Diagnostics.CloneChecks.RunEngine"/>
+    /// <seealso cref="DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; AMinTokens: Integer = 90): TArray<TLintFinding>;
     /// <summary>Within + cross-file clones across AFiles (used by lint-all).</summary>
     /// <param name="AFiles">All .pas files in the project scan.</param>
     /// <param name="AMinTokens">Minimum clone length in normalized tokens.</param>
     /// <returns>One info finding per maximal clone pair, sorted by (FilePath, StartLine).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
+    /// Calls: DRagLint.Diagnostics.CloneChecks.RunEngine
+    /// Returns: RunEngine(AFiles, AMinTokens)
+    /// Pure
+    /// <seealso cref="DRagLint.Diagnostics.CloneChecks.RunEngine"/>
+    /// <seealso cref="DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckProject(const AFiles: TArray<string>; AMinTokens: Integer = 90): TArray<TLintFinding>;
   end;
 
