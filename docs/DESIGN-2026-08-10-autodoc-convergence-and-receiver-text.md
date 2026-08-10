@@ -161,6 +161,55 @@ name "was never equal to itself on the next run, so the block was rewritten fore
 Whatever type text is emitted must be byte-stable across runs, so it must come from the
 indexed signature verbatim, never re-formatted.
 
+### SHIPPED 2026-08-10, and the two defects it caused
+
+`lint-all` **3,675 -> 3,104**, below the 3,321 pre-autodoc baseline;
+`doc-param-no-description` **574 -> 0**; convergence probe **0 pending edits across 0
+files**. Whole autodoc suite green (71/71).
+
+Both defects had ONE root cause -- ownership was INFERRED rather than stated:
+
+1. **Reproducibility broke.** `ClassifyParamAction` reads marked-and-EMPTY as
+   engine-owned and marked-WITH-TEXT as "a human typed inside my tag, preserve it"
+   (ruling D-4). Filling the tag with a type made the engine's own output
+   indistinguishable from a human's, so pass 2 took the preserve path, re-emitted the
+   tag WITHOUT its marker, and the file changed on every run.
+2. **`--strip` stopped round-tripping.** Strip is a line-oriented scan with no index and
+   no facts -- by design, so it can strip a file the parser cannot resolve. It therefore
+   cannot compute what type the engine would generate, left every typed tag behind, and
+   the file never returned to its pre-apply bytes.
+
+A content-equality fix (compare the body to a freshly built type) was tried for (1) and
+is why the marker exists. It failed on LONG types that WRAP across several `///` lines
+and come back re-wrapped: an exact compare missed exactly those, the preserve path
+claimed them, and the marker was dropped -- 6 pending edits across 2 files, found by the
+pipeline's convergence probe and by NO fixture, because no fixture had a type long enough
+to wrap. Collapsing whitespace fixed (1) but could not address (2) at all.
+
+**The answer is an explicit marker.** `AUTO_TYPE = '<!-- drag-lint:auto type -->'` marks a
+`<param>` body that is entirely the engine's declared-type baseline. Both consumers decide
+LEXICALLY -- `MergeComment` regenerates it, `--strip` deletes it -- and the whitespace
+fragility disappears. Same contract as `<summary>`: marked means engine-owned, full stop.
+A plain `AUTO_MARK` tag keeps D-4's protection for text a human typed inside it.
+
+`AUTO_TYPE` is deliberately NOT a superstring of `AUTO_MARK`, so every consumer that
+searches for a marker must search for BOTH -- `IsManagedText`, `StripMark`, and strip's
+Rule 1 scan were all updated. That is the cost of the design and the place a future
+consumer will forget.
+
+**One visible behaviour change:** hover renders the doc-derived param row and no longer
+needs `RenderSignatureParamsMarkdown`'s fallback, so PLAIN hover gained a
+`AValue -- const Integer` row it never had. Same information, one fewer code path.
+
+**A process note worth more than the feature.** During this work `git checkout -- src/`
+was run to discard the previous pipeline's machine-generated doc comments (written under
+the old marker, and about to be misclassified as hand-written). It also discarded the
+UNCOMMITTED param-types implementation in the same directory -- four files, no `.bak`, no
+stash, unrecoverable. It was reconstructed from the surviving tests under `tests/`, which
+had not been reverted and were an exact executable spec; the suite went straight back to
+71/71. Commit before running a path-scoped destructive command: the path scopes the
+command, it does not scope the intent.
+
 ---
 
 ## 3. Design: `refs.receiver_text` -- schema v20

@@ -551,6 +551,41 @@ begin
   Result:= N = 1;
 end;
 
+{ The EXTRA-STORE form of the same gate, and the difference is load-bearing.
+
+  LeafNameIsUnambiguous asks "does this name identify exactly ONE call target
+  here?", which is right for the PRIMARY store -- the symbol being documented is
+  declared there, so exactly one means the name is unique.
+
+  It is WRONG for an extra store, where N = 0 is the NORMAL case: an extra DB is
+  consulted for CALLERS, not for the declaration. `Compute` declared in uLib's DB
+  and called from uApp's DB is the whole point of multi-db, and it has zero
+  `Compute` declarations in uApp's store. Requiring exactly one there skipped the
+  cross-DB bucket entirely and silently dropped every cross-DB caller.
+
+  Absent is not ambiguous. Ambiguous is TWO OR MORE, so the extra-store test is
+  N <= 1. Regression introduced with the leaf-name uniqueness gate (the fix for
+  a constructor claiming 107 callers) and caught by tests/autotest/
+  run_doc_multidb.ps1 the next time the full battery ran -- which is the argument
+  for running it before shipping, not after. }
+function LeafNameNotAmbiguous(const AStore: ISymbolStore; const ALeaf: string): Boolean;
+var
+  Cands: TArray<TSymbol>;
+  S    : TSymbol        ;
+  N    : Integer        ;
+begin
+  if ALeaf = '' then Exit(False);
+  N:= 0;
+  Cands:= AStore.FindSymbolsByExactName(ALeaf);
+  for S in Cands do
+    if CanBeCallTarget(S.Kind) then
+    begin
+      Inc(N);
+      if N > 1 then Exit(False);
+    end;
+  Result:= True; { 0 = not declared here (normal for an extra store); 1 = unique }
+end;
+
 // v(ADP1 Bug D): True when ARef is a class's OWN self-reference -- a qualified
 // implementation header (e.g. 'function TThing.Add: Integer;') emits a
 // type_use ref of NameText='TThing' whose EnclosingSymbolId is the method
@@ -1484,7 +1519,7 @@ begin
       // name must identify one call target in BOTH stores -- shared in either
       // means an unresolved ref naming it cannot be attributed to this symbol,
       // and a fact must not depend on which DB a reference happened to live in.
-      if not (NameUnambiguous and LeafNameIsUnambiguous(ExStore, LastSeg(ASym.QualifiedName))) then Continue;
+      if not (NameUnambiguous and LeafNameNotAmbiguous(ExStore, LastSeg(ASym.QualifiedName))) then Continue;
       // Same kind gate as the primary store above -- the two must agree, or a
       // symbol's fact would depend on which DB a reference happened to live in.
       // The expression is repeated because it is CODE; the reasoning is not, and

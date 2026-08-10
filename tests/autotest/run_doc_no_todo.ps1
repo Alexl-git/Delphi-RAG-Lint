@@ -128,8 +128,12 @@ Check 'T3: NO <summary> tag at all (nothing to say)' ($summaryLinesA.Count -eq 0
 # text -- an empty body, not a stub sentence (the zero-TODO assertion below
 # covers the whole file).
 $paramLinesA = @([regex]::Matches($textA, '<param name="AWidth">.*?</param>') | ForEach-Object { $_.Value })
-Check 'v(PHASE A3): exactly ONE <param name="AWidth"> tag, engine-marked and EMPTY' `
-  (($paramLinesA.Count -eq 1) -and ($paramLinesA[0] -eq '<param name="AWidth"><!-- drag-lint:auto --></param>')) "got=$($paramLinesA -join ' | ')"
+# v(2026-08-10, owner ruling): the body is the DECLARED TYPE under AUTO_TYPE,
+# not an empty shell -- a <param> must reflect the current signature because
+# these comments are generated into doc/HTML help. Still exactly ONE tag, and
+# still not a TODO stub, which is what this runner actually guards.
+Check 'v(PHASE A3): exactly ONE <param name="AWidth"> tag, carrying its TYPE' `
+  (($paramLinesA.Count -eq 1) -and ($paramLinesA[0] -eq '<param name="AWidth"><!-- drag-lint:auto type -->const Integer</param>')) "got=$($paramLinesA -join ' | ')"
 
 $returnsLinesA = @([regex]::Matches($textA, '<returns>.*?</returns>') | ForEach-Object { $_.Value })
 Check 'exactly one <returns> tag' ($returnsLinesA.Count -eq 1) "count=$($returnsLinesA.Count)"
