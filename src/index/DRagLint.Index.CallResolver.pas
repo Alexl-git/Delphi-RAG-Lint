@@ -530,7 +530,38 @@ begin
   while I >= 1 do
   begin
     Ch:= Line[I];
-    if (Ch = ')') or (Ch = ']') then
+    if Ch = '>' then
+    begin
+      // GENERIC ARGUMENT LIST: 'TArray<string>.Create', 'TPair<string,
+      // Integer>.Create'. Without this the scan breaks on '>' and returns '',
+      // which is the SAME value a bare call yields -- so every generic
+      // construction looked unqualified and was offered as a caller of every
+      // symbol sharing its leaf name. Measured on this repo: the three residual
+      // false callers left on TQueryRule.Create after the v20 receiver filter
+      // were all TArray<>/TPair<> constructions.
+      //
+      // Safe against '>' the COMPARISON operator, because this scan only ever
+      // looks at the character immediately left of the receiver's dot: in
+      // 'X > Y.Foo' that character is 'Y', and in '(A > B).Foo' it is ')'. A '>'
+      // can land here only as the close of a generic argument list.
+      Depth:= 0;
+      while I >= 1 do
+      begin
+        if Line[I] = '>' then Inc(Depth)
+        else if Line[I] = '<' then
+        begin
+          Dec(Depth);
+          if Depth = 0 then Break;
+        end;
+        Dec(I);
+      end;
+      if Depth <> 0 then Exit; // unbalanced -> give up (return '')
+      StopL:= I;
+      // The '<' group is preceded by the generic type's own name: TArray<...>.
+      Dec(I);
+      while (I >= 1) and IsIdentPart(Line[I]) do begin StopL:= I; Dec(I); end;
+    end
+    else if (Ch = ')') or (Ch = ']') then
     begin
       // Balanced bracket group: walk left to its matching opener.
       Depth:= 0;

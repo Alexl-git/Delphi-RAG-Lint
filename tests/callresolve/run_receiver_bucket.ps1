@@ -68,7 +68,11 @@ try {
     ($calledFrom -match 'receiver_bucket\.MakeQualified') $calledFrom
 
   # --- the fabricated callers are GONE ---------------------------------------
-  foreach ($n in 'NoiseA','NoiseB','NoiseC') {
+  # NoiseGeneric constructs TArray<string>. Its receiver ends in '>', which the
+  # left-walking extractor used to break on -- returning '', the same value a
+  # BARE call yields, so every generic construction slipped back in through the
+  # '' arm of the filter.
+  foreach ($n in 'NoiseA','NoiseB','NoiseC','NoiseGeneric') {
     Check "FABRICATED: $n is NOT listed" ($calledFrom -notmatch "receiver_bucket\.$n") $calledFrom
   }
 

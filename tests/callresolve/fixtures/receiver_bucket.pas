@@ -46,6 +46,7 @@ function MakeQualified: TOnlyOnce;
 procedure NoiseA;
 procedure NoiseB;
 procedure NoiseC;
+procedure NoiseGeneric;
 
 implementation
 
@@ -84,6 +85,17 @@ end;
 procedure NoiseC;
 begin
   TUnknownC.Create(5);
+end;
+
+{ A GENERIC receiver. ExtractReceiverExpr walks LEFT from the dot, and '>' is
+  neither a bracket it recognised nor an identifier char, so it used to break
+  immediately and return '' -- the SAME value a bare call yields. Every generic
+  construction therefore looked unqualified and was readmitted to the bucket by
+  the '' arm. On the real index the three false callers left on TQueryRule.Create
+  after the receiver filter were all TArray<>/TPair<> sites. }
+procedure NoiseGeneric;
+begin
+  TArray<string>.Create('x');
 end;
 
 end.
