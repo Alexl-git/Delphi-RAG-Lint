@@ -30,10 +30,15 @@
 
   THE FAIL-LOUDLY GUARD
   ---------------------------------------------------------------------------
-  A .dproj that resolves to ZERO closure files exits 2 instead of falling back
+  A .dproj that resolves to NOTHING INDEXABLE exits 2 instead of falling back
   to a folder walk or writing an empty index. An empty index is the most
   dangerous artefact this tool can produce: lint, coverage and doc all report a
   clean bill of health over it. Assertion group 2 pins that.
+
+  The guard keys on the FINAL EXPANDED SCOPE, not on the raw closure: a
+  single-file program whose `uses` names only library units has an empty
+  project-local closure by construction, and is a perfectly legitimate index of
+  one file. Group 5 pins that; groups 2 and 5 are a pair and must both hold.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7. Needs `python` on PATH.
 #>
@@ -216,6 +221,54 @@ Write-Ascii (Join-Path $empty 'Empty.dproj') @'
 </Project>
 '@
 
+# --- fixture 3: a LEGITIMATE single-file program ----------------------------
+# Solo.dpr's `uses` names RTL units ONLY, so the PROJECT-LOCAL closure is
+# legitimately EMPTY -- every unit it names lives under a Library path and
+# belongs in library-Win64.sqlite, not here. Its scope is the program file
+# itself, which ExpandProjectScope always contributes. Reproduced in the wild on
+# C:\Projects\OCRPDF\delphi\OCRPDF.dpr (bare .dpr) and on
+# C:\Projects\DB\ORM3\TESTER\CachedUpdates\TestCachedUpdates.dproj (a .dproj
+# whose only member is its MainSource) -- both indexed 0 files and FAILED their
+# manifest section. Solo.dproj reproduces the second shape.
+$solo = Join-Path $scratch 'solo'
+New-Item -ItemType Directory -Path $solo | Out-Null
+
+Write-Ascii (Join-Path $solo 'Solo.dpr') @'
+program Solo;
+
+{$APPTYPE CONSOLE}
+
+uses
+  System.SysUtils,
+  System.IOUtils;
+
+procedure Announce;
+begin
+  Writeln(TPath.GetFileName(ParamStr(0)));
+end;
+
+begin
+  Announce;
+end.
+'@
+
+Write-Ascii (Join-Path $solo 'Solo.dproj') @'
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <MainSource>Solo.dpr</MainSource>
+        <ProjectVersion>20.3</ProjectVersion>
+        <Platform>Win64</Platform>
+        <Config Condition="'$(Config)'==''">Debug</Config>
+    </PropertyGroup>
+    <ItemGroup>
+        <DelphiCompile Include="Solo.dpr">
+            <MainSource>MainSource</MainSource>
+        </DelphiCompile>
+    </ItemGroup>
+</Project>
+'@
+
 $py = Join-Path $scratch 'files.py'
 @'
 import sqlite3, sys, json, os
@@ -378,6 +431,71 @@ try {
   $dfiles = @((& python $py (Join-Path $scratch 'out2\dead.sqlite')) -join "`n" | ConvertFrom-Json)
   Check 'the dead section wrote no source rows' ($dfiles.Count -eq 0) `
     ("count=" + $dfiles.Count + "; e.g. " + (($dfiles | Select-Object -First 3) -join ' | '))
+
+  # ==========================================================================
+  # 5. THE GUARD MUST NOT EAT A LEGITIMATE PROJECT.
+  #    "The closure resolved 0 PROJECT-LOCAL files" is not the same fact as
+  #    "this project resolved nothing". A single-file program whose `uses` names
+  #    only library units has an empty project-local closure BY CONSTRUCTION,
+  #    and its correct scope is the program file -- which ExpandProjectScope
+  #    always contributes. The guard therefore keys on the FINAL EXPANDED SCOPE,
+  #    not on the raw closure. Group 2 above is the other half of this pair: it
+  #    pins that a .dproj expanding to nothing indexable STILL exits 2, so this
+  #    group cannot be satisfied by simply deleting the guard.
+  # ==========================================================================
+  $sdpr = Join-Path $solo 'Solo.dpr'
+  $sdb  = Join-Path $scratch 'solo.sqlite'
+
+  $sout = & $exePath index --project $sdpr --db $sdb --platform Win64 --quiet 2>&1
+  $src  = $LASTEXITCODE
+  Check 'a single-file program (library uses only) exits 0' ($src -eq 0) `
+    "exit=$src; $(($sout | Select-Object -Last 2) -join ' | ')"
+
+  $sfiles = @((& python $py $sdb) -join "`n" | ConvertFrom-Json)
+  Write-Host ("  solo indexed {0} file(s): {1}" -f $sfiles.Count,
+    (($sfiles | ForEach-Object { Split-Path $_ -Leaf }) -join ', '))
+  Check 'Solo.dpr IS in the index' `
+    (@($sfiles | Where-Object { $_ -like '*\Solo.dpr' }).Count -ge 1) `
+    ("count=" + $sfiles.Count)
+
+  # The .dproj shape of the same defect: MainSource only, no DCCReference.
+  $sdproj = Join-Path $solo 'Solo.dproj'
+  $sdb2   = Join-Path $scratch 'solo_dproj.sqlite'
+
+  $s2out = & $exePath index --project $sdproj --db $sdb2 --platform Win64 --quiet 2>&1
+  $s2rc  = $LASTEXITCODE
+  Check 'the .dproj shape of a single-file program exits 0' ($s2rc -eq 0) `
+    "exit=$s2rc; $(($s2out | Select-Object -Last 2) -join ' | ')"
+
+  $s2files = @((& python $py $sdb2) -join "`n" | ConvertFrom-Json)
+  Check 'Solo.dpr IS in the index when reached via Solo.dproj' `
+    (@($s2files | Where-Object { $_ -like '*\Solo.dpr' }).Count -ge 1) `
+    ("count=" + $s2files.Count)
+
+  # ...and the OTHER arm agrees: a manifest section over the same program must
+  # BUILD, not fail. This is the shape that actually broke in production.
+  $cfg3 = Join-Path $scratch 'manifest3.drag-lint.json'
+  @"
+{
+  "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 1 },
+  "indexes": {
+    "outDir": "out3",
+    "sections": [
+      { "name": "SoloSection", "db": "solo.sqlite", "include": ["solo\\Solo.dpr"] }
+    ]
+  }
+}
+"@ | Set-Content $cfg3 -Encoding ascii
+
+  $3out = @((& $exePath index --all --config $cfg3 --only SoloSection 2>&1) | ForEach-Object { $_.ToString() })
+  $3rc  = $LASTEXITCODE
+  Check 'a manifest section over a single-file program exits 0' ($3rc -eq 0) `
+    "exit=$3rc; $(($3out | Select-Object -Last 2) -join ' | ')"
+
+  $3files = @((& python $py (Join-Path $scratch 'out3\solo.sqlite')) -join "`n" | ConvertFrom-Json)
+  Check 'section: Solo.dpr IS in the index' `
+    (@($3files | Where-Object { $_ -like '*\Solo.dpr' }).Count -ge 1) `
+    ("count=" + $3files.Count)
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

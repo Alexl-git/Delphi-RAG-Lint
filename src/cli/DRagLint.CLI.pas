@@ -1475,6 +1475,44 @@ begin
   end; // try
 end; // function
 
+/// <summary>True when an expanded project scope holds at least one file the
+/// indexer can actually parse, i.e. anything other than the bare .dproj
+/// anchor.</summary>
+/// <param name="AScope">The result of ExpandProjectScope. An empty array
+/// answers False.</param>
+/// <returns>True when the scope would contribute at least one row to the
+/// index.</returns>
+/// <remarks>
+/// THE DISTINCTION BOTH INDEX ARMS GUARD ON, and it is not the one they used to
+/// guard on. They tested Length(CR.Files) -- the PROJECT-LOCAL closure -- and
+/// treated 0 as a hard failure. That is right for a .dproj that is missing,
+/// unparseable, or names a program file which is not on disk. It is WRONG for a
+/// single-file program whose `uses` names only library units: its project-local
+/// closure is empty BY CONSTRUCTION (every unit it names belongs in
+/// library-Win32/Win64.sqlite), yet its scope -- the program file, which
+/// ExpandProjectScope always contributes -- is a perfectly legitimate index of
+/// one file. Real casualties, both reported 0 files and FAILED their manifest
+/// section: OCRPDF-App (a bare .dpr over System.SysUtils/IOUtils/Winapi.Windows)
+/// and ORM3-TestCachedUpdates (a .dproj whose only member is its MainSource).
+///
+/// Testing Length(scope) instead would be a hole rather than a fix: for a
+/// .dproj ExpandProjectScope names the .dproj itself unconditionally, so a
+/// missing or member-less .dproj still yields a scope of one and would sail
+/// past. The .dproj is also the ONE entry no parser claims (see
+/// ExpandProjectScope's remarks: it is named as a finding anchor, not as
+/// content), which is exactly why excluding it here is both the parse test and
+/// the failure test. Should a .dproj parser ever be registered, this predicate
+/// must be revisited along with that comment.
+/// </remarks>
+function ScopeHasIndexableFile(const AScope: TArray<string>): Boolean;
+var
+  F: string;
+begin
+  for F in AScope do
+    if not SameText(ExtractFileExt(F), '.dproj') then Exit(True);
+  Result:= False;
+end; // function
+
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False): Boolean;
 var
@@ -1491,6 +1529,7 @@ var
   Elapsed        : Double                                    ;
   ProjectFile    : string                                    ;
   ExcludePatterns: TArray<string>                            ;
+  Scope          : TArray<string>                            ; { ExpandProjectScope's result: what the guard tests AND what gets indexed }
   { One formatted reason per project file in this section that yielded NO source,
     e.g. 'project file NOT FOUND: C:\...\X.dproj'. Reasons rather than bare paths
     so the ERROR line says which of the two failures happened -- a missing file
@@ -1581,28 +1620,30 @@ begin
               ExcludePatterns:= Concat( AItem.Filter.GlobalExclude, AItem.Filter.SectionExclude);
               CR:= Cl.Resolve(F, ExcludePatterns);
               for W in CR.Warnings do Writeln('  ', W);
+              { Same scope expansion as `index --project` (sibling .dfm + the
+                project file). Before this, closure sections indexed .pas/.inc
+                only: Loader.sqlite held 84 files, dfm 0, dpr 0. }
+              Scope:= ExpandProjectScope(F, CR.Files);
               { The same fail-loudly rule the standalone `index --project` arm
                 applies (DoIndex), unified here so the two arms agree about
-                FAILURE as well as about scope. Tested on CR.Files, NOT on the
-                expansion: ExpandProjectScope always contributes the project file
-                itself, so an empty closure would otherwise still look like one
-                indexed file and pass for success.
+                FAILURE as well as about scope. Tested on the EXPANDED SCOPE, not
+                on CR.Files: a single-file program over library units only has an
+                empty project-local closure by construction and is still a
+                legitimate one-file index (OCRPDF-App, ORM3-TestCachedUpdates).
+                See ScopeHasIndexableFile for why the test is not Length(Scope).
 
                 Unlike the standalone arm this does NOT exit -- `index --all`
                 builds many sections, and one mistyped path must not stop every
                 other index from refreshing. The section is failed instead
                 (Result := False below), which the caller already turns into a
                 non-zero process exit via AnyFailed. }
-              if Length(CR.Files) = 0 then
+              if not ScopeHasIndexableFile(Scope) then
               begin
-                DeadProjects:= DeadProjects + [Format('project file resolved 0 source files: %s', [F])];
+                DeadProjects:= DeadProjects + [Format('project file resolved no indexable source: %s', [F])];
                 Writeln('  ', DeadProjects[High(DeadProjects)]);
                 Continue;
               end;
-              { Same scope expansion as `index --project` (sibling .dfm + the
-                project file). Before this, closure sections indexed .pas/.inc
-                only: Loader.sqlite held 84 files, dfm 0, dpr 0. }
-              for ProjectFile in ExpandProjectScope(F, CR.Files) do Indexer.IndexFile(ProjectFile);
+              for ProjectFile in Scope do Indexer.IndexFile(ProjectFile);
             end;
           finally
             Cl.Free;
@@ -2182,26 +2223,32 @@ begin
         var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
         for var W: string in CR.Warnings do Writeln('  ', W);
 
+        { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
+          sibling .dfm and the project file(s). See its remarks for why both are
+          load-bearing. }
+        Folders:= ExpandProjectScope(AArgs.ProjectPath, CR.Files);
+
         { FAIL LOUDLY. A project that resolves to nothing must NOT fall back to
           a folder walk -- that fallback is the defect above returning -- and
           must not quietly write an empty index either. Lint, coverage and the
           doc engine all report a clean bill of health over an empty DB, so a
           silent empty index is the most dangerous artefact this tool can
-          produce. }
-        if Length(CR.Files) = 0 then
+          produce.
+
+          Guarded on the EXPANDED SCOPE, not on CR.Files. A single-file program
+          whose `uses` names only library units has an empty project-local
+          closure by construction, and indexing its program file is the correct
+          outcome -- the CR.Files test failed OCRPDF.dpr and
+          TestCachedUpdates.dproj, both legitimate. ScopeHasIndexableFile
+          explains why the test is not simply Length(Folders) = 0. }
+        if not ScopeHasIndexableFile(Folders) then
         begin
-          Writeln(ErrOutput, Format('ERROR: %s resolves to an EMPTY compile closure -- no ' +
-            'DCCReference entries and no resolvable .dpr member units. Refusing to write an ' +
-            'empty index; a folder walk is NOT a fallback (it indexes files the project does ' +
-            'not compile).', [AArgs.ProjectPath]));
+          Writeln(ErrOutput, Format('ERROR: %s resolves to an EMPTY compile scope -- no ' +
+            'DCCReference entries, no resolvable .dpr member units, and no program file on ' +
+            'disk. Refusing to write an empty index; a folder walk is NOT a fallback (it ' +
+            'indexes files the project does not compile).', [AArgs.ProjectPath]));
           Exit(2);
         end;
-
-        { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
-          sibling .dfm and the project file(s). See its remarks for why both are
-          load-bearing. Guarded on CR.Files above, NOT on the expansion: a
-          project whose only resolvable input is its own .dpr has no closure. }
-        Folders:= ExpandProjectScope(AArgs.ProjectPath, CR.Files);
       finally
         Cl.Free;
       end; // try
