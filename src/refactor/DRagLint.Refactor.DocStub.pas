@@ -66,6 +66,7 @@ function ExtractParamList(const ASig: string): string;
 /// "const A, B: string; C: Boolean; D: Integer" and returns an array of bare param names
 /// (A, B, C, D). Handles const/var/out/in prefixes and grouped names (A, B: T).</summary>
 /// <param name="AParamList"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.GroupParamNames (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)

@@ -72,6 +72,7 @@ type
       /// </remarks>
       function ResolveNamedMacro(const AName: string; out AValue: string): Boolean;
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas)

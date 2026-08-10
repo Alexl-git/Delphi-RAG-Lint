@@ -46,6 +46,7 @@ type
   TDocCommentParser = class
     public
       /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->TParsedDoc</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)
@@ -61,6 +62,7 @@ type
       /// </remarks>
       class function ParseXmlDoc(const ARaw: string)                         : TParsedDoc; static;
       /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->TParsedDoc</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)
@@ -77,6 +79,7 @@ type
       class function ParsePasDoc(const ARaw: string)                         : TParsedDoc; static;
       /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AKind"><!-- drag-lint:auto type -->TDocCommentKind</param>
+      /// <returns><!-- drag-lint:auto type -->TParsedDoc</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose (DRagLint.Parser.DocComments.pas)
@@ -108,6 +111,7 @@ type
 
       /// <summary><!-- drag-lint:auto -->TDocCommentParser</summary>
       /// <param name="ALine"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline (DRagLint.Parser.DocComments.pas)

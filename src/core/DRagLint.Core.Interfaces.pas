@@ -95,6 +95,7 @@ type
     /// instead of running a query against a pre-current schema.</summary>
     /// <param name="AFound"><!-- drag-lint:auto type -->out Integer</param>
     /// <param name="AExpected"><!-- drag-lint:auto type -->out Integer</param>
+    /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas)
@@ -113,6 +114,7 @@ type
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Convert.Apply.CheckTypeFreshness (DRagLint.Convert.Apply.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
@@ -133,6 +135,7 @@ type
     /// see TIndexer.ForceReparse -- so an engine upgrade can invalidate an otherwise
     /// byte-identical file. '' when the key (or the table) is absent.</summary>
     /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)
@@ -161,6 +164,7 @@ type
     /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ALanguage"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TFileTxToken</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
@@ -174,6 +178,7 @@ type
     function OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
     /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
     /// <param name="ASymbol"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
@@ -225,6 +230,7 @@ type
     procedure RollbackFileTx(const AToken: TFileTxToken);
 
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas) (+26 more)
@@ -270,6 +276,7 @@ type
     /// file, ordered by position. Backs the Structure form (was mis-using class-scoped
     /// surface).</summary>
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoOutline (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) (+11 more)
@@ -282,6 +289,7 @@ type
     /// </remarks>
     function FindSymbolsByFile(const APath: string): TArray<TSymbol>                       ;
     /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)
@@ -294,6 +302,7 @@ type
     /// </remarks>
     function FindReferencesTo(ASymbolId: Int64): TArray<TReference>                        ;
     /// <param name="ACalleeName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) (+2 more)
@@ -307,6 +316,7 @@ type
     function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
     /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleWorkspaceSymbol (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
@@ -319,6 +329,7 @@ type
     /// </remarks>
     function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoHelpersOf (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas) (+58 more)
@@ -330,6 +341,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetFilePath(AFileId: Int64): string                                           ;
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;Int64&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestFiles (DRagLint.CLI.pas), DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas) (+12 more)
@@ -342,6 +354,7 @@ type
     /// </remarks>
     function GetAllFileIds: TArray<Int64>                                                  ; { v0.43: for cycles / cross-file scans }
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) (+4 more)
@@ -353,6 +366,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetReferencesFromFile(AFileId: Int64): TArray<TReference>                     ; { v0.43: uses-audit }
+    /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
@@ -364,6 +378,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function CountSymbols   : Int64;
+    /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
@@ -375,6 +390,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function CountReferences: Int64;
+    /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
@@ -510,6 +526,7 @@ type
     /// <summary><!-- drag-lint:auto -->v0.17: blast-radius pack</summary>
     /// <param name="ASymbolName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TImpactLevel&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
@@ -524,6 +541,7 @@ type
     /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AIncludeImpl"><!-- drag-lint:auto type -->Boolean</param>
     /// <param name="AAllVisibility"><!-- drag-lint:auto type -->Boolean</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSurfaceLine&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
@@ -536,6 +554,7 @@ type
     /// </remarks>
     function GetClassSurface(const AQName: string; AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine> ;
     /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSliceChunk&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoSlice (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
@@ -549,6 +568,7 @@ type
     function GetSymbolSlice(const AQName: string): TArray<TSliceChunk>                                          ;
     /// <param name="ACalleeName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AContextLines"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
@@ -576,6 +596,7 @@ type
     /// </remarks>
     procedure UpsertSymbolDoc(const AToken: TFileTxToken; ASymbolId: Int64; const ADoc: TParsedDoc);
     /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TParsedDoc</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas)
@@ -616,6 +637,7 @@ type
     /// </remarks>
     procedure DeleteUnitUsesForFile(AFileId: Int64);
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TUnitUse&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) (+7 more)
@@ -737,6 +759,7 @@ type
     /// walked recursively; unresolved ones are name-only leaves). Cycle-safe,
     /// hop-capped.</summary>
     /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TTypeAncestor&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.IsTestRoutine (DRagLint.Doc.SymbolFacts.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Resolver.TypeAt.ResolveMemberOnType (DRagLint.Resolver.TypeAt.pas) (+10 more)
@@ -753,6 +776,7 @@ type
     /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AAncestorName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Diagnostics.FlowChecks.ConstructorTransfersOwnership (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas), DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit (DRagLint.Diagnostics.NamingChecks.pas) ?
@@ -768,6 +792,7 @@ type
     /// (the reverse of IsDescendantOf). Distinct class names, sorted. Backed by a
     /// single indexed lookup on type_ancestors.ancestor_name.</summary>
     /// <param name="AAncestorName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Convert.PropTree.BuildPropTree.ClosureClassIds (DRagLint.Convert.PropTree.pas) ?
@@ -784,6 +809,7 @@ type
     /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AInterfaceName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas)
@@ -801,6 +827,7 @@ type
     /// (prefer the one declared in that file). tcUnknown when unresolvable.</summary>
     /// <param name="ATypeName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TTypeCategory</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Diagnostics.FlowChecks.IsInterfaceType (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.IsManagedType (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CatOf (DRagLint.Diagnostics.AstChecks.pas) ?, DRagLint.Lint.ClassMetrics.TClassMetrics.Run.ResolveParents (DRagLint.Lint.ClassMetrics.pas) ? (+2 more)
@@ -817,6 +844,7 @@ type
     /// (cross-unit). Backs cross-unit virtual-method-in-constructor.</summary>
     /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
     function GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
     /// <summary>v15: all helpers (record/class) whose target type name matches
     /// ATargetName (whole-DB). Empty when no helper targets that type.
@@ -825,6 +853,7 @@ type
     /// -- prefer FindHelpersOfTypeSymbol when the candidate's own symbol id
     /// is known, to avoid cross-linking unrelated same-named types.</summary>
     /// <param name="ATargetName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;THelperEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoHelpersOf (DRagLint.CLI.pas)
@@ -848,6 +877,7 @@ type
     /// different units must be avoided (enum-helper-separate-units lint rule,
     /// enum-helper generator's existing-helper guard).</summary>
     /// <param name="ATargetSymbolId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;THelperEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits (DRagLint.Lint.ProjectRules.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve (DRagLint.Refactor.EnumHelper.pas)
@@ -860,6 +890,7 @@ type
     /// </remarks>
     function FindHelpersOfTypeSymbol(ATargetSymbolId: Int64): TArray<THelperEdge>;
     /// <param name="ATag"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas)
@@ -873,6 +904,7 @@ type
     function FindByDocTag(const ATag: string): TArray<TSymbol>                           ;
     /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
     /// <param name="APublicOnly"><!-- drag-lint:auto type -->Boolean</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc (DRagLint.Lint.DocRules.pas)
@@ -885,6 +917,7 @@ type
     /// </remarks>
     function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
     /// <param name="ASubstring"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas)
@@ -921,6 +954,7 @@ type
     /// &lt;remarks&gt;/&lt;param&gt;/&lt;returns&gt;/&lt;example&gt;/&lt;seealso&gt;/&lt;since&gt;
     /// and left it reported by NEITHER missing-doc nor doc-drift.</summary>
     /// <param name="ALimit"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.Lint.DocRules.DocumentedPublicDecls (DRagLint.Lint.DocRules.pas)
@@ -937,6 +971,7 @@ type
     /// <summary><!-- drag-lint:auto -->v0.19: type-at-position helpers</summary>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)
@@ -949,6 +984,7 @@ type
     /// </remarks>
     function FindContainingSymbol(AFileId: Int64; ALine: Integer): TSymbol        ;
     /// <param name="AId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas) (+20 more)
@@ -961,6 +997,7 @@ type
     /// </remarks>
     function GetSymbolById(AId: Int64): TSymbol                                   ;
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+8 more)
@@ -975,6 +1012,7 @@ type
     function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason (DRagLint.Refactor.Rename.pas), DRagLint.Resolver.TypeAt.ResolveMemberOnType (DRagLint.Resolver.TypeAt.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas), DRagLint.Convert.PropTree.BuildPropTree.ResolveInheritedType (DRagLint.Convert.PropTree.pas) ? (+4 more)
@@ -1005,6 +1043,7 @@ type
     /// <param name="ATypeName">Bare type name to resolve (e.g. 'TCustomButton').</param>
     /// <param name="AScopeFileId">File whose uses-clause disambiguates same-named
     /// candidates; 0 disables scope preference (single-global fallback only).</param>
+    /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     function ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
     /// <summary>Memoize a resolved property type by writing ': '+ATypeName as the
     /// signature of property symbol ASymbolId (which previously carried an
@@ -1029,6 +1068,7 @@ type
     /// that routine's params/locals.</summary>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)
@@ -1045,6 +1085,7 @@ type
     /// <summary><!-- drag-lint:auto -->v0.20: completion helpers</summary>
     /// <param name="APrefix"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ALimit"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems (DRagLint.LSP.Completion.pas)
@@ -1057,6 +1098,7 @@ type
     /// </remarks>
     function FindSymbolsByPrefix(const APrefix: string; ALimit: Integer): TArray<TSymbol>;
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Convert.Apply.GetConstructorNames (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ToTypeHasGenericCreate (DRagLint.Convert.Apply.pas), DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+14 more)
@@ -1073,6 +1115,7 @@ type
     /// <summary><!-- drag-lint:auto -->v0.25: dead-code finder</summary>
     /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AIncludePrivate"><!-- drag-lint:auto type -->Boolean</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Refactor.DeadCode.TDeadCodeFinder.Find (DRagLint.Refactor.DeadCode.pas)
@@ -1088,6 +1131,7 @@ type
     // v0.26: compiler diagnostics
     /// <summary><!-- drag-lint:auto -->v0.26: compiler diagnostics</summary>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TCompilerFinding&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
@@ -1143,6 +1187,7 @@ type
     procedure SetFileCompiledAt(AFileId: Int64; AUnix: Int64);
     /// <summary>Returns files.last_compiled_unix for one file, or 0 when NULL.</summary>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.Project.Coherence.ComputeCoherence (DRagLint.Project.Coherence.pas)
@@ -1156,6 +1201,7 @@ type
     function GetFileCompiledAt(AFileId: Int64): Int64;
     /// <summary>Returns files.mtime_unix for one file, or 0 when NULL/absent.</summary>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Project.Coherence.ComputeCoherence (DRagLint.Project.Coherence.pas)
@@ -1169,6 +1215,7 @@ type
     function GetFileMTime(AFileId: Int64): Int64;
     /// <summary>Returns file_ids whose findings are STALE: last_compiled_unix is
     /// NULL or older than mtime_unix. Pascal source files only.</summary>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;Int64&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoRefreshFindings (DRagLint.CLI.pas), DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas)
@@ -1198,6 +1245,7 @@ type
     procedure UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);
     procedure DeleteDiBindingsForFile(AFileId: Int64);
     /// <param name="AInterfaceName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TDiBindingRow&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas)
@@ -1214,6 +1262,7 @@ type
     /// registered as, and with what lifetime" for the doc/hover
     /// 'Registered as:' line. Empty when the class is not registered.</summary>
     /// <param name="AImplName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TDiBindingRow&gt;</returns>
     /// <remarks>
     /// Matched case-insensitively on impl_name, which idx_di_impl
     /// already indexes. Ordered by file_id then start_line so a class
@@ -1235,8 +1284,10 @@ type
     /// <param name="ASymbolId">The Delphi symbol (orm_links.delphi_symbol_id).</param>
     /// <param name="AMaxColumns">Column cap per relation; the row is
     /// display-ready, so the cap lives here rather than in the renderer.</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TOrmDatasetLink&gt;</returns>
     function FindOrmDatasetLinks(ASymbolId: Int64; AMaxColumns: Integer = 4): TArray<TOrmDatasetLink>;
     /// <param name="AInterfaceName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference &gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas)
@@ -1248,6 +1299,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindDiResolveSites   ( const AInterfaceName: string): TArray<TReference   >;
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas)
@@ -1263,6 +1315,7 @@ type
     /// component event (kind='event-binding'). NameText is the handler method;
     /// FileId/StartLine point at the .dfm OnXxx line.</summary>
     /// <param name="AFormName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas)
@@ -1313,6 +1366,7 @@ type
     /// <param name="AMode"><!-- drag-lint:auto type -->string</param>
     /// <param name="ASource"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ALimit"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TStringLitMatch&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoQueryText (DRagLint.CLI.pas)
@@ -1338,6 +1392,7 @@ type
     /// <summary>The Called-from query: every resolved caller of ATargetSymbolId,
     /// most-confident first. Backs the AutoDocument Called-from facts block.</summary>
     /// <param name="ATargetSymbolId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TResolvedCaller&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.RenderCallGraphText (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk (DRagLint.Doc.SymbolFacts.pas) ? (+1 more)
@@ -1394,6 +1449,7 @@ type
     /// genuine caller on a stale index. Reindex to make the filter effective --
     /// do not loosen the predicate, the same rule the uses-scope filter carries
     /// a few lines below.</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TResolvedCaller&gt;</returns>
     /// <remarks>
     /// v(ADP3 T3i review round 4): THIS DECLARATION IS THE SINGLE
     /// SOURCE for what ACallSitesOnly means and for who may pass it. The
@@ -1449,6 +1505,7 @@ type
     /// AEnclosingSymbolId (i.e. every resolved call made from inside that
     /// routine's body).</summary>
     /// <param name="AEnclosingSymbolId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TCallEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.CLI.RenderCallGraphText (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+1 more)
@@ -1461,6 +1518,7 @@ type
     /// </remarks>
     function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
     /// <summary>Total row count in call_edges. Diagnostic/test probe.</summary>
+    /// <returns><!-- drag-lint:auto type -->Int64</returns>
     function CountCallEdges: Int64;
     /// <summary>v14 (D5): SIZE ESCAPE HATCH -- delete every skLocalVar/skParam
     /// symbol (kind IN 'local_var','param') then VACUUM to reclaim the freed
@@ -1495,6 +1553,7 @@ type
     /// name populated). Bulk read that backs TCallResolver's name-candidate map
     /// for receiver typing -- the same candidate set ResolveAncestry builds
     /// inline, exposed so the resolver can prepare it once.</summary>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)
@@ -1510,6 +1569,7 @@ type
     /// target_file_id) from unit_uses where the target is resolved. Backs
     /// TCallResolver's per-file in-scope set (mirrors ResolveAncestry's
     /// FileScope). Unresolved uses rows (NULL target) are excluded.</summary>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TFileScopeEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)
@@ -1550,6 +1610,7 @@ type
     /// confidence, receiver_type_symbol_id), unordered. Diagnostic dump backing
     /// the dump-call-edges verb / tests; not for production queries (use
     /// FindResolvedCallers / GetCallEdgesFromSymbol for those).</summary>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TCallEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas)
@@ -1575,6 +1636,7 @@ type
     /// EnclosingQName is '' when the ref has no enclosing routine.</summary>
     /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TResolvedCaller&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoAmbiguousCalls (DRagLint.CLI.pas)
@@ -1593,6 +1655,7 @@ type
     /// ASymbolId -- the renderer's cue to omit every derived doc-comment
     /// line.</summary>
     /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TSymbolFacts</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
@@ -1648,6 +1711,7 @@ type
   /// </remarks>
   IParser = interface
     ['{8C45D5A2-1B6E-4C2D-A3E8-9F0E7B41E612}']
+    /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
@@ -1656,6 +1720,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LanguageName: string                                               ;
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Core.Indexer.TIndexer.ParserFor (DRagLint.Core.Indexer.pas)
@@ -1666,6 +1731,7 @@ type
     function FileExtensions: TArray<string>                                     ;
     /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
     /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TParseResult</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
@@ -1709,6 +1775,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure IndexFile(const AFilePath: string);
+    /// <returns><!-- drag-lint:auto type -->Integer</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas)

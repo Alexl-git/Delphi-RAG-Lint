@@ -63,6 +63,7 @@ function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const 
 
 /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
 /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
+/// <returns><!-- drag-lint:auto type -->string</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, IfThen

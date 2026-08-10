@@ -120,6 +120,7 @@ type
       /// </remarks>
       class function RenderText(const AResult: TTypeAtResult)                                                        : string       ;
       /// <param name="AResult"><!-- drag-lint:auto type -->const TTypeAtResult</param>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)

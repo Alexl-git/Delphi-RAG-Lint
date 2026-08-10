@@ -224,6 +224,7 @@ type
     constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes);
     /// <returns><!-- drag-lint:auto -->Observed: fdForward.</returns>
     function Direction: TFlowDir;
+    /// <returns><!-- drag-lint:auto type -->TDefAsgnVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
@@ -237,6 +238,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Bottom: TDefAsgnVal;
+    /// <returns><!-- drag-lint:auto type -->TDefAsgnVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get
@@ -252,6 +254,7 @@ type
     function Boundary: TDefAsgnVal;
     /// <param name="A"><!-- drag-lint:auto type -->const TDefAsgnVal</param>
     /// <param name="B"><!-- drag-lint:auto type -->const TDefAsgnVal</param>
+    /// <returns><!-- drag-lint:auto type -->TDefAsgnVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
@@ -267,6 +270,7 @@ type
     function Join(const A, B: TDefAsgnVal): TDefAsgnVal;
     /// <param name="ABlock"><!-- drag-lint:auto type -->const TCfgBlock</param>
     /// <param name="AIn"><!-- drag-lint:auto type -->const TDefAsgnVal</param>
+    /// <returns><!-- drag-lint:auto type -->TDefAsgnVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Cfg.IsValuedExit, DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf
@@ -340,6 +344,7 @@ type
     constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes);
     /// <returns><!-- drag-lint:auto -->Observed: fdForward.</returns>
     function Direction: TFlowDir;
+    /// <returns><!-- drag-lint:auto type -->TFreedVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
@@ -353,6 +358,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Bottom: TFreedVal;
+    /// <returns><!-- drag-lint:auto type -->TFreedVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
@@ -368,6 +374,7 @@ type
     function Boundary: TFreedVal;
     /// <param name="A"><!-- drag-lint:auto type -->const TFreedVal</param>
     /// <param name="B"><!-- drag-lint:auto type -->const TFreedVal</param>
+    /// <returns><!-- drag-lint:auto type -->TFreedVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
@@ -383,6 +390,7 @@ type
     function Join(const A, B: TFreedVal): TFreedVal;
     /// <param name="ABlock"><!-- drag-lint:auto type -->const TCfgBlock</param>
     /// <param name="AIn"><!-- drag-lint:auto type -->const TFreedVal</param>
+    /// <returns><!-- drag-lint:auto type -->TFreedVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
@@ -435,6 +443,7 @@ type
     constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes);
     /// <returns><!-- drag-lint:auto -->Observed: fdBackward.</returns>
     function Direction: TFlowDir;
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;Boolean&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
@@ -448,6 +457,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Bottom: TArray<Boolean>;
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;Boolean&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get
@@ -463,6 +473,7 @@ type
     function Boundary: TArray<Boolean>;
     /// <param name="A"><!-- drag-lint:auto type -->const TArray&lt;Boolean&gt;</param>
     /// <param name="B"><!-- drag-lint:auto type -->const TArray&lt;Boolean&gt;</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;Boolean&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
@@ -505,6 +516,7 @@ type
   /// present; nil => store-free (any pass-to-call escapes).</summary>
   /// <param name="ACalleeName"><!-- drag-lint:auto type -->const string</param>
   /// <param name="AArgIdx"><!-- drag-lint:auto type -->Integer</param>
+  /// <returns><!-- drag-lint:auto type -->Boolean</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// Used by: declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TEscape.Create (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas)
@@ -558,6 +570,7 @@ type
     constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes; AOwns: TCallArgOwns = nil);
     /// <returns><!-- drag-lint:auto -->Observed: fdForward.</returns>
     function Direction: TFlowDir;
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;Boolean&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
@@ -575,6 +588,7 @@ type
     function Boundary: TArray<Boolean>;
     /// <param name="A"><!-- drag-lint:auto type -->const TArray&lt;Boolean&gt;</param>
     /// <param name="B"><!-- drag-lint:auto type -->const TArray&lt;Boolean&gt;</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;Boolean&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count

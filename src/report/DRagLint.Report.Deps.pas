@@ -189,6 +189,7 @@ function DepsGroupStr(AGroup: TDepsGroup): string;
 /// per-external rollup + the flat edge list + summary. No I/O.</summary>
 /// <param name="AStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt;</param>
 /// <param name="AOpts"><!-- drag-lint:auto type -->const TDepsOptions</param>
+/// <returns><!-- drag-lint:auto type -->TDepsReport</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas)

@@ -144,6 +144,7 @@ type
       /// command-line limit. Returns a semicolon-separated path list, or empty if
       /// none found or any error occurs (best-effort).</summary>
       /// <param name="APlatform"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)

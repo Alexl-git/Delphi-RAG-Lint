@@ -99,6 +99,7 @@ type
       const ACategory: string = ''): TArray<TRuleInfo>; static;
     /// <summary>Totals + per-category counts over ACatalog.</summary>
     /// <param name="ACatalog"><!-- drag-lint:auto type -->const TArray&lt;TRuleInfo&gt;</param>
+    /// <returns><!-- drag-lint:auto type -->TCatalogSummary</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas)

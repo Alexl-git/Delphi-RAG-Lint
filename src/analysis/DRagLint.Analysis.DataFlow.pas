@@ -27,23 +27,29 @@ type
   /// </remarks>
   IDataFlowAnalysis<TValue> = interface
     /// <summary>Forward (Entry-&gt;Exit) or backward (Exit-&gt;Entry).</summary>
+    /// <returns><!-- drag-lint:auto type -->TFlowDir</returns>
     function Direction: TFlowDir;
     /// <summary>The lattice bottom (initial IN/OUT of interior blocks).</summary>
+    /// <returns><!-- drag-lint:auto type -->TValue</returns>
     function Bottom: TValue;
     /// <summary>Value at the boundary block (Entry for forward, Exit for
     /// backward) -- e.g. params assigned-on-entry, or vars live-at-exit.</summary>
+    /// <returns><!-- drag-lint:auto type -->TValue</returns>
     function Boundary: TValue;
     /// <summary>Meet of two predecessor/successor contributions.</summary>
     /// <param name="A"><!-- drag-lint:auto type -->const TValue</param>
     /// <param name="B"><!-- drag-lint:auto type -->const TValue</param>
+    /// <returns><!-- drag-lint:auto type -->TValue</returns>
     function Join(const A, B: TValue): TValue;
     /// <summary>Effect of one block on the in-value.</summary>
     /// <param name="ABlock"><!-- drag-lint:auto type -->const TCfgBlock</param>
     /// <param name="AIn"><!-- drag-lint:auto type -->const TValue</param>
+    /// <returns><!-- drag-lint:auto type -->TValue</returns>
     function Transfer(const ABlock: TCfgBlock; const AIn: TValue): TValue;
     /// <summary>Lattice equality (fixpoint test).</summary>
     /// <param name="A"><!-- drag-lint:auto type -->const TValue</param>
     /// <param name="B"><!-- drag-lint:auto type -->const TValue</param>
+    /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     function Equals(const A, B: TValue): Boolean;
   end;
 

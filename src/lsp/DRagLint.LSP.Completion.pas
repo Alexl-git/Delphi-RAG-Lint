@@ -182,6 +182,7 @@ type
       /// </remarks>
       class function EmptySigHelp                                                       : TJSONObject;
       /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas)

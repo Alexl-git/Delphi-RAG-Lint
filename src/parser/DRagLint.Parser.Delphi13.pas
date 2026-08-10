@@ -63,6 +63,7 @@ type
       function FileExtensions: TArray<string>                                     ;
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->TParseResult</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse

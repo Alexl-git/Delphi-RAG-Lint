@@ -199,6 +199,7 @@ type
       function FormatFindings  (const AFindings: TArray<TLintFinding>): string;
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)

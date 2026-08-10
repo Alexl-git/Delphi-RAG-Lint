@@ -40,6 +40,7 @@ type
 /// <summary>Normalize a unit name or file path to a bare lower-case unit-name
 /// segment, used on BOTH sides of every membership comparison so they match.</summary>
 /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto type -->string</returns>
 /// <remarks>
 /// Only a known SOURCE extension (.pas/.dpk/.dpr) is stripped; a dotted
 /// namespace like 'Foo.ViewModel' must NOT lose '.ViewModel' to ChangeFileExt
@@ -160,6 +161,7 @@ function IsRtlNamespaceUnit(const AUnitName: string): Boolean;
 /// <param name="AUnitName">Verbatim used unit name, e.g. 'Bde.DBTables'.</param>
 /// <param name="AIsProjectMember">Given a normalized stem, is it an indexed project unit?</param>
 /// <param name="AIsInLibrary">Given a normalized stem, is it in the platform library DB?</param>
+/// <returns><!-- drag-lint:auto type -->TUnitResolution</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable (DRagLint.Lint.ProjectChecks.pas)

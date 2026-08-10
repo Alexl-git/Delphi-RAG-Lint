@@ -531,12 +531,12 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)
-    /// Calls: ContainsText, DRagLint.Doc.Regions.DropAlreadyPresentPhrases, DRagLint.Doc.Regions.EmitHarvestedRemarks, DRagLint.Doc.Regions.ObservedSuffix, DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor, DRagLint.Doc.Regions.TDocRegions.IsManagedDesc, DRagLint.Doc.Regions.TDocRegions.MergeComment.ClassifyParamAction, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineException, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineParam, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitTagged (+22 more)
-    /// Complexity: 79 (cyclomatic, outer body), 1168 lines (full implementation)
+    /// Calls: ContainsText, DRagLint.Doc.Regions.DropAlreadyPresentPhrases, DRagLint.Doc.Regions.EmitHarvestedRemarks, DRagLint.Doc.Regions.HasMalformedManagedFence, DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor, DRagLint.Doc.Regions.TDocRegions.IsManagedDesc, DRagLint.Doc.Regions.TDocRegions.MergeComment.ClassifyParamAction, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineException, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineParam, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineReturns (+24 more)
+    /// Complexity: 80 (cyclomatic, outer body), 1225 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Doc.Regions.DropAlreadyPresentPhrases"/>
     /// <seealso cref="DRagLint.Doc.Regions.EmitHarvestedRemarks"/>
-    /// <seealso cref="DRagLint.Doc.Regions.ObservedSuffix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.HasMalformedManagedFence"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
@@ -604,6 +604,7 @@ type
     /// leading whitespace changes). Used to recover the previously-emitted
     /// text for a drift comparison.</summary>
     /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.StripForDisplay (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas) ? (+1 more)
@@ -660,6 +661,7 @@ type
     /// IsManagedDesc, the doc-drift comparison) must NEVER call this: it needs
     /// the raw marker to know what the engine owns.</summary>
     /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas) (+5 more)
@@ -679,6 +681,7 @@ type
 /// and greater-than become their XML entity references. The ampersand pass runs
 /// first so the ampersand it introduces for a later entity is not re-escaped.</summary>
 /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto type -->string</returns>
 /// <remarks>
 /// Applied to EVERY mined value emitted into the managed facts block
 /// (caller/callee names, unit names, raised/overridden/implemented types,
@@ -699,7 +702,7 @@ type
 /// dependency cycle this unit's interface would otherwise close
 /// (Regions -&gt; Facts -&gt; Harvest -&gt; Regions) never forms.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Harvest.HarvestText (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Regions.EscXmlAttr (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.ObservedSuffix (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ParamNoteFor (DRagLint.Doc.Regions.pas) (+4 more)
+/// Called from: DRagLint.Doc.Harvest.HarvestText (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Regions.EscXmlAttr (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.ObservedSuffix (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineReturns (DRagLint.Doc.Regions.pas) (+5 more)
 /// Calls: StringReplace
 /// Pure
 /// <!-- drag-lint:auto END -->

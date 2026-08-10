@@ -34,6 +34,7 @@ type
       /// <param name="AIncludeSurface"><!-- drag-lint:auto type -->Boolean</param>
       /// <param name="AIncludeImpl"><!-- drag-lint:auto type -->Boolean</param>
       /// <param name="AExcludeDfmFields"><!-- drag-lint:auto type -->Boolean = True</param>
+      /// <returns><!-- drag-lint:auto type -->TContextBundle</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
@@ -80,6 +81,7 @@ type
       /// </remarks>
       class function RenderMarkdown(const ABundle: TContextBundle): string ;
       /// <param name="ABundle"><!-- drag-lint:auto type -->const TContextBundle</param>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)

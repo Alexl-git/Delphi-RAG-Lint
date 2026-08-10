@@ -28,6 +28,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: KindText[Self].</returns>
     function ToText: string                                          ;
     /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TSymbolKind</returns>
     /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -771,6 +772,7 @@ function UnitUseSectionToStr(ASection: TUnitUseSection): string;
 /// </remarks>
 function StrToUnitUseSection(const AStr: string): TUnitUseSection          ;
 /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto type -->string</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.Core.Model.ExceptionsToJson (DRagLint.Core.Model.pas), DRagLint.Core.Model.ParamsToJson (DRagLint.Core.Model.pas) (+10 more)

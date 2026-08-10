@@ -28,6 +28,7 @@ type
     MinIdentifierLen        : Integer;       // shortest allowed identifier (hungarian-or-short rule)
     HungarianPrefixes       : TArray<string>;// type-prefix denylist for the hungarian rule
     ShortIdentifierCheck    : Boolean;       // master on/off for hungarian-or-short-identifier (default False)
+    /// <returns><!-- drag-lint:auto type -->TNamingConfig</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.DoScanAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ? (+37 more)
@@ -316,6 +317,7 @@ type
     /// </remarks>
     function AutoFixIds: TArray<string>;
     /// <summary>Returns severity pairs (rule id, severity string).</summary>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TPair&lt;string,string&gt;&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Reads: FSevNames, FSevValues
@@ -329,6 +331,7 @@ type
     /// </remarks>
     function SeverityPairs: TArray<TPair<string,string>>;
     /// <summary>Returns threshold pairs (metric name, integer value).</summary>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TPair&lt;string,Integer&gt;&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Reads: FThreshNames, FThreshValues

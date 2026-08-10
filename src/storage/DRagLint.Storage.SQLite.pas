@@ -448,6 +448,7 @@ type
       /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
       /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->TFileTxToken</returns>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1080,6 +1081,7 @@ type
       function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
       /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
+      /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: CompareText, DRagLint.Storage.SQLite.ReadSymbolFromQuery, DRagLint.Storage.SQLite.TSQLiteSymbolStore.EnsureTrigramTablePopulated, IntToStr
@@ -1204,6 +1206,7 @@ type
       /// </remarks>
       procedure UpsertSymbolDoc(const AToken: TFileTxToken; ASymbolId: Int64; const ADoc: TParsedDoc);
       /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
+      /// <returns><!-- drag-lint:auto type -->TParsedDoc</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: FillChar, IndexStr
@@ -1221,6 +1224,7 @@ type
 
       // v(ADP2 T1): symbol_facts (index-time analysis facts) -- see ISymbolStore.
       /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
+      /// <returns><!-- drag-lint:auto type -->TSymbolFacts</returns>
       /// <remarks>
       /// <!-- drag-lint:auto -->v(ADP2 T1): symbol_facts (index-time analysis facts) -- see
       /// ISymbolStore.

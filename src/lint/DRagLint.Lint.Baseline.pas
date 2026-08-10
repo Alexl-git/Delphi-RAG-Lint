@@ -53,6 +53,7 @@ type
     /// <summary>Fingerprints with an occurrence ordinal appended pre-hash, so two
     /// findings on identical-text lines in the same (rule,file) disambiguate.</summary>
     /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Lint.Baseline.TBaseline.Filter (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Fingerprint (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Write (DRagLint.Lint.Baseline.pas)
@@ -105,6 +106,7 @@ type
     /// unchanged.</summary>
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TLintFinding&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)

@@ -58,6 +58,7 @@ type
       function FileExtensions: TArray<string>                                     ;
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->TParseResult</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse

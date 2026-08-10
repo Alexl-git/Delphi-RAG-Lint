@@ -29,6 +29,7 @@ type
       FLanguage  : PTSLanguage                                             ;
       FQueryRules: TArray<TQueryRule>                                      ;
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto type -->TArray&lt;TLintFinding&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)
@@ -125,6 +126,7 @@ type
       /// <summary>Rule ids of loaded .scm rules whose sidecar json declared
       /// "enabled": false (ship off-by-default). Findings from these are dropped
       /// downstream unless re-enabled via config "enabled" / --enable.</summary>
+      /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas)
