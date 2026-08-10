@@ -41,7 +41,7 @@
   Review-fix regression (the presentation-layer strip originally covered only
   1 of 5 display surfaces): 6. `context --task "modify provenance.Marked"
   --format md` never leaks the literal 'drag-lint:auto' ownership token, and
-  its Remarks section shows the facts TEXT ("Calls: Length") with the
+  its Remarks section shows the facts TEXT ("Calls: provenance.Touch") with the
   AUTO_BEGIN/END fence markers stripped (finding 1b) -- Marked already
   carries both a managed tag AND a managed facts block, so this is a REAL
   assertion against a REAL engine-emitted symbol, not a fixture string.
@@ -155,7 +155,7 @@ try {
   Check 'T1 review fix: context markdown shows the cleaned Returns line' `
     ($ctxMarked -match '\*\*Returns:\*\* Observed: Length\(AText\)\.') $ctxMarked
   Check 'T1 review fix (1b): context markdown Remarks keeps the facts TEXT with the fence markers stripped' `
-    ($ctxMarked -match '\*\*Remarks:\*\* Calls: Length') $ctxMarked
+    ($ctxMarked -match '\*\*Remarks:\*\* Calls: provenance\.Touch') $ctxMarked
 
   $ctxHandWritten = (& $exePath context --task 'modify provenance.HandWritten' --db $db --format md 2>&1) -join "`n"
   Check 'context (HandWritten) exits 0' ($LASTEXITCODE -eq 0)

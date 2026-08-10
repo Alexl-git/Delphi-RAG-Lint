@@ -738,6 +738,35 @@ function CallSiteRefKindSql(const ARefAlias: string): string;
 /// that gate.</remarks>
 function CanBeCallTarget(AKind: TSymbolKind): Boolean;
 
+/// <summary>The System-unit declaration of a Delphi COMPILER INTRINSIC, for
+/// display; '' when AName is not a recognized intrinsic.</summary>
+/// <param name="AName">A called identifier as written at the call site.
+///  Matched case-insensitively.</param>
+/// <remarks>The set is deliberately RESTRICTED to names virtually never chosen
+///  for a user-defined routine, which is why Copy / Insert / Delete / Pos are
+///  absent despite being intrinsics: a real method of that name must not be
+///  mislabeled. Widening this list is not a free improvement -- every added name
+///  is a name some project may legitimately declare.
+///
+///  Lives HERE, in the shared base unit, so the hover renderer and the
+///  documentation facts builder share ONE list. It was previously private to
+///  DRagLint.LSP.Server, and a second copy in the doc layer would have been a
+///  second answer to one question -- exactly the drift channel this repo keeps
+///  closing.</remarks>
+function IntrinsicSignature(const AName: string): string;
+
+/// <summary>True when AName is a Delphi compiler intrinsic -- a built-in the
+/// compiler recognizes by name and compiles inline, which is therefore never a
+/// symbol in any index.</summary>
+/// <remarks>Callers use this to keep intrinsics out of derived facts. It is
+///  SAFE to drop a bare call to one of these from a "Calls:" list even though a
+///  project could declare a routine of the same name: a real project routine
+///  resolves through call_edges and is rendered QUALIFIED from the resolved
+///  set, so only the unresolved bare-name fallback is filtered here. Since the
+///  unit-level rung landed, a bare call to a project routine resolves across a
+///  uses edge as well, which narrows that gap further.</remarks>
+function IsCompilerIntrinsic(const AName: string): Boolean;
+
 /// <summary>Unit-qualified prefix of a qualified symbol name
 /// ('Vcl.Controls.TWinControl' -&gt; 'Vcl.Controls'); '' when the name carries no
 /// dotted prefix at all.</summary>
@@ -827,6 +856,40 @@ implementation
 uses
   System.SysUtils
   ;
+
+function IntrinsicSignature(const AName: string): string;
+begin
+  if SameText(AName, 'Assigned') then Result:= 'function System.Assigned(var P): Boolean'
+  else if SameText(AName, 'Length'   ) then Result:= 'function System.Length(const S): Integer'
+  else if SameText(AName, 'SetLength') then Result:= 'procedure System.SetLength(var S; NewLength: Integer)'
+  else if SameText(AName, 'Inc'      ) then Result:= 'procedure System.Inc(var X [; N: Integer])'
+  else if SameText(AName, 'Dec'      ) then Result:= 'procedure System.Dec(var X [; N: Integer])'
+  else if SameText(AName, 'Ord'      ) then Result:= 'function System.Ord(X): Integer'
+  else if SameText(AName, 'Chr'      ) then Result:= 'function System.Chr(B: Byte): AnsiChar'
+  else if SameText(AName, 'High'     ) then Result:= 'function System.High(X): <ordinal>'
+  else if SameText(AName, 'Low'      ) then Result:= 'function System.Low(X): <ordinal>'
+  else if SameText(AName, 'SizeOf'   ) then Result:= 'function System.SizeOf(X): Integer'
+  else if SameText(AName, 'TypeInfo' ) then Result:= 'function System.TypeInfo(X): Pointer'
+  else if SameText(AName, 'Succ'     ) then Result:= 'function System.Succ(X): <ordinal>'
+  else if SameText(AName, 'Pred'     ) then Result:= 'function System.Pred(X): <ordinal>'
+  else if SameText(AName, 'Trunc'    ) then Result:= 'function System.Trunc(X: Extended): Int64'
+  else if SameText(AName, 'Round'    ) then Result:= 'function System.Round(X: Extended): Int64'
+  else if SameText(AName, 'Frac'     ) then Result:= 'function System.Frac(X: Extended): Extended'
+  else if SameText(AName, 'Abs'      ) then Result:= 'function System.Abs(X): <numeric>'
+  else if SameText(AName, 'Sqr'      ) then Result:= 'function System.Sqr(X): <numeric>'
+  else if SameText(AName, 'Sqrt'     ) then Result:= 'function System.Sqrt(X: Extended): Extended'
+  else if SameText(AName, 'Exit'     ) then Result:= 'procedure System.Exit [(Result)]'
+  else if SameText(AName, 'Break'    ) then Result:= 'procedure System.Break'
+  else if SameText(AName, 'Continue' ) then Result:= 'procedure System.Continue'
+  else if SameText(AName, 'Halt'     ) then Result:= 'procedure System.Halt [(ExitCode: Integer)]'
+  else if SameText(AName, 'Assert'   ) then Result:= 'procedure System.Assert(expr: Boolean [; const msg: string])'
+  else Result:= '';
+end; // function
+
+function IsCompilerIntrinsic(const AName: string): Boolean;
+begin
+  Result:= IntrinsicSignature(AName) <> '';
+end;
 
 function DeclaringUnitOfQName(const AQName: string): string;
 var P: Integer;

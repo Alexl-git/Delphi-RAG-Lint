@@ -809,43 +809,12 @@ end; // begin
 // (e.g. `Assigned(X)`) otherwise matched a random library symbol of the same
 // name (FMX.Graphics.TCanvasSaveState.Assigned, a property) because the project
 // DB has no such symbol and the search fell through to the library DB.
-// IntrinsicSignature returns the System-unit signature so the hover can show
-// the full declaration like the IDE; '' = not a recognized intrinsic. The set
-// is deliberately RESTRICTED to names virtually never user-defined (so a real
-// method called Copy/Insert/Delete/etc. is NOT mislabeled).
-function IntrinsicSignature(const AName: string): string;
-begin
-  if SameText(AName, 'Assigned') then Result:= 'function System.Assigned(var P): Boolean'
-  else if SameText(AName, 'Length'   ) then Result:= 'function System.Length(const S): Integer'
-  else if SameText(AName, 'SetLength') then Result:= 'procedure System.SetLength(var S; NewLength: Integer)'
-  else if SameText(AName, 'Inc'      ) then Result:= 'procedure System.Inc(var X [; N: Integer])'
-  else if SameText(AName, 'Dec'      ) then Result:= 'procedure System.Dec(var X [; N: Integer])'
-  else if SameText(AName, 'Ord'      ) then Result:= 'function System.Ord(X): Integer'
-  else if SameText(AName, 'Chr'      ) then Result:= 'function System.Chr(B: Byte): AnsiChar'
-  else if SameText(AName, 'High'     ) then Result:= 'function System.High(X): <ordinal>'
-  else if SameText(AName, 'Low'      ) then Result:= 'function System.Low(X): <ordinal>'
-  else if SameText(AName, 'SizeOf'   ) then Result:= 'function System.SizeOf(X): Integer'
-  else if SameText(AName, 'TypeInfo' ) then Result:= 'function System.TypeInfo(X): Pointer'
-  else if SameText(AName, 'Succ'     ) then Result:= 'function System.Succ(X): <ordinal>'
-  else if SameText(AName, 'Pred'     ) then Result:= 'function System.Pred(X): <ordinal>'
-  else if SameText(AName, 'Trunc'    ) then Result:= 'function System.Trunc(X: Extended): Int64'
-  else if SameText(AName, 'Round'    ) then Result:= 'function System.Round(X: Extended): Int64'
-  else if SameText(AName, 'Frac'     ) then Result:= 'function System.Frac(X: Extended): Extended'
-  else if SameText(AName, 'Abs'      ) then Result:= 'function System.Abs(X): <numeric>'
-  else if SameText(AName, 'Sqr'      ) then Result:= 'function System.Sqr(X): <numeric>'
-  else if SameText(AName, 'Sqrt'     ) then Result:= 'function System.Sqrt(X: Extended): Extended'
-  else if SameText(AName, 'Exit'     ) then Result:= 'procedure System.Exit [(Result)]'
-  else if SameText(AName, 'Break'    ) then Result:= 'procedure System.Break'
-  else if SameText(AName, 'Continue' ) then Result:= 'procedure System.Continue'
-  else if SameText(AName, 'Halt'     ) then Result:= 'procedure System.Halt [(ExitCode: Integer)]'
-  else if SameText(AName, 'Assert'   ) then Result:= 'procedure System.Assert(expr: Boolean [; const msg: string])'
-  else Result:= '';
-end; // function
-
-function IsBuiltinIntrinsic(const AName: string): Boolean;
-begin
-  Result:= IntrinsicSignature(AName) <> '';
-end;
+//
+// The TABLE MOVED to DRagLint.Core.Model (IntrinsicSignature /
+// IsCompilerIntrinsic) when the documentation facts builder needed the same
+// list to keep intrinsics out of its "Calls:" lines. Two copies of one list is
+// a drift channel; there is now one, and this unit reads it through its
+// existing DRagLint.Core.Model dependency.
 
 procedure TLSPServer.HandleHover(const AId: TJSONValue; const AParams: TJSONObject);
 var
@@ -901,7 +870,7 @@ begin
       built-in with its System-unit signature (like the IDE) instead of falling
       through to a wrong library match. The "- `System.X` - line 1" row keeps the
       clickable shape the popup parses (opens System.pas if on the source path). }
-    if IsBuiltinIntrinsic(Ident) then
+    if IsCompilerIntrinsic(Ident) then
     begin
       MdValue:= Format(
         '**%s** `intrinsic`'#10#10 + '- `System.%s` - line 1'#10 + '    %s'#10#10 + '_Delphi compiler built-in (System unit)._', [Ident, Ident, IntrinsicSignature(Ident)]);

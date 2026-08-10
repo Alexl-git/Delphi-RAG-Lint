@@ -1424,8 +1424,25 @@ begin
         // header line (`Name(...)`), whose `Name(` reads as a call to itself --
         // a spurious self-`Calls:` (seen on free-function overloads). Genuine
         // self-recursion renders nothing useful as "Calls: self" either.
+        //
+        // COMPILER INTRINSICS are dropped here too. A routine that increments a
+        // counter and measures an array rendered
+        // `Calls: Assigned, High, Inc, intr.Helper, Low, SetLength` -- five of
+        // six entries carrying no information about what the routine does, with
+        // the one real callee buried among them. Inc and SetLength are not
+        // collaborators; they are syntax.
+        //
+        // It is safe even though a project MAY declare a routine named High or
+        // Abs: a real project routine resolves through call_edges and is added
+        // QUALIFIED by step 1, so only the unresolved bare-name fallback is
+        // filtered. The unit-level rung widened that safety further -- a bare
+        // call to a project routine now resolves across a uses edge as well.
+        // The name list itself (DRagLint.Core.Model.IsCompilerIntrinsic) is
+        // deliberately restricted to names virtually never user-defined, which
+        // is why Copy / Insert / Delete are absent from it.
         for var K:= 0 to CallSet.Count - 1 do
-          if (ResolvedLeaves.IndexOf(CallSet[K]) < 0) and (not SameText(CallSet[K], ASym.Name)) then
+          if (ResolvedLeaves.IndexOf(CallSet[K]) < 0) and (not SameText(CallSet[K], ASym.Name))
+             and (not IsCompilerIntrinsic(CallSet[K])) then
             FinalSet.Add(CallSet[K]);
       finally
         CallSet.Free;
