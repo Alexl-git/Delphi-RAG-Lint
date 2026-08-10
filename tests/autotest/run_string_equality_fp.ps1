@@ -113,7 +113,16 @@ try {
 
   Write-Host ''
   Write-Host 'NO-STORE path (lint): crude .scm is type-blind -- documents the limitation the plugin now avoids by using the store' -ForegroundColor Cyan
-  $noStoreOut = (& $Exe lint $fixture 2>&1) -join "`n"
+  # --rule is REQUIRED here now: string-equality-comparison ships OFF by default
+  # (it fires on every string '=', which is a census rather than a defect report
+  # -- 406 findings on drag-lint's own source). Without the flag the no-store run
+  # emits nothing and this arm cannot demonstrate anything at all.
+  #
+  # Asking for the rule explicitly is also the honest form of the question this
+  # scenario poses: "WHEN THIS RULE IS ASKED FOR, is the no-store path still
+  # type-blind?" The answer is yes, and that is what keeps the store path
+  # authoritative for the plugin.
+  $noStoreOut = (& $Exe lint $fixture --rule string-equality-comparison 2>&1) -join "`n"
   $nsSe = ($noStoreOut -split "`n" | Where-Object { $_ -match 'string-equality-comparison' }).Count
   # This is the DOCUMENTED no-store limitation: the .scm fires on the non-string
   # lines. We assert it here so a future .scm tightening that also fixes the
