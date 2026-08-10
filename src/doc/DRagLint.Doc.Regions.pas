@@ -1892,8 +1892,16 @@ begin
     end;
     if Length(AFacts.UsedInUnits) > 0 then
       AppendFact('Used in units: ' + JoinEsc(AFacts.UsedInUnits) + MoreSuffix(Length(AFacts.UsedInUnits), AFacts.UsedInTotal));
-    if Length(AFacts.Raises) > 0 then
-      AppendFact('Raises: ' + JoinEsc(AFacts.Raises));
+    // Mined raises are NOT a fact line any more. They are emitted as real
+    // <exception cref="..."/> tags by MergeComment -- the tag this project's
+    // documentation standard actually requires, and the element DocInsight and
+    // Help Insight render as their own section. Keeping the line too would say
+    // the same thing twice in one comment.
+    //
+    // Nothing else read it: `Raises:` appeared ONLY here, in the managed doc
+    // block. Hover and the context bundle build their facts through
+    // FormatPhase2FactLines, which never carried it, so no other surface loses
+    // anything by this.
     // v(ADF T3): ground-truth 'deprecated' directive line. Emitted only when
     // AFacts.Deprecated (the directive was actually found on the decl -- see
     // TDocFactsBuilder.DetectDeprecated). A message renders 'Deprecated: <msg>';
@@ -2088,6 +2096,24 @@ var
   function IsBlankBody(const AText: string): Boolean;
   begin
     Result:= Trim(StripMark(AText)) = '';
+  end;
+  // The STRUCTURAL <exception cref> for one mined raise class, on exactly the
+  // same terms as EmitEngineParam: the tag set mirrors what the code does, and
+  // the description is left for a human to fill.
+  //
+  // <exception cref=""> is the one tag REQUIRED by this project's own
+  // documentation standard that the engine never generated. Mined raises used
+  // to surface only as a `Raises: EFoo` line inside <remarks>, which is prose
+  // in the wrong element: DocInsight and Help Insight render <exception> as its
+  // own section, and a linter looking for the required tag never saw one.
+  //
+  // Empty rather than invented: the class name is the only thing the source
+  // states. WHEN it is raised is a claim the miner cannot make, and guessing it
+  // would be the "absence over wrong" policy broken in the place a wrong claim
+  // does most damage.
+  function EmitEngineException(const ATypeName: string): string;
+  begin
+    Result:= EmitTagged('<exception cref="' + ATypeName + '">' + AUTO_MARK, '', '</exception>');
   end;
   // v(ADP3 T3 review round 2, Finding 1 -- PARAM ONLY): classifies
   // ownership of one existing <param>'s raw parsed text (S) for the repair
@@ -2442,6 +2468,11 @@ begin
         if Obs <> '' then
           Sb.AppendLine(EmitTagged('<returns>' + AUTO_MARK, Obs, '</returns>'));
       end;
+      // Mined raises, in DocInsight's element order (after <returns>, before
+      // <remarks>). Structural, like <param>: a fresh comment has no
+      // hand-written exception tag to collide with by definition.
+      for var RaiseCls in AFacts.Raises do
+        Sb.AppendLine(EmitEngineException(RaiseCls));
       // v(ADP3 T7): the <remarks> element is now also warranted by harvested
       // prose alone -- a symbol can have a second paragraph worth promoting and
       // no facts at all -- so the condition is widened past `Facts <> ''`.
@@ -2718,13 +2749,45 @@ begin
     // sharing the identical cref is the one case this cannot disambiguate;
     // out of scope, same as the pre-existing "keeps only the first
     // <deprecated>/<since>" limitation.)
+    //
+    // OWNERSHIP (new, with the generated tags below): the engine now writes
+    // <exception> too, so "every <exception> found is hand-written" -- true
+    // when the paragraph above was written -- no longer is. The split mirrors
+    // <param>'s exactly:
+    //   * marked AND blank      -> the engine's own from a prior run. NOT
+    //     preserved; it is regenerated below IF the body still raises that
+    //     class, which is what makes a deleted `raise` delete its tag instead
+    //     of freezing it forever.
+    //   * marked AND non-blank  -> a human typed inside the engine's tag
+    //     without removing the marker. Ruling D-4: their words stay, and the
+    //     marker is dropped so the tag is hand-written from now on.
+    //   * unmarked              -> hand-written, preserved verbatim, exactly
+    //     as before.
+    var PreservedCrefs: TArray<string>:= nil;
     for var StandaloneExcItem in StandaloneExc.Exceptions do
       for var OrigExc in Eff.Exceptions do
         if SameText(OrigExc.TypeName, StandaloneExcItem.TypeName) then
         begin
-          Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', OrigExc.Desc, '</exception>'));
+          if IsManagedDesc(OrigExc.Desc) and IsBlankBody(OrigExc.Desc) then Break;
+          if IsManagedDesc(OrigExc.Desc) then
+            Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', StripMark(OrigExc.Desc), '</exception>'))
+          else
+            Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', OrigExc.Desc, '</exception>'));
+          PreservedCrefs:= PreservedCrefs + [OrigExc.TypeName];
           Break;
         end;
+
+    // Generated structural tags for every mined raise class that no
+    // hand-written tag already covers. A hand-written <exception> for a class
+    // the body does not raise is left alone above -- the author may be
+    // documenting a raise from a callee, which the miner cannot see.
+    for var RaiseCls in AFacts.Raises do
+    begin
+      var Covered: Boolean:= False;
+      for var PC in PreservedCrefs do
+        if SameText(PC, RaiseCls) then begin Covered:= True; Break; end;
+      if not Covered then Sb.AppendLine(EmitEngineException(RaiseCls));
+    end;
 
     // <example>: v(ADP3 T3b; review Minor 1 -- gated on HasExampleTag, not
     // ExampleText <> '', so a deliberate, empty <example></example> is
