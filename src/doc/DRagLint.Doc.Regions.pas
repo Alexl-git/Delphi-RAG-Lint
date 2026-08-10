@@ -1339,6 +1339,43 @@ begin
   Result:= Body;
 end;
 
+{ True when ARawBlock carries a BROKEN managed fence -- an AUTO_BEGIN that never
+  reaches an AUTO_END, or an AUTO_END with no AUTO_BEGIN before it.
+
+  Either shape is ambiguous corruption: the engine cannot tell where its own
+  content ends and the author's begins, so it must not rewrite the region at all.
+  MergeComment consults this FIRST and returns '' -- see the call site for why
+  that is the safe landing and why the previous protection (the engine merely
+  having nothing to emit) was an accident rather than a guard.
+
+  Deliberately a plain line scan over the RAW block, not a parse: the block is by
+  definition malformed, so anything that needs it to be well-formed is the wrong
+  tool. Mirrors RegionFullyEngineOwned and StripRegion, which already fail closed
+  on precisely these two shapes. }
+function HasMalformedManagedFence(const ARawBlock: string): Boolean;
+var
+  Lines: TArray<string>;
+  I, J : Integer       ;
+begin
+  Result:= False;
+  if Pos(AUTO_BEGIN, ARawBlock) + Pos(AUTO_END, ARawBlock) = 0 then Exit; { fast path: no fence at all }
+  Lines:= ARawBlock.Split([sLineBreak, #10, #13]);
+  I:= 0;
+  while I <= High(Lines) do
+  begin
+    if Pos(AUTO_BEGIN, Lines[I]) > 0 then
+    begin
+      J:= I;
+      while (J <= High(Lines)) and (Pos(AUTO_END, Lines[J]) = 0) do Inc(J);
+      if J > High(Lines) then Exit(True); { BEGIN with no END }
+      I:= J + 1;
+      Continue;
+    end;
+    if Pos(AUTO_END, Lines[I]) > 0 then Exit(True); { END with no opening BEGIN }
+    Inc(I);
+  end;
+end;
+
 class function TDocRegions.SplitResidualLines(const ARawBlock: string;
   AEngineEmitsOwnRemarks: Boolean;
   out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
@@ -2404,6 +2441,41 @@ var
   begin
     Result:= StartsStr(AUTO_TYPE, TrimLeft(AText));
   end;
+  // The engine-owned <returns>, on exactly the terms EmitEngineParam uses.
+  //
+  // Was: emit ONLY when a return expression could be MINED from the body, and
+  // omit the tag entirely otherwise. That left `doc-drift: function returns a
+  // value but has no <returns> tag` findings the documenter could not clear --
+  // the rule demanded a tag the writer refused to write, which is the same
+  // checker-vs-writer split that produced the <seealso> and scope defects.
+  //
+  // Now: mined observation FIRST (it says what the function actually returns),
+  // and the DECLARED RETURN TYPE as the baseline beneath it, under AUTO_TYPE so
+  // both MergeComment and --strip recognise it as ours. Same ruling as <param>:
+  // reflect the CURRENT situation, and these comments are generated into
+  // doc/HTML help where the returns row is part of the deliverable.
+  //
+  // THE FIRST ATTEMPT AT THIS DESTROYED HAND-WRITTEN PROSE, and the reason is
+  // worth keeping: emitting for EVERY function turns "no edit" into "always an
+  // edit", which drags previously-untouched declarations into MergeComment's
+  // rewrite -- including ones whose only protection was that the engine had
+  // nothing to say about them. A malformed managed fence is exactly that shape.
+  // It is safe now because HasMalformedManagedFence makes that protection
+  // EXPLICIT at the top of MergeComment instead of incidental.
+  //
+  // A procedure never reaches here (callers gate on AHasReturn), and a function
+  // whose return type the index could not recover still emits nothing rather
+  // than an empty tag -- absence over a blank row.
+  function EmitEngineReturns(const AF: TDocFacts): string;
+  var Obs: string;
+  begin
+    Obs:= Trim(ObservedSuffix(AF.ReturnCases));
+    if Obs <> '' then
+      Exit(EmitTagged('<returns>' + AUTO_MARK, Obs, '</returns>'));
+    if Trim(AF.ReturnType) <> '' then
+      Exit(EmitTagged('<returns>' + AUTO_TYPE, EscXml(Trim(AF.ReturnType)), '</returns>'));
+    Result:= '';
+  end;
   // The STRUCTURAL <exception cref> for one mined raise class, on exactly the
   // same terms as EmitEngineParam: the tag set mirrors what the code does, and
   // the description is left for a human to fill.
@@ -2487,6 +2559,30 @@ begin
     // TDocCommentParser.Dispatch routes a malformed or tagless /// region to
     // ParseOneline/ParseLoose instead, and re-parsing one of those as XML
     // would change its meaning wholesale.
+    // MALFORMED MANAGED FENCE -> LEAVE THE REGION ALONE, and say so explicitly.
+    //
+    // SplitResidualLines' own header already states the intent: "An AUTO_BEGIN
+    // with no matching AUTO_END is ambiguous corruption: abort the whole
+    // mechanism and leave the region exactly as it is." Its implementation is a
+    // bare Exit, which returns False -- and False only means "I could not
+    // classify the lines". The caller then merged ANYWAY, from a TParsedDoc that
+    // cannot represent an unmodeled tag, so a hand-written <value> after the
+    // broken fence was destroyed. Stated intent and code disagreed.
+    //
+    // Until now that block survived BY ACCIDENT: the engine happened to have
+    // nothing to emit for those declarations, so no edit was produced. The moment
+    // it had something to say (a <returns> type baseline), the accident stopped
+    // holding and run_doc_p3_guards went red. Protection that depends on having
+    // nothing to say is not protection.
+    //
+    // Returning '' lands on the behaviour that is already correct: BuildForSymbol
+    // treats Merged='' as "nothing to say", and deletes the region ONLY when
+    // RegionFullyEngineOwned agrees -- which fails closed on this exact shape.
+    // So the region is left byte-identical and the action is daUnchanged. This
+    // is the same fail-closed posture RegionFullyEngineOwned and StripRegion
+    // already take, which SplitResidualLines' comment cites as precedent.
+    if HasMalformedManagedFence(AExisting.RawBlock) then Exit('');
+
     var Eff: TParsedDoc:= AExisting;
     var Residual: TArray<string>:= nil;
     if AExistingHasAnyTag and (AExisting.Format = dfXmlDoc) then
@@ -2771,9 +2867,8 @@ begin
         Sb.AppendLine(EmitEngineParam(P));
       if AHasReturn then
       begin
-        var Obs: string:= Trim(ObservedSuffix(AFacts.ReturnCases));
-        if Obs <> '' then
-          Sb.AppendLine(EmitTagged('<returns>' + AUTO_MARK, Obs, '</returns>'));
+        var RetLine: string:= EmitEngineReturns(AFacts);
+        if RetLine <> '' then Sb.AppendLine(RetLine);
       end;
       // Mined raises, in DocInsight's element order (after <returns>, before
       // <remarks>). Structural, like <param>: a fresh comment has no
@@ -3017,9 +3112,8 @@ begin
         // tag at all: refill from the mined cases, or omit entirely when
         // there is nothing mined to say (v(ADP3 T3): a managed/empty
         // <returns> is never written).
-        var Obs: string:= Trim(ObservedSuffix(AFacts.ReturnCases));
-        if Obs <> '' then
-          Sb.AppendLine(EmitTagged('<returns>' + AUTO_MARK, Obs, '</returns>'));
+        var RetLine: string:= EmitEngineReturns(AFacts);
+        if RetLine <> '' then Sb.AppendLine(RetLine);
       end;
     end;
 

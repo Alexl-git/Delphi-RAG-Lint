@@ -510,8 +510,17 @@ foreach ($p in @(
     @{ N = 'Accum'  ; Was = 'Observed: 0; Result + AItems[I].'     ; Why = 'a self-referential RHS leaks an intermediate' })) {
   Check ("MUTATION: {0} emits NO Observed: at all ({1})" -f $p.N, $p.Why) `
     ((Get-Observed $blocks[$p.N]) -eq '') ($blocks[$p.N] -replace "`n",' | ')
-  Check ("MUTATION: {0} emits no <returns> TAG at all (omit-when-empty)" -f $p.N) `
-    (-not ($blocks[$p.N] -match '<returns>')) ($blocks[$p.N] -replace "`n",' | ')
+  # v(2026-08-10) PIN FLIPPED. The subject of this check is the MINED
+  # observation, and that assertion is unchanged and still above: no
+  # 'Observed:' is emitted for a mutation whose seed would be a false claim.
+  # What changed is the FALLBACK: a <returns> tag is now always written for a
+  # function, carrying the DECLARED TYPE under AUTO_TYPE when nothing is
+  # minable, so doc-drift's "function returns a value but has no <returns>"
+  # is satisfiable by the documenter instead of being a finding it refuses to
+  # clear. The tag must therefore be PRESENT and TYPE-ONLY -- proving the
+  # mutation's bad observation did not sneak back in through the new path.
+  Check ("MUTATION: {0} emits a TYPE-ONLY <returns> (declared type, no mined claim)" -f $p.N) `
+    ($blocks[$p.N] -match '<returns><!-- drag-lint:auto type -->') ($blocks[$p.N] -replace "`n",' | ')
   $bad = @($lines | Where-Object { $_ -match '^\s*///' -and $_ -match [regex]::Escape($p.Was) })
   Check ("MUTATION: the sentence that used to ship for {0} -- '{1}' -- is nowhere in the file" -f $p.N, $p.Was) `
     ($bad.Count -eq 0) ($bad -join ' | ')
@@ -520,8 +529,12 @@ foreach ($p in @(
 # --- (2) An incomplete capture is not emitted. -----------------------------
 Check 'CAPTURE: MultiLineRhs emits NO Observed: (its RHS does not end on its line)' `
   ((Get-Observed $blocks['MultiLineRhs']) -eq '') ($blocks['MultiLineRhs'] -replace "`n",' | ')
-Check 'CAPTURE: MultiLineRhs emits no <returns> TAG at all (omit-when-empty)' `
-  (-not ($blocks['MultiLineRhs'] -match '<returns>')) ($blocks['MultiLineRhs'] -replace "`n",' | ')
+# v(2026-08-10) PIN FLIPPED, same reason: an incomplete CAPTURE still emits no
+# 'Observed:' (asserted above), but the tag itself is now present carrying the
+# declared type. Absence of a mined claim is what this file guards; absence of
+# the tag was only ever the mechanism.
+Check 'CAPTURE: MultiLineRhs emits a TYPE-ONLY <returns> (no partial mined claim)' `
+  ($blocks['MultiLineRhs'] -match '<returns><!-- drag-lint:auto type -->') ($blocks['MultiLineRhs'] -replace "`n",' | ')
 Check 'CAPTURE: no <returns> anywhere ships the unbalanced fragment "(A &gt; 0) and"' `
   (-not ($text -match '\(A &gt; 0\) and')) ''
 
@@ -654,8 +667,12 @@ Check 'MEMBERS: DefaultCfg''s doc block was written at all (so the checks below 
   ($blocks['DefaultCfg'] -match '///') ($blocks['DefaultCfg'] -replace "`n",' | ')
 Check 'MEMBERS: DefaultCfg emits NO Observed: -- Result.<Field> := is not a return value' `
   ((Get-Observed $blocks['DefaultCfg']) -eq '') ($blocks['DefaultCfg'] -replace "`n",' | ')
-Check 'MEMBERS: DefaultCfg emits no <returns> TAG at all (omit-when-empty)' `
-  (-not ($blocks['DefaultCfg'] -match '<returns>')) ($blocks['DefaultCfg'] -replace "`n",' | ')
+# v(2026-08-10) PIN FLIPPED, third and last of the same family. The regression
+# this guards -- `Result.<Field> :=` is not a return value -- is asserted by the
+# 'emits NO Observed:' check directly above and is UNCHANGED. The tag is now
+# always present for a function, carrying the declared type.
+Check 'MEMBERS: DefaultCfg emits a TYPE-ONLY <returns> (member assignment still yields no mined claim)' `
+  ($blocks['DefaultCfg'] -match '<returns><!-- drag-lint:auto type -->') ($blocks['DefaultCfg'] -replace "`n",' | ')
 $retLines = @($lines | Where-Object { $_ -match '^\s*///' -and $_ -match '<returns>' })
 foreach ($f in @('Alpha','Beta','Gamma','Delta','Sigma','Omega')) {
   $bad = @($retLines | Where-Object { $_ -match ('\.' + $f + '\b') })
