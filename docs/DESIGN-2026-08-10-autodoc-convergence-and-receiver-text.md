@@ -265,10 +265,39 @@ The bucket filter then becomes exact rather than statistical:
 correctly absent. No display cap and no proportional heuristic is needed, because nothing
 is being guessed any more.
 
-**Open question to settle before implementing:** how the indexer represents the receiver
-for `inherited Create`, `Self.Create`, a fully qualified `System.JSON.TJSONArray.Create`,
-and construction through a class-reference variable (`FClass.Create`). These decide
-whether "empty receiver" is a safe allow-rule or needs its own handling.
+### The receiver shapes -- SETTLED 2026-08-10 (read before writing the migration)
+
+The open question was how the indexer represents the receiver for the awkward shapes.
+Answered by reading `ExtractReceiverExpr` (`DRagLint.Index.CallResolver.pas:507`), which
+recovers the receiver from the SOURCE LINE by scanning LEFT from the ref's column:
+
+| source | `ExtractReceiverExpr` returns |
+|---|---|
+| `Create(...)` (bare) | `''` -- exits at line 521, the char before the name is not `.` |
+| `inherited Create` | `''` -- same path; no dot precedes the name |
+| `Self.Create` | `Self` |
+| `TJSONArray.Create` | `TJSONArray` |
+| `System.JSON.TJSONArray.Create` | `System.JSON.TJSONArray` -- the FULL dotted chain |
+| `FClass.Create` (class-reference var) | `FClass` |
+| `TFoo(X).Create` / `(X as TFoo).Create` | the cast expression; `TryParseCastTarget` reduces it to `TFoo` |
+
+Four consequences for the filter, none of them guesses:
+
+1. **"Empty receiver -> allow" is SAFE, and it covers `inherited` for free.** Both a bare
+   `Create(...)` and `inherited Create` produce `''`, and both legitimately target the
+   enclosing or an ancestor class. No special case is needed for `inherited`.
+2. **Dotted chains must be compared on the LAST SEGMENT.** `System.JSON.TJSONArray` must
+   match a target owned by `TJSONArray`; comparing the whole string would reject it.
+3. **Cast shapes must go through `TryParseCastTarget`** before comparison, or
+   `TFoo(X).Create` is read as a receiver literally named `TFoo(X)`.
+4. **`Self` needs an ancestry check**, not a name match: allow only when the target's
+   owning class is the enclosing class or one of its ancestors.
+
+**And the population cost is ~zero.** `TCallResolver` already calls `ExtractReceiverExpr`
+for EVERY call ref (line 1369), reading from `LinesOf(FileId)` -- a CACHED per-file line
+array. So `receiver_text` can be written by the SAME pass that builds `call_edges`, not by
+a new extraction pass. That also means a re-RESOLVE may be enough to populate the column
+on an existing DB; `--force-reparse` should be tested but may not be required.
 
 ---
 
