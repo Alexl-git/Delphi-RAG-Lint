@@ -441,6 +441,48 @@ begin
   if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
 end;
 
+{ True when ALeaf names exactly ONE call-target symbol in the index, i.e. when an
+  unresolved call ref carrying that name can only have meant this one.
+
+  This is the missing precondition of the unresolved-NAME caller bucket. That
+  bucket exists so a call the resolver could not bind still shows up somewhere,
+  and marks it uncertain -- an honest trade WHEN the name identifies something.
+  It does not when the name is shared: `Create` is declared by 35 symbols in
+  drag-lint's own index, so attributing an unresolved `Create(` site to any one
+  constructor is a 1-in-35 guess repeated across the whole corpus. TQueryRule.
+  Create, constructed in exactly ONE place, documented itself with 107 callers.
+
+  The uses-REACHABILITY filter already applied at the call site is necessary and
+  was added for this same symptom, but it is not sufficient: within one codebase
+  almost everything can reach almost everything through the uses graph, so it
+  removed the impossible callers and left the merely-wrong ones.
+
+  UNIQUENESS, not a threshold. 1,501 of this index's callable leaf names are
+  unique and 221 are shared, so the bucket keeps working for the large majority
+  while the shared names -- exactly the ones a guess cannot distinguish -- stop
+  claiming callers. Overload sets count as shared, which is correct: an
+  unresolved `Foo(` cannot be attributed to a particular overload either.
+
+  Counts only CALL-TARGET kinds, so a local variable or field that happens to
+  share a method's name does not make that method look ambiguous. }
+function LeafNameIsUnambiguous(const AStore: ISymbolStore; const ALeaf: string): Boolean;
+var
+  Cands: TArray<TSymbol>;
+  S    : TSymbol        ;
+  N    : Integer        ;
+begin
+  if ALeaf = '' then Exit(False);
+  N:= 0;
+  Cands:= AStore.FindSymbolsByExactName(ALeaf);
+  for S in Cands do
+    if CanBeCallTarget(S.Kind) then
+    begin
+      Inc(N);
+      if N > 1 then Exit(False);
+    end;
+  Result:= N = 1;
+end;
+
 // v(ADP1 Bug D): True when ARef is a class's OWN self-reference -- a qualified
 // implementation header (e.g. 'function TThing.Add: Integer;') emits a
 // type_use ref of NameText='TThing' whose EnclosingSymbolId is the method
@@ -1280,14 +1322,53 @@ begin
     // target at all. Reachability is a Delphi rule, not a guess, so what it
     // removes is not merely improbable but impossible. Contract + the
     // NULL-target and per-DB-file-id caveats: the ISymbolStore declaration.
-    ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
-                                                 CanBeCallTarget(ASym.Kind),
-                                                 ASym.FileId);
-    for RC in ResCallers do
+    //
+    // AMBIGUOUS LEAF NAME -> NO BUCKET AT ALL. Reachability (above) removes the
+    // callers that are IMPOSSIBLE; it cannot remove the ones that are merely
+    // WRONG, and within a single codebase almost everything reaches almost
+    // everything. `Create` is declared by 35 symbols here, so every unresolved
+    // `Create(` site was being claimed by every constructor in the index --
+    // TQueryRule.Create, constructed in ONE place, listed 107 callers.
+    // See LeafNameIsUnambiguous for why the test is uniqueness and not a
+    // threshold.
+    //
+    // THE GATE APPLIES TO CALL TARGETS ONLY. For a TYPE (class/record/enum/
+    // alias) this bucket is not a fallback -- it is the ONLY source of the
+    // "Used in units:" / "Used by:" facts, because a type is never a call target
+    // and so has no resolved edges to fall back to. Gating it there does not
+    // remove a guess, it deletes the fact outright: three suites said so
+    // immediately (a RECORD stopped rendering "Used by:" at all).
+    //
+    // CanBeCallTarget is the same predicate already passed to
+    // FindUnresolvedNameCallers below to choose the ref-kind restriction, so the
+    // two halves of this decision cannot drift apart.
+    // AND THE GATE NEEDS A RESOLVED-ANCHOR ESCAPE. Ambiguity alone is not the
+    // danger; ambiguity with NOTHING to compare against is. When at least one
+    // caller resolved, adding a guess makes the list MIXED -- and the ' ?'
+    // marker renders on a mixed list, so the reader is told which entries are
+    // weak. That is the honest trade the bucket was designed for, and
+    // calledfrom.pas exercises it deliberately (TAlpha.Run / TBeta.Run share a
+    // name; the untypable U.Run site must still surface, marked).
+    //
+    // The 107-caller case had NO resolved caller, so every entry was uncertain,
+    // the marker was suppressed as uniform, and a wholly-guessed list rendered
+    // exactly like a verified one. That is the combination this suppresses:
+    // ambiguous name AND no resolved anchor.
+    var NameUnambiguous: Boolean:=
+      (not CanBeCallTarget(ASym.Kind))
+      or (Distinct.Count > 0)
+      or LeafNameIsUnambiguous(AStore, LastSeg(ASym.QualifiedName));
+    if NameUnambiguous then
     begin
-      FR:= ToFactRef(RC);
-      FR.Confidence:= 'unverified'; // enforce the '?' marker regardless of store value
-      AddDistinct(FR);
+      ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
+                                                   CanBeCallTarget(ASym.Kind),
+                                                   ASym.FileId);
+      for RC in ResCallers do
+      begin
+        FR:= ToFactRef(RC);
+        FR.Confidence:= 'unverified'; // enforce the '?' marker regardless of store value
+        AddDistinct(FR);
+      end;
     end;
 
     // Extra stores (multi-DB fan-out): NAME-BASED bucket only. ASym.Id is a
@@ -1301,6 +1382,13 @@ begin
     for var ExStore in AExtraStores do
     begin
       if ExStore = nil then Continue;
+      // AMBIGUITY GATE, and it matters MORE here than on the primary store: the
+      // note below records that this path has no uses-scope filter at all, so
+      // this is the one bucket where section 7's noise could still arrive. The
+      // name must identify one call target in BOTH stores -- shared in either
+      // means an unresolved ref naming it cannot be attributed to this symbol,
+      // and a fact must not depend on which DB a reference happened to live in.
+      if not (NameUnambiguous and LeafNameIsUnambiguous(ExStore, LastSeg(ASym.QualifiedName))) then Continue;
       // Same kind gate as the primary store above -- the two must agree, or a
       // symbol's fact would depend on which DB a reference happened to live in.
       // The expression is repeated because it is CODE; the reasoning is not, and

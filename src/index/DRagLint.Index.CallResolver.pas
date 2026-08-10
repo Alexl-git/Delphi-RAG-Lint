@@ -1035,8 +1035,31 @@ begin
       Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
   end;
 
-  // Unresolved receiver identifier (unknown local/param/field, or a global we do
-  // not track) -> Result stays 0 (leave unresolved).
+  // --- Kind 7: the receiver IS A TYPE -- 'TFoo.Create(...)', 'TFoo.ClassMethod'.
+  //
+  // This rung was missing entirely, and it is the shape EVERY Delphi constructor
+  // call has. The consequence was not a quiet loss of coverage: because the call
+  // did not resolve, the documentation's caller list fell through to its
+  // unresolved-NAME bucket, and for a constructor that bucket is keyed on the
+  // leaf name `Create` -- shared by 35 symbols in this index alone. So
+  // TQueryRule.Create, constructed in exactly ONE place, documented itself with
+  // 107 callers, none of them real.
+  //
+  // Last of the identifier rungs on purpose. A local, parameter, field or
+  // property whose name happens to match a type name SHADOWS the type in Delphi,
+  // and each of those was already tried above, so this can only fire when the
+  // identifier is not a value in scope.
+  //
+  // ResolveTypeNameToSymbol is the same FP-conservative resolver the cast rung
+  // uses: it answers only when exactly one candidate is in scope (or exactly one
+  // exists globally), so an ambiguous type name still yields 0 rather than a
+  // guess. Class METHODS and constructors are ordinary children of the type
+  // symbol, so LookupMethodOnType needs no change to find them.
+  Result:= ResolveTypeNameToSymbol(AReceiverExpr, ACallRef.FileId);
+  if Result > 0 then Exit;
+
+  // Unresolved receiver identifier (unknown local/param/field, and not a type we
+  // can name) -> Result stays 0 (leave unresolved).
 end;
 
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;
