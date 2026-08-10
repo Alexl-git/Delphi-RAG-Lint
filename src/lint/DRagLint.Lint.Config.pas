@@ -4,6 +4,7 @@ interface
 
 uses
   System.SysUtils, System.JSON, System.IOUtils, System.Generics.Collections,
+  System.Masks, { IsPathExcluded's glob match }
   DRagLint.Core.Model;
 
 type
@@ -59,6 +60,19 @@ type
     FSevValues   : TArray<string> ;
     FThreshNames : TArray<string> ; // parallel arrays: metric name -> value
     FThreshValues: TArray<Integer>;
+    { v(2026-08-10): "exclude_paths" -- case-insensitive globs matched against a
+      file's FULL path. A match drops the file from the lint scan entirely.
+
+      This is a LINT-scope filter, deliberately NOT an index-scope one. Vendored
+      code (third_party\delphi-tree-sitter) is in the index because it is part of
+      the .dproj compile closure -- excluding it there would strand symbol
+      resolution for everything that uses it. But it is not this repo's code to
+      restyle: 134 of drag-lint's own 2,765 findings sat in it, 95 of them
+      method-pascalcase on C bindings (ts_query_cursor_new), where "fixing" the
+      name would diverge from upstream and make every future sync a conflict.
+      tests\autotest\run_encoding_guard.ps1 already exempts the same directory
+      for the same stated reason; lint did not, and the two should agree. }
+    FExcludePaths: TArray<string> ;
     /// <param name="AArr"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
@@ -210,6 +224,17 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function IsAutoFix(const ARuleId: string): Boolean;
+    /// <summary>True when AFilePath matches any configured "exclude_paths"
+    /// glob and must therefore not be linted at all.</summary>
+    /// <param name="AFilePath">Full path of the candidate source file.</param>
+    /// <returns>True to SKIP the file; False to lint it. Always False when no
+    /// exclude_paths are configured, so behaviour is unchanged by default.</returns>
+    /// <remarks>Case-insensitive, and matched against the WHOLE path so a glob
+    /// like <c>*\third_party\*</c> selects a directory subtree. This drops the
+    /// file before any rule runs -- it is a scope decision, not a per-rule
+    /// suppression, because vendored code is not this codebase's quality
+    /// signal for ANY rule.</remarks>
+    function IsPathExcluded(const AFilePath: string): Boolean;
     /// <summary>Returns the configured threshold for AName, else ADefault.</summary>
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ADefault"><!-- drag-lint:auto type -->Integer</param>
@@ -505,6 +530,11 @@ begin
     if AReplace then FAutoFix:= nil;
     for V in (AObj.GetValue('autofix') as TJSONArray) do FAutoFix:= FAutoFix + [V.Value];
   end;
+  if AObj.GetValue('exclude_paths') is TJSONArray then
+  begin
+    if AReplace then FExcludePaths:= nil;
+    for V in (AObj.GetValue('exclude_paths') as TJSONArray) do FExcludePaths:= FExcludePaths + [V.Value];
+  end;
   if AObj.GetValue('severity') is TJSONObject then
   begin
     { profile semantics: update-or-add each severity key; base keys not
@@ -600,6 +630,22 @@ end;
 function TLintConfig.IsAutoFix(const ARuleId: string): Boolean;
 begin
   Result:= Contains(FAutoFix, ARuleId);
+end;
+
+function TLintConfig.IsPathExcluded(const AFilePath: string): Boolean;
+var
+  G: string;
+begin
+  Result:= False;
+  if (Length(FExcludePaths) = 0) or (AFilePath = '') then Exit;
+  { MatchesMask on the LOWERCASED path, with '/' folded to '\': an author writes
+    the glob one way and Windows hands us the other, and a filter that silently
+    fails to match is the worst outcome here -- it reports a full scan while
+    quietly linting what the config said to skip. }
+  var P: string:= LowerCase(StringReplace(AFilePath, '/', '\', [rfReplaceAll]));
+  for G in FExcludePaths do
+    if (G <> '') and MatchesMask(P, LowerCase(StringReplace(G, '/', '\', [rfReplaceAll]))) then
+      Exit(True);
 end;
 
 function TLintConfig.ThresholdFor(const AName: string; ADefault: Integer): Integer;

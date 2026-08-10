@@ -1,0 +1,18 @@
+{
+  "_comment": [
+    "drag-lint's lint config for its OWN source. Pass with --config when linting",
+    "this repo from a neutral CWD (the pipeline runs from C:\\TEMP, so the",
+    "auto-discovery of a CWD-local drag-lint-lint.json does not find this file).",
+    "",
+    "exclude_paths: third_party\\delphi-tree-sitter is VENDORED UPSTREAM code. It",
+    "is in the index because it is part of the .dproj compile closure and symbol",
+    "resolution needs it -- but it is not ours to restyle. It accounted for 134 of",
+    "2,765 findings, 95 of them method-pascalcase on C binding names such as",
+    "ts_query_cursor_new, where renaming would diverge from upstream and turn",
+    "every future sync into a conflict. tests\\autotest\\run_encoding_guard.ps1",
+    "already exempts this exact directory for this exact reason."
+  ],
+  "exclude_paths": [
+    "*\\third_party\\*"
+  ]
+}

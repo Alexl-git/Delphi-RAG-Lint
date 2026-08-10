@@ -1,0 +1,28 @@
+# 2026-08-10 split: casing noise vs. a real field-prefix-on-a-local signal.
+#
+# EXEMPT: 1-character loop counters. `i` and `j` are universal, and PascalCasing
+# them yields `I`/`J` -- pure churn. On drag-lint's own source this shape alone
+# was 135 of 195 local-var-casing findings, 116 of them the single name `i`.
+# The absence assertions below are the load-bearing half of this fixture: without
+# them, a rule that simply stopped firing would still pass.
+local-var-casing 26
+local-var-casing 27
+
+# `fi` (line 26) is the case that proves the exemption is about LENGTH, not about
+# being a loop counter -- it IS one, and it still fires, because at 2 characters
+# a reader gains something from the fix. It is also the exact name whose autofix
+# proposed `Fi`, which would have invented a fake field prefix; that is why the
+# casing fix and the prefix rule had to stop sharing one message.
+
+# A local wearing the F field prefix is its own rule now, and it is the signal
+# worth acting on: F is reserved for object fields, so `FName` in a routine body
+# reads as a field and is not one.
+local-field-prefix 28
+local-field-prefix 29
+
+# CONTROLS -- these keep the split honest.
+# GLE (line 30) is a short all-caps initialism, already exempt from casing.
+# Good (line 31) is clean.
+# Neither may draw either rule, and no F-prefixed local may be reported as a
+# casing violation any more (that conflation is what the split removes).
+!hungarian-or-short-identifier

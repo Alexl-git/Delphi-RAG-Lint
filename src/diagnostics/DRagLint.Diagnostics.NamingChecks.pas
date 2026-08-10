@@ -10,7 +10,11 @@ unit DRagLint.Diagnostics.NamingChecks;
                             prefix.
     method-pascalcase     : routine/method name must match MethodCase.
     const-casing          : constant name must match one of ConstCase.
-    local-var-casing      : local variable name must match LocalCase.
+    local-var-casing      : local variable name must match LocalCase. 1-char
+                            names (i, j, k) are EXEMPT -- see the emit site.
+    local-field-prefix    : local variable wears the field (or param) prefix,
+                            so it reads as an object field and is not one.
+                            Split out of local-var-casing 2026-08-10.
     unit-name-matches-file: unit name must equal the file base name
                             (case-insensitive).
     reserved-word-casing  : Pascal keyword tokens must be all-lowercase
@@ -940,14 +944,48 @@ var
             (F + uppercase next char) would fire the carry check. }
           if ANaming.LocalCase <> '' then
           begin
+            { v(2026-08-10, owner ruling): TWO rules, not one message for two
+              unrelated complaints.
+
+              This fired once for "wrong casing" OR "wears a field/param
+              prefix", which are different defects with different fixes and
+              wildly different value. On drag-lint's own source it produced 195
+              findings, of which 116 were the single loop counter `i` -- so the
+              22 locals genuinely named FName/FIdx/FRoot, which really do read
+              as fields and are worth renaming, could never be seen. Merging a
+              high-noise check with a high-signal one destroys the signal, and
+              neither half could be tuned or suppressed without the other.
+
+              1-CHARACTER NAMES ARE EXEMPT FROM CASING. `i`, `j`, `k` are
+              universal loop counters; "rename i to I" is churn with no reader
+              benefit, and it was 135 of the 195. The exemption is on LENGTH,
+              not on "looks like a counter": `fi` at two characters still
+              fires, because there a reader gains something.
+
+              That case is also why the split was necessary rather than
+              cosmetic -- the autofix for `fi` proposed `Fi`, which under this
+              codebase's own F-is-a-field convention invents a fake field
+              prefix. A casing fix that manufactures a prefix violation is
+              precisely what happens when one rule owns both concepts. }
             var CasingBad: Boolean:= (not MatchesCase(VarName, ANaming.LocalCase))
-              and (not IsShortAllCaps(VarName));
+              and (not IsShortAllCaps(VarName))
+              and (Length(VarName) > 1);
             var HasFieldPfx: Boolean:= (ANaming.FieldPrefix <> '') and HasPrefix(VarName, ANaming.FieldPrefix);
             var HasParamPfx: Boolean:= (ANaming.ParamPrefix <> '') and HasPrefix(VarName, ANaming.ParamPrefix);
-            if CasingBad or HasFieldPfx or HasParamPfx then
+            { Prefix first, and the two are mutually exclusive: an F-prefixed
+              local is reported ONLY as local-field-prefix, never also as a
+              casing violation, so one declaration never draws two findings for
+              what a reader will fix with one rename. }
+            if HasFieldPfx or HasParamPfx then
+              EmitAt(VarNameId, 'local-field-prefix',
+                Format('Local variable "%s" carries the "%s" %s prefix -- that prefix is reserved for %s, so a local wearing it reads as one',
+                  [VarName,
+                   IfThen(HasFieldPfx, ANaming.FieldPrefix, ANaming.ParamPrefix),
+                   IfThen(HasFieldPfx, 'field', 'parameter'),
+                   IfThen(HasFieldPfx, 'object fields', 'parameters')]))
+            else if CasingBad then
               EmitAt(VarNameId, 'local-var-casing',
-                Format('Local variable "%s" should be %s and not carry a field/param prefix',
-                  [VarName, ANaming.LocalCase]));
+                Format('Local variable "%s" should be %s', [VarName, ANaming.LocalCase]));
           end;
           EmitShortHungarian(VarNameId, VarName);
         end;

@@ -1,3 +1,21 @@
-local-var-casing 6
+# UPDATED 2026-08-10 for the local-naming SPLIT.
+#
+# Line 6 is `FCount` -- an F-prefixed local. It used to be asserted here as
+# local-var-casing, because ONE rule fired for two unrelated complaints
+# ("should be PascalCase AND not carry a field/param prefix"). It is now
+# local-field-prefix: FCount is perfectly PascalCase, so calling it a CASING
+# violation was always the wrong label, and the conflation buried the 22 real
+# F-prefixed locals under 116 complaints about the loop counter `i`.
+#
+# The negative assertion below is the load-bearing one: it pins that an
+# F-prefixed local is reported ONCE, under the prefix rule, and no longer also
+# as a casing violation. Without it the split could regress into double-reporting.
+local-field-prefix 6
+!local-var-casing 6
+
+# Line 7 is `ok` -- genuinely mis-cased, 2 characters, so NOT covered by the
+# new 1-character exemption. Still local-var-casing, unchanged.
 local-var-casing 7
+
+# Line 9 is `GLE` -- a short all-caps initialism, exempt from casing as before.
 !local-var-casing 9

@@ -517,6 +517,34 @@ See the **v0.96 / v0.97** CHANGELOG entries for the full behaviour notes.
 
 ---
 
+## 4c. Writing code that passes the linter first time
+
+Two companion documents, both meant to be handed straight to your agent:
+
+- **[`docs/AI-CODING-CONVENTIONS.md`](AI-CODING-CONVENTIONS.md)** -- the naming,
+  documentation, resource-handling and encoding conventions **stated as the rule
+  ids that enforce them**, so what the agent is told and what the linter checks
+  are the same thing. Paste it into your `CLAUDE.md` / `AGENTS.md`. It also
+  points at **YADF** for layout: drag-lint owns semantics, YADF owns formatting,
+  and code satisfying both needs no style review.
+  Keep it in step with any naming-config change **in the same commit** -- a
+  convention doc that drifts from its rules is worse than none, because the
+  agent follows it confidently while the linter disagrees.
+
+- **The `relint` skill** (`skills/relint/SKILL.md`) -- the full
+  `reindex -> autodoc -> reindex -> lint-all` loop as a repeatable measurement,
+  with a timestamped result file and a per-rule classification. Use it to
+  re-baseline a project, and to harden the rules: each pass should leave the
+  LINTER sharper, not only the code cleaner.
+
+  Its preflight exists because each check has silently ruined a real run:
+  `index --all` resolves its manifest **relative to the exe's own directory**,
+  so an exe with no `drag-lint.json` beside it indexes **nothing**, prints
+  nothing, and **exits 0** -- every downstream number then measures a stale
+  database while reporting success.
+
+---
+
 ## 5. Warnings (please read)
 
 - **Alpha software.** Expect rough edges and breaking changes between versions.

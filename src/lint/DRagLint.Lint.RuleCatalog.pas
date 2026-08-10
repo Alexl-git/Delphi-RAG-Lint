@@ -249,6 +249,14 @@ begin
       [MkParam('const_case','stringlist','PascalCase,UPPER_CASE')]);
     B('local-var-casing',    'naming', 'info', 'Local variable name casing', True,
       [MkParam('local_case','string','PascalCase')]);
+    { Split out of local-var-casing (2026-08-10). Casing is high-noise and this
+      is high-signal, so they are separately tunable: a local named FName reads
+      as an object field and is not one. Shares field_prefix/param_prefix with
+      the field/param rules rather than declaring its own, so "what F means"
+      has ONE answer across the whole naming family. }
+    B('local-field-prefix',  'naming', 'info', 'Local variable wears the field/param prefix', True,
+      [MkParam('field_prefix','string','F'),
+       MkParam('param_prefix','string','')]);
     B('unit-name-matches-file','naming','info', 'Unit name must equal the file base name');
     B('reserved-word-casing','naming', 'info', 'Reserved words must be lowercase', True,
       [MkParam('keyword_case','string','lowercase')]);

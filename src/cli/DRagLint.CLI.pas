@@ -9337,21 +9337,32 @@ begin
   end;
 
   { Enumerate all indexed .pas files from the project store }
+  { The lint config is loaded HERE, before enumeration, rather than after it:
+    "exclude_paths" is a SCOPE decision (vendored code is not this codebase's
+    quality signal for any rule), so an excluded file must never reach the
+    scanner, and the banner below must report the count actually scanned. }
+  var Cfg: TLintConfig:= LoadLintConfig(AArgs);
   FilePaths:= nil;
+  var ExcludedCount: Integer:= 0;
   for Fid in Store.GetAllFileIds do
   begin
     PasPath:= Store.GetFilePath(Fid);
     if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then
     begin
+      if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
       if (ScopeSet = nil) or ScopeSet.ContainsKey(ScopeKey(PasPath)) then FilePaths:= FilePaths + [PasPath];
     end;
   end;
   { The banner is prose: on --json / --format sarif it belongs on stderr, or the
     document it precedes will not parse (docs\INBOX-lint-all-json-stdout-banner.md). }
   EmitStatusLine(AArgs, Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
+  { Say what was skipped. A scope filter that reports nothing is indistinguishable
+    from a clean codebase -- the same failure this session hit when a silent
+    no-op reindex made a stale-DB run look like a successful one. }
+  if ExcludedCount > 0 then
+    EmitStatusLine(AArgs, Format('lint-all: %d file(s) skipped by exclude_paths', [ExcludedCount]));
 
   { Per-file rules: external .scm rules + all built-in AST checks }
-  var Cfg: TLintConfig:= LoadLintConfig(AArgs);
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
   LastPct:= -1;
   try
