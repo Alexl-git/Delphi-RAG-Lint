@@ -34,7 +34,7 @@ type
       /// <summary><!-- drag-lint:auto -->Compare .dproj &lt;DCCReference
       /// Include="..."/&gt; entries vs the matching .dpr/.dpk's `uses` clause. Returns
       /// findings for every unit that is present on one side but not the other.</summary>
-      /// <param name="ADprojPath"><!-- drag-lint:auto --></param>
+      /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

@@ -69,10 +69,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Resolve(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer)         : TTypeAtResult; overload;
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="ALine"><!-- drag-lint:auto --></param>
-      /// <param name="ACol"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed:
       /// Resolve(TArray&lt;ISymbolStore&gt;.Create(AStore), AFile, ALine, ACol).</returns>
       /// <remarks>
@@ -87,10 +87,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Resolve(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer)                  : TTypeAtResult; overload;
-      /// <param name="ALine"><!-- drag-lint:auto --></param>
-      /// <param name="ACol"><!-- drag-lint:auto --></param>
-      /// <param name="APrecedingDot"><!-- drag-lint:auto --></param>
-      /// <param name="ALhs"><!-- drag-lint:auto --></param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="APrecedingDot"><!-- drag-lint:auto type -->out Boolean</param>
+      /// <param name="ALhs"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''; Copy(ALine, Start, EndIdx -
       /// Start).</returns>
       /// <remarks>
@@ -105,7 +105,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ExtractTokenAt(const ALine: string; ACol: Integer; out APrecedingDot: Boolean; out ALhs: string): string       ;
-      /// <param name="AResult"><!-- drag-lint:auto --></param>
+      /// <param name="AResult"><!-- drag-lint:auto type -->const TTypeAtResult</param>
       /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -119,7 +119,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function RenderText(const AResult: TTypeAtResult)                                                        : string       ;
-      /// <param name="AResult"><!-- drag-lint:auto --></param>
+      /// <param name="AResult"><!-- drag-lint:auto type -->const TTypeAtResult</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)

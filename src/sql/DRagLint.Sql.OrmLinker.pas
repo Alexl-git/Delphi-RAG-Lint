@@ -56,7 +56,7 @@ type
   /// </remarks>
   TOrmLinker = class
     public
-      /// <param name="ADbPaths"><!-- drag-lint:auto --></param>
+      /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default       (TOrmLinkerStats).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

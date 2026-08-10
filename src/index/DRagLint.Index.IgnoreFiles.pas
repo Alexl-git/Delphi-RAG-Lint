@@ -68,8 +68,8 @@ type
     var
       FLayers: TObjectList<TLayer>; // index 0 = outermost; last = innermost
 
-      /// <param name="APath"><!-- drag-lint:auto --></param>
-      /// <param name="AIsHg"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AIsHg"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Observed: TLayer.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

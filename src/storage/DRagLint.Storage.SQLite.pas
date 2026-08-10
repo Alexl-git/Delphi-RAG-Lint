@@ -160,8 +160,8 @@ type
       // index -- no writes, so --no-write-back is unaffected.
       FAnchorCache           : TDictionary<Int64, string>; // file id -> '' | 'Vcl' | 'FMX'
       FDerivingAnchor        : Boolean;                    // re-entrancy guard
-      /// <param name="ADbPath"><!-- drag-lint:auto --></param>
-      /// <param name="AReadOnly"><!-- drag-lint:auto --></param>
+      /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AReadOnly"><!-- drag-lint:auto type -->Boolean</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas)
@@ -227,7 +227,7 @@ type
       /// is the kind of detail that is right in the copy someone read and wrong in the
       /// copy someone wrote -- and getting it wrong strands FTS5 shadow rows that no
       /// ordinary test notices. See the implementation.</summary>
-      /// <param name="AIds"><!-- drag-lint:auto --></param>
+      /// <param name="AIds"><!-- drag-lint:auto type -->const TList&lt;Int64&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.EvictOutOfScopeFiles (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.PruneMissingFiles (DRagLint.Storage.SQLite.pas)
@@ -387,9 +387,9 @@ type
       /// </remarks>
       function IsSchemaCurrent(out AFound, AExpected: Integer): Boolean;
 
-      /// <param name="APath"><!-- drag-lint:auto --></param>
-      /// <param name="AMtimeUnix"><!-- drag-lint:auto --></param>
-      /// <param name="ASha"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: not Q.IsEmpty.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -409,7 +409,7 @@ type
       /// a missing table (a DB from before schema_meta existed) and a missing key, both
       /// as '' -- callers treat that as "unknown", never as an error, exactly as
       /// IsSchemaCurrent does.</summary>
-      /// <param name="AKey"><!-- drag-lint:auto --></param>
+      /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''; Q.Fields[0].AsString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -429,8 +429,8 @@ type
       /// read-only or non-index DB -- swallowed for the same reason the reader swallows
       /// it, since a fingerprint that cannot be recorded must not fail the run that
       /// produced it.</summary>
-      /// <param name="AKey"><!-- drag-lint:auto --></param>
-      /// <param name="AValue"><!-- drag-lint:auto --></param>
+      /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AValue"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.SetMetaValue
@@ -444,10 +444,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetMetaValue(const AKey, AValue: string)                                                                    ;
-      /// <param name="APath"><!-- drag-lint:auto --></param>
-      /// <param name="AMtimeUnix"><!-- drag-lint:auto --></param>
-      /// <param name="ASha"><!-- drag-lint:auto --></param>
-      /// <param name="ALanguage"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALanguage"><!-- drag-lint:auto type -->const string</param>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -464,8 +464,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
-      /// <param name="ASymbol"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
+      /// <param name="ASymbol"><!-- drag-lint:auto type -->const TSymbol</param>
       /// <returns><!-- drag-lint:auto -->Observed: FConn.GetLastAutoGenValue('').</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -480,8 +480,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function UpsertSymbol(const AToken: TFileTxToken; const ASymbol: TSymbol): Int64                                      ;
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
-      /// <param name="ARef"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
+      /// <param name="ARef"><!-- drag-lint:auto type -->const TReference</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.UpsertReference
@@ -495,8 +495,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure UpsertReference(const AToken: TFileTxToken; const ARef    : TReference   );
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
-      /// <param name="ABinding"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
+      /// <param name="ABinding"><!-- drag-lint:auto type -->const TDiBindingRow</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.UpsertDiBinding
@@ -510,7 +510,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure UpsertDiBinding(const AToken: TFileTxToken; const ABinding: TDiBindingRow);
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.DeleteDiBindingsForFile
@@ -524,8 +524,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DeleteDiBindingsForFile(AFileId: Int64);
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
-      /// <param name="ALit"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
+      /// <param name="ALit"><!-- drag-lint:auto type -->const TStringLiteral</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.UpsertStringLiteral
@@ -539,7 +539,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure UpsertStringLiteral(const AToken: TFileTxToken; const ALit: TStringLiteral);
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.DeleteFilesByIds (DRagLint.Storage.SQLite.pas)
@@ -558,8 +558,8 @@ type
       /// DELETE, which is the only honest place for it: the returned list is then
       /// produced by the same predicate over the same rows the real sweep would have
       /// deleted, so a preview cannot disagree with the run it previews.</summary>
-      /// <param name="ARoots"><!-- drag-lint:auto --></param>
-      /// <param name="ADryRun"><!-- drag-lint:auto --></param>
+      /// <param name="ARoots"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <param name="ADryRun"><!-- drag-lint:auto type -->Boolean = False</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Gone.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -583,9 +583,9 @@ type
       /// NormalizeStoredPath produced at write time. Comparing those two raw was B6's
       /// bug, and here it would not merely duplicate a row -- it would EVICT every file
       /// whose spelling disagreed.</summary>
-      /// <param name="ARoots"><!-- drag-lint:auto --></param>
-      /// <param name="AInScopeAbsPaths"><!-- drag-lint:auto --></param>
-      /// <param name="ADryRun"><!-- drag-lint:auto --></param>
+      /// <param name="ARoots"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <param name="AInScopeAbsPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <param name="ADryRun"><!-- drag-lint:auto type -->Boolean = False</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Gone.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -620,10 +620,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ClearAllFiles: Integer;
-      /// <param name="AQuery"><!-- drag-lint:auto --></param>
-      /// <param name="AMode"><!-- drag-lint:auto --></param>
-      /// <param name="ASource"><!-- drag-lint:auto --></param>
-      /// <param name="ALimit"><!-- drag-lint:auto --></param>
+      /// <param name="AQuery"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AMode"><!-- drag-lint:auto type -->string</param>
+      /// <param name="ASource"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALimit"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <exception cref="ENotSupportedException"><!-- drag-lint:auto --></exception>
       /// <remarks>
@@ -643,8 +643,8 @@ type
       // v14 (D5): resolved call-target edges (call_edges table).
       /// <summary><!-- drag-lint:auto -->v14 (D5): resolved call-target edges (call_edges
       /// table).</summary>
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
-      /// <param name="AEdge"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
+      /// <param name="AEdge"><!-- drag-lint:auto type -->const TCallEdge</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)
@@ -673,7 +673,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ClearCallEdges;
-      /// <param name="ATargetSymbolId"><!-- drag-lint:auto --></param>
+      /// <param name="ATargetSymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -695,9 +695,9 @@ type
         decision -- and if they ever diverged, an interface-typed caller and a
         class-typed caller would silently get different behaviour. Every caller
         goes through ISymbolStore, so omitting it here costs nothing. }
-      /// <param name="AName"><!-- drag-lint:auto --></param>
-      /// <param name="ACallSitesOnly"><!-- drag-lint:auto --></param>
-      /// <param name="AReachableToFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ACallSitesOnly"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="AReachableToFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto -->v(ADP3 T3i review round 2): the '= True' default is declared ONCE,
@@ -719,7 +719,7 @@ type
       /// </remarks>
       function FindUnresolvedNameCallers(const AName: string;
         ACallSitesOnly: Boolean; AReachableToFileId: Int64): TArray<TResolvedCaller>;
-      /// <param name="AEnclosingSymbolId"><!-- drag-lint:auto --></param>
+      /// <param name="AEnclosingSymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -825,8 +825,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DumpAllCallEdges: TArray<TCallEdge>;
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -842,7 +842,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetAmbiguousCalls(const AQName, AFilePath: string): TArray<TResolvedCaller>;
-      /// <param name="AInterfaceName"><!-- drag-lint:auto --></param>
+      /// <param name="AInterfaceName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -858,7 +858,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
-      /// <param name="AImplName"><!-- drag-lint:auto --></param>
+      /// <param name="AImplName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto -->v(ADP3 T14): the reverse of FindImplementationsOf -- see the
@@ -881,8 +881,8 @@ type
       /// <summary><!-- drag-lint:auto -->v(ADP3 T14): orm_links -&gt; fb_relations -&gt;
       /// fb_columns, in two queries rather than one join, so the per-relation column cap
       /// is applied by LIMIT instead of by post-filtering a cross product.</summary>
-      /// <param name="ASymbolId"><!-- drag-lint:auto --></param>
-      /// <param name="AMaxColumns"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="AMaxColumns"><!-- drag-lint:auto type -->Integer = 4</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto -->NOTE ON THE JOIN KEY: orm_links.sql_symbol_id is matched against
@@ -904,7 +904,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindOrmDatasetLinks(ASymbolId: Int64; AMaxColumns: Integer = 4): TArray<TOrmDatasetLink>;
-      /// <param name="AInterfaceName"><!-- drag-lint:auto --></param>
+      /// <param name="AInterfaceName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -935,7 +935,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindDiUnresolved: TArray<TReference>                                       ;
-      /// <param name="AFormName"><!-- drag-lint:auto --></param>
+      /// <param name="AFormName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -950,8 +950,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindEventHandlersForForm( const AFormName: string): TArray<TReference>     ;
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
-      /// <param name="AChunk"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
+      /// <param name="AChunk"><!-- drag-lint:auto type -->const TChunk</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.UpsertChunk
@@ -964,7 +964,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure UpsertChunk(const AToken: TFileTxToken; const AChunk: TChunk);
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx
@@ -978,7 +978,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure CommitFileTx  (const AToken: TFileTxToken);
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.RollbackFileTx
@@ -993,7 +993,7 @@ type
       /// </remarks>
       procedure RollbackFileTx(const AToken: TFileTxToken);
 
-      /// <param name="AName"><!-- drag-lint:auto --></param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1010,7 +1010,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindSymbolsByExactName    (const AName : string): TArray<TSymbol>;
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1027,7 +1027,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1043,7 +1043,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindSymbolsByFile         (const APath : string): TArray<TSymbol>;
-      /// <param name="ASymbolId"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1059,7 +1059,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindReferencesTo(ASymbolId: Int64): TArray<TReference>                        ;
-      /// <param name="ACalleeName"><!-- drag-lint:auto --></param>
+      /// <param name="ACalleeName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1076,8 +1076,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
-      /// <param name="APattern"><!-- drag-lint:auto --></param>
-      /// <param name="ATopK"><!-- drag-lint:auto --></param>
+      /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: CompareText, DRagLint.Storage.SQLite.ReadSymbolFromQuery, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.EnsureTrigramTablePopulated, IntToStr
@@ -1093,7 +1093,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindSymbolsFuzzy(const APattern: string; ATopK: Integer = 10): TArray<TSymbol>;
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''; Q.FieldByName('path').AsString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1123,7 +1123,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetAllFileIds: TArray<Int64>                                                  ;
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1184,9 +1184,9 @@ type
       /// </remarks>
       function CountFiles     : Int64;
 
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
-      /// <param name="ASymbolId"><!-- drag-lint:auto --></param>
-      /// <param name="ADoc"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
+      /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.ExceptionsToJson, DRagLint.Core.Model.ParamsToJson, DRagLint.Core.Model.SeeAlsoToJson, DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbolDoc.SetNullableText
@@ -1201,7 +1201,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure UpsertSymbolDoc(const AToken: TFileTxToken; ASymbolId: Int64; const ADoc: TParsedDoc);
-      /// <param name="ASymbolId"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: FillChar, IndexStr
@@ -1218,7 +1218,7 @@ type
       function GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
 
       // v(ADP2 T1): symbol_facts (index-time analysis facts) -- see ISymbolStore.
-      /// <param name="ASymbolId"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <remarks>
       /// <!-- drag-lint:auto -->v(ADP2 T1): symbol_facts (index-time analysis facts) -- see
       /// ISymbolStore.
@@ -1235,7 +1235,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetSymbolFacts(ASymbolId: Int64): TSymbolFacts;
-      /// <param name="AFacts"><!-- drag-lint:auto --></param>
+      /// <param name="AFacts"><!-- drag-lint:auto type -->const TSymbolFacts</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.PutSymbolFacts.SetNullableText
@@ -1253,8 +1253,8 @@ type
 
       // v0.40.4: uses-clause persistence + queries
       /// <summary><!-- drag-lint:auto -->v0.40.4: uses-clause persistence + queries</summary>
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
-      /// <param name="AUse"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
+      /// <param name="AUse"><!-- drag-lint:auto type -->const TUnitUse</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: DRagLint.Core.Model.UnitUseSectionToStr, DRagLint.Storage.SQLite.UnitNameNorm
@@ -1269,7 +1269,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure UpsertUnitUse(const AToken: TFileTxToken; const AUse: TUnitUse);
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.DeleteUnitUsesForFile
@@ -1283,7 +1283,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DeleteUnitUsesForFile(AFileId: Int64);
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1299,7 +1299,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
-      /// <param name="AUnitNameNorm"><!-- drag-lint:auto --></param>
+      /// <param name="AUnitNameNorm"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1384,7 +1384,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveCallTargets;
-      /// <param name="ASymbolId"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1402,9 +1402,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
-      /// <param name="AClassName"><!-- drag-lint:auto --></param>
-      /// <param name="AAncestorName"><!-- drag-lint:auto --></param>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AAncestorName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1419,7 +1419,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
-      /// <param name="AAncestorName"><!-- drag-lint:auto --></param>
+      /// <param name="AAncestorName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToStringArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1435,9 +1435,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindDescendantNames(const AAncestorName: string): TArray<string>;
-      /// <param name="AClassName"><!-- drag-lint:auto --></param>
-      /// <param name="AInterfaceName"><!-- drag-lint:auto --></param>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AInterfaceName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1452,8 +1452,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
-      /// <param name="ATypeName"><!-- drag-lint:auto --></param>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="ATypeName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: ResolveTypeCategoryDepth(ATypeName,
       /// AFileId, 0).</returns>
       /// <remarks>
@@ -1469,8 +1469,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveTypeCategory(const ATypeName: string; AFileId: Int64): TTypeCategory;
-      /// <param name="AClassName"><!-- drag-lint:auto --></param>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: Names.Keys.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1492,7 +1492,7 @@ type
       /// (e.g. two distinct `TColor` enums) are indistinguishable to this call
       /// -- prefer FindHelpersOfTypeSymbol when the candidate's own symbol id
       /// is known, to avoid cross-linking unrelated same-named types.</summary>
-      /// <param name="ATargetName"><!-- drag-lint:auto --></param>
+      /// <param name="ATargetName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1519,7 +1519,7 @@ type
       /// symbol id is known and false cross-links between same-named types in
       /// different units must be avoided (enum-helper-separate-units lint rule,
       /// enum-helper generator's existing-helper guard).</summary>
-      /// <param name="ATargetSymbolId"><!-- drag-lint:auto --></param>
+      /// <param name="ATargetSymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1558,7 +1558,7 @@ type
       /// </remarks>
       function GetConnection: TFDConnection;
 
-      /// <param name="ATag"><!-- drag-lint:auto --></param>
+      /// <param name="ATag"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1574,8 +1574,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindByDocTag(const ATag: string): TArray<TSymbol>                           ;
-      /// <param name="AKind"><!-- drag-lint:auto --></param>
-      /// <param name="APublicOnly"><!-- drag-lint:auto --></param>
+      /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="APublicOnly"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1591,7 +1591,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
-      /// <param name="ASubstring"><!-- drag-lint:auto --></param>
+      /// <param name="ASubstring"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1607,7 +1607,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindByDocContains(const ASubstring: string): TArray<TSymbol>                ;
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.DeleteFileDocs
@@ -1625,7 +1625,7 @@ type
       // v0.18: bench-context. v(ADP3 T3d, register D4): see the query text.
       /// <summary><!-- drag-lint:auto -->v0.18: bench-context. v(ADP3 T3d, register D4):
       /// see the query text.</summary>
-      /// <param name="ALimit"><!-- drag-lint:auto --></param>
+      /// <param name="ALimit"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1644,8 +1644,8 @@ type
 
       // v0.19: type-at-position helpers
       /// <summary><!-- drag-lint:auto -->v0.19: type-at-position helpers</summary>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
-      /// <param name="ALine"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default(TSymbol);
       /// ReadSymbolFromQuery(FQFindContaining).</returns>
       /// <remarks>
@@ -1663,7 +1663,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindContainingSymbol(AFileId: Int64; ALine: Integer): TSymbol        ;
-      /// <param name="AId"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default(TSymbol);
       /// ReadSymbolFromQuery(Q).</returns>
       /// <remarks>
@@ -1681,7 +1681,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetSymbolById(AId: Int64): TSymbol                                   ;
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: -1; FQFindFileId.Fields[0].AsLargeInt.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1698,7 +1698,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindFileIdByPath             (const APath: string): Int64;
-      /// <param name="AName"><!-- drag-lint:auto --></param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default (TSymbol); Arr[0].</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1714,8 +1714,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindSymbolByExactNameAnywhere(const AName: string): TSymbol;
-      /// <param name="AParentId"><!-- drag-lint:auto --></param>
-      /// <param name="AName"><!-- drag-lint:auto --></param>
+      /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default(TSymbol);
       /// ReadSymbolFromQuery(FQFindChildByName).</returns>
       /// <remarks>
@@ -1737,8 +1737,8 @@ type
       /// <summary><!-- drag-lint:auto -->proptree lazy ancestry-bridge (scope-aware,
       /// alias-following resolver) + its write-back memoization. See interface DocInsight
       /// for the contract.</summary>
-      /// <param name="ATypeName"><!-- drag-lint:auto --></param>
-      /// <param name="AScopeFileId"><!-- drag-lint:auto --></param>
+      /// <param name="ATypeName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AScopeFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default(TSymbol).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1754,8 +1754,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
-      /// <param name="ASymbolId"><!-- drag-lint:auto --></param>
-      /// <param name="ATypeName"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="ATypeName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: False; Q.RowsAffected &gt; 0.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1771,8 +1771,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function MemoizePropertyType(ASymbolId: Int64; const ATypeName: string): Boolean;
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
-      /// <param name="ALine"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default(TSymbol);
       /// ReadSymbolFromQuery(FQFindEnclRoutine).</returns>
       /// <remarks>
@@ -1792,8 +1792,8 @@ type
 
       // v0.20: completion helpers
       /// <summary><!-- drag-lint:auto -->v0.20: completion helpers</summary>
-      /// <param name="APrefix"><!-- drag-lint:auto --></param>
-      /// <param name="ALimit"><!-- drag-lint:auto --></param>
+      /// <param name="APrefix"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALimit"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1809,7 +1809,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindSymbolsByPrefix(const APrefix: string; ALimit: Integer): TArray<TSymbol>;
-      /// <param name="AParentId"><!-- drag-lint:auto --></param>
+      /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1829,8 +1829,8 @@ type
 
       // v0.25: dead-code finder
       /// <summary><!-- drag-lint:auto -->v0.25: dead-code finder</summary>
-      /// <param name="AKind"><!-- drag-lint:auto --></param>
-      /// <param name="AIncludePrivate"><!-- drag-lint:auto --></param>
+      /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AIncludePrivate"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1849,7 +1849,7 @@ type
 
       // v0.26: compiler diagnostics
       /// <summary><!-- drag-lint:auto -->v0.26: compiler diagnostics</summary>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1878,7 +1878,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ClearCompilerFindings;
-      /// <param name="AFinding"><!-- drag-lint:auto --></param>
+      /// <param name="AFinding"><!-- drag-lint:auto type -->const TCompilerFinding</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.InsertCompilerFinding
@@ -1892,7 +1892,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure InsertCompilerFinding(const AFinding: TCompilerFinding);
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile
@@ -1906,8 +1906,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ClearCompilerFindingsForFile(AFileId: Int64);
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
-      /// <param name="AUnix"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="AUnix"><!-- drag-lint:auto type -->Int64</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.SetFileCompiledAt
@@ -1921,7 +1921,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetFileCompiledAt(AFileId: Int64; AUnix: Int64);
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: 0; Q.Fields[0].AsLargeInt.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1936,7 +1936,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetFileCompiledAt(AFileId: Int64): Int64;
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: 0; Q.Fields[0].AsLargeInt.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1968,8 +1968,8 @@ type
 
       // v0.17: blast-radius pack
       /// <summary><!-- drag-lint:auto -->v0.17: blast-radius pack</summary>
-      /// <param name="ASymbolName"><!-- drag-lint:auto --></param>
-      /// <param name="ADepth"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbolName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: Levels.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1985,9 +1985,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindTransitiveCallers(const ASymbolName: string; ADepth: Integer): TArray<TImpactLevel>            ;
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="AIncludeImpl"><!-- drag-lint:auto --></param>
-      /// <param name="AAllVisibility"><!-- drag-lint:auto --></param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AIncludeImpl"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="AAllVisibility"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Acc.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2003,7 +2003,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetClassSurface(const AQName: string; AIncludeImpl, AAllVisibility: Boolean): TArray<TSurfaceLine> ;
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Chunks.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2019,8 +2019,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetSymbolSlice(const AQName: string): TArray<TSliceChunk>                                          ;
-      /// <param name="ACalleeName"><!-- drag-lint:auto --></param>
-      /// <param name="AContextLines"><!-- drag-lint:auto --></param>
+      /// <param name="ACalleeName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AContextLines"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: Refs.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2088,7 +2088,7 @@ type
       // v0.42: path-tolerant file-id resolution for FindSymbolsByFile (outline)
       /// <summary><!-- drag-lint:auto -->v0.42: path-tolerant file-id resolution for
       /// FindSymbolsByFile (outline)</summary>
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: FindFileIdByPath(APath);
       /// FindFileIdByPath(WantFull); MatchId; OnlyId; -1.</returns>
       /// <remarks>
@@ -2111,8 +2111,8 @@ type
       // symbol id, preferring a definition in AFileId. 0 if none.
       /// <summary><!-- drag-lint:auto -->v11 (M1): resolve a type name to its defining
       /// class/interface/record symbol id, preferring a definition in AFileId. 0 if none.</summary>
-      /// <param name="AName"><!-- drag-lint:auto --></param>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: 0; S.Id.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2130,9 +2130,9 @@ type
       // v11 (M1): depth-capped alias-chasing core of ResolveTypeCategory.
       /// <summary><!-- drag-lint:auto -->v11 (M1): depth-capped alias-chasing core of
       /// ResolveTypeCategory.</summary>
-      /// <param name="ATypeName"><!-- drag-lint:auto --></param>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
-      /// <param name="ADepth"><!-- drag-lint:auto --></param>
+      /// <param name="ATypeName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: tcUnknown; IntrinsicCategory(N);
       /// tcClass; tcInterface; tcEnum; tcRecord.</returns>
       /// <remarks>
@@ -2152,7 +2152,7 @@ type
       function ResolveTypeCategoryDepth(const ATypeName: string; AFileId: Int64; ADepth: Integer): TTypeCategory;
       // v0.17 slice helpers
       /// <summary><!-- drag-lint:auto -->v0.17 slice helpers</summary>
-      /// <param name="AParentId"><!-- drag-lint:auto --></param>
+      /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2172,8 +2172,8 @@ type
       // "procedure|function|constructor|destructor ClassName.MethodName"
       // case-insensitively. Returns 0-based index, or -1 if not found.
       // NOTE: heuristic for v0.17 - may miss unusual formatting.
-      /// <param name="ALines"><!-- drag-lint:auto --></param>
-      /// <param name="APattern"><!-- drag-lint:auto --></param>
+      /// <param name="ALines"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: -1.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto -->FindImplLine: searches ALines (0-based) for a line matching
@@ -2198,8 +2198,8 @@ type
       // at column 0, or at a line ending 'end.' (unit footer). Returns 0-based
       // index of the last line included in the body.
       // NOTE: handles single-line "begin ... end;" bodies correctly.
-      /// <param name="ALines"><!-- drag-lint:auto --></param>
-      /// <param name="AStartLine"><!-- drag-lint:auto --></param>
+      /// <param name="ALines"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <param name="AStartLine"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: High(ALines); AStartLine.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

@@ -30,8 +30,8 @@ type
   /// </remarks>
   TYadfFormatter = class
     public
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="AYadfPath"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AYadfPath"><!-- drag-lint:auto type -->const string = ''</param>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -55,9 +55,9 @@ type
       /// </remarks>
       class function FindYadfPath                                             : string       ;
     private
-      /// <param name="ACmd"><!-- drag-lint:auto --></param>
-      /// <param name="ATimeoutMs"><!-- drag-lint:auto --></param>
-      /// <param name="AOutput"><!-- drag-lint:auto --></param>
+      /// <param name="ACmd"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ATimeoutMs"><!-- drag-lint:auto type -->DWORD</param>
+      /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Observed: -1; -2; Integer(ExitCode).</returns>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>

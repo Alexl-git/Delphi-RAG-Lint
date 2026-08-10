@@ -199,7 +199,7 @@ type
 
     /// <summary>Human-readable preview of the edit set, matching the other
     /// refactorings' dry-run rendering (delegates to TTextEditApplier).</summary>
-    /// <param name="AEdits"><!-- drag-lint:auto --></param>
+    /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TTextEdit&gt;</param>
     /// <returns><!-- drag-lint:auto -->Observed: TTextEditApplier.RenderDryRun(AEdits).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->

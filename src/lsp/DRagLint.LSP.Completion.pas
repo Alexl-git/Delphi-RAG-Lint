@@ -31,7 +31,7 @@ type
   /// </remarks>
   TLspCompletion = class
     public
-      /// <param name="AKind"><!-- drag-lint:auto --></param>
+      /// <param name="AKind"><!-- drag-lint:auto type -->TSymbolKind</param>
       /// <returns><!-- drag-lint:auto -->Observed: 7; 22; 8; 13; 20; 2.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -48,7 +48,7 @@ type
       class function MapSymbolKindToLspKind(AKind: TSymbolKind): Integer;
       // ASevText is the string severity stored in TLintFinding.Severity
       // ('error', 'warning', 'info', 'hint').
-      /// <param name="ASevText"><!-- drag-lint:auto --></param>
+      /// <param name="ASevText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: 1; 2; 3; 4.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto -->ASevText is the string severity stored in TLintFinding.Severity
@@ -71,7 +71,7 @@ type
       /// <summary><!-- drag-lint:auto -->v0.26: map compiler finding severity
       /// ('Error'|'Warning'|'Hint'| 'Information') to LSP DiagnosticSeverity (1=Error,
       /// 2=Warning, 3=Information, 4=Hint).</summary>
-      /// <param name="ASev"><!-- drag-lint:auto --></param>
+      /// <param name="ASev"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: 1; 2; 3; 4.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -86,10 +86,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapCompilerSeverityToLspSeverity(const ASev: string)                                       : Integer    ;
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="ALine"><!-- drag-lint:auto --></param>
-      /// <param name="ACol"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: TJSONArray.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -106,10 +106,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildCompletionItems(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer): TJSONArray ;
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="ALine"><!-- drag-lint:auto --></param>
-      /// <param name="ACol"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; EmptySigHelp; TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -130,9 +130,9 @@ type
       /// <summary><!-- drag-lint:auto -->v0.26: AStore is optional; when supplied,
       /// compiler_findings for this file are merged into the result alongside lint
       /// findings.</summary>
-      /// <param name="ALinter"><!-- drag-lint:auto --></param>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="ALinter"><!-- drag-lint:auto type -->const TLinter</param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <returns><!-- drag-lint:auto -->Observed: TJSONArray.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -150,8 +150,8 @@ type
       /// </remarks>
       class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
     private
-      /// <param name="ASym"><!-- drag-lint:auto --></param>
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -181,7 +181,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function EmptySigHelp                                                       : TJSONObject;
-      /// <param name="AName"><!-- drag-lint:auto --></param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas)

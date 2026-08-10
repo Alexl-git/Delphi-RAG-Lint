@@ -44,7 +44,7 @@ type
   TWorkspaceConfigIO = class
     public
       /// <summary><!-- drag-lint:auto -->TWorkspaceConfigIO</summary>
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default(TWorkspaceConfig).</returns>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
@@ -58,8 +58,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function LoadFromFile(const APath: string): TWorkspaceConfig; static;
-      /// <param name="AConfig"><!-- drag-lint:auto --></param>
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="AConfig"><!-- drag-lint:auto type -->const TWorkspaceConfig</param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix.TryEdit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?
@@ -69,7 +69,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class procedure SaveToFile(const AConfig: TWorkspaceConfig; const APath: string); static;
-      /// <param name="AStartDir"><!-- drag-lint:auto --></param>
+      /// <param name="AStartDir"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''; Dir.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

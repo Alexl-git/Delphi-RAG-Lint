@@ -184,7 +184,7 @@ procedure HarvestText(const AResult: THarvestResult; out ASummary, ARemarks: str
 /// `selftest harvest` and asserted by tests/autodoc/run_doc_p3_harvest_scan.ps1.
 /// Lives here rather than at the print site so the enum and its wire form
 /// cannot drift apart.</summary>
-/// <param name="AReason"><!-- drag-lint:auto --></param>
+/// <param name="AReason"><!-- drag-lint:auto type -->const THarvestReason</param>
 /// <returns><!-- drag-lint:auto -->Observed: 'ACCEPTED'; 'NONE'; 'BANNER';
 /// 'COMMENTEDCODE'; 'TRAILER'; 'EMPTY'.</returns>
 /// <remarks>

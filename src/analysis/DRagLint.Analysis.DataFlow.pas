@@ -34,16 +34,16 @@ type
     /// backward) -- e.g. params assigned-on-entry, or vars live-at-exit.</summary>
     function Boundary: TValue;
     /// <summary>Meet of two predecessor/successor contributions.</summary>
-    /// <param name="A"><!-- drag-lint:auto --></param>
-    /// <param name="B"><!-- drag-lint:auto --></param>
+    /// <param name="A"><!-- drag-lint:auto type -->const TValue</param>
+    /// <param name="B"><!-- drag-lint:auto type -->const TValue</param>
     function Join(const A, B: TValue): TValue;
     /// <summary>Effect of one block on the in-value.</summary>
-    /// <param name="ABlock"><!-- drag-lint:auto --></param>
-    /// <param name="AIn"><!-- drag-lint:auto --></param>
+    /// <param name="ABlock"><!-- drag-lint:auto type -->const TCfgBlock</param>
+    /// <param name="AIn"><!-- drag-lint:auto type -->const TValue</param>
     function Transfer(const ABlock: TCfgBlock; const AIn: TValue): TValue;
     /// <summary>Lattice equality (fixpoint test).</summary>
-    /// <param name="A"><!-- drag-lint:auto --></param>
-    /// <param name="B"><!-- drag-lint:auto --></param>
+    /// <param name="A"><!-- drag-lint:auto type -->const TValue</param>
+    /// <param name="B"><!-- drag-lint:auto type -->const TValue</param>
     function Equals(const A, B: TValue): Boolean;
   end;
 
@@ -53,10 +53,10 @@ type
     /// <summary>Solve AAnalysis over ACfg. Returns False (and leaves AIn/AOut
     /// empty) when ACfg.Skipped. Otherwise AIn[b]/AOut[b] hold the per-block
     /// fixpoint values.</summary>
-    /// <param name="ACfg"><!-- drag-lint:auto --></param>
-    /// <param name="AAnalysis"><!-- drag-lint:auto --></param>
-    /// <param name="AIn"><!-- drag-lint:auto --></param>
-    /// <param name="AOut"><!-- drag-lint:auto --></param>
+    /// <param name="ACfg"><!-- drag-lint:auto type -->const TCfg</param>
+    /// <param name="AAnalysis"><!-- drag-lint:auto type -->const IDataFlowAnalysis&lt;TValue&gt;</param>
+    /// <param name="AIn"><!-- drag-lint:auto type -->out TArray&lt;TValue&gt;</param>
+    /// <param name="AOut"><!-- drag-lint:auto type -->out TArray&lt;TValue&gt;</param>
     /// <returns><!-- drag-lint:auto -->Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->

@@ -28,7 +28,7 @@ type
   /// only where the source states it. Nothing in this record is ever
   /// invented.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas)
+  /// Used by: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas)
   /// Used in units: DRagLint.Doc.Facts
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -337,6 +337,28 @@ type
     // says nothing about simply has no entry, and the emitter then writes its
     // <param> tag with an empty body. See TDocParamNote and MineParamNotes.
     ParamNotes       : TArray<TDocParamNote>;
+    // v(2026-08-10, owner ruling): per-parameter DECLARED TYPE, from the indexed
+    // signature -- 'const string', 'Boolean = True', 'var TShape'. Text is the
+    // rendered qualifier+type, VERBATIM (see TParamDecl in DRagLint.Refactor.
+    // DocStub for why it is never re-formatted).
+    //
+    // Unlike ParamNotes this is DENSE: every declared parameter has an entry,
+    // because every declared parameter HAS a type. It is the baseline body of an
+    // otherwise-undocumented <param>, so the tag reflects the current situation
+    // instead of being an empty shell.
+    //
+    // The ruling that put it here: "We document all params and documentation has
+    // to be current, i.e. delete docs on deleted params, insert on new params
+    // with correct types. If any additional prose is present we can include it,
+    // but at least we must reflect the current situation." -- and the reason the
+    // type is NOT redundant with the declaration one line below is that these
+    // comments are also generated into doc/HTML help files, where the parameter
+    // table is the deliverable and the signature is not adjacent.
+    //
+    // ParamNotes still WINS where it has an entry: a human's mined meaning is
+    // never replaced by a type name (ruling D-3's "meaning only where the source
+    // states it").
+    ParamTypes       : TArray<TDocParamNote>;
     // v(ADP3 T4): the documented symbol's OWN kind, copied verbatim from
     // ASym.Kind by Build. Exactly ONE consumer: RenderFactsBlock selects the
     // reference line's VERB from it, via DRagLint.Core.Model.CanBeCallTarget --
@@ -393,8 +415,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
-    /// Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+27 more)
-    /// Complexity: 75 (cyclomatic, outer body), 839 lines (full implementation)
+    /// Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+28 more)
+    /// Complexity: 75 (cyclomatic, outer body), 840 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -412,7 +434,7 @@ type
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
   /// UNLESS ATotal > 15, in which case only the first 10 are kept and the caller
   /// appends '(+N more)' with N = ATotal - 10. Returns how many to display.</summary>
-  /// <param name="ATotal"><!-- drag-lint:auto --></param>
+  /// <param name="ATotal"><!-- drag-lint:auto type -->Integer</param>
   /// <returns><!-- drag-lint:auto -->Observed: 10.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -908,6 +930,33 @@ begin
   Result:= Result + [Acc];
 end;
 
+// v(2026-08-10): the DENSE companion to MineParamNotes -- every declared
+// parameter's qualifier+type, rendered for a <param> body. Reads the SAME
+// ExtractParamList text MineParamNotes reads and delegates the split to
+// ParseParamDecls, so the meaning half and the type half cannot disagree about
+// where a parameter ends.
+//
+// A parameter with no ': Type' at all (untyped var/const) yields NO entry rather
+// than an empty one: the emitter must fall through to leaving the tag empty, and
+// a blank string here would look like a type that rendered to nothing.
+function MineParamTypes(const ASig: string): TArray<TDocParamNote>;
+var
+  D  : TParamDecl   ;
+  Ent: TDocParamNote;
+  Txt: string       ;
+begin
+  Result:= nil;
+  for D in ParseParamDecls(ExtractParamList(ASig)) do
+  begin
+    if Trim(D.TypeText) = '' then Continue;
+    if D.Qualifier <> '' then Txt:= D.Qualifier + ' ' + D.TypeText
+    else Txt:= D.TypeText;
+    Ent.Name:= D.Name;
+    Ent.Text:= Txt;
+    Result:= Result + [Ent];
+  end;
+end;
+
 function MineParamNotes(const ASig: string): TArray<TDocParamNote>;
 var
   ParamList: string        ;
@@ -1303,6 +1352,7 @@ begin
   // does not depend on this: a parameter with no note still gets a <param> tag,
   // with an empty body.
   Result.ParamNotes:= MineParamNotes(ASym.Signature);
+  Result.ParamTypes:= MineParamTypes(ASym.Signature);
 
   // Called from: RESOLVED caller refs -> display 'EnclosingQName (file)'.
   // v14 (D5) -- THE BUG FIX. Previously this was name-based

@@ -105,9 +105,12 @@ try {
   # ONLY WHERE THE SOURCE CARRIES IT. The old rule -- no <param> unless a human
   # wrote a description -- was itself the defect: doc-drift reported those tags as
   # missing while `document` refused to write them, so the two halves could never
-  # converge. The tag is now emitted, engine-marked, with an EMPTY body.
-  Check 'v(PHASE A3, D-3): Marked HAS a <param name="AText"> tag, engine-marked and empty' `
-    (($null -ne $paramLine) -and ($paramLine -match [regex]::Escape('<param name="AText"><!-- drag-lint:auto --></param>'))) $paramLine
+  # converge. The tag is now emitted, and since 2026-08-10 it carries the
+  # DECLARED TYPE ('const string') under the AUTO_TYPE ownership marker rather
+  # than being an empty shell -- ruling D-3's structure/meaning split is intact,
+  # the type is only the BASELINE beneath a harvested meaning.
+  Check 'v(PHASE A3, D-3): Marked HAS a <param name="AText"> tag carrying its TYPE' `
+    (($null -ne $paramLine) -and ($paramLine -match [regex]::Escape('<param name="AText"><!-- drag-lint:auto type -->const string</param>'))) $paramLine
 
   $returnsLineMarked = $null
   if ($null -ne $markedBlock) {

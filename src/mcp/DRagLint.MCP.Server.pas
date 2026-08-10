@@ -28,7 +28,7 @@ type
       FStore  : ISymbolStore  ;
       FLinter : TLinter       ;
       FDbPaths: TArray<string>;
-      /// <param name="AText"><!-- drag-lint:auto --></param>
+      /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.MCP.Server.TMCPServer.SendError (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.SendResult (DRagLint.MCP.Server.pas)
@@ -42,8 +42,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendRaw(const AText: string);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AResult"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AResult"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.MCP.Server.TMCPServer.HandleInitialize (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsList (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
@@ -57,9 +57,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendResult(const AId: TJSONValue; const AResult: TJSONValue);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="ACode"><!-- drag-lint:auto --></param>
-      /// <param name="AMessage"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="ACode"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AMessage"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
@@ -73,8 +73,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
@@ -88,7 +88,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleInitialize(const AId: TJSONValue; const AParams: TJSONObject);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
@@ -102,8 +102,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleToolsList(const AId: TJSONValue);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
@@ -119,9 +119,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleToolsCall(const AId: TJSONValue; const AParams: TJSONObject);
-      /// <param name="AName"><!-- drag-lint:auto --></param>
-      /// <param name="ADesc"><!-- drag-lint:auto --></param>
-      /// <param name="ASchemaJSON"><!-- drag-lint:auto --></param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ADesc"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ASchemaJSON"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -136,7 +136,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ToolDescriptor(const AName, ADesc: string; const ASchemaJSON: string): TJSONObject     ;
-      /// <param name="AText"><!-- drag-lint:auto --></param>
+      /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: TJSONArray .Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -151,7 +151,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function TextContent(const AText: string): TJSONArray                                           ;
-      /// <param name="ASymbols"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbols"><!-- drag-lint:auto type -->const TArray&lt;TSymbol &gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -166,7 +166,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatSymbols   (const ASymbols : TArray<TSymbol     >): string;
-      /// <param name="ARefs"><!-- drag-lint:auto --></param>
+      /// <param name="ARefs"><!-- drag-lint:auto type -->const TArray&lt;TReference &gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -182,7 +182,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatReferences(const ARefs    : TArray<TReference  >): string;
-      /// <param name="AFindings"><!-- drag-lint:auto --></param>
+      /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -197,8 +197,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatFindings  (const AFindings: TArray<TLintFinding>): string;
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="ADoc"><!-- drag-lint:auto --></param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
@@ -212,8 +212,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatDocAsJson(const AQName: string; const ADoc: TParsedDoc): string                  ;
-      /// <param name="ASymbols"><!-- drag-lint:auto --></param>
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbols"><!-- drag-lint:auto type -->const TArray&lt;TSymbol&gt;</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->ISymbolStore</param>
       /// <returns><!-- drag-lint:auto -->Observed: '[]'; '[' + string.Join(',', Parts) +
       /// ']'.</returns>
       /// <remarks>
@@ -229,7 +229,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatSymbolsAsJsonArray(const ASymbols: TArray<TSymbol>; AStore: ISymbolStore): string;
-      /// <param name="ARefs"><!-- drag-lint:auto --></param>
+      /// <param name="ARefs"><!-- drag-lint:auto type -->const TArray&lt;TReference&gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: '{"callers":[]}'; '{"callers":[' +
       /// string.Join(',', Parts) + ']}'.</returns>
       /// <remarks>
@@ -246,8 +246,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatReferencesWithContext(const ARefs: TArray<TReference>): string                   ;
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="ALevels"><!-- drag-lint:auto --></param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALevels"><!-- drag-lint:auto type -->const TArray&lt;TImpactLevel&gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: '{"qname":"' + JsonEscape(AQName) +
       /// '","levels":[]}'; '{"qname":"' + JsonEscape(AQName) + '"' + ',"levels":[' +
       /// string.Join(',', Parts) + ']}'.</returns>
@@ -264,8 +264,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatImpactAsJson (const AQName: string; const ALevels: TArray<TImpactLevel>): string;
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="ALines"><!-- drag-lint:auto --></param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALines"><!-- drag-lint:auto type -->const TArray&lt;TSurfaceLine&gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: '{"qname":"' + JsonEscape(AQName) +
       /// '","lines":[]}'; '{"qname":"' + JsonEscape(AQName) + '"' + ',"lines":[' +
       /// string.Join(',', Parts) + ']}'.</returns>
@@ -282,8 +282,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatSurfaceAsJson(const AQName: string; const ALines : TArray<TSurfaceLine>): string;
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="AChunks"><!-- drag-lint:auto --></param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AChunks"><!-- drag-lint:auto type -->const TArray&lt;TSliceChunk &gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: '{"qname":"' + JsonEscape(AQName) +
       /// '","chunks":[]}'; '{"qname":"' + JsonEscape(AQName) + '"' + ',"chunks":[' +
       /// string.Join(',', Parts) + ']}'.</returns>
@@ -300,7 +300,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatSliceAsJson  (const AQName: string; const AChunks: TArray<TSliceChunk >): string;
-      /// <param name="AEdits"><!-- drag-lint:auto --></param>
+      /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: '[]'; '[' + string.Join(',', Parts) +
       /// ']'.</returns>
       /// <remarks>
@@ -316,7 +316,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatRenameEditsAsJson(const AEdits: TArray<TRenameEdit>): string                     ;
-      /// <param name="AArgs"><!-- drag-lint:auto --></param>
+      /// <param name="AArgs"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <returns><!-- drag-lint:auto -->Observed: TSQLiteSymbolStore.Create(DbPath);
       /// FStore.</returns>
       /// <remarks>
@@ -334,7 +334,7 @@ type
       /// </remarks>
       function ResolveStore(const AArgs: TJSONObject): ISymbolStore                                   ;
     public
-      /// <param name="ADbPaths"><!-- drag-lint:auto --></param>
+      /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create

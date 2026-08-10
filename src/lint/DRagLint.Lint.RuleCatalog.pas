@@ -81,8 +81,8 @@ type
     /// <summary>Full catalog: built-ins + external .scm rules from ARulesDir
     /// (default &lt;exe-dir&gt;\rules). Deduped by id (builtin wins). Sorted by
     /// (category, id). When ACategory&lt;&gt;'' only that category is returned.</summary>
-    /// <param name="ARulesDir"><!-- drag-lint:auto --></param>
-    /// <param name="ACategory"><!-- drag-lint:auto --></param>
+    /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string = ''</param>
+    /// <param name="ACategory"><!-- drag-lint:auto type -->const string = ''</param>
     /// <returns><!-- drag-lint:auto -->Observed: Res.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -98,7 +98,7 @@ type
     class function BuildCatalog(const ARulesDir: string = '';
       const ACategory: string = ''): TArray<TRuleInfo>; static;
     /// <summary>Totals + per-category counts over ACatalog.</summary>
-    /// <param name="ACatalog"><!-- drag-lint:auto --></param>
+    /// <param name="ACatalog"><!-- drag-lint:auto type -->const TArray&lt;TRuleInfo&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
@@ -110,7 +110,7 @@ type
     /// </remarks>
     class function Summarize(const ACatalog: TArray<TRuleInfo>): TCatalogSummary; static;
     /// <summary>Category bucket for an external .scm rule id; 'other' if unmapped.</summary>
-    /// <param name="AId"><!-- drag-lint:auto --></param>
+    /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: 'bug-patterns'; 'resource-lifetime';
     /// 'security'; 'platform'; 'structure'; 'dead-code'.</returns>
     /// <remarks>

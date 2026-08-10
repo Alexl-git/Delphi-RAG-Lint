@@ -5,6 +5,7 @@ interface
 uses
   System.SysUtils
   , System.Classes
+  , System.Generics.Collections { ParseParamDecls' accumulator }
   , System.RegularExpressions
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
@@ -26,9 +27,9 @@ type
   /// </remarks>
   TDocStubGenerator = class
     public
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="AFormat"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFormat"><!-- drag-lint:auto type -->TDocStubFormat</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''; Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -50,12 +51,12 @@ type
 /// <summary><!-- drag-lint:auto -->Signature parser helpers. Exported so
 /// DRagLint.Doc.Regions / .Document can reuse the same param-list extraction the
 /// generate-docs stub uses.</summary>
-/// <param name="ASig"><!-- drag-lint:auto --></param>
+/// <param name="ASig"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: Trim(Copy(ASig, OpenPos + 1, ClosePos -
 /// OpenPos - 1)).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)
+/// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)
 /// Calls: Copy, LastDelimiter, Pos, Trim
 /// Pure
 /// <!-- drag-lint:auto END -->
@@ -64,18 +65,55 @@ function ExtractParamList(const ASig: string): string;
 /// <summary><!-- drag-lint:auto -->ParseParamNames: parses a param-list string such as
 /// "const A, B: string; C: Boolean; D: Integer" and returns an array of bare param names
 /// (A, B, C, D). Handles const/var/out/in prefixes and grouped names (A, B: T).</summary>
-/// <param name="AParamList"><!-- drag-lint:auto --></param>
-/// <returns><!-- drag-lint:auto -->Observed: Acc.ToStringArray.</returns>
+/// <param name="AParamList"><!-- drag-lint:auto type -->const string</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.GroupParamNames (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)
+/// Calls: DRagLint.Refactor.DocStub.ParseParamDecls
+/// Pure
+/// <seealso cref="DRagLint.Refactor.DocStub.ParseParamDecls"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ParseParamNames(const AParamList: string): TArray<string>;
+  /// <summary>One parsed parameter declaration: its qualifier (const/var/out/in,
+  /// '' when none), its bare name, and its declared type text exactly as the
+  /// indexed signature spells it ('' when the group carried no ': Type').</summary>
+  /// <remarks>
+  /// The type text is taken VERBATIM and never re-formatted. It is
+  /// emitted into a managed &lt;param&gt; block that is regenerated and compared on
+  /// every run, so any normalisation here would make a block that is not equal to
+  /// itself on the next pass -- the exact failure ParseParamNames' own comment
+  /// records for parameter NAMES.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)
+  /// Used in units: DRagLint.Doc.Facts, DRagLint.Refactor.DocStub
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+type
+  TParamDecl = record
+    Qualifier: string;
+    Name     : string;
+    TypeText : string;
+  end;
+/// <summary>Parses a param-list string into (qualifier, name, type) triples.
+/// Same scan as ParseParamNames -- which delegates here and keeps only the
+/// names -- so the name half and the type half can never disagree about where a
+/// parameter or its type begins and ends.</summary>
+/// <param name="AParamList">Param-list text as stored in symbols.signature,
+/// comments included; ExtractPascalComments removes them per parameter.</param>
+/// <returns>One entry per declared parameter, grouped names expanded (A, B: T
+/// yields two entries sharing the type T).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas)
 /// Calls: Copy, DRagLint.Refactor.DocStub.ExtractPascalComments, LowerCase, Pos, Trim
+/// Returns: Acc.ToArray
 /// Pure
 /// <seealso cref="DRagLint.Refactor.DocStub.ExtractPascalComments"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ParseParamNames(const AParamList: string): TArray<string>;
-/// <param name="ASig"><!-- drag-lint:auto --></param>
+function ParseParamDecls(const AParamList: string): TArray<TParamDecl>;
+/// <param name="ASig"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: Lower.StartsWith('function') or
 /// Lower.StartsWith('constructor').</returns>
 /// <remarks>
@@ -92,8 +130,8 @@ function SignatureHasReturn(const ASig: string): Boolean;
 /// <summary>Splits AText into the comment text it contains and everything
 /// else: returns the joined comment content, and sets ARest to AText with every
 /// comment removed. Handles the three Pascal spellings ({ }, (* *), //).</summary>
-/// <param name="AText"><!-- drag-lint:auto --></param>
-/// <param name="ARest"><!-- drag-lint:auto --></param>
+/// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ARest"><!-- drag-lint:auto type -->out string</param>
 /// <returns><!-- drag-lint:auto -->Observed: Trim(Note.ToString).</returns>
 /// <remarks>
 /// ONE implementation, TWO readers, and they must not diverge:
@@ -104,7 +142,7 @@ function SignatureHasReturn(const ASig: string): Boolean;
 /// second copy of this scan is how the name half and the meaning half would end
 /// up disagreeing about where a comment starts.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas)
+/// Called from: DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)
 /// Calls: Copy, Trim
 /// Complexity: 19 (cyclomatic, outer body), 49 lines (full implementation)
 /// Mutates: ARest (out)
@@ -204,39 +242,73 @@ end;
 // Handles const/var/out/in prefixes and grouped names (A, B: T).
 function ParseParamNames(const AParamList: string): TArray<string>;
 var
+  D: TParamDecl;
+begin
+  { Delegates: ONE scan decides where a parameter, its qualifier and its type
+    begin and end. ParseParamDecls carries the type as well; this view drops it.
+    A second scan here is exactly how the name half and the type half would come
+    to disagree -- the same reasoning ExtractPascalComments' header records for
+    the name half and the MEANING half. }
+  Result:= nil;
+  for D in ParseParamDecls(AParamList) do
+    Result:= Result + [D.Name];
+end; // function
+
+function ParseParamDecls(const AParamList: string): TArray<TParamDecl>;
+var
   Groups    : TArray<string>;
   Group     : string        ;
   NamesStr  : string        ;
   NamesClean: string        ;
+  TypeText  : string        ;
+  Qual      : string        ;
   Names     : TArray<string>;
   N         : string        ;
   NTrimmed  : string        ;
-  Acc       : TStringList   ;
+  Acc       : TList<TParamDecl>;
   ColonPos  : Integer       ;
   I         : Integer       ;
+  D         : TParamDecl    ;
 const
   Qualifiers: array[0..4] of string = ('const ', 'var ', 'out ', 'in ', 'array of ');
 begin
   if Trim(AParamList) = '' then Exit(nil);
   Groups:= AParamList.Split([';']);
-  Acc:= TStringList.Create;
+  Acc:= TList<TParamDecl>.Create;
   try
     for I:= 0 to High(Groups) do
     begin
       Group:= Trim(Groups[I]);
       if Group = '' then Continue;
-      // Strip leading qualifiers (const/var/out/in/array of).
+      // Strip leading qualifiers (const/var/out/in/array of), REMEMBERING them:
+      // 'const AName: string' documents as 'const string', which is a fact about
+      // the contract (the callee will not modify it), not decoration.
       NamesStr:= Group;
+      Qual:= '';
       var LowerGroup:= LowerCase(NamesStr);
       for N in Qualifiers do
         if LowerGroup.StartsWith(N) then
         begin
+          Qual:= Trim(N);
           NamesStr:= Copy(NamesStr, Length(N) + 1, MaxInt);
           LowerGroup:= LowerCase(NamesStr);
         end;
-      // Strip type after colon.
+      // Split at the colon: names on the left, declared type on the right. The
+      // type is kept VERBATIM (default value included, e.g. 'Boolean = True') --
+      // see TParamDecl's remark on why it must never be re-formatted.
       ColonPos:= Pos(':', NamesStr);
-      if ColonPos > 0 then NamesStr:= Copy(NamesStr, 1, ColonPos - 1);
+      if ColonPos > 0 then
+      begin
+        TypeText:= Trim(Copy(NamesStr, ColonPos + 1, MaxInt));
+        NamesStr:= Copy(NamesStr, 1, ColonPos - 1);
+        // A type can carry a trailing comment too ('AIndex: Integer { 1-based }');
+        // strip it with the SAME scan the names use, or the emitted type text
+        // would differ from itself once the comment is re-read.
+        var TypeBare: string;
+        ExtractPascalComments(TypeText, TypeBare);
+        TypeText:= Trim(TypeBare);
+      end
+      else TypeText:= '';
       NamesClean:= Trim(NamesStr);
       // Split by comma for grouped params.
       Names:= NamesClean.Split([',']);
@@ -253,10 +325,16 @@ begin
         var Bare: string;
         ExtractPascalComments(NTrimmed, Bare);
         Bare:= Trim(Bare);
-        if Bare <> '' then Acc.Add(Bare);
+        if Bare <> '' then
+        begin
+          D.Qualifier:= Qual;
+          D.Name     := Bare;
+          D.TypeText := TypeText; { grouped names (A, B: T) share one type }
+          Acc.Add(D);
+        end;
       end;
     end; // for
-    Result:= Acc.ToStringArray;
+    Result:= Acc.ToArray;
   finally
     Acc.Free;
   end; // try

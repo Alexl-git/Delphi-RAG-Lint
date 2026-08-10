@@ -143,7 +143,7 @@ type
       /// minimized to compiled-DCU dirs (deduped and existence-filtered) to fit the
       /// command-line limit. Returns a semicolon-separated path list, or empty if
       /// none found or any error occurs (best-effort).</summary>
-      /// <param name="APlatform"><!-- drag-lint:auto --></param>
+      /// <param name="APlatform"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)
@@ -161,9 +161,9 @@ type
       /// <summary>Spawns ACmd via CreateProcessW with stdout+stderr redirected;
       /// optionally applies an environment variable block (for DCC_UnitSearchPath injection);
       /// returns the process exit code and the merged output in AOutput.</summary>
-      /// <param name="ACmd"><!-- drag-lint:auto --></param>
-      /// <param name="AEnvBlock"><!-- drag-lint:auto --></param>
-      /// <param name="AOutput"><!-- drag-lint:auto --></param>
+      /// <param name="ACmd"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AEnvBlock"><!-- drag-lint:auto type -->Pointer</param>
+      /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Observed: -1; Integer(ExitCode).</returns>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
@@ -181,7 +181,7 @@ type
       class function SpawnAndCapture(const ACmd: string; AEnvBlock: Pointer; out AOutput: string): Integer;
       /// <summary>Canonicalizes a raw severity word (error/fatal/warning/hint/
       /// information) to 'Error'/'Warning'/'Hint'/'Information'.</summary>
-      /// <param name="ARaw"><!-- drag-lint:auto --></param>
+      /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: 'Error'; 'Warning'; 'Hint';
       /// 'Information'; ARaw.</returns>
       /// <remarks>
@@ -203,8 +203,8 @@ type
       /// like "Hint warning H2219" where the severity word ("warning") disagrees with the
       /// real severity (Hint). Falls back to AFallbackWord when the code is
       /// empty/unrecognized.</summary>
-      /// <param name="ACode"><!-- drag-lint:auto --></param>
-      /// <param name="AFallbackWord"><!-- drag-lint:auto --></param>
+      /// <param name="ACode"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFallbackWord"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: 'hint'; 'warning'; 'error';
       /// AFallbackWord.</returns>
       /// <remarks>

@@ -288,6 +288,8 @@ var
   I, J, K    : Integer;
   Line       : string;
   MarkPos    : Integer;
+  MarkLen    : Integer;  { length of whichever ownership marker matched }
+  IsTypeMark : Boolean;  { True when it was AUTO_TYPE, not AUTO_MARK }
   Closer     : string;
   RemarksOpen: Integer;
   Empty      : Boolean;
@@ -323,7 +325,23 @@ begin
     end;
 
     // Rule 1: a marked <summary>/<param>/<returns> tag, single- or multi-line.
+    // TWO ownership markers are recognised: AUTO_MARK, and AUTO_TYPE for a
+    // <param> whose body is the engine's declared-type baseline. AUTO_TYPE is
+    // NOT a superstring of AUTO_MARK, so it must be searched for explicitly --
+    // without this, every typed <param> survived --strip and the round-trip test
+    // failed (the file did not return to its pre-apply bytes).
     MarkPos:= Pos(AUTO_MARK, Line);
+    MarkLen:= Length(AUTO_MARK);
+    IsTypeMark:= False;
+    if MarkPos = 0 then
+    begin
+      MarkPos:= Pos(AUTO_TYPE, Line);
+      if MarkPos > 0 then
+      begin
+        MarkLen   := Length(AUTO_TYPE);
+        IsTypeMark:= True;
+      end;
+    end;
     if MarkPos > 0 then
     begin
       Closer:= ManagedTagCloser(Line, MarkPos);
@@ -345,8 +363,12 @@ begin
           // deletes the whole tag). <summary>/<returns> are UNCHANGED:
           // marked always means engine-owned there, stripped
           // unconditionally regardless of content.
-          if SameText(Closer, '</param>')
-             and (not TagBodyIsEmpty(ALines, I, J, MarkPos + Length(AUTO_MARK), Closer)) then
+          // ... but that exception is about a HUMAN's text sitting inside an
+          // AUTO_MARK tag. An AUTO_TYPE body is the engine's own declared-type
+          // baseline, so it is deleted unconditionally, exactly like <summary>:
+          // apply regenerates it, strip removes it, and the two verbs agree.
+          if SameText(Closer, '</param>') and (not IsTypeMark)
+             and (not TagBodyIsEmpty(ALines, I, J, MarkPos + MarkLen, Closer)) then
           begin
             I:= J + 1;
             Continue;

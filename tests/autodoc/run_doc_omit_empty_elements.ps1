@@ -62,7 +62,7 @@ unit omitempty;
 
 interface
 
-function Described(const AWanted: string { the value to look for }; const AOther: Integer): string;
+function Described(const AWanted: string { the value to look for }; const AOther: Integer; var AUntyped): string;
 
 /// <summary></summary>
 /// <param name="AInput"></param>
@@ -167,8 +167,13 @@ Check 'once settled, further index+apply passes are byte-identical' `
 $lint = & $Exe lint-all --db $db --json 2>$null
 $find = @(); try { $find = ($lint -join "`n" | ConvertFrom-Json) } catch { $find = @() }
 $nd = @($find | Where-Object { $_.rule -eq 'doc-param-no-description' })
-Check 'an undocumented param is reported at WARNING' `
-  ((@($nd | Where-Object { $_.message -match 'AOther' }).Count -ge 1) -and
+# v(2026-08-10): AOther is TYPED, so it now carries 'const Integer' as its body
+# and this rule correctly stays silent on it -- that is the 574-finding drop on
+# drag-lint's own source. AUntyped (untyped var param: no comment AND no type)
+# is the residue the engine can never fill in for itself, so it is what the
+# rule must still report.
+Check 'a param with a genuinely empty body is reported at WARNING' `
+  ((@($nd | Where-Object { $_.message -match 'AUntyped' }).Count -ge 1) -and
    (@($nd | Where-Object { $_.severity -ne 'warning' }).Count -eq 0)) `
   ("severities: " + ((@($nd | ForEach-Object { $_.severity }) | Sort-Object -Unique) -join ','))
 Check 'a param that HAS a description is not reported' `

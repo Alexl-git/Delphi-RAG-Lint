@@ -78,13 +78,13 @@ type
     /// caller applies them.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AQName">Fully qualified symbol name, e.g. Unit.TType.Method.</param>
-    /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto --></param>
-    /// <param name="AIncludeSince"><!-- drag-lint:auto --></param>
-    /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
-    /// <param name="AExtraStores"><!-- drag-lint:auto --></param>
-    /// <param name="AMaxReturnCases"><!-- drag-lint:auto --></param>
-    /// <param name="AMaxCallers"><!-- drag-lint:auto --></param>
-    /// <param name="AComplexityMin"><!-- drag-lint:auto --></param>
+    /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AIncludeSince"><!-- drag-lint:auto type -->Boolean = False</param>
+    /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string = ''</param>
+    /// <param name="AExtraStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt; = nil</param>
+    /// <param name="AMaxReturnCases"><!-- drag-lint:auto type -->Integer = 20</param>
+    /// <param name="AMaxCallers"><!-- drag-lint:auto type -->Integer = 5</param>
+    /// <param name="AComplexityMin"><!-- drag-lint:auto type -->Integer = 10</param>
     /// <returns>The classified action plus file/line and the computed edits.</returns>
     /// <remarks>
     /// Does not write files; TTextEditApplier.Apply performs any I/O.
@@ -127,8 +127,8 @@ type
       AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5; AComplexityMin: Integer = 10): TDocumentResult; overload;
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
     /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
-    /// <param name="AStore"><!-- drag-lint:auto --></param>
-    /// <param name="AQName"><!-- drag-lint:auto --></param>
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: BuildFor(AStore, AQName, False).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -154,13 +154,13 @@ type
     /// and documenting the others never -- see adp1-bugA-brief.md.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="ASym">The already-resolved symbol to document (its own file/line).</param>
-    /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto --></param>
-    /// <param name="AIncludeSince"><!-- drag-lint:auto --></param>
-    /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
-    /// <param name="AExtraStores"><!-- drag-lint:auto --></param>
-    /// <param name="AMaxReturnCases"><!-- drag-lint:auto --></param>
-    /// <param name="AMaxCallers"><!-- drag-lint:auto --></param>
-    /// <param name="AComplexityMin"><!-- drag-lint:auto --></param>
+    /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto type -->Boolean = False</param>
+    /// <param name="AIncludeSince"><!-- drag-lint:auto type -->Boolean = False</param>
+    /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string = ''</param>
+    /// <param name="AExtraStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt; = nil</param>
+    /// <param name="AMaxReturnCases"><!-- drag-lint:auto type -->Integer = 20</param>
+    /// <param name="AMaxCallers"><!-- drag-lint:auto type -->Integer = 5</param>
+    /// <param name="AComplexityMin"><!-- drag-lint:auto type -->Integer = 10</param>
     /// <returns>The classified action plus file/line and the computed edits.</returns>
     /// <remarks>
     /// Does not write files; TTextEditApplier.Apply performs any I/O.

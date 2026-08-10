@@ -38,7 +38,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function LoadBuiltinAllowlist          : TDictionary<string, Boolean>;
-      /// <param name="AName"><!-- drag-lint:auto --></param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed:
       /// GKeywordSet.ContainsKey(System.SysUtils.LowerCase(AName)).</returns>
       /// <remarks>
@@ -55,8 +55,8 @@ type
       /// </remarks>
       class function IsKeyword(const AName: string): Boolean                     ;
     public
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: All.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -71,8 +71,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Check(const AStore: ISymbolStore; const AFile: string)          : TArray<TLintFinding>;
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -87,7 +87,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckUndeclared(const AStore: ISymbolStore; const AFile: string): TArray<TLintFinding>;
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; [Finding].</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -108,7 +108,7 @@ type
       /// <summary><!-- drag-lint:auto -->Tree-sitter ERROR / MISSING nodes -&gt; located
       /// 'syntax-error' findings. Live syntax diagnostics (Error-Insight-style) without a
       /// compiler.</summary>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -135,7 +135,7 @@ type
       /// flagged. Counting over the subtree is intentionally false-positive-SAFE: a name
       /// used anywhere (incl. a nested routine = closure, or via with/property) raises
       /// the count and suppresses the finding. No compiler / no DB needed.</summary>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -297,9 +297,9 @@ type
       // v11 (M1): AStore (+ AFileId, the file's id in that store) make the
       // operand-type decisions exact via ResolveTypeCategory; when AStore is nil
       // (the bare `lint <file>` path) it falls back to the name heuristics.
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -746,7 +746,7 @@ type
       /// <summary>v0.75 (#6): flags routines whose SonarSource-style cognitive complexity exceeds
       /// the threshold -- each control-flow structure adds 1 + its nesting depth, each and/or/xor
       /// adds 1. Rewards flat code, penalises deep nesting (unlike flat cyclomatic count).</summary>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: CheckCognitiveComplexity(AFile, 25).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -761,8 +761,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckCognitiveComplexity(const AFile: string): TArray<TLintFinding>; overload;
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="AMaxScore"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AMaxScore"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -790,9 +790,9 @@ type
       // v12 (M1): when AStore is present, the virtual-method set is augmented with
       // inherited virtuals from cross-unit ancestors (GetVirtualMethodsIncludingAncestors);
       // nil keeps the same-file/same-class behavior.
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AFileId"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

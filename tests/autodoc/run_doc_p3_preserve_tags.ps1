@@ -912,10 +912,19 @@ try {
   # standalone sibling, so that is what is asserted directly: the nested text
   # appears exactly once (still inside <example>), and the engine's own tag is
   # empty rather than carrying it.
+  # v(2026-08-10): the engine's own tag is no longer EMPTY -- by the owner's
+  # ruling it carries the DECLARED TYPE as its baseline body, so the <param>
+  # reflects the current signature in generated doc/HTML help. That changes the
+  # proxy, not the invariant: what must never happen is the nested tag's
+  # DESCRIPTION being copied out into the sibling. So assert the invariant
+  # directly -- the sibling is engine-marked and does NOT carry the nested text --
+  # rather than pinning the sibling's exact bytes, which is what made this
+  # assertion fail on a behaviour change that was actually correct.
   $nestedDescCount = ([regex]::Matches($exampleNestParamBlock, 'nested param desc')).Count
+  $siblingTag = [regex]::Match($exampleNestParamBlock, '<param name="AV"><!-- drag-lint:auto(?: type)? -->(?<body>.*?)</param>')
   Check 'STRUCTURAL 1: the nested <param> description is NOT copied into a standalone sibling' `
     (($paramTagCount -eq 2) -and ($nestedDescCount -eq 1) -and `
-     ($exampleNestParamBlock -match [regex]::Escape('<param name="AV"><!-- drag-lint:auto --></param>'))) $exampleNestParamBlock
+     $siblingTag.Success -and ($siblingTag.Groups['body'].Value -notmatch 'nested param desc')) $exampleNestParamBlock
 
   # --- STRUCTURAL 1, formerly a DISCLOSED RESIDUAL: DeprecatedWithNestedReturns
   # / ExampleWithNestedRemarks. PINS FLIPPED by v(ADP3 T3h).

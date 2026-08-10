@@ -15,8 +15,8 @@ uses
   DRagLint.Core.Model
   ;
 
-/// <param name="ASym"><!-- drag-lint:auto --></param>
-/// <param name="ADoc"><!-- drag-lint:auto --></param>
+/// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+/// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
 /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -61,8 +61,8 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 /// </remarks>
 function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil; const AFactLines: TArray<string> = nil): string;
 
-/// <param name="ASym"><!-- drag-lint:auto --></param>
-/// <param name="ADoc"><!-- drag-lint:auto --></param>
+/// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+/// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, IfThen
@@ -79,7 +79,7 @@ function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string; o
 // AFldrSystID: Int64): Boolean' -- into an IDE-style markdown block listing
 // each parameter name + type on its own line, plus the return type. Returns ''
 // when the signature has no parameter list (containers, fields, properties).
-/// <param name="ASignature"><!-- drag-lint:auto --></param>
+/// <param name="ASignature"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: ''; SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->

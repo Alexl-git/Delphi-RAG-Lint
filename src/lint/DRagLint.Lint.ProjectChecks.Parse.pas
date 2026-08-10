@@ -39,7 +39,7 @@ type
 
 /// <summary>Normalize a unit name or file path to a bare lower-case unit-name
 /// segment, used on BOTH sides of every membership comparison so they match.</summary>
-/// <param name="AName"><!-- drag-lint:auto --></param>
+/// <param name="AName"><!-- drag-lint:auto type -->const string</param>
 /// <remarks>
 /// Only a known SOURCE extension (.pas/.dpk/.dpr) is stripped; a dotted
 /// namespace like 'Foo.ViewModel' must NOT lose '.ViewModel' to ChangeFileExt
@@ -56,7 +56,7 @@ function NormUnit(const AName: string): string;
 /// <summary>Blank out Pascal comments -- { ... }, (* ... *), and // ... -- in
 /// place, preserving overall length and every line-break so byte offsets and
 /// line numbers stay valid. String literals ('...') are left intact.</summary>
-/// <param name="ASrc"><!-- drag-lint:auto --></param>
+/// <param name="ASrc"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: ASrc.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -72,7 +72,7 @@ function StripPasCommentsKeepLayout(const ASrc: string): string;
 /// <summary>Extract unit names from the uses/contains/requires clauses in the
 /// given .dpr/.dpk source text. Form-name hints and compiler directives are
 /// scrubbed first so they are never mis-read as units (FP-8).</summary>
-/// <param name="AContent"><!-- drag-lint:auto --></param>
+/// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
 /// <param name="AUsesStartLine">Receives the 1-based line of the first clause.</param>
 /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
 /// <remarks>
@@ -86,8 +86,8 @@ function StripPasCommentsKeepLayout(const ASrc: string): string;
 function ParseUsesFromContent(const AContent: string; out AUsesStartLine: Integer): TArray<string>;
 
 /// <summary>Read a .dpr/.dpk file and extract its uses-clause unit names.</summary>
-/// <param name="AProgramPath"><!-- drag-lint:auto --></param>
-/// <param name="AUsesStartLine"><!-- drag-lint:auto --></param>
+/// <param name="AProgramPath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AUsesStartLine"><!-- drag-lint:auto type -->out Integer</param>
 /// <returns><!-- drag-lint:auto -->Observed:
 /// ParseUsesFromContent(TFile.ReadAllText(AProgramPath), AUsesStartLine).</returns>
 /// <remarks>
@@ -102,7 +102,7 @@ function ParseUsesFromContent(const AContent: string; out AUsesStartLine: Intege
 function ExtractUsesNames(const AProgramPath: string; out AUsesStartLine: Integer): TArray<string>;
 
 /// <summary>Read the .pas/.dpk &lt;DCCReference Include="..."/&gt; entries from a .dproj.</summary>
-/// <param name="ADprojPath"><!-- drag-lint:auto --></param>
+/// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -114,7 +114,7 @@ function ExtractUsesNames(const AProgramPath: string; out AUsesStartLine: Intege
 function ReadDCCReferences(const ADprojPath: string): TArray<string>;
 
 /// <summary>Find the sibling .dpr or .dpk for a .dproj, or '' if none exists.</summary>
-/// <param name="ADprojPath"><!-- drag-lint:auto --></param>
+/// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: ''.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -128,7 +128,7 @@ function FindSiblingProgramFile(const ADprojPath: string): string;
 /// <summary>True if AUnitName is a classic Delphi unit alias (WinTypes, WinProcs,
 /// DbiTypes, DbiProcs, DbiErrs) -- the compiler maps these to a real unit, so a
 /// `uses` of one is always resolvable.</summary>
-/// <param name="AUnitName"><!-- drag-lint:auto --></param>
+/// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -143,7 +143,7 @@ function IsStandardUnitAlias(const AUnitName: string): Boolean;
 /// Vcl.*, Fmx.*, Winapi.*, Data.*, Datasnap.*, Soap.*, Web.*, FireDAC.*) or a
 /// classic bare RTL name (Forms, SysUtils, Classes, Windows, ...). Belt-and-
 /// suspenders so incomplete library-index coverage never false-flags core RTL.</summary>
-/// <param name="AUnitName"><!-- drag-lint:auto --></param>
+/// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->

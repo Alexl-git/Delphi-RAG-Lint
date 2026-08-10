@@ -12,7 +12,7 @@ type
   strict private
     /// <summary>Maps a drag-lint severity to a SARIF level. error->error,
     /// warning->warning, everything else (info/hint/unknown)->note.</summary>
-    /// <param name="ASeverity"><!-- drag-lint:auto --></param>
+    /// <param name="ASeverity"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: 'error'; 'warning'; 'note'.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -26,7 +26,7 @@ type
     class function SarifLevel(const ASeverity: string): string; static;
     /// <summary>Builds one SARIF result object for a finding. Caller owns it
     /// (added into a results array which frees it).</summary>
-    /// <param name="AFinding"><!-- drag-lint:auto --></param>
+    /// <param name="AFinding"><!-- drag-lint:auto type -->const TLintFinding</param>
     /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->

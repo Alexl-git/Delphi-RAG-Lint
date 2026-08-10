@@ -77,8 +77,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileExtensions: TArray<string>                                     ;
-      /// <param name="ASource"><!-- drag-lint:auto --></param>
-      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default(TParseResult).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

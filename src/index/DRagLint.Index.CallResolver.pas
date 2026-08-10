@@ -80,8 +80,8 @@ type
     procedure BuildMaps;
     /// <summary>True when a candidate declared in ACandFile is visible from
     /// ADeclFile (same file, or in ADeclFile's resolved uses scope).</summary>
-    /// <param name="ADeclFile"><!-- drag-lint:auto --></param>
-    /// <param name="ACandFile"><!-- drag-lint:auto --></param>
+    /// <param name="ADeclFile"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="ACandFile"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->Observed: (ADeclFile = ACandFile);
     /// L.IndexOf(ACandFile) &gt;= 0.</returns>
     /// <remarks>
@@ -100,8 +100,8 @@ type
     /// <summary>Resolve a raw type text (a param/field/local Signature) to a
     /// defining class/interface/record symbol id, in scope of ADeclFileId. 0 when
     /// unresolvable OR ambiguous (FP-conservative, mirrors ResolveAncestry).</summary>
-    /// <param name="ATypeText"><!-- drag-lint:auto --></param>
-    /// <param name="ADeclFileId"><!-- drag-lint:auto --></param>
+    /// <param name="ATypeText"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ADeclFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->Observed: 0; Cands[InScopeIdx].Id; Cands[0].Id.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -119,7 +119,7 @@ type
     /// </remarks>
     function ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
     /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
-    /// <param name="AParentId"><!-- drag-lint:auto --></param>
+    /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->Observed: TList&lt;TSymbol&gt;.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -136,7 +136,7 @@ type
     /// </remarks>
     function ChildrenOf(AParentId: Int64): TList<TSymbol>;
     /// <summary>The source lines of the file AFileId (cached, ANSI). Nil-safe.</summary>
-    /// <param name="AFileId"><!-- drag-lint:auto --></param>
+    /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->Observed: TStringList.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -155,9 +155,9 @@ type
     /// <summary>Find a direct child of AParentId whose Name matches AName (case-
     /// insensitively) and whose Kind is in AKinds. Default(TSymbol) (Id=0) when
     /// none.</summary>
-    /// <param name="AParentId"><!-- drag-lint:auto --></param>
-    /// <param name="AName"><!-- drag-lint:auto --></param>
-    /// <param name="AKinds"><!-- drag-lint:auto --></param>
+    /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AKinds"><!-- drag-lint:auto type -->const TSymbolKindSet</param>
     /// <returns><!-- drag-lint:auto -->Observed: Default(TSymbol).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -178,10 +178,10 @@ type
     /// AMatches is empty.</summary>
     /// <param name="AMatches">Candidates already filtered by name and scope.
     /// Not modified. Nil is treated as empty.</param>
-    /// <param name="AArgCount"><!-- drag-lint:auto --></param>
+    /// <param name="AArgCount"><!-- drag-lint:auto type -->Integer</param>
     /// <param name="AArgsKnown">False when the call site could not be read, in
     /// which case arity is not consulted and the first candidate answers.</param>
-    /// <param name="AConfidence"><!-- drag-lint:auto --></param>
+    /// <param name="AConfidence"><!-- drag-lint:auto type -->out string</param>
     /// <returns><!-- drag-lint:auto -->Observed: 0; AMatches[0].Id; Fit[0].Id.</returns>
     /// <remarks>
     /// Arity NARROWS an existing name match and never widens one: when
@@ -207,15 +207,15 @@ type
     /// AMethodName on the type's own children + its transitive ancestors. Sets
     /// AConfidence ('certain' one surviving candidate | 'ambiguous' >1) and
     /// returns the target method id, or 0 (method not found on the chain).</summary>
-    /// <param name="ATypeSymbolId"><!-- drag-lint:auto --></param>
-    /// <param name="AMethodName"><!-- drag-lint:auto --></param>
+    /// <param name="ATypeSymbolId"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="AMethodName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AArgCount">Number of arguments at the call site, used to
     /// separate OVERLOADS when the name alone matches several (B1). Ignored
     /// unless AArgsKnown.</param>
     /// <param name="AArgsKnown">False when the call site could not be read (an
     /// unreadable source file), in which case arity is not consulted at all and
     /// the pre-B1 name-only behaviour stands.</param>
-    /// <param name="AConfidence"><!-- drag-lint:auto --></param>
+    /// <param name="AConfidence"><!-- drag-lint:auto type -->out string</param>
     /// <returns><!-- drag-lint:auto -->Observed: 0; PickFromMatches(Matches, AArgCount,
     /// AArgsKnown, AConfidence).</returns>
     /// <remarks>
@@ -247,8 +247,8 @@ type
     /// <param name="AEnclosingSymbolId">refs.enclosing_symbol_id of the call
     /// site. Since nested routines became symbols this is the NESTED routine
     /// for a call written inside one, which is what makes the walk possible.</param>
-    /// <param name="AName"><!-- drag-lint:auto --></param>
-    /// <param name="AConfidence"><!-- drag-lint:auto --></param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AConfidence"><!-- drag-lint:auto type -->out string</param>
     /// <returns>0 when the name is not declared anywhere on the lexical chain --
     /// the caller then falls through to receiver typing exactly as before.</returns>
     /// <remarks>
@@ -281,12 +281,12 @@ type
     /// target symbol id, or 0 when no unit in scope declares the name.</summary>
     /// <param name="ACallFileId">refs.file_id of the call site -- the file whose
     /// uses clause defines what is visible.</param>
-    /// <param name="AName"><!-- drag-lint:auto --></param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AArgCount">Argument count at the call site, used only to
     /// narrow an overload set, exactly as LookupMethodOnType does.</param>
     /// <param name="AArgsKnown">False when the call site could not be read; arity
     /// is then not consulted at all.</param>
-    /// <param name="AConfidence"><!-- drag-lint:auto --></param>
+    /// <param name="AConfidence"><!-- drag-lint:auto type -->out string</param>
     /// <returns>0 when the name is declared by no unit in scope -- the caller
     /// leaves the ref unresolved, which is the right answer for an intrinsic or
     /// an RTL routine living in the separate library index.</returns>
@@ -320,8 +320,8 @@ type
     /// receiver TYPE symbol id (0 when the receiver kind is unhandled or its type
     /// is unresolvable). AReceiverExpr is '' for a bare / Self call, in which case
     /// the enclosing routine's owning class is used.</summary>
-    /// <param name="ACallRef"><!-- drag-lint:auto --></param>
-    /// <param name="AReceiverExpr"><!-- drag-lint:auto --></param>
+    /// <param name="ACallRef"><!-- drag-lint:auto type -->const TReference</param>
+    /// <param name="AReceiverExpr"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: 0; Encl.ParentId;
     /// ResolveTypeNameToSymbol(CastType, ACallRef.FileId);
     /// ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId);
@@ -343,7 +343,7 @@ type
     function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
   public
     /// <summary>Builds the whole-DB name/scope maps from AStore. Call once.</summary>
-    /// <param name="AStore"><!-- drag-lint:auto --></param>
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ? (+155 more)
@@ -375,7 +375,7 @@ type
     /// ReceiverTypeSymbolId is set whenever the receiver type resolved (even if
     /// the method was not found on it); Confidence is 'certain' | 'ambiguous'
     /// (only meaningful when TargetSymbolId>0).</summary>
-    /// <param name="ACallRef"><!-- drag-lint:auto --></param>
+    /// <param name="ACallRef"><!-- drag-lint:auto type -->const TReference</param>
     /// <returns><!-- drag-lint:auto -->Observed: Default(TCallEdge).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -399,8 +399,8 @@ type
   /// text ('FBar', 'Self', 'A.B', '(X as TBar)', 'GetFoo') or '' for a bare /
   /// non-dotted call. Pure over ASourceLine; unit-tested via
   /// TCallResolver's own trace.</summary>
-  /// <param name="ASourceLine"><!-- drag-lint:auto --></param>
-  /// <param name="ARefCol"><!-- drag-lint:auto --></param>
+  /// <param name="ASourceLine"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="ARefCol"><!-- drag-lint:auto type -->Integer</param>
   /// <returns><!-- drag-lint:auto -->Observed: ''; Trim(Copy(Line, StopL, ARefCol - 1 -
   /// StopL)).</returns>
   /// <remarks>
@@ -417,8 +417,8 @@ type
   /// <summary>True when ATypeText, normalized, is a hard cast prefix shape
   /// '(EXPR as TName)' or 'TName(EXPR)'; if so ATypeName receives the target
   /// type name TName. Used by receiver kind 6 (cast). False otherwise.</summary>
-  /// <param name="AReceiverExpr"><!-- drag-lint:auto --></param>
-  /// <param name="ATypeName"><!-- drag-lint:auto --></param>
+  /// <param name="AReceiverExpr"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="ATypeName"><!-- drag-lint:auto type -->out string</param>
   /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -437,8 +437,8 @@ type
   /// exactly what refs.start_col stores, for both `M(...)` and `Obj.M(...)`.</summary>
   /// <param name="ALines">The callee's source file. Nil / out-of-range yields
   /// AKnown=False.</param>
-  /// <param name="ALine"><!-- drag-lint:auto --></param>
-  /// <param name="ACol"><!-- drag-lint:auto --></param>
+  /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+  /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
   /// <param name="AKnown">False when the site could not be read, or when its
   /// argument list never closes within the scan budget. Callers must not
   /// consult the count in that case.</param>
@@ -463,8 +463,8 @@ type
   /// signature is not a single number.</summary>
   /// <param name="ASignature">A stored symbol Signature, e.g.
   /// '(const A: string; const B: Integer = 0): string'.</param>
-  /// <param name="AMin"><!-- drag-lint:auto --></param>
-  /// <param name="AMax"><!-- drag-lint:auto --></param>
+  /// <param name="AMin"><!-- drag-lint:auto type -->out Integer</param>
+  /// <param name="AMax"><!-- drag-lint:auto type -->out Integer</param>
   /// <returns>False when ASignature is not shaped like a parameter list, in
   /// which case the caller must not filter on it.</returns>
   /// <remarks>

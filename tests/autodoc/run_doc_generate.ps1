@@ -63,9 +63,9 @@ try {
   # what lets doc-drift's "has no <param> tag" finding ever be cleared. A
   # <summary> has no structural content to carry: empty, it says nothing at all.
   Check 'comment: <param name="A"> IS emitted -- structure, with an empty body' `
-    ($txt -match [regex]::Escape('<param name="A"><!-- drag-lint:auto --></param>'))
+    ($txt -match [regex]::Escape('<param name="A"><!-- drag-lint:auto type -->Integer</param>'))
   Check 'comment: <param name="B"> IS emitted -- structure, with an empty body' `
-    ($txt -match [regex]::Escape('<param name="B"><!-- drag-lint:auto --></param>'))
+    ($txt -match [regex]::Escape('<param name="B"><!-- drag-lint:auto type -->Integer</param>'))
   Check 'comment: <returns> present (mined A + B case survives)' ($txt -match '///\s*<returns>')
   Check 'comment: <remarks> fenced block present' ($txt.Contains('/// <remarks>') -and $txt.Contains('<!-- drag-lint:auto BEGIN -->') -and $txt.Contains('<!-- drag-lint:auto END -->'))
   Check 'comment: Called from: doc_generate.UseAdd present' ($txt -match 'Called from:.*doc_generate\.UseAdd')

@@ -183,10 +183,20 @@ try {
   # fall back to a signature-derived row when there is no <param> tag
   # (RenderSignatureParamsMarkdown), so it shows the param's NAME AND TYPE
   # instead -- still no marker leak (covered by the broad no-leak check above).
-  Check 'T3: hover plain has NO param row at all (no <param> tag, no signature fallback)' `
-    ($echoPlain -notmatch 'AValue --') $echoPlain
-  Check 'T3: hover md falls back to the signature-derived param row (name + type, no marker)' `
-    ($echoMd -match '(?m)^- `AValue` : const Integer\s*$') $echoMd
+  # v(2026-08-10) THIS PIN FLIPPED, and the flip is the feature. An
+  # undocumented <param> now carries its DECLARED TYPE under the AUTO_TYPE
+  # marker instead of an empty body (owner ruling), so hover renders the
+  # DOC-DERIVED row and no longer needs the signature fallback:
+  #   plain, which had NO param row at all, now shows name + type;
+  #   md shows the same row without the fallback's ' : ' separator.
+  # HasAnyParamDescription's purpose is unchanged -- it exists so a tooltip
+  # never loses the name+type block when `document --apply` runs, and that
+  # block is now sourced from the tag itself. Same information, one fewer
+  # code path.
+  Check 'T3: hover plain NOW shows the doc-derived param row (name + type)' `
+    ($echoPlain -match 'AValue -- const Integer') $echoPlain
+  Check 'T3: hover md shows the doc-derived param row (name + type, no marker)' `
+    ($echoMd -match '(?m)^- `AValue` const Integer\s*$') $echoMd
 
   # --- Idempotency-adjacent: reindex (facts are index-time) + re-hover -----
   # --- shows the SAME facts (no drift across a reindex with no source      --

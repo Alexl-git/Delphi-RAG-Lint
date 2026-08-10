@@ -126,8 +126,14 @@ foreach ($p in @(@{N='Plain';B=$blkPlain}, @{N='Noted';B=$blkNoted}, @{N='Groupe
 Check 'D-3 STRUCTURE: Plain''s undocumented params BOTH get a <param> tag' `
   (($null -ne (Get-ParamBody $blkPlain 'AFirst')) -and ($null -ne (Get-ParamBody $blkPlain 'ASecond'))) `
   ($blkPlain -replace "`n",' | ')
-Check 'D-3 STRUCTURE: ... and their bodies are EMPTY -- structure is not meaning' `
-  (((Get-ParamBody $blkPlain 'AFirst') -eq '') -and ((Get-ParamBody $blkPlain 'ASecond') -eq '')) `
+# v(2026-08-10, owner ruling): an undocumented param's body is no longer EMPTY --
+# it is the DECLARED TYPE, so the tag reflects the current signature in the
+# doc/HTML help these comments are generated into. D-3's split is untouched:
+# the type is STRUCTURE (derived from the code, never invented), and MEANING
+# still comes only from a comment the source actually carries -- which is what
+# check (2) below asserts, and it still passes.
+Check 'D-3 STRUCTURE: ... and their bodies are their DECLARED TYPES' `
+  (((Get-ParamBody $blkPlain 'AFirst') -eq 'Integer') -and ((Get-ParamBody $blkPlain 'ASecond') -eq 'string')) `
   ("first=[" + (Get-ParamBody $blkPlain 'AFirst') + "] second=[" + (Get-ParamBody $blkPlain 'ASecond') + "]")
 
 # --- (2) D-3 MEANING: harvested from the parameter list. --------------------

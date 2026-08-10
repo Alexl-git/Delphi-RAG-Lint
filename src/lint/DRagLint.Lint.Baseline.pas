@@ -14,7 +14,7 @@ type
   TBaseline = class
   strict private
     /// <summary>Lowercased, backslash-normalized file path.</summary>
-    /// <param name="APath"><!-- drag-lint:auto --></param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: LowerCase(StringReplace(APath, '/', '\',
     /// [rfReplaceAll])).</returns>
     /// <remarks>
@@ -32,9 +32,9 @@ type
     class function NormPath(const APath: string): string; static;
     /// <summary>Reads (and caches in ACache) the trimmed text of line ALine
     /// (1-based) from AFile; '' if the file/line is unavailable.</summary>
-    /// <param name="AFile"><!-- drag-lint:auto --></param>
-    /// <param name="ALine"><!-- drag-lint:auto --></param>
-    /// <param name="ACache"><!-- drag-lint:auto --></param>
+    /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="ACache"><!-- drag-lint:auto type -->const TDictionary&lt;string, TArray&lt;string&gt;&gt;</param>
     /// <returns><!-- drag-lint:auto -->Observed: ''; Trim(Lines[ALine - 1]).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -52,7 +52,7 @@ type
       const ACache: TDictionary<string, TArray<string>>): string; static;
     /// <summary>Fingerprints with an occurrence ordinal appended pre-hash, so two
     /// findings on identical-text lines in the same (rule,file) disambiguate.</summary>
-    /// <param name="AFindings"><!-- drag-lint:auto --></param>
+    /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Lint.Baseline.TBaseline.Filter (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Fingerprint (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Write (DRagLint.Lint.Baseline.pas)
@@ -69,7 +69,7 @@ type
   public
     /// <summary>Fingerprint for one finding (occurrence ordinal 0). Stable across
     /// line-number shifts; changes only when rule, file, or the line text change.</summary>
-    /// <param name="AFinding"><!-- drag-lint:auto --></param>
+    /// <param name="AFinding"><!-- drag-lint:auto type -->const TLintFinding</param>
     /// <returns><!-- drag-lint:auto -->Observed: Fps[0].</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -85,8 +85,8 @@ type
     class function Fingerprint(const AFinding: TLintFinding): string; static;
     /// <summary>Writes the findings' fingerprints to APath as
     /// { "version":1, "fingerprints":[...] }.</summary>
-    /// <param name="APath"><!-- drag-lint:auto --></param>
-    /// <param name="AFindings"><!-- drag-lint:auto --></param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) (+4 more)
@@ -103,8 +103,8 @@ type
     /// <summary>Returns only findings whose fingerprint is absent from the
     /// baseline at APath. If APath is missing/unreadable, returns AFindings
     /// unchanged.</summary>
-    /// <param name="APath"><!-- drag-lint:auto --></param>
-    /// <param name="AFindings"><!-- drag-lint:auto --></param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)

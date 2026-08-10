@@ -26,9 +26,9 @@ type
   /// </remarks>
   TTestStubGenerator = class
     public
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="AFramework"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFramework"><!-- drag-lint:auto type -->TTestFramework</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''; Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

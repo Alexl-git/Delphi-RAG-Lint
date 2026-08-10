@@ -28,7 +28,7 @@ type
     strict private
       FLanguage  : PTSLanguage                                             ;
       FQueryRules: TArray<TQueryRule>                                      ;
-      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)
@@ -45,7 +45,7 @@ type
       function CheckFileImpl(const AFilePath: string): TArray<TLintFinding>;
     public
       /// <summary><!-- drag-lint:auto -->TLinter</summary>
-      /// <param name="ARulesDir"><!-- drag-lint:auto --></param>
+      /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string = ''</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+73 more)
@@ -92,8 +92,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LintFile(const AFilePath: string): TArray<TLintFinding>                          ;
-      /// <param name="APath"><!-- drag-lint:auto --></param>
-      /// <param name="ARecursive"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ARecursive"><!-- drag-lint:auto type -->Boolean = True</param>
       /// <returns><!-- drag-lint:auto -->Observed: All.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

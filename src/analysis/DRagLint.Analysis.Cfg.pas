@@ -63,7 +63,7 @@ type
     Succ     : TList<Integer>;
     Pred     : TList<Integer>;
     /// <summary><!-- drag-lint:auto -->TCfgBlock</summary>
-    /// <param name="AIndex"><!-- drag-lint:auto --></param>
+    /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+80 more)
@@ -85,8 +85,8 @@ type
     /// </remarks>
     destructor Destroy; override;
     /// <summary>Append an item (an assignment / call / condition node).</summary>
-    /// <param name="ANode"><!-- drag-lint:auto --></param>
-    /// <param name="AOpaque"><!-- drag-lint:auto --></param>
+    /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AOpaque"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas)
@@ -99,7 +99,7 @@ type
     /// </remarks>
     procedure AddItem(const ANode: TTSNode; AOpaque: Boolean);
     /// <summary>Record an edge from this block to block AToIdx (no duplicates).</summary>
-    /// <param name="AToIdx"><!-- drag-lint:auto --></param>
+    /// <param name="AToIdx"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Analysis.Cfg.TBuilderState.DivertVia (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas)
@@ -230,7 +230,7 @@ type
   end;
 
 /// <summary>Collect every `defProc` node anywhere under ARoot.</summary>
-/// <param name="ARoot"><!-- drag-lint:auto --></param>
+/// <param name="ARoot"><!-- drag-lint:auto type -->const TTSNode</param>
 /// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->

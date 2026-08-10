@@ -54,8 +54,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure EnsureEnvVarsLoaded                     ;
-      /// <param name="AName"><!-- drag-lint:auto --></param>
-      /// <param name="AValue"><!-- drag-lint:auto --></param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AValue"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Observed: AValue &lt;&gt; ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -71,7 +71,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveNamedMacro(const AName: string; out AValue: string): Boolean;
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas)
@@ -86,8 +86,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ExpandMacros(const APath: string): string;
-      /// <param name="AList"><!-- drag-lint:auto --></param>
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths (DRagLint.Project.Resolver.pas)
@@ -101,9 +101,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AddFolderIfReal(AList: TList<string>; const APath: string);
-      /// <param name="AList"><!-- drag-lint:auto --></param>
-      /// <param name="ASemicolonList"><!-- drag-lint:auto --></param>
-      /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
+      /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
+      /// <param name="ASemicolonList"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths (DRagLint.Project.Resolver.pas)
@@ -134,8 +134,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EnumLibraryPlatforms: TArray<string>;
-      /// <param name="AList"><!-- drag-lint:auto --></param>
-      /// <param name="APlatforms"><!-- drag-lint:auto --></param>
+      /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
+      /// <param name="APlatforms"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths (DRagLint.Project.Resolver.pas)
@@ -149,8 +149,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>);
-      /// <param name="ADprojPath"><!-- drag-lint:auto --></param>
-      /// <param name="AList"><!-- drag-lint:auto --></param>
+      /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders (DRagLint.Project.Resolver.pas)
@@ -164,8 +164,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReadDProj       (const ADprojPath: string; AList: TList<string>);
-      /// <param name="ADprPath"><!-- drag-lint:auto --></param>
-      /// <param name="AList"><!-- drag-lint:auto --></param>
+      /// <param name="ADprPath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders (DRagLint.Project.Resolver.pas)
@@ -184,8 +184,8 @@ type
       /// main source's `in '...'` clauses. Deliberately contains no registry lookup --
       /// that tail is what separates a compiler search path from an indexing scope, and
       /// it is added by Resolve alone.</summary>
-      /// <param name="ADprojPath"><!-- drag-lint:auto --></param>
-      /// <param name="AList"><!-- drag-lint:auto --></param>
+      /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -288,7 +288,7 @@ type
       /// ...\BDS\37.0\Library (Android*, iOS*, Linux64, OSX*, Win64x, ...), which
       /// additionally pulls in the Posix / Androidapi / iOSapi / Macapi platform source
       /// trees.</summary>
-      /// <param name="AAllPlatforms"><!-- drag-lint:auto --></param>
+      /// <param name="AAllPlatforms"><!-- drag-lint:auto type -->Boolean = False</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

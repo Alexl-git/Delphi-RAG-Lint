@@ -28,8 +28,8 @@ function ContrastRatio(AForeground, ABackground: TColor): Double;
 /// <summary>Return AForeground if it already clears AMinRatio against
 /// ABackground; otherwise nudge its lightness away from the background until it
 /// does (clamped at black/white).</summary>
-/// <param name="AForeground"><!-- drag-lint:auto --></param>
-/// <param name="ABackground"><!-- drag-lint:auto --></param>
+/// <param name="AForeground"><!-- drag-lint:auto type -->TColor</param>
+/// <param name="ABackground"><!-- drag-lint:auto type -->TColor</param>
 /// <param name="AMinRatio">WCAG floor: 4.5 body text, 3.0 large/bold.</param>
 /// <returns>A color guaranteed to meet AMinRatio against ABackground.</returns>
 /// <remarks>

@@ -57,7 +57,7 @@ type
       /// match that sits in a structural context the rule should not flag (e.g. an
       /// integer literal that IS the value of a const definition, for
       /// large-magic-number).</summary>
-      /// <param name="ANode"><!-- drag-lint:auto --></param>
+      /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -76,7 +76,7 @@ type
         ancestor of one of those kinds. }
       /// <summary><!-- drag-lint:auto -->True when FRequireAncestors is empty (no
       /// requirement) or the node has an ancestor of one of those kinds.</summary>
-      /// <param name="ANode"><!-- drag-lint:auto --></param>
+      /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -92,10 +92,10 @@ type
       /// </remarks>
       function HasRequiredAncestor(const ANode: TTSNode): Boolean;
     public
-      /// <param name="ALanguage"><!-- drag-lint:auto --></param>
-      /// <param name="AQuerySource"><!-- drag-lint:auto --></param>
-      /// <param name="AScmPath"><!-- drag-lint:auto --></param>
-      /// <param name="AJsonPath"><!-- drag-lint:auto --></param>
+      /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
+      /// <param name="AQuerySource"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AScmPath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AJsonPath"><!-- drag-lint:auto type -->const string</param>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -123,9 +123,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
-      /// <param name="ARootNode"><!-- drag-lint:auto --></param>
-      /// <param name="ASource"><!-- drag-lint:auto --></param>
-      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <param name="ARootNode"><!-- drag-lint:auto type -->const TTSNode</param>
+      /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: FoundList.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -162,8 +162,8 @@ type
       /// <summary><!-- drag-lint:auto -->Loads every *.scm under ARulesDir as a
       /// TQueryRule, paired with the sibling &lt;basename&gt;.json if present. Skips and
       /// warns on compile failures.</summary>
-      /// <param name="ALanguage"><!-- drag-lint:auto --></param>
-      /// <param name="ARulesDir"><!-- drag-lint:auto --></param>
+      /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
+      /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas)

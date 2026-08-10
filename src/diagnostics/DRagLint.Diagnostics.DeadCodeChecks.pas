@@ -105,10 +105,10 @@ type
     /// <summary>Runs the dead-code rules against a single .pas file and
     /// returns one TLintFinding per violation.</summary>
     /// <param name="AFile">Absolute path to the .pas source file.</param>
-    /// <param name="AMinCaseBranches"><!-- drag-lint:auto --></param>
-    /// <param name="AMaxBoolOps"><!-- drag-lint:auto --></param>
-    /// <param name="AMaxUnitLines"><!-- drag-lint:auto --></param>
-    /// <param name="AMaxChainHops"><!-- drag-lint:auto --></param>
+    /// <param name="AMinCaseBranches"><!-- drag-lint:auto type -->Integer = 2</param>
+    /// <param name="AMaxBoolOps"><!-- drag-lint:auto type -->Integer = 4</param>
+    /// <param name="AMaxUnitLines"><!-- drag-lint:auto type -->Integer = 2000</param>
+    /// <param name="AMaxChainHops"><!-- drag-lint:auto type -->Integer = 4</param>
     /// <returns>Array of findings (severity 'warning'); empty when the file is
     /// clean or could not be parsed.</returns>
     /// <exception cref="bug"><!-- drag-lint:auto --></exception>

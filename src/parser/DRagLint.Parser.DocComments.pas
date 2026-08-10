@@ -19,7 +19,7 @@ type
   TDocCommentScanner = class
     public
       /// <summary>Walk the source, return all comment regions sorted by StartLine.</summary>
-      /// <param name="ASource"><!-- drag-lint:auto --></param>
+      /// <param name="ASource"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: TList&lt;TDocCommentRegion&gt;.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -45,7 +45,7 @@ type
   /// </remarks>
   TDocCommentParser = class
     public
-      /// <param name="ARaw"><!-- drag-lint:auto --></param>
+      /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)
@@ -60,7 +60,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ParseXmlDoc(const ARaw: string)                         : TParsedDoc; static;
-      /// <param name="ARaw"><!-- drag-lint:auto --></param>
+      /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)
@@ -75,8 +75,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ParsePasDoc(const ARaw: string)                         : TParsedDoc; static;
-      /// <param name="ARaw"><!-- drag-lint:auto --></param>
-      /// <param name="AKind"><!-- drag-lint:auto --></param>
+      /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AKind"><!-- drag-lint:auto type -->TDocCommentKind</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose (DRagLint.Parser.DocComments.pas)
@@ -90,7 +90,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ParseOneline(const ARaw: string; AKind: TDocCommentKind): TParsedDoc; static;
-      /// <param name="ARaw"><!-- drag-lint:auto --></param>
+      /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: ParseOneline(ARaw, dckLooseLine).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -107,7 +107,7 @@ type
       class function ParseLoose(const ARaw: string)                          : TParsedDoc; static;
 
       /// <summary><!-- drag-lint:auto -->TDocCommentParser</summary>
-      /// <param name="ALine"><!-- drag-lint:auto --></param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline (DRagLint.Parser.DocComments.pas)
@@ -121,7 +121,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function StripXmlDocPrefix(const ALine: string): string; static;
-      /// <param name="S"><!-- drag-lint:auto --></param>
+      /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Re.Replace(Trim(S), ' ').</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -165,7 +165,7 @@ type
       /// </remarks>
       class function BuildCleaned(const ARaw: string): string; static;
 
-      /// <param name="ARegion"><!-- drag-lint:auto --></param>
+      /// <param name="ARegion"><!-- drag-lint:auto type -->const TDocCommentRegion</param>
       /// <returns><!-- drag-lint:auto -->Observed: ParseXmlDoc(ARegion.RawText);
       /// ParseOneline(ARegion.RawText, ARegion.Kind); ParsePasDoc(ARegion.RawText);
       /// ParseLoose (ARegion.RawText).</returns>

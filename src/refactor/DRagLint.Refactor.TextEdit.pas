@@ -66,8 +66,8 @@ type
   public
     /// <summary>Applies edits per file, back-to-front by line, preserving ANSI
     /// + CRLF + (optional) .bak backup. Returns files touched.</summary>
-    /// <param name="AEdits"><!-- drag-lint:auto --></param>
-    /// <param name="AWriteBackups"><!-- drag-lint:auto --></param>
+    /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TTextEdit&gt;</param>
+    /// <param name="AWriteBackups"><!-- drag-lint:auto type -->Boolean</param>
     /// <returns><!-- drag-lint:auto -->Observed: Apply(AEdits, AWriteBackups, Skipped).</returns>
     /// <remarks>
     /// Edits are validated before they are written: a
@@ -121,7 +121,7 @@ type
     class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean;
       out ASkippedEdits: Integer): Integer; overload;
     /// <summary>Human-readable preview of the edit set.</summary>
-    /// <param name="AEdits"><!-- drag-lint:auto --></param>
+    /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TTextEdit&gt;</param>
     /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -147,11 +147,11 @@ type
     /// when it is already imported. Empty result + AResolvedUnit='' when AName is
     /// unresolvable. Inserts into the implementation uses if present, else the
     /// interface uses, else a fresh implementation uses block.</summary>
-    /// <param name="AStore"><!-- drag-lint:auto --></param>
-    /// <param name="AName"><!-- drag-lint:auto --></param>
-    /// <param name="AInFile"><!-- drag-lint:auto --></param>
-    /// <param name="AResolvedUnit"><!-- drag-lint:auto --></param>
-    /// <param name="AAlreadyUsed"><!-- drag-lint:auto --></param>
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AInFile"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AResolvedUnit"><!-- drag-lint:auto type -->out string</param>
+    /// <param name="AAlreadyUsed"><!-- drag-lint:auto type -->out Boolean</param>
     /// <returns><!-- drag-lint:auto -->Observed: Build(AStore, AStore, AName, AInFile,
     /// AResolvedUnit, AAlreadyUsed).</returns>
     /// <remarks>
@@ -172,12 +172,12 @@ type
     /// TYPE and target FILE are indexed in different --db stores (e.g.
     /// drag-lint convert-apply, where the To type may live in a different
     /// index than the form being converted).</summary>
-    /// <param name="ANameStore"><!-- drag-lint:auto --></param>
-    /// <param name="AUnitStore"><!-- drag-lint:auto --></param>
-    /// <param name="AName"><!-- drag-lint:auto --></param>
-    /// <param name="AInFile"><!-- drag-lint:auto --></param>
-    /// <param name="AResolvedUnit"><!-- drag-lint:auto --></param>
-    /// <param name="AAlreadyUsed"><!-- drag-lint:auto --></param>
+    /// <param name="ANameStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="AUnitStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AInFile"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AResolvedUnit"><!-- drag-lint:auto type -->out string</param>
+    /// <param name="AAlreadyUsed"><!-- drag-lint:auto type -->out Boolean</param>
     /// <returns><!-- drag-lint:auto -->Observed: nil; [Edit].</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -211,9 +211,9 @@ type
     /// FindCallersByName(short name) -- FindReferencesTo is unreliable (refs.
     /// symbol_id is NULL in the index). Returns empty + ARefuseReason when the
     /// symbol is referenced or not found.</summary>
-    /// <param name="AStore"><!-- drag-lint:auto --></param>
-    /// <param name="AQName"><!-- drag-lint:auto --></param>
-    /// <param name="ARefuseReason"><!-- drag-lint:auto --></param>
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ARefuseReason"><!-- drag-lint:auto type -->out string</param>
     /// <returns><!-- drag-lint:auto -->Observed: nil; Edits.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->

@@ -81,8 +81,8 @@ type
       /// (inactive-branch bytes blanked to spaces, offsets 1:1). When disabled -- or on a
       /// per-file preprocess exception (logged once) -- returns AContent unchanged so the
       /// caller falls back to the old all-branch scan for that file.</summary>
-      /// <param name="AContent"><!-- drag-lint:auto --></param>
-      /// <param name="AFileLabel"><!-- drag-lint:auto --></param>
+      /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFileLabel"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: TEncoding.UTF8.GetString(Resolved);
       /// AContent.</returns>
       /// <remarks>
@@ -104,7 +104,7 @@ type
       // Return True if AFile is rooted under any library root (case-insensitive).
       /// <summary><!-- drag-lint:auto -->Return True if AFile is rooted under any library
       /// root (case-insensitive).</summary>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -126,8 +126,8 @@ type
       /// <summary><!-- drag-lint:auto -->Search ASearchPaths for &lt;AUnitName&gt;.pas
       /// (case-insensitive first-file-wins). Returns the full absolute path, or '' if not
       /// found.</summary>
-      /// <param name="AUnitName"><!-- drag-lint:auto --></param>
-      /// <param name="ASearchPaths"><!-- drag-lint:auto --></param>
+      /// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ASearchPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -147,9 +147,9 @@ type
       /// <summary><!-- drag-lint:auto -->Search ASearchPaths + the dir of AFromFile for
       /// AIncName (as-given, then relative to each search path). Returns absolute path or
       /// ''.</summary>
-      /// <param name="AIncName"><!-- drag-lint:auto --></param>
-      /// <param name="AFromDir"><!-- drag-lint:auto --></param>
-      /// <param name="ASearchPaths"><!-- drag-lint:auto --></param>
+      /// <param name="AIncName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFromDir"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ASearchPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -172,10 +172,10 @@ type
       /// <summary><!-- drag-lint:auto -->Parse the .dpr `uses` clause: fill AUnitNames
       /// (name) + AUnitFiles (the `in 'path'` specifier when given, or '' when not). Both
       /// lists are parallel (same index).</summary>
-      /// <param name="AContent"><!-- drag-lint:auto --></param>
-      /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
-      /// <param name="AUnitNames"><!-- drag-lint:auto --></param>
-      /// <param name="AUnitFiles"><!-- drag-lint:auto --></param>
+      /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AUnitNames"><!-- drag-lint:auto type -->TStringList</param>
+      /// <param name="AUnitFiles"><!-- drag-lint:auto type -->TStringList</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
@@ -194,9 +194,9 @@ type
       // Return the `<DCCReference Include="...">` file paths from a .dproj.
       /// <summary><!-- drag-lint:auto -->Return the `&lt;DCCReference Include="..."&gt;`
       /// file paths from a .dproj.</summary>
-      /// <param name="AContent"><!-- drag-lint:auto --></param>
-      /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
-      /// <param name="AFiles"><!-- drag-lint:auto --></param>
+      /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFiles"><!-- drag-lint:auto type -->TStringList</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
@@ -213,9 +213,9 @@ type
       // Read search paths from the .dproj's DCC_UnitSearchPath tags.
       /// <summary><!-- drag-lint:auto -->Read search paths from the .dproj's
       /// DCC_UnitSearchPath tags.</summary>
-      /// <param name="AContent"><!-- drag-lint:auto --></param>
-      /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
-      /// <param name="APaths"><!-- drag-lint:auto --></param>
+      /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="APaths"><!-- drag-lint:auto type -->TStringList</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
@@ -240,7 +240,7 @@ type
       /// literals from AText so that `uses`/`{$I}` scanning does not pick up identifiers
       /// inside them. Does NOT strip // comments (they end at EOL, and our regex won't
       /// cross lines for uses-identifiers anyway).</summary>
-      /// <param name="AText"><!-- drag-lint:auto --></param>
+      /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -260,7 +260,7 @@ type
       // sections).  Returns a list of dotted unit names.
       /// <summary><!-- drag-lint:auto -->Scan AText for uses-clause identifiers (both
       /// interface and implementation sections). Returns a list of dotted unit names.</summary>
-      /// <param name="AText"><!-- drag-lint:auto --></param>
+      /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -279,7 +279,7 @@ type
       // Scan AText for {$I filename} / {$INCLUDE filename} directives.
       /// <summary><!-- drag-lint:auto -->Scan AText for {$I filename} / {$INCLUDE
       /// filename} directives.</summary>
-      /// <param name="AText"><!-- drag-lint:auto --></param>
+      /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -298,7 +298,7 @@ type
       /// <summary>Create a resolver that treats files under ALibraryRoots as library
       /// (excluded from the closure).
       /// Pass TProjectResolver.ResolveLibraryPaths as ALibraryRoots.</summary>
-      /// <param name="ALibraryRoots"><!-- drag-lint:auto --></param>
+      /// <param name="ALibraryRoots"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+75 more)

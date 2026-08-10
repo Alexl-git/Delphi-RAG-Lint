@@ -139,7 +139,7 @@ type
 /// <summary>True when APath is a Delphi library/RTL/3rd-party path (lowercased
 /// path contains '\embarcadero\', '\program files', or '\dcc\'). The canonical
 /// project-vs-library path test; shared with find-unit.</summary>
-/// <param name="APath"><!-- drag-lint:auto --></param>
+/// <param name="APath"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: (Pos('\embarcadero\', L) &gt; 0) or
 /// (Pos('\program files', L) &gt; 0) or (Pos('\dcc\', L) &gt; 0).</returns>
 /// <remarks>
@@ -154,9 +154,9 @@ function IsLibraryPath(const APath: string): Boolean;
 /// <summary>Classifies an external unit into a display group by resolved library
 /// path root first, then unit-name prefix (cx*/dx*/dxBar*->DevExpress; Spring.*->
 /// Spring4D; FireDAC.*->FireDAC; System/Winapi/Vcl/FMX/Data/Soap/Xml->RTL).</summary>
-/// <param name="AUnitName"><!-- drag-lint:auto --></param>
-/// <param name="AResolvedPath"><!-- drag-lint:auto --></param>
-/// <param name="AResolved"><!-- drag-lint:auto --></param>
+/// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AResolvedPath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AResolved"><!-- drag-lint:auto type -->Boolean</param>
 /// <returns><!-- drag-lint:auto -->Observed: dgUnknown; dgRTL; dgDevExpress; dgSpring4D;
 /// ClassifyByName(AUnitName); dgOther.</returns>
 /// <remarks>
@@ -172,7 +172,7 @@ function ClassifyDepsGroup(const AUnitName, AResolvedPath: string; AResolved: Bo
 
 /// <summary>Lowercase group label for output ('RTL','DevExpress','Spring4D',
 /// 'FireDAC','other','unknown').</summary>
-/// <param name="AGroup"><!-- drag-lint:auto --></param>
+/// <param name="AGroup"><!-- drag-lint:auto type -->TDepsGroup</param>
 /// <returns><!-- drag-lint:auto -->Observed: 'RTL'; 'DevExpress'; 'Spring4D'; 'FireDAC';
 /// 'other'; 'unknown'.</returns>
 /// <remarks>
@@ -187,8 +187,8 @@ function DepsGroupStr(AGroup: TDepsGroup): string;
 /// Borrows AStores (does not open/free them). Classifies each used unit as project
 /// vs external (unresolved OR library-path), groups externals, and computes the
 /// per-external rollup + the flat edge list + summary. No I/O.</summary>
-/// <param name="AStores"><!-- drag-lint:auto --></param>
-/// <param name="AOpts"><!-- drag-lint:auto --></param>
+/// <param name="AStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt;</param>
+/// <param name="AOpts"><!-- drag-lint:auto type -->const TDepsOptions</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas)

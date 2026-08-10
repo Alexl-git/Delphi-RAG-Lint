@@ -64,7 +64,7 @@ try {
   # engine's, with an EMPTY body, and X's hand-written description is still
   # preserved verbatim by the assertion above.
   Check 'v(PHASE A3, D-3): ADDED -- <param name="Y"> gets an engine-marked tag with an empty body' `
-    ($txt -match [regex]::Escape('<param name="Y"><!-- drag-lint:auto --></param>'))
+    ($txt -match [regex]::Escape('<param name="Y"><!-- drag-lint:auto type -->Integer</param>'))
 
   # Both hand remark lines survive, EACH with a /// prefix (Task 4 fix #1).
   $hasLine1 = ($lines | Where-Object { $_.Trim() -eq '/// First remark line.' }).Count -eq 1

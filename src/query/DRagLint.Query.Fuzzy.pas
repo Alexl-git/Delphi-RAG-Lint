@@ -13,8 +13,8 @@ uses
 /// <summary><!-- drag-lint:auto -->Classic O(|a|*|b|) Levenshtein distance with two
 /// rolling rows. Case-insensitive (lowercases both inputs first) - Pascal identifiers are
 /// case-insensitive at the language level.</summary>
-/// <param name="A"><!-- drag-lint:auto --></param>
-/// <param name="B"><!-- drag-lint:auto --></param>
+/// <param name="A"><!-- drag-lint:auto type -->const string</param>
+/// <param name="B"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: RowPrev[Lb].</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -30,7 +30,7 @@ function LevenshteinDistance(const A, B: string): Integer;
 /// <summary><!-- drag-lint:auto -->Acceptable distance threshold for a fuzzy match
 /// against APattern. Tighter for short patterns to keep precision; looser for long
 /// patterns.</summary>
-/// <param name="APattern"><!-- drag-lint:auto --></param>
+/// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: 1; 2; 3.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -45,7 +45,7 @@ function FuzzyMaxDistanceFor(const APattern: string): Integer;
 /// <summary><!-- drag-lint:auto -->Extracts the case-insensitive 3-gram set of a string.
 /// Patterns shorter than 3 chars return an empty array (caller should fall back to full
 /// scan).</summary>
-/// <param name="S"><!-- drag-lint:auto --></param>
+/// <param name="S"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->

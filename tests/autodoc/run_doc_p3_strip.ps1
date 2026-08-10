@@ -119,9 +119,13 @@ try {
   # ONLY WHERE THE SOURCE CARRIES IT. The old rule -- no <param> unless a human
   # wrote a description -- was itself the defect: doc-drift reported those tags as
   # missing while `document` refused to write them, so the two halves could never
-  # converge. The tag is now emitted, engine-marked, with an EMPTY body.
-  Check 'Plain gained an engine-marked <param name="AValue"> tag with an EMPTY body' `
-    (($null -ne $plainBlock) -and ($plainBlock -match [regex]::Escape('<param name="AValue"><!-- drag-lint:auto --></param>'))) $plainBlock
+  # converge. The tag is now emitted, and since 2026-08-10 it carries the
+  # DECLARED TYPE under its own AUTO_TYPE ownership marker (owner ruling: a
+  # <param> must reflect the current signature, types included, because these
+  # comments are generated into doc/HTML help). AUTO_TYPE is what lets --strip
+  # recognise the body as the engine's without an index -- see the constant.
+  Check 'Plain gained an engine-marked <param name="AValue"> tag carrying its TYPE' `
+    (($null -ne $plainBlock) -and ($plainBlock -match [regex]::Escape('<param name="AValue"><!-- drag-lint:auto type -->Integer</param>'))) $plainBlock
 
   # --- dry-run --strip (no --apply), run against the STILL-documented file --
   # (before the real strip below) so there is engine content to report on.

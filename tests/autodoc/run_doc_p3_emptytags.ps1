@@ -80,7 +80,7 @@ try {
   # missing while `document` refused to write them, so the two halves could never
   # converge. The tag is now emitted, engine-marked, with an EMPTY body.
   Check '1. NoDocs HAS an engine-marked <param> tag with an EMPTY body' `
-    (($null -ne $noDocsBlock) -and ($noDocsBlock -match [regex]::Escape('<param name="AValue"><!-- drag-lint:auto --></param>'))) $noDocsBlock
+    (($null -ne $noDocsBlock) -and ($noDocsBlock -match [regex]::Escape('<param name="AValue"><!-- drag-lint:auto type -->Integer</param>'))) $noDocsBlock
 
   $noDocsReturns = $null
   if ($null -ne $noDocsBlock) {
@@ -125,7 +125,7 @@ try {
   Check '4. HumanBlanks <param name="AValue"> STAYS (structure mirrors the signature)' `
     ($humanBlock -match '<param name="AValue">') $humanBlock
   Check '4. ... and it is now engine-marked, so a mined description can fill it' `
-    ($humanBlock -match [regex]::Escape('<param name="AValue"><!-- drag-lint:auto --></param>')) $humanBlock
+    ($humanBlock -match [regex]::Escape('<param name="AValue"><!-- drag-lint:auto type -->Integer</param>')) $humanBlock
   # NOTE: HumanBlanks is a real function with a mined return case (Result :=
   # AValue) and NO pre-existing <returns> tag of its own, so it legitimately
   # GAINS a brand-new managed <returns> (Rule 3) -- the doc block as a whole

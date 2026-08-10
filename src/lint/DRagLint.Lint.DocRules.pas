@@ -80,6 +80,9 @@ type
     /// TDocDrift signal (renamed/removed param, missing param, spurious/absent
     /// &lt;returns&gt;, never-raised &lt;exception&gt;, stale facts block, ...).</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
+    /// <param name="AIncludeSeeAlso">Threaded straight to TDocDrift.Analyze; must
+    /// match the flag `document` wrote the managed blocks under (default True).
+    /// See that routine for why a mismatch here is reported as drift.</param>
     /// <returns>'doc-drift' findings, in stable per-symbol/per-signal order; empty
     /// if every documented decl is structurally current.</returns>
     /// <remarks>
@@ -101,9 +104,6 @@ type
     /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="AIncludeSeeAlso">Threaded straight to TDocDrift.Analyze; must
-    /// match the flag `document` wrote the managed blocks under (default True).
-    /// See that routine for why a mismatch here is reported as drift.</param>
     class function RunDocDrift(const AStore: ISymbolStore;
       AIncludeSeeAlso: Boolean = True): TArray<TLintFinding>;
 

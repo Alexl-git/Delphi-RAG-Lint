@@ -38,9 +38,9 @@ type
   /// </remarks>
   TRenameRefactoring = class
     public
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="ANewName"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ANewName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -56,8 +56,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(const AStore: ISymbolStore; const AQName, ANewName: string): TArray<TRenameEdit>;
-      /// <param name="AEdits"><!-- drag-lint:auto --></param>
-      /// <param name="AWriteBackups"><!-- drag-lint:auto --></param>
+      /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
+      /// <param name="AWriteBackups"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Observed: FilesTouched.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -73,7 +73,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Apply(const AEdits: TArray<TRenameEdit>; AWriteBackups: Boolean) : Integer            ; // returns files touched
-      /// <param name="AEdits"><!-- drag-lint:auto --></param>
+      /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
       /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -90,7 +90,7 @@ type
       class function RenderDryRun(const AEdits: TArray<TRenameEdit>)                  : string             ;
       /// <summary>True when AName is a Delphi reserved word (case-insensitive) and
       /// therefore cannot be used as an identifier.</summary>
-      /// <param name="AName"><!-- drag-lint:auto --></param>
+      /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -108,9 +108,9 @@ type
       /// <summary>Non-empty human reason when renaming AQName to ANewName would be
       /// unsafe: ANewName is a reserved word, or a sibling symbol named ANewName
       /// already exists under the same parent. '' when the rename is safe.</summary>
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="ANewName"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ANewName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''; Format('"%s" is a reserved word',
       /// [ANewName]); Format('a symbol named "%s" already exists in the same scope',
       /// [ANewName]).</returns>
@@ -138,10 +138,10 @@ type
       /// Known limitations (deliberate conservative choices): occurrences inside a
       /// with block are skipped entirely; a same-named param in an unrelated same-name
       /// overload header may be touched (header-only, not a body rename).</summary>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="ALine"><!-- drag-lint:auto --></param>
-      /// <param name="ACol"><!-- drag-lint:auto --></param>
-      /// <param name="ANewName"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="ANewName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil; Final.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

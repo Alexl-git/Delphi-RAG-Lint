@@ -59,7 +59,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ReadMessage: TJSONObject  ;
-      /// <param name="AObj"><!-- drag-lint:auto --></param>
+      /// <param name="AObj"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleInitialize (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas) (+5 more)
@@ -76,7 +76,7 @@ type
       /// <summary><!-- drag-lint:auto -->SendRawNotification sends a notification (no id)
       /// with Content-Length framing. Identical to SendMessage but semantically distinct
       /// -- used for server-pushed notifications such as textDocument/publishDiagnostics.</summary>
-      /// <param name="AObj"><!-- drag-lint:auto --></param>
+      /// <param name="AObj"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)
@@ -90,9 +90,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendRawNotification(const AObj: TJSONObject);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="ACode"><!-- drag-lint:auto --></param>
-      /// <param name="AMessage"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="ACode"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AMessage"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
@@ -106,7 +106,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
-      /// <param name="AUri"><!-- drag-lint:auto --></param>
+      /// <param name="AUri"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas) (+1 more)
@@ -120,7 +120,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileFromUri(const AUri : string): string;
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.LocationFromRef/2 (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/1 (DRagLint.LSP.Server.pas)
@@ -134,8 +134,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileToUri  (const APath: string): string;
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
@@ -149,7 +149,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleInitialize(const AId: TJSONValue; const AParams: TJSONObject);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
@@ -163,8 +163,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleShutdown(const AId: TJSONValue);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
@@ -180,8 +180,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleWorkspaceSymbol(const AId: TJSONValue; const AParams: TJSONObject);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
@@ -196,8 +196,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDefinition     (const AId: TJSONValue; const AParams: TJSONObject);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
@@ -218,8 +218,8 @@ type
       /// library symbol of the same name (FMX.Graphics.TCanvasSaveState.Assigned, a
       /// property) because the project DB has no such symbol and the search fell through
       /// to the library DB.</summary>
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto -->The TABLE MOVED to DRagLint.Core.Model (IntrinsicSignature /
       /// IsCompilerIntrinsic) when the documentation facts builder needed the same list to keep
@@ -239,8 +239,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleHover          (const AId: TJSONValue; const AParams: TJSONObject);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
@@ -255,8 +255,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleCompletion     (const AId: TJSONValue; const AParams: TJSONObject);
-      /// <param name="AId"><!-- drag-lint:auto --></param>
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
@@ -271,7 +271,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleSignatureHelp  (const AId: TJSONValue; const AParams: TJSONObject);
-      /// <param name="AParams"><!-- drag-lint:auto --></param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
@@ -286,7 +286,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDidOpenOrSave(const AParams: TJSONObject);
-      /// <param name="ASym"><!-- drag-lint:auto --></param>
+      /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
       /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -302,7 +302,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LocationFromSymbol(const ASym: TSymbol   ): TJSONObject; overload;
-      /// <param name="ARef"><!-- drag-lint:auto --></param>
+      /// <param name="ARef"><!-- drag-lint:auto type -->const TReference</param>
       /// <returns><!-- drag-lint:auto -->Observed: LocationFromRef(ARef, FStore).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -323,8 +323,8 @@ type
       /// <summary><!-- drag-lint:auto -->v0.40.3: explicit-store overloads -- preferred
       /// for multi-DB queries so each Location URI resolves against the store that owns
       /// the row.</summary>
-      /// <param name="ASym"><!-- drag-lint:auto --></param>
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <returns><!-- drag-lint:auto -->Observed: LocationFromSymbol(ASym, FStore).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -342,8 +342,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LocationFromSymbol(const ASym: TSymbol   ; const AStore: ISymbolStore): TJSONObject; overload;
-      /// <param name="ARef"><!-- drag-lint:auto --></param>
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="ARef"><!-- drag-lint:auto type -->const TReference</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -366,9 +366,9 @@ type
       /// <summary><!-- drag-lint:auto -->v0.7: reparse the file at APath and find the
       /// identifier text under (ALine, ACol) - both 0-based (LSP convention). Returns
       /// empty string if the file doesn't exist or the cursor isn't on an identifier.</summary>
-      /// <param name="APath"><!-- drag-lint:auto --></param>
-      /// <param name="ALine"><!-- drag-lint:auto --></param>
-      /// <param name="ACol"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas)
@@ -398,7 +398,7 @@ type
       /// </remarks>
       function EnsureLinter: TLinter                                                  ;
     public
-      /// <param name="ADbPath"><!-- drag-lint:auto --></param>
+      /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas), DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas), DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) (+66 more)
@@ -420,7 +420,7 @@ type
       /// <summary><!-- drag-lint:auto -->v0.40.3: multi-DB constructor. Opens every path;
       /// missing paths are logged via stderr (LSP doesn't see them) and skipped. The
       /// first surviving store becomes FStore for legacy code paths.</summary>
-      /// <param name="ADbPaths"><!-- drag-lint:auto --></param>
+      /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, GetStdHandle, Writeln

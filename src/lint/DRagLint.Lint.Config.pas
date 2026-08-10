@@ -58,8 +58,8 @@ type
     FSevValues   : TArray<string> ;
     FThreshNames : TArray<string> ; // parallel arrays: metric name -> value
     FThreshValues: TArray<Integer>;
-    /// <param name="AArr"><!-- drag-lint:auto --></param>
-    /// <param name="AId"><!-- drag-lint:auto --></param>
+    /// <param name="AArr"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -77,7 +77,7 @@ type
     /// <summary>Parses a "naming" JSON object and applies each present field
     /// over the current Naming record (field-wise; absent keys are left
     /// unchanged).</summary>
-    /// <param name="ANaming"><!-- drag-lint:auto --></param>
+    /// <param name="ANaming"><!-- drag-lint:auto type -->const TJSONObject</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Lint.Config.TLintConfig.ApplyConfigObject (DRagLint.Lint.Config.pas)
@@ -97,8 +97,8 @@ type
     /// is True the disabled/enabled/severity/thresholds arrays are cleared
     /// before merging (profile-override semantics); when False they are
     /// appended (top-level base semantics).</summary>
-    /// <param name="AObj"><!-- drag-lint:auto --></param>
-    /// <param name="AReplace"><!-- drag-lint:auto --></param>
+    /// <param name="AObj"><!-- drag-lint:auto type -->const TJSONObject</param>
+    /// <param name="AReplace"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas)
@@ -123,8 +123,8 @@ type
     /// (disabled, enabled) are replaced wholesale; map fields (severity,
     /// thresholds, naming) are updated per-key so base entries the profile
     /// omits are inherited unchanged.</summary>
-    /// <param name="APath"><!-- drag-lint:auto --></param>
-    /// <param name="AProfile"><!-- drag-lint:auto --></param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AProfile"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: Default(TLintConfig).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -140,8 +140,8 @@ type
     /// </remarks>
     class function Load(const APath, AProfile: string): TLintConfig; static;
     /// <summary>Returns the configured severity for ARuleId, else ADefault.</summary>
-    /// <param name="ARuleId"><!-- drag-lint:auto --></param>
-    /// <param name="ADefault"><!-- drag-lint:auto --></param>
+    /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ADefault"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: ADefault.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -159,8 +159,8 @@ type
     function ApplySeverity(const ARuleId, ADefault: string): string;
     /// <summary>Keep policy for a finding's rule. Dropped if disabled; an
     /// off-by-default rule (ADefaultDisabled) is dropped unless re-enabled.</summary>
-    /// <param name="ARuleId"><!-- drag-lint:auto --></param>
-    /// <param name="ADefaultDisabled"><!-- drag-lint:auto --></param>
+    /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ADefaultDisabled"><!-- drag-lint:auto type -->Boolean</param>
     /// <returns><!-- drag-lint:auto -->Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -177,7 +177,7 @@ type
     /// </remarks>
     function ShouldKeep(const ARuleId: string; ADefaultDisabled: Boolean): Boolean;
     /// <summary>Convenience: ShouldKeep(ARuleId, False).</summary>
-    /// <param name="ARuleId"><!-- drag-lint:auto --></param>
+    /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: ShouldKeep(ARuleId, False).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -194,7 +194,7 @@ type
     /// <summary>Returns True when ARuleId is in the configured auto-fix set.
     /// Independent of enabled/disabled -- a rule may be enabled without being
     /// auto-fixed, or auto-fixed while off by default.</summary>
-    /// <param name="ARuleId"><!-- drag-lint:auto --></param>
+    /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Observed: Contains(FAutoFix, ARuleId).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -211,8 +211,8 @@ type
     /// </remarks>
     function IsAutoFix(const ARuleId: string): Boolean;
     /// <summary>Returns the configured threshold for AName, else ADefault.</summary>
-    /// <param name="AName"><!-- drag-lint:auto --></param>
-    /// <param name="ADefault"><!-- drag-lint:auto --></param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ADefault"><!-- drag-lint:auto type -->Integer</param>
     /// <returns><!-- drag-lint:auto -->Observed: ADefault.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -229,7 +229,7 @@ type
     /// </remarks>
     function ThresholdFor(const AName: string; ADefault: Integer): Integer;
     /// <summary>Appends ids to the effective enabled set (for --enable).</summary>
-    /// <param name="AIds"><!-- drag-lint:auto --></param>
+    /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas)
@@ -244,7 +244,7 @@ type
     /// </remarks>
     procedure AddEnabled(const AIds: TArray<string>);
     /// <summary>Appends ids to the effective disabled set (for --disable).</summary>
-    /// <param name="AIds"><!-- drag-lint:auto --></param>
+    /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas)
@@ -259,7 +259,7 @@ type
     /// </remarks>
     procedure AddDisabled(const AIds: TArray<string>);
     /// <summary>Appends ids to the effective auto-fix set.</summary>
-    /// <param name="AIds"><!-- drag-lint:auto --></param>
+    /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: Trim
@@ -346,7 +346,7 @@ type
     function ThresholdPairs: TArray<TPair<string,Integer>>;
     // -- Write mutators (for config writer) --
     /// <summary>Replaces the disabled list with AIds.</summary>
-    /// <param name="AIds"><!-- drag-lint:auto --></param>
+    /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Writes: FDisabled
@@ -359,7 +359,7 @@ type
     /// </remarks>
     procedure SetDisabled(const AIds: TArray<string>);
     /// <summary>Replaces the enabled list with AIds.</summary>
-    /// <param name="AIds"><!-- drag-lint:auto --></param>
+    /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Writes: FEnabled
@@ -372,7 +372,7 @@ type
     /// </remarks>
     procedure SetEnabled(const AIds: TArray<string>);
     /// <summary>Replaces the auto-fix list with AIds.</summary>
-    /// <param name="AIds"><!-- drag-lint:auto --></param>
+    /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Writes: FAutoFix
@@ -385,8 +385,8 @@ type
     /// </remarks>
     procedure SetAutoFix(const AIds: TArray<string>);
     /// <summary>Sets or updates the severity override for AId.</summary>
-    /// <param name="AId"><!-- drag-lint:auto --></param>
-    /// <param name="ASev"><!-- drag-lint:auto --></param>
+    /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASev"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Lint.Config.TLintConfig.ApplyConfigObject (DRagLint.Lint.Config.pas)
@@ -401,8 +401,8 @@ type
     /// </remarks>
     procedure SetSeverityPair(const AId, ASev: string);
     /// <summary>Sets or updates the threshold override for AName.</summary>
-    /// <param name="AName"><!-- drag-lint:auto --></param>
-    /// <param name="AValue"><!-- drag-lint:auto --></param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AValue"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: SameText

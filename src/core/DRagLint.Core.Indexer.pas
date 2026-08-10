@@ -51,8 +51,8 @@ type
       /// output with one line per file. The file is still indexed from its RAW
       /// UTF-8 bytes (old behaviour) -- a preprocess exception never hard-fails
       /// the run.</summary>
-      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
-      /// <param name="AError"><!-- drag-lint:auto --></param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AError"><!-- drag-lint:auto type -->const Exception</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
@@ -66,7 +66,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
-      /// <param name="AExtension"><!-- drag-lint:auto --></param>
+      /// <param name="AExtension"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: nil.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -82,10 +82,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ParserFor(const AExtension: string): IParser;
-      /// <param name="APath"><!-- drag-lint:auto --></param>
-      /// <param name="ASymbols"><!-- drag-lint:auto --></param>
-      /// <param name="ARefs"><!-- drag-lint:auto --></param>
-      /// <param name="AErrors"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ASymbols"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="ARefs"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AErrors"><!-- drag-lint:auto type -->Integer</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
@@ -99,7 +99,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -115,7 +115,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsUnderExcludeRoot  (const APath: string): Boolean;
-      /// <param name="ADir"><!-- drag-lint:auto --></param>
+      /// <param name="ADir"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: True; False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -137,7 +137,7 @@ type
       /// index isn't polluted by ad-hoc query scripts. Non-.sql files always pass this
       /// gate. v0.45: gate is conditional on FWalkFilter.SqlOnlyMS; when False all SQL
       /// pass.</summary>
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: StartsText('MS', Name).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -199,8 +199,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
-      /// <param name="ADir"><!-- drag-lint:auto --></param>
-      /// <param name="ARecursive"><!-- drag-lint:auto --></param>
+      /// <param name="ADir"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ARecursive"><!-- drag-lint:auto type -->Boolean</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFolder (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
@@ -218,9 +218,9 @@ type
       /// </remarks>
       procedure WalkAndIndex(const ADir: string; ARecursive: Boolean);
     public
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AParsers"><!-- drag-lint:auto --></param>
-      /// <param name="ADocConfig"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AParsers"><!-- drag-lint:auto type -->const TArray&lt;IParser&gt;</param>
+      /// <param name="ADocConfig"><!-- drag-lint:auto type -->const TDocConfig</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.Create/2 (DRagLint.Core.Indexer.pas) (+63 more)
@@ -235,8 +235,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig); overload;
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AParsers"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AParsers"><!-- drag-lint:auto type -->const TArray&lt;IParser&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: DRagLint.Core.Indexer.TIndexer.Create/3
@@ -261,8 +261,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
-      /// <param name="APath"><!-- drag-lint:auto --></param>
-      /// <param name="ARecursive"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ARecursive"><!-- drag-lint:auto type -->Boolean = True</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: DRagLint.Core.Indexer.TIndexer.WalkAndIndex
@@ -276,7 +276,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFolder(const APath: string; ARecursive: Boolean = True);
-      /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
@@ -321,7 +321,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function VisitedFiles: TArray<string>;
-      /// <param name="APath"><!-- drag-lint:auto --></param>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: ExcludeTrailingPathDelimiter, IncludeTrailingPathDelimiter, LowerCase
@@ -336,7 +336,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AddExcludeRoot(const APath: string);
-      /// <param name="AValue"><!-- drag-lint:auto --></param>
+      /// <param name="AValue"><!-- drag-lint:auto type -->Boolean</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Implements: DRagLint.Core.Interfaces.IIndexer.SetForceReparse
@@ -349,7 +349,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetForceReparse(AValue: Boolean);
-      /// <param name="AFilter"><!-- drag-lint:auto --></param>
+      /// <param name="AFilter"><!-- drag-lint:auto type -->const TWalkFilter</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: FreeAndNil
@@ -363,8 +363,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetWalkFilter(const AFilter: TWalkFilter);
-      /// <param name="AEnabled"><!-- drag-lint:auto --></param>
-      /// <param name="AProfile"><!-- drag-lint:auto --></param>
+      /// <param name="AEnabled"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="AProfile"><!-- drag-lint:auto type -->const TDefineProfile</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)

@@ -54,16 +54,18 @@ unit paramnodesc;
 
 interface
 
-{ APath carries a comment beside it, so the engine can fill its body.
-  AFlag carries nothing, so its tag is written with an EMPTY body. }
-function Scan(const APath { the folder to scan }: string; AFlag: Boolean): Boolean;
+{ APath carries a comment beside it, so the engine harvests its MEANING.
+  AFlag carries no comment, so it falls back to its DECLARED TYPE.
+  AUntyped is an untyped var parameter -- no comment AND no type -- so it is the
+  only one whose tag can still be written with a genuinely EMPTY body. }
+function Scan(const APath { the folder to scan }: string; AFlag: Boolean; var AUntyped): Boolean;
 
 { no parameters at all -- must never produce a <param> finding of any kind }
 function NoParamsAtAll: Boolean;
 
 implementation
 
-function Scan(const APath { the folder to scan }: string; AFlag: Boolean): Boolean;
+function Scan(const APath { the folder to scan }: string; AFlag: Boolean; var AUntyped): Boolean;
 begin
   result:= AFlag and (APath <> '');
 end;
@@ -90,8 +92,17 @@ Check 'APath got a body harvested from its inline comment' ($doc -match 'name="A
 # Warnings and errors is what Linter produces." <param> is STRUCTURAL, so the tag
 # is written for every signature parameter whether or not the source describes it
 # (ruling D-3 stands); what changed is that the linter now says so at WARNING.
-Check 'AFlag got a tag with an EMPTY body (structure is not meaning)' `
-  ($doc -match 'name="AFlag"><!-- drag-lint:auto --></param>')
+# OWNER RULING 2026-08-10, which SUPERSEDES the empty-body expectation above: a
+# <param> must "reflect the current situation ... with correct types", because
+# these comments are generated into doc/HTML help where the parameter table is
+# the deliverable and the signature is not adjacent to it. So an undocumented
+# parameter now falls back to its DECLARED TYPE rather than an empty shell, and
+# ruling D-3's structure/meaning split is unchanged: a harvested MEANING still
+# wins over the type wherever the source states one.
+Check 'AFlag falls back to its DECLARED TYPE (structure that reflects the code)' `
+  ($doc -match 'name="AFlag"><!-- drag-lint:auto type -->Boolean</param>')
+Check 'AUntyped (no comment, no type) is the one left with an EMPTY body' `
+  ($doc -match 'name="AUntyped"><!-- drag-lint:auto --></param>')
 
 $raw  = & $Exe lint-all --db $db --json 2>$null
 $find = @()
@@ -101,9 +112,15 @@ $nd = @($find | Where-Object { $_.rule -eq 'doc-param-no-description' })
 
 Write-Host ''
 Write-Host 'doc-param-no-description' -ForegroundColor Cyan
-Check 'it fires for the param with no description' (@($nd | Where-Object { $_.message -match 'AFlag' }).Count -ge 1) `
+Check 'it fires for the param with a genuinely empty body' (@($nd | Where-Object { $_.message -match 'AUntyped' }).Count -ge 1) `
   "(got $($nd.Count) finding(s) of this rule)"
-Check 'it does NOT fire for the param that has one'  (@($nd | Where-Object { $_.message -match 'APath' }).Count -eq 0)
+Check 'it does NOT fire for the param whose meaning was harvested' (@($nd | Where-Object { $_.message -match 'APath' }).Count -eq 0)
+# The 2026-08-10 type baseline is what removes this rule's bulk: before it, every
+# undocumented parameter in the corpus was an empty tag and the rule fired 574
+# times on drag-lint's own source. A typed parameter now carries its type, so the
+# rule is left reporting only what it can never fill in for itself.
+Check 'it does NOT fire for a param that fell back to its declared type' `
+  (@($nd | Where-Object { $_.message -match 'AFlag' }).Count -eq 0)
 # RAISED from hint to warning by the 2026-08-09 ruling: "If method has params and
 # they are not documented it should be reported as warning."
 Check 'its severity is warning' (($nd.Count -gt 0) -and (@($nd | Where-Object { $_.severity -ne 'warning' }).Count -eq 0)) `

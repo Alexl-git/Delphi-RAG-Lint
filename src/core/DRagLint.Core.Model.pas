@@ -27,7 +27,7 @@ type
   TSymbolKindHelper = record helper for TSymbolKind
     /// <returns><!-- drag-lint:auto -->Observed: KindText[Self].</returns>
     function ToText: string                                          ;
-    /// <param name="AText"><!-- drag-lint:auto --></param>
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
     /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -725,7 +725,7 @@ type
     ImpactSummary: TArray<TImpactLevel> ;
   end;
 
-/// <param name="AFormat"><!-- drag-lint:auto --></param>
+/// <param name="AFormat"><!-- drag-lint:auto type -->TDocFormat</param>
 /// <returns><!-- drag-lint:auto -->Observed: 'xmldoc'; 'pasdoc'; 'oneline'; 'loose';
 /// 'unknown'.</returns>
 /// <remarks>
@@ -735,7 +735,7 @@ type
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DocFormatToStr     (AFormat : TDocFormat     ): string;
-/// <param name="ASection"><!-- drag-lint:auto --></param>
+/// <param name="ASection"><!-- drag-lint:auto type -->TUnitUseSection</param>
 /// <returns><!-- drag-lint:auto -->Observed: 'interface'; 'implementation'; 'program';
 /// 'package'; 'unknown'.</returns>
 /// <remarks>
@@ -745,7 +745,7 @@ function DocFormatToStr     (AFormat : TDocFormat     ): string;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function UnitUseSectionToStr(ASection: TUnitUseSection): string;
-/// <param name="AStr"><!-- drag-lint:auto --></param>
+/// <param name="AStr"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: uusInterface; uusImplementation; uusProgram;
 /// uusPackage.</returns>
 /// <remarks>
@@ -756,7 +756,7 @@ function UnitUseSectionToStr(ASection: TUnitUseSection): string;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function StrToUnitUseSection(const AStr: string): TUnitUseSection          ;
-/// <param name="S"><!-- drag-lint:auto --></param>
+/// <param name="S"><!-- drag-lint:auto type -->const string</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.Core.Model.ExceptionsToJson (DRagLint.Core.Model.pas), DRagLint.Core.Model.ParamsToJson (DRagLint.Core.Model.pas) (+10 more)
@@ -765,7 +765,7 @@ function StrToUnitUseSection(const AStr: string): TUnitUseSection          ;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function JsonEscape(const S: string): string                               ;
-/// <param name="AParams"><!-- drag-lint:auto --></param>
+/// <param name="AParams"><!-- drag-lint:auto type -->const TArray&lt;TDocParam &gt;</param>
 /// <returns><!-- drag-lint:auto -->Observed: '[' + string.Join(',', Parts) + ']'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -776,7 +776,7 @@ function JsonEscape(const S: string): string                               ;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParamsToJson    (const AParams    : TArray<TDocParam    >): string;
-/// <param name="AExceptions"><!-- drag-lint:auto --></param>
+/// <param name="AExceptions"><!-- drag-lint:auto type -->const TArray&lt;TDocException&gt;</param>
 /// <returns><!-- drag-lint:auto -->Observed: '[' + string.Join(',', Parts) + ']'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -787,7 +787,7 @@ function ParamsToJson    (const AParams    : TArray<TDocParam    >): string;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExceptionsToJson(const AExceptions: TArray<TDocException>): string;
-/// <param name="ASeeAlso"><!-- drag-lint:auto --></param>
+/// <param name="ASeeAlso"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
 /// <returns><!-- drag-lint:auto -->Observed: '[' + string.Join(',', Parts) + ']'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -1092,7 +1092,7 @@ function IntrinsicSignature(const AName: string): string;
 /// <summary>True when AName is a Delphi compiler intrinsic -- a built-in the
 /// compiler recognizes by name and compiles inline, which is therefore never a
 /// symbol in any index.</summary>
-/// <param name="AName"><!-- drag-lint:auto --></param>
+/// <param name="AName"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: IntrinsicSignature(AName) &lt;&gt; ''.</returns>
 /// <remarks>
 /// Callers use this to keep intrinsics out of derived facts. It is
@@ -1114,7 +1114,7 @@ function IsCompilerIntrinsic(const AName: string): Boolean;
 /// <summary>Unit-qualified prefix of a qualified symbol name
 /// ('Vcl.Controls.TWinControl' -&gt; 'Vcl.Controls'); '' when the name carries no
 /// dotted prefix at all.</summary>
-/// <param name="AQName"><!-- drag-lint:auto --></param>
+/// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: ''; Copy(AQName, 1, P - 1).</returns>
 /// <remarks>
 /// Known limitation: splits on the LAST dot, so a NESTED type
@@ -1138,7 +1138,7 @@ function DeclaringUnitOfQName(const AQName: string): string;
 /// substring before the FIRST '.' ('Vcl.Controls' -&gt; 'Vcl'; 'Vcl.StdCtrls'
 /// -&gt; 'Vcl'; 'FMX.Controls.Win' -&gt; 'FMX'; 'Winapi.Windows' -&gt;
 /// 'Winapi').</summary>
-/// <param name="AUnitName"><!-- drag-lint:auto --></param>
+/// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
 /// <returns>The segment, or '' when AUnitName carries no dot at all.</returns>
 /// <remarks>
 /// An UNDOTTED unit name -- a hermetic-test unit ('VclKit') or real

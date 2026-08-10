@@ -19,7 +19,7 @@ type
 
 /// <summary>Maps a TNamingConfig case string ('PascalCase' | 'camelCase' |
 /// 'UPPER_CASE') to a TNameStyle. Unknown/empty -> nsPascalCase.</summary>
-/// <param name="AConfigCase"><!-- drag-lint:auto --></param>
+/// <param name="AConfigCase"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->Observed: nsCamelCase; nsUpperCase; nsPascalCase.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->

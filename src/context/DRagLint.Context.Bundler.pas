@@ -25,15 +25,15 @@ type
   /// </remarks>
   TContextBundler = class
     public
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AVerb"><!-- drag-lint:auto --></param>
-      /// <param name="AQName"><!-- drag-lint:auto --></param>
-      /// <param name="ACallerContext"><!-- drag-lint:auto --></param>
-      /// <param name="AMaxCallers"><!-- drag-lint:auto --></param>
-      /// <param name="AIncludeDocs"><!-- drag-lint:auto --></param>
-      /// <param name="AIncludeSurface"><!-- drag-lint:auto --></param>
-      /// <param name="AIncludeImpl"><!-- drag-lint:auto --></param>
-      /// <param name="AExcludeDfmFields"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AVerb"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ACallerContext"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AMaxCallers"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AIncludeDocs"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="AIncludeSurface"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="AIncludeImpl"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="AExcludeDfmFields"><!-- drag-lint:auto type -->Boolean = True</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
@@ -50,7 +50,7 @@ type
       class function Build(
         const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
         AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True): TContextBundle;
-      /// <param name="AText"><!-- drag-lint:auto --></param>
+      /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Round(Length(AText) / 3.7).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -63,7 +63,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function EstimateTokens(const AText: string)          : Integer;
-      /// <param name="ABundle"><!-- drag-lint:auto --></param>
+      /// <param name="ABundle"><!-- drag-lint:auto type -->const TContextBundle</param>
       /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -79,7 +79,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function RenderMarkdown(const ABundle: TContextBundle): string ;
-      /// <param name="ABundle"><!-- drag-lint:auto --></param>
+      /// <param name="ABundle"><!-- drag-lint:auto type -->const TContextBundle</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
@@ -92,7 +92,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function RenderJson(const ABundle: TContextBundle)    : string ;
-      /// <param name="ABundle"><!-- drag-lint:auto --></param>
+      /// <param name="ABundle"><!-- drag-lint:auto type -->const TContextBundle</param>
       /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

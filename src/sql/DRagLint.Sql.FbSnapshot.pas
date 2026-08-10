@@ -68,8 +68,8 @@ type
   /// </remarks>
   TFbSnapshot = class
     public
-      /// <param name="AConnectionString"><!-- drag-lint:auto --></param>
-      /// <param name="ASqliteStore"><!-- drag-lint:auto --></param>
+      /// <param name="AConnectionString"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ASqliteStore"><!-- drag-lint:auto type -->const TSQLiteSymbolStore</param>
       /// <returns><!-- drag-lint:auto -->Observed: Default       (TFbSnapshotStats).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

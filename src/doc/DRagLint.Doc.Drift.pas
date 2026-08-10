@@ -109,13 +109,20 @@ type
     /// Raises facts and the fresh facts-block render. Must not be nil.</param>
     /// <param name="ASym">The documented symbol (routine).</param>
     /// <param name="ADoc">The parsed DocInsight comment currently on the decl.</param>
+    /// <param name="AIncludeSeeAlso">Must match the flag the DOCUMENTER used when
+    /// it wrote the managed block (`document`'s --seealso, default True since the
+    /// seealso-on-by-default change). The staleness test regenerates the block and
+    /// compares, so a checker that regenerates WITHOUT &lt;seealso&gt; while the
+    /// writer emitted it reports every such block as stale: that mismatch produced
+    /// 514 false 'managed facts block is out of date' findings on this repo, while
+    /// `document --unit` on the same files reported "nothing to document".</param>
     /// <returns>The drift findings, in a stable per-signal order.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
     /// Calls: ContainsText, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile, DRagLint.Doc.Drift.GroupParamNames, DRagLint.Doc.Drift.MakeFinding (+17 more)
     /// Returns: Findings.ToArray
-    /// Complexity: 48 (cyclomatic, outer body), 368 lines (full implementation)
+    /// Complexity: 48 (cyclomatic, outer body), 372 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
     /// <seealso cref="DRagLint.Doc.Drift.DescReadsInputOnly"/>
@@ -124,13 +131,6 @@ type
     /// <seealso cref="DRagLint.Doc.Drift.ExtractCTokens"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="AIncludeSeeAlso">Must match the flag the DOCUMENTER used when
-    /// it wrote the managed block (`document`'s --seealso, default True since the
-    /// seealso-on-by-default change). The staleness test regenerates the block and
-    /// compares, so a checker that regenerates WITHOUT &lt;seealso&gt; while the
-    /// writer emitted it reports every such block as stale: that mismatch produced
-    /// 514 false 'managed facts block is out of date' findings on this repo, while
-    /// `document --unit` on the same files reported "nothing to document".</param>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
       const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean = True): TArray<TDocDriftFinding>;
   end;

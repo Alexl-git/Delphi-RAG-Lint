@@ -463,8 +463,8 @@ function ResolveReadDbs(const AManifest: TIndexManifest;
 
 type
   /// <summary>"Does the index at ADbPath contain a files row for AFilePath?"</summary>
-  /// <param name="ADbPath"><!-- drag-lint:auto --></param>
-  /// <param name="AFilePath"><!-- drag-lint:auto --></param>
+  /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
   /// <remarks>
   /// A callback so the ordering rules stay pure and testable while the
   /// actual SQL lives with the storage layer. Implementations must normalise both

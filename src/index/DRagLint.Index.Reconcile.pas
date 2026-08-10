@@ -95,8 +95,8 @@ type
       /// <summary><!-- drag-lint:auto -->Parse the .dpr uses clause; return absolute
       /// paths for each listed unit. Uses the same logic as TClosureResolver.ParseDprUses
       /// but returns only the file paths (we need the absolute-path set, not unit names).</summary>
-      /// <param name="ADprPath"><!-- drag-lint:auto --></param>
-      /// <param name="AMembers"><!-- drag-lint:auto --></param>
+      /// <param name="ADprPath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AMembers"><!-- drag-lint:auto type -->TDictionary&lt;string, string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)
@@ -115,8 +115,8 @@ type
       // Parse the .dproj DCCReference ItemGroup; add absolute paths.
       /// <summary><!-- drag-lint:auto -->Parse the .dproj DCCReference ItemGroup; add
       /// absolute paths.</summary>
-      /// <param name="ADprojPath"><!-- drag-lint:auto --></param>
-      /// <param name="AMembers"><!-- drag-lint:auto --></param>
+      /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AMembers"><!-- drag-lint:auto type -->TDictionary&lt;string, string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)
@@ -133,8 +133,8 @@ type
 
       // Resolve a path token relative to ABaseDir.
       /// <summary><!-- drag-lint:auto -->Resolve a path token relative to ABaseDir.</summary>
-      /// <param name="AToken"><!-- drag-lint:auto --></param>
-      /// <param name="ABaseDir"><!-- drag-lint:auto --></param>
+      /// <param name="AToken"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: ''; TPath.GetFullPath(AToken);
       /// TPath.GetFullPath(TPath.Combine(ABaseDir, AToken)).</returns>
       /// <remarks>
@@ -153,8 +153,8 @@ type
       // Build a relative path from ABase to AFile (backslash sep).
       /// <summary><!-- drag-lint:auto -->Build a relative path from ABase to AFile
       /// (backslash sep).</summary>
-      /// <param name="AFile"><!-- drag-lint:auto --></param>
-      /// <param name="ABase"><!-- drag-lint:auto --></param>
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ABase"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Observed: Copy(NormFile, Length(NormBase) + 1,
       /// MaxInt); NormFile.</returns>
       /// <remarks>
@@ -176,8 +176,8 @@ type
       /// from the closure (pass TProjectResolver.ResolveLibraryPaths).
       /// AStaleGlobs: extra stale glob patterns (e.g. from manifest indexes.exclude)
       /// applied on top of the built-in heuristics.</summary>
-      /// <param name="ALibraryRoots"><!-- drag-lint:auto --></param>
-      /// <param name="AStaleGlobs"><!-- drag-lint:auto --></param>
+      /// <param name="ALibraryRoots"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <param name="AStaleGlobs"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas) ? (+65 more)

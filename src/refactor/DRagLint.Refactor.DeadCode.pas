@@ -19,9 +19,9 @@ type
   /// </remarks>
   TDeadCodeFinder = class
     public
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
-      /// <param name="AKind"><!-- drag-lint:auto --></param>
-      /// <param name="AIncludePrivate"><!-- drag-lint:auto --></param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+      /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AIncludePrivate"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Observed: AStore.FindSymbolsWithNoCallers(AKind,
       /// AIncludePrivate).</returns>
       /// <remarks>
@@ -34,8 +34,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Find(const AStore: ISymbolStore; const AKind: string; AIncludePrivate: Boolean): TArray<TSymbol>;
-      /// <param name="ASymbols"><!-- drag-lint:auto --></param>
-      /// <param name="AStore"><!-- drag-lint:auto --></param>
+      /// <param name="ASymbols"><!-- drag-lint:auto type -->const TArray&lt;TSymbol&gt;</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <returns><!-- drag-lint:auto -->Observed: Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
