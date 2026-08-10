@@ -38,6 +38,11 @@ type
     FStore      : ISymbolStore;
     // Lowercased simple type name -> candidate class/interface/record symbols.
     FNameToCands: TObjectDictionary<string, TList<TSymbol>>;
+    // Option 4: lowercased routine name -> candidate UNIT-LEVEL routines (free
+    // procedures/functions). Deliberately separate from FNameToCands: that map
+    // holds TYPES for receiver typing, and a bare call resolves against
+    // routines, so merging them would make every lookup filter by kind.
+    FNameToRoutines: TObjectDictionary<string, TList<TSymbol>>;
     // Declaring file id -> the resolved target file ids it can see (uses graph).
     FFileScope  : TObjectDictionary<Int64, TList<Int64>>;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
@@ -64,6 +69,21 @@ type
     /// insensitively) and whose Kind is in AKinds. Default(TSymbol) (Id=0) when
     /// none.</summary>
     function FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet): TSymbol;
+    /// <summary>Choose one target from a set of same-named candidates, narrowing
+    /// by argument count when the set is an overload set. Sets AConfidence
+    /// ('certain' | 'ambiguous') and returns the chosen symbol id, or 0 when
+    /// AMatches is empty.</summary>
+    /// <param name="AMatches">Candidates already filtered by name and scope.
+    ///  Not modified. Nil is treated as empty.</param>
+    /// <param name="AArgsKnown">False when the call site could not be read, in
+    ///  which case arity is not consulted and the first candidate answers.</param>
+    /// <remarks>Arity NARROWS an existing name match and never widens one: when
+    ///  it cannot decide -- several candidates of one arity, or none that fits --
+    ///  the answer is the pre-arity one, still marked uncertain. Shared by the
+    ///  method-chain and unit-level rungs so the two cannot drift apart on how a
+    ///  tie is broken.</remarks>
+    function PickFromMatches(AMatches: TList<TSymbol>; AArgCount: Integer;
+      AArgsKnown: Boolean; out AConfidence: string): Int64;
     /// <summary>Given a resolved receiver TYPE symbol id, look up a method named
     /// AMethodName on the type's own children + its transitive ancestors. Sets
     /// AConfidence ('certain' one surviving candidate | 'ambiguous' >1) and
@@ -100,6 +120,31 @@ type
     ///  neither duplicate nor pre-empt.</remarks>
     function LookupInLexicalScopes(AEnclosingSymbolId: Int64; const AName: string;
       out AConfidence: string): Int64;
+    /// <summary>Option 4: the UNIT-LEVEL rung of Delphi's bare-call chain. Looks
+    /// for a free routine named AName, first in the call site's OWN unit (either
+    /// section), then in the units it USES (interface section only). Returns the
+    /// target symbol id, or 0 when no unit in scope declares the name.</summary>
+    /// <param name="ACallFileId">refs.file_id of the call site -- the file whose
+    ///  uses clause defines what is visible.</param>
+    /// <param name="AArgCount">Argument count at the call site, used only to
+    ///  narrow an overload set, exactly as LookupMethodOnType does.</param>
+    /// <param name="AArgsKnown">False when the call site could not be read; arity
+    ///  is then not consulted at all.</param>
+    /// <returns>0 when the name is declared by no unit in scope -- the caller
+    ///  leaves the ref unresolved, which is the right answer for an intrinsic or
+    ///  an RTL routine living in the separate library index.</returns>
+    /// <remarks>Runs AFTER the lexical walk and after the enclosing class's own
+    ///  methods, because that is the order the compiler binds in: a nested
+    ///  routine shadows a method, and a method shadows a free routine of the same
+    ///  name. Running it earlier would silently retarget correct edges.
+    ///  OWN UNIT WINS OUTRIGHT over any used unit, and the search stops at the
+    ///  first rung that matches -- a used unit is never consulted for a name the
+    ///  call's own unit declares. The implementation-section filter on the second
+    ///  rung is the visibility check that keeps this honest: without it a bare
+    ///  call binds to routines it could not actually see, which measured as 41
+    ///  WRONG edges when the yield was first estimated without one.</remarks>
+    function LookupUnitLevelRoutine(ACallFileId: Int64; const AName: string;
+      AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
     /// <summary>Type the receiver expression left of the call. Returns the
     /// receiver TYPE symbol id (0 when the receiver kind is unhandled or its type
     /// is unresolvable). AReceiverExpr is '' for a bare / Self call, in which case
@@ -601,6 +646,7 @@ begin
   inherited Create;
   FStore      := AStore;
   FNameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
+  FNameToRoutines:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
@@ -612,6 +658,7 @@ begin
   FLineCache .Free;
   FChildCache.Free;
   FFileScope .Free;
+  FNameToRoutines.Free;
   FNameToCands.Free;
   FStore:= nil;
   inherited;
@@ -633,6 +680,16 @@ begin
     if Lc = '' then Continue;
     if not FNameToCands.ContainsKey(Lc) then FNameToCands.Add(Lc, TList<TSymbol>.Create);
     FNameToCands[Lc].Add(S);
+  end;
+  // 1b. Option 4: candidate UNIT-LEVEL routines by lowercased name. Same shape
+  // as the type map above, and built in the same single pass over the DB so the
+  // resolver still costs two bulk reads rather than a query per call site.
+  for S in FStore.GetUnitLevelRoutines do
+  begin
+    Lc:= LowerCase(S.Name);
+    if Lc = '' then Continue;
+    if not FNameToRoutines.ContainsKey(Lc) then FNameToRoutines.Add(Lc, TList<TSymbol>.Create);
+    FNameToRoutines[Lc].Add(S);
   end;
   // 2. per-file in-scope target file ids from the uses graph.
   Edges:= FStore.GetUnitScopeEdges;
@@ -735,22 +792,73 @@ begin
     if (S.Kind in AKinds) and SameText(S.Name, AName) then Exit(S);
 end;
 
+function TCallResolver.PickFromMatches(AMatches: TList<TSymbol>; AArgCount: Integer;
+  AArgsKnown: Boolean; out AConfidence: string): Int64;
+var
+  Fit   : TList<TSymbol>;
+  S     : TSymbol       ;
+  Lo, Hi: Integer       ;
+begin
+  Result     := 0;
+  AConfidence:= '';
+  if (AMatches = nil) or (AMatches.Count = 0) then Exit; // not found -> 0 / '?'
+  if AMatches.Count = 1 then
+  begin
+    Result     := AMatches[0].Id;
+    AConfidence:= 'certain';
+    Exit;
+  end;
+
+  // B1: several candidates share the name -- an OVERLOAD SET, or a class and an
+  // ancestor both declaring the method. Argument count separates the first kind
+  // and says nothing about the second, which is exactly the intended reach:
+  // before this, `First` won, so for an overload set the LOWEST-id declaration
+  // answered every call site. In YADF that made a 2-arg delegator whose body
+  // calls the 3-arg implementation resolve to ITSELF, documenting a phantom
+  // self-recursion while the real 603-line function recorded no callers at all.
+  //
+  // A default parameter makes a candidate accept a RANGE, so the test is
+  // containment, not equality.
+  Fit:= TList<TSymbol>.Create;
+  try
+    if AArgsKnown then
+      for S in AMatches do
+        if SignatureArityRange(S.Signature, Lo, Hi) and (AArgCount >= Lo) and (AArgCount <= Hi) then
+          Fit.Add(S);
+
+    if Fit.Count = 1 then
+    begin
+      Result     := Fit[0].Id;
+      AConfidence:= 'certain';
+      Exit;
+    end;
+
+    // Arity did not settle it. NARROWING ONLY: when several candidates fit, the
+    // first of THOSE is a better guess than the first overall; when none fits
+    // (an unreadable call site, a shape the counter does not model, a signature
+    // it declined to parse) fall back to the pre-B1 answer exactly. Either way
+    // the site still resolves and is still marked uncertain -- arity may improve
+    // an answer, never remove one.
+    if Fit.Count > 1 then Result:= Fit[0].Id else Result:= AMatches[0].Id;
+    AConfidence:= 'ambiguous';
+  finally
+    Fit.Free;
+  end;
+end;
+
 function TCallResolver.LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string;
   AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
 var
   Matches: TList<TSymbol>;
-  Fit    : TList<TSymbol>;
   Kids   : TList<TSymbol>;
   S      : TSymbol       ;
   A      : TTypeAncestor ;
-  Lo, Hi : Integer       ;
 begin
   Result     := 0;
   AConfidence:= '';
   if ATypeSymbolId <= 0 then Exit;
 
   Matches:= TList<TSymbol>.Create;
-  Fit    := TList<TSymbol>.Create;
   try
     // 1. the type's own methods.
     Kids:= ChildrenOf(ATypeSymbolId);
@@ -770,47 +878,8 @@ begin
         if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
     end;
 
-    if Matches.Count = 0 then Exit; // not found on the chain -> 0 / '?'
-    if Matches.Count = 1 then
-    begin
-      Result     := Matches[0].Id;
-      AConfidence:= 'certain';
-      Exit;
-    end;
-
-    // B1: several candidates share the name -- an OVERLOAD SET, or a class and
-    // an ancestor both declaring the method. Argument count separates the first
-    // kind and says nothing about the second, which is exactly the intended
-    // reach: before this, `First` won, so for an overload set the LOWEST-id
-    // declaration answered every call site. In YADF that made a 2-arg delegator
-    // whose body calls the 3-arg implementation resolve to ITSELF, documenting a
-    // phantom self-recursion while the real 603-line function recorded no
-    // callers at all.
-    //
-    // A default parameter makes a candidate accept a RANGE, so the test is
-    // containment, not equality.
-    if AArgsKnown then
-      for S in Matches do
-        if SignatureArityRange(S.Signature, Lo, Hi) and (AArgCount >= Lo) and (AArgCount <= Hi) then
-          Fit.Add(S);
-
-    if Fit.Count = 1 then
-    begin
-      Result     := Fit[0].Id;
-      AConfidence:= 'certain';
-      Exit;
-    end;
-
-    // Arity did not settle it. NARROWING ONLY: when several candidates fit, the
-    // first of THOSE is a better guess than the first overall; when none fits
-    // (an unreadable call site, a shape the counter does not model, a signature
-    // it declined to parse) fall back to the pre-B1 answer exactly. Either way
-    // the site still resolves and is still marked uncertain -- arity may improve
-    // an answer, never remove one.
-    if Fit.Count > 1 then Result:= Fit[0].Id else Result:= Matches[0].Id;
-    AConfidence:= 'ambiguous';
+    Result:= PickFromMatches(Matches, AArgCount, AArgsKnown, AConfidence);
   finally
-    Fit    .Free;
     Matches.Free;
   end;
 end;
@@ -873,6 +942,42 @@ begin
       if (Parent.Id <= 0) or not (Parent.Kind in METHOD_KINDS) then Exit;
       ScopeId:= Parent.Id;
     end;
+  finally
+    Matches.Free;
+  end;
+end;
+
+function TCallResolver.LookupUnitLevelRoutine(ACallFileId: Int64; const AName: string;
+  AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
+var
+  Cands  : TList<TSymbol>;
+  Matches: TList<TSymbol>;
+  S      : TSymbol       ;
+begin
+  Result     := 0;
+  AConfidence:= '';
+  if (ACallFileId <= 0) or (AName = '') then Exit;
+  if not FNameToRoutines.TryGetValue(LowerCase(AName), Cands) then Exit;
+
+  Matches:= TList<TSymbol>.Create;
+  try
+    // RUNG 1 -- the call's OWN unit. Both sections are visible from inside the
+    // unit, and a routine declared here shadows any same-named routine a used
+    // unit exports, so this rung answers alone whenever it matches at all.
+    for S in Cands do
+      if S.FileId = ACallFileId then Matches.Add(S);
+    if Matches.Count > 0 then
+      Exit(PickFromMatches(Matches, AArgCount, AArgsKnown, AConfidence));
+
+    // RUNG 2 -- units this file USES. Only the INTERFACE section is reachable
+    // from another unit; an implementation-section routine is private to its own
+    // unit no matter what the uses clause says. CandInScope supplies the uses
+    // relation itself, from the same resolved edges receiver typing uses, so a
+    // unit that is merely present in the index but not used is never consulted.
+    for S in Cands do
+      if (S.FileId <> ACallFileId) and SameText(S.Section, 'interface')
+         and CandInScope(ACallFileId, S.FileId) then Matches.Add(S);
+    Result:= PickFromMatches(Matches, AArgCount, AArgsKnown, AConfidence);
   finally
     Matches.Free;
   end;
@@ -993,13 +1098,50 @@ begin
   // 2. type the receiver -> a class/interface/record symbol id.
   TypeId:= TypeReceiver(ACallRef, Rcv);
   Result.ReceiverTypeSymbolId:= TypeId; // 0 when the receiver type is unknown
-  if TypeId <= 0 then Exit; // unhandled shape / unresolvable type -> no edge
 
   // 3. look the method up on the resolved type + its ancestor chain.
-  Target:= LookupMethodOnType(TypeId, ACallRef.NameText, ArgCount, ArgsKnown, Conf);
-  if Target <= 0 then Exit; // method not found on the chain -> '?' bucket, no edge
-  Result.TargetSymbolId:= Target;
-  Result.Confidence    := Conf;
+  if TypeId > 0 then
+  begin
+    Target:= LookupMethodOnType(TypeId, ACallRef.NameText, ArgCount, ArgsKnown, Conf);
+    if Target > 0 then
+    begin
+      Result.TargetSymbolId:= Target;
+      Result.Confidence    := Conf;
+      Exit;
+    end;
+  end;
+
+  // 4. OPTION 4 -- the UNIT-LEVEL rung, and the LAST one. Reached only for a
+  // BARE call that no nearer scope claimed: not a nested routine, and not a
+  // method of the enclosing class or its ancestors. That ordering is the whole
+  // correctness argument -- running this earlier would rebind calls that today
+  // resolve correctly to a method.
+  //
+  // A DOTTED call is excluded outright. `Obj.Format` names a member of Obj and
+  // must never bind to a free `Format`, so the guard is Rcv = '' and not merely
+  // "the receiver failed to type": an unresolvable receiver is unknown, not
+  // absent, and treating the two alike is how a resolver invents edges.
+  //
+  // Note this is now also the path for a bare call whose receiver typing yielded
+  // nothing at all (TypeId = 0) -- previously an early Exit. A free routine
+  // calling another free routine in a unit it uses has no receiver to type, and
+  // that shape was the larger half of what this rung recovers.
+  if Rcv = '' then
+  begin
+    Target:= LookupUnitLevelRoutine(ACallRef.FileId, ACallRef.NameText, ArgCount, ArgsKnown, Conf);
+    if Target > 0 then
+    begin
+      // ReceiverTypeSymbolId is CLEARED, matching the lexical rung above. For a
+      // bare call inside a method, TypeReceiver returns the enclosing class --
+      // the implicit Self, not a receiver the source wrote. Leaving it set would
+      // record "this call went through a TFoo receiver" for a call that has no
+      // receiver at all, and the two bare-call rungs would disagree about the
+      // same field.
+      Result.ReceiverTypeSymbolId:= 0;
+      Result.TargetSymbolId:= Target;
+      Result.Confidence    := Conf;
+    end;
+  end;
 end;
 
 end.

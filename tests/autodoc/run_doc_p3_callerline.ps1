@@ -69,8 +69,9 @@
 
   B  fixtures\docp3\callerline_mixed.pas + callerline_mixedcross.pas, indexed
      TOGETHER. Ping's caller list holds one 'certain' entry (NearCaller, same
-     unit, real call_edges row) and one 'unverified' entry (FarCaller, cross
-     unit, no row). This scenario is NOT optional and it is not redundant with
+     unit, real call_edges row) and one 'unverified' entry (FarCaller, which
+     calls Ping through a receiver of a type no unit declares, so the site has
+     no target by construction). This scenario is NOT optional and not redundant with
      A: a suite built only from uniform lists passes identically whether the
      marker is correctly suppressed or never emitted at all. Only a mixed list
      tells those two apart.
@@ -78,9 +79,19 @@
      BOTH scenarios' preconditions are re-derived FROM THE INDEX
      (dump-call-edges and ambiguous-calls), never from the rendered line the
      scenario is about to assert on. If the resolver ever learns to resolve
-     B's cross-unit site, or stops resolving A's same-unit ones, the
+     B's unresolved site, or stops resolving A's same-unit ones, the
      precondition fails and names the fixture, instead of leaving the
      scenario vacuous.
+
+     THIS ALREADY HAPPENED, AND IT IS WHY B'S FIXTURE LOOKS THE WAY IT DOES.
+     B's unverified half was originally a plain cross-unit BARE call. Option 4
+     (the unit-level rung: a bare call now resolves across a uses edge) made it
+     resolve, both entries turned 'certain', and these preconditions failed by
+     name rather than letting the marker assertions pass over a list that was no
+     longer mixed. The lesson taken: a fixture must not rest on a LIMITATION,
+     because the next improvement dissolves it. FarCaller now calls through a
+     receiver whose type is declared nowhere -- unresolvable by construction, and
+     the shape most of the real remainder actually has.
 
   LOAD-BEARING PROOFS (see task-4-report.md for the transcripts). Each mutation
   leaves the mechanism reachable and changes only its answer, and each reddens a

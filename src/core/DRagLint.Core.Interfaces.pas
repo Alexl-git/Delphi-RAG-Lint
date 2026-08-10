@@ -551,6 +551,21 @@ type
     /// TCallResolver's per-file in-scope set (mirrors ResolveAncestry's
     /// FileScope). Unresolved uses rows (NULL target) are excluded.</summary>
     function GetUnitScopeEdges: TArray<TFileScopeEdge>;
+    /// <summary>Option 4: every UNIT-LEVEL routine -- a procedure/function whose
+    /// parent symbol is the unit itself (id, file_id, name, signature, section
+    /// populated). Backs TCallResolver's unit-level rung for a BARE call, which
+    /// is the step Delphi takes after the lexical scopes and the enclosing
+    /// class's methods, and which no other candidate set covers.</summary>
+    /// <returns>Empty when the index holds no unit-level routines. Methods
+    ///  (parent = a class/record/interface) and nested routines (parent = a
+    ///  routine) are excluded by construction -- those rungs belong to
+    ///  LookupMethodOnType and LookupInLexicalScopes respectively.</returns>
+    /// <remarks>Section is load-bearing for the caller, not decoration: an
+    ///  implementation-section routine is reachable only from its OWN unit,
+    ///  while a bare call from another unit may bind only to an interface-section
+    ///  one. Returning both and letting the caller filter keeps that visibility
+    ///  rule in one place.</remarks>
+    function GetUnitLevelRoutines: TArray<TSymbol>;
     /// <summary>v14 (D5): every call_edges row (ref_id, target_symbol_id,
     /// confidence, receiver_type_symbol_id), unordered. Diagnostic dump backing
     /// the dump-call-edges verb / tests; not for production queries (use

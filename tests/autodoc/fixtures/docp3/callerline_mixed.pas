@@ -6,9 +6,16 @@ interface
 //
 // Ping is called twice. NearCaller sits in THIS unit and the call resolver
 // writes a real call_edges row for that site, so it reaches the caller list
-// 'certain'. FarCaller sits in callerline_mixedcross.pas; that cross-unit
-// site gets no call_edges row in this index, so it reaches the list
+// 'certain'. FarCaller sits in callerline_mixedcross.pas and reaches Ping
+// through a receiver whose type is declared in no unit at all, so that site
+// can have no target and gets no call_edges row, reaching the list
 // 'unverified'. One list, two different Confidence values.
+//
+// FarCaller was originally a plain cross-unit BARE call, unresolved only
+// because the resolver could not cross a uses edge. Option 4 removed that
+// limitation and this fixture's precondition failed by name, as designed. The
+// unverified half now rests on an untypable receiver instead -- something no
+// resolver improvement can dissolve. See callerline_mixedcross.pas.
 //
 // This shape is the only one that can tell "the marker is correctly
 // SUPPRESSED on a uniform list" apart from "the marker is never EMITTED at

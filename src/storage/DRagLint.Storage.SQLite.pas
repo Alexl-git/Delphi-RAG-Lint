@@ -246,6 +246,7 @@ type
       function PurgeLocals: Int64;
       function GetTypeCandidates: TArray<TSymbol>;
       function GetUnitScopeEdges: TArray<TFileScopeEdge>;
+      function GetUnitLevelRoutines: TArray<TSymbol>;
       function DumpAllCallEdges: TArray<TCallEdge>;
       function GetAmbiguousCalls(const AQName, AFilePath: string): TArray<TResolvedCaller>;
       function FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
@@ -1938,6 +1939,50 @@ begin
       E.FileId      := Q.FieldByName('file_id'       ).AsLargeInt;
       E.TargetFileId:= Q.FieldByName('target_file_id').AsLargeInt;
       List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.GetUnitLevelRoutines: TArray<TSymbol>;
+{ Option 4: every procedure/function parented directly by a UNIT symbol -- the
+  free routines. The join on parent kind is what makes this exact rather than
+  approximate: filtering on `parent_id IS NOT NULL` would also sweep in methods
+  (parent = class/record) and nested routines (parent = a routine), and both of
+  those already have their own resolution rung. Measured on this repo's own
+  index: 895 rows, 218 interface / 677 implementation.
+  Signature is carried because the caller narrows an overload set by arity, and
+  Section because it decides cross-unit visibility. }
+var
+  Q   : TFDQuery      ;
+  List: TList<TSymbol>;
+  S   : TSymbol       ;
+begin
+  List:= TList<TSymbol>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT s.id, s.file_id, s.parent_id, s.kind, s.name, ' +
+                   '       s.signature, s.section ' +
+                   'FROM symbols s ' +
+                   'JOIN symbols p ON p.id = s.parent_id AND p.kind = ''unit'' ' +
+                   'WHERE s.kind IN (''procedure'',''function'')';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      S:= Default(TSymbol);
+      S.Id       := Q.FieldByName('id'       ).AsLargeInt;
+      S.FileId   := Q.FieldByName('file_id'  ).AsLargeInt;
+      S.ParentId := Q.FieldByName('parent_id').AsLargeInt;
+      S.Kind     := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
+      S.Name     := Q.FieldByName('name'     ).AsString;
+      S.Signature:= Q.FieldByName('signature').AsString;
+      S.Section  := Q.FieldByName('section'  ).AsString;
+      List.Add(S);
       Q.Next;
     end;
     Result:= List.ToArray;
