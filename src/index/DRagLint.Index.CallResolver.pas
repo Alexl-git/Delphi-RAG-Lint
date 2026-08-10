@@ -1368,6 +1368,12 @@ begin
     Line:= Lines[ACallRef.StartLine - 1];
     Rcv := ExtractReceiverExpr(Line, ACallRef.StartCol);
   end;
+  { v20: hand the receiver text back so ResolveCallTargets can persist it. Set
+    HERE, immediately after it is computed and before any of the resolution
+    rungs can Exit, so every return path carries it -- a path that leaves
+    earlier legitimately has '' (no name, or no readable source line). This is a
+    pure record write; the value was already being computed and dropped. }
+  Result.ReceiverText:= Rcv;
 
   // 1b. B1: count the arguments at this site, from the same cached lines. Unlike
   // the receiver scan -- which reads LEFT and cannot leave the line -- an

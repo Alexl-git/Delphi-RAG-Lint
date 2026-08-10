@@ -3,7 +3,11 @@ unit DRagLint.Storage.Schema;
 interface
 
 const
-  SCHEMA_VERSION = 19;
+  { v20: refs.receiver_text -- the call-site receiver, so an unresolved call can
+    be attributed to the type it was actually written against instead of to every
+    symbol sharing its leaf name. Retrofitted by a Migrate() ALTER (see there),
+    so it must NOT be referenced from SCHEMA_DDL below -- read the INVARIANT. }
+  SCHEMA_VERSION = 20;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.

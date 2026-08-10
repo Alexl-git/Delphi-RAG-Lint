@@ -251,6 +251,17 @@ type
     TargetSymbolId      : Int64 ;
     ReceiverTypeSymbolId: Int64 ;
     Confidence          : string;
+    // v20: the call-site RECEIVER TEXT, verbatim as written left of the dot.
+    // '' for a bare call AND for `inherited M` (neither has a dot before the
+    // name); 'Self'; a bare type or variable name; the FULL dotted chain for a
+    // qualified call ('System.JSON.TJSONArray'); or a cast expression, which
+    // TryParseCastTarget reduces.
+    //
+    // Carried on the EDGE record but persisted for EVERY call ref, resolved or
+    // not -- the unresolved ones are precisely the ones that need it, because
+    // they are what the leaf-name caller bucket draws from. TargetSymbolId = 0
+    // does not mean "no receiver to record".
+    ReceiverText        : string;
   end;
 
   /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see

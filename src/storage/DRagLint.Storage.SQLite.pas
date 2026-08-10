@@ -718,7 +718,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindUnresolvedNameCallers(const AName: string;
-        ACallSitesOnly: Boolean; AReachableToFileId: Int64): TArray<TResolvedCaller>;
+        ACallSitesOnly: Boolean; AReachableToFileId: Int64;
+        const AOwnerTypeName: string): TArray<TResolvedCaller>;
       /// <param name="AEnclosingSymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
@@ -2636,6 +2637,24 @@ begin
   TryExec('ALTER TABLE symbol_facts ADD COLUMN ui_affinity TEXT'   );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN touches TEXT'       );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN wiring TEXT'        );
+  { v20: the CALL-SITE RECEIVER, verbatim as written left of the dot -- '' for a
+    bare or `inherited` call, 'Self', 'TJSONArray', the full dotted chain for a
+    qualified call, or a cast expression. Additive column, same reason as every
+    ALTER above.
+
+    WHY IT EXISTS. Without it a ref records only its leaf NAME, so
+    `TJSONArray.Create` is stored as name_text='Create' and the qualifier is
+    thrown away at index time. Every project constructor named `Create` (35 of
+    them here) then matched every unresolved `Create(` site in the corpus, and
+    TQueryRule.Create -- constructed in exactly ONE place -- was documented with
+    77 callers. The information needed to tell those apart existed in the source
+    and was discarded before anything could use it.
+
+    Populated by the RESOLVE pass, not by extraction: TCallResolver already
+    computes this exact string for every call ref (ExtractReceiverExpr, reading a
+    cached per-file line array), so this is a write of a value that was being
+    computed and dropped. }
+  TryExec('ALTER TABLE refs ADD COLUMN receiver_text TEXT');
   { v11 (M1): direct ancestor edges (one row per heritage entry). Created here
     rather than in SCHEMA_DDL to avoid renumbering the FTS5 split index; it is
     plain DDL that must always exist (independent of FTS5 availability).
@@ -3489,7 +3508,8 @@ end; // function
 /// all, e.g. a plain top-level routine) is kept: s.parent_id is either a
 /// non-matching id or NULL, either of which satisfies the OR.</para></summary>
 function TSQLiteSymbolStore.FindUnresolvedNameCallers(const AName: string;
-  ACallSitesOnly: Boolean; AReachableToFileId: Int64): TArray<TResolvedCaller>;
+  ACallSitesOnly: Boolean; AReachableToFileId: Int64;
+  const AOwnerTypeName: string): TArray<TResolvedCaller>;
 var
   Q     : TFDQuery              ;
   List  : TList<TResolvedCaller>;
@@ -3497,6 +3517,7 @@ var
   KindP : string                ;
   ScopeC: string                ; { the reach CTE, or '' }
   ScopeP: string                ; { the reach predicate, or '' }
+  RcvP  : string                ; { v20: the receiver predicate, or '' }
 begin
   { ACallSitesOnly=False is the historic kind-blind scan. Its contract lives on
     the ISymbolStore declaration in DRagLint.Core.Interfaces and nowhere else --
@@ -3549,6 +3570,59 @@ begin
     ScopeP:= '';
   end;
 
+  { v20 RECEIVER FILTER. Without it this bucket has only the LEAF NAME to go on,
+    so `TUnknownA.Create(...)` -- a construction of something else entirely --
+    is offered as a caller of every symbol named Create. That is how a
+    constructor built in one place came to be documented with 77 callers.
+
+    Kept when the call site was written against THIS type, or against nothing in
+    particular:
+      * receiver_text IS NULL  -- pre-v20 DB, never resolved by a v20 engine. Not
+        a judgement, an absence of data: dropping these would delete every
+        genuine caller on a stale index. Reindex to make the filter bite.
+      * ''                     -- a BARE call, and also `inherited M` (neither has
+        a dot before the name), both legitimately targeting the enclosing or an
+        ancestor scope.
+      * 'Self'                 -- the enclosing instance.
+      * the owner type's leaf name, exactly.
+      * anything ending '.<owner>' -- a FULLY QUALIFIED receiver such as
+        'receiver_bucket.TOnlyOnce' or 'System.JSON.TJSONArray'. Matching the
+        whole string instead would reject a real caller written qualified.
+
+    A RECEIVER IS NOT ALWAYS A TYPE, and conflating the two is a false-negative
+    machine. Two different shapes reach this column:
+      * a TYPE REFERENCE -- 'TUnknownA.Create'. The receiver names the type being
+        constructed, so "not our type" really does mean "not our caller".
+      * a VALUE -- 'U.Run', 'FGrid.Add'. The receiver names a variable, param or
+        field whose TYPE the resolver could not infer. Its NAME says nothing
+        about which type is on the other end, so rejecting it deletes a caller
+        the engine deliberately surfaces (marked ' ?').
+    The last arm keeps the value shape: if the receiver names a value symbol
+    anywhere in the index, it is not a type reference and cannot be judged here.
+    Matching on name alone rather than scoping to the enclosing routine is
+    deliberately LOOSE -- it errs toward keeping, which is the safe direction for
+    a filter whose job is to remove provable non-callers only.
+
+    Three suites said so immediately when this arm was missing:
+    run_calledfrom_resolved, run_calledfrom_uses_scope and
+    run_callsite_kind_universe all pin that an untypable receiver STILL surfaces.
+
+    KNOWN AND DELIBERATE GAP: a CAST receiver ('TFoo(X).Create', '(X as TFoo).
+    Create') is stored as the cast expression and matches none of the arms, so
+    such a caller is dropped. Reducing it via TryParseCastTarget is a resolver-
+    side job; a looser SQL pattern (LIKE '%owner%') would readmit the noise this
+    exists to remove -- 'TFooBar' contains 'TFoo'. }
+  if Trim(AOwnerTypeName) = '' then RcvP:= ''
+  else RcvP:=
+    '  AND (r.receiver_text IS NULL ' +
+    '       OR r.receiver_text = '''' ' +
+    '       OR r.receiver_text = ''Self'' COLLATE NOCASE ' +
+    '       OR r.receiver_text = :own COLLATE NOCASE ' +
+    '       OR r.receiver_text LIKE ''%.'' || :own2 ' +
+    '       OR EXISTS (SELECT 1 FROM symbols sv ' +
+    '                  WHERE sv.name = r.receiver_text COLLATE NOCASE ' +
+    '                    AND sv.kind IN (''local_var'',''param'',''field'',''property'',''var'',''const''))) ';
+
   List:= TList<TResolvedCaller>.Create;
   Q:= TFDQuery.Create(nil);
   try
@@ -3562,10 +3636,16 @@ begin
       '  AND r.id NOT IN (SELECT ref_id FROM call_edges) ' +
       '  AND (s.parent_id IS NULL OR s.parent_id NOT IN (' +
       '        SELECT id FROM symbols WHERE name = :n2 AND kind IN (''class'',''interface'',''record'',''type''))) ' +
+      RcvP +
       ScopeP +
       'ORDER BY f.path, r.start_line';
     Q.ParamByName('n').AsString:= AName;
     Q.ParamByName('n2').AsString:= AName;
+    if RcvP <> '' then
+    begin
+      Q.ParamByName('own' ).AsString:= AOwnerTypeName;
+      Q.ParamByName('own2').AsString:= AOwnerTypeName;
+    end;
     if AReachableToFileId > 0 then Q.ParamByName('tf').AsLargeInt:= AReachableToFileId;
     Q.Open;
     while not Q.Eof do
@@ -7475,6 +7555,7 @@ procedure TSQLiteSymbolStore.ResolveCallTargets;
 var
   Resolver: TCallResolver ;
   Q       : TFDQuery      ;
+  UpdRcv  : TFDQuery      ; { v20: prepared refs.receiver_text writer }
   Ref     : TReference    ;
   Edge    : TCallEdge     ;
   DummyTok: TFileTxToken  ;
@@ -7485,8 +7566,21 @@ begin
   Written := 0;
   Resolver:= TCallResolver.Create(Self); // prepare name/scope maps ONCE
   Q       := TFDQuery.Create(nil);
+  UpdRcv  := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
+    { PREPARED once, executed per ref -- the same discipline UpsertCallEdge uses,
+      and for the same reason: this runs inside the one big transaction below,
+      where a fresh statement per row would dominate the pass. }
+    UpdRcv.Connection:= FConn;
+    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r WHERE id = :id';
+    { DataType MUST be set before Prepare. FireDAC cannot infer a parameter's
+      type from the SQL alone and fails at execute with "Parameter [R] data type
+      is unknown" -- which surfaces as a FATAL that aborts the whole index run,
+      not as a skipped update. }
+    UpdRcv.ParamByName('r' ).DataType:= ftString;
+    UpdRcv.ParamByName('id').DataType:= ftLargeint;
+    UpdRcv.Prepare;
     { Only call-site refs are resolved here. Filtering is faster + cleaner than
       letting ResolveOne return Target=0 for every non-call ref -- but note it
       also DEFINES the universe: a ref of any other kind can never own a
@@ -7516,6 +7610,19 @@ begin
           Ref.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
 
         Edge:= Resolver.ResolveOne(Ref);
+        { v20: persist the receiver for EVERY call ref, resolved or not. The
+          UNRESOLVED ones are the whole point -- they are what the leaf-name
+          caller bucket draws from, and without the receiver a `TJSONArray.Create`
+          site is indistinguishable from a bare `Create` and gets attributed to
+          every constructor in the index.
+
+          Written as '' rather than skipped when there is no receiver, so NULL
+          keeps a distinct meaning: "this DB has never been resolved by a v20
+          engine". A consumer that treats NULL as "bare" would silently restore
+          the old fabrication on a stale DB -- reindex, do not reinterpret. }
+        UpdRcv.ParamByName('r' ).AsString   := Edge.ReceiverText;
+        UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
+        UpdRcv.ExecSQL;
         if Edge.TargetSymbolId > 0 then
         begin
           Edge.RefId:= Ref.Id; // ensure the natural key is the ref we resolved
@@ -7532,6 +7639,7 @@ begin
     end;
   finally
     Q.Free;
+    UpdRcv.Free;
     Resolver.Free;
   end; // try
 end; // procedure

@@ -1354,9 +1354,23 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CommitFileTx"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <param name="AOwnerTypeName">v20: the LEAF NAME of the type that owns the
+    /// target ('TOnlyOnce' for TOnlyOnce.Create), or '' for a free routine and
+    /// for any caller that cannot supply it. Non-empty enables the RECEIVER
+    /// filter: a ref is kept only when its call site was written against this
+    /// type, was unqualified, or was `Self`.
+    ///
+    /// '' preserves the pre-v20 behaviour exactly, so an existing caller is not
+    /// silently changed by adding the parameter. Rows whose receiver_text is
+    /// NULL are ALWAYS kept: NULL means the DB has never been resolved by a v20
+    /// engine, and treating "not recorded" as "no receiver" would drop every
+    /// genuine caller on a stale index. Reindex to make the filter effective --
+    /// do not loosen the predicate, the same rule the uses-scope filter carries
+    /// a few lines below.</param>
     function FindUnresolvedNameCallers(const AName: string;
       ACallSitesOnly: Boolean = True;
-      AReachableToFileId: Int64 = 0): TArray<TResolvedCaller>;
+      AReachableToFileId: Int64 = 0;
+      const AOwnerTypeName: string = ''): TArray<TResolvedCaller>;
     /// <summary>Find-callees: every call edge whose ref is enclosed by
     /// AEnclosingSymbolId (i.e. every resolved call made from inside that
     /// routine's body).</summary>

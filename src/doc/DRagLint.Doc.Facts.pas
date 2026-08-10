@@ -509,6 +509,27 @@ begin
   if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
 end;
 
+{ v20: the leaf name of the TYPE that owns AKind/AQualifiedName, or '' when the
+  symbol is not owned by a type. It feeds FindUnresolvedNameCallers' receiver
+  filter, which uses '' to mean "do not filter".
+
+  Derived from the qualified name rather than a store round-trip, and GATED ON
+  KIND because the second-to-last segment is only a type for a MEMBER. For a
+  free routine 'receiver_bucket.MakeOne' that segment is the UNIT name, and
+  handing 'receiver_bucket' to the filter as a type would drop every caller of
+  every free routine -- the filter would be comparing a receiver against a unit
+  name that no call site can ever match. }
+function OwnerTypeLeaf(AKind: TSymbolKind; const AQualifiedName: string): string;
+var Head: string; P: Integer;
+begin
+  Result:= '';
+  if not (AKind in [skMethod, skConstructor, skDestructor]) then Exit;
+  P:= AQualifiedName.LastDelimiter('.');
+  if P < 0 then Exit;
+  Head:= Copy(AQualifiedName, 1, P); { drop the member leaf }
+  Result:= LastSeg(Head);
+end;
+
 { True when ALeaf names exactly ONE call-target symbol in the index, i.e. when an
   unresolved call ref carrying that name can only have meant this one.
 
@@ -1493,7 +1514,8 @@ begin
     begin
       ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
                                                    CanBeCallTarget(ASym.Kind),
-                                                   ASym.FileId);
+                                                   ASym.FileId,
+                                                   OwnerTypeLeaf(ASym.Kind, ASym.QualifiedName));
       for RC in ResCallers do
       begin
         FR:= ToFactRef(RC);
@@ -1532,8 +1554,14 @@ begin
       // is that section 7's noise can still arrive from an EXTRA store; fixing
       // that needs the target unit resolved BY NAME inside each extra store,
       // which is a separate change.
+      { Same receiver filter on the cross-DB fan-out. It matters MORE here: this
+        path has no uses-scope filter at all (ASym.FileId is a primary-store key
+        and file ids are per-DB), so the receiver is the only thing standing
+        between this bucket and every same-named call site in another project. }
       ResCallers:= ExStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
-                                                    CanBeCallTarget(ASym.Kind));
+                                                    CanBeCallTarget(ASym.Kind),
+                                                    0,
+                                                    OwnerTypeLeaf(ASym.Kind, ASym.QualifiedName));
       for RC in ResCallers do
       begin
         FR:= ToFactRef(RC);
