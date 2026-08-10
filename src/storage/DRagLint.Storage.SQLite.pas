@@ -7555,20 +7555,25 @@ procedure TSQLiteSymbolStore.ResolveCallTargets;
   so a default token is passed. The whole loop runs in one transaction: thousands
   of refs at per-row autocommit would be pathologically slow. }
 var
-  Resolver: TCallResolver ;
-  Q       : TFDQuery      ;
-  UpdRcv  : TFDQuery      ; { v20: prepared refs.receiver_text writer }
-  Ref     : TReference    ;
-  Edge    : TCallEdge     ;
-  DummyTok: TFileTxToken  ;
-  Written : Int64         ;
+  Resolver  : TCallResolver ;
+  Q         : TFDQuery      ;
+  UpdRcv    : TFDQuery      ; { v20: prepared refs.receiver_text writer }
+  QIsRoutine: TFDQuery      ; { v20b: is the resolved target a routine kind? }
+  QTwin     : TFDQuery      ; { v20b: is there a co-located real 'call' ref?  }
+  Ref       : TReference    ;
+  Edge      : TCallEdge     ;
+  KeepEdge  : Boolean       ;
+  DummyTok  : TFileTxToken  ;
+  Written   : Int64         ;
 begin
   ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
   DummyTok:= Default(TFileTxToken);
   Written := 0;
   Resolver:= TCallResolver.Create(Self); // prepare name/scope maps ONCE
-  Q       := TFDQuery.Create(nil);
-  UpdRcv  := TFDQuery.Create(nil);
+  Q         := TFDQuery.Create(nil);
+  UpdRcv    := TFDQuery.Create(nil);
+  QIsRoutine:= TFDQuery.Create(nil);
+  QTwin     := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
     { PREPARED once, executed per ref -- the same discipline UpsertCallEdge uses,
@@ -7583,6 +7588,25 @@ begin
     UpdRcv.ParamByName('r' ).DataType:= ftString;
     UpdRcv.ParamByName('id').DataType:= ftLargeint;
     UpdRcv.Prepare;
+
+    { v20b guards. The routine-kind list is spelled here rather than reusing
+      CanBeCallTarget because that predicate is symbol-KIND-enum side and this is
+      a SQL string; the two must agree, and CanBeCallTarget's own header is the
+      single source for WHICH kinds -- procedure/function/method/constructor/
+      destructor. Keep them in step. }
+    QIsRoutine.Connection:= FConn;
+    QIsRoutine.SQL.Text  := 'SELECT 1 FROM symbols WHERE id = :id AND kind IN ' +
+                            '(''procedure'',''function'',''method'',''constructor'',''destructor'')';
+    QIsRoutine.ParamByName('id').DataType:= ftLargeint;
+    QIsRoutine.Prepare;
+
+    QTwin.Connection:= FConn;
+    QTwin.SQL.Text  := 'SELECT 1 FROM refs WHERE file_id = :f AND start_line = :l ' +
+                       'AND start_col = :c AND ' + CallSiteRefKindSql('refs');
+    QTwin.ParamByName('f').DataType:= ftLargeint;
+    QTwin.ParamByName('l').DataType:= ftInteger;
+    QTwin.ParamByName('c').DataType:= ftInteger;
+    QTwin.Prepare;
     { Only call-site refs are resolved here. Filtering is faster + cleaner than
       letting ResolveOne return Target=0 for every non-call ref -- but note it
       also DEFINES the universe: a ref of any other kind can never own a
@@ -7590,9 +7614,33 @@ begin
       take their complement against this same universe. That is why the kind
       comes from the shared CallSiteRefKindSql and not from a local literal
       (register item E1 -- see the block comment in DRagLint.Core.Model). }
+    { v20b: the RESOLVE universe is widened to include 'member-access'; the
+      COMPLEMENT universe (CallSiteRefKindSql) is deliberately NOT.
+
+      The disclosed gap this closes (DRagLint.Core.Model's block comment): a
+      paren-less dotted invocation in EXPRESSION position -- `T:= TThing.Create;`,
+      `N:= Obj.Func;` -- emits NO 'call' ref, only 'member-access'. Such a site
+      owned no call_edges row, so it was invisible to Calls:, Called from:,
+      find-callers --resolved, call-path, call-tree and blast radius alike.
+      Parameterless constructor calls are the common case, so the miss was large.
+
+      WHY THE TWO UNIVERSES MUST STAY SPLIT. A PARENTHESISED dotted call emits
+      BOTH a 'call' ref and a co-located 'member-access' ref at the same span.
+      Widening CallSiteRefKindSql would put that twin into the UNRESOLVED
+      complement, and every resolved call would be reported as unverified again
+      -- register item E1, the exact defect that comment was written to prevent.
+      Widening only HERE adds edges without touching the complement.
+
+      Two guards below keep the widening honest:
+        * a member-access ref yields an edge only when its target is a ROUTINE
+          (ordinary property/field/event access shares this kind and must not
+          become a fake call), and
+        * a member-access ref co-located with a real 'call' ref is skipped, so a
+          parenthesised call still produces exactly one edge. }
     Q.SQL.Text:=
       'SELECT id, symbol_id, file_id, kind, name_text, start_line, start_col, ' +
-      '  end_line, end_col, enclosing_symbol_id FROM refs WHERE ' + CallSiteRefKindSql('refs');
+      '  end_line, end_col, enclosing_symbol_id FROM refs WHERE ' +
+      '(' + CallSiteRefKindSql('refs') + ' OR refs.kind = ''member-access'')';
     FConn.StartTransaction;
     try
       Q.Open;
@@ -7627,9 +7675,40 @@ begin
         UpdRcv.ExecSQL;
         if Edge.TargetSymbolId > 0 then
         begin
-          Edge.RefId:= Ref.Id; // ensure the natural key is the ref we resolved
-          UpsertCallEdge(DummyTok, Edge);
-          Inc(Written);
+          KeepEdge:= True;
+          if not SameText(Ref.Kind, REF_KIND_CALL) then
+          begin
+            { A member-access ref earns an edge only if it is really a call. }
+            QIsRoutine.ParamByName('id').AsLargeInt:= Edge.TargetSymbolId;
+            QIsRoutine.Open;
+            try
+              KeepEdge:= not QIsRoutine.Eof; { target is a routine kind }
+            finally
+              QIsRoutine.Close;
+            end;
+            if KeepEdge then
+            begin
+              { ...and only if no real 'call' ref already covers this span. A
+                parenthesised dotted call emits BOTH kinds at the identical
+                position; without this the edge would be written twice and every
+                such caller would be double-counted. }
+              QTwin.ParamByName('f').AsLargeInt:= Ref.FileId;
+              QTwin.ParamByName('l').AsInteger := Ref.StartLine;
+              QTwin.ParamByName('c').AsInteger := Ref.StartCol;
+              QTwin.Open;
+              try
+                KeepEdge:= QTwin.Eof;        { no co-located 'call' twin }
+              finally
+                QTwin.Close;
+              end;
+            end;
+          end;
+          if KeepEdge then
+          begin
+            Edge.RefId:= Ref.Id; // ensure the natural key is the ref we resolved
+            UpsertCallEdge(DummyTok, Edge);
+            Inc(Written);
+          end;
         end;
         Q.Next;
       end;
@@ -7642,6 +7721,8 @@ begin
   finally
     Q.Free;
     UpdRcv.Free;
+    QIsRoutine.Free;
+    QTwin.Free;
     Resolver.Free;
   end; // try
 end; // procedure

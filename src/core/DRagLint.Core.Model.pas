@@ -983,7 +983,8 @@ function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
   implementer to build a fixture for a non-problem. Verify a negative result
   reached the binary under test before recording it.
 
-  DISCLOSED CONSEQUENCE (a writer-side gap, deliberately NOT fixed here). A
+  DISCLOSED CONSEQUENCE -- CLOSED 2026-08-10 (v20b), but kept in full because the
+  SHAPE of the fix is the point; see the closing note at the end of this block. A
   paren-less dotted invocation in EXPRESSION position -- `N:= Obj.Func;`,
   `T:= TThing.Create;` -- emits no 'call' ref at all, only 'member-access'.
   Such a site is therefore outside this universe, and it was already invisible
@@ -994,7 +995,27 @@ function DocRegionFitsDecl(AEndLine, ADeclLine, AAllowGap: Integer;
   noise than signal. Making those sites first-class means EMITTING a call ref
   for them, which changes what is INDEXED and fixes every surface at once.
   Name-based discovery (`query find-callers`, FindCallersByName) is kind-blind
-  and still finds them. Pinned by tests/callresolve/run_callsite_kind_universe.ps1. }
+  and still finds them. Pinned by tests/callresolve/run_callsite_kind_universe.ps1.
+
+  HOW IT WAS CLOSED (v20b), and why NOT by the route named just above. Emitting a
+  second 'call' ref for those sites would place a co-located TWIN beside the one a
+  PARENTHESISED dotted call already emits, double-counting every such caller.
+  Instead ResolveCallTargets widens only ITS OWN query to
+  `kind = 'call' OR kind = 'member-access'`, while CallSiteRefKindSql -- the
+  COMPLEMENT universe the unresolved-site queries read -- is left exactly as it
+  was. Widening BOTH is precisely register item E1 above: every resolved call
+  would be reported as unverified again.
+
+  Two guards keep the widening honest, both in ResolveCallTargets:
+    * a member-access ref earns an edge only when its target is a ROUTINE kind --
+      ordinary property/field/event access shares this kind and must not become a
+      fake call site; and
+    * a member-access ref co-located with a real 'call' ref is skipped, so a
+      parenthesised call still yields exactly one edge.
+
+  run_callsite_kind_universe.ps1's ParenlessExpr assertion FLIPPED from EXCLUDES
+  to INCLUDES, and its ambiguous-calls and ReadsProperty/CallsFire checks are the
+  regression fence for the two guards. }
 
 const
   /// <summary>The refs.kind value that denotes a CALL SITE, and thereby the

@@ -193,10 +193,24 @@ try {
   Check 'BOUNDARY: the enum gets NO Used in units: fact (that gate must not widen as a side effect)' `
     (-not ($kindOut -match 'Used in units:')) $kindOut
 
-  # 5: the disclosed gap, at this consumer -- and the bound on it.
+  # 5: THE DISCLOSED GAP IS CLOSED, and this pin FLIPPED to say so.
+  #
+  # It used to assert the gap: a paren-less dotted invocation in EXPRESSION
+  # position ('N := FProbe.Make;') emits only a 'member-access' ref, never a
+  # 'call' ref, so it owned no call_edges row and appeared on NO call-graph
+  # surface. DRagLint.Core.Model's block comment named the fix -- make those
+  # sites first-class -- and v20b does it by widening the RESOLVE universe to
+  # include member-access while leaving CallSiteRefKindSql (the UNRESOLVED
+  # complement) alone. Widening both would re-report every resolved call as
+  # unverified, which is register item E1, the defect that comment exists for.
+  #
+  # Two guards keep it honest and are asserted elsewhere in this runner: a
+  # member-access earns an edge only when its target is a ROUTINE (so the
+  # property read at ReadsProperty stays out), and a member-access co-located
+  # with a real 'call' ref is skipped (so CallsFire is not double-counted).
   $makeLine = CalledFromLine 'callsitekind.TProbe.Make'
-  Check 'Called-from(TProbe.Make): EXCLUDES ParenlessExpr (DISCLOSED: no call ref for the shape)' `
-    ($makeLine -eq '')
+  Check 'Called-from(TProbe.Make): INCLUDES ParenlessExpr (gap CLOSED -- paren-less calls are first-class)' `
+    ($makeLine -match 'callsitekind\.TDriver\.ParenlessExpr') $makeLine
   # Line number computed from the fixture rather than hardcoded, so the assertion
   # keeps its teeth when the fixture grows (it did, in round 2) instead of going
   # vacuously false-negative on a stale literal.
