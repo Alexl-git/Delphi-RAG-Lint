@@ -1,5 +1,77 @@
 # Project-Scoped Indexing Implementation Plan
 
+---
+
+## >>> RESUME POINT -- 2026-08-09 (end of the implementation session)
+
+`main` = **`5429e4a`, 32 commits UNPUSHED** (no consent to push given). Last FULL battery **241/241**
+(taken at `982c08c`). **Ledger with every decision, correction and deferred finding:**
+`.superpowers/sdd/2026-08-09-project-scoped-index/progress.md` -- gitignored, so read it from disk;
+it is the real record, this section is the summary.
+
+### SHIPPED and verified
+
+Tasks 1, 3, 5, 6, 7 complete, each reviewed clean. A project's index is now exactly its compile
+closure; `--rebuild`/`--recompile` exist; the manifest carries 29 sections across BOTH platforms;
+the IDE menu rebuilds the ACTIVE project into the right DB.
+
+| measured | before | after |
+|---|---|---|
+| YADF | 228 files (5 `.private` + 57 DelphiAST) | **27** |
+| DragLint | 670 files | **147** |
+| Loader `.dfm` | **0** | **76** |
+| ORM3-Micronite2027 `call_edges` | 0 (crashed) | **25,370** |
+
+### THE NEXT ACTIONS, in order
+
+1. **PHASE 3 / Task 8 -- documentation.** Bigger than originally scoped: four DB names changed and
+   the four old DBs have been DELETED, so `C:\Projects\CLAUDE.md`, the auto-memory and ~25 docs name
+   files that no longer exist. Start with the CLI usage banner (the only docs inside the binary).
+2. **PHASE 4 / Task 9 -- the live runs.** BRANCH FIRST (YADF = git, DataCopy = **hg**); `document
+   --apply` REWRITES SOURCE and DataCopy shipped to a tester on 2026-08-07. Rebuild+time -> verify
+   scope -> `lint-all` BEFORE -> autodocument -> rebuild+time -> `lint-all` after.
+3. **Per-file isolation (USER-APPROVED, and it is the primary fix, not a nicety).** `CLI.pas:1646`
+   (the `--project` loop) has NO per-file `try/except`; the folder walk (`Indexer.pas:693`) does.
+   That disagreement is what turned a survivable SKIP into a fatal `0xC0000005`.
+4. **Split `Walk`'s ~25 branch bodies** (`Parser.Delphi13.pas:1566`) so their locals stop sharing one
+   1,776-byte frame. The durable fix, and **the only one that helps the IDE plugin** -- a BPL inherits
+   `bds.exe`'s stack, so `{$MAXSTACKSIZE}` cannot reach it. Measure TIME as well as depth:
+   `PDFlibStampAnnot.pas` takes 16.75 s for 19 symbols, suggesting super-linear cost.
+5. Phase 2: out-of-scope eviction (unlocks a trustworthy `--recompile`), then the
+   used-but-not-a-`.dproj`-member warning.
+
+### OPEN QUESTIONS FOR THE USER
+
+- **18 further orphan DBs, ~4.9 GB**, still in `C:\Projects\.drag-lint\` and still reachable by
+  auto-select: `projects.sqlite` (1.2 GB), `library.sqlite` (1.0 GB), `active-projects.sqlite`,
+  `M2022.sqlite`, `samples.sqlite`, `convrules-worktree.sqlite`, `Delphi-RAG-Lint-Graph.sqlite`
+  (newly orphaned BY this conversion), and `library-<non-Win32/64 platforms>` which may be
+  legitimate `--scan-libraries-all` output. Four were deleted on the user's instruction; these await
+  a decision.
+- **`ConvRulesEditor.dpr:77` and `ConvRulesModelTests.dpr:449/752/1145` hardcode the retired ORM3
+  union DB path.** The file still exists but is no longer rebuilt, so it will go stale silently.
+- **TableTools/OCRPDF project files were chosen by an agent, not supplied** --
+  `TableTools370P.dproj`, `MemTableFieldWizard.dproj`, `delphi\OCRPDF.dpr`,
+  `TESTER1\TEST_PDFFragments.dproj`. They exist; whether they are the right set is the user's call.
+
+### GOTCHAS THAT WILL BITE A COLD START
+
+- **`run_encoding_guard.ps1` currently FAILS**, on 4 lone-LF `tools/lsp-diag/*.ps1` created 19:33 by
+  a CONCURRENT WORKSTREAM. Not this work's; deliberately untouched. The next battery shows a red
+  that is not yours.
+- **`third_party/dll-win32/dclDragLintWizard.{bpl,dcp}` are MODIFIED and unstaged** -- the Task 5
+  build. **The IDE fix is not live until that BPL is installed.** The `dll-win64` pair plus
+  `FEATURES.txt` and `PLAN-autodoc-and-backlog-2026-08-06.md` belong to another workstream: never
+  commit them.
+- Writing `{$MAXSTACKSIZE}` in prose inside a `{ }` comment terminates the comment and breaks the
+  build.
+- `index --all` RECREATES each section DB every run (`RecreateSectionDb`), so it has never been
+  incremental; `--recompile` there warns and is ignored. Replacing it with `ClearAllFiles` is a
+  Phase 2 prerequisite and carries the IDE file-handle question with it.
+- Do not rebuild the `Library` sections casually: 4.1 GB, unchanged by this work.
+
+---
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A project's index contains exactly that project's compile closure -- nothing loose, nothing archived, nothing from a library -- and can be refreshed incrementally (`--recompile`) or from scratch (`--rebuild`).
