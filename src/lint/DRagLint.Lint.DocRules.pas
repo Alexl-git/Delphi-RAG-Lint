@@ -208,14 +208,35 @@ begin
 end;
 
 { Public-surface test mirroring FindUndocumented's publicOnly SQL: a symbol is
-  public when its modifiers carry neither 'private' nor 'protected'. Keeps
-  doc-drift scoped to the same public API surface as missing-doc (CDD rule). }
+  public when its modifiers carry neither 'private' nor 'protected' AND it is
+  declared in the INTERFACE section. Keeps doc-drift scoped to the same public
+  API surface as missing-doc (CDD rule).
+
+  THE SECTION HALF IS NOT DECORATION -- without it this predicate answered "yes"
+  for every unit-level routine in the IMPLEMENTATION section, because such a
+  routine has EMPTY modifiers and "empty" trivially contains neither 'private'
+  nor 'protected'. Measured on this repo: 118 documented routines live in the
+  implementation section, and doc-drift was grading every one of them.
+
+  That is unfixable-by-construction, which is the real tell. `document` writes
+  only to the public surface, so the findings it produced could never be
+  satisfied by running the documenter -- the checker was reporting drift against
+  declarations the writer will not touch. It is the same checker/writer split as
+  the <seealso> defect (see TDocDrift.Analyze's AIncludeSeeAlso), reached from a
+  different direction: there the two disagreed about OPTIONS, here about SCOPE.
+
+  Interface-side is also where the doc BELONGS -- the codebase already prefers it
+  ("a comment there is unambiguously about the declaration", DRagLint.Doc.Facts),
+  so a doc-comment on an implementation-only routine is outside CDD's stated
+  scope of "public/published types, methods and interfaces" and is optional by
+  that rule. Optional prose is not drift. }
 function IsPublicSymbol(const ASym: TSymbol): Boolean;
 var
   M: string;
 begin
   M:= LowerCase(ASym.Modifiers);
-  Result:= (Pos('private', M) = 0) and (Pos('protected', M) = 0);
+  Result:= (Pos('private', M) = 0) and (Pos('protected', M) = 0)
+       and SameText(Trim(ASym.Section), 'interface');
 end;
 
 class function TDocLintRules.RunMissingDoc(const AStore: ISymbolStore): TArray<TLintFinding>;
