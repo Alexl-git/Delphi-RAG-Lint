@@ -2,7 +2,119 @@
 
 ---
 
-## >>> RESUME POINT -- 2026-08-09 (LATE; supersedes the section below it)
+## >>> RESUME POINT -- 2026-08-10 (autonomous session; supersedes everything below)
+
+`main` = **`b760963`, 42 commits UNPUSHED.** Nothing pushed -- publish is still last, and it is the
+user's call, not mine.
+
+### What the user asked for, and what that turned into
+
+They scoped the doc work as *"the 5 approved doc features + the Phase C autodoc leftovers"*, then:
+*"After these 2 are done and safe autofix is applied we can autodoc the drag-lint then we'll rerun
+lint-all and see what is remain to fix here or fix the rules."* Their standard, verbatim:
+
+> **"We must bring the number of lint messages to very little otherwise what is the purpose of
+> these messages? We either follow them or consider them a noise and then they are nothing but a
+> nuisance."**
+
+Mid-session they added: fix the rule-related code **before** re-running `lint-all`, so the rerun is
+read against calibrated rules rather than filtered by hand.
+
+### SHIPPED this session (7 commits, each TDD with a RED run first)
+
+| | commit |
+|---|---|
+| Option 4 -- bare calls resolve at the UNIT level | `ff804cd` |
+| Compiler intrinsics are not callees | `bf2bb75` |
+| `<exception cref>` generated from mined raises | `134304a` |
+| Recursion fact + `<seealso>` on by default | `874ae27` |
+| Four dominant rules calibrated + per-file isolation | `e18fcf8` |
+| The three error-severity findings cleared | `b760963` |
+
+**Option 4 is TWO rungs, and the plan had the smaller half.** The plan said "167 cross-unit". The
+oracle says **520 SAME-UNIT** + 371 cross-unit + 6 ambiguous. The same-unit half was invisible to
+the plan because it is not a uses-clause problem at all: a bare call inside a METHOD types its
+receiver to the enclosing class, fails to find the method there, and stops -- the unit's own free
+routines were never consulted. Measured: `call_edges` **3,466 -> 4,339**, of which 870 of the 873
+new edges are `certain`.
+
+**Doc feature 3 was ALREADY SHIPPED.** `Owns returned: new (caller owns)` renders today; verified
+live. The plan listed it as outstanding. Record corrected.
+
+**Doc feature 2 (`<value>`) is DEFERRED and needs YOUR RULING** -- see below.
+
+### THE ONE DECISION WAITING FOR YOU: `<value>` for properties
+
+I did not implement it, for three reasons, in increasing order of importance:
+
+1. `<value>` is **not modelled at all**. `TParsedDoc` has no `ValueText`/`HasValueTag`; the tag
+   survives today only because unmodelled tags are carried through verbatim as residual lines.
+   Generating one needs parse + standalone-detection + ownership + residual accounting -- the full
+   Phase-3b treatment of the most intricate unit in the repo, on an engine that **rewrites source**.
+2. Properties are **not a documentable kind** (`IsDocumentableKind`, `Doc.Batch.pas:176`), so
+   `document --unit` on a class with 3 properties reports "2/3 decl(s)" and documents only the two
+   accessor methods.
+3. **The generatable content would be noise.** The only derivable fact is `prop_access` (ro/rw/wo)
+   -- and `property Name: string read GetName;` states that on the line below the comment. Against
+   your own standard, a `<value>Read-only.</value>` restates the declaration.
+
+Also: making properties documentable would likely ADD `doc-drift` findings for every undocumented
+property, which pulls directly against the count you want reduced.
+
+**My recommendation:** do (2) alone -- properties become documentable so a HAND-WRITTEN `<value>` or
+`<summary>` on a property is preserved and surfaced -- and generate no `<value>` text. Say the word
+if you want the tag emitted anyway.
+
+### Rule calibration -- decided from SAMPLED SOURCE, not from counts
+
+Fresh baseline before the work: **4,478 findings** (3 error / 1,291 warning / 3,157 info / 27 hint).
+Two of the top five (`field-by-name-in-loop` 340, `nil-comparison` 311) were not in the previous
+session's breakdown at all.
+
+- `dataset-open-without-close` (96) -- **rule fixed**: `TDataSet.Destroy` closes before freeing, so
+  `try Q.Open ... finally Q.Free` leaks nothing. Every one of those 96 advised a `Close` the
+  language already performs.
+- `large-magic-number` (304) -- **rule fixed**: its exempt regex omitted 5, 6, 7, 9 and 11-15 while
+  its own comment claimed small values were exempt, so a rule called LARGE flagged `shl 6` and
+  `array[0..5]`.
+- `concat-in-loop` (328) -- **rule fixed**, and it was never loop-aware at all despite id, comment
+  and message all saying so. Needed a new sidecar key `require_ancestor` (the mirror of
+  `exclude_if_ancestor`), because a tree-sitter pattern describes a subtree and cannot ask about the
+  path to the root.
+- `string-equality-comparison` (406) and `nil-comparison` (311) -- **off by default**, joining the
+  ~10 rules that already ship that way. Neither is a defect check; both are censuses. Still
+  available via config `"enabled"`.
+- `field-by-name-in-loop` (340) -- **kept ON.** Sampled and it is real: `Q.FieldByName('id')` per
+  row is a genuine per-row linear name search. True debt, not noise.
+
+### THE NEXT ACTIONS, in order
+
+1. **Re-run `lint-all` and record the new number.** I stopped mine mid-run to free the exe for the
+   battery; the pre-calibration baseline is 4,478. NOTE: a full `lint-all` on this corpus takes
+   **~45 minutes**, which is itself worth treating as a product defect -- a linter nobody can afford
+   to run is not consulted.
+2. **`doc-drift` (543) is now the largest class and the one autodoc exists to fix.** Run safe
+   autofix, then autodocument drag-lint itself, then re-measure. Do NOT blind-run `--fix` on
+   doc-drift: generated `<param>` text is where a wrong claim does most damage.
+3. `duplicate-code` (265) and `field-by-name-in-loop` (340) are the real remaining debt.
+4. Split `Walk` (`Parser.Delphi13.pas:1566`) -- still the only stack fix that reaches the IDE BPL.
+5. The used-but-not-a-`.dproj`-member warning (last Phase 2 item).
+6. **PHASE 4** -- YADF (git) / DataCopy (hg), BRANCH FIRST. Left untriggered deliberately: it
+   rewrites source in other repos and DataCopy is with a tester.
+7. **PUBLISH.**
+
+### Two things I got wrong, recorded so they are not repeated
+
+- I wrote the stack-size directive in full inside a `{ }` comment. It terminates the comment and
+  broke the build -- **exactly as this repo's own ledger already warned in writing.**
+- I put a literal example of a rendered `Calls:` line in a FIXTURE HEADER COMMENT. The runner
+  located that line by pattern with no `///` guard, matched my prose instead of the engine's output,
+  and failed four assertions against a perfectly correct emission. `run_doc_p3_callerline`'s header
+  warns about this exact shape. Guard added, and a note left in the fixture.
+
+---
+
+## >>> RESUME POINT -- 2026-08-09 (LATE)
 
 `main` = **`27f4766`, 36 commits UNPUSHED.** Battery **243/244** (sole failure = 4 lone-LF
 `tools/lsp-diag/*.ps1` from a CONCURRENT workstream -- not ours, do not touch).
