@@ -1,0 +1,5 @@
+# Two command-dispatch chains. After identifier+literal normalization they are
+# token-identical -- and so is EVERY dispatch chain in every unit. There is no
+# common routine to extract from two dispatchers that dispatch to different
+# things, so this finding could never be cleared. It must not fire.
+!duplicate-code
