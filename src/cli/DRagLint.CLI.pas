@@ -16250,8 +16250,16 @@ end;
 /// <param name="AArgs">Parsed args; ConfigPath and the --apply switch are read.</param>
 /// <returns>0 = success or nothing to do, 1 = a move failed, 2 = a DB is locked
 /// or the manifest could not be read.</returns>
-/// <remarks>Dry-run by default: prints every planned move and touches nothing.
-/// No reindex is needed -- no table stores the database's own path.</remarks>
+/// <remarks>Dry-run by default: prints every planned move and touches nothing,
+/// so the exclusive-open lock probe is skipped entirely for a dry run -- it
+/// must always be safe to run even while RAD Studio holds every index open.
+/// The manifest is SAVED after every individual successful move, not once at
+/// the end: a later section failing must never leave the on-disk manifest
+/// naming a path that no longer exists for a project already relocated. A
+/// stale entry that names a source which no longer exists, but whose derived
+/// destination already holds a database, self-heals on the next --apply
+/// instead of being reported as never built. No reindex is needed -- no
+/// table stores the database's own path.</remarks>
 function DoMigrateDbs(const AArgs: TArgs): Integer;
 var
   Manifest : TIndexManifest;
@@ -16283,19 +16291,24 @@ begin
   end;
   Manifest:= TManifestIO.ParseText(TFile.ReadAllText(CfgPath), ExtractFilePath(TPath.GetFullPath(CfgPath)));
 
-  { Probe EVERY lock before moving ANY file. A half-done migration is the one
-    outcome worth engineering against. }
-  for I:= 0 to High(Manifest.Sections) do
-  begin
-    if SectionProjectFile(Manifest, Manifest.Sections[I]) = '' then Continue;
-    Src:= ExpandSectionDb(Manifest, Manifest.Sections[I]);
-    if DbIsLocked(Src) then
+  { Probe EVERY lock before moving ANY file -- but only when actually
+    APPLYING. A plain dry run only prints the plan and touches nothing, so it
+    must always be safe to run, even while RAD Studio holds every index open
+    (review finding 4: the probe used to run unconditionally, so a harmless
+    dry run would abort with exit 2 for no reason). A half-done APPLY is
+    still the one outcome worth engineering against. }
+  if AArgs.Apply then
+    for I:= 0 to High(Manifest.Sections) do
     begin
-      Writeln('ERROR: in use, cannot migrate: ', Src);
-      Writeln('       Close RAD Studio (its LSP holds project indexes open) and retry.');
-      Exit(2);
+      if SectionProjectFile(Manifest, Manifest.Sections[I]) = '' then Continue;
+      Src:= ExpandSectionDb(Manifest, Manifest.Sections[I]);
+      if DbIsLocked(Src) then
+      begin
+        Writeln('ERROR: in use, cannot migrate: ', Src);
+        Writeln('       Close RAD Studio (its LSP holds project indexes open) and retry.');
+        Exit(2);
+      end;
     end;
-  end;
 
   HgRoots:= TStringList.Create;
   HgRoots.Sorted:= True; HgRoots.Duplicates:= dupIgnore;
@@ -16313,7 +16326,22 @@ begin
       if not AArgs.Apply then Continue;
       if not TFile.Exists(Src) then
       begin
-        Writeln('  SKIP: source does not exist (never built)');
+        { Review finding 2: a stale manifest entry (a hand-edited config, or a
+          retry after a batch that failed partway through, before this
+          function persisted after every move) must not be reported as
+          "never built" when the database plainly already exists at its
+          derived home -- reconcile the entry instead. Only reconcile when
+          the destination is real; a source and destination BOTH missing is
+          still a project that was never indexed. }
+        if TFile.Exists(Dst) then
+        begin
+          Manifest.Sections[I].Db:= '';   { now derivable }
+          TManifestIO.Save(Manifest, CfgPath);
+          Inc(Moved);
+          Writeln('  RECONCILED: already at ', Dst, ' -- manifest entry updated');
+        end
+        else
+          Writeln('  SKIP: source does not exist (never built)');
         Continue;
       end;
 
@@ -16359,6 +16387,13 @@ begin
         if HgRoot <> '' then HgRoots.Add(HgRoot);
 
         Manifest.Sections[I].Db:= '';   { now derivable }
+        { Review finding 1 (critical): persist NOW, not once after the whole
+          batch. Save used to be reached only if every remaining section also
+          succeeded, so a later section throwing left the on-disk manifest
+          still naming an OLD path for every project already moved -- a
+          silent, unrecoverable desync (see finding 2's reconciliation for
+          what covers the case where this already happened once). }
+        TManifestIO.Save(Manifest, CfgPath);
         Inc(Moved);
         Writeln(Format('  OK (%d files)', [RowsAfter]));
       except
@@ -16372,7 +16407,8 @@ begin
 
     if AArgs.Apply and (Moved > 0) then
     begin
-      TManifestIO.Save(Manifest, CfgPath);
+      { Already saved per-move (finding 1) or per-reconciliation (finding 2)
+        above -- this is a summary line, not the save. }
       Writeln(Format('migrate-dbs: %d database(s) moved; manifest updated (%s)', [Moved, CfgPath]));
       if HgRoots.Count > 0 then
       begin
