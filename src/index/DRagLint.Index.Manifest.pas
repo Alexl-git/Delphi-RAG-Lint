@@ -399,6 +399,27 @@ type
 function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: string;
   out ADb: string; out AClaimants: TArray<string>): TProjectDbMatch;
 
+/// <summary>Expands a section's configured output database path to an absolute path.</summary>
+/// <param name="AManifest">Parsed manifest; provides RootDir and OutDir context.</param>
+/// <param name="ASection">Section whose Db field is to be expanded.</param>
+/// <returns>Absolute path to the section's output database file. If ASection.Db is
+/// empty, defaults to &lt;OutDir&gt;\&lt;SectionName&gt;.sqlite.</returns>
+/// <remarks>
+/// Handles relative paths, empty paths (defaults), and environment variable expansion.
+/// Used by DB selection logic to match resolved DBs back to manifest sections.
+/// </remarks>
+function ExpandSectionDb(const AManifest: TIndexManifest; const ASection: TIndexSection): string;
+
+/// <summary>The project file a section is anchored to, expanded to an absolute
+/// path, or '' when the section scans a folder tree instead.</summary>
+/// <param name="AManifest">Parsed manifest; RootDir anchors a relative include.</param>
+/// <param name="ASection">Section to inspect.</param>
+/// <returns>Absolute .dproj/.dpr/.dpk path, or '' for a folder-scan section.</returns>
+/// <remarks>Only the FIRST include is considered. A section whose target is a
+/// project indexes that project's compile closure, so a second project target
+/// would be a second section -- which is how the manifest already models it.</remarks>
+function SectionProjectFile(const AManifest: TIndexManifest; const ASection: TIndexSection): string;
+
 /// <summary>Resolves any file to a section DB by FOLDER: the section whose
 /// include folder is the most specific ancestor of AFilePath wins.</summary>
 /// <param name="AManifest">Parsed manifest. Relative includes are expanded against
@@ -546,6 +567,10 @@ function OrderDbsByMembership(const ACandidates: TArray<string>;
 function LoadDocComplexityMin: Integer;
 
 implementation
+
+uses
+  DRagLint.Core.Model
+  ;
 
 { ---------------------------------------------------------------------- }
 {  Helpers                                                                 }
@@ -1191,15 +1216,41 @@ begin
   Result:= LowerCase(ExpandFileName(P));
 end;
 
-{ Absolute DB path for a section: an empty Db means the documented default
-  <OutDir>\<Name>.sqlite; a relative Db is anchored to OutDir (itself anchored to
-  RootDir when relative); an absolute Db is used as given. }
+function SectionProjectFile(const AManifest: TIndexManifest; const ASection: TIndexSection): string;
+var
+  Ext: string;
+begin
+  Result:= '';
+  if Length(ASection.Include) = 0 then Exit;
+  Result:= ASection.Include[0];
+  if Result = '' then Exit;
+  if TPath.IsRelativePath(Result) and (AManifest.RootDir <> '') then
+    Result:= TPath.Combine(AManifest.RootDir, Result);
+  Result:= ExpandFileName(Result);
+  Ext   := LowerCase(ExtractFileExt(Result));
+  if (Ext <> '.dproj') and (Ext <> '.dpr') and (Ext <> '.dpk') then Result:= '';
+end;
+
 function ExpandSectionDb(const AManifest: TIndexManifest; const ASection: TIndexSection): string;
 var
-  OutBase: string;
+  OutBase : string;
+  ProjFile: string;
 begin
   Result:= ASection.Db;
-  if Result = '' then Result:= ASection.Name + '.sqlite';
+  { An omitted Db on a PROJECT section resolves to that project's own _D-RAG
+    home, named after the PROJECT FILE. Not the folder and not the section name:
+    five folders here host two or three projects (YADF, YADFOT and YADFSetup all
+    live in C:\Projects\YADF), so a folder-derived name would collide.
+    An explicit Db still wins -- the escape hatch for a read-only or network
+    source tree that cannot host a database. }
+  if Result = '' then
+  begin
+    ProjFile:= SectionProjectFile(AManifest, ASection);
+    if ProjFile <> '' then
+      Exit(TPath.Combine(TPath.Combine(ExtractFilePath(ProjFile), DRAG_HOME_DIR),
+                         TPath.GetFileNameWithoutExtension(ProjFile) + '.sqlite'));
+    Result:= ASection.Name + '.sqlite';
+  end;
   if not TPath.IsRelativePath(Result) then Exit(ExpandFileName(Result));
   OutBase:= AManifest.OutDir;
   if OutBase = '' then OutBase:= AManifest.RootDir

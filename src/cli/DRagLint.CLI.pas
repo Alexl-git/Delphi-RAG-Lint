@@ -9427,6 +9427,90 @@ begin
         [AArgs.ProjectPath]));
       Exit(2);
     end;
+  end
+  else
+  begin
+    { Per-project DB scope: if no --project flag, default to linting only files under
+      the manifest's Include paths for this section, excluding vendored dependencies.
+      For a per-project DB (introduced 2026-08-09), the compile closure includes external
+      dependencies needed for call resolution, but linting scope should be narrower --
+      only the project's own source roots. If the manifest section is not found (shared
+      DB, folder-scoped DB, etc.), ScopeSet stays nil and everything in the DB is linted
+      (preserving pre-2026-08-11 behavior for non-per-project configurations). }
+    try
+      var EngineDir: string:= ExtractFilePath(ParamStr(0));
+      var Manifest: TIndexManifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+
+      { Find which manifest section owns this ProjectDb. Match the section's expanded
+        DB path (section name + platform + output location) against ProjectDb. }
+      var FoundSection: TIndexSection:= Default(TIndexSection);
+      var SectionFound: Boolean:= False;
+      for var Sec in Manifest.Sections do
+      begin
+        if ExpandSectionDb(Manifest, Sec) = ProjectDb then
+        begin
+          FoundSection:= Sec;
+          SectionFound:= True;
+          Break;
+        end;
+      end;
+
+      { If found and the section has Include paths, build a default scope from them. }
+      if SectionFound and (Length(FoundSection.Include) > 0) then
+      begin
+        { Build scope from Include paths: expand each path and normalize. For each
+          Include, include all .pas files under that root, plus sibling .dfm files. }
+        var IncludePaths: TList<string>:= TList<string>.Create;
+        try
+          for var IncPath in FoundSection.Include do
+          begin
+            var ExpandedPath: string:= TPath.GetFullPath(IncPath);
+            if TDirectory.Exists(ExpandedPath) or TFile.Exists(ExpandedPath) then
+              IncludePaths.Add(LowerCase(ExpandedPath));
+          end;
+
+          { Filter indexed files to only those under Include paths. }
+          if IncludePaths.Count > 0 then
+          begin
+            ScopeSet:= TDictionary<string, Boolean>.Create;
+            for var ScopeFid in Store.GetAllFileIds do
+            begin
+              var FilePath: string:= Store.GetFilePath(ScopeFid);
+              var LowerPath: string:= LowerCase(FilePath);
+              var IsUnderInclude: Boolean:= False;
+
+              { Check if this file is under any Include path. }
+              for var IncPath in IncludePaths do
+              begin
+                if LowerPath = IncPath then
+                begin
+                  IsUnderInclude:= True;
+                  Break;
+                end;
+                { Also include files in subdirectories of Include paths. }
+                var IncPathWithDel: string:= IncludeTrailingPathDelimiter(IncPath);
+                if AnsiStartsStr(IncPathWithDel, LowerPath) then
+                begin
+                  IsUnderInclude:= True;
+                  Break;
+                end;
+              end;
+
+              if IsUnderInclude then
+                ScopeSet.AddOrSetValue(ScopeKey(FilePath), True);
+            end;
+          end;
+        finally
+          IncludePaths.Free;
+        end;
+      end;
+    except
+      { Manifest load / parse failure: fall through with ScopeSet = nil,
+        linting everything in the DB (preserves safe fallback behavior). }
+      on E: Exception do
+        if not AArgs.Quiet then
+          Writeln(ErrOutput, Format('lint-all: (info) could not determine project scope from manifest: %s', [E.Message]));
+    end; // try
   end;
 
   { Enumerate all indexed .pas files from the project store }
@@ -10214,7 +10298,7 @@ function GhostDir(const ADproj: string): string;
 var
   Attrs: Cardinal;
 begin
-  Result:= TPath.Combine(ExtractFilePath(ADproj), '_D-RAG');
+  Result:= TPath.Combine(ExtractFilePath(ADproj), DRAG_HOME_DIR);
   try
     if not TDirectory.Exists(Result) then TDirectory.CreateDirectory(Result);
     Attrs:= GetFileAttributes(PChar(Result));
@@ -10561,7 +10645,7 @@ begin
   if Root = '' then Root:= AArgs.Path;
   if Root = '' then Root:= GetCurrentDir;
   if SameText(ExtractFileExt(Root), '.dproj') then Root:= ExtractFilePath(Root);
-  DragDir:= TPath.Combine(Root, '_D-RAG');
+  DragDir:= TPath.Combine(Root, DRAG_HOME_DIR);
   Recovered:= 0;
   if not TDirectory.Exists(DragDir) then begin Writeln('ghost-recover: nothing pending.'); Exit (0 ); end;
   try
@@ -15717,6 +15801,59 @@ begin
   Result:= 0;
 end; // function
 
+// selftest section-db: asserts ExpandSectionDb derives <projdir>\_D-RAG\<project
+// base>.sqlite for a project section with no "db", that TWO projects in ONE folder
+// get distinct files (YADF hosts three), that an explicit "db" still wins, and that
+// a folder-scan section keeps <OutDir>\<Name>.sqlite.
+// Prints SECTIONDB-OK on success or SECTIONDB-FAIL: <detail>.
+function DoSelfTestSectionDb: Integer;
+var
+  M  : TIndexManifest;
+  S  : TIndexSection ;
+  Got: string        ;
+begin
+  M        := Default(TIndexManifest);
+  M.RootDir:= 'C:\cfg';
+  M.OutDir := 'C:\out';
+
+  S        := Default(TIndexSection);
+  S.Name   := 'YADF';
+  S.Include:= ['C:\Projects\YADF\YADF.dproj'];
+  Got      := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\Projects\YADF\_D-RAG\YADF.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: derived ', Got); Exit(1); end;
+
+  S.Name   := 'YADFOT';
+  S.Include:= ['C:\Projects\YADF\YADFOT.dproj'];
+  Got      := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\Projects\YADF\_D-RAG\YADFOT.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: same-folder second project got ', Got); Exit(1); end;
+
+  S.Db:= 'C:\elsewhere\pinned.sqlite';
+  Got := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\elsewhere\pinned.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: explicit db did not win, got ', Got); Exit(1); end;
+
+  S        := Default(TIndexSection);
+  S.Name   := 'Library';
+  S.Include:= ['C:\Projects\SomeFolder'];
+  Got      := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\out\Library.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: folder section got ', Got); Exit(1); end;
+
+  { A .dpr and a .dpk anchor a project just as a .dproj does -- DragLint-Tests
+    and the Graph packages are configured that way. }
+  S        := Default(TIndexSection);
+  S.Name   := 'Tests';
+  S.Include:= ['C:\Projects\X\tests\Edge.dpr'];
+  Got      := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\Projects\X\tests\_D-RAG\Edge.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: .dpr anchor got ', Got); Exit(1); end;
+
+  Writeln('SECTIONDB-OK');
+  Result:= 0;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -15730,10 +15867,11 @@ begin
   else if AArgs.SubCommand = 'recreate'      then Result:= DoSelfTestRecreate
   else if AArgs.SubCommand = 'unused-locals' then Result:= DoSelfTestUnusedLocals
   else if AArgs.SubCommand = 'harvest'       then Result:= DoSelfTestHarvest    (AArgs)
+  else if AArgs.SubCommand = 'section-db'    then Result:= DoSelfTestSectionDb
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db');
     Result:= 2;
   end;
 end; // function

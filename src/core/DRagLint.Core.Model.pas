@@ -16,6 +16,11 @@ const
   /// constant here reaches both with no new dependency and no cycle.</remarks>
   DRAGLINT_VERSION = '1.2.2-alpha';
 
+  /// <summary>Hidden per-project folder holding everything drag-lint keeps for
+  /// one Delphi project: its index, its drag-lint-project.json, its reports, and
+  /// the ghost-compile journal that first created the folder.</summary>
+  DRAG_HOME_DIR = '_D-RAG';
+
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
