@@ -2708,6 +2708,32 @@ begin
           '  helper_kind      TEXT NOT NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_helper ON type_helpers(helper_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_target ON type_helpers(target_name)');
+  { v0.85 PERF -- the three FK child columns that had no index.
+
+    `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
+    `symbols` row makes SQLite look for children in every table that REFERENCES
+    symbols(id). Without an index on the referencing column that lookup is a FULL
+    TABLE SCAN, once PER DELETED SYMBOL. Re-indexing one file deletes ~77 symbols,
+    so the cost is 77 x (rows in the child table) -- invisible on a small DB and
+    dominant on a large one.
+
+    MEASURED on a 25 MB DB, 120 per-file cascade deletes, run in BOTH orders to
+    exclude a page-cache ordering artifact: 12.9 s -> 4.6 s, a 2.7x speedup. The
+    scanned tables grow ~24x between a 291-file sample and the ~7,000-file library
+    index, which is the 25x throughput collapse observed there (150 files/min on a
+    fresh DB vs 5.9 on the 2 GB library DB).
+
+    Every OTHER foreign-key child column in this schema was already indexed; these
+    three were simply missed as their tables were added.
+
+    DELIBERATELY NOT A SCHEMA-VERSION BUMP. The version fingerprint drives
+    "indexer changed -> re-parse every file in scope"; bumping it to ship an index
+    would force a full re-parse of every DB, which is the very cost this removes.
+    These are additive and idempotent, so an existing DB picks them up on the next
+    open with no re-parse at all. }
+  TryExec('CREATE INDEX IF NOT EXISTS idx_call_edges_receiver ON call_edges(receiver_type_symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_facts_symbol ON symbol_facts(symbol_id)'          );
+  TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_docs_symbol  ON symbol_docs(symbol_id)'           );
   PrepareStatements;
   { PHASE C B6: AFTER PrepareStatements, because the merge deletes files rows and
     that has to go through DeleteStringLiteralsForFile (FQDeleteFileStringLiterals)

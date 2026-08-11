@@ -467,6 +467,33 @@ uses
   , DRagLint.Parser.DFM                { ADP2 T6: TDfmEventBinding/ExtractDfmEventBindings -- the paired-.dfm event-wiring extractor }
   ;
 
+{ v0.85 PERF -- memoize FindAllChildSymbols(ParentId).
+
+  Three separate fact analyses (AnalyzeReadsWrites, AnalyzeUiAffinity and the
+  ownership pass) ask the store for the owning class's children, and each runs
+  once per ROUTINE. Every method of a class therefore re-issues the same query
+  and re-materialises the same rows: a 100-method class costs 100 identical
+  round-trips per analysis.
+
+  The rows cannot change underneath us during a file's facts pass -- OpenFileTx
+  has already rewritten this file's symbols and the facts pass runs inside that
+  same still-open transaction -- so caching per parent id is safe.
+
+  Single-entry by design: routines of one class are analysed consecutively, which
+  is exactly the access pattern. NOT THREAD-SAFE -- see the note on GProcsCache;
+  parallel indexing must give each worker its own cache. }
+var
+  GKidsCacheParent: Int64 = -1;
+  GKidsCache      : TArray<TSymbol>;
+
+function ChildSymbolsCached(const AStore: ISymbolStore; AParentId: Int64): TArray<TSymbol>;
+begin
+  if (AParentId > 0) and (AParentId = GKidsCacheParent) then Exit(GKidsCache);
+  GKidsCache      := AStore.FindAllChildSymbols(AParentId);
+  GKidsCacheParent:= AParentId;
+  Result          := GKidsCache;
+end;
+
 function SymbolFactsCsvJoin(const AItems: TArray<string>): string;
 begin
   if Length(AItems) = 0 then Exit('');
@@ -722,7 +749,7 @@ begin
   Writes:= TList<string>.Create;
   Vars  := nil;
   try
-    Kids:= AStore.FindAllChildSymbols(ASym.ParentId);
+    Kids:= ChildSymbolsCached(AStore, ASym.ParentId); { was a per-routine store round-trip }
     for Kid in Kids do
       if Kid.Kind = skField then
       begin
@@ -1124,7 +1151,7 @@ begin
     // declared type text, which for a field symbol lives in Signature.
     if ASym.ParentId > 0 then
     begin
-      Kids:= AStore.FindAllChildSymbols(ASym.ParentId);
+      Kids:= ChildSymbolsCached(AStore, ASym.ParentId); { was a per-routine store round-trip }
       for Kid in Kids do
         if Kid.Kind = skField then
         begin
@@ -2575,7 +2602,7 @@ begin
     // parameter) and the unanimity check below naturally omits.
     if ASym.ParentId > 0 then
     begin
-      Kids:= AStore.FindAllChildSymbols(ASym.ParentId);
+      Kids:= ChildSymbolsCached(AStore, ASym.ParentId); { was a per-routine store round-trip }
       for Kid in Kids do
         if Kid.Kind = skField then
         begin
@@ -2612,6 +2639,42 @@ begin
     Fields.Free;
     Vars.Free;
   end;
+end;
+
+{ v0.85 PERF -- memoize CfgFindProcs per file.
+
+  Analyze is called once per ROUTINE, and it called CfgFindProcs(RootNode) each
+  time. CfgFindProcs walks the WHOLE tree to collect every defProc, so a file with
+  N routines walked its entire AST N times: O(routines x AST nodes) per file.
+  The comment below correctly notes the O(routines) linear MATCH, but the
+  COLLECTION it scans was being rebuilt on every call.
+
+  Measured before this change, with the per-phase profiler (DRAGLINT_PROFILE=1) on
+  Studio\37.0\source\Internet (54 files): facts = 32.56 s of a 47.60 s accounted
+  total -- 68%, against parse 1.34 s and commit 6.73 s.
+
+  A single-entry cache is enough and is the safest possible shape: the indexer
+  processes one file at a time and calls Analyze for all of that file's routines
+  consecutively, which is precisely the lifetime TAstParseCache already assumes.
+  The tree pointer is part of the key, so a re-parse (new tree, same path) cannot
+  hand back TTSNodes belonging to a freed tree.
+
+  NOT THREAD-SAFE, deliberately -- it inherits the shared-parse-cache constraint
+  stated in this unit's banner. Parallel indexing must give each worker its own
+  cache (or key this per thread) before using it. }
+var
+  GProcsCacheFile: string          ;
+  GProcsCacheTree: Pointer         ;
+  GProcsCache    : TArray<TTSNode> ;
+
+
+function ProcsForFile(const AFilePath: string; const APF: TParsedFile): TArray<TTSNode>;
+begin
+  if (GProcsCacheFile = AFilePath) and (GProcsCacheTree = Pointer(APF.Tree)) then Exit(GProcsCache);
+  GProcsCache    := CfgFindProcs(APF.Tree.RootNode);
+  GProcsCacheFile:= AFilePath;
+  GProcsCacheTree:= Pointer(APF.Tree);
+  Result         := GProcsCache;
 end;
 
 class function TSymbolFactsAnalyzer.Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts;
@@ -2659,7 +2722,7 @@ begin
   PF:= TAstParseCache.Get(AFilePath);
   if PF.Tree <> nil then
   begin
-    Procs:= CfgFindProcs(PF.Tree.RootNode);
+    Procs:= ProcsForFile(AFilePath, PF); { was CfgFindProcs(PF.Tree.RootNode) per routine }
     for Proc in Procs do
       if Integer(Proc.StartPoint.Row) + 1 = ASym.ImplStartLine then
       begin
