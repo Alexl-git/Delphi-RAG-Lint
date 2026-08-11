@@ -595,6 +595,7 @@ begin
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
+  Writeln('  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project''s _D-RAG folder');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -16192,6 +16193,202 @@ begin
   else Result:= 0;
 end; // function
 
+{ Exclusive-open probe. A DB that another process holds -- RAD Studio's LSP is
+  the usual one, but a stray index job or an LSP started from a copied exe does
+  it too -- must abort the migration BEFORE the first move, not half way through.
+  Testing the file beats testing for a process name: it is the lock that would
+  actually break the move. }
+function DbIsLocked(const APath: string): Boolean;
+var
+  FS: TFileStream;
+begin
+  Result:= False;
+  if not TFile.Exists(APath) then Exit;
+  try
+    FS:= TFileStream.Create(APath, fmOpenReadWrite or fmShareExclusive);
+    FS.Free;
+  except
+    on E: EFOpenError do Result:= True;
+  end;
+end;
+
+{ Move a database and the two WAL sidecars that belong to it. All 27 configured
+  indexes have both today. Checkpointing first collapses the WAL into the main
+  file, so a sidecar that fails to move costs nothing. }
+procedure MoveDbSet(const ASrc, ADst: string);
+var
+  Suffix: string;
+begin
+  TFile.Move(ASrc, ADst);
+  for Suffix in ['-wal', '-shm'] do
+    if TFile.Exists(ASrc + Suffix) then
+    begin
+      if TFile.Exists(ADst + Suffix) then TFile.Delete(ADst + Suffix);
+      TFile.Move(ASrc + Suffix, ADst + Suffix);
+    end;
+end;
+
+{ Nearest ancestor holding a .hg directory, or '' -- used only to tell the user
+  which .hgignore to edit. }
+function FindHgRoot(const AStartDir: string): string;
+var
+  Dir, Parent: string;
+begin
+  Result:= '';
+  Dir   := ExcludeTrailingPathDelimiter(ExpandFileName(AStartDir));
+  while Dir <> '' do
+  begin
+    if TDirectory.Exists(TPath.Combine(Dir, '.hg')) then Exit(Dir);
+    Parent:= ExtractFileDir(Dir);
+    if SameText(Parent, Dir) then Break;
+    Dir:= Parent;
+  end;
+end;
+
+/// <summary>Moves every project section's index into that project's _D-RAG home
+/// and drops the now-derivable "db" from the manifest.</summary>
+/// <param name="AArgs">Parsed args; ConfigPath and the --apply switch are read.</param>
+/// <returns>0 = success or nothing to do, 1 = a move failed, 2 = a DB is locked
+/// or the manifest could not be read.</returns>
+/// <remarks>Dry-run by default: prints every planned move and touches nothing.
+/// No reindex is needed -- no table stores the database's own path.</remarks>
+function DoMigrateDbs(const AArgs: TArgs): Integer;
+var
+  Manifest : TIndexManifest;
+  CfgPath  : string        ;
+  I        : Integer       ;
+  Src, Dst : string        ;
+  ProjFile : string        ;
+  Moved    : Integer       ;
+  Planned  : Integer       ;
+  Conn     : TFDConnection ;
+  RowsBefore, RowsAfter: Int64;
+  HgRoots  : TStringList   ;
+begin
+  Result := 0;
+  Moved  := 0;
+  Planned:= 0;
+  { Deliberately NOT TManifestIO.Load: that MERGES a global and a local manifest
+    and does not report which file it read, so saving the merged result back
+    would inline one manifest into the other. Resolve exactly one file and
+    rewrite exactly that file. --config wins; else the drag-lint.json beside the
+    exe, which is where the real one lives (third_party\dll-win64). }
+  CfgPath:= AArgs.WorkspaceConfig;
+  if CfgPath = '' then CfgPath:= TPath.Combine(ExtractFilePath(ParamStr(0)), 'drag-lint.json');
+  if not TFile.Exists(CfgPath) then
+  begin
+    Writeln('ERROR: manifest not found: ', CfgPath);
+    Writeln('       Pass --config <drag-lint.json> naming the file to rewrite.');
+    Exit(2);
+  end;
+  Manifest:= TManifestIO.ParseText(TFile.ReadAllText(CfgPath), ExtractFilePath(TPath.GetFullPath(CfgPath)));
+
+  { Probe EVERY lock before moving ANY file. A half-done migration is the one
+    outcome worth engineering against. }
+  for I:= 0 to High(Manifest.Sections) do
+  begin
+    if SectionProjectFile(Manifest, Manifest.Sections[I]) = '' then Continue;
+    Src:= ExpandSectionDb(Manifest, Manifest.Sections[I]);
+    if DbIsLocked(Src) then
+    begin
+      Writeln('ERROR: in use, cannot migrate: ', Src);
+      Writeln('       Close RAD Studio (its LSP holds project indexes open) and retry.');
+      Exit(2);
+    end;
+  end;
+
+  HgRoots:= TStringList.Create;
+  HgRoots.Sorted:= True; HgRoots.Duplicates:= dupIgnore;
+  try
+    for I:= 0 to High(Manifest.Sections) do
+    begin
+      ProjFile:= SectionProjectFile(Manifest, Manifest.Sections[I]);
+      if ProjFile = '' then Continue;                    { folder scan: stays put }
+      Src:= ExpandSectionDb(Manifest, Manifest.Sections[I]);
+      Dst:= TPath.Combine(TPath.Combine(ExtractFilePath(ProjFile), DRAG_HOME_DIR),
+                          TPath.GetFileNameWithoutExtension(ProjFile) + '.sqlite');
+      if SameText(Src, Dst) then Continue;               { already home }
+      Inc(Planned);
+      Writeln(Format('%s  %s -> %s', [Manifest.Sections[I].Name, Src, Dst]));
+      if not AArgs.Apply then Continue;
+      if not TFile.Exists(Src) then
+      begin
+        Writeln('  SKIP: source does not exist (never built)');
+        Continue;
+      end;
+
+      try
+        { Checkpoint so the moved file is self-contained, and count rows so the
+          move can be verified rather than assumed. }
+        Conn:= TFDConnection.Create(nil);
+        try
+          Conn.DriverName:= 'SQLite';
+          Conn.Params.Values['Database']:= Src;
+          Conn.LoginPrompt:= False;
+          Conn.Open;
+          Conn.ExecSQL('PRAGMA wal_checkpoint(TRUNCATE)');
+          RowsBefore:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
+        finally
+          Conn.Close; Conn.Free;
+        end;
+
+        TDirectory.CreateDirectory(ExtractFileDir(Dst));
+        MoveDbSet(Src, Dst);
+
+        Conn:= TFDConnection.Create(nil);
+        try
+          Conn.DriverName:= 'SQLite';
+          Conn.Params.Values['Database']:= Dst;
+          Conn.LoginPrompt:= False;
+          Conn.Open;
+          RowsAfter:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
+        finally
+          Conn.Close; Conn.Free;
+        end;
+        if RowsAfter <> RowsBefore then
+        begin
+          Writeln(Format('  ERROR: %d files before, %d after -- STOPPING', [RowsBefore, RowsAfter]));
+          Exit(1);
+        end;
+
+        { Self-ignoring for git. Mercurial cannot self-ignore, so collect the
+          repo roots and print instructions at the end instead of editing a
+          repository's ignore file behind its owner's back. }
+        TFile.WriteAllText(TPath.Combine(ExtractFileDir(Dst), '.gitignore'), '*'#13#10);
+        var HgRoot: string:= FindHgRoot(ExtractFilePath(ProjFile));
+        if HgRoot <> '' then HgRoots.Add(HgRoot);
+
+        Manifest.Sections[I].Db:= '';   { now derivable }
+        Inc(Moved);
+        Writeln(Format('  OK (%d files)', [RowsAfter]));
+      except
+        on E: Exception do
+        begin
+          Writeln('  ERROR: ', E.ClassName, ': ', E.Message);
+          Exit(1);
+        end;
+      end;
+    end;
+
+    if AArgs.Apply and (Moved > 0) then
+    begin
+      TManifestIO.Save(Manifest, CfgPath);
+      Writeln(Format('migrate-dbs: %d database(s) moved; manifest updated (%s)', [Moved, CfgPath]));
+      if HgRoots.Count > 0 then
+      begin
+        Writeln('');
+        Writeln('Mercurial cannot self-ignore. Add this line to each .hgignore:');
+        Writeln('    ' + DRAG_HOME_DIR);
+        for var R: string in HgRoots do Writeln('  ' + TPath.Combine(R, '.hgignore'));
+      end;
+    end
+    else if not AArgs.Apply then
+      Writeln(Format('migrate-dbs: %d database(s) would move. Re-run with --apply.', [Planned]));
+  finally
+    HgRoots.Free;
+  end;
+end; // function
+
 // Hidden self-test verb for Auto-Document Phase 2 Task 1 (symbol_facts
 // storage plumbing). Assumes --db already has fixtures\docp2store\p2store.pas
 // indexed (tests/autodoc/run_doc_p2_store.ps1's job) so ComputeTotal has a
@@ -16356,6 +16553,7 @@ begin
     else if Args.Command = 'doc-facts-selftest' then Result:= DoDocFactsSelfTest(Args)
     else if Args.Command = 'reconcile-project' then Result:= DoReconcileProject(Args)
     else if Args.Command = 'library-drift'     then Result:= DoLibraryDrift    (Args)
+    else if Args.Command = 'migrate-dbs'       then Result:= DoMigrateDbs      (Args)
     else if Args.Command = 'resolve-dbs' then
       // v0.45 Task 10: print the consumer DB list (same as query/lsp/serve use).
       Result:= DoResolveDbsList(Args)

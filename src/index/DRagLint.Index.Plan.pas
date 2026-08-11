@@ -351,9 +351,14 @@ begin
         PS.Mode    := Mode;
         PS.Platform:= '';
 
-        DbTemplate:= Sec.Db;
-        if DbTemplate = '' then DbTemplate:= Sec.Name + '.sqlite';
-        PS.DbPath:= ExpandDbPath(DbTemplate, '', AManifest.RootDir, AManifest.OutDir);
+        { NOT ExpandDbPath here (that is the smLibrary path, above): a project
+          section with no explicit "db" is anchored to ITS OWN project file, not
+          to <OutDir>\<Name>.sqlite -- ExpandSectionDb is the one function that
+          knows that (project -> _D-RAG home; folder scan -> the OutDir
+          default), and migrate-dbs's manifest rewrite depends on this function
+          agreeing with it, or a post-migration `index --all` would recreate a
+          second, stale database at the old OutDir location. }
+        PS.DbPath:= ExpandSectionDb(AManifest, Sec);
         PS.Roots:= ResolveRoots(Sec, AManifest.RootDir, Mode);
         PS.Filter:= BuildFilter(AManifest, Sec);
         Items.Add(PS);
