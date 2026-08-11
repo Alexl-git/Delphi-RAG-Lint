@@ -402,8 +402,11 @@ function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: s
 /// <summary>Expands a section's configured output database path to an absolute path.</summary>
 /// <param name="AManifest">Parsed manifest; provides RootDir and OutDir context.</param>
 /// <param name="ASection">Section whose Db field is to be expanded.</param>
-/// <returns>Absolute path to the section's output database file. If ASection.Db is
-/// empty, defaults to &lt;OutDir&gt;\&lt;SectionName&gt;.sqlite.</returns>
+/// <returns>Absolute path to the section's output database file. An explicit
+/// ASection.Db always wins. Otherwise, for a PROJECT section (one whose first
+/// Include is a .dproj/.dpr/.dpk -- see SectionProjectFile), the default is
+/// &lt;project folder&gt;\_D-RAG\&lt;project file base&gt;.sqlite. For a folder-scan
+/// section, the default remains &lt;OutDir&gt;\&lt;SectionName&gt;.sqlite.</returns>
 /// <remarks>
 /// Handles relative paths, empty paths (defaults), and environment variable expansion.
 /// Used by DB selection logic to match resolved DBs back to manifest sections.
