@@ -1,0 +1,47 @@
+{
+  "name": "drag-lint",
+  "displayName": "drag-lint (Delphi)",
+  "description": "Delphi/Pascal language server backed by the drag-lint index: hover, go-to-definition, find-references, workspace symbols, completion and signature help.",
+  "version": "1.2.2",
+  "publisher": "drag-lint",
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:pascal"],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "pascal",
+        "aliases": ["Delphi", "Object Pascal", "Pascal"],
+        "extensions": [".pas", ".dpr", ".dpk", ".inc", ".dfm"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configuration": {
+      "title": "drag-lint",
+      "properties": {
+        "dragLint.serverPath": {
+          "type": "string",
+          "default": "C:\\Projects\\Delphi-RAG-lint\\third_party\\dll-win64\\drag-lint.exe",
+          "markdownDescription": "Path to `drag-lint.exe`. Defaults to the **same deployed binary the Delphi IDE loads**, so redeploying the engine updates VS Code with no extension change and the two can never disagree about which build answered."
+        },
+        "dragLint.databases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "markdownDescription": "Optional explicit `--db` paths. Leave EMPTY (the default) to let drag-lint auto-select databases from `drag-lint.json` beside the exe — that is what keeps VS Code pointed at whatever the manifest currently says, including per-project indexes."
+        },
+        "dragLint.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Log the LSP conversation to the 'drag-lint' output channel."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

@@ -758,7 +758,9 @@ begin
     ResObj     .AddPair('capabilities'         , Caps           );
     Info:= TJSONObject.Create;
     Info  .AddPair('name'      , 'drag-lint LSP');
-    Info  .AddPair('version'   , '0.40.5-alpha' );
+    { NOT a literal: editors show this in their LSP logs, and a hardcoded copy
+      had already drifted eleven releases behind the CLI banner. }
+    Info  .AddPair('version'   , DRAGLINT_VERSION);
     ResObj.AddPair('serverInfo', Info           );
     Reply .AddPair('result'    , ResObj         );
     SendMessage(Reply);

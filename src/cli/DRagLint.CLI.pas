@@ -2,8 +2,17 @@ unit DRagLint.CLI;
 
 interface
 
+uses
+  { INTERFACE-level, and only for DRAGLINT_VERSION below -- everything else this
+    unit needs is in the implementation uses. Core.Model is a leaf model unit
+    (it uses nothing of ours), so this adds no cycle. }
+  DRagLint.Core.Model;
+
 const
-  VERSION = '1.2.2-alpha';
+  { Kept as a local alias so the seven existing uses below read unchanged; the
+    value now comes from DRagLint.Core.Model so the LSP handshake cannot drift
+    away from the CLI banner again -- see DRAGLINT_VERSION. }
+  VERSION = DRAGLINT_VERSION;
 
 /// <returns><!-- drag-lint:auto -->Observed: 2; DoIndexAll(Args); DoIndex(Args); DoQuery
 /// (Args); DoRules (Args); DoLint (Args).</returns>
@@ -45,7 +54,8 @@ uses
   , { v0.42: lets TFDParam.SetAsX inline (was H2443) }
       FireDAC.DApt
   , TreeSitter
-  , DRagLint.Core   .Model
+  { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
+    must not be listed twice. }
   , DRagLint.Core   .Interfaces
   , DRagLint.Core   .Indexer
   , DRagLint.Storage.SQLite

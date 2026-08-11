@@ -703,9 +703,13 @@ begin
       Exit; { malformed manifest: show the default rather than raising in Options UI }
     end; // try
     if not (Root is TJSONObject) then Exit;
-    Docs:= Root.GetValue('docs');
+    { Both casts are LOAD-BEARING -- see the note in LintOptionsFrame.ParseCatalog.
+      Root and Docs are statically TJSONValue, whose GetValue is GENERIC; the
+      `is TJSONObject` guards narrow the value, not the static type. An autofix
+      removed all three of these in 41134be and left the package unbuildable. }
+    Docs:= TJSONObject(Root).GetValue('docs');
     if not (Docs is TJSONObject) then Exit;
-    Num:= Docs.GetValue('max_return_cases');
+    Num:= TJSONObject(Docs).GetValue('max_return_cases');
     if Num is TJSONNumber then Result:= TJSONNumber(Num).AsInt;
   finally
     Root.Free;

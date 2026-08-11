@@ -1,0 +1,5 @@
+# Dependencies are restored with `npm install --omit=dev` in this directory.
+# They are NOT tracked: 319 files of third-party JavaScript would swamp the diff
+# of a repo whose reviewable content is Object Pascal, and package-lock.json
+# already pins exactly what to restore.
+node_modules/

@@ -421,7 +421,13 @@ begin
   if Root = nil then Exit;
   try
     if not (Root is TJSONObject) then Exit;
-    RulesArr:= Root.GetValue('rules') as TJSONArray;
+    { The cast is LOAD-BEARING, not redundant, and an autofix removed it in
+      41134be leaving the package unbuildable. Root is statically TJSONValue,
+      whose GetValue is GENERIC (GetValue<T>) and cannot be called without a type
+      argument; the non-generic GetValue(const Name: string): TJSONValue belongs
+      to TJSONObject. The `is TJSONObject` guard above narrows the VALUE, not the
+      static type, so the compiler still needs to be told. }
+    RulesArr:= TJSONObject(Root).GetValue('rules') as TJSONArray;
     if RulesArr = nil then Exit;
     SetLength(Result, RulesArr.Count);
     i:= 0;
