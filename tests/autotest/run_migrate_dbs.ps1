@@ -62,6 +62,16 @@ try {
     Check 'Save round-trip: platforms survives'      ((@($savedSec.platforms)   -join ',') -eq 'Win64')
     Check 'Save round-trip: dedupAgainst survives'   ((@($savedSec.dedupAgainst) -join ',') -eq 'OtherLib')
 
+    # 2c. TManifestIO.Save must be atomic (review round 2): migrate-dbs now
+    # calls it up to once per section -- up to 27 times in one unattended run
+    # -- against the user's real, hand-maintained manifest. Forcing a genuine
+    # mid-write crash from OUTSIDE this process is not something a black-box
+    # script can do deterministically, so this is covered by an in-process
+    # selftest instead: it forces the atomic swap itself to fail (a read-only
+    # target) and asserts the original content survives completely untouched.
+    $saveAtomic = & $Exe selftest manifest-save-atomic 2>&1 | Out-String
+    Check 'TManifestIO.Save is atomic' ($saveAtomic -match 'SAVEATOMIC-OK')
+
     # 3. The moved index still answers, and the manifest now derives the path.
     $after = & $Exe query --db $newdb --name App --json 2>$null | Out-String
     Check 'moved index still answers' ($after.Trim() -eq $before.Trim())
@@ -159,6 +169,98 @@ try {
         Check 'retry: index --all resolves B at its new home' ($bSection.db -eq $bdst)
     } finally {
         Remove-Item -Recurse -Force $work2 -ErrorAction SilentlyContinue
+    }
+
+    # 8. Review finding 1b: the reconciliation branch must not launder a
+    # database that fails an integrity check. A manifest entry whose source
+    # is gone but whose derived destination holds an UNHEALTHY file (here:
+    # not a database at all) must be REFUSED, not silently accepted just
+    # because something is sitting at that path.
+    $work3 = Join-Path $env:TEMP ('draglint_migrate3_' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory $work3 | Out-Null
+    try {
+        $projC = Join-Path $work3 'C'; New-Item -ItemType Directory $projC | Out-Null
+        Set-Content -LiteralPath (Join-Path $projC 'C.dproj') -Value '<Project/>' -NoNewline
+        Set-Content -LiteralPath (Join-Path $projC 'C.pas')   -Value "unit C;`r`ninterface`r`nimplementation`r`nend."
+
+        $cdst = Join-Path $projC '_D-RAG\C.sqlite'
+        New-Item -ItemType Directory (Split-Path $cdst) -Force | Out-Null
+        Set-Content -LiteralPath $cdst -Value 'not a sqlite file' -NoNewline
+
+        $cfgC = Join-Path $work3 'drag-lint.json'
+        $jC = @{ indexes = @{ outDir = (Join-Path $work3 'out'); sections = @(
+                  @{ name = 'C'; db = (Join-Path $work3 'out\gone-C.sqlite'); include = @((Join-Path $projC 'C.dproj')) }
+              ) } }
+        Set-Content -LiteralPath $cfgC -Value ($jC | ConvertTo-Json -Depth 8)
+
+        $badRecon = & $Exe migrate-dbs --config $cfgC --apply 2>&1 | Out-String
+        Check 'unhealthy reconcile: refused, exit 1'        ($LASTEXITCODE -eq 1)
+        # -match is case-insensitive, and the refusal message itself says
+        # "NOT reconciling" -- match the exact success marker (with the
+        # colon) so that phrase cannot false-positive this check.
+        Check 'unhealthy reconcile: not claimed RECONCILED' ($badRecon -notmatch 'RECONCILED:')
+        Check 'unhealthy reconcile: reports the integrity failure' ($badRecon -match 'integrity check')
+
+        # Refusing to reconcile means not touching the manifest AT ALL.
+        $savedC = (Get-Content -LiteralPath $cfgC -Raw | ConvertFrom-Json).indexes.sections | Where-Object { $_.name -eq 'C' }
+        Check 'unhealthy reconcile: manifest entry left alone' ($savedC.db -match 'gone-C\.sqlite')
+
+        # A GENUINELY healthy database at the same path must still reconcile.
+        Remove-Item -LiteralPath $cdst -Force
+        & $Exe index $projC --db $cdst | Out-Null
+        $goodRecon = & $Exe migrate-dbs --config $cfgC --apply 2>&1 | Out-String
+        Check 'healthy reconcile: exits 0'    ($LASTEXITCODE -eq 0)
+        Check 'healthy reconcile: RECONCILED' ($goodRecon -match 'RECONCIL')
+    } finally {
+        Remove-Item -Recurse -Force $work3 -ErrorAction SilentlyContinue
+    }
+
+    # 9. Review finding 1 (residual): an exception raised strictly AFTER a
+    # successful physical move -- unlike block 6's section B, which fails
+    # during the pre-move checkpoint -- must still leave the on-disk manifest
+    # naming the destination. Forced here by pre-creating "_D-RAG\.gitignore"
+    # as a DIRECTORY, so the .gitignore write (which runs after the move)
+    # throws; a genuine post-move ROW-COUNT mismatch could not be constructed
+    # deterministically from outside the process without either racing the
+    # live child process or adding test-only fault-injection hooks to
+    # production code (see the fix report) -- this exercises the identical
+    # code path instead: an exception after MoveDbSet returns, caught by the
+    # same except handler, Exit(1)ing the same way.
+    $work4 = Join-Path $env:TEMP ('draglint_migrate4_' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory $work4 | Out-Null
+    try {
+        $projD = Join-Path $work4 'D';   New-Item -ItemType Directory $projD | Out-Null
+        $outD  = Join-Path $work4 'out'; New-Item -ItemType Directory $outD  | Out-Null
+        Set-Content -LiteralPath (Join-Path $projD 'D.dproj') -Value '<Project/>' -NoNewline
+        Set-Content -LiteralPath (Join-Path $projD 'D.pas')   -Value "unit D;`r`ninterface`r`nimplementation`r`nend."
+        $ddb = Join-Path $outD 'D.sqlite'
+        & $Exe index $projD --db $ddb | Out-Null
+
+        $ddst = Join-Path $projD '_D-RAG\D.sqlite'
+        New-Item -ItemType Directory (Join-Path $projD '_D-RAG\.gitignore') -Force | Out-Null
+
+        $cfgD = Join-Path $work4 'drag-lint.json'
+        $jD = @{ indexes = @{ outDir = $outD; sections = @(
+                  @{ name = 'D'; db = 'D.sqlite'; include = @((Join-Path $projD 'D.dproj')) }
+              ) } }
+        Set-Content -LiteralPath $cfgD -Value ($jD | ConvertTo-Json -Depth 8)
+
+        & $Exe migrate-dbs --config $cfgD --apply 2>&1 | Out-Null
+        Check 'post-move failure: overall exit is 1'            ($LASTEXITCODE -eq 1)
+        Check 'post-move failure: file physically moved anyway' ((Test-Path $ddst) -and -not (Test-Path $ddb))
+
+        $savedD = (Get-Content -LiteralPath $cfgD -Raw | ConvertFrom-Json).indexes.sections | Where-Object { $_.name -eq 'D' }
+        Check 'post-move failure: manifest already names the destination, not the vanished source' ([string]::IsNullOrEmpty($savedD.db))
+
+        # A retry must not silently declare the section healthy: the entry is
+        # already correct, so the section is "already home" with nothing left
+        # to do -- it must NOT print a false RECONCILED/OK claim for a
+        # database whose .gitignore write never actually completed.
+        $retryD = & $Exe migrate-dbs --config $cfgD --apply 2>&1 | Out-String
+        Check 'post-move failure retry: exits 0 (nothing left to move)' ($LASTEXITCODE -eq 0)
+        Check 'post-move failure retry: no false health claim' (($retryD -notmatch 'RECONCIL') -and ($retryD -notmatch 'OK \('))
+    } finally {
+        Remove-Item -Recurse -Force $work4 -ErrorAction SilentlyContinue
     }
 } finally {
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue

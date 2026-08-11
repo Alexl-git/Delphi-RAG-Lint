@@ -15771,6 +15771,72 @@ begin
   Result:= 0;
 end; // function
 
+// selftest manifest-save-atomic (review round 2, migrate-dbs finding): a
+// plain TFile.WriteAllText truncates the target BEFORE writing new content,
+// so a save interrupted mid-write (crash/kill/power loss) used to be able to
+// leave drag-lint.json empty or truncated -- and migrate-dbs now calls Save
+// up to once per section, up to 27 times in one unattended run, against the
+// user's real manifest. TManifestIO.Save now writes a sibling temp file and
+// swaps it into place with one atomic filesystem operation. Deterministically
+// (no timing/racing needed) forces the swap to fail by making the target
+// read-only, then asserts the ORIGINAL content survives completely intact --
+// proving a failed save can only fail outright, never corrupt the target.
+// Prints SAVEATOMIC-OK on success or SAVEATOMIC-FAIL: <detail>.
+function DoSelfTestManifestSaveAtomic: Integer;
+var
+  M     : TIndexManifest;
+  Path  : string        ;
+  Before: string        ;
+  After : string        ;
+  Raised: Boolean       ;
+begin
+  Result:= 1;
+  Path:= TPath.Combine(TPath.GetTempPath, 'draglint-selftest-save-atomic-' + TPath.GetGUIDFileName(False) + '.json');
+
+  M         := Default(TIndexManifest);
+  M.Settings:= TIndexSettings.Defaults;
+  M.Docs    := TDocSettings.Defaults;
+  SetLength(M.Sections, 1);
+  M.Sections[0]          := Default(TIndexSection);
+  M.Sections[0].Name     := 'Sentinel';
+  M.Sections[0].UseIgnoreFiles:= True;
+  M.Sections[0].SqlOnlyMS     := True;
+  TManifestIO.Save(M, Path);
+  Before:= TFile.ReadAllText(Path);
+  if Pos('Sentinel', Before) = 0 then
+    begin Writeln('SAVEATOMIC-FAIL: initial save did not persist'); Exit; end;
+
+  { Force the atomic swap to fail -- deterministically, no timing required:
+    Windows refuses to replace/rename onto a read-only destination. }
+  TFile.SetAttributes(Path, [TFileAttribute.faReadOnly]);
+  try
+    M.Sections[0].Name:= 'ChangedButShouldNotLand';
+    Raised:= False;
+    try
+      TManifestIO.Save(M, Path);
+    except
+      Raised:= True;   { expected: the swap must fail, loudly }
+    end;
+    if not Raised then
+      begin Writeln('SAVEATOMIC-FAIL: Save did not raise against a read-only target'); Exit; end;
+  finally
+    TFile.SetAttributes(Path, []);
+  end;
+
+  if TFile.Exists(Path + '.tmp') then
+    begin Writeln('SAVEATOMIC-FAIL: leftover .tmp file after a failed save'); Exit; end;
+
+  After:= TFile.ReadAllText(Path);
+  if After <> Before then
+    begin Writeln('SAVEATOMIC-FAIL: original content was altered by a failed save'); Exit; end;
+  if Pos('ChangedButShouldNotLand', After) > 0 then
+    begin Writeln('SAVEATOMIC-FAIL: the failed save''s new content leaked into the target'); Exit; end;
+
+  TFile.Delete(Path);
+  Writeln('SAVEATOMIC-OK');
+  Result:= 0;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -15785,10 +15851,11 @@ begin
   else if AArgs.SubCommand = 'unused-locals' then Result:= DoSelfTestUnusedLocals
   else if AArgs.SubCommand = 'harvest'       then Result:= DoSelfTestHarvest    (AArgs)
   else if AArgs.SubCommand = 'section-db'    then Result:= DoSelfTestSectionDb
+  else if AArgs.SubCommand = 'manifest-save-atomic' then Result:= DoSelfTestManifestSaveAtomic
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic');
     Result:= 2;
   end;
 end; // function
@@ -16228,6 +16295,39 @@ begin
     end;
 end;
 
+{ Opens APath and confirms it is a USABLE drag-lint index, not merely present.
+  Guards the reconciliation branch (review finding 1b): TFile.Exists alone
+  would also accept a database that failed the row-count check on an earlier
+  run -- the move itself succeeds independently of whether the moved file is
+  intact, so "Src missing, Dst present" is also exactly what a section that
+  already failed verification looks like. Reconciling that blindly would
+  launder a database this tool itself already flagged as broken. }
+function DbLooksHealthy(const APath: string): Boolean;
+var
+  Conn : TFDConnection;
+  Check: string       ;
+  Rows : Int64        ;
+begin
+  Result:= False;
+  if not TFile.Exists(APath) then Exit;
+  Conn:= TFDConnection.Create(nil);
+  try
+    try
+      Conn.DriverName:= 'SQLite';
+      Conn.Params.Values['Database']:= APath;
+      Conn.LoginPrompt:= False;
+      Conn.Open;
+      Check:= Conn.ExecSQLScalar('PRAGMA quick_check');
+      Rows := Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
+      Result:= SameText(Check, 'ok') and (Rows > 0);
+    except
+      Result:= False;   { not a database, or too corrupt to answer either query }
+    end;
+  finally
+    Conn.Close; Conn.Free;
+  end;
+end;
+
 { Nearest ancestor holding a .hg directory, or '' -- used only to tell the user
   which .hgignore to edit. }
 function FindHgRoot(const AStartDir: string): string;
@@ -16253,29 +16353,37 @@ end;
 /// <remarks>Dry-run by default: prints every planned move and touches nothing,
 /// so the exclusive-open lock probe is skipped entirely for a dry run -- it
 /// must always be safe to run even while RAD Studio holds every index open.
-/// The manifest is SAVED after every individual successful move, not once at
-/// the end: a later section failing must never leave the on-disk manifest
-/// naming a path that no longer exists for a project already relocated. A
-/// stale entry that names a source which no longer exists, but whose derived
-/// destination already holds a database, self-heals on the next --apply
-/// instead of being reported as never built. No reindex is needed -- no
-/// table stores the database's own path.</remarks>
+/// The manifest entry for a section is corrected and SAVED the INSTANT
+/// MoveDbSet physically relocates its database -- before the row-count
+/// verification, before the .gitignore write, before anything else that
+/// could still fail. That is the instant the on-disk manifest becomes wrong,
+/// so it is the instant it must be fixed; a later verification failure does
+/// NOT move the file back, so it must not revert this either, only report
+/// loudly. A stale entry that names a source which no longer exists, but
+/// whose derived destination already holds a database, self-heals on the
+/// next --apply -- but only after passing the SAME health check verification
+/// uses (PRAGMA quick_check + a non-zero files count), so a database that
+/// already failed verification once can never be laundered back to "healthy"
+/// by a retry. No reindex is needed -- no table stores the database's own
+/// path.</remarks>
 function DoMigrateDbs(const AArgs: TArgs): Integer;
 var
-  Manifest : TIndexManifest;
-  CfgPath  : string        ;
-  I        : Integer       ;
-  Src, Dst : string        ;
-  ProjFile : string        ;
-  Moved    : Integer       ;
-  Planned  : Integer       ;
-  Conn     : TFDConnection ;
+  Manifest   : TIndexManifest;
+  CfgPath    : string        ;
+  I          : Integer       ;
+  Src, Dst   : string        ;
+  ProjFile   : string        ;
+  Moved      : Integer       ;
+  Reconciled : Integer       ;
+  Planned    : Integer       ;
+  Conn       : TFDConnection ;
   RowsBefore, RowsAfter: Int64;
-  HgRoots  : TStringList   ;
+  HgRoots    : TStringList   ;
 begin
-  Result := 0;
-  Moved  := 0;
-  Planned:= 0;
+  Result    := 0;
+  Moved     := 0;
+  Reconciled:= 0;
+  Planned   := 0;
   { Deliberately NOT TManifestIO.Load: that MERGES a global and a local manifest
     and does not report which file it read, so saving the merged result back
     would inline one manifest into the other. Resolve exactly one file and
@@ -16331,14 +16439,25 @@ begin
           function persisted after every move) must not be reported as
           "never built" when the database plainly already exists at its
           derived home -- reconcile the entry instead. Only reconcile when
-          the destination is real; a source and destination BOTH missing is
-          still a project that was never indexed. }
-        if TFile.Exists(Dst) then
+          the destination is real AND HEALTHY (review finding 1b): the move
+          itself can succeed independently of whether the moved database is
+          intact, so "Src missing, Dst present" is also exactly what a
+          section that already failed the row-count check looks like on a
+          retry -- TFile.Exists alone would launder it back to "healthy"
+          with no verification at all. A source and destination BOTH missing
+          is still a project that was never indexed. }
+        if TFile.Exists(Dst) and DbLooksHealthy(Dst) then
         begin
           Manifest.Sections[I].Db:= '';   { now derivable }
           TManifestIO.Save(Manifest, CfgPath);
-          Inc(Moved);
+          Inc(Reconciled);
           Writeln('  RECONCILED: already at ', Dst, ' -- manifest entry updated');
+        end
+        else if TFile.Exists(Dst) then
+        begin
+          Writeln('  ERROR: found ', Dst, ' but it failed an integrity check -- ' +
+            'NOT reconciling. Rebuild it (index --rebuild) before retrying.');
+          Exit(1);
         end
         else
           Writeln('  SKIP: source does not exist (never built)');
@@ -16347,7 +16466,9 @@ begin
 
       try
         { Checkpoint so the moved file is self-contained, and count rows so the
-          move can be verified rather than assumed. }
+          move can be verified rather than assumed -- but the count is only
+          CONSULTED after the manifest is already fixed (below); it can no
+          longer gate whether the manifest gets fixed at all. }
         Conn:= TFDConnection.Create(nil);
         try
           Conn.DriverName:= 'SQLite';
@@ -16363,6 +16484,24 @@ begin
         TDirectory.CreateDirectory(ExtractFileDir(Dst));
         MoveDbSet(Src, Dst);
 
+        { Review finding 1 (critical, round 2): the database IS at Dst the
+          instant MoveDbSet returns -- whatever happens in the rest of this
+          try block, that fact does not change. The on-disk manifest becomes
+          WRONG at that same instant (it still names Src), so it must be
+          corrected in that same instant: HERE, before the row-count
+          verification below, before the .gitignore write, before anything
+          else that could throw and Exit(1) with the entry still naming a
+          path that no longer exists. A verification failure a few lines
+          down does NOT move the file back, so it must not revert this. }
+        Manifest.Sections[I].Db:= '';   { now derivable }
+        TManifestIO.Save(Manifest, CfgPath);
+        Inc(Moved);
+
+        { Verify AFTER persisting the move, not instead of it: a mismatch
+          here is a loud integrity failure on a database that is ALREADY
+          migrated, not proof that the move can be undone. The manifest
+          keeps naming Dst either way -- see DbLooksHealthy above, which is
+          what stops a retry from treating this failure as fine. }
         Conn:= TFDConnection.Create(nil);
         try
           Conn.DriverName:= 'SQLite';
@@ -16375,7 +16514,10 @@ begin
         end;
         if RowsAfter <> RowsBefore then
         begin
-          Writeln(Format('  ERROR: %d files before, %d after -- STOPPING', [RowsBefore, RowsAfter]));
+          Writeln(Format('  ERROR: %d files before, %d after -- the database ' +
+            'IS at %s but FAILED VERIFICATION -- STOPPING. The manifest entry ' +
+            'already points here (correctly, since the file really is there); ' +
+            'investigate before trusting it.', [RowsBefore, RowsAfter, Dst]));
           Exit(1);
         end;
 
@@ -16386,15 +16528,6 @@ begin
         var HgRoot: string:= FindHgRoot(ExtractFilePath(ProjFile));
         if HgRoot <> '' then HgRoots.Add(HgRoot);
 
-        Manifest.Sections[I].Db:= '';   { now derivable }
-        { Review finding 1 (critical): persist NOW, not once after the whole
-          batch. Save used to be reached only if every remaining section also
-          succeeded, so a later section throwing left the on-disk manifest
-          still naming an OLD path for every project already moved -- a
-          silent, unrecoverable desync (see finding 2's reconciliation for
-          what covers the case where this already happened once). }
-        TManifestIO.Save(Manifest, CfgPath);
-        Inc(Moved);
         Writeln(Format('  OK (%d files)', [RowsAfter]));
       except
         on E: Exception do
@@ -16405,11 +16538,16 @@ begin
       end;
     end;
 
-    if AArgs.Apply and (Moved > 0) then
+    if AArgs.Apply and (Moved + Reconciled > 0) then
     begin
       { Already saved per-move (finding 1) or per-reconciliation (finding 2)
-        above -- this is a summary line, not the save. }
-      Writeln(Format('migrate-dbs: %d database(s) moved; manifest updated (%s)', [Moved, CfgPath]));
+        above -- this is a summary line, not the save. Moved and Reconciled
+        are reported separately (review: minor) -- a reconciliation is a
+        manifest-only fix for a database that was already sitting at its
+        home, not a new physical move, and folding the two counts together
+        would misreport how many databases actually moved this run. }
+      Writeln(Format('migrate-dbs: %d database(s) moved, %d reconciled; manifest updated (%s)',
+        [Moved, Reconciled, CfgPath]));
       if HgRoots.Count > 0 then
       begin
         Writeln('');

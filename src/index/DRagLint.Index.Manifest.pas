@@ -300,7 +300,12 @@ type
       /// </remarks>
       class function ToJson(const AManifest: TIndexManifest): TJSONObject; static;
 
-      /// <summary>Serialise AManifest to a .drag-lint.json file at APath.</summary>
+      /// <summary>Serialise AManifest to a .drag-lint.json file at APath,
+      /// ATOMICALLY: the full new content is written to a sibling temp file
+      /// first, then swapped into place with a single filesystem replace, so
+      /// an interruption (crash, kill, power loss) mid-write can never leave
+      /// APath truncated or empty -- APath is either the OLD content or the
+      /// NEW content, never a partial write.</summary>
       /// <param name="AManifest">Manifest to write.</param>
       /// <param name="APath">Destination file path.</param>
       /// <remarks>
@@ -572,7 +577,8 @@ function LoadDocComplexityMin: Integer;
 implementation
 
 uses
-  DRagLint.Core.Model
+  Winapi.Windows   { MoveFileEx / MOVEFILE_REPLACE_EXISTING -- TManifestIO.Save's atomic swap }
+  , DRagLint.Core.Model
   ;
 
 { ---------------------------------------------------------------------- }
@@ -1187,6 +1193,7 @@ class procedure TManifestIO.Save(const AManifest: TIndexManifest; const APath: s
 var
   Root    : TJSONObject;
   JsonText: string     ;
+  TmpPath : string     ;
 begin
   Root:= ToJson(AManifest);
   try
@@ -1194,7 +1201,33 @@ begin
   finally
     Root.Free;
   end;
-  TFile.WriteAllText(APath, JsonText, TEncoding.UTF8);
+  { Atomic write. migrate-dbs calls this once per section moved -- up to 27
+    times in one unattended run -- against the user's real, hand-maintained
+    manifest. A plain TFile.WriteAllText TRUNCATES APath before writing a
+    byte of the new content, so an interruption mid-write (a crash, a kill, a
+    power loss) would leave drag-lint.json truncated or empty, losing every
+    section's mapping, not just the one being saved right now. Write the full
+    new content to a sibling temp file first (nothing yet depends on it),
+    then swap it into place with ONE atomic filesystem operation: a
+    MoveFileEx rename with MOVEFILE_REPLACE_EXISTING, which either fully
+    succeeds or leaves the ORIGINAL file completely untouched -- there is no
+    observable half-written state either way, whether or not APath already
+    exists (the same call handles the very first save too). NOT TFile.Replace:
+    its Delphi wrapper unconditionally runs its backup-filename parameter
+    through TPath.GetFullPath, which raises EInOutArgumentException on an
+    empty string -- there is no way to ask it for "no backup" even though the
+    underlying Win32 ReplaceFile supports that directly (a NULL backup
+    pointer), so the wrapper cannot be used without leaving a stray .bak
+    file behind on every single save. MoveFileEx needs no backup at all. }
+  TmpPath:= APath + '.tmp';
+  TFile.WriteAllText(TmpPath, JsonText, TEncoding.UTF8);
+  try
+    if not MoveFileEx(PChar(TmpPath), PChar(APath), MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
+      RaiseLastOSError;
+  except
+    if TFile.Exists(TmpPath) then TFile.Delete(TmpPath);
+    raise;
+  end;
 end;
 
 { ---------------------------------------------------------------------- }
