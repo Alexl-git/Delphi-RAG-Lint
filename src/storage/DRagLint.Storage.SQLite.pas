@@ -8002,23 +8002,11 @@ begin
     the argument; AExtraStores forces the whole database because a library index
     consulted by ResolveExternally is outside everything this instance recorded. }
   Scoped:= (Length(AExtraStores) = 0) and ScopedResolveIsSound;
-  if Scoped then
-  begin
-    ScopeWhere:= MaterializeResolveScope;
-    { Only the edges we are about to rewrite. Most are already gone -- both
-      cascades fired during the file walk -- but a ref that merely CHANGES
-      target still holds its old row, and re-resolving without clearing it would
-      leave the stale edge in place (UpsertCallEdge is keyed on ref_id, so it
-      would overwrite; the DELETE is what covers a ref that now resolves to
-      NOTHING and must end up with no row at all). }
-    FConn.ExecSQL('DELETE FROM call_edges WHERE ref_id IN ' +
-                  '(SELECT refs.id FROM refs WHERE ' + ScopeWhere + ')');
-  end
-  else
-  begin
-    ScopeWhere:= '';
-    ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
-  end;
+  { Only the temp tables are built here. The DELETE they feed happens INSIDE the
+    rebuild transaction below -- see the note there. MaterializeResolveScope
+    writes nothing but connection-local temp tables, so it is safe outside. }
+  if Scoped then ScopeWhere:= MaterializeResolveScope
+  else ScopeWhere:= '';
   TClear  := ResolveSecs(T0);
   DummyTok:= Default(TFileTxToken);
   Written := 0;
@@ -8106,6 +8094,30 @@ begin
     if Scoped then Q.SQL.Text:= Q.SQL.Text + ' AND (' + ScopeWhere + ')';
     FConn.StartTransaction;
     try
+      { THE DELETE BELONGS IN THIS TRANSACTION, and it was outside it until
+        v0.86. ResolveAncestry and ResolveHelpers both DELETE inside their own
+        transaction; this pass did not, so its `DELETE FROM call_edges`
+        AUTOCOMMITTED and only the rebuild was atomic. Anything that ended the
+        process in between -- Ctrl-C, a kill, a crash, a machine restart, and
+        this pass runs for 37 MINUTES on a 2 GB index -- left the database with
+        ZERO call edges and no way to tell that had happened. Observed, not
+        theorised: killing a run on library-Win32.sqlite destroyed all 541,352
+        edges while every other table stayed intact and `quick_check` returned
+        ok, so the index went on answering find-callers with silence.
+        Inside the transaction, an interrupted pass rolls back to the edges it
+        started with, which are stale at worst.
+
+        Only the edges about to be rewritten. Most are already gone -- both FK
+        cascades fired during the file walk -- but a ref that merely CHANGES
+        target still holds its old row, and re-resolving without clearing it
+        would leave the stale edge in place (UpsertCallEdge is keyed on ref_id,
+        so it would overwrite; the DELETE is what covers a ref that now resolves
+        to NOTHING and must end up with no row at all). }
+      if Scoped then
+        FConn.ExecSQL('DELETE FROM call_edges WHERE ref_id IN ' +
+                      '(SELECT refs.id FROM refs WHERE ' + ScopeWhere + ')')
+      else
+        ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
       Q.Open;
       while not Q.Eof do
       begin
