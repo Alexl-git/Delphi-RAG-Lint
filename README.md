@@ -361,6 +361,22 @@ and more (see [MCP tools](#mcp-tools-14) below).
 
 ## Features
 
+### Editors
+
+`drag-lint lsp` is a stdio language server: hover, go-to-definition,
+**find-references**, **workspace symbols**, completion and signature help,
+answered from the index across every project in your manifest at once -- no
+compiler and no project open. DelphiLSP implements neither find-references nor
+workspace symbols, so those two are drag-lint only.
+
+* **VS Code** -- extension included (`editors/vscode/drag-lint/`).
+* **Zed** -- tree-sitter highlighting ships today; the language-server
+  registration needs a small Rust/WASM extension that is **not yet built** and is
+  fully specified for contributors.
+* **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`.
+
+See **[docs/EDITORS.md](docs/EDITORS.md)**.
+
 ### CLI (~25 commands)
 
 | Command | Description |
