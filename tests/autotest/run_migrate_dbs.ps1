@@ -72,6 +72,24 @@ try {
     $saveAtomic = & $Exe selftest manifest-save-atomic 2>&1 | Out-String
     Check 'TManifestIO.Save is atomic' ($saveAtomic -match 'SAVEATOMIC-OK')
 
+    # 2d. Save must write plain UTF-8, no BOM, and must not silently rewrite
+    # CRLF to LF (review round 3 -- found on the real 27-database migration:
+    # the real drag-lint.json came back with EF BB BF at byte 0, which a
+    # strict JSON parser -- Python's json.load, jq -- rejects outright, even
+    # though drag-lint itself never noticed because TFile.ReadAllText skips a
+    # BOM on read). Read the RAW BYTES, not via ConvertFrom-Json or
+    # Get-Content -Raw (text mode): a BOM-tolerant reader would hide the very
+    # thing being tested.
+    $cfgBytes = [System.IO.File]::ReadAllBytes($cfg)
+    $hasBom   = ($cfgBytes.Length -ge 3 -and $cfgBytes[0] -eq 0xEF -and $cfgBytes[1] -eq 0xBB -and $cfgBytes[2] -eq 0xBF)
+    Check 'Save does not write a UTF-8 BOM' (-not $hasBom)
+
+    $loneLf = $false
+    for ($bi = 0; $bi -lt $cfgBytes.Length; $bi++) {
+        if ($cfgBytes[$bi] -eq 0x0A -and ($bi -eq 0 -or $cfgBytes[$bi - 1] -ne 0x0D)) { $loneLf = $true; break }
+    }
+    Check 'Save writes CRLF line endings (no lone LF)' (-not $loneLf)
+
     # 3. The moved index still answers, and the manifest now derives the path.
     $after = & $Exe query --db $newdb --name App --json 2>$null | Out-String
     Check 'moved index still answers' ($after.Trim() -eq $before.Trim())

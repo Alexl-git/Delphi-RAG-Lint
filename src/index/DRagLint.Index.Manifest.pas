@@ -305,7 +305,9 @@ type
       /// first, then swapped into place with a single filesystem replace, so
       /// an interruption (crash, kill, power loss) mid-write can never leave
       /// APath truncated or empty -- APath is either the OLD content or the
-      /// NEW content, never a partial write.</summary>
+      /// NEW content, never a partial write. Written as UTF-8 WITHOUT a BOM
+      /// (byte-for-byte plain ASCII when the content is all-ASCII), matching
+      /// the hand-maintained file this overwrites -- see B8.</summary>
       /// <param name="AManifest">Manifest to write.</param>
       /// <param name="APath">Destination file path.</param>
       /// <remarks>
@@ -1219,8 +1221,18 @@ begin
     underlying Win32 ReplaceFile supports that directly (a NULL backup
     pointer), so the wrapper cannot be used without leaving a stray .bak
     file behind on every single save. MoveFileEx needs no backup at all. }
+  { B8 (this repo's own recorded fix, see DoLintAll): GetBytes, not
+    WriteAllText(..., TEncoding.UTF8). TEncoding.UTF8 carries a PREAMBLE, and
+    WriteAllText emits it, so a hand-maintained drag-lint.json a real user
+    edits -- and that other, non-Delphi tooling (jq, a strict JSON parser)
+    reads -- would open with EF BB BF at byte 0. TFile.ReadAllText silently
+    skips a BOM on the way back in, which is exactly why this went unnoticed
+    from inside drag-lint itself. GetBytes returns the same UTF-8 WITHOUT the
+    preamble: a manifest that needs a non-ASCII character (an accented path)
+    still round-trips as UTF-8, while the ordinary all-ASCII manifest stays
+    byte-for-byte plain ASCII, matching the file the user started with. }
   TmpPath:= APath + '.tmp';
-  TFile.WriteAllText(TmpPath, JsonText, TEncoding.UTF8);
+  TFile.WriteAllBytes(TmpPath, TEncoding.UTF8.GetBytes(JsonText));
   try
     if not MoveFileEx(PChar(TmpPath), PChar(APath), MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
       RaiseLastOSError;
