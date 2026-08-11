@@ -1787,6 +1787,26 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function SkippedUpToDate: Integer;
+    /// <summary>How many files this indexer got PAST the incremental
+    /// up-to-date skip for -- i.e. an upper bound on the files whose rows it may
+    /// have rewritten.</summary>
+    /// <returns>0 when every walked file was already current, so the database
+    /// this indexer writes to is provably unchanged by it.</returns>
+    /// <remarks>Exists so a caller can decide whether the four whole-database
+    /// resolve passes (ISymbolStore.ResolveUnitUseTargets / ResolveAncestry /
+    /// ResolveHelpers / ResolveCallTargets) are worth running at all. Those
+    /// passes are pure functions of the stored corpus, so on an unchanged
+    /// corpus they rewrite the identical rows -- and on a multi-gigabyte index
+    /// that costs minutes of silent full-table scanning per pass. A
+    /// <c>--recompile</c> run where nothing had changed paid all four for
+    /// nothing, which is what was mistaken for a livelock across two sessions.
+    /// DELIBERATELY AN UPPER BOUND, counted before the parse rather than after
+    /// the commit: over-counting wastes a pass, under-counting serves stale
+    /// ancestry and call edges. It is NOT the whole precondition -- a caller
+    /// that also prunes or evicts rows must include those counts, and a
+    /// <c>--rebuild</c> has cleared the corpus before the walk even starts.
+    /// CUMULATIVE over the indexer's lifetime, matching VisitedFiles.</remarks>
+    function ParsedFiles: Integer;
     /// <summary>Every file this indexer ADMITTED since it was created -- the
     /// walk's in-scope set, in the spelling the walk produced.</summary>
     /// <returns>The admitted paths, in visit order, with duplicates collapsed.</returns>

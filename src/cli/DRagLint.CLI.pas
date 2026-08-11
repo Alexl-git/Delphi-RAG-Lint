@@ -1897,10 +1897,27 @@ begin
       end;
     end;
 
+    { GUARDED, v0.86 -- see the long note at the DoIndex call site for why, and
+      for the rule that this condition must name every writer above it. This
+      function's writers are ClearAllFiles (ARebuild), the Indexer.IndexFolder
+      walk, and EvictOutOfScopeFiles; there is no prune here. No extra stores
+      term either: this call resolves against THIS section's database only.
+
+      THIS is the site that produced the multi-hour "hang". A Library section
+      re-run with --recompile finds every file up to date, prints nothing at all
+      because skipping is silent, and then spent 2,252 s on the call pass alone
+      re-deriving links that already held over a 2 GB corpus.
+
+      Only the call pass is guarded -- see the DoIndex note for why the other
+      three stay unconditional (they are the repair path, and they cost ~21 s
+      together on that same index). }
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
-    Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
+    if (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) then
+      Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
+    else
+      Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
     Elapsed:= (Now - T0) * 86400;
 
     var PlatSuffix:= '';
@@ -2599,9 +2616,14 @@ begin
       if TDirectory.Exists(F) then begin WalksAFolder:= True; Break; end;
     var DrySweep : Boolean:= AArgs.NoPrune                ;
     var WantPrune: Boolean:= AArgs.Prune or WalksAFolder  ;
+    { Rows either sweep reported. Feeds the resolve-pass guard below, which is
+      why a DRY sweep is counted too: over-counting costs a redundant pass,
+      under-counting serves stale edges. }
+    var SweptRows: Integer:= 0;
     if WantPrune then
     begin
       var Pruned: TArray<string>:= Store.PruneMissingFiles(Folders, DrySweep);
+      Inc(SweptRows, Length(Pruned));
       if Length(Pruned) = 0 then
       begin
         { Only the real sweep says "nothing to do": a --no-prune run that found
@@ -2665,6 +2687,7 @@ begin
         EvictRoots:= Folders;
       end;
       var Evicted: TArray<string>:= Store.EvictOutOfScopeFiles(EvictRoots, InScope, DrySweep);
+      Inc(SweptRows, Length(Evicted));
       if Length(Evicted) > 0 then
       begin
         if DrySweep then
@@ -2677,11 +2700,65 @@ begin
 
     { v0.40.4: post-pass resolves target_file_id for every unit_uses row.
       Done here (not inside the per-file transaction) because resolution
-      needs to see every file the indexer has just written. }
+      needs to see every file the indexer has just written.
+
+      GUARDED, v0.86: all four passes scan the WHOLE database however few files
+      this run touched, and each is a pure function of the stored corpus -- so on
+      a corpus this run did not change they rewrite byte-identical rows. On a
+      multi-gigabyte index that is minutes per pass of silent scanning for
+      nothing, which is precisely the pathology that was mistaken for a livelock
+      (docs/INBOX-indexer-livelock-when-two-platforms-run-concurrently.md):
+      `--recompile` skipped every up-to-date file without printing a word and
+      went straight into four full-corpus resolutions.
+
+      THE PRECONDITION IS THE COMPLETE LIST OF THIS FUNCTION'S WRITERS, not a
+      guess: DoIndex mutates the store in exactly four places -- ClearAllFiles
+      (--rebuild), the Indexer.IndexFile/IndexFolder walk, PruneMissingFiles and
+      EvictOutOfScopeFiles -- and every one of them is represented below. Add a
+      writer above this line and it must be added here too, or the passes will be
+      skipped over its rows.
+
+      EVERY TERM ERRS TOWARD RUNNING. ParsedFiles counts files that got past the
+      up-to-date skip, before the parse rather than after the commit; SweptRows
+      counts a DRY sweep's would-remove rows as though they had been removed. A
+      redundant pass costs time; a skipped one serves stale ancestry and call
+      edges, which is silent and much worse.
+
+      EXTRA STORES FORCE THE PASS. ResolveCallTargets consults the library
+      databases, and those are outside everything counted here -- a library
+      reindexed since this project was last resolved changes the answer with no
+      local file having changed. Tested on the REQUESTED list rather than on
+      OpenLibraryStores' result because that function opens connections and
+      prints a line per database: asking it would undo the saving it is being
+      consulted about, and a --library-db that fails to open still means the
+      caller asked for a cross-database resolve.
+
+      ONLY THE CALL-TARGET PASS IS GUARDED, and the asymmetry is deliberate.
+      These passes are not merely an incremental update -- they RECOMPUTE, which
+      is what lets a plain re-index REPAIR a value that went wrong behind the
+      indexer's back (see ResolveUnitUseTargets' header: filling only NULL rows
+      would have left 122 measured wrong dotted targets in place forever, and
+      tests/autotest/run_unit_uses_targets.ps1 pins exactly that by poisoning the
+      column with raw SQL and re-running `index`). Skipping them on an unchanged
+      corpus would quietly retire that repair. On the largest index in use --
+      2.09 GB, 7,412 files, 2.24M symbols -- the three of them together cost
+      about 21 s (1.9 + 8.0 + 11.6), so keeping them unconditional is nearly
+      free. The fourth cost 2,252 s on that same index, which is the whole
+      reason any of this exists, and it is the only one worth a guard.
+
+      THE RESIDUAL, stated rather than hidden: on a run that wrote nothing, an
+      out-of-band change that ResolveUnitUseTargets then REPAIRS could in
+      principle leave a call edge that was derived from the broken uses graph.
+      `--force-reparse` re-runs everything, and DRAGLINT_NO_SCOPED_RESOLVE=1
+      forces the full-corpus call pass; both are one flag away. }
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
-    Store.ResolveCallTargets(OpenLibraryStores(AArgs)); { v14 (D5) + v21 cross-DB }
+    if (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
+       (Length(AArgs.LibraryDbs) > 0) then
+      Store.ResolveCallTargets(OpenLibraryStores(AArgs)) { v14 (D5) + v21 cross-DB }
+    else
+      Writeln('resolve: calls skipped -- no file changed, so every call edge already holds.');
     Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
@@ -2727,10 +2804,16 @@ begin
   Store.ResolveUnitUseTargets;
   Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
   Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
-  { IndexDictionary has no TArgs -- the dictionary builders (--scan-libraries)
+  { GUARDED, v0.86 -- see the long note at the DoIndex call site. This function's
+    only writer is the Indexer walk above: it does not clear, prune or evict, so
+    ParsedFiles alone is the whole precondition here.
+    IndexDictionary has no TArgs -- the dictionary builders (--scan-libraries)
     are the LIBRARY side, and consulting a library from a library is not a shape
     v21 supports. Default (no extra stores) = pre-v21 behaviour. }
-  Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
+  if Indexer.ParsedFiles > 0 then
+    Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
+  else
+    Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;

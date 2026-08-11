@@ -26,7 +26,15 @@ all 10 fact fields -> 0 disagreements (and none blank); every aggregate identica
 A per-phase profiler shipped with it: `DRAGLINT_PROFILE=1` prints a breakdown to
 stderr at exit. Opt-in, so normal runs are unchanged.
 
-## Task 1 -- find the missing 82 seconds (do this first)
+## Task 1 -- find the missing 82 seconds
+
+**Re-measure before chasing this.** The 82 s was computed by subtracting the
+per-phase timers from the wall clock, and those timers only ever covered
+`TIndexer.IndexFile`. The four resolve passes run OUTSIDE them and were, at the
+time, both unmeasured and unbounded -- on a large database they are minutes.
+Task 2 put a timer on all four, so the arithmetic that produced "82 s" needs
+redoing with those numbers subtracted first; what is left may be much smaller
+than 82 s, or a different shape entirely.
 
 Current profile of the 147 s run: accounted 64.7 s, **wall 147 s**. The largest
 single bucket is now the 82 s that no timer covers.
@@ -53,7 +61,75 @@ phases" vs "outside IndexFile entirely" and immediately halves the search space.
 FTS5 trigram deletes) were each measured and each was wrong; the profiler found the
 real answer in one run.
 
-## Task 2 -- make the four resolve passes incremental  [DIAGNOSED -- THIS IS THE BIG ONE]
+## Task 2 -- DONE (2026-08-11, later the same day). Results below, then the original brief.
+
+**Measured on the 2.09 GB `library-Win32` index** (7,412 files, 2,240,573 symbols,
+3,321,103 refs, 541,354 call edges):
+
+| | before | after |
+|---|---|---|
+| index 1 changed file | 2,276.7 s | **38.7 s** |
+| -- of which the call pass | 2,252.8 s | 17.0 s |
+| re-index, NOTHING changed | 2,276.7 s | **20.9 s** |
+
+**The first thing that had to happen was a timer.** All four passes were silent
+and untimed, so nobody had ever let one finish -- the earlier "livelock" reading
+came from sampling a 90-second window. With one line printed per pass the answer
+took a single run:
+
+```
+unit-uses  1.4s      ancestry  4.5s      helpers  13.4s      calls  2252.8s
+```
+
+Three of the four cost 19 s combined. `ResolveCallTargets` was the whole thing:
+it clears every edge, builds name maps over 2.24M symbols (only 6.4 s -- not the
+problem) and then streams **1,109,614** call-site refs, issuing an
+`UPDATE refs SET receiver_text` for each. ~2 ms per ref is the entire cost.
+
+**What shipped:**
+
+* `TSQLiteSymbolStore` records what a run actually changed -- file ids from
+  `OpenFileTx`, symbol names REMOVED (read out before the delete) and ADDED (in
+  `UpsertSymbol`).
+* `ResolveCallTargets` re-resolves only the affected refs. The soundness argument
+  is in the code: the two FK cascades (`call_edges.ref_id -> refs`,
+  `call_edges.target_symbol_id -> symbols`) already delete exactly the edges a
+  re-index invalidates, so the affected set is "refs in rewritten files, plus
+  refs naming a symbol added or removed".
+* Four fallbacks to the whole database: any delete outside `OpenFileTx`
+  (`ClearAllFiles` / prune / evict), extra library stores, a run covering a third
+  or more of the corpus (latched during accumulation, so a full `--recompile`
+  pays for the first third and nothing after), and the one channel a name-keyed
+  set cannot catch -- a call resolving through a TYPE whose declaration moved
+  while the method name is untouched, closed by requiring that the type names a
+  run removed are exactly the ones it put back.
+* `DRAGLINT_NO_SCOPED_RESOLVE=1` forces the old whole-corpus pass.
+
+**Verified**: `cmpcalls_sql.py` (ATTACH + EXCEPT both directions) over 3.32M refs
+and 541,354 call edges -> **0 disagreements**, plus five mutation shapes on a
+fresh 168-file index (unchanged file; cross-unit rename; call target removed, 67
+edges dropped; call target restored, 67 edges reappearing in files never
+re-indexed; and both fallback guards).
+
+**The regression the battery caught, and the rule it taught.** The first cut
+skipped all four passes when nothing changed. That broke
+`tests/autotest/run_unit_uses_targets.ps1`, which poisons
+`unit_uses.target_file_id` with raw SQL and requires the next plain `index` to
+repair it -- these passes are not only an incremental update, they RECOMPUTE, and
+that is what makes a re-index a repair. Only the call pass is guarded now; the
+other three stay unconditional because together they cost ~21 s even on the 2 GB
+index. **A cheap pass that is also a repair mechanism should not be guarded at
+all.**
+
+**Still open here:** `refs.receiver_text` is re-derived from the file on DISK at
+the ref's STORED line/col, so a whole-corpus pass over an index whose sources have
+moved overwrites good receivers with garbage -- 11,008 receivers and 464 edges
+destroyed in a measured run. Filed as
+`docs/INBOX-whole-db-resolve-degrades-a-stale-index.md`; the cheapest fix is to
+re-derive receivers only for files this run re-indexed, which would also delete
+most of what the pass writes.
+
+## Task 2 (original brief) -- make the four resolve passes incremental
 
 **Superseded the "livelock" theory. There is no livelock.** After the file walk,
 every `index` run does four passes over the WHOLE database

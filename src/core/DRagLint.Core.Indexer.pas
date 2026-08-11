@@ -33,6 +33,9 @@ type
       FStore          : ISymbolStore                       ;
       FParsers        : TList<IParser>                     ;
       FSkippedUpToDate: Integer                            ;
+      { Files this indexer got PAST the up-to-date skip for, i.e. every file it
+        may have written rows for. Backs IIndexer.ParsedFiles -- see there. }
+      FParsedFiles    : Integer                            ;
       { The walk's in-scope set: every file a parser claimed, whether or not it
         was then parsed. Backs IIndexer.VisitedFiles -- see there for why the
         list is what it is. FVisitedKeys is the lowercase de-dup guard; the same
@@ -310,6 +313,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SkippedUpToDate: Integer;
+      /// <summary>How many files this indexer got past the incremental
+      /// up-to-date skip for -- see IIndexer.ParsedFiles.</summary>
+      function ParsedFiles: Integer;
       /// <returns><!-- drag-lint:auto -->Observed: FVisited.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -432,6 +438,11 @@ end;
 function TIndexer.SkippedUpToDate: Integer;
 begin
   Result:= FSkippedUpToDate;
+end;
+
+function TIndexer.ParsedFiles: Integer;
+begin
+  Result:= FParsedFiles;
 end;
 
 function TIndexer.VisitedFiles: TArray<string>;
@@ -779,6 +790,13 @@ begin
     Inc(FSkippedUpToDate);
     Exit;
   end;
+  { COUNTED HERE, BEFORE THE PARSE, not at the commit. This counter's only job is
+    to answer "could the database have changed?", and the caller uses a zero to
+    SKIP the four whole-DB resolve passes. Over-counting costs a wasted pass;
+    under-counting silently serves stale ancestry / call edges. Every exit below
+    this line -- a parse failure, a rolled-back file transaction -- has already
+    opened the door to a write, so the increment belongs above all of them. }
+  Inc(FParsedFiles);
   // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 before the
   // parse/slice pipeline (which assumes UTF-8). A valid CP1252 file (0xAE/0xA9
   // in a resourcestring -- the SOFTWID.PAS class) was SKIPPED here with
