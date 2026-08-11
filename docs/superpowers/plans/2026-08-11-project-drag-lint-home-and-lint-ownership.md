@@ -560,7 +560,22 @@ git commit -m "feat(index): migrate-dbs moves project indexes into their _D-RAG 
 
 This is an operational task, not a code change. It moves 292 MB of real indexes. **RAD Studio must be closed.**
 
-- [ ] **Step 1: Snapshot the current state**
+- [ ] **Step 1: Deploy the freshly built engine, then snapshot the current state**
+
+`migrate-dbs` exists only in the exe Task 2 built. The deployed
+`third_party\dll-win64\drag-lint.exe` is stale, and running the verb from
+`src\cli\Win64\Debug` instead is a trap: `index --all` resolves its manifest
+relative to **the exe's own directory**, so a copied exe with no
+`drag-lint.json` beside it indexes nothing and exits 0 -- a fake pass. Deploy
+first, with RAD Studio closed (it holds the exe open):
+
+```bash
+cp src/cli/Win64/Debug/drag-lint.exe third_party/dll-win64/drag-lint.exe
+third_party/dll-win64/drag-lint.exe --version    # must report 1.2.2-alpha or later
+third_party/dll-win64/drag-lint.exe migrate-dbs --help 2>&1 | head -3   # verb exists
+```
+
+Then snapshot:
 
 ```bash
 python - <<'EOF'
@@ -1233,7 +1248,14 @@ git commit -m "fix(lint): lint-all counts only the project's own code
 - Consumes: everything from Tasks 1-5.
 - Produces: measured before/after numbers for the resume doc in Task 7.
 
-- [ ] **Step 1: Record the baseline**
+- [ ] **Step 1: Re-deploy, then record the baseline**
+
+Task 5 changed `DoLintAll`, so the deployed engine is stale again. Re-deploy
+before measuring or the numbers describe the old binary:
+
+```bash
+cp src/cli/Win64/Debug/drag-lint.exe third_party/dll-win64/drag-lint.exe
+```
 
 ```bash
 cd third_party/dll-win64
