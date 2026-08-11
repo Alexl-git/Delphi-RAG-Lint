@@ -2074,20 +2074,57 @@ var
   end;
 
   { Deepest nesting of control structures within N. }
+  { AN ELSE-IF CHAIN IS ONE LEVEL, NOT ONE LEVEL PER BRANCH.
+
+    Delphi has no `elif`, so `if A then .. else if B then .. else if C then ..`
+    can only be spelled as an if nested in the else of the previous if, and the
+    grammar represents exactly that: ifElse(A, .., ifElse(B, .., ifElse(C, ..))).
+    Counting one level per if-node therefore measures the SPELLING, not the
+    shape of the code -- a flat dispatch table reads as a staircase.
+
+    Measured before this change (drag-lint on its own source): ParseArgs "nests
+    control structures 141 deep", Run 84. Those two routines are argument
+    dispatchers -- every branch is at the same logical level and none is inside
+    another. A generated chain scaled exactly 1:1: 6 branches -> 6, 8 -> 8,
+    12 -> 12, 20 -> 20. At the default threshold of 5 that makes the rule fire on
+    any dispatcher with six arms, which is most of them, and the advice it gives
+    ("flatten with early exits") cannot be followed because there is nothing
+    nested to flatten.
+
+    So: descending into the ELSE branch does not deepen when that branch is
+    itself an if -- it is the next arm of the same chain. Every other descent,
+    including into the THEN branch, still deepens, which is what keeps genuine
+    nesting (six ifs down the then side) firing at 6.
+
+    Identity by StartPoint rather than node equality: two children of one parent
+    cannot begin at the same row and column, and TTSNode exposes no equality
+    operator. The same chain-walking shape is already used by
+    DeadCodeChecks' repeated-else-if-condition check. }
   function MaxNest(const N: TTSNode; ADepth: Integer): Integer;
   var
-    I, D, M: Integer;
-    Inc1   : Integer;
+    I, D, M    : Integer;
+    Inc1       : Integer;
+    ElseN, C   : TTSNode;
+    ChildDepth : Integer;
   begin
     Result:= ADepth;
     if N.IsNull then Exit;
     Inc1:= 0;
     if (N.NodeType = 'if') or (N.NodeType = 'ifElse') or (N.NodeType = 'while') or (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
       (N.NodeType = 'with') or (N.NodeType = 'try') then Inc1:= 1;
+    if N.NodeType = 'ifElse' then ElseN:= N.ChildByField('else')
+    else ElseN:= Default(TTSNode);
     M:= ADepth;
     for I:= 0 to N.ChildCount - 1 do
     begin
-      D:= MaxNest(N.Child(I), ADepth + Inc1);
+      C:= N.Child(I);
+      ChildDepth:= ADepth + Inc1;
+      if (Inc1 = 1) and (not ElseN.IsNull) and (not C.IsNull) and
+         ((C.NodeType = 'if') or (C.NodeType = 'ifElse')) and
+         (C.StartPoint.Row = ElseN.StartPoint.Row) and
+         (C.StartPoint.Column = ElseN.StartPoint.Column) then
+        ChildDepth:= ADepth;   { chain continuation -- same logical level }
+      D:= MaxNest(C, ChildDepth);
       if D > M then M:= D;
     end;
     Result:= M;
