@@ -75,6 +75,7 @@ uses
   , DRagLint.Project.Resolver
   , DRagLint.Project.Members
   , DRagLint.Project.Coherence
+  , DRagLint.Project.OwnRoots
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
@@ -15837,6 +15838,54 @@ begin
   Result:= 0;
 end; // function
 
+// selftest own-roots --dir <fixtures\own-roots>: asserts a declared root list is
+// read (including a RELATIVE entry), that a file under a declared root is ours,
+// that a sibling folder outside them is not, that an UNDECLARED project defaults
+// to its own folder, and that a DB inside a _D-RAG resolves back to its project.
+// Prints OWNROOTS-OK or OWNROOTS-FAIL: <detail>.
+function DoSelfTestOwnRoots(const AArgs: TArgs): Integer;
+var
+  Fx  : string   ;
+  Own : TOwnRoots;
+begin
+  { --dir lands in TArgs.Path, not a field called Dir (see the parser at :980) --
+    the same field `selftest ignore --dir` reads. }
+  Fx:= AArgs.Path;
+  if Fx = '' then begin Writeln('OWNROOTS-FAIL: pass --dir <fixtures\own-roots>'); Exit(1); end;
+
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'proj'));
+  if not Own.Declared then begin Writeln('OWNROOTS-FAIL: declaration not read'); Exit(1); end;
+  if Own.Error <> '' then begin Writeln('OWNROOTS-FAIL: ', Own.Error); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'proj\App.pas')) then
+    begin Writeln('OWNROOTS-FAIL: own file not ours'); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'shared\Shared.pas')) then
+    begin Writeln('OWNROOTS-FAIL: relative root "..\shared" not honoured'); Exit(1); end;
+  if Own.IsOurs(TPath.Combine(Fx, 'vendor\Vendor.pas')) then
+    begin Writeln('OWNROOTS-FAIL: vendor file counted as ours'); Exit(1); end;
+
+  { An undeclared project owns exactly its own folder. }
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'vendor'));
+  if Own.Declared then begin Writeln('OWNROOTS-FAIL: vendor has no declaration'); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'vendor\Vendor.pas')) then
+    begin Writeln('OWNROOTS-FAIL: default root must be the project folder'); Exit(1); end;
+  if Own.IsOurs(TPath.Combine(Fx, 'proj\App.pas')) then
+    begin Writeln('OWNROOTS-FAIL: default root leaked to a sibling'); Exit(1); end;
+
+  { No anchor at all: filtering must be OFF, not empty. }
+  Own:= TOwnRoots.Load('');
+  if not Own.IsOurs(TPath.Combine(Fx, 'vendor\Vendor.pas')) then
+    begin Writeln('OWNROOTS-FAIL: an anchorless run must not filter'); Exit(1); end;
+
+  if not SameText(AnchorDirForDb(TPath.Combine(Fx, 'proj\_D-RAG\App.sqlite')),
+                  ExcludeTrailingPathDelimiter(TPath.Combine(Fx, 'proj'))) then
+    begin Writeln('OWNROOTS-FAIL: AnchorDirForDb did not resolve the _D-RAG parent'); Exit(1); end;
+  if AnchorDirForDb(TPath.Combine(Fx, 'proj\App.sqlite')) <> '' then
+    begin Writeln('OWNROOTS-FAIL: a DB outside a _D-RAG has no anchor'); Exit(1); end;
+
+  Writeln('OWNROOTS-OK');
+  Result:= 0;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -15852,10 +15901,11 @@ begin
   else if AArgs.SubCommand = 'harvest'       then Result:= DoSelfTestHarvest    (AArgs)
   else if AArgs.SubCommand = 'section-db'    then Result:= DoSelfTestSectionDb
   else if AArgs.SubCommand = 'manifest-save-atomic' then Result:= DoSelfTestManifestSaveAtomic
+  else if AArgs.SubCommand = 'own-roots'     then Result:= DoSelfTestOwnRoots     (AArgs)
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots');
     Result:= 2;
   end;
 end; // function

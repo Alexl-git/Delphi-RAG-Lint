@@ -130,6 +130,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ClassMetrics.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.DocRules.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
+        <DCCReference Include="..\project\DRagLint.Project.OwnRoots.pas"/>
         <DCCReference Include="..\forms\DRagLint.FormsMap.pas"/>
         <DCCReference Include="..\mcp\DRagLint.MCP.Server.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Server.pas"/>
