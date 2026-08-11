@@ -233,7 +233,7 @@ git commit -m "feat(index): a project section with no db resolves to its _D-RAG 
 - Consumes: `SectionProjectFile`, `ExpandSectionDb`, `DRAG_HOME_DIR` from Task 1.
 - Produces: the verb `drag-lint migrate-dbs [--config <manifest>] [--apply]`. Exit 0 = nothing to do or success, 1 = at least one move failed, 2 = usage/lock error. Task 3 runs it for real.
 
-**A deliberate refinement of spec §3.3 step 1.** The spec says "refuse to run if RAD Studio is running". Implement it as an **exclusive-open probe on each database file** instead. That tests the thing that actually matters -- is this file locked -- and also catches a running index job or an LSP launched from a copied exe, which a process-name check would miss. The error message names the locked file and cites RAD Studio as the likely holder.
+**A deliberate refinement of spec section 3.3 step 1.** The spec says "refuse to run if RAD Studio is running". Implement it as an **exclusive-open probe on each database file** instead. That tests the thing that actually matters -- is this file locked -- and also catches a running index job or an LSP launched from a copied exe, which a process-name check would miss. The error message names the locked file and cites RAD Studio as the likely holder.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -657,7 +657,7 @@ git commit -m "chore(index): move all 27 project indexes into their project _D-R
   - `function AnchorDirForDb(const ADbPath: string): string` -- the project folder for a DB in a `_D-RAG` home, else `''`.
   - Task 5 calls all of these.
 
-**Refinement of spec §4.1:** `ownRoots` entries may be **relative to the anchor directory** as well as absolute. This is a superset of the spec and makes declarations portable -- ORM3's eight sections each declare `[".."]` rather than a hardcoded `C:\Projects\DB\ORM3`, and the test fixture can declare roots at all. Absolute entries keep working unchanged.
+**Refinement of spec section 4.1:** `ownRoots` entries may be **relative to the anchor directory** as well as absolute. This is a superset of the spec and makes declarations portable -- ORM3's eight sections each declare `[".."]` rather than a hardcoded `C:\Projects\DB\ORM3`, and the test fixture can declare roots at all. Absolute entries keep working unchanged.
 
 - [ ] **Step 1: Create the fixture tree**
 
