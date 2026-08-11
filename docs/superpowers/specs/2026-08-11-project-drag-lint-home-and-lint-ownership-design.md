@@ -136,9 +136,12 @@ The DB now lives inside a working copy and must not be committed.
 { "ownRoots": ["C:\\Projects\\DB\\ORM3"] }
 ```
 
-`ownRoots` is a list of absolute directory roots. A file is OURS when it sits
-under any of them (prefix match on the normalised path, case-insensitive,
-matching `DRagLint.Storage.FileMembership.NormalizeForLookup`).
+`ownRoots` is a list of directory roots, each either absolute or **relative to
+the project folder the declaration sits in**. A file is OURS when it sits under
+any of them (prefix match on the normalised path, case-insensitive, matching
+`DRagLint.Storage.FileMembership.NormalizeForLookup`). Relative entries keep a
+declaration portable and short -- ORM3's eight sections each declare `[".."]`
+rather than repeating an absolute path that breaks if the tree moves.
 
 **Default when the file is absent, unreadable, or declares no roots: the
 project file's own folder.** That is the whole configuration for YADF,
