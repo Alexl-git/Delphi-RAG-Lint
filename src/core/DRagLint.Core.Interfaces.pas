@@ -784,6 +784,19 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore> = nil);
+    /// <summary>True when call_edges holds no rows although the index does hold
+    /// call-site refs -- i.e. the edge set is missing rather than genuinely
+    /// empty.</summary>
+    /// <returns>True for a pre-D5 index, one whose call_edges a schema migration
+    /// just recreated, or one an interrupted pass emptied. False for a healthy
+    /// index and for a corpus with no call sites at all.</returns>
+    /// <remarks>Callers that skip ResolveCallTargets because nothing changed ON
+    /// DISK must consult this first: "no file changed" only implies "every edge
+    /// still holds" if the edges were there to begin with. Without it such a
+    /// database stays broken across every future reindex, and
+    /// `find-callers --resolved` answers nothing without erroring.
+    /// Errs towards True -- rebuilding costs time, not correctness.</remarks>
+    function CallEdgesNeedRebuild: Boolean;
     /// <summary>Transitive ancestor closure of the symbol (resolved edges are
     /// walked recursively; unresolved ones are name-only leaves). Cycle-safe,
     /// hop-capped.</summary>

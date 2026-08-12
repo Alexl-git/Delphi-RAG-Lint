@@ -1932,7 +1932,12 @@ begin
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
-    if (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) then
+    { CallEdgesNeedRebuild: see the DoIndex site for the full argument. Short
+      version -- "no file changed" only implies "every edge still holds" if the
+      edges existed to begin with, and this is the path `index --all` takes, so
+      omitting it here would leave every manifest-driven reindex unable to repair
+      a dropped or emptied call_edges. }
+    if (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or Store.CallEdgesNeedRebuild then
       Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
     else
       Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
@@ -2772,8 +2777,17 @@ begin
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
+    { A MISSING EDGE SET ALSO FORCES THE PASS. Every other term here asks "did
+      anything change?", and the skip message's premise -- no file changed, so
+      every call edge already holds -- is only true if the edges were there in
+      the first place. A pre-D5 index, one whose call_edges the schema migration
+      above just recreated, or one an interrupted pass emptied has nothing on
+      disk to change, so it would skip the rebuild on THIS run and on every run
+      after it, leaving `find-callers --resolved` silently answering nothing.
+      CallEdgesNeedRebuild is two LIMIT 1 probes and is False on a healthy
+      index, so the guard this sits inside keeps its 2,252s-to-17s saving. }
     if (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
-       (Length(AArgs.LibraryDbs) > 0) then
+       (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild then
       Store.ResolveCallTargets(OpenLibraryStores(AArgs)) { v14 (D5) + v21 cross-DB }
     else
       Writeln('resolve: calls skipped -- no file changed, so every call edge already holds.');
@@ -2828,7 +2842,10 @@ begin
     IndexDictionary has no TArgs -- the dictionary builders (--scan-libraries)
     are the LIBRARY side, and consulting a library from a library is not a shape
     v21 supports. Default (no extra stores) = pre-v21 behaviour. }
-  if Indexer.ParsedFiles > 0 then
+  { CallEdgesNeedRebuild: the third and last site that skips this pass on an
+    unchanged corpus -- see the DoIndex site for the argument. A dictionary build
+    can open a database whose edges were dropped just as the other two can. }
+  if (Indexer.ParsedFiles > 0) or Store.CallEdgesNeedRebuild then
     Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
   else
     Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
