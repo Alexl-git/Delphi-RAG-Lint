@@ -9676,13 +9676,39 @@ begin
     the doc rules, used-unit-not-resolvable -- so without this the third-party
     findings walk straight back in through the project-wide pass. Exactly the
     failure the --project ScopeSet filter below already documents.
-    A finding with no file path belongs to the run, not to a file: keep it. }
+    A finding with no file path belongs to the run, not to a file: keep it.
+
+    Pre-sized, filled by index, trimmed once at the end: `Ours + [F]` on every
+    iteration is an O(n^2) allocate-and-copy of a string-bearing record, and
+    (unlike the --project ScopeSet block below, which only runs when --project
+    is given) this path runs on EVERY default lint-all -- measured on
+    ORM3-Micronite2027 as part of an 8,705 CPU-second stall in the
+    project-wide phase. Own.IsOurs also does an ExpandFileName + StringReplace
+    per call; findings cluster heavily by file, so a per-file memo turns that
+    into one real test per distinct FilePath rather than one per finding. }
   if (not AArgs.LintThirdParty) and Own.Active then
   begin
-    var Ours: TArray<TLintFinding>:= nil;
-    for F in Findings do
-      if (F.FilePath = '') or Own.IsOurs(F.FilePath) then Ours:= Ours + [F];
-    Findings:= Ours;
+    var OwnMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      var Ours: TArray<TLintFinding>;
+      SetLength(Ours, Length(Findings));
+      var OursCount: Integer:= 0;
+      for F in Findings do
+      begin
+        var Keep: Boolean;
+        if F.FilePath = '' then Keep:= True
+        else if not OwnMemo.TryGetValue(F.FilePath, Keep) then
+        begin
+          Keep:= Own.IsOurs(F.FilePath);
+          OwnMemo.Add(F.FilePath, Keep);
+        end;
+        if Keep then begin Ours[OursCount]:= F; Inc(OursCount); end;
+      end;
+      SetLength(Ours, OursCount);
+      Findings:= Ours;
+    finally
+      OwnMemo.Free;
+    end;
   end;
 
   { Scope the PROJECT-WIDE rules too. Filtering FilePaths above only narrowed the
