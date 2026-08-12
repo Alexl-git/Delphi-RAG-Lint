@@ -4,11 +4,16 @@ interface
 
 implementation
 
-uses SysUtils;
+uses SysUtils, StrUtils;
 
 function Expensive: Integer;
 begin
   Result := 42;
+end;
+
+function ExpensiveMessage: string;
+begin
+  Result := 'x';
 end;
 
 procedure Bad;
@@ -39,6 +44,30 @@ var
   S: string;
 begin
   S := IfThen(B, 'true', 'false');
+end;
+
+// Post-merge review regression fix: StrUtils.IfThen's string overload
+// declares 'AFalse: string = ''''', so the 2-argument call is valid,
+// idiomatic Delphi -- NOT a malformed 3-arg call. The 3-arg patterns cannot
+// match it (both require a 3rd child that does not exist here), so it needs
+// its own pattern. A non-literal single value branch is a genuine
+// unconditionally-evaluated side effect -- still fires.
+procedure BadTwoArg;
+var
+  B: Boolean;
+  S: string;
+begin
+  S := IfThen(B, ExpensiveMessage);
+end;
+
+// The 2-arg counterpart to GoodBothLiteral: the single value branch is a
+// literal -- no finding.
+procedure GoodTwoArgLiteral;
+var
+  B: Boolean;
+  S: string;
+begin
+  S := IfThen(B, 'literal');
 end;
 
 end.

@@ -48,3 +48,47 @@
   (#match?     @b1 "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
   (#not-match? @b2 "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
 )
+
+; Pattern C -- the 2-argument overload (StrUtils.IfThen's AFalse: string = ''
+; default makes 'IfThen(B, Value)' valid, idiomatic Delphi -- this is NOT a
+; malformed 3-arg call). Patterns A/B above cannot match it at all (both
+; REQUIRE a 3rd child to exist, so a 2-child exprArgs has nothing for @b2 to
+; bind to) -- which is exactly the bug a reviewer caught post-merge: the
+; 2-arg shape was silently unreachable by any pattern, not suppressed as
+; inert, so 'S := IfThen(Verbose, ExpensiveMessage);' -- a genuine
+; unconditionally-evaluated side effect -- went undetected entirely.
+;
+; Getting "exactly 2 children, not 3" right needed proof, not assumption: the
+; obvious tool is a trailing '.' anchor ("this capture is the parent's LAST
+; child"), but empirically (`tree-sitter query` CLI against this compiled
+; grammar, tree-sitter-cli 0.24.7) a trailing anchor does NOT constrain
+; matches here -- '((declVar (identifier) @n .))' matched non-last
+; identifiers in a multi-name 'var A, B, C: Integer' just as readily as a
+; leading anchor's correctly-restricted match, so trailing anchors are not a
+; reliable primitive in this grammar/toolchain and must not be reused
+; elsewhere without re-proving them. (Leading '.' and the between-two-
+; patterns '.' DO work, verified the same way -- used above in Patterns A/B's
+; positional b1/b2 captures.)
+;
+; What DOES reliably work, verified the same way: tree-sitter's quantifier
+; suffix on a child pattern. '(_)? @b2exists' captures a 3rd argument ONLY IF
+; ONE IS PRESENT; when absent, @b2exists is simply not in the match's capture
+; list at all, and TQueryRule.ResolveCaptureText (DRagLint.Lint.QueryRules.pas)
+; returns '' for a capture index that is not present -- so '(#eq? @b2exists
+; "")' is true exactly when there is no 3rd argument (a real AST node's text
+; is never empty), and false whenever one exists. That makes Pattern C
+; structurally disjoint from A/B: A/B fire only when a 3rd child EXISTS
+; (bound to @b2), Pattern C fires only when it does NOT -- so a 2-arg and a
+; 3-arg call can never both match, and there is no double-report to prove
+; away here (verified directly: see tests/lint/ifthen-both-branches.pas).
+(
+  (exprCall
+    entity: (identifier) @fn
+    args: (exprArgs
+      . (_)
+      . (_) @val
+      (_)? @b2exists)) @warn
+  (#eq? @fn "IfThen")
+  (#eq? @b2exists "")
+  (#not-match? @val "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
+)
