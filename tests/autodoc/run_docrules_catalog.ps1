@@ -103,7 +103,12 @@ if ($null -ne $pns) {
 # reason the 2026-08-07 bump was: a rule reaching the catalogue without anyone
 # deciding it belongs there is exactly what these two numbers exist to catch.
 $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
-Assert ("built-in rule count = 115 (114 + doc-param-not-in-signature); got {0}" -f $builtins.Count) ($builtins.Count -eq 115)
+# 2026-08-12: +1 -> 116, and the naming category goes 9 -> 10, from
+# `local-field-prefix` ("Local variable wears the field/param prefix"), added by
+# 3fdefd9 on main when the naming rules were split. Verified against the catalog
+# before matching the number: the delta is exactly that one id, and the
+# documentation category is unchanged at 4.
+Assert ("built-in rule count = 116 (115 + local-field-prefix); got {0}" -f $builtins.Count) ($builtins.Count -eq 116)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 4 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 4)

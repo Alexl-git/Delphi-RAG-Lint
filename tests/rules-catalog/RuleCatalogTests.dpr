@@ -60,11 +60,15 @@ begin
   Check('summary categories >= 8', Sum.Categories >= 8);
   NamingCount:= 0;
   for P in Sum.PerCategory do if P.Key = 'naming' then NamingCount:= P.Value;
-  Check('summary naming count = 9', NamingCount = 9);
+  { 2026-08-12: 9 -> 10. local-field-prefix ("Local variable wears the
+    field/param prefix") joined the naming bucket in 3fdefd9 when the naming
+    rules were split. Verified against the live catalog before the number was
+    changed -- the delta is exactly that one id. }
+  Check('summary naming count = 10', NamingCount = 10);
 
   { category filter returns only that category }
   Cat:= TRuleCatalog.BuildCatalog(RulesDir, 'naming');
-  Check('category filter naming -> 9 rules', Length(Cat) = 9);
+  Check('category filter naming -> 10 rules', Length(Cat) = 10);
   for Info in Cat do
     if Info.Category <> 'naming' then begin Check('filtered all naming', False); Break; end;
 

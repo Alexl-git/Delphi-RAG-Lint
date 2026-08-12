@@ -58,14 +58,29 @@ $script:Failed = $false
 $script:Results = @()
 
 if ($ExpectedVersion -eq '') {
-    $cliUnit = Join-Path $PSScriptRoot '..\..\src\cli\DRagLint.CLI.pas'
-    if (Test-Path $cliUnit) {
-        $head = (Get-Content $cliUnit -TotalCount 20) -join "`n"
-        $m = [regex]::Match($head, "VERSION\s*=\s*'([^']+)'")
+    # The version literal MOVED. src\cli\DRagLint.CLI.pas used to hold
+    # `VERSION = '<literal>'`; c92cb1d made it `VERSION = DRAGLINT_VERSION`, an
+    # alias of the single definition in src\core\DRagLint.Core.Model.pas, so the
+    # LSP handshake and the CLI banner cannot drift apart again. This scrape was
+    # never updated and has read nothing since -- the staleness guard it feeds
+    # has been dead, not passing.
+    #
+    # Read the DEFINITION first, then fall back to the CLI unit for a tree old
+    # enough to still carry the literal there. Failing to find EITHER is still
+    # fatal: silently skipping the check is how this went unnoticed.
+    $versionUnits = @(
+        (Join-Path $PSScriptRoot '..\..\src\core\DRagLint.Core.Model.pas'),
+        (Join-Path $PSScriptRoot '..\..\src\cli\DRagLint.CLI.pas')
+    )
+    foreach ($vu in $versionUnits) {
+        if ($ExpectedVersion -ne '') { break }
+        if (-not (Test-Path $vu)) { continue }
+        $head = (Get-Content $vu -TotalCount 80) -join "`n"
+        $m = [regex]::Match($head, "(?:DRAGLINT_VERSION|VERSION)\s*=\s*'([^']+)'")
         if ($m.Success) { $ExpectedVersion = $m.Groups[1].Value }
     }
     if ($ExpectedVersion -eq '') {
-        Write-Host "FATAL: could not read VERSION from $cliUnit -- pass -ExpectedVersion" -ForegroundColor Red
+        Write-Host "FATAL: could not read DRAGLINT_VERSION from $($versionUnits -join ' or ') -- pass -ExpectedVersion" -ForegroundColor Red
         exit 2
     }
 }
