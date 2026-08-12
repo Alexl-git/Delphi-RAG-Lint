@@ -1049,7 +1049,16 @@ begin
     IsRecordType has no naming-convention fallback, so a store-free receiver, or
     one that resolves to anything other than tcRecord, leaves this False and a
     method call on an uninitialised class reference keeps flagging as the
-    nil-dereference bug it is. }
+    nil-dereference bug it is.
+
+    KNOWN TRADE-OFF: CanBeCallTarget accepts ANY callable member, not only a
+    mutating one -- there is no effect analysis here to tell "St.Reset" (writes
+    every field) from a pure query like "St.Peek" (reads Total, writes nothing).
+    So a getter called first, before any real initialiser, is ALSO (wrongly)
+    treated as establishing definite assignment, and a genuine "read of garbage
+    record state" would go unreported. Accepted deliberately: the alternative
+    is the 24 false positives this fix removes from YADF alone, and narrowing
+    to "provably mutates Self" is not information this analysis has. }
   if AStore <> nil then
     RecMethodDef :=
       function(const ATypeText, AMemberName: string): Boolean
