@@ -9544,9 +9544,16 @@ begin
         Groups.AddOrSetValue(K, N + 1);
       end;
       var Keys: TArray<string>:= Groups.Keys.ToArray;
+      { TArray.Sort is not stable, and count-only comparison ties whenever two
+        groups share a count -- a report that reorders itself on unchanged
+        input wastes whoever is diffing it. Break ties on the group name so
+        the order is a pure function of the input, not of hash iteration. }
       TArray.Sort<string>(Keys, TComparer<string>.Construct(
         function(const L, R: string): Integer
-        begin Result:= Groups[R] - Groups[L]; end));
+        begin
+          Result:= Groups[R] - Groups[L];
+          if Result = 0 then Result:= CompareText(L, R);
+        end));
       for var Idx: Integer:= 0 to Min(9, High(Keys)) do
         EmitStatusLine(AArgs, Format('          %6d  %s', [Groups[Keys[Idx]], Keys[Idx]]));
       if Length(Keys) > 10 then
