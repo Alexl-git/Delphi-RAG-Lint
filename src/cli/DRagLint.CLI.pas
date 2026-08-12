@@ -15898,8 +15898,11 @@ begin
     begin Writeln('OWNROOTS-FAIL: empty "ownRoots" must set Error'); Exit(1); end;
 
   { Malformed (unparseable) JSON is NOT an Error -- it defaults exactly like a
-    missing declaration (review round 1; pins the Finding-1 leak fix's code
-    path too). }
+    missing declaration (review round 1). NOTE: ParseJSONValue's default
+    RaiseExc=False overload returns nil (no exception) on unparseable text,
+    and `nil as TJSONObject` also evaluates to nil without raising -- so this
+    path was never the one Finding 1's leak fix touched; see non-object-decl
+    below for that. }
   Own:= TOwnRoots.Load(TPath.Combine(Fx, 'malformed-decl'));
   if Own.Declared then
     begin Writeln('OWNROOTS-FAIL: malformed JSON must not count as declared'); Exit(1); end;
@@ -15907,6 +15910,21 @@ begin
     begin Writeln('OWNROOTS-FAIL: malformed JSON must default, not error'); Exit(1); end;
   if not Own.IsOurs(TPath.Combine(Fx, 'malformed-decl\Whatever.pas')) then
     begin Writeln('OWNROOTS-FAIL: malformed JSON must still default to the anchor folder'); Exit(1); end;
+
+  { Syntactically VALID JSON whose root is not an object ("ownRoots" is
+    unreachable, but there is no parse failure either). This is the actual
+    path Finding 1's leak fix touches: ParseJSONValue returns a live
+    TJSONValue here, and the old `... as TJSONObject` cast raised
+    EInvalidCast on it BEFORE completing the assignment, leaking the parsed
+    value on every reload (review round 2 -- malformed-decl above does not
+    exercise this). Same contract as malformed JSON: default, never error. }
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'non-object-decl'));
+  if Own.Declared then
+    begin Writeln('OWNROOTS-FAIL: non-object JSON root must not count as declared'); Exit(1); end;
+  if Own.Error <> '' then
+    begin Writeln('OWNROOTS-FAIL: non-object JSON root must default, not error'); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'non-object-decl\Whatever.pas')) then
+    begin Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder'); Exit(1); end;
 
   if not SameText(AnchorDirForDb(TPath.Combine(Fx, 'proj\_D-RAG\App.sqlite')),
                   ExcludeTrailingPathDelimiter(TPath.Combine(Fx, 'proj'))) then
