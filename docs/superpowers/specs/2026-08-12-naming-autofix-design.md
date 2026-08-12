@@ -107,8 +107,14 @@ function PlanName(const AOld: string; AKind: TNameKind; const ACfg: TNamingConfi
    bounded by construction. Cap it at 100 candidates; if none is accepted, set
    `Unfixable` and change nothing -- never emit a guessed name.
 
-`ATaken` and `AKnownTypes` are supplied by the caller, keeping scope resolution
-out of the pure layer.
+**Where `ATaken` and `AKnownTypes` come from.** They ARE built from the indexes
+-- the project DB for in-project names, plus the platform library DB for library
+types. The point of passing them IN is only that `PlanName` itself must not open
+a database: the caller (`NamingFix`) runs the queries and hands the pure function
+two finished sets. Same data, one layer up. That is what makes every synthesis
+edge case -- `Out_`, `fCount`, `TList`, reserved words, `VarN` escalation -- a
+millisecond table test with no DB, no files and no compiler, which is where the
+bugs in the current implementation are hiding.
 
 ### 2. Scope supplied by `NamingFix` (per kind, natural scope)
 
