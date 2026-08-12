@@ -3,7 +3,33 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.3.0-alpha -- 2026-08-12
+
+A feature release, not a patch: it changes **where every index lives** and **what
+`lint-all` reports**, and it makes `lint-all` finish on a project where it
+previously could not.
+
+**No schema change.** `SCHEMA_VERSION` is 21 before and after. Existing databases
+were relocated by `migrate-dbs`, verified row-for-row, and needed no reindex --
+what moved is where a database lives, not what is inside it.
+
+### `lint-all` completes on a large project (2026-08-12)
+
+- **ORM3-Micronite2027 went from 8,705 CPU-seconds unfinished to 732 s**, with
+  byte-identical findings (the same 19,024). Three project rules each asked the
+  store per *occurrence* what could be asked once per run:
+  `unused-private-member` (447.8 s -> 0.01 s) and `unused-public-symbol`
+  (59.0 s -> 0.36 s) ran two row-materialising queries per symbol just to compare
+  a length with zero -- the second a full scan of `refs`, which has no
+  `name_text` index -- and `unused-unit-in-uses` ran one query per *reference*.
+  The first two now read two DISTINCT scans into sets once per run (new store
+  methods `GetReferencedSymbolIds` / `GetReferencedNamesLower`); the third
+  memoises name -> unit stems.
+- **`DRAGLINT_PROFILE=1` now profiles `lint-all`**, per phase and per project
+  rule, on stderr. Phases are announced when they open and costed when they
+  close, so a run that never terminates still names the phase it died in.
+- Known remainder, measured and filed: `doc-drift` is now the dominant phase
+  (454.9 s of ORM3's 732.3 s). It was invisible behind the above.
 
 ### Project DB home (`_D-RAG`), and `lint-all` scoped to the project's own code (2026-08-11)
 

@@ -2,7 +2,7 @@
   "name": "drag-lint",
   "displayName": "drag-lint (Delphi)",
   "description": "Delphi/Pascal language server backed by the drag-lint index: hover, go-to-definition, find-references, workspace symbols, completion and signature help.",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "publisher": "drag-lint",
   "license": "SEE LICENSE IN LICENSE",
   "engines": { "vscode": "^1.75.0" },
