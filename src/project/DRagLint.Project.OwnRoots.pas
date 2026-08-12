@@ -113,6 +113,7 @@ end;
 class function TOwnRoots.Load(const AAnchorDir: string): TOwnRoots;
 var
   CfgPath: string     ;
+  JVal   : TJSONValue ;
   Root   : TJSONObject;
   Arr    : TJSONArray ;
   V      : TJSONValue ;
@@ -127,35 +128,50 @@ begin
 
   if TFile.Exists(CfgPath) then
   try
-    Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(CfgPath)) as TJSONObject;
-    if Root <> nil then
+    { Parse into the base TJSONValue FIRST and free it in a finally that covers
+      every exit from this block. The earlier `... as TJSONObject` cast raised
+      EInvalidCast (on a root that parses but is not an object, e.g. `["a"]`)
+      BEFORE the assignment to Root completed -- the parsed value was still
+      live but never reachable to free, so it leaked on every malformed file.
+      This unit serves the LSP, a long-running process that reloads this file
+      repeatedly, so that leak was not academic. }
+    JVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(CfgPath));
     try
-      if Root.GetValue('ownRoots') is TJSONArray then
+      if JVal is TJSONObject then
       begin
-        Arr:= Root.GetValue('ownRoots') as TJSONArray;
-        if Arr.Count = 0 then
+        Root:= TJSONObject(JVal);
+        if Root.GetValue('ownRoots') is TJSONArray then
         begin
-          Result.FError:= Format('%s declares an empty "ownRoots". Remove the key to ' +
-            'default to the project folder, or list the roots -- scoping to nothing ' +
-            'would report a clean project.', [CfgPath]);
-          Exit;
+          Arr:= Root.GetValue('ownRoots') as TJSONArray;
+          if Arr.Count = 0 then
+          begin
+            Result.FError:= Format('%s declares an empty "ownRoots". Remove the key to ' +
+              'default to the project folder, or list the roots -- scoping to nothing ' +
+              'would report a clean project.', [CfgPath]);
+            Exit;
+          end;
+          for V in Arr do
+          begin
+            Entry:= Trim(V.Value);
+            if Entry = '' then Continue;
+            if TPath.IsRelativePath(Entry) then Entry:= TPath.Combine(Result.FAnchor, Entry);
+            Result.FRoots:= Result.FRoots + [NormalizeDir(Entry)];
+          end;
+          Result.FDeclared:= Length(Result.FRoots) > 0;
         end;
-        for V in Arr do
-        begin
-          Entry:= Trim(V.Value);
-          if Entry = '' then Continue;
-          if TPath.IsRelativePath(Entry) then Entry:= TPath.Combine(Result.FAnchor, Entry);
-          Result.FRoots:= Result.FRoots + [NormalizeDir(Entry)];
-        end;
-        Result.FDeclared:= Length(Result.FRoots) > 0;
       end;
     finally
-      Root.Free;
+      JVal.Free;
     end;
   except
     { A malformed declaration defaults rather than throws: the fallback is the
-      project's own folder, which is never WRONG, only narrow -- and the skip
-      report names what it dropped, so a bad file is visible within one run. }
+      project's own folder, which is never WRONG, only narrow. The parse
+      failure itself is swallowed HERE -- E.Message is not captured onto this
+      record anywhere, so from TOwnRoots' properties alone a malformed
+      drag-lint-project.json is indistinguishable from no declaration at all;
+      Declared = False is the only signal this record gives. A caller that
+      needs to report WHY defaulting happened must re-read/re-parse the file
+      itself. }
     on E: Exception do Result.FDeclared:= False;
   end;
 

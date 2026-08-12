@@ -15842,6 +15842,10 @@ end; // function
 // read (including a RELATIVE entry), that a file under a declared root is ours,
 // that a sibling folder outside them is not, that an UNDECLARED project defaults
 // to its own folder, and that a DB inside a _D-RAG resolves back to its project.
+// Also covers (review round 1): a sibling folder whose NAME EXTENDS a declared
+// root's name is not a prefix match; an explicit "ownRoots": [] is an Error, not
+// a default; and malformed (unparseable) JSON defaults exactly like a missing
+// file, never an Error.
 // Prints OWNROOTS-OK or OWNROOTS-FAIL: <detail>.
 function DoSelfTestOwnRoots(const AArgs: TArgs): Integer;
 var
@@ -15852,6 +15856,13 @@ begin
     the same field `selftest ignore --dir` reads. }
   Fx:= AArgs.Path;
   if Fx = '' then begin Writeln('OWNROOTS-FAIL: pass --dir <fixtures\own-roots>'); Exit(1); end;
+  { Normalized ONCE, here, to an absolute path: AnchorDirForDb always calls
+    ExpandFileName internally (so its answer is always absolute), so comparing
+    it against an un-normalized Fx-relative expected value below would fail
+    for a relative --dir even though behaviour is correct -- reported in
+    review round 1. Every other assertion in this function is unaffected
+    either way, because TOwnRoots.Load/IsOurs already normalize internally. }
+  Fx:= TPath.GetFullPath(Fx);
 
   Own:= TOwnRoots.Load(TPath.Combine(Fx, 'proj'));
   if not Own.Declared then begin Writeln('OWNROOTS-FAIL: declaration not read'); Exit(1); end;
@@ -15862,6 +15873,10 @@ begin
     begin Writeln('OWNROOTS-FAIL: relative root "..\shared" not honoured'); Exit(1); end;
   if Own.IsOurs(TPath.Combine(Fx, 'vendor\Vendor.pas')) then
     begin Writeln('OWNROOTS-FAIL: vendor file counted as ours'); Exit(1); end;
+  { Sibling-name prefix collision (review round 1): "proj" must not own
+    "projExtra\..." merely because "projExtra" starts with the string "proj". }
+  if Own.IsOurs(TPath.Combine(Fx, 'projExtra\Extra.pas')) then
+    begin Writeln('OWNROOTS-FAIL: sibling name prefix "projExtra" wrongly counted as ours'); Exit(1); end;
 
   { An undeclared project owns exactly its own folder. }
   Own:= TOwnRoots.Load(TPath.Combine(Fx, 'vendor'));
@@ -15875,6 +15890,23 @@ begin
   Own:= TOwnRoots.Load('');
   if not Own.IsOurs(TPath.Combine(Fx, 'vendor\Vendor.pas')) then
     begin Writeln('OWNROOTS-FAIL: an anchorless run must not filter'); Exit(1); end;
+
+  { An explicit "ownRoots": [] is a declared-but-unusable Error -- scoping to
+    nothing would silently report a clean project (review round 1). }
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'empty-decl'));
+  if Own.Error = '' then
+    begin Writeln('OWNROOTS-FAIL: empty "ownRoots" must set Error'); Exit(1); end;
+
+  { Malformed (unparseable) JSON is NOT an Error -- it defaults exactly like a
+    missing declaration (review round 1; pins the Finding-1 leak fix's code
+    path too). }
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'malformed-decl'));
+  if Own.Declared then
+    begin Writeln('OWNROOTS-FAIL: malformed JSON must not count as declared'); Exit(1); end;
+  if Own.Error <> '' then
+    begin Writeln('OWNROOTS-FAIL: malformed JSON must default, not error'); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'malformed-decl\Whatever.pas')) then
+    begin Writeln('OWNROOTS-FAIL: malformed JSON must still default to the anchor folder'); Exit(1); end;
 
   if not SameText(AnchorDirForDb(TPath.Combine(Fx, 'proj\_D-RAG\App.sqlite')),
                   ExcludeTrailingPathDelimiter(TPath.Combine(Fx, 'proj'))) then
