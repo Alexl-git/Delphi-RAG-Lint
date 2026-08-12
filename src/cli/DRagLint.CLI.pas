@@ -45,6 +45,7 @@ uses
   , System.RegularExpressions
   , System.Generics.Collections
   , System.Generics.Defaults { Task 5: TComparer<string>.Construct for the lint-all skip-report sort }
+  , System.Diagnostics       { TStopwatch -- DRAGLINT_PROFILE per-phase lint-all timing }
   , System.Math
   , Data.DB
   , FireDAC.Comp.Client
@@ -9469,6 +9470,84 @@ begin
   end;
 end;
 
+{ PERF INSTRUMENTATION -- set DRAGLINT_PROFILE=1 for a per-phase breakdown of
+  lint-all on stderr. The indexer has had one since v0.85; the linter had none,
+  and the cost of that showed: ORM3-Micronite2027 burned 8,705 CPU-seconds in
+  the project-wide phase without finishing, and the only way to say WHICH rule
+  was spending it was to guess (docs\INBOX-lint-all-project-wide-phase-dominates-runtime.md).
+
+  Two deliberate choices:
+
+  * Each phase is announced when it OPENS and its cost printed when it CLOSES,
+    streaming to stderr rather than accumulating a table for the end. A run that
+    never terminates -- which is exactly the case being diagnosed -- prints
+    nothing at all under an end-of-run report, so the report has to arrive
+    before the stall does. `-> <name> ...` with no matching cost line is the
+    phase that hung.
+  * stderr, and only when the variable is set, so a normal run stays
+    byte-identical on stdout (the reports get diffed).
+
+  Cost when unarmed is one Boolean test per phase, roughly a dozen per run. }
+type
+  TLintPhaseProfiler = record
+  private
+    FActive: Boolean;
+    FOpen  : string ; { name of the phase in progress, '' when none }
+    FMark  : Int64  ; { tick stamp at which FOpen began }
+    FStart : Int64  ; { tick stamp of Init, for the TOTAL line }
+    procedure CloseOpenPhase;
+  public
+    /// <summary>Arms the profiler if DRAGLINT_PROFILE is set; otherwise every
+    /// method on this record is a no-op.</summary>
+    /// <param name="AHeader">Run identification printed above the breakdown.</param>
+    procedure Init(const AHeader: string);
+    /// <summary>Closes the phase in progress (printing its cost) and opens AName.</summary>
+    procedure Phase(const AName: string);
+    /// <summary>Closes the last phase and prints the TOTAL line. Safe to call twice.</summary>
+    procedure Done;
+  end;
+
+procedure TLintPhaseProfiler.Init(const AHeader: string);
+begin
+  FActive:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
+  FOpen  := '';
+  if not FActive then Exit;
+  FStart:= TStopwatch.GetTimeStamp;
+  FMark := FStart;
+  Writeln(ErrOutput, 'LINT PROFILE -- ' + AHeader);
+  Flush(ErrOutput);
+end; // procedure
+
+procedure TLintPhaseProfiler.CloseOpenPhase;
+var
+  Stamp: Int64;
+begin
+  if (not FActive) or (FOpen = '') then Exit;
+  Stamp:= TStopwatch.GetTimeStamp;
+  Writeln(ErrOutput, Format('  %-28s %10.2f s', [FOpen, (Stamp - FMark) / TStopwatch.Frequency]));
+  Flush(ErrOutput);
+  FMark:= Stamp;
+  FOpen:= '';
+end; // procedure
+
+procedure TLintPhaseProfiler.Phase(const AName: string);
+begin
+  if not FActive then Exit;
+  CloseOpenPhase;
+  FOpen:= AName;
+  Writeln(ErrOutput, '  -> ' + AName + ' ...');
+  Flush(ErrOutput);
+end; // procedure
+
+procedure TLintPhaseProfiler.Done;
+begin
+  if not FActive then Exit;
+  CloseOpenPhase;
+  Writeln(ErrOutput, Format('  %-28s %10.2f s', ['TOTAL', (TStopwatch.GetTimeStamp - FStart) / TStopwatch.Frequency]));
+  Flush(ErrOutput);
+  FActive:= False;
+end; // procedure
+
 // v0.61: drag-lint lint-all [--db <index.sqlite>] [--project <.dproj>]
 //   [--disable id,...] [--output <report.txt>] [--json]
 // Batch lint runner: runs ALL per-file AST rules over every indexed .pas file,
@@ -9496,6 +9575,7 @@ var
   { nil = unscoped (no --project), which is the default and must stay
     byte-identical to the old behaviour. }
   ScopeSet : TDictionary<string, Boolean>;
+  Prof     : TLintPhaseProfiler          ;
 begin
   { Resolve DBs: first existing = project index; second = library index }
   Dbs:= ResolveConsumerDbs(AArgs);
@@ -9510,6 +9590,8 @@ begin
   if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }
+  Prof.Init('lint-all ' + ExtractFileName(ProjectDb));
+  Prof.Phase('open+migrate store');
   Store:= TSQLiteSymbolStore.Create(ProjectDb);
   Store.Migrate;
   Findings:= nil;
@@ -9547,6 +9629,7 @@ begin
     "exclude_paths" is a SCOPE decision (vendored code is not this codebase's
     quality signal for any rule), so an excluded file must never reach the
     scanner, and the banner below must report the count actually scanned. }
+  Prof.Phase('enumerate+scope files');
   var Cfg: TLintConfig:= LoadLintConfig(AArgs);
   { Ownership is a SCOPE decision, exactly like exclude_paths, so it belongs
     here -- before the scan, so an out-of-scope file never reaches the scanner
@@ -9584,6 +9667,7 @@ begin
   for var SkLine: string in SkipLines do EmitStatusLine(AArgs, SkLine);
 
   { Per-file rules: external .scm rules + all built-in AST checks }
+  Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
   LastPct:= -1;
   try
@@ -9663,29 +9747,38 @@ begin
   end; // try
 
   { Project-wide rules }
+  Prof.Phase('project-rules');
   Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, '');
   { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
+  Prof.Phase('class-metrics');
   Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, '');
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
+  Prof.Phase('missing-doc');
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
   { ADF Task 8: doc-drift -- store-backed (needs the doc graph + Raises facts);
     ON by default. Its --fix subset is applied in FinalizeAndOutput (Store passed). }
   { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
+  Prof.Phase('doc-drift');
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso);
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
+  Prof.Phase('duplicate-code');
   Findings:= Findings + DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths, Cfg.ThresholdFor('duplicate-code', 90));
   { Interface reference cycles (needs all file paths) }
+  Prof.Phase('interface-cycles');
   Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);
   { Architecture layering (only if config present) }
+  Prof.Phase('layering');
   LayersCfg:= AArgs.LayersPath;
   if (LayersCfg = '') and FileExists('drag-lint-layers.json') then LayersCfg:= 'drag-lint-layers.json';
   if LayersCfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
+  Prof.Phase('unit-not-in-dpr');
   if AArgs.ProjectPath <> '' then Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
   { Used-unit resolvability (used-unit-not-resolvable) }
+  Prof.Phase('used-unit-resolvable');
   Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
 
   { The per-file filter above only narrowed the SCAN. Every rule between the
@@ -9703,6 +9796,7 @@ begin
     project-wide phase. Own.IsOurs also does an ExpandFileName + StringReplace
     per call; findings cluster heavily by file, so a per-file memo turns that
     into one real test per distinct FilePath rather than one per finding. }
+  Prof.Phase(Format('ownership filter (%d findings)', [Length(Findings)]));
   if (not AArgs.LintThirdParty) and Own.Active then
   begin
     var OwnMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
@@ -9733,6 +9827,7 @@ begin
     class, clone detection, layering, doc rules, used-unit-not-resolvable), so
     without this the non-member noise walks straight back in through them.
     A finding carrying no file path is kept -- it belongs to the run, not a file. }
+  Prof.Phase('--project scope filter');
   if ScopeSet <> nil then
   begin
     var InScope: TArray<TLintFinding>:= nil;
@@ -9770,6 +9865,7 @@ begin
     and would otherwise fire on every bare lint-all (the measured 1302-finding wave).
     List it here so ShouldKeep drops it by default; config "enabled":["missing-doc"]
     still overrides (opt-in). doc-drift stays ON -- do NOT list it. }
+  Prof.Phase('finalize+output');
   Result:= FinalizeAndOutput(
     AArgs, Findings, [
       'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter',
@@ -9841,6 +9937,7 @@ begin
     end,
     Store { ADF Task 8: enables the store-backed doc-drift --fix path }
   );
+  Prof.Done;
 end; // function
 
 // v0.48: drag-lint lint-project --db <index.sqlite> [--rule <id>] [--json]

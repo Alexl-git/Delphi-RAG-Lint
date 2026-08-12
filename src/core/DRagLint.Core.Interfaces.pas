@@ -314,6 +314,21 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
+    /// <summary>Every symbol id that appears as the target of at least one reference.</summary>
+    /// <returns>Distinct non-zero refs.symbol_id values; empty if the index has no refs.</returns>
+    /// <remarks>The set form of FindReferencesTo for callers that only ask "is this
+    /// referenced AT ALL?" of many symbols. One scan answers the question for every
+    /// symbol, where the per-symbol call costs one query each.</remarks>
+    function GetReferencedSymbolIds: TArray<Int64>                                         ;
+    /// <summary>Every distinct reference name in the index, lowercased.</summary>
+    /// <returns>Distinct LowerCase(refs.name_text); empty if the index has no refs.</returns>
+    /// <remarks>The set form of FindCallersByName, for the same reason. Lowercased
+    /// because the query it replaces matches COLLATE NOCASE, and both that collation
+    /// and Delphi's default LowerCase fold ASCII only -- so a lookup on
+    /// LowerCase(Name) accepts exactly the rows the query would have returned.
+    /// refs.name_text carries NO index, so FindCallersByName is a full table scan
+    /// EVERY call: replacing N of those with one scan is the whole point.</remarks>
+    function GetReferencedNamesLower: TArray<string>                                       ;
     /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>

@@ -1122,6 +1122,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
+      /// <summary>Implements ISymbolStore.GetReferencedSymbolIds -- one DISTINCT scan of refs.</summary>
+      function GetReferencedSymbolIds: TArray<Int64>                                         ;
+      /// <summary>Implements ISymbolStore.GetReferencedNamesLower -- one DISTINCT scan of refs.</summary>
+      function GetReferencedNamesLower: TArray<string>                                       ;
       /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
@@ -5413,6 +5417,66 @@ begin
       List.Add(R);
       Q.Next;
     end; // while
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+{ The set forms of FindReferencesTo / FindCallersByName.
+
+  Both exist because "is this symbol referenced at all?" was being asked once per
+  symbol, and each ask cost a query that MATERIALISED EVERY MATCHING ROW into a
+  TReference just to have its length compared with zero. refs.name_text carries
+  no index (see FindCallersByName), so the name form was a full table scan per
+  symbol. Measured on ORM3-Micronite2027: unused-private-member 447.8 s and
+  unused-public-symbol 59.0 s of a 537.3 s project-rules phase.
+
+  One DISTINCT scan each answers the same question for every symbol. }
+function TSQLiteSymbolStore.GetReferencedSymbolIds: TArray<Int64>;
+var
+  Q   : TFDQuery    ;
+  List: TList<Int64>;
+begin
+  List:= TList<Int64>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT DISTINCT symbol_id FROM refs WHERE symbol_id IS NOT NULL AND symbol_id > 0';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(Q.Fields[0].AsLargeInt);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.GetReferencedNamesLower: TArray<string>;
+var
+  Q   : TFDQuery     ;
+  List: TList<string>;
+begin
+  List:= TList<string>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { Lowercased in Delphi rather than by SQL: LOWER() in SQLite folds ASCII
+      only, and so does Delphi's default LowerCase, so the two agree -- but
+      doing it here keeps DISTINCT operating on the stored text, which is what
+      the replaced query matched with COLLATE NOCASE. }
+    Q.SQL.Text:= 'SELECT DISTINCT name_text FROM refs WHERE name_text IS NOT NULL AND name_text <> ''''';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(LowerCase(Q.Fields[0].AsString));
+      Q.Next;
+    end;
     Result:= List.ToArray;
   finally
     Q.Free;
