@@ -551,6 +551,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleSignatureHelp  (const AId: TJSONValue; const AParams: TJSONObject);
+      /// <summary>Code actions for a given range. Generates actions to insert
+      /// reviewed-markers for drag-lint findings.</summary>
+      /// <param name="AId">Request id from the client.</param>
+      /// <param name="AParams">textDocument/codeAction request parameters (textDocument, range, context).</param>
+      /// <remarks>Responds with a JSON array of CodeAction objects or null.</remarks>
+      procedure HandleCodeAction(const AId: TJSONValue; const AParams: TJSONObject);
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1066,6 +1072,7 @@ begin
       because a Delphi source unit is small enough that resending it costs less
       than the range arithmetic costs in correctness risk. }
     Caps.AddPair('textDocumentSync'       , TJSONNumber.Create(1) );
+    Caps.AddPair('codeActionProvider'     , TJSONBool.Create(True));
     // v0.20: completion provider
     CompProvider          := TJSONObject.Create;
     TriggerCharsCompletion:= TJSONArray .Create;
@@ -2739,6 +2746,85 @@ begin
   end; // try
 end; // procedure
 
+procedure TLSPServer.HandleCodeAction(const AId: TJSONValue; const AParams: TJSONObject);
+var
+  Reply    : TJSONObject;
+  TextDoc  : TJSONObject;
+  RangeObj : TJSONObject;
+  StartPos : TJSONObject;
+  EndPos   : TJSONObject;
+  Uri      : string     ;
+  Path     : string     ;
+  StartLine: Integer    ;
+  StartCol : Integer    ;
+  EndLine  : Integer    ;
+  EndCol   : Integer    ;
+  Context  : TJSONObject;
+  Diags    : TJSONArray ;
+  Actions  : TJSONArray ;
+begin
+  Reply:= TJSONObject.Create;
+  try
+    Reply.AddPair('jsonrpc', '2.0');
+    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
+
+    if (AParams = nil) then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+
+    TextDoc := AParams.GetValue('textDocument') as TJSONObject;
+    RangeObj:= AParams.GetValue('range'        ) as TJSONObject;
+    Context := AParams.GetValue('context'      ) as TJSONObject;
+
+    if (TextDoc = nil) or (RangeObj = nil) then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+
+    Uri:= TextDoc.GetValue('uri').Value;
+    Path:= FileFromUri(Uri);
+
+    { Extract range: LSP uses 0-based lines and characters; our builder uses 1-based. }
+    StartPos:= RangeObj.GetValue('start') as TJSONObject;
+    EndPos  := RangeObj.GetValue('end'  ) as TJSONObject;
+
+    if (StartPos = nil) or (EndPos = nil) then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+
+    StartLine:= StrToIntDef(StartPos.GetValue('line'     ).Value, 0) + 1;
+    StartCol := StrToIntDef(StartPos.GetValue('character').Value, 0) + 1;
+    EndLine  := StrToIntDef(EndPos  .GetValue('line'     ).Value, 0) + 1;
+    EndCol   := StrToIntDef(EndPos  .GetValue('character').Value, 0) + 1;
+
+    { Get diagnostics from context if provided; otherwise build them. }
+    if (Context <> nil) and (Context.GetValue('diagnostics') is TJSONArray) then
+      Diags:= Context.GetValue('diagnostics') as TJSONArray
+    else
+      Diags:= TLspCompletion.BuildDiagnostics(EnsureLinter, Path, FStore);
+
+    try
+      { Build code actions for the given range and diagnostics. }
+      Actions:= TLspCompletion.BuildCodeActions(Path, StartLine, StartCol, EndLine, EndCol, Diags);
+      Reply.AddPair('result', Actions);
+    finally
+      if Context = nil then Diags.Free; { only free if we built it; context owns it }
+    end;
+
+    SendMessage(Reply);
+  finally
+    Reply.Free;
+  end; // try
+end; // procedure
+
 procedure TLSPServer.HandleDidOpenOrSave(const AParams: TJSONObject);
 var
   TextDoc  : TJSONObject;
@@ -2873,6 +2959,7 @@ begin
       else if Method = 'draglint/usages' then HandleUsages(Id, Params)
       else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)
       else if Method = 'textDocument/signatureHelp' then HandleSignatureHelp(Id, Params)
+      else if Method = 'textDocument/codeAction' then HandleCodeAction(Id, Params)
       else if Method = 'textDocument/didOpen' then HandleDidOpenOrSave(Params)
       else if Method = 'textDocument/didSave' then HandleDidOpenOrSave(Params)
       else if Method = 'textDocument/didChange' then HandleDidChange(Params)
