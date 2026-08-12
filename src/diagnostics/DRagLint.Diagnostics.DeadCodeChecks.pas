@@ -1103,11 +1103,17 @@ var
     Result:= (not Dr.IsNull) and (Dr.NodeType = 'identifier') and SameText(Trim(NodeStr(Dr)), 'Create');
   end;
 
-  { True if N is 'AVarLower.Free', 'AVarLower.Destroy', or
-    'FreeAndNil(AVarLower)' -- the three shapes create-inside-try accepts as
-    "the finally frees the constructed variable". Comparison is case-
-    insensitive on both the variable name and the freeing method/routine. }
-  function IsFreeOf(const N: TTSNode; const AVarLower: string): Boolean;
+  { True if N is 'ALhsNorm.Free', 'ALhsNorm.Destroy', or
+    'FreeAndNil(ALhsNorm)' -- the three shapes create-inside-try accepts as
+    "the finally frees the constructed variable". ALhsNorm is a NORMALISED
+    SOURCE-TEXT comparison (LowerCase + NormaliseText, the same technique
+    identical-then-else already uses above), not an identifier-node-type
+    check -- Fix 4 (2026-08-11 final review) widened this from bare
+    identifiers only ('X.Free') to ANY lhs shape the constructor assignment
+    can have, so an indexed target ('FList[0].Free') or a multi-level one
+    ('A.B.C.Free') is now compared too, as long as the finally frees the
+    exact same source text. }
+  function IsFreeOf(const N: TTSNode; const ALhsNorm: string): Boolean;
   var Lhs, Rhs, Ent, Args, A0: TTSNode;
   begin
     Result:= False;
@@ -1117,8 +1123,8 @@ var
       Lhs:= N.ChildByField('lhs');
       Rhs:= N.ChildByField('rhs');
       Result:= (not Lhs.IsNull) and (not Rhs.IsNull)
-        and (Lhs.NodeType = 'identifier') and (Rhs.NodeType = 'identifier')
-        and SameText(LowerCase(Trim(NodeStr(Lhs))), AVarLower)
+        and (Rhs.NodeType = 'identifier')
+        and SameText(LowerCase(NormaliseText(NodeStr(Lhs))), ALhsNorm)
         and (SameText(Trim(NodeStr(Rhs)), 'Free') or SameText(Trim(NodeStr(Rhs)), 'Destroy'));
     end
     else if N.NodeType = 'exprCall' then
@@ -1130,28 +1136,28 @@ var
         if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
         begin
           A0:= Args.NamedChild(0);
-          Result:= (A0.NodeType = 'identifier') and SameText(LowerCase(Trim(NodeStr(A0))), AVarLower);
+          Result:= SameText(LowerCase(NormaliseText(NodeStr(A0))), ALhsNorm);
         end;
       end;
     end;
   end;
 
   { True if ASubtree (the finally block's body) contains, anywhere, a call
-    that frees AVarLower ('X.Free' / 'X.Destroy' / 'FreeAndNil(X)'). Full
-    subtree scan -- the freeing call is not required to be the first or only
-    statement. }
-  function SubtreeFreesVar(const ASubtree: TTSNode; const AVarLower: string): Boolean;
+    that frees ALhsNorm ('X.Free' / 'X.Destroy' / 'FreeAndNil(X)', X being any
+    lhs shape -- see IsFreeOf). Full subtree scan -- the freeing call is not
+    required to be the first or only statement. }
+  function SubtreeFreesVar(const ASubtree: TTSNode; const ALhsNorm: string): Boolean;
   var I: Integer;
   begin
     Result:= False;
     if ASubtree.IsNull then Exit;
-    if IsFreeOf(ASubtree, AVarLower) then Exit(True);
+    if IsFreeOf(ASubtree, ALhsNorm) then Exit(True);
     for I:= 0 to ASubtree.ChildCount - 1 do
-      if SubtreeFreesVar(ASubtree.Child(I), AVarLower) then Exit(True);
+      if SubtreeFreesVar(ASubtree.Child(I), ALhsNorm) then Exit(True);
   end;
 
   { create-inside-try's own narrowing check (see the rule site below): True
-    when ATryNode's OWN 'finally' block references AVarLower via Free /
+    when ATryNode's OWN 'finally' block references ALhsNorm via Free /
     Destroy / FreeAndNil -- i.e. the exact hazard the rule's message
     describes ("the finally frees an undefined reference") actually exists
     for this variable. A finally that frees a DIFFERENT, already-assigned
@@ -1161,7 +1167,7 @@ var
     is unusable here because the grammar reuses that field name for BOTH the
     'kFinally' keyword token and the body, so ChildByField returns the
     keyword (the first match), never the statements. }
-  function TryFinallyFreesVar(const ATryNode: TTSNode; const AVarLower: string): Boolean;
+  function TryFinallyFreesVar(const ATryNode: TTSNode; const ALhsNorm: string): Boolean;
   var
     I, KFi: Integer;
     Body  : TTSNode;
@@ -1175,7 +1181,7 @@ var
     begin
       Body:= ATryNode.Child(I);
       if Body.NodeType = 'kEnd' then Break;
-      if SubtreeFreesVar(Body, AVarLower) then Exit(True);
+      if SubtreeFreesVar(Body, ALhsNorm) then Exit(True);
     end;
   end;
 
@@ -1480,10 +1486,17 @@ var
         construction has its own nested try..finally on the very next line,
         which is the idiom this rule exists to teach) -- there the
         just-constructed X has no undefined reference the finally can touch.
-        Also does not flag when the assignment's lhs is not a plain local
-        identifier (e.g. 'Self.FList := TFoo.Create'): the rule cannot name
-        "the variable" to check the finally against, so it cannot prove the
-        hazard and stays silent rather than guess.
+        Fix 4 (2026-08-11 final review): the lhs gate used to require a bare
+        local identifier ('X := TFoo.Create'), so an indexed target
+        ('FList[0] := TFoo.Create') or a multi-level one
+        ('A.B.C := TFoo.Create') was silently dropped even when the SAME
+        try's finally demonstrably freed that exact target -- the real
+        hazard the rule exists for. Widened to compare the lhs's own
+        NORMALISED SOURCE TEXT (LowerCase + collapsed whitespace, same
+        technique identical-then-else already uses in this unit) against
+        what the finally frees, instead of requiring an 'identifier' node --
+        see IsFreeOf/TryFinallyFreesVar. docs\INBOX-create-inside-try-
+        qualified-lhs-not-flagged.md is now resolved by this change.
         NOT implemented (explicitly out of scope, see task-9 brief): the
         related but DIFFERENT defect where a SECOND construction inside the
         same try (after the first) raises and leaks the first, already-
@@ -1504,8 +1517,9 @@ var
           if IsConstructorAssignment(Stmt) then
           begin
             var CtorLhs: TTSNode:= Stmt.ChildByField('lhs');
-            if (not CtorLhs.IsNull) and (CtorLhs.NodeType = 'identifier')
-               and TryFinallyFreesVar(N, LowerCase(Trim(NodeStr(CtorLhs)))) then
+            var CtorLhsNorm: string:= '';
+            if not CtorLhs.IsNull then CtorLhsNorm:= LowerCase(NormaliseText(NodeStr(CtorLhs)));
+            if (CtorLhsNorm <> '') and TryFinallyFreesVar(N, CtorLhsNorm) then
               EmitAt(Stmt, 'create-inside-try',
                 'Object is constructed as the first statement INSIDE its try..finally -- if the constructor raises, the finally frees an undefined reference. Construct it before the try.');
           end;

@@ -14,7 +14,17 @@ source, so lint inherits the indexer's answer to a different question.
 Measured on YADF (2026-08-11): **1,072 findings, 768 of them (72%) in
 `C:\Projects\DelphiAST`** -- a vendored parser YADF neither owns nor can fix.
 182 of the 183 `inherited-bare` findings were DelphiAST's. YADF's own code has
-**304** findings: 0 errors, 70 warnings, 231 info, 3 hints.
+**304** findings: 0 errors, 70 warnings, 231 info, 3 hints (pre-implementation
+estimate, grep-filtered from a whole-corpus 16-file report -- see the
+correction below).
+
+**Correction (2026-08-11, final whole-branch review):** a genuinely scoped
+`lint-all` run reports **305**, not 304 -- clone detection is set-relative, so
+a scoped run claims a slightly different, overlapping set of windows in one
+repetitive region of `YadfMain.pas` than grep-filtering the whole-corpus
+report did. After the subsequent rule fortifications and YADF source fixes,
+the current count is **259**. Treat 259, not 304 or 305, as today's baseline
+-- an acceptance run reporting 259 has NOT failed.
 
 This is a SCOPE defect, not a false-positive problem. Indexing scope and linting
 scope are different questions and lint is currently answering with the indexer's
@@ -42,7 +52,8 @@ Measured spread of "outside the project folder" per index:
 | ORM3-Micronite2027 | 641 | 371 | 295 `ORM3\COMMON` (**ours**) + 76 `PDFlibPas` |
 | ORM3-MicroniteMW1Service | 459 | 313 | mostly `ORM3\COMMON` (**ours**) |
 | TableTools370P | 18 | 9 | 8 `ORM3\COMMON`/`SERVER` (**ours**) + 1 `tzdb` |
-| Loader, DataCopy, DragLint-*, Graph-* | -- | 0 | nothing outside |
+| Loader, DataCopy | -- | 0 | nothing outside |
+| DragLint-*, Graph-* | -- | corrected: not 0 | this row originally measured "outside" against the REPOSITORY ROOT; the code's default own-root is the project FILE'S OWN folder (e.g. `src\cli` for DragLint-Cli), which is a much narrower scope -- these self-hosting indexes needed explicit `ownRoots` declarations for exactly that reason (a Critical finding from the final review, already fixed by configuration) |
 
 ## 2. Non-goals
 
@@ -144,14 +155,33 @@ declaration portable and short -- ORM3's eight sections each declare `[".."]`
 rather than repeating an absolute path that breaks if the tree moves.
 
 **Default when the file is absent, unreadable, or declares no roots: the
-project file's own folder.** That is the whole configuration for YADF,
-Delphi-RAG-lint, Graph, DataCopy, Loader, OCRPDF and the Graph packages -- they
-have nothing outside it. Only two declarations are needed across the corpus:
+project file's own folder.** That suffices only where the `.dproj` sits AT the
+root of the code it owns -- YADF, DataCopy, Loader, OCRPDF.
+
+**CORRECTED 2026-08-12, after the final review measured it.** An earlier draft
+of this section claimed the default also covered `DragLint-*` and `Graph-*`.
+That was wrong, and the error is worth recording because it is easy to repeat:
+the measurement behind it was taken against each project's **repository root**,
+while the code defaults to the **project file's folder**. Those differ whenever
+the `.dproj` lives in a subdirectory. `drag-lint`'s own project file is at
+`src\cli\drag-lint.dproj`, so the default own-root was `src\cli` -- three files,
+with the other 94 units of the engine classified as third-party. Nine of the 27
+configured sections were affected.
+
+Declarations actually required across the corpus:
 
 | project | `ownRoots` |
 |---|---|
-| all 8 ORM3 sections | `["C:\\Projects\\DB\\ORM3"]` |
-| TableTools (both) | `["C:\\Projects\\TableTools", "C:\\Projects\\DB\\ORM3"]` |
+| all 8 ORM3 sections | `[".."]`, or `["..\\.."]` from the four `TESTER\*` folders |
+| TableTools (both) | `[".", "C:\\Projects\\DB\\ORM3"]` |
+| DragLint-Cli / -Wizard / -CorpusScan, all 5 Graph sections | `["..\\.."]` |
+| DragLint-Tests | `[".."]` |
+
+The lesson generalises: **the default is only right when the project file sits
+at the root of its own code.** A `.dproj` in a subdirectory always needs a
+declaration, and the skip report is what surfaces that -- on `drag-lint` itself
+it read "94 file(s) outside the project's own roots skipped", which is exactly
+the signal the report exists to give.
 
 An empty `ownRoots: []` is a usage error, not "own nothing" -- the same
 reasoning as the existing refusal to lint an empty `--project` scope, because
@@ -205,6 +235,11 @@ lint-all: 8 file(s) outside the project's own roots skipped
 lint-all: 304 finding(s) -- 0 error(s), 70 warning(s), 231 info, 3 hint
 ```
 
+(Sample numbers as originally measured -- see the 305/259 correction in
+section 1; the per-severity breakdown for 305/259 was not separately
+recorded, so this illustration keeps the original, internally-consistent
+304 figures rather than mixing a corrected total with a stale breakdown.)
+
 Grouping is defined precisely, because "group by directory" would print two
 lines for DelphiAST (`Source` and `Source\SimpleParser`) instead of naming the
 dependency: start from each skipped file's directory, then repeatedly merge
@@ -216,8 +251,10 @@ by the same stop condition. Capped at the 10 largest groups with a "+N more"
 line. The report file gets the same block. On `--json` / `--format sarif` these
 lines go to stderr, per `docs\INBOX-lint-all-json-stdout-banner.md`.
 
-Expected effect: YADF 1,072 -> 304. ORM3-Micronite2027 keeps all 295
-`COMMON\OBJECTS` files and drops the 76 `PDFlibPas` ones.
+Expected effect: YADF 1,072 -> 305 as originally scoped (now 259 after
+subsequent rule fortifications and YADF source fixes -- see the correction in
+section 1). ORM3-Micronite2027 keeps all 295 `COMMON\OBJECTS` files and drops
+the 76 `PDFlibPas` ones.
 
 ## 5. Testing
 

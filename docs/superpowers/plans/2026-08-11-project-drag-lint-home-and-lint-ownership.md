@@ -1310,6 +1310,15 @@ Expected, and these are the acceptance numbers for the whole plan:
 
 If YADF's count is not 304, do NOT adjust the number to match -- find out why. The 304 was measured directly on 2026-08-11 and is recorded in the spec.
 
+**Correction (2026-08-11, final whole-branch review):** the 304 above was a
+pre-implementation estimate, grep-filtered from a whole-corpus 16-file report.
+A genuinely scoped run reports **305** -- clone detection is set-relative, so
+it claims a slightly different, overlapping set of windows in one repetitive
+region of `YadfMain.pas`. After the subsequent rule fortifications and YADF
+source fixes, the current count is **259**. A run reporting 259, not 304 or
+305, has NOT failed acceptance -- see the spec's section 1 for the full
+explanation.
+
 - [ ] **Step 4: Verify the ORM3 shared tree really is still in scope**
 
 ```bash
@@ -1395,7 +1404,7 @@ COMMON\\OBJECTS units."
 
 ## Acceptance
 
-- `drag-lint lint-all --db C:\Projects\YADF\_D-RAG\YADF.sqlite` reports **304** findings, names `C:\Projects\DelphiAST` as skipped, and `--lint-third-party` restores 1,072.
+- `drag-lint lint-all --db C:\Projects\YADF\_D-RAG\YADF.sqlite` reports **259** findings (originally scoped as 305, not the 304 first estimated by grep-filtering a whole-corpus report -- see the correction under Task 6, Step 3), names `C:\Projects\DelphiAST` as skipped, and `--lint-third-party` restores 1,072.
 - ORM3-Micronite2027 scans 565 files, keeps `COMMON\OBJECTS`, drops `PDFlibPas`.
 - All 27 project indexes live in a `_D-RAG` folder, open cleanly, and report the same `files` row counts as before the move.
 - `pwsh -File tests\run_battery.ps1` is at or above 251/253 with no new failure.

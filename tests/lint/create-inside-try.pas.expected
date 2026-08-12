@@ -1,22 +1,48 @@
 # create-inside-try, narrowed (Task 9a): fires ONLY when the try's own
 # finally block actually frees the just-constructed variable.
 #
-# P (genuine hazard -- rule fires): line 10 constructs SL as the first
-# protected statement, and the SAME try's finally at line 13 frees SL. NOT on
-# the correct pattern where the object is created before the try (line 15)
-# and the try's first statement is SL.Add (line 16/17).
-create-inside-try 10
-!create-inside-try 15
-!create-inside-try 16
-!create-inside-try 17
+# P (genuine hazard -- rule fires): line 21 constructs SL as the first
+# protected statement, and the SAME try's finally at line 24 frees SL. NOT on
+# the correct pattern where the object is created before the try (line 26)
+# and the try's first statement is SL.Add (line 27/28).
+create-inside-try 21
+!create-inside-try 26
+!create-inside-try 27
+!create-inside-try 28
 #
-# Q (YADF 5483 shape -- no finding): Sb is constructed at line 35 as the
-# first statement of the OUTER try, but that try's finally (line 42) frees
-# Root, not Sb -- Sb has its own nested try..finally (Sb.Free at line 39)
+# Q (YADF 5483 shape -- no finding): Sb is constructed at line 46 as the
+# first statement of the OUTER try, but that try's finally (line 53) frees
+# Root, not Sb -- Sb has its own nested try..finally (Sb.Free at line 50)
 # immediately after. The outer finally never touches an undefined Sb.
-!create-inside-try 35
+!create-inside-try 46
 #
 # R (finally frees a different var -- no finding): A is constructed at line
-# 55 as the first statement of the try, but the try's finally (line 58)
+# 66 as the first statement of the try, but the try's finally (line 69)
 # frees B, a different, already-assigned variable -- not A.
-!create-inside-try 55
+!create-inside-try 66
+#
+# Fix 4 (2026-08-11 review): the lhs gate used to require a bare identifier,
+# so an indexed or multi-level qualified target was silently dropped even
+# when the same finally demonstrably freed the exact target. All four below
+# are new coverage for that widening.
+#
+# S (indexed lhs, finally frees the SAME element -- fires): line 87
+# constructs Arr[0] as the try's first statement, and the same try's finally
+# (line 89) frees Arr[0].
+create-inside-try 87
+#
+# T (indexed lhs, finally frees a DIFFERENT element -- no finding): line 102
+# constructs Arr[0] as the try's first statement, but the try's finally
+# (line 104) frees Arr[1], not Arr[0].
+!create-inside-try 102
+#
+# U (multi-level lhs 'A.B.C', finally frees the SAME target -- fires): line
+# 116 constructs Outer.Inner.Obj as the try's first statement, and the same
+# try's finally (line 118) frees Outer.Inner.Obj via the identical path.
+create-inside-try 116
+#
+# V (multi-level lhs, finally frees a DIFFERENT qualified target -- no
+# finding): line 132 constructs Outer1.Inner.Obj as the try's first
+# statement, but the try's finally (line 134) frees Outer2.Inner.Obj --
+# textually different.
+!create-inside-try 132

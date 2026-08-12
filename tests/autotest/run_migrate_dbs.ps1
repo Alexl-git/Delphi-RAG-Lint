@@ -263,9 +263,16 @@ try {
               ) } }
         Set-Content -LiteralPath $cfgD -Value ($jD | ConvertTo-Json -Depth 8)
 
-        & $Exe migrate-dbs --config $cfgD --apply 2>&1 | Out-Null
+        $postMove = & $Exe migrate-dbs --config $cfgD --apply 2>&1 | Out-String
         Check 'post-move failure: overall exit is 1'            ($LASTEXITCODE -eq 1)
         Check 'post-move failure: file physically moved anyway' ((Test-Path $ddst) -and -not (Test-Path $ddb))
+
+        # Fix 3 (2026-08-11 review): MoveDbSet already relocated the .sqlite by
+        # the time the .gitignore write throws, so the bare "ERROR: <class>:
+        # <message>" used to read as "the move failed" when the file was, in
+        # fact, already sitting at $ddst. The handler must now say so.
+        Check 'post-move failure: message names the destination' ($postMove -match [regex]::Escape($ddst))
+        Check 'post-move failure: message says it already moved' ($postMove -match 'ALREADY MOVED')
 
         $savedD = (Get-Content -LiteralPath $cfgD -Raw | ConvertFrom-Json).indexes.sections | Where-Object { $_.name -eq 'D' }
         Check 'post-move failure: manifest already names the destination, not the vanished source' ([string]::IsNullOrEmpty($savedD.db))
@@ -279,6 +286,69 @@ try {
         Check 'post-move failure retry: no false health claim' (($retryD -notmatch 'RECONCIL') -and ($retryD -notmatch 'OK \('))
     } finally {
         Remove-Item -Recurse -Force $work4 -ErrorAction SilentlyContinue
+    }
+
+    # 10. Fix 2 (2026-08-11 review): --config resolving to a "...\dll-win64\
+    # drag-lint.json" path must mirror the SAME save onto its "...\dll-win32\
+    # drag-lint.json" sibling -- the 32-bit IDE design-time BPL and the 64-bit
+    # CLI each resolve and read their OWN copy (run_manifest_parity.ps1's
+    # header explains the mechanism), and nothing else in the product keeps
+    # the pair in sync. A real migration once desynced them silently and had
+    # to be repaired by hand; this proves the next --apply cannot do it
+    # again. Two sub-cases, in one hermetic tree (never touches the real
+    # third_party\dll-win32\ or dll-win64\ pair):
+    #   10a. no win32 sibling present -- must not fabricate one, must not error.
+    #   10b. a STALE win32 sibling present -- must become byte-identical, and
+    #        say so, naming the mirrored path.
+    $work5 = Join-Path $env:TEMP ('draglint_migrate_pair_' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory $work5 | Out-Null
+    try {
+        $dll64 = Join-Path $work5 'dll-win64'; New-Item -ItemType Directory $dll64 | Out-Null
+        $dll32 = Join-Path $work5 'dll-win32'; New-Item -ItemType Directory $dll32 | Out-Null
+
+        $projE = Join-Path $work5 'E';   New-Item -ItemType Directory $projE | Out-Null
+        $outE  = Join-Path $work5 'out'; New-Item -ItemType Directory $outE  | Out-Null
+        Set-Content -LiteralPath (Join-Path $projE 'E.dproj') -Value '<Project/>' -NoNewline
+        Set-Content -LiteralPath (Join-Path $projE 'E.pas')   -Value "unit E;`r`ninterface`r`nimplementation`r`nend."
+        & $Exe index $projE --db (Join-Path $outE 'E.sqlite') | Out-Null
+
+        $cfg64 = Join-Path $dll64 'drag-lint.json'
+        $cfg32 = Join-Path $dll32 'drag-lint.json'
+        $jE = @{ indexes = @{ outDir = $outE; sections = @(
+                  @{ name = 'E'; db = 'E.sqlite'; include = @((Join-Path $projE 'E.dproj')) }
+              ) } }
+        Set-Content -LiteralPath $cfg64 -Value ($jE | ConvertTo-Json -Depth 8)
+
+        # 10a. No sibling file yet -- migrating E must not fabricate one.
+        $noSib = & $Exe migrate-dbs --config $cfg64 --apply 2>&1 | Out-String
+        Check 'pair 10a: apply exits 0'                ($LASTEXITCODE -eq 0)
+        Check 'pair 10a: no sibling -- none fabricated' (-not (Test-Path $cfg32))
+
+        # 10b. Add a STALE win32 sibling, then migrate a SECOND section (F) --
+        # E is already home, so only F's move triggers a fresh Save, which is
+        # what must trigger the mirror.
+        Set-Content -LiteralPath $cfg32 -Value '{ "note": "STALE-DOES-NOT-MATCH" }' -NoNewline
+
+        $projF = Join-Path $work5 'F'; New-Item -ItemType Directory $projF | Out-Null
+        Set-Content -LiteralPath (Join-Path $projF 'F.dproj') -Value '<Project/>' -NoNewline
+        Set-Content -LiteralPath (Join-Path $projF 'F.pas')   -Value "unit F;`r`ninterface`r`nimplementation`r`nend."
+        & $Exe index $projF --db (Join-Path $outE 'F.sqlite') | Out-Null
+
+        $doc64 = Get-Content -LiteralPath $cfg64 -Raw | ConvertFrom-Json
+        $doc64.indexes.sections = @($doc64.indexes.sections) + @(
+            @{ name = 'F'; db = 'F.sqlite'; include = @((Join-Path $projF 'F.dproj')) })
+        Set-Content -LiteralPath $cfg64 -Value ($doc64 | ConvertTo-Json -Depth 10)
+
+        $mirrorOut = & $Exe migrate-dbs --config $cfg64 --apply 2>&1 | Out-String
+        Check 'pair 10b: apply exits 0' ($LASTEXITCODE -eq 0)
+
+        $bytes64 = [System.IO.File]::ReadAllBytes($cfg64)
+        $bytes32 = [System.IO.File]::ReadAllBytes($cfg32)
+        $identical = ($bytes64.Length -eq $bytes32.Length) -and (-not (Compare-Object $bytes64 $bytes32))
+        Check 'pair 10b: win32 sibling mirrored to byte-identical' $identical
+        Check 'pair 10b: output names the mirrored sibling' ($mirrorOut -match [regex]::Escape($cfg32))
+    } finally {
+        Remove-Item -Recurse -Force $work5 -ErrorAction SilentlyContinue
     }
 } finally {
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue

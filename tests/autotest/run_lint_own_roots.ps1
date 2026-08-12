@@ -19,6 +19,15 @@ Check 'skip line present'      ($bare -match "outside the project's own roots sk
 Check 'skip NAMES the root'    ($bare -match 'vendor')
 Check 'declared root included' ((Get-Content $rep -Raw) -match 'Shared\.pas|App\.pas')
 
+# 1b. Fix 1 (2026-08-11 review): spec 4.5 says "the report file gets the same
+#     block" -- the skip lines used to reach only the console (EmitStatusLine)
+#     and never the report file, so an archived report looked clean even when
+#     most of the project was silently out of scope. Assert on the REPORT
+#     FILE, not stdout -- this is the assertion the old test was missing.
+$repText = Get-Content $rep -Raw
+Check 'skip line present in REPORT FILE' ($repText -match "outside the project's own roots skipped")
+Check 'skip block in REPORT FILE names the root' ($repText -match 'vendor')
+
 # 2. A project-wide rule must not pair our code with vendored code.
 #    App.pas and Vendor.pas are exact clones; duplicate-code must stay silent.
 #    CAUTION: TCloneChecker.CheckProject is handed the already-narrowed

@@ -9423,6 +9423,52 @@ begin
   end;
 end;
 
+{ Fix 1 (2026-08-11 review): the skip-block lines used to be built directly
+  inside the EmitStatusLine calls in DoLintAll, so only the console ever saw
+  them -- the report file (the archived artifact) stayed silent about scope,
+  exactly the "reports nothing is indistinguishable from a clean codebase"
+  failure the spec (4.5) warns about. Building the lines ONCE here lets
+  DoLintAll feed the identical text to both the console and the report, so
+  they cannot drift apart. Returns nil when nothing was skipped. }
+function BuildSkippedThirdPartyLines(const ASkipped: TArray<string>; const AOwn: TOwnRoots): TArray<string>;
+var
+  Groups: TDictionary<string, Integer>;
+begin
+  Result:= nil;
+  if Length(ASkipped) = 0 then Exit;
+  Result:= Result + [Format('lint-all: %d file(s) outside the project''s own roots skipped', [Length(ASkipped)])];
+  Groups:= TDictionary<string, Integer>.Create;
+  try
+    for var SkPath: string in ASkipped do
+    begin
+      var K: string:= GroupKeyFor(SkPath, AOwn);
+      var N: Integer:= 0;
+      Groups.TryGetValue(K, N);
+      Groups.AddOrSetValue(K, N + 1);
+    end;
+    var Keys: TArray<string>:= Groups.Keys.ToArray;
+    { TArray.Sort is not stable, and count-only comparison ties whenever two
+      groups share a count -- a report that reorders itself on unchanged
+      input wastes whoever is diffing it. Break ties on the group name so
+      the order is a pure function of the input, not of hash iteration. }
+    TArray.Sort<string>(Keys, TComparer<string>.Construct(
+      function(const L, R: string): Integer
+      begin
+        Result:= Groups[R] - Groups[L];
+        if Result = 0 then Result:= CompareText(L, R);
+      end));
+    for var Idx: Integer:= 0 to Min(9, High(Keys)) do
+      Result:= Result + [Format('          %6d  %s', [Groups[Keys[Idx]], Keys[Idx]])];
+    if Length(Keys) > 10 then
+      Result:= Result + [Format('          + %d more root(s)', [Length(Keys) - 10])];
+    if AOwn.Anchor <> '' then
+      Result:= Result + [Format('          declare in %s to include; --lint-third-party to lint everything',
+        [TPath.Combine(TPath.Combine(AOwn.Anchor, DRAG_HOME_DIR), 'drag-lint-project.json')])];
+  finally
+    Groups.Free;
+  end;
+end;
+
 // v0.61: drag-lint lint-all [--db <index.sqlite>] [--project <.dproj>]
 //   [--disable id,...] [--output <report.txt>] [--json]
 // Batch lint runner: runs ALL per-file AST rules over every indexed .pas file,
@@ -9530,41 +9576,12 @@ begin
   if ExcludedCount > 0 then
     EmitStatusLine(AArgs, Format('lint-all: %d file(s) skipped by exclude_paths', [ExcludedCount]));
   { A scope filter that reports nothing is indistinguishable from a clean
-    codebase. Name what was dropped, grouped, and say how to include it. }
-  if Length(SkippedThird) > 0 then
-  begin
-    EmitStatusLine(AArgs, Format('lint-all: %d file(s) outside the project''s own roots skipped', [Length(SkippedThird)]));
-    var Groups: TDictionary<string, Integer>:= TDictionary<string, Integer>.Create;
-    try
-      for var SkPath: string in SkippedThird do
-      begin
-        var K: string:= GroupKeyFor(SkPath, Own);
-        var N: Integer:= 0;
-        Groups.TryGetValue(K, N);
-        Groups.AddOrSetValue(K, N + 1);
-      end;
-      var Keys: TArray<string>:= Groups.Keys.ToArray;
-      { TArray.Sort is not stable, and count-only comparison ties whenever two
-        groups share a count -- a report that reorders itself on unchanged
-        input wastes whoever is diffing it. Break ties on the group name so
-        the order is a pure function of the input, not of hash iteration. }
-      TArray.Sort<string>(Keys, TComparer<string>.Construct(
-        function(const L, R: string): Integer
-        begin
-          Result:= Groups[R] - Groups[L];
-          if Result = 0 then Result:= CompareText(L, R);
-        end));
-      for var Idx: Integer:= 0 to Min(9, High(Keys)) do
-        EmitStatusLine(AArgs, Format('          %6d  %s', [Groups[Keys[Idx]], Keys[Idx]]));
-      if Length(Keys) > 10 then
-        EmitStatusLine(AArgs, Format('          + %d more root(s)', [Length(Keys) - 10]));
-      if Own.Anchor <> '' then
-        EmitStatusLine(AArgs, Format('          declare in %s to include; --lint-third-party to lint everything',
-          [TPath.Combine(TPath.Combine(Own.Anchor, DRAG_HOME_DIR), 'drag-lint-project.json')]));
-    finally
-      Groups.Free;
-    end;
-  end;
+    codebase. Name what was dropped, grouped, and say how to include it.
+    SkipLines is built once (BuildSkippedThirdPartyLines) and reused below by
+    the report-writing closure, so the console and the report file cannot
+    say different things -- see Fix 1, 2026-08-11 review. }
+  var SkipLines: TArray<string>:= BuildSkippedThirdPartyLines(SkippedThird, Own);
+  for var SkLine: string in SkipLines do EmitStatusLine(AArgs, SkLine);
 
   { Per-file rules: external .scm rules + all built-in AST checks }
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
@@ -9794,6 +9811,14 @@ begin
       try
         for FF in ASurv do OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
         OL.AppendLine(Summary);
+        { Fix 1 (2026-08-11 review): the skip-block ("N file(s) outside the
+          project's own roots skipped" + per-root breakdown) used to reach only
+          the console. The report is the archived artifact -- it gets diffed
+          and read later, so per spec 4.5 "the report file gets the same
+          block". Placed right under Summary so a reader sees it without
+          scrolling past the finding list. SkipLines is nil when nothing was
+          skipped, so AppendLine emits nothing extra in the common case. }
+        for var SkLine2: string in SkipLines do OL.AppendLine(SkLine2);
         { The report is the answer to "did it actually cover my project?", so it
           names the files it scanned rather than only counting them. }
         OL.AppendLine('');
@@ -16577,6 +16602,62 @@ begin
   end;
 end;
 
+{ Fix 2 (2026-08-11 final review): there are TWO copies of drag-lint.json that
+  must stay byte-identical -- third_party\dll-win32\drag-lint.json (the 32-bit
+  IDE design-time BPL resolves the manifest beside ITSELF, i.e. this copy --
+  DragLint.Plugin.DbResolver.pas:89-92) and dll-win64\drag-lint.json (every
+  engine process the plugin spawns is the win64 CLI, which reads its OWN
+  sibling copy -- DRagLint.Index.Manifest.pas:546). See
+  tests\autotest\run_manifest_parity.ps1's header for the full mechanism.
+  DoMigrateDbs resolves and rewrites exactly ONE of the pair (CfgPath); this
+  bit the user for real (a live migration desynced them, repaired by hand),
+  and nothing stopped the next --apply from doing it again.
+  Returns '' when ACfgPath does not sit directly inside a folder literally
+  named "dll-win32" or "dll-win64" -- e.g. a test's --config path, or a
+  workspace-local manifest -- where there is no platform sibling to keep in
+  sync. }
+function PairedManifestPath(const ACfgPath: string): string;
+var
+  Dir, ParentDir, LeafDir, Sibling: string;
+begin
+  Result := '';
+  Dir    := ExcludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(ACfgPath)));
+  LeafDir:= ExtractFileName(Dir);
+  if SameText(LeafDir, 'dll-win64') then Sibling:= 'dll-win32'
+  else if SameText(LeafDir, 'dll-win32') then Sibling:= 'dll-win64'
+  else Exit;
+  ParentDir:= ExtractFileDir(Dir);
+  Result:= TPath.Combine(TPath.Combine(ParentDir, Sibling), ExtractFileName(ACfgPath));
+end;
+
+/// <summary>Mirrors ACfgPath over its platform-paired manifest (see
+/// PairedManifestPath) whenever the sibling exists and now differs from what
+/// was just saved.</summary>
+/// <param name="ACfgPath">The manifest DoMigrateDbs just wrote.</param>
+/// <remarks>Chosen over a loud warning: CfgPath is, by construction, the copy
+/// this run deliberately just wrote, so there is no ambiguity about which
+/// side is "intended" -- mirroring it is exactly the fix
+/// run_manifest_parity.ps1's own failure text recommends ("copy the intended
+/// file over the other so both are identical"). No-ops (silently) when there
+/// is no sibling to pair with, or the sibling already matches
+/// byte-for-byte.</remarks>
+procedure MirrorPairedManifest(const ACfgPath: string);
+var
+  Mine, Theirs: TBytes;
+  SiblingPath : string;
+  Same        : Boolean;
+begin
+  SiblingPath:= PairedManifestPath(ACfgPath);
+  if (SiblingPath = '') or (not TFile.Exists(SiblingPath)) then Exit;
+  Mine  := TFile.ReadAllBytes(ACfgPath);
+  Theirs:= TFile.ReadAllBytes(SiblingPath);
+  Same:= (Length(Mine) = Length(Theirs)) and
+    ((Length(Mine) = 0) or CompareMem(@Mine[0], @Theirs[0], Length(Mine)));
+  if Same then Exit;
+  TFile.Copy(ACfgPath, SiblingPath, True);
+  Writeln(Format('  manifest parity: mirrored to %s (the IDE win32 BPL and the win64 CLI must read the same scope)', [SiblingPath]));
+end;
+
 { Nearest ancestor holding a .hg directory, or '' -- used only to tell the user
   which .hgignore to edit. }
 function FindHgRoot(const AStartDir: string): string;
@@ -16699,6 +16780,7 @@ begin
         begin
           Manifest.Sections[I].Db:= '';   { now derivable }
           TManifestIO.Save(Manifest, CfgPath);
+          MirrorPairedManifest(CfgPath);   { Fix 2: keep the win32/win64 pair in sync }
           Inc(Reconciled);
           Writeln('  RECONCILED: already at ', Dst, ' -- manifest entry updated');
         end
@@ -16744,6 +16826,7 @@ begin
           down does NOT move the file back, so it must not revert this. }
         Manifest.Sections[I].Db:= '';   { now derivable }
         TManifestIO.Save(Manifest, CfgPath);
+        MirrorPairedManifest(CfgPath);   { Fix 2: keep the win32/win64 pair in sync }
         Inc(Moved);
 
         { Verify AFTER persisting the move, not instead of it: a mismatch
@@ -16781,7 +16864,18 @@ begin
       except
         on E: Exception do
         begin
-          Writeln('  ERROR: ', E.ClassName, ': ', E.Message);
+          { Fix 3 (2026-08-11 review): MoveDbSet (above) relocates the main
+            .sqlite FIRST via TFile.Move, then the -wal/-shm sidecars
+            separately -- so a sidecar move that raises (locked file, etc.)
+            leaves the .sqlite already sitting at Dst while this handler's
+            plain "ERROR: <class>: <message>" reads as "the move failed".
+            Say where the database actually is when that is the case, so the
+            operator does not start hunting for it at Src. }
+          if TFile.Exists(Dst) then
+            Writeln(Format('  ERROR: %s: %s -- the database has ALREADY MOVED to %s; do not re-copy or undo, investigate this failure in place',
+              [E.ClassName, E.Message, Dst]))
+          else
+            Writeln('  ERROR: ', E.ClassName, ': ', E.Message);
           Exit(1);
         end;
       end;
