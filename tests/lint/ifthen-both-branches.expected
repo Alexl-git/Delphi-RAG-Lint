@@ -1,4 +1,7 @@
-# IfThen calls at lines 19-20; the if/then/else in Good must not fire
+# IfThen calls at lines 19-20 (one branch is a call, still flagged); the
+# if/then/else in Good must not fire; Task 9b: both-literal-branch call at
+# line 41 must not fire either (a literal cannot have a side effect).
 ifthen-both-branches 19
 ifthen-both-branches 20
 !ifthen-both-branches 27
+!ifthen-both-branches 41

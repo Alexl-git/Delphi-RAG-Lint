@@ -31,4 +31,14 @@ begin
     N := 0;
 end;
 
+// Task 9b: both branches are literals -- a literal cannot have a side
+// effect, so the rule's rationale is inapplicable (YADF.Options.pas:850,879).
+procedure GoodBothLiteral;
+var
+  B: Boolean;
+  S: string;
+begin
+  S := IfThen(B, 'true', 'false');
+end;
+
 end.
