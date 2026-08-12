@@ -196,6 +196,26 @@ type
     May : TArray<Boolean>;
   end;
 
+  /// <summary>Callback answering whether AMemberName, invoked via the dot operator
+  /// on a local declared as ATypeText, should count as a DEFINITION of that local
+  /// (fed into ACallDefs) rather than a plain read.</summary>
+  /// <remarks>Backs the used-before-assignment fix for a record local initialised
+  /// through its own method (e.g. <c>St.Reset;</c> before any field of St is
+  /// read) -- see CollectReadsAndCallDefs. A CLASS reference is deliberately NOT
+  /// eligible for this treatment anywhere this predicate is implemented: a method
+  /// call on an uninitialised class reference is a genuine nil-dereference bug and
+  /// must keep being flagged, whereas a record is stack memory that always exists,
+  /// so a method call on it is a normal (and idiomatic, parameterless-constructor-
+  /// style) way to establish its initial state. Nil on every store-free
+  /// CollectReadsAndCallDefs caller -- every dot-access then keeps today's
+  /// plain-read behaviour, so the bare lint path (no ISymbolStore) is unaffected.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
+  /// Used in units: DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TRecordMethodDefPredicate = reference to function(const ATypeText, AMemberName: string): Boolean;
+
   /// <summary>Forward must+may definite-assignment analysis.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -207,15 +227,20 @@ type
   strict private
     FVars: TRoutineVarTable;
     FSrc : TBytes;
+    FIsRecordMethodDef: TRecordMethodDefPredicate;
   public
     /// <summary><!-- drag-lint:auto -->----- TDefiniteAssignment -----</summary>
     /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
     /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="AIsRecordMethodDef">Optional (nil on the store-free path);
+    /// forwarded verbatim to every CollectReadsAndCallDefs call Transfer makes, so
+    /// a record local initialised through its own method is Must-assigned from
+    /// that call onward (see TRecordMethodDefPredicate).</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
     /// constructor
-    /// Writes: FVars, FSrc
+    /// Writes: FVars, FSrc, FIsRecordMethodDef
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Bottom"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Boundary"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction"/>
@@ -223,7 +248,8 @@ type
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Join"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes);
+    constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes;
+      const AIsRecordMethodDef: TRecordMethodDefPredicate = nil);
     /// <returns><!-- drag-lint:auto -->Observed: fdForward.</returns>
     function Direction: TFlowDir;
     /// <returns><!-- drag-lint:auto type -->TDefAsgnVal</returns>
@@ -759,12 +785,18 @@ function LeftmostBaseVar(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVa
 /// resolve to a routine var. Skips the member-name child after a `.` (kDot) and
 /// treats call arguments / `@x` as POSSIBLE defs (FP-safe), not reads -- so
 /// AReads holds only genuine value reads, ACallDefs the indices possibly written
-/// via a call argument or address-of.</summary>
+/// via a call argument or address-of. When AIsRecordMethodDef is assigned and
+/// answers True for a `X.Member` dot-expression (X a routine var, Member the
+/// dot's rhs identifier text, original case), X's index is added to ACallDefs
+/// INSTEAD of AReads for that occurrence -- the call is treated as the point
+/// that establishes X, not a read of X's not-yet-assigned state.</summary>
 /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
 /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
 /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
 /// <param name="AReads"><!-- drag-lint:auto type -->TList&lt;Integer&gt;</param>
 /// <param name="ACallDefs"><!-- drag-lint:auto type -->TList&lt;Integer&gt;</param>
+/// <param name="AIsRecordMethodDef">Optional; nil on every store-free caller
+/// (see TRecordMethodDefPredicate).</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Liveness.ApplyItemBackward (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.CollectInterfaceDerefs.CollectLocalCallDefs (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas) (+2 more)
@@ -774,7 +806,8 @@ function LeftmostBaseVar(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVa
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
-  AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>);
+  AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>;
+  const AIsRecordMethodDef: TRecordMethodDefPredicate = nil);
 
 /// <summary>Index of the variable an `assignment` node defines as a WHOLE
 /// (its plain lhs), or -1 when the lhs is an indexed/qualified write (a[i] / x.f)
@@ -1080,10 +1113,11 @@ begin
 end;
 
 procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
-  AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>);
+  AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>;
+  const AIsRecordMethodDef: TRecordMethodDefPredicate = nil);
 
   procedure Walk(const N: TTSNode; AAfterDot: Boolean);
-  var I, Idx: Integer; K: string; ArgsN, Arg: TTSNode;
+  var I, Idx: Integer; K: string; ArgsN, Arg, Lhs: TTSNode;
   begin
     if N.IsNull then Exit;
     K := N.NodeType;
@@ -1098,7 +1132,27 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
     end;
     if K = 'exprDot' then
     begin
-      Walk(N.ChildByField('lhs'), False);
+      Lhs := N.ChildByField('lhs');
+      { A method invoked on a record local (`St.Reset`, or the entity of
+        `St.SkipNonCode(Line, k)` reached via the exprCall case below) is a
+        DEFINITION of St, not a read of its not-yet-assigned state -- the
+        idiomatic way a record establishes its own initial value, since it has
+        no constructor. Only a bare-identifier receiver qualifies (a chained
+        `Foo.St.Reset` falls through to the plain read walk below, same as
+        today) and only when AIsRecordMethodDef actually confirms BOTH that the
+        receiver's declared type is a record AND that the dot's rhs resolves to
+        a callable member of it -- a plain field access (`St.Total`) is left as
+        a read, so a genuinely uninitialised record field access still flags. }
+      if Assigned(AIsRecordMethodDef) and (Lhs.NodeType = 'identifier') then
+      begin
+        Idx := AVars.IndexOf(LowerCase(NodeStr(Lhs, ASrc)));
+        if (Idx >= 0) and AIsRecordMethodDef(AVars.Get(Idx).TypeText, NodeStr(N.ChildByField('rhs'), ASrc)) then
+        begin
+          if ACallDefs.IndexOf(Idx) < 0 then ACallDefs.Add(Idx);
+          Exit; { rhs is a member name, not a var read }
+        end;
+      end;
+      Walk(Lhs, False);
       Walk(N.ChildByField('rhs'), True); { member name, not a var read }
       Exit;
     end;
@@ -1152,8 +1206,9 @@ end;
 
 { ----- TDefiniteAssignment ----- }
 
-constructor TDefiniteAssignment.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
-begin inherited Create; FVars := AVars; FSrc := ASrc; end;
+constructor TDefiniteAssignment.Create(AVars: TRoutineVarTable; const ASrc: TBytes;
+  const AIsRecordMethodDef: TRecordMethodDefPredicate);
+begin inherited Create; FVars := AVars; FSrc := ASrc; FIsRecordMethodDef := AIsRecordMethodDef; end;
 
 function TDefiniteAssignment.Direction: TFlowDir; begin Result := fdForward; end;
 
@@ -1213,7 +1268,7 @@ begin
       if It.Node.NodeType = 'assignment' then
       begin
         { reads on the rhs happen BEFORE the def of the lhs }
-        CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), FSrc, FVars, Reads, CallDefs);
+        CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef);
         { a var passed to a call (or @x) may be a var/out param the callee assigns
           (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
         for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;
@@ -1223,7 +1278,7 @@ begin
       end
       else
       begin
-        CollectReadsAndCallDefs(It.Node, FSrc, FVars, Reads, CallDefs);
+        CollectReadsAndCallDefs(It.Node, FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef);
         { a var passed to a call (or @x) may be a var/out param the callee assigns
           (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
         for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;

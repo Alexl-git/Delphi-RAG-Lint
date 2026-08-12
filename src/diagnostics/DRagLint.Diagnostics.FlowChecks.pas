@@ -97,6 +97,33 @@ begin
   Result := (Length(T) >= 2) and (T[1] = 'I') and T[2].IsUpper;
 end;
 
+/// <summary>Record-typed subset of the type-category family (IsManagedType /
+/// IsInterfaceType): True only when a store is present and ATypeText resolves to
+/// tcRecord.</summary>
+/// <param name="ATypeText">The variable's declared type text, verbatim from the
+/// routine var table.</param>
+/// <param name="AStore">Symbol store used to resolve the type's KIND; nil
+/// disables this check entirely (returns False).</param>
+/// <param name="AFileId">File id scoping the resolution (0 when no store).</param>
+/// <returns>True only when AStore resolves ATypeText to tcRecord.</returns>
+/// <remarks>Deliberately carries NO naming-convention fallback, unlike
+/// IsInterfaceType's 'I'+uppercase spelling convention -- a record has no
+/// reliable name shape to guess from, and this predicate feeds the record-
+/// method-call-defines-the-local seam in CollectReadsAndCallDefs (see
+/// TRecordMethodDefPredicate). Guessing "this looks like a record" would risk
+/// widening that used-before-assignment suppression to CLASS references that
+/// merely look record-like, which is exactly the false negative the task's
+/// hard constraint forbids: a method call on an uninitialised class reference
+/// is a genuine nil-dereference bug and must keep being flagged. Without a
+/// store this returns False, which is today's (pre-fix) behaviour, so the
+/// store-free lint path cannot silently over-suppress.</remarks>
+function IsRecordType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
+begin
+  Result := False;
+  if AStore = nil then Exit;
+  Result := AStore.ResolveTypeCategory(ATypeText, AFileId) = tcRecord;
+end;
+
 /// <summary>Tests whether AConstructorNode (an already-confirmed constructor
 /// call/dot-expr per ExprIsConstructor) transfers ownership of the created
 /// object to a VCL owner, per TComponent's owner-parenting contract: a
@@ -444,6 +471,7 @@ var
   PI: Integer;
   OwnCache: TDictionary<string, Boolean>;
   OwnsOracle: TCallArgOwns;
+  RecMethodDef: TRecordMethodDefPredicate;
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
   var F: TLintFinding;
@@ -477,7 +505,7 @@ var
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
     try
       if Cfg.Skipped or (Vars.Count = 0) then Exit;
-      Ana := TDefiniteAssignment.Create(Vars, PF.Src);
+      Ana := TDefiniteAssignment.Create(Vars, PF.Src, RecMethodDef);
       if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, Ana, AIn, AOut) then Exit;
 
       Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
@@ -498,9 +526,9 @@ var
             It := Cfg.Blocks[B].Items[I];
             Reads.Clear; CallDefs.Clear;
             if It.Node.NodeType = 'assignment' then
-              CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs)
+              CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs, RecMethodDef)
             else
-              CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs);
+              CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef);
             { flag reads of unmanaged locals not yet must-assigned (skip opaque with-bodies) }
             if not It.Opaque then
               for J := 0 to Reads.Count - 1 do
@@ -1011,6 +1039,35 @@ begin
       end
   else
     OwnsOracle := nil;
+  { used-before-assignment: with a store, a method call on a RECORD local (e.g.
+    `St.Reset;`) counts as a definition of that local -- the idiomatic way a
+    record establishes its own initial value, since it has no constructor. Gated
+    on BOTH the receiver resolving to tcRecord (IsRecordType) AND the dot's rhs
+    resolving to a callable member (CanBeCallTarget) of that record type, so a
+    plain field access (`St.Total`) is left as an ordinary read and a genuinely
+    uninitialised record field still flags. A CLASS reference never qualifies --
+    IsRecordType has no naming-convention fallback, so a store-free receiver, or
+    one that resolves to anything other than tcRecord, leaves this False and a
+    method call on an uninitialised class reference keeps flagging as the
+    nil-dereference bug it is. }
+  if AStore <> nil then
+    RecMethodDef :=
+      function(const ATypeText, AMemberName: string): Boolean
+      var RecSym, MemSym: TSymbol;
+      begin
+        Result := False;
+        if not IsRecordType(ATypeText, AStore, AFileId) then Exit;
+        RecSym := AStore.ResolveTypeNameToClass(Trim(ATypeText), AFileId);
+        if RecSym.Id <= 0 then Exit;
+        { records have no ancestry (no class heritage), so a direct child lookup
+          is the whole answer -- unlike ResolveMemberOnType's class ancestor
+          climb, which does not apply here. }
+        MemSym := AStore.FindChildSymbolByName(RecSym.Id, AMemberName);
+        if MemSym.Id <= 0 then Exit;
+        Result := CanBeCallTarget(MemSym.Kind);
+      end
+  else
+    RecMethodDef := nil;
   try
     Procs := CfgFindProcs(PF.Tree.RootNode);
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);

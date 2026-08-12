@@ -1,0 +1,22 @@
+# Task 8: used-before-assignment must not fire on a record initialised by its
+# own method call, but must still fire on an uninitialised CLASS reference and
+# on a genuinely-unread-before record FIELD access. Store-backed only (the
+# fix is gated on AStore.ResolveTypeCategory = tcRecord, which has no
+# naming-convention fallback) -- see tests\lint\run_lint_tests.ps1's baseline
+# for the pre-fix / store-free numbers (all three still flag there).
+
+# Fixture 1: R.Reset defines R; R.Peek then reads an already-assigned R.
+!used-before-assignment recordmethodcalldef.pas:54
+!used-before-assignment recordmethodcalldef.pas:55
+
+# Fixture 2: C is a class reference -- a method call on it before any
+# assignment is a genuine nil-dereference bug and must keep flagging.
+used-before-assignment recordmethodcalldef.pas:66
+
+# Fixture 3: R2.Total is a FIELD read (skField, not callable) with no prior
+# call or assignment -- must keep flagging.
+used-before-assignment recordmethodcalldef.pas:78
+
+# Fixture 4: the pre-existing var-argument CallDefs behaviour must not regress.
+!used-before-assignment recordmethodcalldef.pas:87
+!used-before-assignment recordmethodcalldef.pas:88
