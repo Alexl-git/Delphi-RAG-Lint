@@ -1103,6 +1103,88 @@ var
     Result:= (not Dr.IsNull) and (Dr.NodeType = 'identifier') and SameText(Trim(NodeStr(Dr)), 'Create');
   end;
 
+  { True if N is 'ALhsNorm.Free', 'ALhsNorm.Destroy', or
+    'FreeAndNil(ALhsNorm)' -- the three shapes create-inside-try accepts as
+    "the finally frees the constructed variable". ALhsNorm is a NORMALISED
+    SOURCE-TEXT comparison (LowerCase + NormaliseText, the same technique
+    identical-then-else already uses above), not an identifier-node-type
+    check -- Fix 4 (2026-08-11 final review) widened this from bare
+    identifiers only ('X.Free') to ANY lhs shape the constructor assignment
+    can have, so an indexed target ('FList[0].Free') or a multi-level one
+    ('A.B.C.Free') is now compared too, as long as the finally frees the
+    exact same source text. }
+  function IsFreeOf(const N: TTSNode; const ALhsNorm: string): Boolean;
+  var Lhs, Rhs, Ent, Args, A0: TTSNode;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'exprDot' then
+    begin
+      Lhs:= N.ChildByField('lhs');
+      Rhs:= N.ChildByField('rhs');
+      Result:= (not Lhs.IsNull) and (not Rhs.IsNull)
+        and (Rhs.NodeType = 'identifier')
+        and SameText(LowerCase(NormaliseText(NodeStr(Lhs))), ALhsNorm)
+        and (SameText(Trim(NodeStr(Rhs)), 'Free') or SameText(Trim(NodeStr(Rhs)), 'Destroy'));
+    end
+    else if N.NodeType = 'exprCall' then
+    begin
+      Ent:= N.ChildByField('entity');
+      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and SameText(Trim(NodeStr(Ent)), 'FreeAndNil') then
+      begin
+        Args:= N.ChildByField('args');
+        if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
+        begin
+          A0:= Args.NamedChild(0);
+          Result:= SameText(LowerCase(NormaliseText(NodeStr(A0))), ALhsNorm);
+        end;
+      end;
+    end;
+  end;
+
+  { True if ASubtree (the finally block's body) contains, anywhere, a call
+    that frees ALhsNorm ('X.Free' / 'X.Destroy' / 'FreeAndNil(X)', X being any
+    lhs shape -- see IsFreeOf). Full subtree scan -- the freeing call is not
+    required to be the first or only statement. }
+  function SubtreeFreesVar(const ASubtree: TTSNode; const ALhsNorm: string): Boolean;
+  var I: Integer;
+  begin
+    Result:= False;
+    if ASubtree.IsNull then Exit;
+    if IsFreeOf(ASubtree, ALhsNorm) then Exit(True);
+    for I:= 0 to ASubtree.ChildCount - 1 do
+      if SubtreeFreesVar(ASubtree.Child(I), ALhsNorm) then Exit(True);
+  end;
+
+  { create-inside-try's own narrowing check (see the rule site below): True
+    when ATryNode's OWN 'finally' block references ALhsNorm via Free /
+    Destroy / FreeAndNil -- i.e. the exact hazard the rule's message
+    describes ("the finally frees an undefined reference") actually exists
+    for this variable. A finally that frees a DIFFERENT, already-assigned
+    variable does not create that hazard and returns False here. Locates the
+    finally body by scanning ATryNode's direct children for the 'kFinally'
+    keyword and taking the sibling right after it -- ChildByField('finally')
+    is unusable here because the grammar reuses that field name for BOTH the
+    'kFinally' keyword token and the body, so ChildByField returns the
+    keyword (the first match), never the statements. }
+  function TryFinallyFreesVar(const ATryNode: TTSNode; const ALhsNorm: string): Boolean;
+  var
+    I, KFi: Integer;
+    Body  : TTSNode;
+  begin
+    Result:= False;
+    KFi:= -1;
+    for I:= 0 to ATryNode.ChildCount - 1 do
+      if ATryNode.Child(I).NodeType = 'kFinally' then begin KFi:= I; Break; end;
+    if KFi < 0 then Exit;
+    for I:= KFi + 1 to ATryNode.ChildCount - 1 do
+    begin
+      Body:= ATryNode.Child(I);
+      if Body.NodeType = 'kEnd' then Break;
+      if SubtreeFreesVar(Body, ALhsNorm) then Exit(True);
+    end;
+  end;
+
   { PASS 2: Walk looking for defProc (unused-parameter) and ifElse
     (identical-then-else). }
   procedure Visit(const N: TTSNode);
@@ -1390,10 +1472,36 @@ var
       finally
         SeenH.Free;
       end;
-      { create-inside-try (#5): a try..finally whose FIRST protected statement is
-        'X := TFoo.Create(...)'. If Create raises, X is undefined and the finally's
-        X.Free crashes -- construct BEFORE the try. Only when the try has a finally
-        and the first real statement is a constructor assignment. }
+      { create-inside-try (#5, narrowed post-Task-9a): a try..finally whose FIRST
+        protected statement is 'X := TFoo.Create(...)', flagged ONLY when the
+        try's OWN finally block actually frees X (X.Free / X.Destroy /
+        FreeAndNil(X)) -- that is the exact hazard the message describes: "if
+        the constructor raises, the finally frees an undefined reference". If
+        Create raises here, control jumps straight to finally with X never
+        assigned, and the finally's own free call then touches that undefined
+        reference.
+        Deliberately does NOT flag when the finally frees a different,
+        already-assigned variable (YADF.Layout.pas:5481-5484, :3477-3485 --
+        the enclosing try's finally frees the OUTER object; the inner
+        construction has its own nested try..finally on the very next line,
+        which is the idiom this rule exists to teach) -- there the
+        just-constructed X has no undefined reference the finally can touch.
+        Fix 4 (2026-08-11 final review): the lhs gate used to require a bare
+        local identifier ('X := TFoo.Create'), so an indexed target
+        ('FList[0] := TFoo.Create') or a multi-level one
+        ('A.B.C := TFoo.Create') was silently dropped even when the SAME
+        try's finally demonstrably freed that exact target -- the real
+        hazard the rule exists for. Widened to compare the lhs's own
+        NORMALISED SOURCE TEXT (LowerCase + collapsed whitespace, same
+        technique identical-then-else already uses in this unit) against
+        what the finally frees, instead of requiring an 'identifier' node --
+        see IsFreeOf/TryFinallyFreesVar. docs\INBOX-create-inside-try-
+        qualified-lhs-not-flagged.md is now resolved by this change.
+        NOT implemented (explicitly out of scope, see task-9 brief): the
+        related but DIFFERENT defect where a SECOND construction inside the
+        same try (after the first) raises and leaks the first, already-
+        constructed object, because that object's own protecting try/finally
+        has not started yet. That needs a different rule. }
       var HasFin: Boolean:= False;
       for var Fi:= 0 to N.ChildCount - 1 do
         if N.Child(Fi).NodeType = 'kFinally' then begin HasFin:= True; Break; end;
@@ -1405,9 +1513,16 @@ var
           if Pt = 'kFinally' then Break;
           if (Length(Pt) > 0) and (Pt[1] = 'k') then Continue; { skip kTry etc. }
           { first real protected statement }
-          if IsConstructorAssignment(UnwrapStmt(Pc)) then
-            EmitAt(UnwrapStmt(Pc), 'create-inside-try',
-              'Object is constructed as the first statement INSIDE its try..finally -- if the constructor raises, the finally frees an undefined reference. Construct it before the try.');
+          var Stmt: TTSNode:= UnwrapStmt(Pc);
+          if IsConstructorAssignment(Stmt) then
+          begin
+            var CtorLhs: TTSNode:= Stmt.ChildByField('lhs');
+            var CtorLhsNorm: string:= '';
+            if not CtorLhs.IsNull then CtorLhsNorm:= LowerCase(NormaliseText(NodeStr(CtorLhs)));
+            if (CtorLhsNorm <> '') and TryFinallyFreesVar(N, CtorLhsNorm) then
+              EmitAt(Stmt, 'create-inside-try',
+                'Object is constructed as the first statement INSIDE its try..finally -- if the constructor raises, the finally frees an undefined reference. Construct it before the try.');
+          end;
           Break;
         end;
     end;

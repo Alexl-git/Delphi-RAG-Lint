@@ -1,0 +1,6 @@
+# One finding for the whole loop, anchored at the FIRST lookup.
+# The 2nd and 3rd lookups must NOT each get their own finding:
+# the remedy is per loop (hoist above it), so the count is per loop.
+field-by-name-in-loop 17
+!field-by-name-in-loop 18
+!field-by-name-in-loop 19

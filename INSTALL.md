@@ -91,6 +91,24 @@ The RAD Studio plugin (`dclDragLintWizard.bpl`) surfaces these diagnostics live
 in the editor. It spawns `drag-lint.exe`; make sure that exe has its `rules\`
 folder beside it (or is launched with `--rules-dir`).
 
+## 6. VS Code, Zed and other editors (optional)
+
+drag-lint ships a stdio language server -- `drag-lint lsp` -- giving hover,
+go-to-definition, **find-references**, **workspace symbols**, completion and
+signature help from the index, across every project in your manifest at once.
+(DelphiLSP implements neither find-references nor workspace symbols, so those
+two are not duplicated features.)
+
+* **VS Code** -- an extension is included; install it from
+  `editors\vscode\drag-lint\`.
+* **Zed** -- highlighting works today via the tree-sitter grammars; registering
+  the language server needs a small Rust/WASM extension that is **not yet
+  built**. It is fully specified so anyone with `rustup` can finish it.
+* **Neovim / Helix / anything else** -- point it at `drag-lint lsp` over stdio.
+
+Full instructions, settings and the Rust extension specification:
+[docs/EDITORS.md](docs/EDITORS.md).
+
 ---
 
 drag-lint is **alpha** -- expect rough edges and breaking changes.

@@ -160,6 +160,48 @@ type
       // index -- no writes, so --no-write-back is unaffected.
       FAnchorCache           : TDictionary<Int64, string>; // file id -> '' | 'Vcl' | 'FMX'
       FDerivingAnchor        : Boolean;                    // re-entrancy guard
+
+      { RESOLVE SCOPE -- what this store instance has written since it opened,
+        recorded so ResolveCallTargets can re-resolve the affected refs instead
+        of all of them. Measured motive: on the 2.09 GB Win32 library index,
+        indexing ONE changed file made unit-uses cost 1.4 s, ancestry 4.5 s,
+        helpers 13.4 s -- and calls over half an hour, because it clears all
+        541,352 edges, rebuilds name maps over 2,240,573 symbols and streams all
+        3,320,946 call-site refs.
+
+        FScopeFiles  -- file ids opened for write (OpenFileTx).
+        FScopeNames  -- lowercased symbol names this run REMOVED or ADDED, i.e.
+                        every name whose candidate set may have changed. Removed
+                        names are read out of the database in OpenFileTx before
+                        the delete; added names are collected in UpsertSymbol.
+        FScopeTypes  -- the same, restricted to TYPE-declaring kinds, kept as two
+                        sets so the pass can prove no type's candidate set moved.
+        FScopeWhole  -- latch: this instance did something that cannot be scoped
+                        (ClearAllFiles, a prune, an eviction), so the pass must
+                        run over the whole database.
+
+        THE DEFAULT IS WHOLE-DATABASE. A store that has recorded no writes -- a
+        fresh read-only open, a caller that resolves without indexing -- takes
+        the unscoped path, so every existing consumer keeps today's semantics
+        and only the indexing path that wrote through THIS instance is scoped. }
+      FScopeFiles            : TDictionary<Int64 , Boolean>;
+      FScopeNames            : TDictionary<string, Boolean>;
+      FScopeTypesBefore      : TDictionary<string, Boolean>;
+      FScopeTypesAfter       : TDictionary<string, Boolean>;
+      FScopeWhole            : Boolean;
+      { Files this run may touch before scoping stops being worth it, read once
+        from the corpus size on the first recorded write. -1 = not yet read. }
+      FScopeMaxFiles         : Integer;
+      /// <summary>True when ResolveCallTargets may restrict itself to the refs
+      /// this instance's writes can have affected.</summary>
+      function ScopedResolveIsSound: Boolean;
+      /// <summary>Materializes the recorded scope into connection-local temp
+      /// tables; returns the `refs` predicate that selects the affected rows.
+      /// </summary>
+      function MaterializeResolveScope: string;
+      /// <summary>Record the names a file is about to lose, before OpenFileTx
+      /// deletes its symbols.</summary>
+      procedure NoteScopeRemoval(AFileId: Int64);
       /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AReadOnly"><!-- drag-lint:auto type -->Boolean</param>
       /// <remarks>
@@ -1080,6 +1122,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
+      /// <summary>Implements ISymbolStore.GetReferencedSymbolIds -- one DISTINCT scan of refs.</summary>
+      function GetReferencedSymbolIds: TArray<Int64>                                         ;
+      /// <summary>Implements ISymbolStore.GetReferencedNamesLower -- one DISTINCT scan of refs.</summary>
+      function GetReferencedNamesLower: TArray<string>                                       ;
       /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
@@ -2233,16 +2279,59 @@ uses
   , System.StrUtils
   , System.IOUtils
   , System.Math
+  , System.Diagnostics        { v0.86: resolve-pass progress timing -- see ResolveLog }
   , DRagLint.Storage.Schema
   , DRagLint.Query  .Fuzzy
   , DRagLint.Index.CallResolver // v14 (D5): receiver-typing engine for ResolveCallTargets
   ;
+
+{ PROGRESS LINE FOR THE FOUR WHOLE-DB RESOLVE PASSES.
+
+  Each of ResolveUnitUseTargets / ResolveAncestry / ResolveHelpers /
+  ResolveCallTargets scans the ENTIRE index however few files were just indexed,
+  and until now each did so in complete silence. On a 2 GB database that is
+  minutes of a live process producing no output and no writes -- which is
+  indistinguishable from a hang, and was in fact diagnosed as one across two
+  sessions (docs/INBOX-indexer-livelock-when-two-platforms-run-concurrently.md
+  carries the corrected finding). A silent multi-minute phase is a defect in its
+  own right, so each pass now states what it did and how long it took.
+
+  ErrOutput, not stdout: `lint --json` and `reconcile --json` put a single JSON
+  document on stdout and a progress line spliced into it would corrupt the
+  payload. The migration notice above (see the case-insensitive-lookup note) is
+  written the same way for the same reason.
+
+  EXCEPTIONS ARE SWALLOWED, deliberately and only here. This unit is linked into
+  the design-time BPL as well as the CLI, and a package hosted by the IDE has no
+  console attached -- a failed Writeln there would abort an index run over a
+  diagnostic line. Losing the line is the strictly better failure. }
+procedure ResolveLog(const AText: string);
+begin
+  try
+    Writeln(ErrOutput, 'resolve: ' + AText);
+    Flush(ErrOutput);
+  except
+    { no console (BPL host) -- see header }
+  end;
+end;
+
+{ Elapsed seconds since AStart, for the ResolveLog lines. TStopwatch's raw
+  timestamp is used rather than Now so a sub-second pass still reports a real
+  number instead of 0.00. }
+function ResolveSecs(AStart: Int64): Double;
+begin
+  Result:= (TStopwatch.GetTimeStamp - AStart) / TStopwatch.Frequency;
+end;
 
 { Forward only. The definition stays down beside OpenFileTx -- the upsert it
   exists to serve -- where its full rationale is written; it is announced here
   because PHASE C B6 gave it two callers that sit ABOVE that point
   (CanonicalizeFilePaths and FileIsUpToDate). }
 function NormalizeStoredPath(const APath: string): string; forward;
+
+{ Forward only. Defined beside ScopedResolveIsSound, whose argument explains why
+  the predicate is deliberately wide; UpsertSymbol calls it from further up. }
+function IsTypeDeclaringKind(const AKindText: string): Boolean; forward;
 
 { TSQLiteSymbolStore }
 
@@ -2253,6 +2342,14 @@ begin
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FDerivingAnchor:= False;
+  { Resolve scope -- see the field block. Empty means "this instance has written
+    nothing", which ScopedResolveIsSound reads as "cannot scope". }
+  FScopeFiles      := TDictionary<Int64 , Boolean>.Create;
+  FScopeNames      := TDictionary<string, Boolean>.Create;
+  FScopeTypesBefore:= TDictionary<string, Boolean>.Create;
+  FScopeTypesAfter := TDictionary<string, Boolean>.Create;
+  FScopeWhole      := False;
+  FScopeMaxFiles   := -1;
   Connect(ADbPath, AReadOnly);
   { v0.86 Task 4: a read-only open still needs its SELECT queries built. In the
     write path PrepareStatements is Migrate's last step; read verbs never call
@@ -2340,6 +2437,10 @@ end;
 
 destructor TSQLiteSymbolStore.Destroy;
 begin
+  FScopeFiles.Free;
+  FScopeNames.Free;
+  FScopeTypesBefore.Free;
+  FScopeTypesAfter.Free;
   FLateAncCache.Free;
   FQInsertFile.Free;
   FQUpsertFile.Free;
@@ -2708,6 +2809,32 @@ begin
           '  helper_kind      TEXT NOT NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_helper ON type_helpers(helper_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_target ON type_helpers(target_name)');
+  { v0.85 PERF -- the three FK child columns that had no index.
+
+    `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
+    `symbols` row makes SQLite look for children in every table that REFERENCES
+    symbols(id). Without an index on the referencing column that lookup is a FULL
+    TABLE SCAN, once PER DELETED SYMBOL. Re-indexing one file deletes ~77 symbols,
+    so the cost is 77 x (rows in the child table) -- invisible on a small DB and
+    dominant on a large one.
+
+    MEASURED on a 25 MB DB, 120 per-file cascade deletes, run in BOTH orders to
+    exclude a page-cache ordering artifact: 12.9 s -> 4.6 s, a 2.7x speedup. The
+    scanned tables grow ~24x between a 291-file sample and the ~7,000-file library
+    index, which is the 25x throughput collapse observed there (150 files/min on a
+    fresh DB vs 5.9 on the 2 GB library DB).
+
+    Every OTHER foreign-key child column in this schema was already indexed; these
+    three were simply missed as their tables were added.
+
+    DELIBERATELY NOT A SCHEMA-VERSION BUMP. The version fingerprint drives
+    "indexer changed -> re-parse every file in scope"; bumping it to ship an index
+    would force a full re-parse of every DB, which is the very cost this removes.
+    These are additive and idempotent, so an existing DB picks them up on the next
+    open with no re-parse at all. }
+  TryExec('CREATE INDEX IF NOT EXISTS idx_call_edges_receiver ON call_edges(receiver_type_symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_facts_symbol ON symbol_facts(symbol_id)'          );
+  TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_docs_symbol  ON symbol_docs(symbol_id)'           );
   PrepareStatements;
   { PHASE C B6: AFTER PrepareStatements, because the merge deletes files rows and
     that has to go through DeleteStringLiteralsForFile (FQDeleteFileStringLiterals)
@@ -3342,6 +3469,12 @@ begin
       Q.Free;
     end;
 
+    { RESOLVE SCOPE: read the outgoing names while they still exist. Must precede
+      the deletes below -- once FQDeleteFileSymbols has run, the names this file
+      used to declare are unrecoverable, and they are exactly what tells
+      ResolveCallTargets which OTHER files' refs lost an edge to the cascade. }
+    NoteScopeRemoval(Result.FileId);
+
     // Phase 1: full re-emit semantics. Clear old symbols/refs for this file
     // before the caller starts emitting fresh records.
     FQDeleteFileRefs.ParamByName('fid').AsLargeInt:= Result.FileId;
@@ -3358,6 +3491,17 @@ end; // function
 
 function TSQLiteSymbolStore.UpsertSymbol(const AToken: TFileTxToken; const ASymbol: TSymbol): Int64;
 begin
+  { RESOLVE SCOPE, the incoming half -- see ScopedResolveIsSound. Two dictionary
+    probes per symbol; the pass they serve is measured in minutes. }
+  if not FScopeWhole then
+  begin
+    var LcName: string:= LowerCase(ASymbol.Name);
+    if LcName <> '' then
+    begin
+      FScopeNames.AddOrSetValue(LcName, True);
+      if IsTypeDeclaringKind(ASymbol.Kind.ToText) then FScopeTypesAfter.AddOrSetValue(LcName, True);
+    end;
+  end;
   FQInsertSymbol.ParamByName('fid').AsLargeInt:= AToken.FileId;
   FQInsertSymbol.ParamByName('pid').DataType:= ftLargeint;
   if ASymbol.ParentId >= 0 then FQInsertSymbol.ParamByName('pid').AsLargeInt:= ASymbol.ParentId
@@ -3436,6 +3580,210 @@ end;
 procedure TSQLiteSymbolStore.ClearCallEdges;
 begin
   FConn.ExecSQL('DELETE FROM call_edges');
+end;
+
+{ The kinds a call receiver's type can resolve TO, spelled as the stored kind
+  text. Deliberately WIDER than strictly necessary: this predicate only decides
+  whether a run keeps its right to the scoped path, so an extra kind costs a
+  whole-database pass on a run that did not need one, while a missing kind costs
+  a wrong answer. 'enum' and 'form' are in for that reason -- a form class is a
+  class, and an enum can carry a helper.
+  Matches the sets already spelled in FindImplementorsOfInterface
+  ('class','interface','record','type') and ResolveTypeNameToClass. }
+function IsTypeDeclaringKind(const AKindText: string): Boolean;
+begin
+  Result:= SameText(AKindText, 'class'    ) or SameText(AKindText, 'interface') or
+           SameText(AKindText, 'record'   ) or SameText(AKindText, 'type'     ) or
+           SameText(AKindText, 'enum'     ) or SameText(AKindText, 'form'     );
+end;
+
+{ SOUNDNESS OF THE SCOPED CALL-TARGET PASS.
+
+  A call edge is a function of three things: the ref's own row, the scope of the
+  file the ref lives in, and the set of symbols any candidate lookup can reach.
+  A scoped pass is correct exactly when every ref whose value of that function
+  changed is inside the set it re-resolves. That set is
+  "refs in FScopeFiles, plus refs whose name_text is in FScopeNames".
+
+  1. REFS IN RE-INDEXED FILES are re-resolved by construction. Their rows were
+     deleted and rewritten, so their edges are already gone -- call_edges.ref_id
+     is ON DELETE CASCADE against refs(id).
+
+  2. REFS ELSEWHERE THAT POINTED INTO A RE-INDEXED FILE also lost their edges,
+     via the second cascade: call_edges.target_symbol_id is ON DELETE CASCADE
+     against symbols(id). Every such ref is named after a symbol the file used to
+     declare, and OpenFileTx reads those names out BEFORE the delete, so they are
+     all in FScopeNames.
+
+  3. REFS ELSEWHERE WHOSE ANSWER NEWLY CHANGES because a re-indexed file added,
+     moved or removed a candidate are named after that candidate, and both
+     directions are recorded -- removals in OpenFileTx, additions in
+     UpsertSymbol.
+
+  4. THE INDIRECT CHANNEL is the one that does not follow from the above, and it
+     is why FScopeTypesBefore/After exist. A call `X.Method` resolves through the
+     TYPE of X, and the type's name need not be the ref's name: if a re-index
+     changes which class `TSomething` denotes -- a new declaration of that name,
+     or an old one withdrawn -- then `X.Method` may resolve differently while
+     `Method` itself is untouched and lives in a file nothing wrote. No
+     name-keyed set can catch that ref.
+     So the scoped path is offered ONLY when the type-declaring names this run
+     removed are exactly the ones it put back. That is the ordinary
+     `--recompile` shape (edit a body, the classes are unchanged) and it is
+     precisely the case where the indirect channel provably cannot fire. A run
+     that introduces or withdraws a type name falls back to the whole database.
+
+  5. ANYTHING THAT DELETES ROWS OUTSIDE OpenFileTx -- ClearAllFiles, a prune, an
+     eviction -- sets FScopeWhole and ends the discussion. Those paths remove
+     symbols without ever passing their names through here.
+
+  The default is the unscoped pass: an instance that recorded no writes cannot
+  know what changed, so it must assume everything did. }
+function TSQLiteSymbolStore.ScopedResolveIsSound: Boolean;
+var
+  N     : string ;
+  Total : Integer;
+begin
+  Result:= False;
+  { ESCAPE HATCH. Two jobs. For an operator: if a cross-unit link is ever
+    suspected of being stale, this restores the pre-scoping behaviour without a
+    rebuild or a new binary, so "is the scoping wrong?" is one run away from an
+    answer rather than a bisect. For this repo: it is what makes the equivalence
+    test an A/B of ONE binary over one corpus -- the scoped and whole-database
+    results have to be row-identical, and comparing two BUILDS would have left
+    the compiler as an uncontrolled variable. }
+  if GetEnvironmentVariable('DRAGLINT_NO_SCOPED_RESOLVE') <> '' then Exit;
+  if FScopeWhole then Exit;
+  if FScopeFiles.Count = 0 then Exit;          { nothing recorded -- assume everything }
+  { The coverage limit is enforced during accumulation (NoteScopeRemoval latches
+    FScopeWhole the moment it is crossed), so by here it can only be re-checked,
+    not newly discovered. Kept as an assertion of the same rule at the point of
+    use: if the latch is ever bypassed, this still declines rather than building
+    a temp table the size of the index. }
+  Total:= CountFiles;
+  if (Total > 0) and (FScopeFiles.Count * 3 >= Total) then Exit;
+  { Type-name equality, both directions. Count equality alone would let one type
+    be swapped for another. }
+  if FScopeTypesBefore.Count <> FScopeTypesAfter.Count then Exit;
+  for N in FScopeTypesBefore.Keys do
+    if not FScopeTypesAfter.ContainsKey(N) then Exit;
+  Result:= True;
+end;
+
+{ Puts FScopeFiles / FScopeNames into two connection-local temp tables and
+  returns the predicate over `refs` that selects everything the scoped
+  call-target pass must re-resolve.
+
+  TEMP TABLES rather than a generated IN (...) list: the name set is a few
+  thousand entries on a normal run and an SQL literal that long is both slow to
+  parse and a quoting hazard. temp tables live on the connection and vanish with
+  it, so nothing is left behind in the database file.
+
+  The two terms are the two halves of the soundness argument on
+  ScopedResolveIsSound -- refs that live in a rewritten file, and refs anywhere
+  that name a symbol this run added or removed.
+
+  NOCASE on the name column, and the comparison written to match it: Delphi
+  identifiers are case-insensitive, and refs.name_text stores whatever the source
+  wrote. A binary comparison here would silently miss `TEdit` against `tedit` --
+  the same defect the case-insensitive symbol lookup exists to prevent. }
+function TSQLiteSymbolStore.MaterializeResolveScope: string;
+var
+  QIns: TFDQuery;
+  Fid : Int64   ;
+  Nm  : string  ;
+begin
+  FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_files');
+  FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_names');
+  FConn.ExecSQL('CREATE TEMP TABLE dl_scope_files (f INTEGER PRIMARY KEY)');
+  FConn.ExecSQL('CREATE TEMP TABLE dl_scope_names (n TEXT COLLATE NOCASE PRIMARY KEY)');
+  QIns:= TFDQuery.Create(nil);
+  try
+    QIns.Connection:= FConn;
+    FConn.StartTransaction;
+    try
+      QIns.SQL.Text:= 'INSERT OR IGNORE INTO temp.dl_scope_files(f) VALUES (:f)';
+      QIns.ParamByName('f').DataType:= ftLargeint;
+      QIns.Prepare;
+      for Fid in FScopeFiles.Keys do
+      begin
+        QIns.ParamByName('f').AsLargeInt:= Fid;
+        QIns.ExecSQL;
+      end;
+      QIns.Close;
+      QIns.SQL.Text:= 'INSERT OR IGNORE INTO temp.dl_scope_names(n) VALUES (:n)';
+      QIns.ParamByName('n').DataType:= ftString;
+      QIns.Prepare;
+      for Nm in FScopeNames.Keys do
+      begin
+        QIns.ParamByName('n').AsString:= Nm;
+        QIns.ExecSQL;
+      end;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+  finally
+    QIns.Free;
+  end;
+  Result:= 'refs.file_id IN (SELECT f FROM temp.dl_scope_files)' +
+           ' OR refs.name_text COLLATE NOCASE IN (SELECT n FROM temp.dl_scope_names)';
+end;
+
+{ Read out the names a file is about to lose. Called from OpenFileTx between
+  resolving the file id and deleting its symbols -- the only moment at which the
+  outgoing names still exist. One indexed lookup per re-indexed file. }
+procedure TSQLiteSymbolStore.NoteScopeRemoval(AFileId: Int64);
+var
+  Q: TFDQuery;
+begin
+  if FScopeWhole then Exit;
+  FScopeFiles.AddOrSetValue(AFileId, True);
+  { STOP ACCUMULATING once this run covers a third of the corpus. Past that the
+    scoped pass is not worth having (see ScopedResolveIsSound), and continuing to
+    record would cost one indexed SELECT per remaining file plus a dictionary
+    entry per symbol name in the index -- on the Win32 library that is 7,412
+    queries and 2.24M strings collected only to be thrown away, and the strings
+    are hundreds of megabytes held for the length of the run. Latching HERE makes
+    a full --recompile pay for the first third and nothing after it.
+    Monotonic, so the decision is safe to take early: files are only ever added
+    to the set, so a run that has crossed the line cannot come back under it.
+    Read the corpus size once -- it is the size BEFORE this run, which is the
+    right denominator: a run that adds files is adding to what it must resolve
+    against, not shrinking it. }
+  if FScopeMaxFiles < 0 then FScopeMaxFiles:= CountFiles div 3;
+  if FScopeFiles.Count > FScopeMaxFiles then
+  begin
+    FScopeWhole:= True;
+    FScopeFiles      .Clear;
+    FScopeNames      .Clear;
+    FScopeTypesBefore.Clear;
+    FScopeTypesAfter .Clear;
+    Exit;
+  end;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT name, kind FROM symbols WHERE file_id = :f';
+    Q.ParamByName('f').AsLargeInt:= AFileId;
+    Q.Open;
+    var FName:= Q.Fields[0];
+    var FKind:= Q.Fields[1];
+    while not Q.Eof do
+    begin
+      var Lc:= LowerCase(FName.AsString);
+      if Lc <> '' then
+      begin
+        FScopeNames.AddOrSetValue(Lc, True);
+        if IsTypeDeclaringKind(FKind.AsString) then FScopeTypesBefore.AddOrSetValue(Lc, True);
+      end;
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
@@ -4125,6 +4473,12 @@ var
   I: Integer;
 begin
   if (AIds = nil) or (AIds.Count = 0) then Exit;
+  { RESOLVE SCOPE: this removes symbols without their names ever passing through
+    NoteScopeRemoval, so the scoped call-target pass can no longer account for
+    the edges the cascade is about to take. Both sweeps -- PruneMissingFiles and
+    EvictOutOfScopeFiles -- reach the database only through here, which is why
+    the latch lives at this one point rather than in each of them. }
+  FScopeWhole:= True;
   FConn.StartTransaction;
   try
     for I:= 0 to AIds.Count - 1 do
@@ -4308,6 +4662,10 @@ begin
   end;
   if Result = 0 then Exit; { nothing to clear -- do not open a transaction }
 
+  { RESOLVE SCOPE: everything is going, so nothing this instance later records
+    describes the change. --rebuild always takes the whole-database pass, which
+    is also what it wants -- every ref is new. }
+  FScopeWhole:= True;
   FConn.StartTransaction;
   try
     FConn.ExecSQL('DELETE FROM string_literals'); { fire the FTS5 sync triggers }
@@ -5059,6 +5417,66 @@ begin
       List.Add(R);
       Q.Next;
     end; // while
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+{ The set forms of FindReferencesTo / FindCallersByName.
+
+  Both exist because "is this symbol referenced at all?" was being asked once per
+  symbol, and each ask cost a query that MATERIALISED EVERY MATCHING ROW into a
+  TReference just to have its length compared with zero. refs.name_text carries
+  no index (see FindCallersByName), so the name form was a full table scan per
+  symbol. Measured on ORM3-Micronite2027: unused-private-member 447.8 s and
+  unused-public-symbol 59.0 s of a 537.3 s project-rules phase.
+
+  One DISTINCT scan each answers the same question for every symbol. }
+function TSQLiteSymbolStore.GetReferencedSymbolIds: TArray<Int64>;
+var
+  Q   : TFDQuery    ;
+  List: TList<Int64>;
+begin
+  List:= TList<Int64>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT DISTINCT symbol_id FROM refs WHERE symbol_id IS NOT NULL AND symbol_id > 0';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(Q.Fields[0].AsLargeInt);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.GetReferencedNamesLower: TArray<string>;
+var
+  Q   : TFDQuery     ;
+  List: TList<string>;
+begin
+  List:= TList<string>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { Lowercased in Delphi rather than by SQL: LOWER() in SQLite folds ASCII
+      only, and so does Delphi's default LowerCase, so the two agree -- but
+      doing it here keeps DISTINCT operating on the stored text, which is what
+      the replaced query matched with COLLATE NOCASE. }
+    Q.SQL.Text:= 'SELECT DISTINCT name_text FROM refs WHERE name_text IS NOT NULL AND name_text <> ''''';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(LowerCase(Q.Fields[0].AsString));
+      Q.Next;
+    end;
     Result:= List.ToArray;
   finally
     Q.Free;
@@ -6971,7 +7389,11 @@ var
   Dot         : Integer                    ;
   i           : Integer                    ;
   Fid         : Int64                      ;
+  T0          : Int64                      ; { see ResolveLog -- silence read as a hang }
+  Hits        : Integer                    ; { distinct used-unit names that resolved }
 begin
+  T0  := TStopwatch.GetTimeStamp;
+  Hits:= 0;
   StemToFileId:= TDictionary<string, Int64> .Create;
   SegToStem   := TDictionary<string, string>.Create;
   UsedNorms   := TList<string>.Create;
@@ -7101,12 +7523,15 @@ begin
         QUpdate.ParamByName('un'  ).AsString  := UsedNorms[i];
         QUpdate.ParamByName('full').AsString  := UsedFulls[i];
         QUpdate.ExecSQL;
+        Inc(Hits);
       end;
       FConn.Commit;
     except
       FConn.Rollback;
       raise;
     end;
+    ResolveLog(Format('unit-uses  %d/%d distinct used-unit name(s) bound, %d .pas stem(s)  [%.1fs]',
+      [Hits, UsedFulls.Count, StemToFileId.Count, ResolveSecs(T0)]));
   finally
     QUpdate    .Free;
     QNames     .Free;
@@ -7231,6 +7656,9 @@ var
   Chosen     : TSymbol                            ; // the scope rule's pick, Id = 0 on a decline
   ScopeUnit  : string                             ; // inheriting file's own unit name ('' if none)
   ScopeUses  : TDictionary<string, Boolean>       ; // its scope-name set (nil if none)
+  T0         : Int64                              ; { see ResolveLog }
+  EdgeRows   : Integer                            ; { type_ancestors rows written }
+  EdgeBound  : Integer                            ; { ... of which resolved to a symbol }
 
   procedure NoteScopeName(AFileId: Int64; const AName: string);
   var D: TDictionary<string, Boolean>;
@@ -7252,6 +7680,9 @@ begin
     query-only open the cache is simply empty here. Nothing in this pass calls
     FrameworkAnchorForFile (see the header note on the '' anchor), so the cache
     cannot be re-poisoned between here and the commit. }
+  T0       := TStopwatch.GetTimeStamp;
+  EdgeRows := 0;
+  EdgeBound:= 0;
   FAnchorCache.Clear;
   NameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FileUnit   := TDictionary<Int64, string>.Create;
@@ -7395,6 +7826,7 @@ begin
           begin
             QIns.ParamByName('asid').AsLargeInt:= RSymId;
             QIns.ParamByName('afid').AsLargeInt:= RFileId;
+            Inc(EdgeBound);
           end
           else
           begin
@@ -7402,6 +7834,7 @@ begin
             QIns.ParamByName('afid').Clear;
           end;
           QIns.ExecSQL;
+          Inc(EdgeRows);
         end;
         Q.Next;
       end;
@@ -7411,6 +7844,8 @@ begin
       FConn.Rollback;
       raise;
     end;
+    ResolveLog(Format('ancestry   %d/%d edge(s) bound to a symbol, %d candidate name(s)  [%.1fs]',
+      [EdgeBound, EdgeRows, NameToCands.Count, ResolveSecs(T0)]));
   finally
     QIns.Free;
     Q.Free;
@@ -7440,6 +7875,9 @@ var
   FileScope  : TObjectDictionary<Int64,  TList<Int64>>  ;
   Lc         : string                             ;
   Sym        : TSymbol                            ;
+  T0         : Int64                              ; { see ResolveLog }
+  HelpRows   : Integer                            ; { type_helpers rows written }
+  HelpBound  : Integer                            ; { ... of which found their target }
 
   function CandInScope(ADeclFile, ACandFile: Int64): Boolean;
   var L: TList<Int64>;
@@ -7450,6 +7888,9 @@ var
   end;
 
 begin
+  T0       := TStopwatch.GetTimeStamp;
+  HelpRows := 0;
+  HelpBound:= 0;
   NameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FileScope  := TObjectDictionary<Int64,  TList<Int64>>.Create([doOwnsValues]);
   Q   := TFDQuery.Create(nil);
@@ -7544,6 +7985,7 @@ begin
             begin
               QIns.ParamByName('tsid').AsLargeInt:= TSymId;
               QIns.ParamByName('tfid').AsLargeInt:= TFileId;
+              Inc(HelpBound);
             end
             else
             begin
@@ -7551,6 +7993,7 @@ begin
               QIns.ParamByName('tfid').Clear;
             end;
             QIns.ExecSQL;
+            Inc(HelpRows);
           end;
         end;
         Q.Next;
@@ -7561,6 +8004,8 @@ begin
       FConn.Rollback;
       raise;
     end;
+    ResolveLog(Format('helpers    %d/%d helper edge(s) bound to a target  [%.1fs]',
+      [HelpBound, HelpRows, ResolveSecs(T0)]));
   finally
     QIns.Free;
     Q.Free;
@@ -7589,11 +8034,53 @@ var
   KeepEdge  : Boolean       ;
   DummyTok  : TFileTxToken  ;
   Written   : Int64         ;
+  Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
+  T0        : Int64         ;
+  TMaps     : Double        ; { seconds spent building TCallResolver's maps }
+  { Sub-phase accumulators, printed only under DRAGLINT_PROFILE. This pass turned
+    out to be the whole cost of a post-index resolve (unit-uses 1.4s + ancestry
+    4.5s + helpers 13.4s against MINUTES here, measured on the 2.09 GB Win32
+    library index), and its four inner costs scale differently: the map build is
+    O(symbols) and indifferent to how many refs need work, the receiver UPDATE
+    fires once per ref whether or not the value changed, and the two v20b guards
+    fire only for member-access refs. Optimising the wrong one of those is the
+    mistake this file has already made three times, so they are measured apart. }
+  TClear    : Double        ; { ClearCallEdges                                   }
+  AccRes    : Int64         ; { Resolver.ResolveOne                              }
+  AccRcv    : Int64         ; { UPDATE refs SET receiver_text/external_target    }
+  AccGuard  : Int64         ; { QIsRoutine + QTwin (member-access refs only)     }
+  AccEdge   : Int64         ; { UpsertCallEdge                                   }
+  TMark     : Int64         ; { scratch for the accumulators above               }
+  Profiled  : Boolean       ;
+  Scoped    : Boolean       ; { re-resolving only the affected refs -- see ScopedResolveIsSound }
+  ScopeWhere: string        ; { the predicate that selects them ('' when not scoped)           }
 begin
-  ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
+  T0:= TStopwatch.GetTimeStamp;
+  { The accumulators cost two QueryPerformanceCounter reads per ref, which on a
+    3.3M-ref corpus is itself measurable -- so the inner ones are gated. The
+    outer TMaps/TClear are unconditional: they are two reads for the whole pass. }
+  Profiled:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
+  AccRes  := 0; AccRcv := 0; AccGuard:= 0; AccEdge:= 0;
+  { SCOPED OR WHOLE-DATABASE -- decided once, here, and reported on the pass's
+    own line so an operator can see which shape ran. ScopedResolveIsSound carries
+    the argument; AExtraStores forces the whole database because a library index
+    consulted by ResolveExternally is outside everything this instance recorded. }
+  Scoped:= (Length(AExtraStores) = 0) and ScopedResolveIsSound;
+  { Only the temp tables are built here. The DELETE they feed happens INSIDE the
+    rebuild transaction below -- see the note there. MaterializeResolveScope
+    writes nothing but connection-local temp tables, so it is safe outside. }
+  if Scoped then ScopeWhere:= MaterializeResolveScope
+  else ScopeWhere:= '';
+  TClear  := ResolveSecs(T0);
   DummyTok:= Default(TFileTxToken);
   Written := 0;
+  Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
+  { Split out because it is O(symbols) and independent of how many refs this run
+    actually needs to resolve -- i.e. it is the part an incremental version of
+    this pass would still pay, so it must be measured separately from the stream
+    below rather than hidden inside one total. }
+  TMaps:= ResolveSecs(T0) - TClear;
   Q         := TFDQuery.Create(nil);
   UpdRcv    := TFDQuery.Create(nil);
   QIsRoutine:= TFDQuery.Create(nil);
@@ -7666,8 +8153,35 @@ begin
       'SELECT id, symbol_id, file_id, kind, name_text, start_line, start_col, ' +
       '  end_line, end_col, enclosing_symbol_id FROM refs WHERE ' +
       '(' + CallSiteRefKindSql('refs') + ' OR refs.kind = ''member-access'')';
+    { The scoped pass narrows the SAME universe rather than defining its own:
+      widen the kind test above and the scoped path follows automatically. }
+    if Scoped then Q.SQL.Text:= Q.SQL.Text + ' AND (' + ScopeWhere + ')';
     FConn.StartTransaction;
     try
+      { THE DELETE BELONGS IN THIS TRANSACTION, and it was outside it until
+        v0.86. ResolveAncestry and ResolveHelpers both DELETE inside their own
+        transaction; this pass did not, so its `DELETE FROM call_edges`
+        AUTOCOMMITTED and only the rebuild was atomic. Anything that ended the
+        process in between -- Ctrl-C, a kill, a crash, a machine restart, and
+        this pass runs for 37 MINUTES on a 2 GB index -- left the database with
+        ZERO call edges and no way to tell that had happened. Observed, not
+        theorised: killing a run on library-Win32.sqlite destroyed all 541,352
+        edges while every other table stayed intact and `quick_check` returned
+        ok, so the index went on answering find-callers with silence.
+        Inside the transaction, an interrupted pass rolls back to the edges it
+        started with, which are stale at worst.
+
+        Only the edges about to be rewritten. Most are already gone -- both FK
+        cascades fired during the file walk -- but a ref that merely CHANGES
+        target still holds its old row, and re-resolving without clearing it
+        would leave the stale edge in place (UpsertCallEdge is keyed on ref_id,
+        so it would overwrite; the DELETE is what covers a ref that now resolves
+        to NOTHING and must end up with no row at all). }
+      if Scoped then
+        FConn.ExecSQL('DELETE FROM call_edges WHERE ref_id IN ' +
+                      '(SELECT refs.id FROM refs WHERE ' + ScopeWhere + ')')
+      else
+        ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
       Q.Open;
       while not Q.Eof do
       begin
@@ -7684,7 +8198,9 @@ begin
         if not Q.FieldByName('enclosing_symbol_id').IsNull then
           Ref.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
 
+        if Profiled then TMark:= TStopwatch.GetTimeStamp;
         Edge:= Resolver.ResolveOne(Ref);
+        if Profiled then Inc(AccRes, TStopwatch.GetTimeStamp - TMark);
         { v20: persist the receiver for EVERY call ref, resolved or not. The
           UNRESOLVED ones are the whole point -- they are what the leaf-name
           caller bucket draws from, and without the receiver a `TJSONArray.Create`
@@ -7695,6 +8211,7 @@ begin
           keeps a distinct meaning: "this DB has never been resolved by a v20
           engine". A consumer that treats NULL as "bare" would silently restore
           the old fabrication on a stale DB -- reindex, do not reinterpret. }
+        if Profiled then TMark:= TStopwatch.GetTimeStamp;
         UpdRcv.ParamByName('r' ).AsString   := Edge.ReceiverText;
         { v21: NULL when there is no external answer, so "not resolved
           externally" stays distinguishable from "resolved to an empty name". }
@@ -7702,11 +8219,13 @@ begin
         else UpdRcv.ParamByName('x').Clear;
         UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
         UpdRcv.ExecSQL;
+        if Profiled then Inc(AccRcv, TStopwatch.GetTimeStamp - TMark);
         if Edge.TargetSymbolId > 0 then
         begin
           KeepEdge:= True;
           if not SameText(Ref.Kind, REF_KIND_CALL) then
           begin
+            if Profiled then TMark:= TStopwatch.GetTimeStamp;
             { A member-access ref earns an edge only if it is really a call. }
             QIsRoutine.ParamByName('id').AsLargeInt:= Edge.TargetSymbolId;
             QIsRoutine.Open;
@@ -7731,14 +8250,18 @@ begin
                 QTwin.Close;
               end;
             end;
+            if Profiled then Inc(AccGuard, TStopwatch.GetTimeStamp - TMark);
           end;
           if KeepEdge then
           begin
+            if Profiled then TMark:= TStopwatch.GetTimeStamp;
             Edge.RefId:= Ref.Id; // ensure the natural key is the ref we resolved
             UpsertCallEdge(DummyTok, Edge);
+            if Profiled then Inc(AccEdge, TStopwatch.GetTimeStamp - TMark);
             Inc(Written);
           end;
         end;
+        Inc(Streamed);
         Q.Next;
       end;
       Q.Close;
@@ -7747,6 +8270,16 @@ begin
       FConn.Rollback;
       raise;
     end;
+    if Scoped then
+      ResolveLog(Format('calls      %d edge(s) from %d affected call-site ref(s) in %d changed file(s)  [%.1fs, clear %.1fs, maps %.1fs]',
+        [Written, Streamed, FScopeFiles.Count, ResolveSecs(T0), TClear, TMaps]))
+    else
+      ResolveLog(Format('calls      %d edge(s) from %d call-site ref(s), WHOLE DB  [%.1fs, clear %.1fs, maps %.1fs]',
+        [Written, Streamed, ResolveSecs(T0), TClear, TMaps]));
+    if Profiled then
+      ResolveLog(Format('calls      ... resolve %.1fs  receiver-update %.1fs  member-access guards %.1fs  edge-write %.1fs',
+        [AccRes / TStopwatch.Frequency, AccRcv / TStopwatch.Frequency,
+         AccGuard / TStopwatch.Frequency, AccEdge / TStopwatch.Frequency]));
   finally
     Q.Free;
     UpdRcv.Free;

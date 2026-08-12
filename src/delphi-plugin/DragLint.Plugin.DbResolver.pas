@@ -288,12 +288,14 @@ end; // function
 
 function PrimaryDbForProject(const AProjPath: string; const ASettings: TDragLintSettings): string;
 var
-  ProjDir: string;
+  ProjDir : string;
+  ProjName: string;
 begin
   Result:= '';
   if AProjPath = '' then Exit;
-  ProjDir:= ExtractFilePath(AProjPath);
-  Result:= ResolveDbPath(ASettings.DbPathTemplate, ProjDir);
+  ProjDir := ExtractFilePath(AProjPath);
+  ProjName:= ChangeFileExt(ExtractFileName(AProjPath), '');
+  Result  := ResolveDbPath(ASettings.DbPathTemplate, ProjDir, ProjName);
 end;
 
 function NormalizePath(const APath: string): string;
@@ -334,7 +336,7 @@ begin
     if SameText(IncludeTrailingPathDelimiter(Sub), IncludeTrailingPathDelimiter(ProjDir)) then Continue;
     ProjFiles:= TDirectory.GetFiles(Sub, '*.dproj');
     if Length(ProjFiles) = 0 then Continue;
-    SiblingDb:= ResolveDbPath(ASettings.DbPathTemplate, Sub);
+    SiblingDb:= ResolveDbPath(ASettings.DbPathTemplate, Sub, ChangeFileExt(ExtractFileName(ProjFiles[0]), ''));
     if TFile.Exists(SiblingDb) then AddUnique(ADbs, SiblingDb);
   end;
 end; // procedure
@@ -455,11 +457,16 @@ function FindAncestorDb(const AStartDir: string; const ASettings: TDragLintSetti
   At each level we try BOTH the configured template AND the canonical
   unprefixed default. Catches the case where a user's old registry
   template still points at the legacy '.drag-lint.sqlite' (dot-prefixed)
-  pattern but their actual DB lives at 'drag-lint.sqlite'. }
+  pattern but their actual DB lives at 'drag-lint.sqlite'. v(project-drag-
+  lint-home): the canonical default is ALSO the pre-relocation flat path
+  (it predates the move into a project's _D-RAG folder), so this same
+  candidate doubles as the fallback that keeps an IDE whose registry still
+  holds the pre-relocation template finding an un-migrated DB. }
 const
   CANONICAL_TEMPLATE = '<projdir>\drag-lint.sqlite';
 var
   Dir       : string        ;
+  DirName   : string        ;
   Parent    : string        ;
   Candidates: TArray<string>;
   C         : string        ;
@@ -468,14 +475,16 @@ begin
   Dir:= ExcludeTrailingPathDelimiter(AStartDir);
   while (Dir <> '') and TDirectory.Exists(Dir) do
   begin
+    DirName:= ExtractFileName(Dir); // heuristic <projname> when no .dproj is known at this level
     SetLength(Candidates, 0);
     if ASettings.DbPathTemplate <> '' then
     begin
       SetLength(Candidates, 1);
-      Candidates[0]:= ResolveDbPath(ASettings.DbPathTemplate, Dir);
+      Candidates[0]:= ResolveDbPath(ASettings.DbPathTemplate, Dir, DirName);
     end;
     { Always also try the canonical default (in case the user's template
-      is misconfigured or legacy). }
+      is misconfigured or legacy). No <projname> substitution -- this is the
+      pre-relocation flat filename, which never had one. }
     SetLength(Candidates, Length(Candidates) + 1);
     Candidates[High(Candidates)]:= ResolveDbPath(CANONICAL_TEMPLATE, Dir);
 
@@ -483,8 +492,7 @@ begin
       level (<dirname>.sqlite), matching PickProjectDb's by-name candidate
       so an ancestor DB named after its own directory is found on the walk-up. }
     SetLength(Candidates, Length(Candidates) + 1);
-    Candidates[High(Candidates)]:= IncludeTrailingPathDelimiter(Dir)
-      + ExtractFileName(ExcludeTrailingPathDelimiter(Dir)) + '.sqlite';
+    Candidates[High(Candidates)]:= IncludeTrailingPathDelimiter(Dir) + DirName + '.sqlite';
 
     for C in Candidates do
       if (C <> '') and TFile.Exists(C) then Exit(C);

@@ -1,0 +1,11 @@
+# Complex (line 15) scores ~35 and must fire; Simple (line 38) is ~2 and must not.
+#
+# Both line numbers moved on 2026-08-10 when the DEFAULT threshold was retuned
+# 15 -> 30 (measured: the median flagged routine in drag-lint's own corpus scored
+# 22, so the old default flagged the median rather than the outliers). The
+# fixture's Complex routine was raised from ~20 to ~35 so it still proves the
+# rule FIRES; it is not the place that pins the threshold value -- that is
+# DEFAULT_CYCLOMATIC_THRESHOLD in DRagLint.Lint.RuleCatalog, read by both the
+# catalog and every checker call site.
+cyclomatic-complexity 15
+!cyclomatic-complexity 38

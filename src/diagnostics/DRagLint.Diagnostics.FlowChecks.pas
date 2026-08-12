@@ -97,6 +97,33 @@ begin
   Result := (Length(T) >= 2) and (T[1] = 'I') and T[2].IsUpper;
 end;
 
+/// <summary>Record-typed subset of the type-category family (IsManagedType /
+/// IsInterfaceType): True only when a store is present and ATypeText resolves to
+/// tcRecord.</summary>
+/// <param name="ATypeText">The variable's declared type text, verbatim from the
+/// routine var table.</param>
+/// <param name="AStore">Symbol store used to resolve the type's KIND; nil
+/// disables this check entirely (returns False).</param>
+/// <param name="AFileId">File id scoping the resolution (0 when no store).</param>
+/// <returns>True only when AStore resolves ATypeText to tcRecord.</returns>
+/// <remarks>Deliberately carries NO naming-convention fallback, unlike
+/// IsInterfaceType's 'I'+uppercase spelling convention -- a record has no
+/// reliable name shape to guess from, and this predicate feeds the record-
+/// method-call-defines-the-local seam in CollectReadsAndCallDefs (see
+/// TRecordMethodDefPredicate). Guessing "this looks like a record" would risk
+/// widening that used-before-assignment suppression to CLASS references that
+/// merely look record-like, which is exactly the false negative the task's
+/// hard constraint forbids: a method call on an uninitialised class reference
+/// is a genuine nil-dereference bug and must keep being flagged. Without a
+/// store this returns False, which is today's (pre-fix) behaviour, so the
+/// store-free lint path cannot silently over-suppress.</remarks>
+function IsRecordType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
+begin
+  Result := False;
+  if AStore = nil then Exit;
+  Result := AStore.ResolveTypeCategory(ATypeText, AFileId) = tcRecord;
+end;
+
 /// <summary>Tests whether AConstructorNode (an already-confirmed constructor
 /// call/dot-expr per ExprIsConstructor) transfers ownership of the created
 /// object to a VCL owner, per TComponent's owner-parenting contract: a
@@ -118,6 +145,63 @@ end;
 /// <returns>True only when a store is present, the constructed type is a
 /// TComponent descendant, and the first constructor argument is present and
 /// is not the literal "nil".</returns>
+/// <summary>True when ATypeText names a type that CANNOT leak, so a
+/// "created but never freed" finding about it would be unfalsifiable: an
+/// INTERFACE (reference-counted by the runtime -- freeing it manually is the
+/// bug) or a RECORD / value type (never heap-allocated; there is no Free to
+/// call).</summary>
+/// <param name="ATypeText">The variable's declared type text, verbatim from the
+/// routine var table. Generic arguments are ignored -- only the head name is
+/// resolved, so IList&lt;TFoo&gt; is judged on IList.</param>
+/// <param name="AStore">Symbol store used to resolve the type's KIND. When nil
+/// or when the type is not indexed, falls back to the naming convention.</param>
+/// <returns>True to SUPPRESS an object-leak finding for this variable.</returns>
+/// <remarks>INDEX-GROUNDED FIRST, convention only as a fallback. Resolving the
+/// kind through the store is what separates this from a name sniff: a CLASS
+/// deliberately named <c>IniFile</c> would be misjudged by an "starts with I"
+/// test, and that class CAN leak. The convention fallback is therefore
+/// deliberately strict -- 'I' followed by an UPPERCASE letter -- and applies
+/// only when the index cannot answer, which is the same absence-over-a-wrong-
+/// verdict policy the ownership fact uses.</remarks>
+function TypeIsRefCountedOrValue(const ATypeText: string;
+  const AStore: ISymbolStore): Boolean;
+var
+  Head: string;
+  P   : Integer;
+  Syms: TArray<TSymbol>;
+  S   : TSymbol;
+begin
+  Result:= False;
+  Head:= Trim(ATypeText);
+  if Head = '' then Exit;
+  { Strip a generic argument list: IList<TFoo> -> IList. The head is what
+    carries the kind; the argument is a different type entirely. }
+  P:= Pos('<', Head);
+  if P > 0 then Head:= Trim(Copy(Head, 1, P - 1));
+  if Head = '' then Exit;
+
+  { Index-grounded: an interface or a record cannot leak. }
+  if AStore <> nil then
+  begin
+    Syms:= AStore.FindSymbolsByExactName(Head);
+    for S in Syms do
+      if S.Kind in [skInterface, skRecord] then Exit(True);
+    { The type IS indexed and is not an interface/record -> it is a class or
+      similar and CAN leak. Trust the index over the convention below. }
+    if Length(Syms) > 0 then Exit(False);
+  end;
+
+  { Fallback: RTL/third-party value types the index does not cover, plus the
+    'I'+uppercase interface convention. TRegEx is named explicitly because it is
+    this rule's single most common false positive (a record constructor, four of
+    twelve sampled findings) and lives in System.RegularExpressions, which a
+    project index does not contain. }
+  if SameText(Head, 'TRegEx') or SameText(Head, 'TMatch') or SameText(Head, 'TMatchCollection')
+     or SameText(Head, 'TGUID') or SameText(Head, 'TPoint') or SameText(Head, 'TRect') then
+    Exit(True);
+  Result:= (Length(Head) >= 2) and (Head[1] = 'I') and CharInSet(Head[2], ['A'..'Z']);
+end;
+
 function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;
   const AStore: ISymbolStore; AFileId: Int64): Boolean;
 var
@@ -387,6 +471,7 @@ var
   PI: Integer;
   OwnCache: TDictionary<string, Boolean>;
   OwnsOracle: TCallArgOwns;
+  RecMethodDef: TRecordMethodDefPredicate;
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
   var F: TLintFinding;
@@ -420,7 +505,7 @@ var
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
     try
       if Cfg.Skipped or (Vars.Count = 0) then Exit;
-      Ana := TDefiniteAssignment.Create(Vars, PF.Src);
+      Ana := TDefiniteAssignment.Create(Vars, PF.Src, RecMethodDef);
       if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, Ana, AIn, AOut) then Exit;
 
       Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
@@ -441,9 +526,9 @@ var
             It := Cfg.Blocks[B].Items[I];
             Reads.Clear; CallDefs.Clear;
             if It.Node.NodeType = 'assignment' then
-              CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs)
+              CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs, RecMethodDef)
             else
-              CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs);
+              CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef);
             { flag reads of unmanaged locals not yet must-assigned (skip opaque with-bodies) }
             if not It.Opaque then
               for J := 0 to Reads.Count - 1 do
@@ -881,8 +966,25 @@ var
               end;
             end;
           { a created local still may-open at the routine exit -> possible leak }
+          { v(2026-08-10): NARROWED BY DECLARED TYPE. Sampled 12 of this rule's
+            106 findings on drag-lint's own source: ZERO were leaks. The two
+            dominant shapes are not "missed frees", they are constructs where a
+            leak is IMPOSSIBLE, so no amount of flow analysis could ever clear
+            them and the finding was unfalsifiable:
+
+              * A VALUE TYPE. `Rx := TRegEx.Create(...)` is a RECORD
+                constructor -- nothing is heap-allocated and there is no Free to
+                call. Four of the twelve were TRegEx alone.
+              * AN INTERFACE. `Store: ISymbolStore := TSQLiteStore.Create(...)`
+                is reference-counted by the runtime; freeing it manually would
+                be the bug. Three of the twelve.
+
+            Both are decided from the DECLARED TYPE, which the routine var table
+            already carries -- no new analysis, and no chance of hiding a real
+            leak, because neither shape can leak by construction. }
           for I := 0 to Vars.Count - 1 do
-            if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and EIn2[Cfg.ExitIdx][I] then
+            if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and EIn2[Cfg.ExitIdx][I]
+               and not TypeIsRefCountedOrValue(Vars.Get(I).TypeText, AStore) then
               Emit('object-leak', 'info',
                 Format('Object "%s" may be leaked: created but not freed or transferred on some path.',
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
@@ -937,6 +1039,44 @@ begin
       end
   else
     OwnsOracle := nil;
+  { used-before-assignment: with a store, a method call on a RECORD local (e.g.
+    `St.Reset;`) counts as a definition of that local -- the idiomatic way a
+    record establishes its own initial value, since it has no constructor. Gated
+    on BOTH the receiver resolving to tcRecord (IsRecordType) AND the dot's rhs
+    resolving to a callable member (CanBeCallTarget) of that record type, so a
+    plain field access (`St.Total`) is left as an ordinary read and a genuinely
+    uninitialised record field still flags. A CLASS reference never qualifies --
+    IsRecordType has no naming-convention fallback, so a store-free receiver, or
+    one that resolves to anything other than tcRecord, leaves this False and a
+    method call on an uninitialised class reference keeps flagging as the
+    nil-dereference bug it is.
+
+    KNOWN TRADE-OFF: CanBeCallTarget accepts ANY callable member, not only a
+    mutating one -- there is no effect analysis here to tell "St.Reset" (writes
+    every field) from a pure query like "St.Peek" (reads Total, writes nothing).
+    So a getter called first, before any real initialiser, is ALSO (wrongly)
+    treated as establishing definite assignment, and a genuine "read of garbage
+    record state" would go unreported. Accepted deliberately: the alternative
+    is the 24 false positives this fix removes from YADF alone, and narrowing
+    to "provably mutates Self" is not information this analysis has. }
+  if AStore <> nil then
+    RecMethodDef :=
+      function(const ATypeText, AMemberName: string): Boolean
+      var RecSym, MemSym: TSymbol;
+      begin
+        Result := False;
+        if not IsRecordType(ATypeText, AStore, AFileId) then Exit;
+        RecSym := AStore.ResolveTypeNameToClass(Trim(ATypeText), AFileId);
+        if RecSym.Id <= 0 then Exit;
+        { records have no ancestry (no class heritage), so a direct child lookup
+          is the whole answer -- unlike ResolveMemberOnType's class ancestor
+          climb, which does not apply here. }
+        MemSym := AStore.FindChildSymbolByName(RecSym.Id, AMemberName);
+        if MemSym.Id <= 0 then Exit;
+        Result := CanBeCallTarget(MemSym.Kind);
+      end
+  else
+    RecMethodDef := nil;
   try
     Procs := CfgFindProcs(PF.Tree.RootNode);
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);

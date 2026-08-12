@@ -4941,9 +4941,11 @@ var
 begin
   Proj:= GetActiveProjectFile;
   if Proj = '' then begin ShowMessage('drag-lint: no active project.'); Exit; end;
-  { Resolve the index DB the manifest-aware way -- the index often lives in a
-    manifest outDir (e.g. ...\DB\ORM3\CLIENT\Micronite2027.sqlite), NOT next to
-    the .dproj, so the simple <dproj>.sqlite path misses it (false "no index"). }
+  { Resolve the index DB the manifest-aware way -- the index lives in the
+    project's own <projdir>\_D-RAG\<projname>.sqlite (a Library or SQL
+    manifest section instead resolves to a shared outDir, e.g.
+    ...\DB\ORM3\CLIENT\Micronite2027.sqlite), so the simple <dproj>.sqlite
+    path misses either case (false "no index"). }
   Db:= '';
   try
     for var Dbc in ResolveActiveIndexDbs(LoadSettings) do

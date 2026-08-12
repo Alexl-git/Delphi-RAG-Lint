@@ -7,6 +7,7 @@ uses
   , System.Classes
   , System.IOUtils
   , System.StrUtils
+  , System.Math
   , System.Types
   , System.Generics.Collections
   , TreeSitter
@@ -316,48 +317,126 @@ begin
   end; // for
 end; // begin
 
-procedure WalkForFieldByNameInLoop(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string; AInLoopDepth: Integer; AFindings: TList<TLintFinding>);
+{ Returns the `FieldByName` name node of a `<expr>.FieldByName(...)` call, or a null
+  node when ANode is not such a call. The name node -- not the call -- is what a
+  finding anchors on, so the caret lands on the offending lookup. }
+function FieldByNameNameNode(const ANode: TTSNode; const ASource: TBytes): TTSNode;
 var
-  NT         : string      ;
-  Entity     : TTSNode     ;
-  Rhs        : TTSNode     ;
-  CalleeName : string      ;
-  Finding    : TLintFinding;
-  I          : Integer     ;
-  ChildInLoop: Integer     ;
+  Entity: TTSNode;
+  Rhs   : TTSNode;
+begin
+  Result:= Default(TTSNode);
+  if ANode.IsNull or (ANode.NodeType <> 'exprCall') then Exit;
+  Entity:= ANode.ChildByField('entity');
+  if Entity.IsNull or (Entity.NodeType <> 'exprDot') then Exit;
+  Rhs:= Entity.ChildByField('rhs');
+  if Rhs.IsNull then Exit;
+  if SameText(NodeText(Rhs, ASource), 'FieldByName') then Result:= Rhs;
+end; // function
+
+{ The literal field name of a FieldByName('x') call, unquoted; '' when the argument
+  is not a plain literal (a variable, an expression, a const). }
+function FieldByNameArgText(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  Args: TTSNode;
+  Arg0: TTSNode;
+begin
+  Result:= '';
+  Args:= ANode.ChildByField('args');
+  if Args.IsNull or (Args.NamedChildCount = 0) then Exit;
+  Arg0:= Args.NamedChild(0);
+  if Arg0.IsNull then Exit;
+  Result:= Trim(NodeText(Arg0, ASource));
+  if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then Result:= Copy(Result, 2, Length(Result) - 2);
+end; // function
+
+procedure CollectFieldByNameCalls(const ANode: TTSNode; const ASource: TBytes; ACalls: TList<TTSNode>);
+var
+  I: Integer;
+begin
+  if ANode.IsNull then Exit;
+  if not FieldByNameNameNode(ANode, ASource).IsNull then ACalls.Add(ANode);
+  for I:= 0 to ANode.NamedChildCount - 1 do CollectFieldByNameCalls(ANode.NamedChild(I), ASource, ACalls);
+end; // procedure
+
+{ One finding for the whole loop, naming the fields to hoist. }
+procedure EmitFieldByNameLoopFinding(const ALoop: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
+const
+  MAX_NAMES_LISTED = 6;
+var
+  Calls  : TList<TTSNode>;
+  Names  : TStringList   ;
+  Finding: TLintFinding  ;
+  Anchor : TTSNode       ;
+  Nm     : string        ;
+  Detail : string        ;
+  Listed : TArray<string>;
+  Shown  : Integer       ;
+  I      : Integer       ;
+begin
+  Calls:= TList<TTSNode>.Create;
+  Names:= TStringList.Create;
+  try
+    CollectFieldByNameCalls(ALoop, ASource, Calls);
+    if Calls.Count = 0 then Exit;
+
+    Names.Sorted    := True    ;
+    Names.Duplicates:= dupIgnore;
+    for I:= 0 to Calls.Count - 1 do
+    begin
+      Nm:= FieldByNameArgText(Calls[I], ASource);
+      if Nm <> '' then Names.Add(Nm);
+    end;
+
+    Detail:= '';
+    if Names.Count > 0 then
+    begin
+      Shown:= Min(Names.Count, MAX_NAMES_LISTED);
+      SetLength(Listed, Shown);
+      for I:= 0 to Shown - 1 do Listed[I]:= Names[I];
+      Detail:= string.Join(', ', Listed); { not S := S + X in a loop -- see concat-in-loop }
+      if Names.Count > MAX_NAMES_LISTED then Detail:= Detail + Format(', +%d more', [Names.Count - MAX_NAMES_LISTED]);
+      Detail:= ' (' + Detail + ')';
+    end;
+
+    Anchor:= FieldByNameNameNode(Calls[0], ASource);
+    Finding:= Default(TLintFinding);
+    Finding.RuleId  := 'field-by-name-in-loop';
+    Finding.Severity:= 'warning';
+    Finding.Message := Format('FieldByName() called %d time(s) inside this loop%s -- cache the TField reference(s) ' + 'in locals before the loop and reuse them', [Calls.Count, Detail]);
+    Finding.FilePath := AFilePath;
+    Finding.StartLine:= Integer(Anchor.StartPoint.row   ) + 1;
+    Finding.StartCol := Integer(Anchor.StartPoint.column) + 1;
+    Finding.EndLine  := Integer(Anchor.EndPoint  .row   ) + 1;
+    Finding.EndCol   := Integer(Anchor.EndPoint  .column) + 1;
+    AFindings.Add(Finding);
+  finally
+    Names.Free;
+    Calls.Free;
+  end; // try
+end; // procedure
+
+{ v0.85: ONE finding per OUTERMOST loop, not one per call site.
+  The old walk emitted a finding for every FieldByName token below a loop. Across
+  this repo that turned 66 loops into 340 findings -- a single 8-line row-reader
+  accounted for 8 of them. The remedy is per loop (hoist the lookups above it), so
+  the finding has to be per loop as well, otherwise the count measures how wide the
+  row-reader is rather than how many places need fixing.
+  Nested loops are deliberately NOT descended into: they are inside the outermost
+  loop's body, and hoisting happens above that loop. }
+procedure WalkForFieldByNameInLoop(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
+var
+  NT: string ;
+  I : Integer;
 begin
   if ANode.IsNull then Exit;
   NT:= ANode.NodeType;
-  ChildInLoop:= AInLoopDepth;
-  if (NT = 'while') or (NT = 'for') or (NT = 'repeat') then Inc(ChildInLoop);
-
-  if (AInLoopDepth > 0) and (NT = 'exprCall') then
+  if (NT = 'while') or (NT = 'for') or (NT = 'repeat') then
   begin
-    Entity:= ANode.ChildByField('entity');
-    if (not Entity.IsNull) and (Entity.NodeType = 'exprDot') then
-    begin
-      Rhs:= Entity.ChildByField('rhs');
-      if not Rhs.IsNull then
-      begin
-        CalleeName:= NodeText(Rhs, ASource);
-        if SameText(CalleeName, 'FieldByName') then
-        begin
-          Finding:= Default(TLintFinding);
-          Finding.RuleId  := 'field-by-name-in-loop';
-          Finding.Severity:= 'warning';
-          Finding.Message:= 'FieldByName() inside a loop body - cache the TField reference ' + 'in a local variable before the loop and reuse it';
-          Finding.FilePath:= AFilePath;
-          Finding.StartLine:= Integer(Rhs.StartPoint.row   ) + 1;
-          Finding.StartCol := Integer(Rhs.StartPoint.column) + 1;
-          Finding.EndLine  := Integer(Rhs.EndPoint  .row   ) + 1;
-          Finding.EndCol   := Integer(Rhs.EndPoint  .column) + 1;
-          AFindings.Add(Finding);
-        end;
-      end; // if
-    end; // if
-  end; // if
-
-  for I:= 0 to ANode.NamedChildCount - 1 do WalkForFieldByNameInLoop(ANode.NamedChild(I), ASource, AFilePath, ChildInLoop, AFindings);
+    EmitFieldByNameLoopFinding(ANode, ASource, AFilePath, AFindings);
+    Exit;
+  end;
+  for I:= 0 to ANode.NamedChildCount - 1 do WalkForFieldByNameInLoop(ANode.NamedChild(I), ASource, AFilePath, AFindings);
 end; // procedure
 
 // v0.57: DFM files are parsed with the dedicated tree-sitter DFM grammar
@@ -606,7 +685,7 @@ begin
     end
     else
     begin
-      WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, 0, Findings);
+      WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, Findings);
       CheckInlineCommentInMultilineArgs(Source, AFilePath, Findings);
       // External *.scm rules
       var R: TQueryRule;

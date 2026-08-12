@@ -2,8 +2,17 @@ unit DRagLint.CLI;
 
 interface
 
+uses
+  { INTERFACE-level, and only for DRAGLINT_VERSION below -- everything else this
+    unit needs is in the implementation uses. Core.Model is a leaf model unit
+    (it uses nothing of ours), so this adds no cycle. }
+  DRagLint.Core.Model;
+
 const
-  VERSION = '1.2.2-alpha';
+  { Kept as a local alias so the seven existing uses below read unchanged; the
+    value now comes from DRagLint.Core.Model so the LSP handshake cannot drift
+    away from the CLI banner again -- see DRAGLINT_VERSION. }
+  VERSION = DRAGLINT_VERSION;
 
 /// <returns><!-- drag-lint:auto -->Observed: 2; DoIndexAll(Args); DoIndex(Args); DoQuery
 /// (Args); DoRules (Args); DoLint (Args).</returns>
@@ -35,6 +44,8 @@ uses
   , System.DateUtils
   , System.RegularExpressions
   , System.Generics.Collections
+  , System.Generics.Defaults { Task 5: TComparer<string>.Construct for the lint-all skip-report sort }
+  , System.Diagnostics       { TStopwatch -- DRAGLINT_PROFILE per-phase lint-all timing }
   , System.Math
   , Data.DB
   , FireDAC.Comp.Client
@@ -45,7 +56,8 @@ uses
   , { v0.42: lets TFDParam.SetAsX inline (was H2443) }
       FireDAC.DApt
   , TreeSitter
-  , DRagLint.Core   .Model
+  { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
+    must not be listed twice. }
   , DRagLint.Core   .Interfaces
   , DRagLint.Core   .Indexer
   , DRagLint.Storage.SQLite
@@ -65,6 +77,7 @@ uses
   , DRagLint.Project.Resolver
   , DRagLint.Project.Members
   , DRagLint.Project.Coherence
+  , DRagLint.Project.OwnRoots
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
@@ -356,6 +369,9 @@ type
     TextSource   : string ; // --source pas|dfm|sql ('' = all)
     // v0.64: lint-all progress
     Quiet : Boolean; // --quiet  suppress per-file progress to stderr
+    // Task 5: lint-all ownership scope. --lint-third-party restores the pre-
+    // Task-5 behaviour (every indexed .pas file, vendored code included).
+    LintThirdParty: Boolean;
     // PP-Task-3: dump-pp-eval diagnostic verb (the {$IF expr} evaluator)
     PpExpr    : string        ; // --expr "<E>"        the compile-time expression to evaluate
     PpDefines : TArray<string>; // --define <SYM>      repeatable defined symbols (lowercased on use)
@@ -473,7 +489,7 @@ begin
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch] [--layers <f.json>] [--json]');
-  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet]');
+  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
   Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
@@ -585,6 +601,7 @@ begin
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
+  Writeln('  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project''s _D-RAG folder');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
@@ -811,6 +828,7 @@ begin
     else if A = '--exact' then Result.ExactOnly:= True
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--quiet'   then Result.Quiet := True
+    else if A = '--lint-third-party' then Result.LintThirdParty:= True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
     else if A = '--scan-libraries-all' then
     begin
@@ -1897,10 +1915,27 @@ begin
       end;
     end;
 
+    { GUARDED, v0.86 -- see the long note at the DoIndex call site for why, and
+      for the rule that this condition must name every writer above it. This
+      function's writers are ClearAllFiles (ARebuild), the Indexer.IndexFolder
+      walk, and EvictOutOfScopeFiles; there is no prune here. No extra stores
+      term either: this call resolves against THIS section's database only.
+
+      THIS is the site that produced the multi-hour "hang". A Library section
+      re-run with --recompile finds every file up to date, prints nothing at all
+      because skipping is silent, and then spent 2,252 s on the call pass alone
+      re-deriving links that already held over a 2 GB corpus.
+
+      Only the call pass is guarded -- see the DoIndex note for why the other
+      three stay unconditional (they are the repair path, and they cost ~21 s
+      together on that same index). }
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
-    Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
+    if (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) then
+      Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
+    else
+      Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
     Elapsed:= (Now - T0) * 86400;
 
     var PlatSuffix:= '';
@@ -2599,9 +2634,14 @@ begin
       if TDirectory.Exists(F) then begin WalksAFolder:= True; Break; end;
     var DrySweep : Boolean:= AArgs.NoPrune                ;
     var WantPrune: Boolean:= AArgs.Prune or WalksAFolder  ;
+    { Rows either sweep reported. Feeds the resolve-pass guard below, which is
+      why a DRY sweep is counted too: over-counting costs a redundant pass,
+      under-counting serves stale edges. }
+    var SweptRows: Integer:= 0;
     if WantPrune then
     begin
       var Pruned: TArray<string>:= Store.PruneMissingFiles(Folders, DrySweep);
+      Inc(SweptRows, Length(Pruned));
       if Length(Pruned) = 0 then
       begin
         { Only the real sweep says "nothing to do": a --no-prune run that found
@@ -2665,6 +2705,7 @@ begin
         EvictRoots:= Folders;
       end;
       var Evicted: TArray<string>:= Store.EvictOutOfScopeFiles(EvictRoots, InScope, DrySweep);
+      Inc(SweptRows, Length(Evicted));
       if Length(Evicted) > 0 then
       begin
         if DrySweep then
@@ -2677,11 +2718,65 @@ begin
 
     { v0.40.4: post-pass resolves target_file_id for every unit_uses row.
       Done here (not inside the per-file transaction) because resolution
-      needs to see every file the indexer has just written. }
+      needs to see every file the indexer has just written.
+
+      GUARDED, v0.86: all four passes scan the WHOLE database however few files
+      this run touched, and each is a pure function of the stored corpus -- so on
+      a corpus this run did not change they rewrite byte-identical rows. On a
+      multi-gigabyte index that is minutes per pass of silent scanning for
+      nothing, which is precisely the pathology that was mistaken for a livelock
+      (docs/INBOX-indexer-livelock-when-two-platforms-run-concurrently.md):
+      `--recompile` skipped every up-to-date file without printing a word and
+      went straight into four full-corpus resolutions.
+
+      THE PRECONDITION IS THE COMPLETE LIST OF THIS FUNCTION'S WRITERS, not a
+      guess: DoIndex mutates the store in exactly four places -- ClearAllFiles
+      (--rebuild), the Indexer.IndexFile/IndexFolder walk, PruneMissingFiles and
+      EvictOutOfScopeFiles -- and every one of them is represented below. Add a
+      writer above this line and it must be added here too, or the passes will be
+      skipped over its rows.
+
+      EVERY TERM ERRS TOWARD RUNNING. ParsedFiles counts files that got past the
+      up-to-date skip, before the parse rather than after the commit; SweptRows
+      counts a DRY sweep's would-remove rows as though they had been removed. A
+      redundant pass costs time; a skipped one serves stale ancestry and call
+      edges, which is silent and much worse.
+
+      EXTRA STORES FORCE THE PASS. ResolveCallTargets consults the library
+      databases, and those are outside everything counted here -- a library
+      reindexed since this project was last resolved changes the answer with no
+      local file having changed. Tested on the REQUESTED list rather than on
+      OpenLibraryStores' result because that function opens connections and
+      prints a line per database: asking it would undo the saving it is being
+      consulted about, and a --library-db that fails to open still means the
+      caller asked for a cross-database resolve.
+
+      ONLY THE CALL-TARGET PASS IS GUARDED, and the asymmetry is deliberate.
+      These passes are not merely an incremental update -- they RECOMPUTE, which
+      is what lets a plain re-index REPAIR a value that went wrong behind the
+      indexer's back (see ResolveUnitUseTargets' header: filling only NULL rows
+      would have left 122 measured wrong dotted targets in place forever, and
+      tests/autotest/run_unit_uses_targets.ps1 pins exactly that by poisoning the
+      column with raw SQL and re-running `index`). Skipping them on an unchanged
+      corpus would quietly retire that repair. On the largest index in use --
+      2.09 GB, 7,412 files, 2.24M symbols -- the three of them together cost
+      about 21 s (1.9 + 8.0 + 11.6), so keeping them unconditional is nearly
+      free. The fourth cost 2,252 s on that same index, which is the whole
+      reason any of this exists, and it is the only one worth a guard.
+
+      THE RESIDUAL, stated rather than hidden: on a run that wrote nothing, an
+      out-of-band change that ResolveUnitUseTargets then REPAIRS could in
+      principle leave a call edge that was derived from the broken uses graph.
+      `--force-reparse` re-runs everything, and DRAGLINT_NO_SCOPED_RESOLVE=1
+      forces the full-corpus call pass; both are one flag away. }
     Store.ResolveUnitUseTargets;
     Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
     Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
-    Store.ResolveCallTargets(OpenLibraryStores(AArgs)); { v14 (D5) + v21 cross-DB }
+    if (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
+       (Length(AArgs.LibraryDbs) > 0) then
+      Store.ResolveCallTargets(OpenLibraryStores(AArgs)) { v14 (D5) + v21 cross-DB }
+    else
+      Writeln('resolve: calls skipped -- no file changed, so every call edge already holds.');
     Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
@@ -2727,10 +2822,16 @@ begin
   Store.ResolveUnitUseTargets;
   Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
   Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
-  { IndexDictionary has no TArgs -- the dictionary builders (--scan-libraries)
+  { GUARDED, v0.86 -- see the long note at the DoIndex call site. This function's
+    only writer is the Indexer walk above: it does not clear, prune or evict, so
+    ParsedFiles alone is the whole precondition here.
+    IndexDictionary has no TArgs -- the dictionary builders (--scan-libraries)
     are the LIBRARY side, and consulting a library from a library is not a shape
     v21 supports. Default (no extra stores) = pre-v21 behaviour. }
-  Store.ResolveCallTargets; { v14 (D5): resolve call sites to target symbols }
+  if Indexer.ParsedFiles > 0 then
+    Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
+  else
+    Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
@@ -6739,7 +6840,7 @@ begin
       { v0.48: routine size/complexity metrics (conservative defaults: params>7, locals>25, body>120 lines, nesting>5) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-parameters') or (AArgs.Rule = 'too-many-locals') or (AArgs.Rule = 'method-too-long') or (AArgs.Rule = 'deep-nesting') then
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(
-          EffPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', 120),
+          EffPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG),
           Cfg.ThresholdFor('deep-nesting', 5)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map }
@@ -6785,9 +6886,9 @@ begin
         EffPath, Cfg.ThresholdFor('too-many-exit-points', 5));
       { v0.63: cyclomatic complexity over 15 }
       if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(
-        EffPath, Cfg.ThresholdFor('cyclomatic-complexity', 15));
+        EffPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD));
       if (AArgs.Rule = '') or (AArgs.Rule = 'cognitive-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(
-        EffPath, Cfg.ThresholdFor('cognitive-complexity', 25));
+        EffPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD));
       { v0.63: virtual/dynamic method called from a constructor of its own class }
       if (AArgs.Rule = '') or (AArgs.Rule = 'virtual-method-in-constructor') then Findings:= Findings
         + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(EffPath);
@@ -9263,6 +9364,190 @@ begin
     end;
 end;
 
+{ The project folder a lint run is anchored to: --project when given, else the
+  index's own _D-RAG parent, else the manifest section that claims this DB.
+  The manifest step is not dead weight after the migration -- a section may pin
+  an explicit "db" outside any _D-RAG (the read-only/network-share escape
+  hatch), and such a project would otherwise silently lose its declaration.
+  '' means no anchor could be determined, which TOwnRoots.Load turns into
+  "filtering off" rather than "own nothing": an ad-hoc --db must keep working
+  exactly as it did before this feature existed. }
+function LintAnchorDir(const AArgs: TArgs; const ADbPath: string): string;
+var
+  Manifest: TIndexManifest;
+  I       : Integer       ;
+  ProjFile: string        ;
+begin
+  if AArgs.ProjectPath <> '' then
+    Exit(ExcludeTrailingPathDelimiter(ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath))));
+
+  Result:= AnchorDirForDb(ADbPath);
+  if Result <> '' then Exit;
+
+  try
+    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    for I:= 0 to High(Manifest.Sections) do
+    begin
+      ProjFile:= SectionProjectFile(Manifest, Manifest.Sections[I]);
+      if ProjFile = '' then Continue;
+      if SameText(ExpandSectionDb(Manifest, Manifest.Sections[I]), ExpandFileName(ADbPath)) then
+        Exit(ExcludeTrailingPathDelimiter(ExtractFilePath(ProjFile)));
+    end;
+  except
+    { No manifest, or an unreadable one, is not a lint failure. }
+    on E: Exception do Result:= '';
+  end;
+end;
+
+{ Collapse skipped files into the fewest honest lines. Grouping by directory
+  would print DelphiAST twice (Source, and Source\SimpleParser) instead of
+  naming the dependency once, so each file's group is the HIGHEST ancestor
+  directory that is not itself an ancestor of one of our own roots: walking up
+  from DelphiAST\Source\SimpleParser stops at C:\Projects\DelphiAST, because the
+  next step reaches C:\Projects, which contains our own root C:\Projects\YADF. }
+function GroupKeyFor(const AFilePath: string; const AOwn: TOwnRoots): string;
+var
+  Dir, Parent, R: string;
+  Blocked       : Boolean;
+begin
+  Result:= ExtractFileDir(ExpandFileName(AFilePath));
+  while True do
+  begin
+    Dir   := Result;
+    Parent:= ExtractFileDir(Dir);
+    if (Parent = '') or SameText(Parent, Dir) then Break;   { drive root }
+    Blocked:= False;
+    for R in AOwn.Roots do
+      if StartsText(IncludeTrailingPathDelimiter(Parent), R) then begin Blocked:= True; Break; end;
+    if Blocked then Break;
+    Result:= Parent;
+  end;
+end;
+
+{ Fix 1 (2026-08-11 review): the skip-block lines used to be built directly
+  inside the EmitStatusLine calls in DoLintAll, so only the console ever saw
+  them -- the report file (the archived artifact) stayed silent about scope,
+  exactly the "reports nothing is indistinguishable from a clean codebase"
+  failure the spec (4.5) warns about. Building the lines ONCE here lets
+  DoLintAll feed the identical text to both the console and the report, so
+  they cannot drift apart. Returns nil when nothing was skipped. }
+function BuildSkippedThirdPartyLines(const ASkipped: TArray<string>; const AOwn: TOwnRoots): TArray<string>;
+var
+  Groups: TDictionary<string, Integer>;
+begin
+  Result:= nil;
+  if Length(ASkipped) = 0 then Exit;
+  Result:= Result + [Format('lint-all: %d file(s) outside the project''s own roots skipped', [Length(ASkipped)])];
+  Groups:= TDictionary<string, Integer>.Create;
+  try
+    for var SkPath: string in ASkipped do
+    begin
+      var K: string:= GroupKeyFor(SkPath, AOwn);
+      var N: Integer:= 0;
+      Groups.TryGetValue(K, N);
+      Groups.AddOrSetValue(K, N + 1);
+    end;
+    var Keys: TArray<string>:= Groups.Keys.ToArray;
+    { TArray.Sort is not stable, and count-only comparison ties whenever two
+      groups share a count -- a report that reorders itself on unchanged
+      input wastes whoever is diffing it. Break ties on the group name so
+      the order is a pure function of the input, not of hash iteration. }
+    TArray.Sort<string>(Keys, TComparer<string>.Construct(
+      function(const L, R: string): Integer
+      begin
+        Result:= Groups[R] - Groups[L];
+        if Result = 0 then Result:= CompareText(L, R);
+      end));
+    for var Idx: Integer:= 0 to Min(9, High(Keys)) do
+      Result:= Result + [Format('          %6d  %s', [Groups[Keys[Idx]], Keys[Idx]])];
+    if Length(Keys) > 10 then
+      Result:= Result + [Format('          + %d more root(s)', [Length(Keys) - 10])];
+    if AOwn.Anchor <> '' then
+      Result:= Result + [Format('          declare in %s to include; --lint-third-party to lint everything',
+        [TPath.Combine(TPath.Combine(AOwn.Anchor, DRAG_HOME_DIR), 'drag-lint-project.json')])];
+  finally
+    Groups.Free;
+  end;
+end;
+
+{ PERF INSTRUMENTATION -- set DRAGLINT_PROFILE=1 for a per-phase breakdown of
+  lint-all on stderr. The indexer has had one since v0.85; the linter had none,
+  and the cost of that showed: ORM3-Micronite2027 burned 8,705 CPU-seconds in
+  the project-wide phase without finishing, and the only way to say WHICH rule
+  was spending it was to guess (docs\INBOX-lint-all-project-wide-phase-dominates-runtime.md).
+
+  Two deliberate choices:
+
+  * Each phase is announced when it OPENS and its cost printed when it CLOSES,
+    streaming to stderr rather than accumulating a table for the end. A run that
+    never terminates -- which is exactly the case being diagnosed -- prints
+    nothing at all under an end-of-run report, so the report has to arrive
+    before the stall does. `-> <name> ...` with no matching cost line is the
+    phase that hung.
+  * stderr, and only when the variable is set, so a normal run stays
+    byte-identical on stdout (the reports get diffed).
+
+  Cost when unarmed is one Boolean test per phase, roughly a dozen per run. }
+type
+  TLintPhaseProfiler = record
+  private
+    FActive: Boolean;
+    FOpen  : string ; { name of the phase in progress, '' when none }
+    FMark  : Int64  ; { tick stamp at which FOpen began }
+    FStart : Int64  ; { tick stamp of Init, for the TOTAL line }
+    procedure CloseOpenPhase;
+  public
+    /// <summary>Arms the profiler if DRAGLINT_PROFILE is set; otherwise every
+    /// method on this record is a no-op.</summary>
+    /// <param name="AHeader">Run identification printed above the breakdown.</param>
+    procedure Init(const AHeader: string);
+    /// <summary>Closes the phase in progress (printing its cost) and opens AName.</summary>
+    procedure Phase(const AName: string);
+    /// <summary>Closes the last phase and prints the TOTAL line. Safe to call twice.</summary>
+    procedure Done;
+  end;
+
+procedure TLintPhaseProfiler.Init(const AHeader: string);
+begin
+  FActive:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
+  FOpen  := '';
+  if not FActive then Exit;
+  FStart:= TStopwatch.GetTimeStamp;
+  FMark := FStart;
+  Writeln(ErrOutput, 'LINT PROFILE -- ' + AHeader);
+  Flush(ErrOutput);
+end; // procedure
+
+procedure TLintPhaseProfiler.CloseOpenPhase;
+var
+  Stamp: Int64;
+begin
+  if (not FActive) or (FOpen = '') then Exit;
+  Stamp:= TStopwatch.GetTimeStamp;
+  Writeln(ErrOutput, Format('  %-28s %10.2f s', [FOpen, (Stamp - FMark) / TStopwatch.Frequency]));
+  Flush(ErrOutput);
+  FMark:= Stamp;
+  FOpen:= '';
+end; // procedure
+
+procedure TLintPhaseProfiler.Phase(const AName: string);
+begin
+  if not FActive then Exit;
+  CloseOpenPhase;
+  FOpen:= AName;
+  Writeln(ErrOutput, '  -> ' + AName + ' ...');
+  Flush(ErrOutput);
+end; // procedure
+
+procedure TLintPhaseProfiler.Done;
+begin
+  if not FActive then Exit;
+  CloseOpenPhase;
+  Writeln(ErrOutput, Format('  %-28s %10.2f s', ['TOTAL', (TStopwatch.GetTimeStamp - FStart) / TStopwatch.Frequency]));
+  Flush(ErrOutput);
+  FActive:= False;
+end; // procedure
+
 // v0.61: drag-lint lint-all [--db <index.sqlite>] [--project <.dproj>]
 //   [--disable id,...] [--output <report.txt>] [--json]
 // Batch lint runner: runs ALL per-file AST rules over every indexed .pas file,
@@ -9290,6 +9575,7 @@ var
   { nil = unscoped (no --project), which is the default and must stay
     byte-identical to the old behaviour. }
   ScopeSet : TDictionary<string, Boolean>;
+  Prof     : TLintPhaseProfiler          ;
 begin
   { Resolve DBs: first existing = project index; second = library index }
   Dbs:= ResolveConsumerDbs(AArgs);
@@ -9304,6 +9590,8 @@ begin
   if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }
+  Prof.Init('lint-all ' + ExtractFileName(ProjectDb));
+  Prof.Phase('open+migrate store');
   Store:= TSQLiteSymbolStore.Create(ProjectDb);
   Store.Migrate;
   Findings:= nil;
@@ -9341,15 +9629,24 @@ begin
     "exclude_paths" is a SCOPE decision (vendored code is not this codebase's
     quality signal for any rule), so an excluded file must never reach the
     scanner, and the banner below must report the count actually scanned. }
+  Prof.Phase('enumerate+scope files');
   var Cfg: TLintConfig:= LoadLintConfig(AArgs);
+  { Ownership is a SCOPE decision, exactly like exclude_paths, so it belongs
+    here -- before the scan, so an out-of-scope file never reaches the scanner
+    and the banner counts what was actually scanned. }
+  var Own: TOwnRoots:= TOwnRoots.Load(LintAnchorDir(AArgs, ProjectDb));
+  if Own.Error <> '' then begin EmitStatusLine(AArgs, 'ERROR: ' + Own.Error); Exit(2); end;
   FilePaths:= nil;
   var ExcludedCount: Integer:= 0;
+  var SkippedThird : TArray<string>:= nil;
   for Fid in Store.GetAllFileIds do
   begin
     PasPath:= Store.GetFilePath(Fid);
     if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then
     begin
       if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
+      if (not AArgs.LintThirdParty) and (not Own.IsOurs(PasPath)) then
+        begin SkippedThird:= SkippedThird + [PasPath]; Continue; end;
       if (ScopeSet = nil) or ScopeSet.ContainsKey(ScopeKey(PasPath)) then FilePaths:= FilePaths + [PasPath];
     end;
   end;
@@ -9361,8 +9658,16 @@ begin
     no-op reindex made a stale-DB run look like a successful one. }
   if ExcludedCount > 0 then
     EmitStatusLine(AArgs, Format('lint-all: %d file(s) skipped by exclude_paths', [ExcludedCount]));
+  { A scope filter that reports nothing is indistinguishable from a clean
+    codebase. Name what was dropped, grouped, and say how to include it.
+    SkipLines is built once (BuildSkippedThirdPartyLines) and reused below by
+    the report-writing closure, so the console and the report file cannot
+    say different things -- see Fix 1, 2026-08-11 review. }
+  var SkipLines: TArray<string>:= BuildSkippedThirdPartyLines(SkippedThird, Own);
+  for var SkLine: string in SkipLines do EmitStatusLine(AArgs, SkLine);
 
   { Per-file rules: external .scm rules + all built-in AST checks }
+  Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
   LastPct:= -1;
   try
@@ -9401,7 +9706,7 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(PasPath);
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(PasPath) do Findings:= Findings + [F];
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(
-          PasPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', 120),
+          PasPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG),
           Cfg.ThresholdFor('deep-nesting', 5)) do Findings:= Findings + [F];
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath, Store, Store.FindFileIdByPath(PasPath)) do { v11 (M1): exact type resolution }
           Findings:= Findings + [F];
@@ -9420,8 +9725,8 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath);
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath, Cfg.ThresholdFor('too-many-exit-points', 5));
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', 15));
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', 25));
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD));
+        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD));
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath)); { v12 (M1): cross-unit }
         Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)); { M2: flow checks, store-exact managed types }
         { v0.68: naming-convention prefix rules (store-optional; enables exception-ancestry sub-check) }
@@ -9442,36 +9747,87 @@ begin
   end; // try
 
   { Project-wide rules }
+  Prof.Phase('project-rules');
   Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, '');
   { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
+  Prof.Phase('class-metrics');
   Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, '');
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
+  Prof.Phase('missing-doc');
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
   { ADF Task 8: doc-drift -- store-backed (needs the doc graph + Raises facts);
     ON by default. Its --fix subset is applied in FinalizeAndOutput (Store passed). }
   { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
+  Prof.Phase('doc-drift');
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso);
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
+  Prof.Phase('duplicate-code');
   Findings:= Findings + DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths, Cfg.ThresholdFor('duplicate-code', 90));
   { Interface reference cycles (needs all file paths) }
+  Prof.Phase('interface-cycles');
   Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);
   { Architecture layering (only if config present) }
+  Prof.Phase('layering');
   LayersCfg:= AArgs.LayersPath;
   if (LayersCfg = '') and FileExists('drag-lint-layers.json') then LayersCfg:= 'drag-lint-layers.json';
   if LayersCfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
+  Prof.Phase('unit-not-in-dpr');
   if AArgs.ProjectPath <> '' then Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
   { Used-unit resolvability (used-unit-not-resolvable) }
+  Prof.Phase('used-unit-resolvable');
   Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
+
+  { The per-file filter above only narrowed the SCAN. Every rule between the
+    scan and here reads the whole store -- god-class, clone detection, layering,
+    the doc rules, used-unit-not-resolvable -- so without this the third-party
+    findings walk straight back in through the project-wide pass. Exactly the
+    failure the --project ScopeSet filter below already documents.
+    A finding with no file path belongs to the run, not to a file: keep it.
+
+    Pre-sized, filled by index, trimmed once at the end: `Ours + [F]` on every
+    iteration is an O(n^2) allocate-and-copy of a string-bearing record, and
+    (unlike the --project ScopeSet block below, which only runs when --project
+    is given) this path runs on EVERY default lint-all -- measured on
+    ORM3-Micronite2027 as part of an 8,705 CPU-second stall in the
+    project-wide phase. Own.IsOurs also does an ExpandFileName + StringReplace
+    per call; findings cluster heavily by file, so a per-file memo turns that
+    into one real test per distinct FilePath rather than one per finding. }
+  Prof.Phase(Format('ownership filter (%d findings)', [Length(Findings)]));
+  if (not AArgs.LintThirdParty) and Own.Active then
+  begin
+    var OwnMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      var Ours: TArray<TLintFinding>;
+      SetLength(Ours, Length(Findings));
+      var OursCount: Integer:= 0;
+      for F in Findings do
+      begin
+        var Keep: Boolean;
+        if F.FilePath = '' then Keep:= True
+        else if not OwnMemo.TryGetValue(F.FilePath, Keep) then
+        begin
+          Keep:= Own.IsOurs(F.FilePath);
+          OwnMemo.Add(F.FilePath, Keep);
+        end;
+        if Keep then begin Ours[OursCount]:= F; Inc(OursCount); end;
+      end;
+      SetLength(Ours, OursCount);
+      Findings:= Ours;
+    finally
+      OwnMemo.Free;
+    end;
+  end;
 
   { Scope the PROJECT-WIDE rules too. Filtering FilePaths above only narrowed the
     per-file pass; every rule between here and there reads the whole store (god-
     class, clone detection, layering, doc rules, used-unit-not-resolvable), so
     without this the non-member noise walks straight back in through them.
     A finding carrying no file path is kept -- it belongs to the run, not a file. }
+  Prof.Phase('--project scope filter');
   if ScopeSet <> nil then
   begin
     var InScope: TArray<TLintFinding>:= nil;
@@ -9509,6 +9865,7 @@ begin
     and would otherwise fire on every bare lint-all (the measured 1302-finding wave).
     List it here so ShouldKeep drops it by default; config "enabled":["missing-doc"]
     still overrides (opt-in). doc-drift stays ON -- do NOT list it. }
+  Prof.Phase('finalize+output');
   Result:= FinalizeAndOutput(
     AArgs, Findings, [
       'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter',
@@ -9550,6 +9907,14 @@ begin
       try
         for FF in ASurv do OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
         OL.AppendLine(Summary);
+        { Fix 1 (2026-08-11 review): the skip-block ("N file(s) outside the
+          project's own roots skipped" + per-root breakdown) used to reach only
+          the console. The report is the archived artifact -- it gets diffed
+          and read later, so per spec 4.5 "the report file gets the same
+          block". Placed right under Summary so a reader sees it without
+          scrolling past the finding list. SkipLines is nil when nothing was
+          skipped, so AppendLine emits nothing extra in the common case. }
+        for var SkLine2: string in SkipLines do OL.AppendLine(SkLine2);
         { The report is the answer to "did it actually cover my project?", so it
           names the files it scanned rather than only counting them. }
         OL.AppendLine('');
@@ -9572,6 +9937,7 @@ begin
     end,
     Store { ADF Task 8: enables the store-backed doc-drift --fix path }
   );
+  Prof.Done;
 end; // function
 
 // v0.48: drag-lint lint-project --db <index.sqlite> [--rule <id>] [--json]
@@ -10121,7 +10487,7 @@ function GhostDir(const ADproj: string): string;
 var
   Attrs: Cardinal;
 begin
-  Result:= TPath.Combine(ExtractFilePath(ADproj), '_D-RAG');
+  Result:= TPath.Combine(ExtractFilePath(ADproj), DRAG_HOME_DIR);
   try
     if not TDirectory.Exists(Result) then TDirectory.CreateDirectory(Result);
     Attrs:= GetFileAttributes(PChar(Result));
@@ -10468,7 +10834,7 @@ begin
   if Root = '' then Root:= AArgs.Path;
   if Root = '' then Root:= GetCurrentDir;
   if SameText(ExtractFileExt(Root), '.dproj') then Root:= ExtractFilePath(Root);
-  DragDir:= TPath.Combine(Root, '_D-RAG');
+  DragDir:= TPath.Combine(Root, DRAG_HOME_DIR);
   Recovered:= 0;
   if not TDirectory.Exists(DragDir) then begin Writeln('ghost-recover: nothing pending.'); Exit (0 ); end;
   try
@@ -15624,6 +15990,223 @@ begin
   Result:= 0;
 end; // function
 
+// selftest section-db: asserts ExpandSectionDb derives <projdir>\_D-RAG\<project
+// base>.sqlite for a project section with no "db", that TWO projects in ONE folder
+// get distinct files (YADF hosts three), that an explicit "db" still wins, and that
+// a folder-scan section keeps <OutDir>\<Name>.sqlite.
+// Prints SECTIONDB-OK on success or SECTIONDB-FAIL: <detail>.
+function DoSelfTestSectionDb: Integer;
+var
+  M  : TIndexManifest;
+  S  : TIndexSection ;
+  Got: string        ;
+begin
+  M        := Default(TIndexManifest);
+  M.RootDir:= 'C:\cfg';
+  M.OutDir := 'C:\out';
+
+  S        := Default(TIndexSection);
+  S.Name   := 'YADF';
+  S.Include:= ['C:\Projects\YADF\YADF.dproj'];
+  Got      := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\Projects\YADF\_D-RAG\YADF.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: derived ', Got); Exit(1); end;
+
+  S.Name   := 'YADFOT';
+  S.Include:= ['C:\Projects\YADF\YADFOT.dproj'];
+  Got      := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\Projects\YADF\_D-RAG\YADFOT.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: same-folder second project got ', Got); Exit(1); end;
+
+  S.Db:= 'C:\elsewhere\pinned.sqlite';
+  Got := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\elsewhere\pinned.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: explicit db did not win, got ', Got); Exit(1); end;
+
+  S        := Default(TIndexSection);
+  S.Name   := 'Library';
+  S.Include:= ['C:\Projects\SomeFolder'];
+  Got      := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\out\Library.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: folder section got ', Got); Exit(1); end;
+
+  { A .dpr and a .dpk anchor a project just as a .dproj does -- DragLint-Tests
+    and the Graph packages are configured that way. }
+  S        := Default(TIndexSection);
+  S.Name   := 'Tests';
+  S.Include:= ['C:\Projects\X\tests\Edge.dpr'];
+  Got      := ExpandSectionDb(M, S);
+  if not SameText(Got, 'C:\Projects\X\tests\_D-RAG\Edge.sqlite') then
+    begin Writeln('SECTIONDB-FAIL: .dpr anchor got ', Got); Exit(1); end;
+
+  Writeln('SECTIONDB-OK');
+  Result:= 0;
+end; // function
+
+// selftest manifest-save-atomic (review round 2, migrate-dbs finding): a
+// plain TFile.WriteAllText truncates the target BEFORE writing new content,
+// so a save interrupted mid-write (crash/kill/power loss) used to be able to
+// leave drag-lint.json empty or truncated -- and migrate-dbs now calls Save
+// up to once per section, up to 27 times in one unattended run, against the
+// user's real manifest. TManifestIO.Save now writes a sibling temp file and
+// swaps it into place with one atomic filesystem operation. Deterministically
+// (no timing/racing needed) forces the swap to fail by making the target
+// read-only, then asserts the ORIGINAL content survives completely intact --
+// proving a failed save can only fail outright, never corrupt the target.
+// Prints SAVEATOMIC-OK on success or SAVEATOMIC-FAIL: <detail>.
+function DoSelfTestManifestSaveAtomic: Integer;
+var
+  M     : TIndexManifest;
+  Path  : string        ;
+  Before: string        ;
+  After : string        ;
+  Raised: Boolean       ;
+begin
+  Result:= 1;
+  Path:= TPath.Combine(TPath.GetTempPath, 'draglint-selftest-save-atomic-' + TPath.GetGUIDFileName(False) + '.json');
+
+  M         := Default(TIndexManifest);
+  M.Settings:= TIndexSettings.Defaults;
+  M.Docs    := TDocSettings.Defaults;
+  SetLength(M.Sections, 1);
+  M.Sections[0]          := Default(TIndexSection);
+  M.Sections[0].Name     := 'Sentinel';
+  M.Sections[0].UseIgnoreFiles:= True;
+  M.Sections[0].SqlOnlyMS     := True;
+  TManifestIO.Save(M, Path);
+  Before:= TFile.ReadAllText(Path);
+  if Pos('Sentinel', Before) = 0 then
+    begin Writeln('SAVEATOMIC-FAIL: initial save did not persist'); Exit; end;
+
+  { Force the atomic swap to fail -- deterministically, no timing required:
+    Windows refuses to replace/rename onto a read-only destination. }
+  TFile.SetAttributes(Path, [TFileAttribute.faReadOnly]);
+  try
+    M.Sections[0].Name:= 'ChangedButShouldNotLand';
+    Raised:= False;
+    try
+      TManifestIO.Save(M, Path);
+    except
+      Raised:= True;   { expected: the swap must fail, loudly }
+    end;
+    if not Raised then
+      begin Writeln('SAVEATOMIC-FAIL: Save did not raise against a read-only target'); Exit; end;
+  finally
+    TFile.SetAttributes(Path, []);
+  end;
+
+  if TFile.Exists(Path + '.tmp') then
+    begin Writeln('SAVEATOMIC-FAIL: leftover .tmp file after a failed save'); Exit; end;
+
+  After:= TFile.ReadAllText(Path);
+  if After <> Before then
+    begin Writeln('SAVEATOMIC-FAIL: original content was altered by a failed save'); Exit; end;
+  if Pos('ChangedButShouldNotLand', After) > 0 then
+    begin Writeln('SAVEATOMIC-FAIL: the failed save''s new content leaked into the target'); Exit; end;
+
+  TFile.Delete(Path);
+  Writeln('SAVEATOMIC-OK');
+  Result:= 0;
+end; // function
+
+// selftest own-roots --dir <fixtures\own-roots>: asserts a declared root list is
+// read (including a RELATIVE entry), that a file under a declared root is ours,
+// that a sibling folder outside them is not, that an UNDECLARED project defaults
+// to its own folder, and that a DB inside a _D-RAG resolves back to its project.
+// Also covers (review round 1): a sibling folder whose NAME EXTENDS a declared
+// root's name is not a prefix match; an explicit "ownRoots": [] is an Error, not
+// a default; and malformed (unparseable) JSON defaults exactly like a missing
+// file, never an Error.
+// Prints OWNROOTS-OK or OWNROOTS-FAIL: <detail>.
+function DoSelfTestOwnRoots(const AArgs: TArgs): Integer;
+var
+  Fx  : string   ;
+  Own : TOwnRoots;
+begin
+  { --dir lands in TArgs.Path, not a field called Dir (see the parser at :980) --
+    the same field `selftest ignore --dir` reads. }
+  Fx:= AArgs.Path;
+  if Fx = '' then begin Writeln('OWNROOTS-FAIL: pass --dir <fixtures\own-roots>'); Exit(1); end;
+  { Normalized ONCE, here, to an absolute path: AnchorDirForDb always calls
+    ExpandFileName internally (so its answer is always absolute), so comparing
+    it against an un-normalized Fx-relative expected value below would fail
+    for a relative --dir even though behaviour is correct -- reported in
+    review round 1. Every other assertion in this function is unaffected
+    either way, because TOwnRoots.Load/IsOurs already normalize internally. }
+  Fx:= TPath.GetFullPath(Fx);
+
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'proj'));
+  if not Own.Declared then begin Writeln('OWNROOTS-FAIL: declaration not read'); Exit(1); end;
+  if Own.Error <> '' then begin Writeln('OWNROOTS-FAIL: ', Own.Error); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'proj\App.pas')) then
+    begin Writeln('OWNROOTS-FAIL: own file not ours'); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'shared\Shared.pas')) then
+    begin Writeln('OWNROOTS-FAIL: relative root "..\shared" not honoured'); Exit(1); end;
+  if Own.IsOurs(TPath.Combine(Fx, 'vendor\Vendor.pas')) then
+    begin Writeln('OWNROOTS-FAIL: vendor file counted as ours'); Exit(1); end;
+  { Sibling-name prefix collision (review round 1): "proj" must not own
+    "projExtra\..." merely because "projExtra" starts with the string "proj". }
+  if Own.IsOurs(TPath.Combine(Fx, 'projExtra\Extra.pas')) then
+    begin Writeln('OWNROOTS-FAIL: sibling name prefix "projExtra" wrongly counted as ours'); Exit(1); end;
+
+  { An undeclared project owns exactly its own folder. }
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'vendor'));
+  if Own.Declared then begin Writeln('OWNROOTS-FAIL: vendor has no declaration'); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'vendor\Vendor.pas')) then
+    begin Writeln('OWNROOTS-FAIL: default root must be the project folder'); Exit(1); end;
+  if Own.IsOurs(TPath.Combine(Fx, 'proj\App.pas')) then
+    begin Writeln('OWNROOTS-FAIL: default root leaked to a sibling'); Exit(1); end;
+
+  { No anchor at all: filtering must be OFF, not empty. }
+  Own:= TOwnRoots.Load('');
+  if not Own.IsOurs(TPath.Combine(Fx, 'vendor\Vendor.pas')) then
+    begin Writeln('OWNROOTS-FAIL: an anchorless run must not filter'); Exit(1); end;
+
+  { An explicit "ownRoots": [] is a declared-but-unusable Error -- scoping to
+    nothing would silently report a clean project (review round 1). }
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'empty-decl'));
+  if Own.Error = '' then
+    begin Writeln('OWNROOTS-FAIL: empty "ownRoots" must set Error'); Exit(1); end;
+
+  { Malformed (unparseable) JSON is NOT an Error -- it defaults exactly like a
+    missing declaration (review round 1). NOTE: ParseJSONValue's default
+    RaiseExc=False overload returns nil (no exception) on unparseable text,
+    and `nil as TJSONObject` also evaluates to nil without raising -- so this
+    path was never the one Finding 1's leak fix touched; see non-object-decl
+    below for that. }
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'malformed-decl'));
+  if Own.Declared then
+    begin Writeln('OWNROOTS-FAIL: malformed JSON must not count as declared'); Exit(1); end;
+  if Own.Error <> '' then
+    begin Writeln('OWNROOTS-FAIL: malformed JSON must default, not error'); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'malformed-decl\Whatever.pas')) then
+    begin Writeln('OWNROOTS-FAIL: malformed JSON must still default to the anchor folder'); Exit(1); end;
+
+  { Syntactically VALID JSON whose root is not an object ("ownRoots" is
+    unreachable, but there is no parse failure either). This is the actual
+    path Finding 1's leak fix touches: ParseJSONValue returns a live
+    TJSONValue here, and the old `... as TJSONObject` cast raised
+    EInvalidCast on it BEFORE completing the assignment, leaking the parsed
+    value on every reload (review round 2 -- malformed-decl above does not
+    exercise this). Same contract as malformed JSON: default, never error. }
+  Own:= TOwnRoots.Load(TPath.Combine(Fx, 'non-object-decl'));
+  if Own.Declared then
+    begin Writeln('OWNROOTS-FAIL: non-object JSON root must not count as declared'); Exit(1); end;
+  if Own.Error <> '' then
+    begin Writeln('OWNROOTS-FAIL: non-object JSON root must default, not error'); Exit(1); end;
+  if not Own.IsOurs(TPath.Combine(Fx, 'non-object-decl\Whatever.pas')) then
+    begin Writeln('OWNROOTS-FAIL: non-object JSON root must still default to the anchor folder'); Exit(1); end;
+
+  if not SameText(AnchorDirForDb(TPath.Combine(Fx, 'proj\_D-RAG\App.sqlite')),
+                  ExcludeTrailingPathDelimiter(TPath.Combine(Fx, 'proj'))) then
+    begin Writeln('OWNROOTS-FAIL: AnchorDirForDb did not resolve the _D-RAG parent'); Exit(1); end;
+  if AnchorDirForDb(TPath.Combine(Fx, 'proj\App.sqlite')) <> '' then
+    begin Writeln('OWNROOTS-FAIL: a DB outside a _D-RAG has no anchor'); Exit(1); end;
+
+  Writeln('OWNROOTS-OK');
+  Result:= 0;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -15637,10 +16220,13 @@ begin
   else if AArgs.SubCommand = 'recreate'      then Result:= DoSelfTestRecreate
   else if AArgs.SubCommand = 'unused-locals' then Result:= DoSelfTestUnusedLocals
   else if AArgs.SubCommand = 'harvest'       then Result:= DoSelfTestHarvest    (AArgs)
+  else if AArgs.SubCommand = 'section-db'    then Result:= DoSelfTestSectionDb
+  else if AArgs.SubCommand = 'manifest-save-atomic' then Result:= DoSelfTestManifestSaveAtomic
+  else if AArgs.SubCommand = 'own-roots'     then Result:= DoSelfTestOwnRoots     (AArgs)
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots');
     Result:= 2;
   end;
 end; // function
@@ -16045,6 +16631,378 @@ begin
   else Result:= 0;
 end; // function
 
+{ Exclusive-open probe. A DB that another process holds -- RAD Studio's LSP is
+  the usual one, but a stray index job or an LSP started from a copied exe does
+  it too -- must abort the migration BEFORE the first move, not half way through.
+  Testing the file beats testing for a process name: it is the lock that would
+  actually break the move. }
+function DbIsLocked(const APath: string): Boolean;
+var
+  FS: TFileStream;
+begin
+  Result:= False;
+  if not TFile.Exists(APath) then Exit;
+  try
+    FS:= TFileStream.Create(APath, fmOpenReadWrite or fmShareExclusive);
+    FS.Free;
+  except
+    on E: EFOpenError do Result:= True;
+  end;
+end;
+
+{ Move a database and the two WAL sidecars that belong to it. All 27 configured
+  indexes have both today. Checkpointing first collapses the WAL into the main
+  file, so a sidecar that fails to move costs nothing. }
+procedure MoveDbSet(const ASrc, ADst: string);
+var
+  Suffix: string;
+begin
+  TFile.Move(ASrc, ADst);
+  for Suffix in ['-wal', '-shm'] do
+    if TFile.Exists(ASrc + Suffix) then
+    begin
+      if TFile.Exists(ADst + Suffix) then TFile.Delete(ADst + Suffix);
+      TFile.Move(ASrc + Suffix, ADst + Suffix);
+    end;
+end;
+
+{ Opens APath and confirms it is a USABLE drag-lint index, not merely present.
+  Guards the reconciliation branch (review finding 1b): TFile.Exists alone
+  would also accept a database that failed the row-count check on an earlier
+  run -- the move itself succeeds independently of whether the moved file is
+  intact, so "Src missing, Dst present" is also exactly what a section that
+  already failed verification looks like. Reconciling that blindly would
+  launder a database this tool itself already flagged as broken. }
+function DbLooksHealthy(const APath: string): Boolean;
+var
+  Conn : TFDConnection;
+  Check: string       ;
+  Rows : Int64        ;
+begin
+  Result:= False;
+  if not TFile.Exists(APath) then Exit;
+  Conn:= TFDConnection.Create(nil);
+  try
+    try
+      Conn.DriverName:= 'SQLite';
+      Conn.Params.Values['Database']:= APath;
+      Conn.LoginPrompt:= False;
+      Conn.Open;
+      Check:= Conn.ExecSQLScalar('PRAGMA quick_check');
+      Rows := Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
+      Result:= SameText(Check, 'ok') and (Rows > 0);
+    except
+      Result:= False;   { not a database, or too corrupt to answer either query }
+    end;
+  finally
+    Conn.Close; Conn.Free;
+  end;
+end;
+
+{ Fix 2 (2026-08-11 final review): there are TWO copies of drag-lint.json that
+  must stay byte-identical -- third_party\dll-win32\drag-lint.json (the 32-bit
+  IDE design-time BPL resolves the manifest beside ITSELF, i.e. this copy --
+  DragLint.Plugin.DbResolver.pas:89-92) and dll-win64\drag-lint.json (every
+  engine process the plugin spawns is the win64 CLI, which reads its OWN
+  sibling copy -- DRagLint.Index.Manifest.pas:546). See
+  tests\autotest\run_manifest_parity.ps1's header for the full mechanism.
+  DoMigrateDbs resolves and rewrites exactly ONE of the pair (CfgPath); this
+  bit the user for real (a live migration desynced them, repaired by hand),
+  and nothing stopped the next --apply from doing it again.
+  Returns '' when ACfgPath does not sit directly inside a folder literally
+  named "dll-win32" or "dll-win64" -- e.g. a test's --config path, or a
+  workspace-local manifest -- where there is no platform sibling to keep in
+  sync. }
+function PairedManifestPath(const ACfgPath: string): string;
+var
+  Dir, ParentDir, LeafDir, Sibling: string;
+begin
+  Result := '';
+  Dir    := ExcludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(ACfgPath)));
+  LeafDir:= ExtractFileName(Dir);
+  if SameText(LeafDir, 'dll-win64') then Sibling:= 'dll-win32'
+  else if SameText(LeafDir, 'dll-win32') then Sibling:= 'dll-win64'
+  else Exit;
+  ParentDir:= ExtractFileDir(Dir);
+  Result:= TPath.Combine(TPath.Combine(ParentDir, Sibling), ExtractFileName(ACfgPath));
+end;
+
+/// <summary>Mirrors ACfgPath over its platform-paired manifest (see
+/// PairedManifestPath) whenever the sibling exists and now differs from what
+/// was just saved.</summary>
+/// <param name="ACfgPath">The manifest DoMigrateDbs just wrote.</param>
+/// <remarks>Chosen over a loud warning: CfgPath is, by construction, the copy
+/// this run deliberately just wrote, so there is no ambiguity about which
+/// side is "intended" -- mirroring it is exactly the fix
+/// run_manifest_parity.ps1's own failure text recommends ("copy the intended
+/// file over the other so both are identical"). No-ops (silently) when there
+/// is no sibling to pair with, or the sibling already matches
+/// byte-for-byte.</remarks>
+procedure MirrorPairedManifest(const ACfgPath: string);
+var
+  Mine, Theirs: TBytes;
+  SiblingPath : string;
+  Same        : Boolean;
+begin
+  SiblingPath:= PairedManifestPath(ACfgPath);
+  if (SiblingPath = '') or (not TFile.Exists(SiblingPath)) then Exit;
+  Mine  := TFile.ReadAllBytes(ACfgPath);
+  Theirs:= TFile.ReadAllBytes(SiblingPath);
+  Same:= (Length(Mine) = Length(Theirs)) and
+    ((Length(Mine) = 0) or CompareMem(@Mine[0], @Theirs[0], Length(Mine)));
+  if Same then Exit;
+  TFile.Copy(ACfgPath, SiblingPath, True);
+  Writeln(Format('  manifest parity: mirrored to %s (the IDE win32 BPL and the win64 CLI must read the same scope)', [SiblingPath]));
+end;
+
+{ Nearest ancestor holding a .hg directory, or '' -- used only to tell the user
+  which .hgignore to edit. }
+function FindHgRoot(const AStartDir: string): string;
+var
+  Dir, Parent: string;
+begin
+  Result:= '';
+  Dir   := ExcludeTrailingPathDelimiter(ExpandFileName(AStartDir));
+  while Dir <> '' do
+  begin
+    if TDirectory.Exists(TPath.Combine(Dir, '.hg')) then Exit(Dir);
+    Parent:= ExtractFileDir(Dir);
+    if SameText(Parent, Dir) then Break;
+    Dir:= Parent;
+  end;
+end;
+
+/// <summary>Moves every project section's index into that project's _D-RAG home
+/// and drops the now-derivable "db" from the manifest.</summary>
+/// <param name="AArgs">Parsed args; ConfigPath and the --apply switch are read.</param>
+/// <returns>0 = success or nothing to do, 1 = a move failed, 2 = a DB is locked
+/// or the manifest could not be read.</returns>
+/// <remarks>Dry-run by default: prints every planned move and touches nothing,
+/// so the exclusive-open lock probe is skipped entirely for a dry run -- it
+/// must always be safe to run even while RAD Studio holds every index open.
+/// The manifest entry for a section is corrected and SAVED the INSTANT
+/// MoveDbSet physically relocates its database -- before the row-count
+/// verification, before the .gitignore write, before anything else that
+/// could still fail. That is the instant the on-disk manifest becomes wrong,
+/// so it is the instant it must be fixed; a later verification failure does
+/// NOT move the file back, so it must not revert this either, only report
+/// loudly. A stale entry that names a source which no longer exists, but
+/// whose derived destination already holds a database, self-heals on the
+/// next --apply -- but only after passing the SAME health check verification
+/// uses (PRAGMA quick_check + a non-zero files count), so a database that
+/// already failed verification once can never be laundered back to "healthy"
+/// by a retry. No reindex is needed -- no table stores the database's own
+/// path.</remarks>
+function DoMigrateDbs(const AArgs: TArgs): Integer;
+var
+  Manifest   : TIndexManifest;
+  CfgPath    : string        ;
+  I          : Integer       ;
+  Src, Dst   : string        ;
+  ProjFile   : string        ;
+  Moved      : Integer       ;
+  Reconciled : Integer       ;
+  Planned    : Integer       ;
+  Conn       : TFDConnection ;
+  RowsBefore, RowsAfter: Int64;
+  HgRoots    : TStringList   ;
+begin
+  Result    := 0;
+  Moved     := 0;
+  Reconciled:= 0;
+  Planned   := 0;
+  { Deliberately NOT TManifestIO.Load: that MERGES a global and a local manifest
+    and does not report which file it read, so saving the merged result back
+    would inline one manifest into the other. Resolve exactly one file and
+    rewrite exactly that file. --config wins; else the drag-lint.json beside the
+    exe, which is where the real one lives (third_party\dll-win64). }
+  CfgPath:= AArgs.WorkspaceConfig;
+  if CfgPath = '' then CfgPath:= TPath.Combine(ExtractFilePath(ParamStr(0)), 'drag-lint.json');
+  if not TFile.Exists(CfgPath) then
+  begin
+    Writeln('ERROR: manifest not found: ', CfgPath);
+    Writeln('       Pass --config <drag-lint.json> naming the file to rewrite.');
+    Exit(2);
+  end;
+  Manifest:= TManifestIO.ParseText(TFile.ReadAllText(CfgPath), ExtractFilePath(TPath.GetFullPath(CfgPath)));
+
+  { Probe EVERY lock before moving ANY file -- but only when actually
+    APPLYING. A plain dry run only prints the plan and touches nothing, so it
+    must always be safe to run, even while RAD Studio holds every index open
+    (review finding 4: the probe used to run unconditionally, so a harmless
+    dry run would abort with exit 2 for no reason). A half-done APPLY is
+    still the one outcome worth engineering against. }
+  if AArgs.Apply then
+    for I:= 0 to High(Manifest.Sections) do
+    begin
+      if SectionProjectFile(Manifest, Manifest.Sections[I]) = '' then Continue;
+      Src:= ExpandSectionDb(Manifest, Manifest.Sections[I]);
+      if DbIsLocked(Src) then
+      begin
+        Writeln('ERROR: in use, cannot migrate: ', Src);
+        Writeln('       Close RAD Studio (its LSP holds project indexes open) and retry.');
+        Exit(2);
+      end;
+    end;
+
+  HgRoots:= TStringList.Create;
+  HgRoots.Sorted:= True; HgRoots.Duplicates:= dupIgnore;
+  try
+    for I:= 0 to High(Manifest.Sections) do
+    begin
+      ProjFile:= SectionProjectFile(Manifest, Manifest.Sections[I]);
+      if ProjFile = '' then Continue;                    { folder scan: stays put }
+      Src:= ExpandSectionDb(Manifest, Manifest.Sections[I]);
+      Dst:= TPath.Combine(TPath.Combine(ExtractFilePath(ProjFile), DRAG_HOME_DIR),
+                          TPath.GetFileNameWithoutExtension(ProjFile) + '.sqlite');
+      if SameText(Src, Dst) then Continue;               { already home }
+      Inc(Planned);
+      Writeln(Format('%s  %s -> %s', [Manifest.Sections[I].Name, Src, Dst]));
+      if not AArgs.Apply then Continue;
+      if not TFile.Exists(Src) then
+      begin
+        { Review finding 2: a stale manifest entry (a hand-edited config, or a
+          retry after a batch that failed partway through, before this
+          function persisted after every move) must not be reported as
+          "never built" when the database plainly already exists at its
+          derived home -- reconcile the entry instead. Only reconcile when
+          the destination is real AND HEALTHY (review finding 1b): the move
+          itself can succeed independently of whether the moved database is
+          intact, so "Src missing, Dst present" is also exactly what a
+          section that already failed the row-count check looks like on a
+          retry -- TFile.Exists alone would launder it back to "healthy"
+          with no verification at all. A source and destination BOTH missing
+          is still a project that was never indexed. }
+        if TFile.Exists(Dst) and DbLooksHealthy(Dst) then
+        begin
+          Manifest.Sections[I].Db:= '';   { now derivable }
+          TManifestIO.Save(Manifest, CfgPath);
+          MirrorPairedManifest(CfgPath);   { Fix 2: keep the win32/win64 pair in sync }
+          Inc(Reconciled);
+          Writeln('  RECONCILED: already at ', Dst, ' -- manifest entry updated');
+        end
+        else if TFile.Exists(Dst) then
+        begin
+          Writeln('  ERROR: found ', Dst, ' but it failed an integrity check -- ' +
+            'NOT reconciling. Rebuild it (index --rebuild) before retrying.');
+          Exit(1);
+        end
+        else
+          Writeln('  SKIP: source does not exist (never built)');
+        Continue;
+      end;
+
+      try
+        { Checkpoint so the moved file is self-contained, and count rows so the
+          move can be verified rather than assumed -- but the count is only
+          CONSULTED after the manifest is already fixed (below); it can no
+          longer gate whether the manifest gets fixed at all. }
+        Conn:= TFDConnection.Create(nil);
+        try
+          Conn.DriverName:= 'SQLite';
+          Conn.Params.Values['Database']:= Src;
+          Conn.LoginPrompt:= False;
+          Conn.Open;
+          Conn.ExecSQL('PRAGMA wal_checkpoint(TRUNCATE)');
+          RowsBefore:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
+        finally
+          Conn.Close; Conn.Free;
+        end;
+
+        TDirectory.CreateDirectory(ExtractFileDir(Dst));
+        MoveDbSet(Src, Dst);
+
+        { Review finding 1 (critical, round 2): the database IS at Dst the
+          instant MoveDbSet returns -- whatever happens in the rest of this
+          try block, that fact does not change. The on-disk manifest becomes
+          WRONG at that same instant (it still names Src), so it must be
+          corrected in that same instant: HERE, before the row-count
+          verification below, before the .gitignore write, before anything
+          else that could throw and Exit(1) with the entry still naming a
+          path that no longer exists. A verification failure a few lines
+          down does NOT move the file back, so it must not revert this. }
+        Manifest.Sections[I].Db:= '';   { now derivable }
+        TManifestIO.Save(Manifest, CfgPath);
+        MirrorPairedManifest(CfgPath);   { Fix 2: keep the win32/win64 pair in sync }
+        Inc(Moved);
+
+        { Verify AFTER persisting the move, not instead of it: a mismatch
+          here is a loud integrity failure on a database that is ALREADY
+          migrated, not proof that the move can be undone. The manifest
+          keeps naming Dst either way -- see DbLooksHealthy above, which is
+          what stops a retry from treating this failure as fine. }
+        Conn:= TFDConnection.Create(nil);
+        try
+          Conn.DriverName:= 'SQLite';
+          Conn.Params.Values['Database']:= Dst;
+          Conn.LoginPrompt:= False;
+          Conn.Open;
+          RowsAfter:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
+        finally
+          Conn.Close; Conn.Free;
+        end;
+        if RowsAfter <> RowsBefore then
+        begin
+          Writeln(Format('  ERROR: %d files before, %d after -- the database ' +
+            'IS at %s but FAILED VERIFICATION -- STOPPING. The manifest entry ' +
+            'already points here (correctly, since the file really is there); ' +
+            'investigate before trusting it.', [RowsBefore, RowsAfter, Dst]));
+          Exit(1);
+        end;
+
+        { Self-ignoring for git. Mercurial cannot self-ignore, so collect the
+          repo roots and print instructions at the end instead of editing a
+          repository's ignore file behind its owner's back. }
+        TFile.WriteAllText(TPath.Combine(ExtractFileDir(Dst), '.gitignore'), '*'#13#10);
+        var HgRoot: string:= FindHgRoot(ExtractFilePath(ProjFile));
+        if HgRoot <> '' then HgRoots.Add(HgRoot);
+
+        Writeln(Format('  OK (%d files)', [RowsAfter]));
+      except
+        on E: Exception do
+        begin
+          { Fix 3 (2026-08-11 review): MoveDbSet (above) relocates the main
+            .sqlite FIRST via TFile.Move, then the -wal/-shm sidecars
+            separately -- so a sidecar move that raises (locked file, etc.)
+            leaves the .sqlite already sitting at Dst while this handler's
+            plain "ERROR: <class>: <message>" reads as "the move failed".
+            Say where the database actually is when that is the case, so the
+            operator does not start hunting for it at Src. }
+          if TFile.Exists(Dst) then
+            Writeln(Format('  ERROR: %s: %s -- the database has ALREADY MOVED to %s; do not re-copy or undo, investigate this failure in place',
+              [E.ClassName, E.Message, Dst]))
+          else
+            Writeln('  ERROR: ', E.ClassName, ': ', E.Message);
+          Exit(1);
+        end;
+      end;
+    end;
+
+    if AArgs.Apply and (Moved + Reconciled > 0) then
+    begin
+      { Already saved per-move (finding 1) or per-reconciliation (finding 2)
+        above -- this is a summary line, not the save. Moved and Reconciled
+        are reported separately (review: minor) -- a reconciliation is a
+        manifest-only fix for a database that was already sitting at its
+        home, not a new physical move, and folding the two counts together
+        would misreport how many databases actually moved this run. }
+      Writeln(Format('migrate-dbs: %d database(s) moved, %d reconciled; manifest updated (%s)',
+        [Moved, Reconciled, CfgPath]));
+      if HgRoots.Count > 0 then
+      begin
+        Writeln('');
+        Writeln('Mercurial cannot self-ignore. Add this line to each .hgignore:');
+        Writeln('    ' + DRAG_HOME_DIR);
+        for var R: string in HgRoots do Writeln('  ' + TPath.Combine(R, '.hgignore'));
+      end;
+    end
+    else if not AArgs.Apply then
+      Writeln(Format('migrate-dbs: %d database(s) would move. Re-run with --apply.', [Planned]));
+  finally
+    HgRoots.Free;
+  end;
+end; // function
+
 // Hidden self-test verb for Auto-Document Phase 2 Task 1 (symbol_facts
 // storage plumbing). Assumes --db already has fixtures\docp2store\p2store.pas
 // indexed (tests/autodoc/run_doc_p2_store.ps1's job) so ComputeTotal has a
@@ -16209,6 +17167,7 @@ begin
     else if Args.Command = 'doc-facts-selftest' then Result:= DoDocFactsSelfTest(Args)
     else if Args.Command = 'reconcile-project' then Result:= DoReconcileProject(Args)
     else if Args.Command = 'library-drift'     then Result:= DoLibraryDrift    (Args)
+    else if Args.Command = 'migrate-dbs'       then Result:= DoMigrateDbs      (Args)
     else if Args.Command = 'resolve-dbs' then
       // v0.45 Task 10: print the consumer DB list (same as query/lsp/serve use).
       Result:= DoResolveDbsList(Args)

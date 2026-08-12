@@ -9,6 +9,7 @@ uses
   , System.IOUtils
   , System.Hash
   , System.DateUtils
+  , System.Diagnostics          { v0.85: per-phase indexing profiler (DRAGLINT_PROFILE) }
   , System  .Generics.Collections
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
@@ -32,6 +33,9 @@ type
       FStore          : ISymbolStore                       ;
       FParsers        : TList<IParser>                     ;
       FSkippedUpToDate: Integer                            ;
+      { Files this indexer got PAST the up-to-date skip for, i.e. every file it
+        may have written rows for. Backs IIndexer.ParsedFiles -- see there. }
+      FParsedFiles    : Integer                            ;
       { The walk's in-scope set: every file a parser claimed, whether or not it
         was then parsed. Backs IIndexer.VisitedFiles -- see there for why the
         list is what it is. FVisitedKeys is the lowercase de-dup guard; the same
@@ -309,6 +313,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SkippedUpToDate: Integer;
+      /// <summary>How many files this indexer got past the incremental
+      /// up-to-date skip for -- see IIndexer.ParsedFiles.</summary>
+      function ParsedFiles: Integer;
       /// <returns><!-- drag-lint:auto -->Observed: FVisited.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -431,6 +438,11 @@ end;
 function TIndexer.SkippedUpToDate: Integer;
 begin
   Result:= FSkippedUpToDate;
+end;
+
+function TIndexer.ParsedFiles: Integer;
+begin
+  Result:= FParsedFiles;
 end;
 
 function TIndexer.VisitedFiles: TArray<string>;
@@ -608,6 +620,76 @@ begin
   if (BestIdx >= 0) and AIdxToId.TryGetValue(BestIdx, DbId) then Result:= DbId;
 end; // function
 
+{ v0.85 PERF INSTRUMENTATION -- set DRAGLINT_PROFILE=1 to get a per-phase
+  breakdown on stderr at process exit. Diagnostic only: the counters cost two
+  QueryPerformanceCounter reads per phase per file and are never printed unless
+  the variable is set. Added because THREE successive guesses about where a
+  library reindex spends its time (fsync, FK-cascade scans, the O(refs x symbols)
+  enclosing-symbol scan) were each measured and each turned out not to be the
+  dominant cost. Guessing was more expensive than measuring. }
+var
+  GProfParse, GProfDocScan, GProfSymbols, GProfRefs,
+  GProfUses, GProfLiterals, GProfFacts, GProfCommit, GProfFiles,
+  GProfPre, GProfOpenTx: Int64;
+
+function ProfNow: Int64; inline;
+begin
+  Result:= TStopwatch.GetTimeStamp;
+end;
+
+{ v0.85 PERF -- the O(refs x symbols) fix.
+
+  ResolveEnclosingSymbolId scans every symbol in the file to attribute ONE
+  reference, and it is called once per reference. Across the Win32 library index
+  that is sum(symbols x refs) = 13,034,967,133 unit operations, which at the
+  measured 1.34 us/unit accounts for essentially the whole 17,493 s run. The same
+  corpus PARSES in ~0.4% of that time, and the identical row volume INSERTS into
+  SQLite in ~0.1% -- so this loop, not tree-sitter and not the database, is what
+  a library reindex spends its life doing.
+
+  This paints a line -> enclosing-symbol-id map once per file instead. Building it
+  costs the sum of routine body lengths (O(file lines x nesting depth)); each
+  reference then costs one array index.
+
+  Semantics are preserved exactly, including the tie-break: the original takes a
+  new best only on a STRICTLY greater ImplStartLine, so among routines sharing a
+  start line the first in array order wins. Tracking BestStart per line and
+  comparing with '>' while iterating symbols in their original order reproduces
+  that, and needs no sort. A symbol missing from AIdxToId maps to 0, exactly as
+  the original's failed TryGetValue did. }
+function BuildEnclosingLineMap(const ASymbols: TArray<TSymbol>;
+  const AIdxToId: TDictionary<Integer, Int64>; ALineCount: Integer): TArray<Int64>;
+var
+  BestStart: TArray<Integer>;
+  I, L, Hi : Integer       ;
+  DbId     : Int64         ;
+begin
+  if ALineCount < 1 then ALineCount:= 1;
+  SetLength(Result   , ALineCount + 1); { SetLength zero-fills: 0 = "in no routine" }
+  SetLength(BestStart, ALineCount + 1);
+  Hi:= High(Result);
+  for I:= 0 to High(ASymbols) do
+  begin
+    case ASymbols[I].Kind of
+      skMethod, skFunction, skProcedure, skConstructor, skDestructor: ; // routine kinds
+    else
+      Continue;
+    end;
+    if ASymbols[I].ImplStartLine <= 0 then Continue;
+    if not AIdxToId.TryGetValue(I, DbId) then DbId:= 0;
+    L:= ASymbols[I].ImplStartLine;
+    while (L <= ASymbols[I].ImplEndLine) and (L <= Hi) do
+    begin
+      if ASymbols[I].ImplStartLine > BestStart[L] then
+      begin
+        BestStart[L]:= ASymbols[I].ImplStartLine;
+        Result   [L]:= DbId;
+      end;
+      Inc(L);
+    end;
+  end;
+end; // function
+
 function TIndexer.SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
 var
   Lo, Hi, J: Integer;
@@ -648,6 +730,7 @@ var
   Facts         : TSymbolFacts               ; { v(ADP2 T2) }
   FactsBody     : TArray<string>             ; { v(ADP2 T2) }
   SymStartLines : TArray<Integer>            ; { adp2-docregion-fix: every symbol's StartLine, sorted ascending -- lets FindDocRegionAbove reject a region separated from its symbol by an intervening declaration }
+  EnclosingByLine: TArray<Int64>             ; { v0.85 perf: line -> enclosing routine's db id, built once per file (see BuildEnclosingLineMap) }
 begin
   Parser:= ParserFor(ExtractFileExt(AFilePath));
   if Parser = nil then Exit;
@@ -681,6 +764,7 @@ begin
       Exit;
     end;
   end;
+  var TPre: Int64:= ProfNow;
   Source:= TFile.ReadAllBytes(AFilePath);
   // Sha/Mtime/up-to-date stay computed over the RAW on-disk bytes so file
   // identity + the incremental-skip contract are byte-identical to before the
@@ -706,6 +790,13 @@ begin
     Inc(FSkippedUpToDate);
     Exit;
   end;
+  { COUNTED HERE, BEFORE THE PARSE, not at the commit. This counter's only job is
+    to answer "could the database have changed?", and the caller uses a zero to
+    SKIP the four whole-DB resolve passes. Over-counting costs a wasted pass;
+    under-counting silently serves stale ancestry / call edges. Every exit below
+    this line -- a parse failure, a rolled-back file transaction -- has already
+    opened the door to a write, so the increment belongs above all of them. }
+  Inc(FParsedFiles);
   // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 before the
   // parse/slice pipeline (which assumes UTF-8). A valid CP1252 file (0xAE/0xA9
   // in a resourcestring -- the SOFTWID.PAS class) was SKIPPED here with
@@ -732,7 +823,10 @@ begin
   end
   else
     ParseBytes:= Utf8;
+  Inc(GProfPre, ProfNow - TPre);
+  var TProf: Int64:= ProfNow;
   ParseRes:= Parser.Parse(ParseBytes, AFilePath);
+  Inc(GProfParse, ProfNow - TProf); Inc(GProfFiles);
   // v0.16: scan doc-comment regions from the source text once per file
   // so we can associate them with symbols by line proximity below.
   // Decode from the bytes the PARSER ACTUALLY SAW (ParseBytes -- preprocessed
@@ -741,12 +835,20 @@ begin
   // is identical to the raw file; blanked regions carry no doc-comments. For
   // pure-ASCII files with preprocessing off this is the prior UTF-8 decode.
   SourceText:= TEncoding.UTF8.GetString(ParseBytes);
+  { Split ONCE here rather than just before the facts pass: BuildEnclosingLineMap
+    (called earlier, in the refs loop) needs the line count to size its map, and
+    the facts pass below reuses the same array. }
+  SourceLines:= SourceText.Split([#10]);
+  TProf:= ProfNow;
   DocRegions:= TDocCommentScanner.Scan(SourceText);
+  Inc(GProfDocScan, ProfNow - TProf);
   try
+    TProf:= ProfNow;
     Token:= FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);
     // v0.16: clear stale doc rows for this file before emitting fresh ones
     // (OpenFileTx already cleared symbols and refs).
     FStore.DeleteFileDocs(Token.FileId);
+    Inc(GProfOpenTx, ProfNow - TProf);
     IdxToId:= TDictionary<Integer, Int64>.Create;
     try
       try
@@ -758,6 +860,7 @@ begin
         for I:= 0 to High(ParseRes.Symbols) do
           SymStartLines[I]:= ParseRes.Symbols[I].StartLine;
         TArray.Sort<Integer>(SymStartLines);
+        TProf:= ProfNow;
         for I:= 0 to High(ParseRes.Symbols) do
         begin
           Sym:= ParseRes.Symbols[I];
@@ -776,16 +879,36 @@ begin
             if ParsedDoc.HasContent then FStore.UpsertSymbolDoc(Token, NewSymId, ParsedDoc);
           end;
         end; // for
+        Inc(GProfSymbols, ProfNow - TProf);
+        TProf:= ProfNow;
         // v13 (v0.82): attribute each ref to the innermost routine whose impl
         // body contains its StartLine (0 when in no body). IdxToId is in scope
         // (symbols already inserted with real ids), so this is a pure in-memory
         // resolution -- no DB round-trips.
+        //
+        // v0.85 PERF: build a LINE -> enclosing-symbol-id map once per file and
+        // index into it, instead of calling ResolveEnclosingSymbolId per ref.
+        // That call scanned EVERY symbol in the file for EVERY reference, i.e.
+        // O(refs x symbols) per file. Measured over the whole Win32 library run:
+        // sum(symbols x refs) = 13,034,967,133 units against a 17,493 s wall
+        // clock -- 1.34 us per unit, which accounts for essentially the entire
+        // run. For scale, parsing the same corpus costs ~0.4% of that, and
+        // inserting the same row volume into SQLite costs ~0.1%. The map is
+        // O(sum of routine body lengths) to build and O(1) per ref.
+        EnclosingByLine:= BuildEnclosingLineMap(ParseRes.Symbols, IdxToId, Length(SourceLines) + 2);
         for I:= 0 to High(ParseRes.References) do
         begin
           var Ref := ParseRes.References[I];
-          Ref.EnclosingSymbolId:= ResolveEnclosingSymbolId(ParseRes.Symbols, IdxToId, Ref.StartLine);
+          if (Ref.StartLine >= 0) and (Ref.StartLine <= High(EnclosingByLine)) then
+            Ref.EnclosingSymbolId:= EnclosingByLine[Ref.StartLine]
+          else
+            { Out of the mapped range (a ref past the last source line -- should not
+              happen, but the old path handled any line, so keep that contract). }
+            Ref.EnclosingSymbolId:= ResolveEnclosingSymbolId(ParseRes.Symbols, IdxToId, Ref.StartLine);
           FStore.UpsertReference(Token, Ref);
         end;
+        Inc(GProfRefs, ProfNow - TProf);
+        TProf:= ProfNow;
         for I:= 0 to High(ParseRes.DiBindings) do FStore.UpsertDiBinding(Token, ParseRes.DiBindings[I]);
         { v0.40.4: wipe-and-rewrite uses for this file so we never carry
           stale rows. DeleteUnitUsesForFile must run inside the open
@@ -794,6 +917,8 @@ begin
         for I:= 0 to High(ParseRes.UsesEntries) do FStore.UpsertUnitUse(Token, ParseRes.UsesEntries[I]);
         // v10: text-content index. Resolve each literal's enclosing symbol by line,
         // then persist. Per-file delete keeps re-index idempotent (FTS cascades via triggers).
+        Inc(GProfUses, ProfNow - TProf);
+        TProf:= ProfNow;
         FStore.DeleteStringLiteralsForFile(Token.FileId);
         for I:= 0 to High(ParseRes.Literals) do
         begin
@@ -824,7 +949,9 @@ begin
         // REFERENCES symbols(id) ON DELETE CASCADE with FK enforcement ON
         // (see TSQLiteSymbolStore.Create), so a stale facts row can never
         // outlive its symbol.
-        SourceLines:= SourceText.Split([#10]);
+        { SourceLines was split once, right after SourceText was decoded. }
+        Inc(GProfLiterals, ProfNow - TProf);
+        TProf:= ProfNow;
         for I:= 0 to High(ParseRes.Symbols) do
         begin
           Sym:= ParseRes.Symbols[I];
@@ -854,7 +981,10 @@ begin
           Facts.SymbolId:= NewSymId;
           FStore.PutSymbolFacts(Facts);
         end;
+        Inc(GProfFacts, ProfNow - TProf);
+        TProf:= ProfNow;
         FStore.CommitFileTx(Token);
+        Inc(GProfCommit, ProfNow - TProf);
         ReportProgress(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), Length(ParseRes.Diagnostics));
         for var Diag in ParseRes.Diagnostics do
           Writeln('    DIAG: ' + Diag);
@@ -1041,5 +1171,38 @@ procedure TIndexer.IndexFolder(const APath: string; ARecursive: Boolean);
 begin
   WalkAndIndex(APath, ARecursive);
 end;
+
+{ Prints the per-phase breakdown collected above. Opt-in via DRAGLINT_PROFILE so
+  a normal run is byte-identical on stdout; the report goes to stderr. }
+procedure WriteIndexProfile;
+var
+  Freq: Double;
+  procedure Line(const AName: string; ATicks: Int64);
+  begin
+    Writeln(ErrOutput, Format('  %-14s %8.2f s', [AName, ATicks / Freq]));
+  end;
+begin
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') = '' then Exit;
+  if GProfFiles = 0 then Exit;
+  Freq:= TStopwatch.Frequency;
+  Writeln(ErrOutput, Format('INDEX PROFILE (%d files)', [GProfFiles]));
+  Line('read/pre'  , GProfPre     );
+  Line('parse'     , GProfParse   );
+  Line('open-tx'   , GProfOpenTx  );
+  Line('doc-scan'  , GProfDocScan );
+  Line('symbols'   , GProfSymbols );
+  Line('refs'      , GProfRefs    );
+  Line('uses/di'   , GProfUses    );
+  Line('literals'  , GProfLiterals);
+  Line('facts'     , GProfFacts   );
+  Line('commit'    , GProfCommit  );
+  Line('TOTAL'     , GProfPre + GProfOpenTx + GProfParse + GProfDocScan + GProfSymbols + GProfRefs +
+                     GProfUses + GProfLiterals + GProfFacts + GProfCommit);
+end;
+
+initialization
+
+finalization
+  WriteIndexProfile;
 
 end.

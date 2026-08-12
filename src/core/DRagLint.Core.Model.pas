@@ -2,6 +2,25 @@ unit DRagLint.Core.Model;
 
 interface
 
+const
+  /// <summary>The engine version, in ONE place.</summary>
+  /// <remarks>It used to be written twice: DRagLint.CLI's VERSION said
+  /// '1.2.2-alpha' while the LSP handshake's serverInfo.version said
+  /// '0.40.5-alpha', eleven releases behind. Editors surface serverInfo.version
+  /// in their language-server logs, so anyone debugging the VS Code or Zed
+  /// integration read a version that had not existed for months and could not
+  /// tell which binary they were actually talking to. Reported from outside
+  /// (tree-sitter-delphi13's editor-integration note, 2026-08-09).
+  /// This unit is the right home because it is the one both sides already use:
+  /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
+  /// constant here reaches both with no new dependency and no cycle.</remarks>
+  DRAGLINT_VERSION = '1.2.2-alpha';
+
+  /// <summary>Hidden per-project folder holding everything drag-lint keeps for
+  /// one Delphi project: its index, its drag-lint-project.json, its reports, and
+  /// the ghost-compile journal that first created the folder.</summary>
+  DRAG_HOME_DIR = '_D-RAG';
+
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->

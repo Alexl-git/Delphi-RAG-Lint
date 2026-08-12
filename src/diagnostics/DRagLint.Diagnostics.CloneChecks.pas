@@ -59,9 +59,23 @@ implementation
 
 uses
   System.SysUtils,
+  System.Math,
   System.Generics.Defaults,
   TreeSitter,
   DRagLint.Diagnostics.ParseCache;
+
+const
+  { Information-density floor for a reported clone -- see IsLowInformation.
+    Distinct normalized tokens must reach VOCAB_COEFF * Sqrt(Len), never below
+    VOCAB_FLOOR_MIN. Tuned so the small hand-written fixture (20 tokens, 17
+    distinct) stays reported while a 100-token dispatch chain (~9 distinct) does not. }
+  VOCAB_COEFF     = 1.5;
+  VOCAB_FLOOR_MIN = 8  ;
+  { A clone at least this % covered by one repeating statement shape is a repetitive
+    construct, not copy-paste. MIN_REPEATS guards against calling two occurrences of
+    anything a "pattern". }
+  PERIODIC_COVER_PCT = 60;
+  MIN_REPEATS        = 3 ;
 
 type
   TTok = record
@@ -180,6 +194,76 @@ var
     Result := True;
     for k := 0 to Len - 1 do
       if Toks[a + k].Code <> Toks[b + k].Code then Exit(False);
+  end;
+
+  { v0.85: information-density floor -- the fix for duplicate-code's false positives.
+
+    AddToken maps every identifier to ID and every literal to LIT, so a run of N
+    structurally identical statements is token-identical to ANY other such run, in
+    any unit, about anything. Three shapes produced most of this rule's findings and
+    NONE of them was actionable:
+      * a command-dispatch chain   `else if ID = LIT then ID := ID(ID)`
+      * a record field-assign run  `ID.ID := ID.ID(LIT).ID;`
+      * a parameter-setup block    `ID.ID.ID(LIT).ID := ID;`
+    Two dispatchers that dispatch to different things share no extractable routine,
+    so the finding could never be cleared -- the same defect class as an object-leak
+    reported on a record.
+
+    A genuine clone carries VOCABULARY as well as length. Distinct-token count grows
+    roughly with the square root of length (Heaps' law), so the floor scales that way
+    too. A flat distinct/length RATIO would be wrong in the other direction: it would
+    suppress long genuine clones, whose vocabulary necessarily grows sub-linearly. }
+  function DistinctTokenCount(AStart, ALen: Integer): Integer;
+  var
+    Distinct: TDictionary<Integer, Boolean>;
+    k       : Integer;
+  begin
+    Distinct := TDictionary<Integer, Boolean>.Create;
+    try
+      for k := AStart to AStart + ALen - 1 do
+        if not Distinct.ContainsKey(Toks[k].Code) then Distinct.Add(Toks[k].Code, True);
+      Result := Distinct.Count;
+    finally
+      Distinct.Free;
+    end;
+  end;
+
+  { Length of the longest contiguous sub-run inside the clone that is EXACTLY
+    periodic with some period p and repeats at least MIN_REPEATS times -- i.e. "the
+    same statement shape, over and over". This is the primary test, because the
+    vocabulary floor alone cannot see repetition: a six-arm dispatch chain carries a
+    routine header (`function ID(const ID: ID): ID;`) whose one-off tokens lift the
+    distinct count over any floor low enough to keep small genuine clones. }
+  function LongestPeriodicRun(AStart, ALen: Integer): Integer;
+  var
+    p, i, RunStart, Best, Cur: Integer;
+  begin
+    Best := 0;
+    for p := 2 to ALen div MIN_REPEATS do
+    begin
+      RunStart := AStart;
+      for i := AStart to AStart + ALen - p - 1 do
+        if Toks[i].Code <> Toks[i + p].Code then RunStart := i + 1
+        else
+        begin
+          Cur := (i - RunStart + 1) + p; { matched prefix plus the trailing period }
+          if (Cur >= MIN_REPEATS * p) and (Cur > Best) then Best := Cur;
+        end;
+    end;
+    Result := Best;
+  end;
+
+  function IsLowInformation(AStart, ALen: Integer): Boolean;
+  var
+    Floor: Integer;
+  begin
+    { (a) mostly one statement shape repeated -- a dispatch chain, a field-assignment
+      run, a block of parameter setup. Nothing extractable. }
+    if LongestPeriodicRun(AStart, ALen) * 100 >= ALen * PERIODIC_COVER_PCT then Exit(True);
+    { (b) too little vocabulary for its length to be a meaningful clone at all. }
+    Floor := Round(Sqrt(ALen) * VOCAB_COEFF);
+    if Floor < VOCAB_FLOOR_MIN then Floor := VOCAB_FLOOR_MIN;
+    Result := DistinctTokenCount(AStart, ALen) < Floor;
   end;
 
   procedure EmitPair(a, b, Len: Integer);
@@ -314,6 +398,9 @@ var
           if Covered[b + k] then Inc(cvB);
         end;
         if (cvA * 2 >= L) and (cvB * 2 >= L) then Continue; { both sides already covered }
+        { Deliberately does NOT mark Covered: a suppressed low-information run must
+          not shadow a genuine clone that overlaps it. }
+        if IsLowInformation(a, L) then Continue;
         EmitPair(a, b, L);
         for k := 0 to L - 1 do
         begin

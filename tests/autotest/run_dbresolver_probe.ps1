@@ -33,6 +33,11 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 # and DRagLint.Plugin.DbProbe.
 $rsvars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 $pluginDir = "$PSScriptRoot\..\..\src\delphi-plugin"
+# v(project-drag-lint-home): DRagLint.Plugin.Settings now uses DRAG_HOME_DIR
+# from DRagLint.Core.Model (src\core), so the harness's unit search path must
+# cover src\core too -- the BPL build already does (its search path is much
+# broader), which is why this only broke the standalone harness.
+$coreDir   = "$PSScriptRoot\..\..\src\core"
 $outDir    = "$DprojDir\Win64\Debug"
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $batPath = "$WorkDir\build_harness.bat"
@@ -41,7 +46,7 @@ $batLines = @(
     '@echo off'
     "call `"$rsvars`""
     "cd /d `"$DprojDir`""
-    "dcc64 -CC -U`"$pluginDir`" -E`"$outDir`" -N0`"$outDir`" DbProbeHarness.dpr"
+    "dcc64 -CC -U`"$pluginDir;$coreDir`" -E`"$outDir`" -N0`"$outDir`" DbProbeHarness.dpr"
     'echo BUILD_EXITCODE=%ERRORLEVEL%'
 )
 $batBody = ($batLines -join "`r`n")

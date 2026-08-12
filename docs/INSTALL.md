@@ -37,8 +37,10 @@ sub-pages -- General / Indexer / Linter / Editor -- so each page only ever
 writes its own fields.
 
 - **General** -- `drag-lint.exe` path (leave blank to use the exe next to the
-  BPL), the DB path template (default resolves a `drag-lint.sqlite` next to
-  or above the active `.dproj`), workspace mode, and the auto-compile toggles
+  BPL), the DB path template (default resolves `<projdir>\_D-RAG\
+  <projname>.sqlite` for the active `.dproj`; the plugin also probes the
+  pre-relocation flat `drag-lint.sqlite` next to or above the project as a
+  fallback), workspace mode, and the auto-compile toggles
   (compile on save, compile the unsaved buffer on idle, compile once on
   project open, compile on switching to a `.pas` file, jump to Diagnostics
   after a compile).
@@ -89,7 +91,7 @@ drag-lint queries one or more `.sqlite` files. Two scopes matter:
 
 ### a) Per-project DB (deep — enables Find Usages of variables)
 ```
-drag-lint index "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" --db "C:\Projects\.drag-lint\ORM3-Micronite2027.sqlite" --deep
+drag-lint index "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" --db "C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite" --deep
 ```
 - **The target declares the scan type.** A `.dpr`/`.dproj` target indexes exactly
   that project's **compile closure** (members + transitively-used project-local
@@ -98,8 +100,14 @@ drag-lint index "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" --db "C:\Projec
   folder are excluded. A **folder** target indexes the whole tree instead.
 - **Mode is separate from type:** `--recompile` (default, incremental) or
   `--rebuild` (from scratch).
-- One DB per project is the current layout on this machine; the old per-repo
-  union DBs were retired and deleted on 2026-08-09.
+- One DB per project is the current layout on this machine, and (since
+  2026-08-11) each project's DB lives in a hidden `_D-RAG` folder **beside its
+  own `.dproj`** rather than in a shared folder -- `<project folder>\_D-RAG\
+  <project file base name>.sqlite`. The old per-repo union DBs were retired
+  and deleted on 2026-08-09; the brief shared-folder layout that replaced them
+  (`C:\Projects\.drag-lint\<Repo>-<Project>.sqlite`) was itself replaced on
+  2026-08-11. In practice you rarely type this path by hand -- `index --all`
+  (section c) derives it from the manifest.
 - `--deep` records identifier **usages** (reads/writes/attributes), so Find
   Usages works for variables/components, not just calls. Use it for *your* code.
 - Re-indexing is incremental (mtime+sha skip). To force a full rebuild after

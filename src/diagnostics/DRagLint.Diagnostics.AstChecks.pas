@@ -575,13 +575,19 @@ type
       /// </remarks>
       class function CheckFormatCall(const AFile: string): TArray<TLintFinding>;
       /// <summary>Flags a try..except whose handler neither re-raises nor logs nor calls
-      /// Application.HandleException/ShowException -- the exception is silently swallowed.</summary>
+      /// Application.HandleException/ShowException nor assigns Result/a var/out parameter --
+      /// the exception is silently swallowed.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
       /// <returns>One finding per swallowing except clause, pinned to the 'except' keyword.</returns>
       /// <remarks>
-      /// Severity warning. A handler counts as handling if it contains a raise, or an
-      /// identifier/call whose text contains handleexception/showexception/log/report. try-finally
-      /// is ignored. Pure AST; no DB. Never raises.
+      /// Severity warning. A handler counts as handling if it contains a raise, an
+      /// identifier/call whose text contains handleexception/showexception/log/report, OR an
+      /// assignment to the enclosing routine's Result (function only) or one of its var/out
+      /// parameters (Task 9c) -- the standard Delphi TryXxx idiom that converts a caught
+      /// exception into a status the caller must inspect. Deliberately does NOT extend this to
+      /// plain locals: an assignment nothing outside the routine can observe still communicates
+      /// nothing, and stays flagged (see tests/lint/try-except-swallowed.pas's LocalOnly case).
+      /// try-finally is ignored. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
       /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, handler, HandlesException, Integer, LowerCase, NodeStr, Pos
@@ -2074,20 +2080,57 @@ var
   end;
 
   { Deepest nesting of control structures within N. }
+  { AN ELSE-IF CHAIN IS ONE LEVEL, NOT ONE LEVEL PER BRANCH.
+
+    Delphi has no `elif`, so `if A then .. else if B then .. else if C then ..`
+    can only be spelled as an if nested in the else of the previous if, and the
+    grammar represents exactly that: ifElse(A, .., ifElse(B, .., ifElse(C, ..))).
+    Counting one level per if-node therefore measures the SPELLING, not the
+    shape of the code -- a flat dispatch table reads as a staircase.
+
+    Measured before this change (drag-lint on its own source): ParseArgs "nests
+    control structures 141 deep", Run 84. Those two routines are argument
+    dispatchers -- every branch is at the same logical level and none is inside
+    another. A generated chain scaled exactly 1:1: 6 branches -> 6, 8 -> 8,
+    12 -> 12, 20 -> 20. At the default threshold of 5 that makes the rule fire on
+    any dispatcher with six arms, which is most of them, and the advice it gives
+    ("flatten with early exits") cannot be followed because there is nothing
+    nested to flatten.
+
+    So: descending into the ELSE branch does not deepen when that branch is
+    itself an if -- it is the next arm of the same chain. Every other descent,
+    including into the THEN branch, still deepens, which is what keeps genuine
+    nesting (six ifs down the then side) firing at 6.
+
+    Identity by StartPoint rather than node equality: two children of one parent
+    cannot begin at the same row and column, and TTSNode exposes no equality
+    operator. The same chain-walking shape is already used by
+    DeadCodeChecks' repeated-else-if-condition check. }
   function MaxNest(const N: TTSNode; ADepth: Integer): Integer;
   var
-    I, D, M: Integer;
-    Inc1   : Integer;
+    I, D, M    : Integer;
+    Inc1       : Integer;
+    ElseN, C   : TTSNode;
+    ChildDepth : Integer;
   begin
     Result:= ADepth;
     if N.IsNull then Exit;
     Inc1:= 0;
     if (N.NodeType = 'if') or (N.NodeType = 'ifElse') or (N.NodeType = 'while') or (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
       (N.NodeType = 'with') or (N.NodeType = 'try') then Inc1:= 1;
+    if N.NodeType = 'ifElse' then ElseN:= N.ChildByField('else')
+    else ElseN:= Default(TTSNode);
     M:= ADepth;
     for I:= 0 to N.ChildCount - 1 do
     begin
-      D:= MaxNest(N.Child(I), ADepth + Inc1);
+      C:= N.Child(I);
+      ChildDepth:= ADepth + Inc1;
+      if (Inc1 = 1) and (not ElseN.IsNull) and (not C.IsNull) and
+         ((C.NodeType = 'if') or (C.NodeType = 'ifElse')) and
+         (C.StartPoint.Row = ElseN.StartPoint.Row) and
+         (C.StartPoint.Column = ElseN.StartPoint.Column) then
+        ChildDepth:= ADepth;   { chain continuation -- same logical level }
+      D:= MaxNest(C, ChildDepth);
       if D > M then M:= D;
     end;
     Result:= M;
@@ -4839,24 +4882,103 @@ var
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
 
-  { True if the subtree contains a raise, or an identifier/call whose text names a
-    handler (HandleException/ShowException) or a logging/reporting routine. }
-  function HandlesException(const N: TTSNode): Boolean;
+  { The nearest enclosing 'defProc' ancestor of N (its own routine), or a null
+    node if N is not inside one. Used to look up Result / var / out parameter
+    names for the "assignment is handling" check below. }
+  function EnclosingDefProc(const N: TTSNode): TTSNode;
+  begin
+    Result:= N.Parent;
+    while (not Result.IsNull) and (Result.NodeType <> 'defProc') do
+      Result:= Result.Parent;
+  end;
+
+  { Populates AHandled (case-insensitive) with the names an assignment INSIDE
+    an except handler may target to count as "handling" the exception rather
+    than swallowing it: the routine's own Result (only when it actually has a
+    return type -- a procedure has no Result, so a coincidental local named
+    "Result" does not count), and any 'var'/'out' parameter (the standard
+    Delphi TryXxx idiom converts a caught exception into a status the caller
+    is required to inspect via one of these). Value/const parameters and
+    plain locals are deliberately excluded -- an assignment to a local that
+    nothing outside the routine can observe does not communicate the failure
+    anywhere, so it is not handling. }
+  procedure CollectHandlingAssignTargets(const ADefProc: TTSNode; AHandled: TStrings);
   var
-    I: Integer;
-    T: string ;
+    Hdr, RetType, Args, DA, Modi, NameId: TTSNode;
+    I, J: Integer;
+    IsVarOrOut: Boolean;
+  begin
+    if ADefProc.IsNull then Exit;
+    Hdr:= ADefProc.ChildByField('header');
+    if Hdr.IsNull then Exit;
+    RetType:= Hdr.ChildByField('type');
+    if not RetType.IsNull then AHandled.Add('result');
+    Args:= Hdr.ChildByField('args');
+    if Args.IsNull then Exit;
+    for I:= 0 to Args.NamedChildCount - 1 do
+    begin
+      DA:= Args.NamedChild(I);
+      if DA.NodeType <> 'declArg' then Continue;
+      IsVarOrOut:= False;
+      for J:= 0 to DA.ChildCount - 1 do
+      begin
+        Modi:= DA.Child(J);
+        if (Modi.NodeType = 'kVar') or (Modi.NodeType = 'kOut') then IsVarOrOut:= True;
+      end;
+      if not IsVarOrOut then Continue;
+      for J:= 0 to DA.NamedChildCount - 1 do
+      begin
+        NameId:= DA.NamedChild(J);
+        if NameId.NodeType = 'identifier' then AHandled.Add(LowerCase(Trim(NodeStr(NameId))));
+      end;
+    end;
+  end;
+
+  { True if the subtree contains a raise, an identifier/call whose text names a
+    handler (HandleException/ShowException) or a logging/reporting routine, or
+    an assignment to one of AHandled (the routine's Result / var / out
+    parameters -- see CollectHandlingAssignTargets). That last case is the
+    standard Delphi TryXxx shape: 'except Result:= False; end' converts the
+    exception into a status the caller is required to check, so it is not
+    silent even though it neither raises nor logs. An assignment to any other
+    (plain local) name does NOT count -- that is still the case this rule
+    exists to catch, and stays flagged. }
+  function HandlesException(const N: TTSNode; const AHandled: TStrings): Boolean;
+  var
+    I  : Integer;
+    T  : string ;
+    Lhs: TTSNode;
   begin
     Result:= False;
     if N.IsNull then Exit;
     if N.NodeType = 'raise' then Exit(True);
+    if N.NodeType = 'assignment' then
+    begin
+      Lhs:= N.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier')
+         and (AHandled.IndexOf(LowerCase(Trim(NodeStr(Lhs)))) >= 0) then Exit(True);
+    end;
     if (N.NodeType = 'identifier') or (N.NodeType = 'exprCall') or (N.NodeType = 'exprDot') then
     begin
       T:= LowerCase(NodeStr(N));
       if (Pos('handleexception', T) > 0) or (Pos('showexception', T) > 0)
          or (Pos('log', T) > 0) or (Pos('report', T) > 0) then Exit(True);
+      { v(2026-08-10): a CONSOLE diagnostic is reporting, same as calling a
+        routine with 'log' in its name. This rule already accepted log*/report*,
+        but drag-lint is a CLI: its actual logging idiom is
+        `Writeln(ErrOutput, ...)`, which contains neither substring -- so the
+        rule reported "silently swallowed" on except bodies that visibly print
+        the error. Two of twelve sampled findings were exactly that.
+
+        Matched on 'writeln' rather than 'write' deliberately: bare 'write'
+        appears in ordinary calls (WriteSymbol, TFile.WriteAllText, Rewrite),
+        and accepting those would turn a real swallow into a false negative --
+        the direction that costs more for this rule. }
+      if (Pos('writeln', T) > 0) or (Pos('outputdebugstring', T) > 0)
+         or (Pos('showmessage', T) > 0) then Exit(True);
     end;
     for I:= 0 to N.ChildCount - 1 do
-      if HandlesException(N.Child(I)) then Exit(True);
+      if HandlesException(N.Child(I), AHandled) then Exit(True);
   end;
 
   procedure Visit(const N: TTSNode);
@@ -4867,6 +4989,7 @@ var
     C        : TTSNode ;
     ExceptPt : TTSPoint;
     F        : TLintFinding;
+    HandledNames: TStringList;
   begin
     if N.IsNull or (Findings.Count >= 100) then Exit;
     if N.NodeType = 'try' then
@@ -4874,18 +4997,25 @@ var
       HasExcept:= False;
       Handled  := False;
       ExceptPt := Default(TTSPoint);
-      for I:= 0 to N.ChildCount - 1 do
-      begin
-        C:= N.Child(I);
-        if C.NodeType = 'kExcept' then
+      HandledNames:= TStringList.Create;
+      try
+        HandledNames.CaseSensitive:= False;
+        CollectHandlingAssignTargets(EnclosingDefProc(N), HandledNames);
+        for I:= 0 to N.ChildCount - 1 do
         begin
-          HasExcept:= True;
-          ExceptPt := C.StartPoint;
-        end
-        else if HasExcept and (C.NodeType <> 'kEnd') and (C.NodeType <> 'kFinally') then
-        begin
-          if HandlesException(C) then Handled:= True;
+          C:= N.Child(I);
+          if C.NodeType = 'kExcept' then
+          begin
+            HasExcept:= True;
+            ExceptPt := C.StartPoint;
+          end
+          else if HasExcept and (C.NodeType <> 'kEnd') and (C.NodeType <> 'kFinally') then
+          begin
+            if HandlesException(C, HandledNames) then Handled:= True;
+          end;
         end;
+      finally
+        HandledNames.Free;
       end;
       if HasExcept and (not Handled) then
       begin

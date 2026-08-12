@@ -37,16 +37,20 @@ section markers per unit.
 
 ## The current database set (this development machine)
 
-**Since 2026-08-09 there is one DB per project.** They live under
-`C:\Projects\.drag-lint\` and are named `<Repo>-<Project>.sqlite`.
+**Since 2026-08-09 there is one DB per project.** From 2026-08-11 each
+project's DB lives in a hidden `_D-RAG` folder **beside that project's own
+`.dproj`** -- `<project folder>\_D-RAG\<project file base name>.sqlite` --
+rather than in a shared folder. The two exceptions are the SQL and Library
+indexes, which have no owning project folder and stay in the shared
+`C:\Projects\.drag-lint\` location they always used.
 
 | Database file | Scope / what it contains | Typical use |
 |---|---|---|
-| `C:\Projects\.drag-lint\ORM3-Micronite2027.sqlite` and seven siblings -- `ORM3-MicroniteMW1Service`, `ORM3-Interfaces`, `ORM3-TestMicroniteObjects`, `ORM3-MicroniteTests`, `ORM3-TestCachedUpdates`, `ORM3-PdfOcrImportTests`, `ORM3-TEST_uSetupDefaultsFrm` | The **Micronite ORM3** solution, one DB per `.dproj` compile closure. | Day-to-day ORM3 lookups; the graph viewer's main store. Cross-project questions need several `--db`. |
-| `C:\Projects\.drag-lint\DragLint-Cli.sqlite` (+ `DragLint-Wizard`, `DragLint-Tests`, `DragLint-CorpusScan`) | drag-lint's **own** source, per project. | Self-index; replaces the deleted `Delphi-RAG-lint.sqlite`. |
-| `C:\Projects\.drag-lint\TableTools-*.sqlite`, `OCRPDF-*.sqlite`, `DataCopy-*.sqlite`, `DragLintGraph-*.sqlite`, `Loader.sqlite`, `YADF*.sqlite` | The other repos, likewise one DB per project. | Replaces the deleted per-repo union DBs. |
-| `C:\Projects\DB\SQL\drag-lint-sql.sqlite` | The **Firebird SQL** scripts under `C:\Projects\DB\SQL` (MS*.SQL): tables, columns, generators, triggers, procedures, views, exceptions, domains. | SQL DDL symbol search; SQL-side of cross-DB resolve. |
-| `C:\Projects\.drag-lint\library-Win32.sqlite` / `library-Win64.sqlite` (and one per other registered platform) | The **RTL / VCL / DevExpress / Spring4D** library sources (everything on the Library/Browsing paths). | Resolving library types (e.g. `TObject`, `IInterface`, `TList`) for cross-DB jumps + hover. |
+| `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite` and seven siblings in their own project folders -- `ORM3-MicroniteMW1Service`, `ORM3-Interfaces`, `ORM3-TestMicroniteObjects`, `ORM3-MicroniteTests`, `ORM3-TestCachedUpdates`, `ORM3-PdfOcrImportTests`, `ORM3-TEST_uSetupDefaultsFrm` | The **Micronite ORM3** solution, one DB per `.dproj` compile closure. | Day-to-day ORM3 lookups; the graph viewer's main store. Cross-project questions need several `--db`. |
+| `C:\Projects\Delphi-RAG-lint\src\cli\_D-RAG\drag-lint.sqlite` (`DragLint-Cli`, + `DragLint-Wizard`, `DragLint-Tests`, `DragLint-CorpusScan` each in their own project's `_D-RAG`) | drag-lint's **own** source, per project. | Self-index. |
+| `C:\Projects\TableTools\_D-RAG\*.sqlite`, `C:\Projects\OCRPDF\...\_D-RAG\*.sqlite`, `C:\Projects\DataCopy\_D-RAG\*.sqlite`, `C:\Projects\Delphi-RAG-Lint-Graph\...\_D-RAG\*.sqlite`, `C:\Projects\Loader2019\_D-RAG\Loader2025.sqlite`, `C:\Projects\YADF\_D-RAG\{YADF,YADFOT,YADFSetup}.sqlite` | The other repos, likewise one DB per project, each beside its own `.dproj`. | Replaces the deleted per-repo union DBs. |
+| `C:\Projects\DB\SQL\drag-lint-sql.sqlite` | The **Firebird SQL** scripts under `C:\Projects\DB\SQL` (MS*.SQL): tables, columns, generators, triggers, procedures, views, exceptions, domains. No owning `.dproj`, so it is not in a `_D-RAG` folder -- it stays exactly where it always lived. | SQL DDL symbol search; SQL-side of cross-DB resolve. |
+| `C:\Projects\.drag-lint\library-Win32.sqlite` / `library-Win64.sqlite` (and one per other registered platform) | The **RTL / VCL / DevExpress / Spring4D** library sources (everything on the Library/Browsing paths). Also has no owning `.dproj`, so it stays in the shared folder. | Resolving library types (e.g. `TObject`, `IInterface`, `TList`) for cross-DB jumps + hover. |
 
 > **Deleted 2026-08-09 -- these files no longer exist**, and any document or
 > script still naming them is stale: `C:\Projects\DB\ORM3\drag-lint.sqlite`
@@ -54,6 +58,13 @@ section markers per unit.
 > `OCRPDF.sqlite`, `DataCopy.sqlite`, `Delphi-RAG-Lint-Graph.sqlite`,
 > `M2022.sqlite`, `active-projects.sqlite`, `convrules-worktree.sqlite`,
 > `library.sqlite`, `projects.sqlite`, `samples.sqlite`.
+>
+> **Moved again 2026-08-11 -- `C:\Projects\.drag-lint\<Repo>-<Project>.sqlite`
+> no longer exists either.** Every one of the 27 project DBs that briefly lived
+> there for two days moved into its own project's `_D-RAG` folder (verified
+> row-identical at the new path). A document or script still naming the
+> `.drag-lint\<Repo>-<Project>.sqlite` shape is stale; only `library-*.sqlite`
+> genuinely still lives in `C:\Projects\.drag-lint\`.
 
 **Never guess a DB path -- ask the tool:**
 
@@ -66,7 +77,7 @@ drag-lint resolve-dbs --in C:\...\MyUnit.pas        REM the DB covering one file
 ## Which to pass to the viewer
 
 ```
-drag_lint_graph.exe --db C:\Projects\.drag-lint\ORM3-Micronite2027.sqlite ^
+drag_lint_graph.exe --db C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite ^
                     --db C:\Projects\.drag-lint\library-Win64.sqlite
 ```
 
@@ -81,11 +92,13 @@ Scanner exe: `drag-lint.exe` (this example machine keeps a Win64 build under
 per command:
 
 ```
-drag-lint index C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --db C:\Projects\.drag-lint\ORM3-Micronite2027.sqlite
+drag-lint index C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --db C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite
 drag-lint index C:\Projects\DB\SQL  --db C:\Projects\DB\SQL\drag-lint-sql.sqlite
 drag-lint index --scan-libraries-win --db C:\Projects\.drag-lint\library-Win64.sqlite
 REM  ...use --scan-libraries-all instead to also pull in Posix/iOS/Android/OSX source trees.
 REM  (--scan-libraries is kept as a back-compat alias for --scan-libraries-win.)
+REM  In practice you rarely type a project's --db by hand -- `index --all` (below)
+REM  derives the _D-RAG path from the manifest automatically.
 ```
 
 A `.dproj`/`.dpr` target is a **project** scan (compile closure); a folder target

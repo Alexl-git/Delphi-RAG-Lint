@@ -1,0 +1,6 @@
+# An else-if CHAIN is one logical level, however long: it is a flat dispatch,
+# and the grammar's right-nesting of ifElse is a parse-tree fact, not a
+# property of the code. Dispatch (line 13) must NOT fire.
+# ReallyNested (line 37) is six ifs deep down the THEN side and MUST still fire
+# -- that is what keeps this fix from degenerating into "stop counting ifs".
+deep-nesting 37

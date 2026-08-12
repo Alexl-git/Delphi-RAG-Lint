@@ -64,7 +64,7 @@ DEFAULT_DBS = [
     ('library-Win64', r'C:\Projects\.drag-lint\library-Win64.sqlite'),
     ('ORM3',          r'C:\Projects\DB\ORM3\drag-lint.sqlite'),
     ('M2022',         r'C:\Projects\.drag-lint\M2022.sqlite'),
-    ('self',          r'C:\Projects\.drag-lint\Delphi-RAG-lint.sqlite'),
+    ('self',          r'C:\Projects\Delphi-RAG-lint\src\cli\_D-RAG\drag-lint.sqlite'),
 ]
 
 

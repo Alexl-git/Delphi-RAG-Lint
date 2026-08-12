@@ -1,4 +1,11 @@
-# empty except (13) fires; reraise (22) and on-E-do-Log (31) do not
+# empty except (13) and local-only assignment (67) fire; reraise (22),
+# on-E-do-Log (31), Result assignment (43), and out-param assignment (53)
+# do not -- Task 9c: an assignment to Result or a var/out parameter converts
+# the exception into a status the caller must inspect (the TryXxx idiom), so
+# it counts as handling. An assignment to a plain local does not.
 try-except-swallowed 13
 !try-except-swallowed 22
 !try-except-swallowed 31
+!try-except-swallowed 43
+!try-except-swallowed 53
+try-except-swallowed 67

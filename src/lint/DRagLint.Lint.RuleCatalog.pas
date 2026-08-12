@@ -12,6 +12,21 @@ uses
   System.SysUtils, System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
   System.JSON, System.IOUtils;
 
+const
+  { THE complexity thresholds. ONE definition, read by BOTH the rule catalog
+    below AND every checker call site in DRagLint.CLI -- which previously
+    repeated the literals 15 / 25 / 120 at six places. That is the drift channel
+    this codebase keeps paying for: the catalog advertises a default, a call
+    site passes a different one, and `drag-lint rules` then documents a number
+    the engine does not use.
+
+    Retuned 2026-08-10 from 15 / 25 / 120 after measuring the distribution over
+    drag-lint's own 94 files -- see the catalog entries for the arithmetic.
+    Overridable per project via `thresholds` in drag-lint-lint.json. }
+  DEFAULT_CYCLOMATIC_THRESHOLD = 30 ; // was 15; median flagged value was 22
+  DEFAULT_COGNITIVE_THRESHOLD  = 65 ; // was 25; median flagged value was 40
+  DEFAULT_METHOD_TOO_LONG      = 250; // was 120; median flagged body was 182
+
 type
   /// <summary>A single configurable parameter of a rule (threshold or naming knob).</summary>
   /// <remarks>
@@ -199,11 +214,31 @@ begin
     { --- complexity (all parameterized) --- }
     B('too-many-parameters',  'complexity', 'info', 'Routine has too many parameters', True, [MkParam('threshold','int','7')]);
     B('too-many-locals',      'complexity', 'info', 'Routine has too many local variables', True, [MkParam('threshold','int','25')]);
-    B('method-too-long',      'complexity', 'info', 'Routine body is too long', True, [MkParam('threshold','int','120')]);
+    { v(2026-08-10): 120 -> 250. Measured over drag-lint's own 94 files: median
+      flagged body is 182 lines, p75 is 300. A threshold BELOW the median of
+      what it flags is not selecting outliers, it is describing the codebase. }
+    B('method-too-long',      'complexity', 'info', 'Routine body is too long', True, [MkParam('threshold','int',IntToStr(DEFAULT_METHOD_TOO_LONG))]);
     B('deep-nesting',         'complexity', 'info', 'Nesting is too deep', True, [MkParam('threshold','int','5')]);
     B('too-many-exit-points', 'complexity', 'info', 'Routine has too many Exit statements', True, [MkParam('threshold','int','5')]);
-    B('cyclomatic-complexity','complexity', 'info', 'Cyclomatic complexity is too high', True, [MkParam('threshold','int','15')]);
-    B('cognitive-complexity', 'complexity', 'info', 'Cognitive complexity is too high (nesting-weighted)', True, [MkParam('threshold','int','25')]);
+    { v(2026-08-10): THE COMPLEXITY THRESHOLDS WERE FLAGGING THE MEDIAN.
+      Measured across drag-lint's own corpus (94 files, 2,499 findings):
+
+        rule                    old  median  p75   p90   max     old count
+        cyclomatic-complexity    15      22   30    55    264          180
+        cognitive-complexity     25      40   65   124  10572          165
+
+      A cyclomatic threshold of 15 against a median flagged value of 22 does not
+      identify outliers -- it reports that this codebase exists, 180 times. The
+      new values sit at p75, which reports ~43 and ~41 routines respectively:
+      few enough to read, and the genuine monsters are untouched (ParseArgs in
+      DRagLint.CLI.pas measures cyclomatic 264 / cognitive 10,572 and fires at
+      any threshold anyone would defend).
+
+      These are DEFAULTS, not a verdict on your code: `thresholds` in
+      drag-lint-lint.json overrides both per project. A team that wants the
+      stricter historical values simply sets them back. }
+    B('cyclomatic-complexity','complexity', 'info', 'Cyclomatic complexity is too high', True, [MkParam('threshold','int',IntToStr(DEFAULT_CYCLOMATIC_THRESHOLD))]);
+    B('cognitive-complexity', 'complexity', 'info', 'Cognitive complexity is too high (nesting-weighted)', True, [MkParam('threshold','int',IntToStr(DEFAULT_COGNITIVE_THRESHOLD))]);
     B('case-with-too-few-branches','complexity', 'hint', 'case has fewer than N branches -- an if is clearer', True, [MkParam('threshold','int','2')]);
     B('boolean-expression-complexity','complexity', 'info', 'Boolean expression has more than N and/or/xor operators', True, [MkParam('threshold','int','4')]);
     B('duplicate-code',       'complexity', 'info', 'Duplicated code block detected (Type-2, renamed-identifier tolerant)', True, [MkParam('threshold','int','90')]);

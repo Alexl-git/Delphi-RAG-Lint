@@ -18,6 +18,9 @@ Check 'settings parsed'  ($plan -match '"currentProjectsIndexing"\s*:\s*"perProj
 $m = & $Exe selftest manifest-merge 2>&1 | Out-String
 Check 'manifest-merge keeps global currentProjectsIndexing' ($m -match 'MERGE-OK')
 Write-Host ''
+$sdb = & $Exe selftest section-db 2>&1 | Out-String
+Check 'section-db selftest (derived _D-RAG path)' ($sdb -match 'SECTIONDB-OK')
+Write-Host ''
 $g = & $Exe selftest glob 2>&1 | Out-String
 Check 'glob selftest' ($g -match 'GLOB-OK')
 Write-Host ''

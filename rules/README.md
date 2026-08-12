@@ -167,7 +167,7 @@ has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_tests.ps1
 | `deprecated-rtl-function` | info | `OemToAnsi`/`AnsiToOem`/`StrPas` -- obsolete RTL routines |
 | `sleep-in-vcl` | warning | `Sleep()` on the main thread freezes the VCL UI |
 | `constant-condition` | warning | `if True`/`if False`/`while False` -- always-constant condition (`while True` is left alone) |
-| `ifthen-both-branches` | warning | `SysUtils.IfThen` evaluates both branches unconditionally |
+| `ifthen-both-branches` | warning | `SysUtils.IfThen` evaluates both branches unconditionally -- does NOT fire when both branches are literal (string/number/`True`/`False`/`nil`); a plain identifier argument still fires (parenless-call ambiguity, see Task 9b) |
 | `sizeof-pointer-assumption` | warning | `SizeOf(Pointer) = 4`/`8` bakes in a platform assumption |
 | `pchar-arithmetic` | warning | `+`/`-` on a PChar-named variable -- unsafe pointer arithmetic |
 | `boolean-result-returned-directly` | info | redundant `if/else` assigning `True`/`False` to `Result` |

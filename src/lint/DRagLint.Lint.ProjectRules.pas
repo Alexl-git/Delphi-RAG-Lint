@@ -14,6 +14,7 @@ uses
   , System.Classes
   , System.IOUtils
   , System.JSON
+  , System.Diagnostics { TStopwatch -- DRAGLINT_PROFILE per-rule attribution in Run }
   , System.Generics.Collections
   , System.Generics.Defaults
   , TreeSitter
@@ -686,19 +687,131 @@ var
   RefdUnitStems : TDictionary<string, Boolean>;
   Refs          : TArray<TReference>          ;
   Ref           : TReference                  ;
-  RefSym        : TSymbol                     ;
   UsesList      : TArray<TUnitUse>            ;
   U             : TUnitUse                    ;
-  NameSyms      : TArray<TSymbol>             ;
   UnitStem      : string                      ;
   UF            : TLintFinding                ;
   PrivModifiers : string                      ;
   IsPrivate     : Boolean                     ;
   PropAccessors : TDictionary<string, Boolean>;
+  { Run-level memos for unused-unit-in-uses. See StemsFor. }
+  StemsOfName   : TDictionary<string, TArray<string>>;
+  PathOfFile    : TDictionary<Int64, string>        ;
+  UnitIndexed   : TDictionary<string, Boolean>      ;
+  { Per-rule cost attribution, printed only under DRAGLINT_PROFILE. `lint-all`'s
+    phase profiler can say "project-rules cost N seconds" but not WHICH of the
+    seven rules in this pass spent it, and the answer decided the fix: on YADF,
+    unused-unit-in-uses was 32.2 s of a 37.4 s pass while every other rule came
+    in under 1.3 s. Attributing it by running `lint-project --rule <id>` once per
+    rule works but costs a full pass each time; these counters get the same
+    answer from ONE run. Two QueryPerformanceCounter reads per rule per symbol,
+    against SQL queries that cost orders of magnitude more. }
+  Prof          : Boolean;
+  TCirc, TEnum, TRts, TUuiu, TGod, TUpub, TUpriv, TAccess, TOuter: Int64;
+  { "Referenced at all?" as two sets, built with one scan each instead of two
+    queries per symbol. See IsReferenced. }
+  RefdIds       : TDictionary<Int64 , Boolean>;
+  RefdNames     : TDictionary<string, Boolean>;
 
   function WantRule(const AId: string): Boolean;
   begin
     Result:= (ARuleId = '') or (ARuleId = AId);
+  end;
+
+  { Not inlined: a nested routine that reads an outer-scope variable cannot be
+    (E2449), and Prof is exactly that. The call overhead is irrelevant next to
+    the SQL queries being measured. }
+  function Tick: Int64;
+  begin
+    if Prof then Result:= TStopwatch.GetTimeStamp else Result:= 0;
+  end;
+
+  procedure ProfLine(const AName: string; ATicks: Int64);
+  begin
+    Writeln(ErrOutput, Format('    %-28s %10.2f s', [AName, ATicks / TStopwatch.Frequency]));
+  end;
+
+  { Exactly the test the two dead-code rules used to make -- "no reference to
+    this symbol id AND no reference to this name" -- but as two hash lookups
+    against sets built once per run.
+
+    It replaces
+      (Length(AStore.FindReferencesTo(ASym.Id)) = 0) and
+      (Length(AStore.FindCallersByName(ASym.Name)) = 0)
+    which cost two row-materialising queries PER SYMBOL, the second of them a
+    full scan of refs (that table has no name_text index). Measured on
+    ORM3-Micronite2027: 447.8 s in unused-private-member and 59.0 s in
+    unused-public-symbol.
+
+    The name set is lowercased, matching the COLLATE NOCASE the query used;
+    both that collation and Delphi's LowerCase fold ASCII only, so the two
+    accept the same rows. }
+  function IsReferenced(const ASym: TSymbol): Boolean;
+  begin
+    Result:= RefdIds.ContainsKey(ASym.Id) or RefdNames.ContainsKey(LowerCase(ASym.Name));
+  end;
+
+  { The unit stems of every symbol named AName, memoised for the whole run.
+
+    This was one FindSymbolsByExactName query per REFERENCE OCCURRENCE, plus a
+    GetFilePath query per matching symbol -- so the cost was O(all refs in the
+    index) queries, repeated in full for every file, and identifiers recur
+    constantly (every Create, Result, Free, TStringList). MEASURED via
+    `lint-project --rule`: unused-unit-in-uses was 32.2 s of the 37.4 s
+    project-rules phase on YADF, a project of EIGHT FILES, while every other
+    project rule came in under 1.3 s. On ORM3-Micronite2027 the same phase was
+    still running after 8,705 CPU-seconds
+    (docs\INBOX-lint-all-project-wide-phase-dominates-runtime.md).
+
+    Keying on the raw NameText -- not a lowercased or normalised form -- keeps
+    this exactly equivalent to calling the store: TDictionary's default string
+    comparer is ordinal, so a memo hit answers the same question the query would
+    have. The stems are de-duplicated because the caller only ever tests set
+    membership, which also bounds the memo's size by distinct names, not refs. }
+  function StemsFor(const AName: string): TArray<string>;
+  var
+    Cached: TArray<string>              ;
+    Seen  : TDictionary<string, Boolean>;
+    S     : TSymbol                     ;
+    FPath : string                      ;
+    Stem  : string                      ;
+  begin
+    if StemsOfName.TryGetValue(AName, Cached) then Exit(Cached);
+    Seen:= TDictionary<string, Boolean>.Create;
+    try
+      for S in AStore.FindSymbolsByExactName(AName) do
+      begin
+        if S.FileId <= 0 then Continue;
+        if not PathOfFile.TryGetValue(S.FileId, FPath) then
+        begin
+          FPath:= AStore.GetFilePath(S.FileId);
+          PathOfFile.Add(S.FileId, FPath);
+        end;
+        Stem:= LowerCase(ChangeFileExt(ExtractFileName(FPath), ''));
+        if (Stem <> '') and not Seen.ContainsKey(Stem) then
+        begin
+          Seen.Add(Stem, True);
+          Result:= Result + [Stem];
+        end;
+      end;
+    finally
+      Seen.Free;
+    end;
+    StemsOfName.Add(AName, Result);
+  end;
+
+  { "Is AUnitName in the index as a unit?" -- memoised for the same reason:
+    every file in the project uses the same handful of units, so this ran the
+    identical query once per (file x used unit). }
+  function UnitIsIndexed(const AUnitName: string): Boolean;
+  var
+    S: TSymbol;
+  begin
+    if UnitIndexed.TryGetValue(AUnitName, Result) then Exit;
+    Result:= False;
+    for S in AStore.FindSymbolsByExactName(AUnitName) do
+      if S.Kind = skUnit then begin Result:= True; Break; end;
+    UnitIndexed.Add(AUnitName, Result);
   end;
 
   procedure Add(const AId, ASeverity, AMsg: string; const ASym: TSymbol);
@@ -720,11 +833,29 @@ var
 begin
   Result:= nil;
   if AStore = nil then Exit;
-  Findings:= TList<TLintFinding>.Create;
+  Findings   := TList<TLintFinding>.Create;
+  StemsOfName:= TDictionary<string, TArray<string>>.Create;
+  PathOfFile := TDictionary<Int64, string>        .Create;
+  UnitIndexed:= TDictionary<string, Boolean>      .Create;
+  RefdIds    := TDictionary<Int64 , Boolean>      .Create;
+  RefdNames  := TDictionary<string, Boolean>      .Create;
+  Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
+  TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
   try
+    { Built only for the rules that need them -- on a large index these are two
+      scans of the whole refs table, which is pure waste for a --rule run that
+      asks neither dead-code question. }
+    if WantRule('unused-public-symbol') or WantRule('unused-private-member') then
+    begin
+      for var RId: Int64  in AStore.GetReferencedSymbolIds  do RefdIds  .AddOrSetValue(RId, True);
+      for var RNm: string in AStore.GetReferencedNamesLower do RefdNames.AddOrSetValue(RNm, True);
+    end;
+
     { circular-uses: whole-graph SCC pass (not per-file). }
+    var T0: Int64:= Tick;
     if WantRule('circular-uses') then
       for var Cf in CollectCircularUses(AStore) do Findings.Add(Cf);
+    Inc(TCirc, Tick - T0); T0:= Tick;
 
     { enum-helper-separate-units (Task 7, enum-helper-generator milestone):
       whole-DB helper-edge pass (not per-file). ON by default -- do NOT add
@@ -733,16 +864,20 @@ begin
       genuinely ON at runtime in both lint paths. }
     if WantRule('enum-helper-separate-units') then
       for var Ef in CollectEnumHelperSeparateUnits(AStore) do Findings.Add(Ef);
+    Inc(TEnum, Tick - T0); T0:= Tick;
 
     { repeated-type-switch (v0.80 #14): cross-file case-selector grouping pass. }
     if WantRule('repeated-type-switch') then
       for var Rf in CollectRepeatedTypeSwitch(AStore) do Findings.Add(Rf);
+    Inc(TRts, Tick - T0);
 
     FileIds:= AStore.GetAllFileIds;
     for Fid in FileIds do
     begin
+      var TF: Int64:= Tick;
       Path:= AStore.GetFilePath(Fid);
       Syms:= AStore.FindSymbolsByFile(Path);
+      Inc(TOuter, Tick - TF);
 
       { unused-unit-in-uses: build the set of file IDs referenced from this file.
         Skip files with no uses entries to avoid the O(refs) cost for every file. }
@@ -750,6 +885,7 @@ begin
         import list: a .dpr legitimately names every unit it links even when its
         main block references no symbol from any of them. Only a .pas import can
         be a dead import, so never run this rule on .dpr/.dpk. }
+      var TU: Int64:= Tick;
       if WantRule('unused-unit-in-uses') and
          not (SameText(ExtractFileExt(Path), '.dpr') or SameText(ExtractFileExt(Path), '.dpk')) then
       begin
@@ -766,13 +902,8 @@ begin
             for Ref in Refs do
             begin
               if Ref.NameText = '' then Continue;
-              NameSyms:= AStore.FindSymbolsByExactName(Ref.NameText);
-              for RefSym in NameSyms do
-              begin
-                if RefSym.FileId <= 0 then Continue;
-                UnitStem:= LowerCase(ChangeFileExt(ExtractFileName(AStore.GetFilePath(RefSym.FileId)), ''));
-                if UnitStem <> '' then RefdUnitStems.AddOrSetValue(UnitStem, True);
-              end;
+              for var RefStem: string in StemsFor(Ref.NameText) do
+                RefdUnitStems.AddOrSetValue(RefStem, True);
             end;
             { Check each used unit: flag if its stem is absent from the ref set. }
             for U in UsesList do
@@ -787,11 +918,7 @@ begin
                 but also try full lowercase name so qualified names match). }
               UnitStem:= LowerCase(U.UnitName);
               { Conservative: only flag when the unit IS in the index (has a skUnit symbol). }
-              NameSyms:= AStore.FindSymbolsByExactName(U.UnitName);
-              var FoundInIndex: Boolean:= False;
-              for RefSym in NameSyms do
-                if RefSym.Kind = skUnit then begin FoundInIndex:= True; Break; end;
-              if not FoundInIndex then Continue;
+              if not UnitIsIndexed(U.UnitName) then Continue;
               { Also build the plain stem (last segment after the dot) for matching. }
               var DotPos: Integer:= LastDelimiter('.', UnitStem);
               var PlainStem: string:= UnitStem;
@@ -816,18 +943,22 @@ begin
           end;
         end; // if Length(UsesList) > 0
       end; // if WantRule
+      Inc(TUuiu, Tick - TU);
 
       { Build the property-accessor guard set for unused-private-member.
         ParseCache.Get re-uses an already-parsed tree when available; cost
         is near-zero on subsequent calls for the same file within a run.
         Must be freed at end of per-file scope (see finally below). }
       PropAccessors:= nil;
+      var TA: Int64:= Tick;
       if WantRule('unused-private-member') then
         PropAccessors:= BuildPropertyAccessorSet(Path);
+      Inc(TAccess, Tick - TA);
       try
 
         for Sym in Syms do
         begin
+          var TS: Int64:= Tick;
           { god-class: a class with both many methods and many fields. }
           if WantRule('god-class') and (Sym.Kind = skClass) then
           begin
@@ -842,6 +973,7 @@ begin
             if (NMethods > 20) and (NFields > 15) then
               Add('god-class', 'info', Format('God class: %s has %d methods and %d fields -- consider splitting responsibilities', [Sym.Name, NMethods, NFields]), Sym);
           end;
+          Inc(TGod, Tick - TS); TS:= Tick;
 
           { unused-public-symbol: an exported (interface-section) free routine that
             nothing in the index references or calls -- likely dead public API.
@@ -852,9 +984,10 @@ begin
           begin
             Parent:= AStore.GetSymbolById(Sym.ParentId);
             if (Parent.Id = Sym.ParentId) and (Parent.Kind = skUnit) then
-              if (Length(AStore.FindReferencesTo(Sym.Id)) = 0) and (Length(AStore.FindCallersByName(Sym.Name)) = 0) then
+              if not IsReferenced(Sym) then
                 Add('unused-public-symbol', 'info', Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);
           end;
+          Inc(TUpub, Tick - TS); TS:= Tick;
 
           { unused-private-member: a private or strict private member (method,
             field, const, nested type) that has zero references in the index.
@@ -890,12 +1023,12 @@ begin
               if (PropAccessors <> nil) and PropAccessors.ContainsKey(LowerCase(Sym.Name)) then
                 { property accessor or backing field -- not dead code, skip }
               else
-              if (Length(AStore.FindReferencesTo(Sym.Id)) = 0) and
-                 (Length(AStore.FindCallersByName(Sym.Name)) = 0) then
+              if not IsReferenced(Sym) then
                 Add('unused-private-member', 'warning',
                   Format('Private member ''%s'' has no references in the index -- possible dead code', [Sym.Name]), Sym);
             end;
           end;
+          Inc(TUpriv, Tick - TS);
 
         end; // for Sym
 
@@ -905,9 +1038,28 @@ begin
       end;
 
     end; // for Fid
+    if Prof then
+    begin
+      Writeln(ErrOutput, '  PROJECT-RULES BREAKDOWN');
+      ProfLine('circular-uses'             , TCirc  );
+      ProfLine('enum-helper-separate-units', TEnum  );
+      ProfLine('repeated-type-switch'      , TRts   );
+      ProfLine('unused-unit-in-uses'       , TUuiu  );
+      ProfLine('god-class'                 , TGod   );
+      ProfLine('unused-public-symbol'      , TUpub  );
+      ProfLine('unused-private-member'     , TUpriv );
+      ProfLine('  (accessor-set parse)'    , TAccess);
+      ProfLine('  (per-file store reads)'  , TOuter );
+      Flush(ErrOutput);
+    end;
     Result:= Findings.ToArray;
   finally
-    Findings.Free;
+    RefdNames  .Free;
+    RefdIds    .Free;
+    UnitIndexed.Free;
+    PathOfFile .Free;
+    StemsOfName.Free;
+    Findings   .Free;
   end;
 end; // function
 

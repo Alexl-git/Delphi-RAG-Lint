@@ -1,4 +1,11 @@
-# IfThen calls at lines 19-20; the if/then/else in Good must not fire
-ifthen-both-branches 19
-ifthen-both-branches 20
-!ifthen-both-branches 27
+# IfThen calls at lines 24-25 (one branch is a call, still flagged); the
+# if/then/else in Good must not fire; Task 9b: both-literal-branch call at
+# line 46 must not fire (a literal cannot have a side effect). Post-merge
+# review regression fix: the 2-arg StrUtils.IfThen overload -- line 60
+# (non-literal value) must still fire, line 70 (literal value) must not.
+ifthen-both-branches 24
+ifthen-both-branches 25
+!ifthen-both-branches 33
+!ifthen-both-branches 46
+ifthen-both-branches 60
+!ifthen-both-branches 70
