@@ -317,6 +317,14 @@ begin
     B('split-variable', 'refactoring', 'info', 'Local reused for two unrelated purposes (disjoint lifetimes) -- Split Variable into two locals', False); { OFF by default -- M2 two-live-range flow signal (linear routines only); opt in via "enabled" }
     B('separate-query-from-modifier', 'refactoring', 'info', 'Value-returning function also mutates state -- Command-Query Separation violation; split into a pure query and a command', False); { OFF by default -- inherently noisy (lazy getters, fluent mutators); conservative field-write predicate; opt in via "enabled" }
 
+    { --- review markers (dl:ok; 2026-08-12) ---
+      Meta-rules ABOUT the suppression mechanism, emitted by the one central
+      marker filter rather than by any checker. Both ship ON: a review marker
+      that has quietly stopped describing its code is the exact silent-wrong-
+      answer this project keeps paying for, so noticing it is the default. }
+    B('review-marker-stale',  'review-markers', 'hint', 'dl:ok marker no longer matches the line it reviews -- the finding is reported again; re-review and re-mark');
+    B('review-marker-unused', 'review-markers', 'hint', 'dl:ok marker records a finding that no longer occurs -- remove the marker');
+
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
     B('used-unit-not-resolvable', 'project-wide', 'warning', 'Used unit resolves to no known unit (project/library/alias)');

@@ -18,11 +18,20 @@ begin
 end;
 procedure TestMerge;
 const
-  CanonicalBuckets: array[0..14] of string = (
+  { A CLOSED vocabulary on purpose: a rule arriving with an invented category is
+    exactly what this assertion is for, so the list is extended deliberately and
+    annotated, never widened to make a red test green.
+    2026-08-12: +'review-markers', for review-marker-stale / review-marker-unused.
+    They are meta-rules ABOUT the suppression mechanism rather than about the code
+    under analysis -- emitted by the central dl:ok filter, not by any checker --
+    which is a genuinely different kind of thing from every other bucket here.
+    Filing them under 'other' would have passed this test while hiding that. }
+  CanonicalBuckets: array[0..15] of string = (
     'bug-patterns','resource-lifetime','security','platform',
     'complexity','structure','naming','dead-code',
     'data-flow','firedac','project-wide','metrics','other','refactoring',
-    'documentation'); { ADF milestone: missing-doc + doc-drift live in this bucket }
+    'documentation', { ADF milestone: missing-doc + doc-drift live in this bucket }
+    'review-markers');
 var
   Cat: TArray<TRuleInfo>;
   Info: TRuleInfo;

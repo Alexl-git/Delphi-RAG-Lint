@@ -108,7 +108,14 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # 3fdefd9 on main when the naming rules were split. Verified against the catalog
 # before matching the number: the delta is exactly that one id, and the
 # documentation category is unchanged at 4.
-Assert ("built-in rule count = 116 (115 + local-field-prefix); got {0}" -f $builtins.Count) ($builtins.Count -eq 116)
+# 2026-08-12 (b): +2 -> 118, from the dl:ok reviewed-marker landing:
+# `review-marker-stale` and `review-marker-unused`, both category `review-markers`,
+# both hint, both ON. They are meta-rules ABOUT the suppression mechanism, emitted
+# by the central marker filter rather than by any checker. This assertion caught
+# them on the first battery run after the change -- which is the tripwire doing its
+# job, so it is bumped deliberately rather than loosened. Verified the delta is
+# exactly those two ids and that `documentation` is still 4.
+Assert ("built-in rule count = 118 (116 + review-marker-stale + review-marker-unused); got {0}" -f $builtins.Count) ($builtins.Count -eq 118)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 4 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 4)
