@@ -93,6 +93,18 @@ type
     /// should still set the real configured value for the intended default
     /// (10, not "show everything").</summary>
     ComplexityMin: Integer;
+    /// <summary>True documents the project's WHOLE compile closure, including
+    /// vendored third-party source. False (the default, and what
+    /// Default(TDocBatchOptions) gives) restricts DocumentProject to the roots
+    /// the project declares as its own.</summary>
+    /// <remarks>`document --project` used to write wherever the closure reached.
+    /// On 2026-08-12 a YADF run applied its only two edits to
+    /// C:\Projects\DelphiAST -- a vendored parser in its own repository -- for a
+    /// 4,287-line diff, while nothing under the project changed. `lint-all`
+    /// already refuses to REPORT on code a project does not own; writing to it
+    /// is strictly worse than reporting on it, so the same declaration governs
+    /// both. Mirrors --lint-third-party as --document-third-party.</remarks>
+    DocumentThirdParty: Boolean;
   end;
 
   /// <summary>Aggregated batch result. Edits is the union of every kept
@@ -226,7 +238,10 @@ implementation
 uses
   System.SysUtils, System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
   DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Strip,
-  DRagLint.Index.Closure, DRagLint.Project.Resolver;
+  DRagLint.Index.Closure, DRagLint.Project.Resolver,
+  { Ownership for DocumentProject -- the same declaration lint-all reads, so the
+    two commands cannot disagree about which files belong to the project. }
+  DRagLint.Project.OwnRoots;
 
 // A declaration whose doc-comment we generate: routines/methods/ctors/dtors and
 // declared types. Fields, consts, vars, enum values, unit/program markers and
@@ -434,6 +449,55 @@ begin
   end;
 end;
 
+{ Keeps only the files the project declares as its own, and NAMES what it drops.
+  A silent drop is indistinguishable from "there was nothing there", which is the
+  failure shape that let the DelphiAST writes go unnoticed across several
+  sessions -- so the skipped roots are reported with their file counts, exactly
+  as lint-all reports them. Returns AFiles unchanged when the caller opted into
+  third-party or when no declaration is active (an undeclared project keeps the
+  pre-existing behaviour of its own folder, via TOwnRoots.Load's default). }
+function FilterToOwnRoots(const AFiles: TArray<string>; const AProjectFile: string;
+  const AOptions: TDocBatchOptions): TArray<string>;
+var
+  Own    : TOwnRoots               ;
+  Kept   : TList<string>           ;
+  Skipped: TDictionary<string, Integer>;
+  Root, F: string                  ;
+  N      : Integer                 ;
+begin
+  Result:= AFiles;
+  if AOptions.DocumentThirdParty then Exit;
+
+  Own:= TOwnRoots.Load(ExtractFilePath(AProjectFile));
+  if not Own.Active then Exit;
+
+  Kept   := TList<string>.Create;
+  Skipped:= TDictionary<string, Integer>.Create;
+  try
+    for F in AFiles do
+      if Own.IsOurs(F) then
+        Kept.Add(F)
+      else
+      begin
+        { Group by the immediate parent directory so the report names a place a
+          reader recognises ("C:\Projects\DelphiAST\Source -- 8 file(s)") rather
+          than listing every file. }
+        Root:= ExcludeTrailingPathDelimiter(ExtractFilePath(F));
+        if not Skipped.TryGetValue(Root, N) then N:= 0;
+        Skipped.AddOrSetValue(Root, N + 1);
+      end;
+
+    for Root in Skipped.Keys do
+      Writeln(ErrOutput, Format('doc: skipped third-party root %s -- %d file(s). Use --document-third-party to include it.',
+        [Root, Skipped[Root]]));
+
+    Result:= Kept.ToArray;
+  finally
+    Skipped.Free;
+    Kept.Free;
+  end; // try
+end; // function
+
 class function TDocBatch.DocumentProject(const AStore: ISymbolStore;
   const AProjectFile: string; const AOptions: TDocBatchOptions): TDocBatchResult;
 var
@@ -461,7 +525,14 @@ begin
     Resolver.Free;
   end;
 
-  Result := AggregateOverFiles(AStore, CR.Files, AOptions);
+  { OWNERSHIP, not just closure. The closure is the right answer to "what does
+    this project compile" and the WRONG answer to "what may this command
+    rewrite": it legitimately contains vendored third-party source. The library
+    path already removes dependencies installed as libraries, but a vendored
+    checkout that is merely `uses`d is not on it, so it stays in the closure and
+    was being edited. `lint-all` refuses to REPORT on such code; writing to it is
+    strictly worse, so both read the same declaration. }
+  Result := AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions);
 end;
 
 class function TDocBatch.DocumentAll(const AStore: ISymbolStore;

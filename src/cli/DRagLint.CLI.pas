@@ -372,6 +372,12 @@ type
     // Task 5: lint-all ownership scope. --lint-third-party restores the pre-
     // Task-5 behaviour (every indexed .pas file, vendored code included).
     LintThirdParty: Boolean;
+    // The same scope question for `document --project`, which WRITES rather
+    // than reports and so needs it more: without it a YADF run put its only two
+    // edits into the vendored DelphiAST checkout. Separate flag from
+    // --lint-third-party because opting into reporting on vendored code is a far
+    // smaller decision than opting into rewriting it.
+    DocumentThirdParty: Boolean;
     // PP-Task-3: dump-pp-eval diagnostic verb (the {$IF expr} evaluator)
     PpExpr    : string        ; // --expr "<E>"        the compile-time expression to evaluate
     PpDefines : TArray<string>; // --define <SYM>      repeatable defined symbols (lowercased on use)
@@ -526,7 +532,9 @@ begin
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup] [--db PATH]   - generate/repair a managed DocInsight comment');
   Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors] [--db PATH]         - document every public decl in the unit (facts-only)');
-  Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex] [--db PATH]  - document every public decl in the project''s compile closure (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
+  Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
+  Writeln('                                 scope: the compile closure restricted to the project''s own roots (_D-RAG\drag-lint-project.json, same declaration lint-all reads).');
+  Writeln('                                 Vendored roots are named and skipped; --document-third-party writes to them too.');
   Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
   // v(ADP3 T15): this line used to read "summary/param left as TODO ... add
   // --stubs to also create all-TODO stub comments". Both halves went stale in
@@ -829,6 +837,7 @@ begin
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--quiet'   then Result.Quiet := True
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
+    else if A = '--document-third-party' then Result.DocumentThirdParty:= True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
     else if A = '--scan-libraries-all' then
     begin
@@ -8566,6 +8575,7 @@ begin
   Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
   Opts.ComplexityMin:= LoadDocComplexityMin; // ADP2 T3: manifest docs.complexity_min threshold for the 'Complexity:' line (default 10 on any load failure).
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
+  Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; // restore the pre-fix whole-closure behaviour, including vendored source.
 
   // Step 2: document --apply (shifts lines, which makes index stale)
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
