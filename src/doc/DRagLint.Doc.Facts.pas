@@ -492,7 +492,16 @@ uses
   (the file reads; the unindexed name lookups) each turned out to be a minority
   share. Accumulate, do not guess. }
 var
-  GBHarvest, GBResolved, GBUnresolved, GBReturns, GBCalls, GBRaises, GBTotal: Int64;
+  GBHarvest, GBResolved, GBUnresolved, GBReturns, GBCalls, GBRaises,
+  GBAncestry, GBCoveredBy, GBWiring, GBTotal: Int64;
+  { The span between the ancestry block and CoveredBy was left untimed, so
+    'build total' minus the parts still hid a remainder. These three close it:
+    SeeAlso is NOT free despite reading "opt-in" -- it is on by default now (see
+    the TWO SETS comment in its block), and it runs GetCallEdgesFromSymbol plus
+    FindAllChildSymbols per declaration. Since/SymFacts are cheap and expected to
+    stay near zero; they are here so the sum is provably complete rather than
+    assumed complete. }
+  GBSeeAlso, GBSince, GBSymFacts: Int64;
 
 function BTick: Int64; inline;
 begin
@@ -505,9 +514,20 @@ function DocFactsBuildProfile: string;
     Result:= Format('%8.2f s', [ATicks / TStopwatch.Frequency]);
   end;
 begin
+  // 'unattributed' is total minus the nine sections. It is printed rather than
+  // left to the reader's arithmetic because that remainder is the whole point of
+  // this profiler: a non-trivial value means a section is still unmeasured, which
+  // is exactly the state that cost two wrong guesses.
+  var Parts: Int64:= GBHarvest + GBResolved + GBUnresolved + GBReturns + GBCalls +
+                     GBRaises + GBAncestry + GBSeeAlso + GBSince + GBSymFacts +
+                     GBCoveredBy + GBWiring;
   Result:= Format('      harvest %s | resolved-callers %s | unresolved-name %s'#13#10 +
-                  '      return-cases %s | calls %s | raises %s | build total %s',
-    [S(GBHarvest), S(GBResolved), S(GBUnresolved), S(GBReturns), S(GBCalls), S(GBRaises), S(GBTotal)]);
+                  '      return-cases %s | calls %s | raises %s | ancestry %s'#13#10 +
+                  '      seealso %s | since %s | symbol-facts %s'#13#10 +
+                  '      covered-by %s | wiring %s | unattributed %s | build total %s',
+    [S(GBHarvest), S(GBResolved), S(GBUnresolved), S(GBReturns), S(GBCalls), S(GBRaises),
+     S(GBAncestry), S(GBSeeAlso), S(GBSince), S(GBSymFacts),
+     S(GBCoveredBy), S(GBWiring), S(GBTotal - Parts), S(GBTotal)]);
 end;
 
 // PHASE C B2: '/N' when ASymbolId is one of several routines that share a name
@@ -1976,6 +1996,7 @@ begin
   // the known StartLine-only bound).
   //
   Inc(GBRaises, BTick - TB0);
+  TB0:= BTick;
   // CHEAP EARLY-OUT: only routine-like symbols with a parent (ASym.ParentId > 0)
   // can carry any of these facts -- a type, a field, a const, etc. has none, so
   // the whole block is skipped for every other kind/parentless symbol. Free
@@ -2098,6 +2119,8 @@ begin
     Result.IsVirtual    := DVirtual and not DOverride;
     Result.IsConstructor:= DCtor;
   end;
+  Inc(GBAncestry, BTick - TB0);
+  TB0:= BTick;
 
   // SeeAlso (opt-in): related-symbol crefs for the <seealso> doc-source. Only
   // computed when AIncludeSeeAlso (the --seealso flag) -- otherwise SeeAlso stays
@@ -2195,6 +2218,8 @@ begin
       CalleeSet .Free;
     end;
   end;
+  Inc(GBSeeAlso, BTick - TB0);
+  TB0:= BTick;
 
   // Since (opt-in): git commit date of the declaration line. Computed ONLY when
   // AIncludeSince (the --since flag) -- so a batch run WITHOUT --since never
@@ -2211,6 +2236,8 @@ begin
       ABaseDir, AStore.GetFilePath(ASym.FileId), ASym.StartLine);
     if SinceDate <> '' then Result.Since:= SinceDate;
   end;
+  Inc(GBSince, BTick - TB0);
+  TB0:= BTick;
 
   // v(ADP2 T3): Complexity fact -- the RAW index-time symbol_facts values,
   // read back verbatim (no threshold applied here: RenderFactsBlock gates the
@@ -2252,6 +2279,7 @@ begin
   // by DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze/
   // AnalyzeReturnsOwner).
   Result.ReturnsOwner:= SFacts.ReturnsOwner;
+  Inc(GBSymFacts, BTick - TB0);
 
   // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE: computed LAZILY
   // here (NOT read back from SFacts.CoveredBy, which stays unwritten/
@@ -2260,13 +2288,17 @@ begin
   // ComputeCoveredBy for the full rationale/ruleset. Unconditional call,
   // like Cyclomatic/ReadsFields above: ComputeCoveredBy itself early-outs
   // to '' for a non-routine ASym, so no kind-guard is duplicated here.
+  TB0:= BTick;
   Result.CoveredBy:= ComputeCoveredBy(AStore, ASym);
+  Inc(GBCoveredBy, BTick - TB0);
 
   // v(ADP3 T14): DI/ORM wiring -- the SECOND controller override, for the same
   // class of reason as CoveredBy above (the data is not in place when the facts
   // loop runs). A pure join over di_bindings/orm_links/fb_relations/fb_columns;
   // symbol_facts.wiring stays unwritten/reserved. See ComputeWiring's header.
+  TB0:= BTick;
   Result.Wiring:= ComputeWiring(AStore, ASym);
+  Inc(GBWiring, BTick - TB0);
   Inc(GBTotal, BTick - TBAll);
 end;
 

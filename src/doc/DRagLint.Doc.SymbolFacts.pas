@@ -3069,6 +3069,19 @@ begin
   // facts gate reads too. See that function's header; do not restate the set.
   if not CanBeCallTarget(ASym.Kind) then Exit;
 
+  // SECOND EARLY-OUT, AND THE ONE THAT MATTERS AT SCALE: if the index holds no
+  // test markers at all, IsTestRoutine cannot return True for any caller, so the
+  // whole reverse walk below is provably incapable of adding a name. Measured on
+  // YADF (188 decls, no tests): the walk was 8.76 s of a 15.55 s facts rebuild --
+  // 56% of it -- to produce '' every single time. COVERED_BY_MAXWALK is 200 and
+  // the walk fires up to two caller queries per expanded node, so the cost is
+  // ~decls x nodes x queries; this collapses it to ONE query per run.
+  //
+  // It is a gate on the WALK, not on the fact: an index that does contain tests
+  // takes exactly the path it always took, so no "Covered by:" line can change.
+  // Cheap to call per declaration -- the store caches its own answer.
+  if not AStore.HasTestRoutineMarkers then Exit;
+
   Names  := TStringList.Create;
   Visited:= TDictionary<Int64, Boolean>.Create;
   try

@@ -98,6 +98,15 @@ type
       FQFindByNameCI         : TFDQuery     ;
       FQFindByQNameCI        : TFDQuery     ;
       FNocaseWarned          : Boolean      ; // one note per store, not per query
+      { HasTestRoutineMarkers' answer, cached on the STORE -- same "once per
+        store, not once per call" idiom as FNocaseWarned above. It lives here
+        rather than in a global memo at the call site because the answer is a
+        property of this database: an instance field needs no identity check, no
+        cross-store invalidation, and keeps no store alive (and so no SQLite file
+        handle open) past its owner. Both default False on construction, i.e.
+        "not yet asked". }
+      FTestMarkersKnown      : Boolean      ;
+      FTestMarkersValue      : Boolean      ;
       FQCountSymbols         : TFDQuery     ;
       FQCountFiles           : TFDQuery     ;
       FQUpsertSymbolDoc      : TFDQuery     ;
@@ -1126,6 +1135,8 @@ type
       function GetReferencedSymbolIds: TArray<Int64>                                         ;
       /// <summary>Implements ISymbolStore.GetReferencedNamesLower -- one DISTINCT scan of refs.</summary>
       function GetReferencedNamesLower: TArray<string>                                       ;
+      /// <summary>Implements ISymbolStore.HasTestRoutineMarkers -- two LIMIT 1 probes.</summary>
+      function HasTestRoutineMarkers: Boolean                                                ;
       /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
@@ -5502,6 +5513,53 @@ begin
     Q.Free;
     List.Free;
   end; // try
+end; // function
+
+function TSQLiteSymbolStore.HasTestRoutineMarkers: Boolean;
+var
+  Q: TFDQuery;
+
+  { One EXISTS probe. LIMIT 1 so SQLite stops at the first hit rather than
+    materialising the match set -- the mistake this whole optimisation class
+    keeps turning up (two rules materialised every row only to compare a length
+    with zero). }
+  function Probe(const ASQL: string): Boolean;
+  begin
+    Q.Close;
+    Q.SQL.Text:= ASQL;
+    Q.Open;
+    Result:= not Q.Eof;
+  end;
+
+begin
+  { Cached per store: the caller asks once per DECLARATION, and neither probe is
+    index-backed (ancestor_name and path carry no index), so re-answering would
+    trade one full walk for one full scan. }
+  if FTestMarkersKnown then Exit(FTestMarkersValue);
+
+  Result:= False;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { (b) first: TTestCase ancestry is the narrower and more decisive of the two
+      IsTestRoutine rules, and type_ancestors is far smaller than files. }
+    if Probe('SELECT 1 FROM type_ancestors WHERE ancestor_name = ''TTestCase'' COLLATE NOCASE LIMIT 1') then
+      Result:= True
+    else
+      { (a) the file-name convention. Matching 'Test' anywhere in the path rather
+        than only in the base name keeps this a SUPERSET of IsTestRoutine's rule --
+        see the interface declaration for why erring towards True is the only safe
+        direction here. }
+      Result:= Probe('SELECT 1 FROM files WHERE path LIKE ''%Test%'' LIMIT 1');
+  finally
+    Q.Free;
+  end; // try
+
+  { Set only after both probes returned normally: an exception must leave the
+    cache "not yet asked" rather than bake in a False that would silently drop
+    every "Covered by:" line for the rest of the run. }
+  FTestMarkersValue:= Result;
+  FTestMarkersKnown:= True;
 end; // function
 
 function TSQLiteSymbolStore.GetFilePath(AFileId: Int64): string;

@@ -329,6 +329,20 @@ type
     /// refs.name_text carries NO index, so FindCallersByName is a full table scan
     /// EVERY call: replacing N of those with one scan is the whole point.</remarks>
     function GetReferencedNamesLower: TArray<string>                                       ;
+    /// <summary>True if this index could contain a test routine at all -- a
+    /// once-per-run precondition for the per-symbol "Covered by:" walk.</summary>
+    /// <returns>False only when NO file path contains 'Test' AND no recorded type
+    /// ancestor is named 'TTestCase'. False is a PROOF that
+    /// DRagLint.Doc.SymbolFacts.IsTestRoutine cannot return True for any symbol.</returns>
+    /// <remarks>Deliberately a SUPERSET of the real test: it matches 'Test' anywhere
+    /// in the path, not just in the file's base name, so it can only ever be too
+    /// permissive. A gate that over-answers True costs one wasted walk; one that
+    /// under-answers False would silently drop a real fact.
+    /// Same shape as GetReferencedSymbolIds/GetReferencedNamesLower above -- a
+    /// question asked once per run instead of once per symbol. Implementations
+    /// MUST cache the answer per store: callers invoke it once per declaration
+    /// and neither underlying column is indexed.</remarks>
+    function HasTestRoutineMarkers: Boolean                                                ;
     /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
