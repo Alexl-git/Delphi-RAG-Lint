@@ -235,6 +235,43 @@ begin
   Result := NodeText(FirstArg, ASrc) <> 'nil';
 end;
 
+{ True for the Try-pattern: a FUNCTION whose name begins with `Try`.
+
+  `TryXxx(const AInput; out AResult): Boolean` is a universal Delphi idiom in
+  which AResult is defined ONLY when the function returns True. Leaving it
+  unassigned on the False path is the contract being honoured, not a defect --
+  and Delphi zero-initialises `out` parameters on entry regardless, so there is
+  no uninitialised read to warn about either. All 7 `out-param-not-set` findings
+  on YADF were this exact shape (`ARec`, across several TryParse* helpers).
+
+  Name-based on purpose. The precise test would be "every path that leaves the
+  parameter unassigned returns False", which needs the return VALUE tracked per
+  path, not just assignment-reachability; the solver here answers the latter. The
+  `Try` prefix IS the published contract for that behaviour, so it is the honest
+  proxy rather than a heuristic standing in for something better.
+
+  A `Try`-named PROCEDURE gets no exemption: with no Result there is no
+  True/False contract for the caller to key off, so an unassigned `out` really is
+  a defect. }
+function IsTryStyleFunction(const AProc: TTSNode; const ASrc: TBytes): Boolean;
+var
+  Hdr, Nm: TTSNode;
+  N      : string ;
+  DotPos : Integer;
+begin
+  Result := False;
+  if AProc.IsNull then Exit;
+  Hdr := AProc.ChildByField('header');
+  if Hdr.IsNull then Exit;
+  Nm := Hdr.ChildByField('name');
+  if Nm.IsNull then Exit;
+  N := LowerCase(Trim(NodeStr(Nm, ASrc)));
+  { A qualified implementation name (TFoo.TryParse) carries the class prefix. }
+  DotPos := LastDelimiter('.', N);
+  if DotPos > 0 then N := Copy(N, DotPos + 1, MaxInt);
+  Result := (Length(N) > 3) and N.StartsWith('try');
+end;
+
 { A single interface dereference site: the routine-var index of the base
   identifier plus the position of the dereferencing node (the `exprDot` /
   `as`-exprBinary itself, so the finding points at the member access, not the
@@ -664,10 +701,14 @@ var
         end;
 
         { ---- out-param-not-set ---- }
+        { The Try-pattern opts out: see IsTryStyleFunction. Requiring a Result
+          here is what makes it "function", so a Try-named PROCEDURE is still
+          checked -- it has no True/False contract to justify the omission. }
+        var TryFn: Boolean := (Vars.IndexOf('result') >= 0) and IsTryStyleFunction(AProc, PF.Src);
         for I := 0 to Vars.Count - 1 do
         begin
           V := Vars.Get(I);
-          if (V.Kind = vkParamOut) and (not ExitVal.Must[I]) then
+          if (V.Kind = vkParamOut) and (not ExitVal.Must[I]) and (not TryFn) then
           begin
             if ExitVal.May[I] then
               Emit('out-param-not-set', 'info',

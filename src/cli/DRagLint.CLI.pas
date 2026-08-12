@@ -126,6 +126,7 @@ uses
   , DRagLint.Output.Sarif
   , DRagLint.Output.ExitCode
   , DRagLint.Lint  .Baseline
+  , DRagLint.Lint  .ReviewMarker { dl:ok reviewed-marker parse/hash/insert }
   , DRagLint.Preprocess.Types
   , DRagLint.Preprocess.Lexer
   , DRagLint.Preprocess.Expr
@@ -5505,17 +5506,50 @@ begin
   Result:= 0;
 end; // function
 
-{ Drops findings whose source line carries a '// drag-lint:ignore' directive.
-  Forms: '// drag-lint:ignore' (suppress every rule on that line) or
-  '// drag-lint:ignore <rule-id> [<rule-id> ...]' (suppress only those rule ids).
-  The marker must be inside a // line comment. File lines are cached per path. }
-function ApplyLineSuppressions(const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
+{ Drops findings whose source line records them as reviewed, and reports review
+  markers that have gone stale or unused.
+
+  Two marker forms are honoured, and they differ in KIND, not just spelling:
+
+  * `// drag-lint:ignore [<rule-id> ...]` -- the original blanket directive. Bare,
+    it silences EVERY rule on that line, permanently, with no record of who
+    decided that or whether the code still says what it said when they did.
+    Kept working for compatibility; `dl:ok` is the one to reach for.
+  * `// dl:ok <rule-id>@<hash> [-- reason]` -- an accountable review. It names the
+    rule, carries 4 hex of the line's code-token hash, and RE-REPORTS the finding
+    (plus a `review-marker-stale` hint) the moment the line changes. A review that
+    outlives the code it reviewed is worse than no review, because it reads as
+    one. See DRagLint.Lint.ReviewMarker for the hash's normalisation.
+
+  THE SINGLE SUPPRESSION POINT. FinalizeAndOutput calls this once, ahead of the
+  config filter, so every rule in the catalogue inherits the behaviour and no
+  future rule can forget to honour a marker. Sitting ahead of the config filter
+  also buys a property worth stating: findings from rules that are DISABLED are
+  still present here, so a dl:ok naming a disabled rule is still seen as USED and
+  is not falsely reported as unused. The two meta-rules emitted here pass through
+  the config filter like any other, so `--disable review-marker-unused` works with
+  no special-casing.
+
+  AScannedFiles is the full set of files the run examined. It is what makes
+  `review-marker-unused` work at all: the finding-driven line cache only ever
+  holds files that still PRODUCE findings, so a marker whose finding is gone --
+  precisely the case the rule exists to catch -- would be invisible without it.
+  Callers that cannot supply it get the degraded behaviour, documented, not a
+  silently empty result. }
+function ApplyLineMarkers(const AFindings: TArray<TLintFinding>;
+  const AScannedFiles: TArray<string> = nil): TArray<TLintFinding>;
 const
   MARK = 'drag-lint:ignore';
+  { Rules that count a comment as content, so the marker itself stops them
+    firing. Measured, not assumed -- see the note at the unused-marker scan. }
+  COMMENT_SENSITIVE: array[0..1] of string = ('empty-except', 'empty-case-branch');
 var
   LineCache : TDictionary<string, TArray<string>>;
   Lines     : TArray<string>                     ;
   Kept      : TList<TLintFinding>                ;
+  Extra     : TList<TLintFinding>                ;
+  Accounted : TDictionary<string, Boolean>       ;
+  Emitted   : TDictionary<string, Boolean>       ;
   F         : TLintFinding                       ;
   LineTxt   : string                             ;
   Rest      : string                             ;
@@ -5524,22 +5558,62 @@ var
   CPos      : Integer                            ;
   MPos      : Integer                            ;
   Suppressed: Boolean                            ;
+  Markers   : TArray<TReviewMarker>              ;
+  M         : TReviewMarker                      ;
+  Want      : string                             ;
+
+  function MarkerKey(const AFile: string; ALine: Integer; const ARule: string): string;
+  begin
+    Result:= LowerCase(AFile) + '|' + IntToStr(ALine) + '|' + LowerCase(ARule);
+  end;
+
+  { One hint per marker, never one per finding that happened to share the line. }
+  procedure EmitHint(const AFile: string; ALine: Integer; const ARule, AMsg: string);
+  var
+    H: TLintFinding;
+    K: string      ;
+  begin
+    K:= ARule + '#' + MarkerKey(AFile, ALine, ARule);
+    if Emitted.ContainsKey(K) then Exit;
+    Emitted.Add(K, True);
+    H:= Default(TLintFinding);
+    H.RuleId   := ARule;
+    H.Severity := 'hint';
+    H.FilePath := AFile;
+    H.StartLine:= ALine; H.StartCol:= 1;
+    H.EndLine  := ALine; H.EndCol  := 1;
+    H.Message  := AMsg;
+    Extra.Add(H);
+  end;
+
+  function LinesOf(const AFile: string): TArray<string>;
+  begin
+    if not LineCache.TryGetValue(AFile, Result) then
+    begin
+      if TFile.Exists(AFile) then Result:= TFile.ReadAllLines(AFile) else SetLength(Result, 0);
+      LineCache.Add(AFile, Result);
+    end;
+  end;
+
 begin
-  if Length(AFindings) = 0 then Exit(AFindings);
+  if (Length(AFindings) = 0) and (Length(AScannedFiles) = 0) then Exit(AFindings);
   LineCache:= TDictionary<string, TArray<string>>.Create;
-  Kept:= TList<TLintFinding>.Create;
+  Kept     := TList<TLintFinding>.Create;
+  Extra    := TList<TLintFinding>.Create;
+  Accounted:= TDictionary<string, Boolean>.Create;
+  Emitted  := TDictionary<string, Boolean>.Create;
   try
     for F in AFindings do
     begin
-      if not LineCache.TryGetValue(F.FilePath, Lines) then
-      begin
-        if TFile.Exists(F.FilePath) then Lines:= TFile.ReadAllLines(F.FilePath) else SetLength(Lines, 0);
-        LineCache.Add(F.FilePath, Lines);
-      end;
+      Lines:= LinesOf(F.FilePath);
       Suppressed:= False;
       if (F.StartLine >= 1) and (F.StartLine <= Length(Lines)) then
       begin
         LineTxt:= Lines[F.StartLine - 1];
+
+        { Legacy blanket directive. Deliberately left on its original naive
+          scan: tightening it here would change what existing projects
+          suppress, which is a separate decision from adding dl:ok. }
         CPos:= Pos('//', LineTxt);
         MPos:= Pos(MARK, LowerCase(LineTxt));
         if (CPos > 0) and (MPos > CPos) then
@@ -5553,11 +5627,95 @@ begin
               if SameText(Trim(Tok), F.RuleId) then begin Suppressed:= True; Break; end;
           end;
         end;
+
+        { The accountable form. }
+        if not Suppressed then
+        begin
+          Markers:= TReviewMarkers.Parse(LineTxt);
+          for M in Markers do
+          begin
+            if not SameText(M.RuleId, F.RuleId) then Continue;
+            Accounted.AddOrSetValue(MarkerKey(F.FilePath, F.StartLine, M.RuleId), True);
+            Want:= TReviewMarkers.HashLine(LineTxt);
+            if M.Hash = '' then
+            begin
+              { Hand-written, no hash: honour it, but say that it cannot be
+                verified rather than pretending it was. }
+              Suppressed:= True;
+              EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
+                Format('dl:ok marker for "%s" carries no @hash, so it cannot be checked against the code -- re-mark it as %s@%s.',
+                       [M.RuleId, M.RuleId, Want]));
+            end
+            else if SameText(M.Hash, Want) then
+              Suppressed:= True
+            else
+              { The load-bearing case. Report the finding AND say why the marker
+                stopped applying; silently keeping the suppression is how a real
+                defect disappears behind someone's old signature. }
+              EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
+                Format('dl:ok marker for "%s" records @%s but the line now hashes to @%s -- the line changed since it was reviewed. Re-review, then update the marker.',
+                       [M.RuleId, M.Hash, Want]));
+            Break;
+          end;
+        end;
       end; // if
       if not Suppressed then Kept.Add(F);
     end; // for
-    Result:= Kept.ToArray;
+
+    { Markers that suppress nothing. Scanned files are walked in full, because a
+      marker whose finding is gone lives, by definition, in a file that may now
+      report nothing at all.
+
+      COMMENT_SENSITIVE is the exception, and it is not a guess -- it was
+      measured. Some rules treat a comment as content, so writing the marker is
+      itself enough to stop the rule firing. Probe of the empty-* family
+      (2026-08-12): empty-except and empty-case-branch both go 1 -> 0 findings
+      when ANY trailing comment is added; empty-on-handler does not. Reporting
+      those as "unused" would create a loop with no exit -- mark the finding, the
+      comment silences the rule, the hint says remove the marker, removing it
+      brings the finding back. Marking such a finding is in fact the remedy the
+      rule was asking for (an explained empty handler), so the marker has done
+      its job and must not be nagged about. }
+    { Known rule ids only. Caught by dogfooding: the doc-comment at the top of
+      THIS function spells out the marker grammar as
+      `// dl:ok <rule-id>@<hash> [-- reason]`, and the scan happily read that as
+      a marker for a rule literally named "<rule-id>" and reported it unused.
+      Any file that documents the feature -- this one, a README embedded in a
+      .pas comment, a spec quoted in source -- has the same shape.
+
+      Validating against the catalogue also closes the typo hole in the safe
+      direction: `dl:ok bare-excpet@1234` suppresses nothing (the id never
+      matches a finding) and is not claimed to be a marker here either, so the
+      original finding stays visible rather than vanishing behind a misspelling. }
+    var Known: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry do
+        Known.AddOrSetValue(LowerCase(RI.Id), True);
+      for var SF: string in AScannedFiles do
+      begin
+        Lines:= LinesOf(SF);
+        for var LN: Integer:= 1 to Length(Lines) do
+        begin
+          if Pos(REVIEW_MARK, LowerCase(Lines[LN - 1])) = 0 then Continue; { cheap reject }
+          for M in TReviewMarkers.Parse(Lines[LN - 1]) do
+          begin
+            if not Known.ContainsKey(LowerCase(M.RuleId)) then Continue;
+            if MatchStr(LowerCase(M.RuleId), COMMENT_SENSITIVE) then Continue;
+            if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
+              EmitHint(SF, LN, 'review-marker-unused',
+                Format('dl:ok marker for "%s" no longer matches any finding on this line -- remove it.', [M.RuleId]));
+          end;
+        end;
+      end;
+    finally
+      Known.Free;
+    end;
+
+    Result:= Kept.ToArray + Extra.ToArray;
   finally
+    Emitted.Free;
+    Accounted.Free;
+    Extra.Free;
     Kept.Free;
     LineCache.Free;
   end; // try
@@ -6281,8 +6439,11 @@ end; // procedure
 /// from the post-ShouldKeep/baseline Survivors set computed inside this function,
 /// not from the caller's raw AFindings -- so a bare command whose only matches were
 /// OFF-by-default (suppressed) rules prints "0 finding(s)" AND exits 0.</remarks>
+{ AScannedFiles: the files this run examined. Optional, and only review-marker-
+  unused needs it -- see ApplyLineMarkers for why the finding list alone cannot
+  substitute. }
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
-  const AStore: ISymbolStore = nil): Integer;
+  const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil): Integer;
 var
   Cfg      : TLintConfig         ;
   Survivors: TArray<TLintFinding>;
@@ -6315,8 +6476,10 @@ begin
     SeenF.Free;
   end;
 
-  { 0: source-level ignore directives. }
-  AFindings:= ApplyLineSuppressions(AFindings);
+  { 0: source-level review markers -- dl:ok suppression, plus the stale/unused
+    hints. Deliberately ahead of the config filter so disabled rules' findings
+    still count as "the marker is doing something". }
+  AFindings:= ApplyLineMarkers(AFindings, AScannedFiles);
 
   { 1: config -- severity remap + enable/disable filter. }
   Cfg:= LoadLintConfig(AArgs);
@@ -9962,7 +10125,9 @@ begin
       for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
       Writeln(Summary + Format(' -- report: %s', [OutPath]));
     end,
-    Store { ADF Task 8: enables the store-backed doc-drift --fix path }
+    Store, { ADF Task 8: enables the store-backed doc-drift --fix path }
+    FilePaths { the scanned set -- what makes review-marker-unused able to see a
+                marker in a file that now reports nothing }
   );
   Prof.Done;
 end; // function
