@@ -73,6 +73,16 @@ For a finding on line L with rule R:
 | does not list R | -- | reported normally |
 | lists R, but R produces no finding | -- | `review-marker-unused` hint |
 
+**Where the check lives (owner requirement).** Before any finding is reported,
+the linter MUST read to the end of that finding's line and decide whether the
+message is already acknowledged. This is real added work -- a line read and a
+token hash per finding -- and it is worth it, but it must be paid ONCE: a single
+suppression filter sitting between "rules produced findings" and "findings are
+output", not a check bolted into each rule. Every rule in the catalogue then gets
+the behaviour for free and no future rule can forget it. The line text is already
+read and cached for the baseline fingerprint (`TBaseline.SourceLineText`), so the
+same cache serves both and the per-finding cost is a hash, not an I/O.
+
 The stale case is the load-bearing one. Without it, editing a reviewed line keeps
 the old suppression and the finding is silently lost -- exactly the
 silent-wrong-answer shape this project keeps hitting. `review-marker-unused` is a
