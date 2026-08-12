@@ -184,6 +184,8 @@ type
 implementation
 
 uses
+  System.Diagnostics, { TStopwatch -- DRAGLINT_PROFILE doc-drift attribution }
+  DRagLint.Doc.Facts, { DocFactsBuildProfile -- per-section cost of the facts rebuild }
   DRagLint.Doc.Drift, DRagLint.Doc.Document;
 
 { Kinds CDD/DocInsight applies to: public/published types + routines +
@@ -315,22 +317,46 @@ var
   Drifts  : TArray<TDocDriftFinding>;
   D       : TDocDriftFinding    ;
   F       : TLintFinding         ;
+  { DRAGLINT_PROFILE attribution -- doc-drift became the dominant lint-all phase
+    (454.9 s of ORM3-Micronite2027's 732.3 s) once the project rules were fixed,
+    and the phase profiler cannot see inside it. }
+  Prof    : Boolean             ;
+  TDecls, TExisting, TAnalyze: Int64;
+  NDecl, NDiff: Integer         ;
+  T0      : Int64               ;
+
+  function Tick: Int64;
+  begin
+    if Prof then Result:= TStopwatch.GetTimeStamp else Result:= 0;
+  end;
+
 begin
   Result:= nil;
   if AStore = nil then Exit;
+  Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
+  TDecls:= 0; TExisting:= 0; TAnalyze:= 0; NDecl:= 0; NDiff:= 0;
   Findings:= TList<TLintFinding>.Create;
   try
-    for Sym in DocumentedPublicDecls(AStore) do
+    T0:= Tick;
+    var Decls: TArray<TSymbol>:= DocumentedPublicDecls(AStore);
+    Inc(TDecls, Tick - T0);
+    for Sym in Decls do
     begin
+      Inc(NDecl);
       try
         { Re-scan the on-disk doc (the live comment above the decl, not the
           indexed snapshot) so drift is diffed against the actual source. Skip
           decls whose live comment cannot be re-anchored -- there is nothing to
           diff there. }
+        T0:= Tick;
         Live:= TDocumenter.ExistingDocFor(AStore, Sym.QualifiedName, ResSym, Found, HasDoc);
+        Inc(TExisting, Tick - T0);
         if (not Found) or (not HasDoc) then Continue;
+        Inc(NDiff);
 
+        T0:= Tick;
         Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AIncludeSeeAlso);
+        Inc(TAnalyze, Tick - T0);
         for D in Drifts do
         begin
           F:= Default(TLintFinding);
@@ -400,6 +426,16 @@ begin
       except
         { A single malformed decl must not abort the whole sweep. }
       end;
+    end;
+    if Prof then
+    begin
+      Writeln(ErrOutput, Format('  DOC-DRIFT BREAKDOWN (%d decl(s), %d with a live doc)', [NDecl, NDiff]));
+      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['list documented decls', TDecls   / TStopwatch.Frequency]));
+      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['ExistingDocFor'       , TExisting/ TStopwatch.Frequency]));
+      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['TDocDrift.Analyze'    , TAnalyze / TStopwatch.Frequency]));
+      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['  of which facts rebuild', TDocDrift.FactsBuildTicks / TStopwatch.Frequency]));
+      Writeln(ErrOutput, DocFactsBuildProfile);
+      Flush(ErrOutput);
     end;
     Result:= Findings.ToArray;
   finally

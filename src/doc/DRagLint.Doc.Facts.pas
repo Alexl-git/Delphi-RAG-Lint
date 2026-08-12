@@ -442,6 +442,14 @@ type
       AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TDocFacts;
   end;
 
+/// <summary>Per-section cost of every TDocFactsBuilder.Build call so far, as two
+/// printable lines. Diagnostic only; read by the DRAGLINT_PROFILE doc-drift
+/// breakdown.</summary>
+/// <remarks>Build runs once per declaration and dominates both `document` and
+/// the doc-drift rule, and its cost is NOT where two successive guesses put it
+/// -- hence per-section accumulation rather than argument.</remarks>
+function DocFactsBuildProfile: string;
+
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
   /// UNLESS ATotal > 15, in which case only the first 10 are kept and the caller
   /// appends '(+N more)' with N = ATotal - 10. Returns how many to display.</summary>
@@ -458,6 +466,7 @@ type
 implementation
 
 uses
+  System.Diagnostics, // TStopwatch -- DocFactsBuildProfile's per-section counters
   DRagLint.Doc.SymbolFacts, // v(ADP2 T5): ComputeCoveredBy -- see TDocFacts.CoveredBy's comment
   // v(ADP3 T7): HarvestScan / HarvestText, called from Build via
   // HarvestInterfaceComment. IMPLEMENTATION-side because Doc.Harvest reaches
@@ -475,6 +484,31 @@ uses
   // keeps paying for. CallResolver reaches only Core.Model / Core.Interfaces,
   // so this adds no cycle.
   DRagLint.Index.CallResolver;
+
+{ PERF ATTRIBUTION for Build, printed by the DRAGLINT_PROFILE doc-drift
+  breakdown. Build is called once per declaration and dominated both the
+  doc-drift lint phase and `document`; the phase profiler could see the total
+  but not which of Build's six sections owned it, and two successive guesses
+  (the file reads; the unindexed name lookups) each turned out to be a minority
+  share. Accumulate, do not guess. }
+var
+  GBHarvest, GBResolved, GBUnresolved, GBReturns, GBCalls, GBRaises, GBTotal: Int64;
+
+function BTick: Int64; inline;
+begin
+  Result:= TStopwatch.GetTimeStamp;
+end;
+
+function DocFactsBuildProfile: string;
+  function S(ATicks: Int64): string;
+  begin
+    Result:= Format('%8.2f s', [ATicks / TStopwatch.Frequency]);
+  end;
+begin
+  Result:= Format('      harvest %s | resolved-callers %s | unresolved-name %s'#13#10 +
+                  '      return-cases %s | calls %s | raises %s | build total %s',
+    [S(GBHarvest), S(GBResolved), S(GBUnresolved), S(GBReturns), S(GBCalls), S(GBRaises), S(GBTotal)]);
+end;
 
 // PHASE C B2: '/N' when ASymbolId is one of several routines that share a name
 // under the same parent -- i.e. an OVERLOAD SET -- where N is its DECLARED
@@ -885,20 +919,72 @@ begin
   end;
 end;
 
+{ PERF -- one whole-file read per file instead of five per DECLARATION.
+
+  Build reads the source with TFile.ReadAllLines in four separate places (the
+  interface-comment harvest, the return-case miner, the Calls scan and the
+  Raises scan), plus ReadDeclLine below, and each read decodes the whole file
+  from ANSI and splits it into lines. Build runs ONCE PER DECLARATION -- in
+  `document` and again in the doc-drift lint rule -- so a unit with N documented
+  decls re-read and re-split itself on the order of 5N times. On YADF, 8 files
+  and 188 decls, that was 18.3 s of a 20.1 s doc-drift phase; the same work sits
+  under `document --project`.
+
+  Single-entry, which is the right size rather than merely the easy one: the
+  four reads WITHIN one Build call are always the same file, so even in the
+  worst interleaving this collapses 5 reads to 1, and when decls arrive grouped
+  by file (the common case) it collapses the whole file's decls to 1. A
+  dictionary would add unbounded memory for the remainder.
+
+  KEYED ON LAST-WRITE-TIME, not just path, because `document --apply` REWRITES
+  the files this cache describes. A path-only key would serve pre-edit lines to
+  a post-edit run and quietly produce facts for source that no longer exists.
+  Cost is one stat per call against a full read and decode. }
+var
+  GSrcCachePath : string         ;
+  GSrcCacheStamp: TDateTime      ;
+  GSrcCacheLines: TArray<string> ;
+
+function SourceLines(const AFilePath: string): TArray<string>;
+var
+  Stamp: TDateTime;
+begin
+  Result:= nil;
+  if AFilePath = '' then Exit;
+  try
+    Stamp:= System.IOUtils.TFile.GetLastWriteTime(AFilePath);
+  except
+    Exit; { missing/unreadable -- same tolerant contract as the reads it replaces }
+  end;
+  { Bit-exact, not arithmetic: the question is "is this the SAME stamp I stored",
+    and both sides are copies of one GetLastWriteTime result, so identical value
+    means identical bits. A tolerance compare would be wrong here in the unsafe
+    direction -- it would call a file that was just rewritten "unchanged" and
+    serve stale lines. (drag-lint's own float-equality rule flags the plain `=`
+    on a TDateTime, correctly: comparing two COMPUTED times that way is a bug.
+    This is not that, and the cast says so.) }
+  if (GSrcCachePath = AFilePath) and (PInt64(@GSrcCacheStamp)^ = PInt64(@Stamp)^) then Exit(GSrcCacheLines);
+  try
+    GSrcCacheLines:= System.IOUtils.TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+  except
+    GSrcCachePath:= '';
+    Exit;
+  end;
+  GSrcCachePath := AFilePath;
+  GSrcCacheStamp:= Stamp;
+  Result        := GSrcCacheLines;
+end;
+
 // Reads the 1-based ALine of AFilePath, trimmed. '' on any error (missing
 // file, out-of-range line) -- same tolerant pattern the Calls/Raises sections
-// above use for their own TFile.ReadAllLines(..., TEncoding.ANSI) reads (source
-// is strict ANSI/CRLF per repo convention).
+// above use for their own reads (source is strict ANSI/CRLF per repo
+// convention). Now served from SourceLines' memo.
 function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
 var Lines: TArray<string>;
 begin
   Result:= '';
   if (AFilePath = '') or (ALine <= 0) then Exit;
-  try
-    Lines:= System.IOUtils.TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
-  except
-    Exit;
-  end;
+  Lines:= SourceLines(AFilePath);
   if ALine <= Length(Lines) then Result:= Trim(Lines[ALine - 1]);
 end;
 
@@ -1214,11 +1300,9 @@ var
   Res  : THarvestResult;
 begin
   if ASym.StartLine <= 0 then Exit;
-  try
-    Lines:= System.IOUtils.TFile.ReadAllLines(AStore.GetFilePath(ASym.FileId), TEncoding.ANSI);
-  except
-    Exit; // unreadable -> no harvested text, exactly as if there were no comment
-  end;
+  // Memoised (see SourceLines): unreadable yields nil, exactly as the previous
+  // swallowed-exception path did -> no harvested text, as if there were no comment.
+  Lines:= SourceLines(AStore.GetFilePath(ASym.FileId));
   if ASym.StartLine > Length(Lines) then Exit;
 
   // v(ADP3 T8): search order -- INTERFACE declaration first, then the
@@ -1425,7 +1509,10 @@ begin
   // one is harvested while the hand-written tags are preserved by MergeComment's
   // existing precedence. Which of the two wins when they disagree is Task 8's
   // question, not this call site's.
+  var TB0: Int64:= BTick;
+  var TBAll: Int64:= TB0;
   HarvestInterfaceComment(AStore, ASym, Result);
+  Inc(GBHarvest, BTick - TB0);
 
   // v(PHASE A3, ruling D-3): per-parameter MEANING, mined from the comments the
   // author wrote inside the parameter list. STRUCTURE is the emitter's job and
@@ -1469,12 +1556,15 @@ begin
   Distinct:= TList<TDocFactRef>.Create;
   Seen    := TDictionary<string, Boolean>.Create;
   try
+    TB0:= BTick;
     ResCallers:= AStore.FindResolvedCallers(ASym.Id);
     for RC in ResCallers do
     begin
       FR:= ToFactRef(RC);
       AddDistinct(FR);
     end;
+    Inc(GBResolved, BTick - TB0);
+    TB0:= BTick;
     // Unverified name-match bucket: CALL-SITE refs whose name matches but that
     // have no call_edges row (untypable receiver). v(ADP3 T3i, register E1):
     // until this bucket was restricted to call-site refs it also collected the
@@ -1600,6 +1690,7 @@ begin
     // governs Calls:/Used in units: below, unchanged). Simple threshold: show
     // AMaxCallers when the distinct count exceeds it, else show all; the
     // renderer's MoreSuffix appends '(+N more)' from CalledFromTotal.
+    Inc(GBUnresolved, BTick - TB0);
     Result.CalledFromTotal:= Distinct.Count;
     if Distinct.Count > AMaxCallers then Shown:= AMaxCallers else Shown:= Distinct.Count;
     if Shown < 0 then Shown:= 0;
@@ -1611,6 +1702,7 @@ begin
   end;
 
   // Returns: type from the signature, else '' (procedures).
+  TB0:= BTick;
   Result.ReturnType:= ParseReturnType(ASym.Signature);
 
   // ReturnCases: v(item1 T8) -- enumerate distinct return cases for a function's
@@ -1626,9 +1718,7 @@ begin
   if (Result.ReturnType <> '') and (AMaxReturnCases > 0)
      and (ASym.ImplStartLine > 0) and (ASym.ImplEndLine >= ASym.ImplStartLine) then
   begin
-    var RSrc: TArray<string>;
-    try RSrc:= System.IOUtils.TFile.ReadAllLines(AStore.GetFilePath(ASym.FileId), TEncoding.ANSI);
-    except RSrc:= nil; end;
+    var RSrc: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error, as before }
     if Length(RSrc) > 0 then
     begin
       var BodyLines: TArray<string>; SetLength(BodyLines, 0);
@@ -1646,6 +1736,8 @@ begin
     end;
   end;
 
+  Inc(GBReturns, BTick - TB0);
+  TB0:= BTick;
   // Calls (outgoing): v14 (D5 T10) -- PREFER RESOLVED callees, body-scan FALLBACK.
   // T3's original decision (t3-calls-spike-decision.md) still holds for sites
   // call_edges cannot resolve: there is no store method filtering refs by
@@ -1726,12 +1818,7 @@ begin
         CallSet.Sorted:= True;
         CallSet.Duplicates:= dupIgnore;
         CallSet.CaseSensitive:= False;
-        var Src: TArray<string>;
-        try
-          Src:= System.IOUtils.TFile.ReadAllLines(AStore.GetFilePath(ASym.FileId), TEncoding.ANSI);
-        except
-          Src:= nil;
-        end;
+        var Src: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error, as before }
         for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src)) do
           CollectCallIdents(Src[Ln - 1], CallSet);
 
@@ -1854,6 +1941,8 @@ begin
     end;
   end;
 
+  Inc(GBCalls, BTick - TB0);
+  TB0:= BTick;
   // Raises: 'raise <Ident>' exception class names in the body, deduped.
   if (ASym.ImplStartLine > 0) and (ASym.ImplEndLine >= ASym.ImplStartLine) then
   begin
@@ -1862,12 +1951,7 @@ begin
       RaiseSet.Sorted:= True;
       RaiseSet.Duplicates:= dupIgnore;
       RaiseSet.CaseSensitive:= False;
-      var Src2: TArray<string>;
-      try
-        Src2:= System.IOUtils.TFile.ReadAllLines(AStore.GetFilePath(ASym.FileId), TEncoding.ANSI);
-      except
-        Src2:= nil;
-      end;
+      var Src2: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error, as before }
       for var Ln2:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src2)) do
         CollectRaiseClass(Src2[Ln2 - 1], RaiseSet);
       Result.Raises:= RaiseSet.ToStringArray;
@@ -1891,6 +1975,7 @@ begin
   // probe DetectMethodDirectives (see its header comment for the rationale and
   // the known StartLine-only bound).
   //
+  Inc(GBRaises, BTick - TB0);
   // CHEAP EARLY-OUT: only routine-like symbols with a parent (ASym.ParentId > 0)
   // can carry any of these facts -- a type, a field, a const, etc. has none, so
   // the whole block is skipped for every other kind/parentless symbol. Free
@@ -2182,6 +2267,7 @@ begin
   // loop runs). A pure join over di_bindings/orm_links/fb_relations/fb_columns;
   // symbol_facts.wiring stays unwritten/reserved. See ComputeWiring's header.
   Result.Wiring:= ComputeWiring(AStore, ASym);
+  Inc(GBTotal, BTick - TBAll);
 end;
 
 end.

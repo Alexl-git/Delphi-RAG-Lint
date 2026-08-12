@@ -141,11 +141,19 @@ type
     /// </remarks>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
       const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean = True): TArray<TDocDriftFinding>;
+    /// <summary>Ticks spent in TDocFactsBuilder.Build across every Analyze call
+    /// so far, for the DRAGLINT_PROFILE doc-drift breakdown. Diagnostic only.</summary>
+    /// <remarks>Analyze regenerates the whole facts block per decl purely to
+    /// compare it, so this separates "rebuilding the facts" from the drift
+    /// comparisons themselves. Accumulated unconditionally -- two stopwatch
+    /// reads per decl -- and read only when the profiler prints.</remarks>
+    class function FactsBuildTicks: Int64;
   end;
 
 implementation
 
 uses
+  System.Diagnostics, { TStopwatch -- FactsBuildTicks, see TDocDrift }
   System.IOUtils,
   DRagLint.Refactor.DocStub, DRagLint.Doc.Facts, DRagLint.Doc.Regions;
 
@@ -449,6 +457,16 @@ end;
 // TDocDrift
 // ---------------------------------------------------------------------------
 
+{ See FactsBuildTicks. Accumulated across the whole process; the profiler is the
+  only reader. }
+var
+  GFactsBuildTicks: Int64 = 0;
+
+class function TDocDrift.FactsBuildTicks: Int64;
+begin
+  Result:= GFactsBuildTicks;
+end;
+
 class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
   const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean): TArray<TDocDriftFinding>;
 var
@@ -477,7 +495,9 @@ begin
     // builds is compared byte-for-byte (whitespace-collapsed) against the block
     // the DOCUMENTER wrote, so the two must be generated under the same options
     // or the comparison measures the option difference instead of drift.
+    var TFacts0: Int64:= TStopwatch.GetTimeStamp;
     Facts:= TDocFactsBuilder.Build(AStore, ASym, AIncludeSeeAlso);
+    Inc(GFactsBuildTicks, TStopwatch.GetTimeStamp - TFacts0);
 
     // Findings 1-6 are param/return drift and make sense ONLY for a routine.
     // On a class/interface/record/type-alias/const/var/property/field symbol,

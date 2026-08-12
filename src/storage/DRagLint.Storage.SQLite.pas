@@ -2730,6 +2730,26 @@ begin
     migration on every pre-v13 DB with "no such column: enclosing_symbol_id". }
   TryExec('ALTER TABLE refs ADD COLUMN enclosing_symbol_id INTEGER');
   TryExec('CREATE INDEX IF NOT EXISTS idx_refs_enclosing ON refs(enclosing_symbol_id)');
+  { refs.name_text had NO index, so every name-keyed reference lookup was a FULL
+    TABLE SCAN of refs -- and those lookups are the index's most-used queries:
+    find-callers (the headline one), FindUnresolvedNameCallers (run once per
+    declaration while building doc facts, i.e. once per decl in both `document`
+    and the doc-drift lint rule), and FindEventHandlersForForm.
+
+    COLLATE NOCASE on the index, matching the collation those queries compare
+    under -- Delphi identifiers are case-insensitive, so the queries say
+    `name_text = :name COLLATE NOCASE`, and SQLite will only use an index whose
+    collation matches the comparison's. A plain index on name_text would be
+    built, reported by `schema`, and then silently never used by the very
+    queries it was added for.
+
+    NO SCHEMA_VERSION BUMP, deliberately. Every ALTER above adds a COLUMN, which
+    changes the shape a reader must understand; an index changes only how fast
+    the same rows are found. Nothing reads it, no row moves, and an older engine
+    opening this DB is unaffected. Migrate runs this TryExec on EVERY open, so
+    existing databases acquire the index the next time anything touches them --
+    no reindex, no migration step for the user. }
+  TryExec('CREATE INDEX IF NOT EXISTS idx_refs_name_nocase ON refs(name_text COLLATE NOCASE)');
   { v16: per-file last-successful-compile timestamp (Unix seconds). NULL = never
     compiled. Additive column; ALTER onto pre-v16 files tables for the same
     reason as the symbols/refs columns above. Read by the freshness engine to
