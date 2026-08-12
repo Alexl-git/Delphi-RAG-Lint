@@ -224,7 +224,7 @@ begin
     resolver reads) -- not a stale per-.dproj sibling DB. Fall back to the
     template only when no manifest section covers it. }
   DbPath:= ManifestDbForFile(FileName);
-  if DbPath = '' then DbPath:= ResolveDbPath(Cfg.DbPathTemplate, ProjDir);
+  if DbPath = '' then DbPath:= ResolveDbPath(Cfg.DbPathTemplate, ProjDir, ProjName);
   GLastProjectDb:= DbPath;
 
   ExePath:= ResolveExePath(Cfg.ExePath);

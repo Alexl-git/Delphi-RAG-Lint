@@ -60,11 +60,41 @@ Key properties:
 > `Delphi-RAG-lint.sqlite`, `TableTools.sqlite`, `OCRPDF.sqlite`,
 > `DataCopy.sqlite`, `Delphi-RAG-Lint-Graph.sqlite`, `M2022.sqlite`,
 > `active-projects.sqlite`, `convrules-worktree.sqlite`, `library.sqlite`,
-> `projects.sqlite`, `samples.sqlite`. Each is replaced by
-> `<Repo>-<Project>.sqlite` under `C:\Projects\.drag-lint\` (ORM3 alone is eight
-> DBs). Consequence for consumers: **a cross-project question needs several
-> `--db` flags** -- a single-DB `find-callers` cannot see callers that live in
-> another project.
+> `projects.sqlite`, `samples.sqlite`. Each was replaced by
+> `<Repo>-<Project>.sqlite` -- see the next note for where those files live now.
+> Consequence for consumers, still true today: **a cross-project question needs
+> several `--db` flags** -- a single-DB `find-callers` cannot see callers that
+> live in another project.
+>
+> **2026-08-11: project DBs moved into the project's own folder.** The
+> per-project DBs above lived in the shared `C:\Projects\.drag-lint\` folder for
+> two days; they have since moved again, this time to a hidden `_D-RAG` folder
+> **beside each project's own `.dproj`**: `<project folder>\_D-RAG\<project
+> file base name>.sqlite` (e.g. `C:\Projects\YADF\_D-RAG\YADF.sqlite`,
+> `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite`). The `_D-RAG` folder
+> also holds that project's `drag-lint-project.json` (ownership roots, §1a) and
+> its ghost-compile recovery journal. Only DBs with **no owning project folder**
+> stay in the shared location: `C:\Projects\.drag-lint\library-{platform}.sqlite`
+> (§3's `Library` section) and `C:\Projects\DB\SQL\drag-lint-sql.sqlite` (a
+> folder-scan `SQL` section with its own absolute `db` path). All 27 project DBs
+> that existed under the shared folder were migrated and verified row-identical
+> at the new path; nothing else about the DB format or contents changed.
+
+### 1a. `lint-all` reports only the project's own code
+
+Since 2026-08-11, `lint-all` scopes its findings to code the project **owns**,
+not everything the compile closure touched. Ownership is declared in
+`<project folder>\_D-RAG\drag-lint-project.json` (key `ownRoots`, entries
+absolute or relative to that folder), defaulting to just the project's own
+folder when the file is absent. A vendored or third-party root the project
+compiles against (DelphiAST, PDFlibPas, tzdb, ...) is reported as **skipped**,
+not silently dropped -- `lint-all`'s output names the skipped root and its file
+count. Pass `--lint-third-party` to include everything again (the old,
+unscoped behavior). Measured effect (verified 2026-08-11 against the live
+YADF DB): YADF went from 1,072 findings (with `C:\Projects\DelphiAST` in
+scope) to 305 (`DelphiAST` skipped, 8 files); ORM3-Micronite2027 scans 565
+files instead of 641, keeping all 295 `COMMON\OBJECTS` units (declared as its
+own) while dropping the 76 `PDFlibPas` ones.
 
 ---
 
@@ -136,9 +166,11 @@ that definition and are deliberate:
 
 ## 3. The manifest: `drag-lint.json`
 
-A machine's DBs are described by a **named-DB manifest**. On this box it lives
-beside the engine: `third_party\dll-win64\drag-lint.json` (a copy also sits at
-`C:\Projects\.drag-lint.json`, loaded as defaults). Shape:
+A machine's DBs are described by a **named-DB manifest**. Two copies exist and
+are kept **byte-identical**: `third_party\dll-win32\drag-lint.json` (the 32-bit
+IDE plugin resolves its manifest beside itself) and `third_party\dll-win64\
+drag-lint.json` (the CLI). `tests\autotest\run_manifest_parity.ps1` enforces
+this. Shape:
 
 ```jsonc
 {
@@ -150,17 +182,21 @@ beside the engine: `third_party\dll-win64\drag-lint.json` (a copy also sits at
     "maxJobs": 0
   },
   "indexes": {
-    "outDir": "C:\\Projects\\.drag-lint",       // where non-absolute DBs land
+    "outDir": "C:\\Projects\\.drag-lint",       // where a section's EXPLICIT relative "db" lands
     "exclude": ["*BACKUP*", "*_OLD*.pas", "* - Copy.pas", "Win64"],
     "sections": [
       /* PROJECT sections -- the include ends .dproj/.dpr, so the scan is a
-         compile closure and the DB covers exactly one project. */
-      { "name": "ORM3-Micronite2027", "db": "ORM3-Micronite2027.sqlite",
+         compile closure and the DB covers exactly one project. No "db" key:
+         an omitted db on a project section resolves to that project's OWN
+         _D-RAG home, named after the project file -- never outDir. */
+      { "name": "ORM3-Micronite2027",
         "include": ["C:\\Projects\\DB\\ORM3\\CLIENT\\Micronite2027.dproj"],
         "useIgnoreFiles": true },
-      { "name": "DragLint-Cli", "db": "DragLint-Cli.sqlite",
+      { "name": "DragLint-Cli",
         "include": ["C:\\Projects\\Delphi-RAG-lint\\src\\cli\\drag-lint.dproj"] },
-      /* LIBRARY section -- the include is a folder, so the whole tree is scanned. */
+      /* SQL and Library are the two sections WITHOUT an owning project folder,
+         so they still name an explicit "db" -- absolute here for SQL, and
+         outDir-relative + {platform}-templated for Library. */
       { "name": "SQL",  "db": "C:\\Projects\\DB\\SQL\\drag-lint-sql.sqlite",
         "include": ["C:\\Projects\\DB\\SQL"], "includeOnly": ["MS*.SQL"] },
       { "name": "Library", "source": "registry-libraries",
@@ -173,14 +209,21 @@ beside the engine: `third_party\dll-win64\drag-lint.json` (a copy also sits at
 ```
 
 - Each **section** maps a set of targets (`include`, optionally filtered by
-  `includeOnly`) to **one DB**. A DB path may be absolute or relative to
-  `outDir`. The kind of target -- `.dproj`/`.dpr` vs folder -- is what makes the
-  section a project section or a library section.
+  `includeOnly`) to **one DB**. The kind of target -- `.dproj`/`.dpr` vs folder
+  -- is what makes the section a project section or a library section.
+- **Where the DB lands** (`ExpandSectionDb` in `DRagLint.Index.Manifest.pas`):
+  an explicit `"db"` wins outright (absolute as-is, or relative to `outDir`);
+  a PROJECT section with no `"db"` resolves to `<project folder>\_D-RAG\
+  <project file base name>.sqlite` -- the project's own home, never `outDir`.
+  `outDir` is therefore only the landing spot for sections with no project
+  folder to be "beside" (today: `SQL` and `Library`).
 - `exclude` globs drop backup/copy/other-platform noise everywhere.
 - The `Library` section is special: `source: registry-libraries` reads the RAD
   Studio Library/Browsing paths from the registry, and `{platform}` templating
   produces one DB per platform (`library-Win32.sqlite`, `library-Win64.sqlite`).
-- `index --all` builds every section; `--only ORM3,SQL` builds a subset.
+- `index --all` builds every section; `--only ORM3,SQL` builds a subset;
+  `index --all --only YADF --dry-run` prints the resolved `_D-RAG` path for a
+  single project section without writing anything.
 
 ---
 
@@ -196,12 +239,17 @@ drag-lint resolve-dbs --project C:\...\MyApp.dproj  # the DB covering one projec
 drag-lint resolve-dbs --in C:\...\MyUnit.pas        # the DB covering one file
 ```
 
-On this box (win64) `--platform` yields the eight `ORM3-*` project DBs, the SQL
-DB, the remaining per-project DBs under `.drag-lint\` (`DragLint-*`, `Loader`,
-`TableTools-*`, `OCRPDF-*`, `DataCopy-*`, `DragLintGraph-*`, `YADF*`), and the
-**Win64 library** DB. A consumer merges results across all of them, so a symbol
-defined in the RTL resolves even when you query from a project unit. You can
-still force a specific set with repeated `--db`.
+On this box (win64) `--platform` yields the eight `ORM3-*` project DBs (each in
+its own `_D-RAG` folder, e.g. `C:\Projects\DB\ORM3\CLIENT\_D-RAG\
+Micronite2027.sqlite`), the remaining per-project DBs likewise in their own
+project's `_D-RAG` folder (`DragLint-*`, `Loader`, `TableTools-*`, `OCRPDF-*`,
+`DataCopy-*`, `DragLintGraph-*`, `YADF*`), the SQL DB
+(`C:\Projects\DB\SQL\drag-lint-sql.sqlite`), and the **Win64 library** DB
+(`C:\Projects\.drag-lint\library-Win64.sqlite`). A consumer merges results
+across all of them, so a symbol defined in the RTL resolves even when you
+query from a project unit. You can still force a specific set with repeated
+`--db`. **You never need to know a `_D-RAG` path by hand** -- `resolve-dbs`
+(or `--db` omitted entirely) always resolves it correctly from the manifest.
 
 > **Per-project DBs change how you ask cross-project questions.** `find-callers`
 > against one project DB reports only the callers inside that project. If the

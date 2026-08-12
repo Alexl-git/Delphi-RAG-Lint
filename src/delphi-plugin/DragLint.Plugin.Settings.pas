@@ -39,7 +39,7 @@ type
 function LoadSettings: TDragLintSettings;
 procedure SaveSettings(const ASettings: TDragLintSettings);
 function DefaultSettings: TDragLintSettings                      ;
-function ResolveDbPath(const ATemplate, AProjDir: string): string;
+function ResolveDbPath(const ATemplate, AProjDir: string; const AProjName: string = ''): string;
 
 implementation
 
@@ -47,6 +47,7 @@ uses
   System.SysUtils
   , System.Win.Registry
   , Winapi.Windows
+  , DRagLint.Core.Model
   ;
 
 const
@@ -55,7 +56,13 @@ const
 function DefaultSettings: TDragLintSettings;
 begin
   Result.ExePath              := 'drag-lint.exe';
-  Result.DbPathTemplate       := '<projdir>\drag-lint.sqlite';
+  { v(project-drag-lint-home): the index now lives in the project's own hidden
+    _D-RAG folder beside its .dproj -- '<projname>' resolves to the project
+    file's base name (see ResolveDbPath below). The old flat
+    '<projdir>\drag-lint.sqlite' is still probed as a fallback (DbProbe.pas,
+    DbResolver.FindAncestorDb) so an IDE whose registry still holds the
+    pre-relocation template keeps finding an index. }
+  Result.DbPathTemplate       := '<projdir>\' + DRAG_HOME_DIR + '\<projname>.sqlite';
   Result.AutoIndex            := True;
   Result.AutoReindexOnSave    := True;
   Result.AutoDiagnosticsOnSave:= True;
@@ -195,9 +202,10 @@ begin
   end; // try
 end; // procedure
 
-function ResolveDbPath(const ATemplate, AProjDir: string): string;
+function ResolveDbPath(const ATemplate, AProjDir: string; const AProjName: string = ''): string;
 begin
   Result:= StringReplace(ATemplate, '<projdir>', ExcludeTrailingPathDelimiter(AProjDir), [rfReplaceAll, rfIgnoreCase]);
+  Result:= StringReplace(Result, '<projname>', AProjName, [rfReplaceAll, rfIgnoreCase]);
 end;
 
 end.

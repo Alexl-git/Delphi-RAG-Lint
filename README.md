@@ -327,7 +327,7 @@ Add to your MCP config (e.g. `~/.claude/claude_desktop_config.json`):
 {
   "drag-lint": {
     "command": "drag-lint.exe",
-    "args": ["serve", "--db", "C:\\Projects\\MyApp\\.drag-lint.sqlite"]
+    "args": ["serve", "--db", "C:\\Projects\\MyApp\\_D-RAG\\MyApp.sqlite"]
   }
 }
 ```

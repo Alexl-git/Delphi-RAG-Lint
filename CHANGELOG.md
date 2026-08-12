@@ -5,6 +5,41 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Project DB home (`_D-RAG`), and `lint-all` scoped to the project's own code (2026-08-11)
+
+- **Every project's index moved out of the shared `.drag-lint` folder into a
+  hidden `_D-RAG` folder beside its own project file.** Two days after the
+  2026-08-09 move to `C:\Projects\.drag-lint\<Repo>-<Project>.sqlite`, each
+  project DB moved again, this time to `<project folder>\_D-RAG\<project file
+  base name>.sqlite` (e.g. `C:\Projects\YADF\_D-RAG\YADF.sqlite`,
+  `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite`). All 27 project DBs
+  were migrated and verified row-identical at the new path. `_D-RAG` also holds
+  that project's `drag-lint-project.json` (ownership roots, next bullet) and
+  its ghost-compile recovery journal. Only DBs with **no owning project
+  folder** stay in `C:\Projects\.drag-lint\`: `library-{platform}.sqlite` and
+  the SQL index (`C:\Projects\DB\SQL\drag-lint-sql.sqlite`). Both manifest
+  copies (`third_party\dll-win32\drag-lint.json` and `dll-win64\
+  drag-lint.json`) resolve an omitted section `db` to this path automatically
+  (`ExpandSectionDb` in `DRagLint.Index.Manifest.pas`); `resolve-dbs` is still
+  the right way to find a DB without hardcoding the path.
+- **The IDE plugin's DB path template follows the move.** The default is now
+  `<projdir>\_D-RAG\<projname>.sqlite`; the pre-relocation flat
+  `<projdir>\drag-lint.sqlite` is still probed as a fallback, so an IDE whose
+  registry still holds the old template keeps finding an index.
+- **`lint-all` now reports only the project's own code.** Ownership is
+  declared in `<project folder>\_D-RAG\drag-lint-project.json` (key
+  `ownRoots`, entries absolute or relative to that folder), defaulting to the
+  project's own folder when the file is absent. A vendored/third-party root
+  the project compiles against is reported as **skipped** (named, with its
+  file count), not silently dropped; `--lint-third-party` restores the old
+  unscoped behavior. Measured: YADF went from 1,072 findings to 305
+  (`C:\Projects\DelphiAST`, 8 files, skipped); ORM3-Micronite2027 scans 565
+  files instead of 641, keeping all 295 `COMMON\OBJECTS` units while dropping
+  the 76 `PDFlibPas` ones.
+- Docs updated: `README.md`, `docs/INDEXING-AND-DB-ARCHITECTURE.md`,
+  `docs/SCAN-DATABASES.md`, `docs/INSTALL.md`,
+  `docs/editors/vscode-and-zed-mcp.md`, `skills/relint/SKILL.md`.
+
 ### Project-scoped indexing: scan type vs mode, and one DB per project (2026-08-09)
 
 - **Scan TYPE and MODE are two independent axes.** TYPE is **declared by the

@@ -434,7 +434,13 @@ begin
 
   S:= LoadSettings;
   if not S.EnableCodeLens then Exit;
-  DbPath:= ResolveDbPath(S.DbPathTemplate, TPath.GetDirectoryName(FilePath));
+  { v(project-drag-lint-home): <projname> is not known here (only a .pas file,
+    not its owning .dproj), so fall back to the containing directory's own
+    name -- the common convention (e.g. YADF\YADF.dproj) that FindAncestorDb
+    already relies on for the same reason. }
+  var ProjDir : string:= TPath.GetDirectoryName(FilePath);
+  var ProjName: string:= ExtractFileName(ExcludeTrailingPathDelimiter(ProjDir));
+  DbPath:= ResolveDbPath(S.DbPathTemplate, ProjDir, ProjName);
   CodeLensCache.PopulateOnce(FilePath, S.ExePath, DbPath);
 end; // procedure
 

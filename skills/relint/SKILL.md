@@ -70,7 +70,7 @@ over a locked exe **fails silently**, so you test the old binary.
 ```bash
 STAMP=$(date -u +%Y%m%d-%H%M%S)
 EXE="C:/Projects/Delphi-RAG-lint/third_party/dll-win64/drag-lint.exe"
-DB="C:/Projects/.drag-lint/<Repo>-<Project>.sqlite"    # ask: drag-lint resolve-dbs
+DB="C:/Projects/<ProjectFolder>/_D-RAG/<Project>.sqlite"   # ask: drag-lint resolve-dbs
 SRC="C:/Projects/<Repo>/src"
 CFG="C:/Projects/<Repo>/drag-lint-lint.json"           # optional; carries exclude_paths
 OUT="C:/TEMP/claude/relint-$STAMP.txt"
