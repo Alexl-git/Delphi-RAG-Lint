@@ -44,6 +44,7 @@ uses
   , System.DateUtils
   , System.RegularExpressions
   , System.Generics.Collections
+  , System.Generics.Defaults { Task 5: TComparer<string>.Construct for the lint-all skip-report sort }
   , System.Math
   , Data.DB
   , FireDAC.Comp.Client
@@ -367,6 +368,9 @@ type
     TextSource   : string ; // --source pas|dfm|sql ('' = all)
     // v0.64: lint-all progress
     Quiet : Boolean; // --quiet  suppress per-file progress to stderr
+    // Task 5: lint-all ownership scope. --lint-third-party restores the pre-
+    // Task-5 behaviour (every indexed .pas file, vendored code included).
+    LintThirdParty: Boolean;
     // PP-Task-3: dump-pp-eval diagnostic verb (the {$IF expr} evaluator)
     PpExpr    : string        ; // --expr "<E>"        the compile-time expression to evaluate
     PpDefines : TArray<string>; // --define <SYM>      repeatable defined symbols (lowercased on use)
@@ -484,7 +488,7 @@ begin
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch] [--layers <f.json>] [--json]');
-  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet]');
+  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
   Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
@@ -823,6 +827,7 @@ begin
     else if A = '--exact' then Result.ExactOnly:= True
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--quiet'   then Result.Quiet := True
+    else if A = '--lint-third-party' then Result.LintThirdParty:= True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
     else if A = '--scan-libraries-all' then
     begin
@@ -9358,6 +9363,66 @@ begin
     end;
 end;
 
+{ The project folder a lint run is anchored to: --project when given, else the
+  index's own _D-RAG parent, else the manifest section that claims this DB.
+  The manifest step is not dead weight after the migration -- a section may pin
+  an explicit "db" outside any _D-RAG (the read-only/network-share escape
+  hatch), and such a project would otherwise silently lose its declaration.
+  '' means no anchor could be determined, which TOwnRoots.Load turns into
+  "filtering off" rather than "own nothing": an ad-hoc --db must keep working
+  exactly as it did before this feature existed. }
+function LintAnchorDir(const AArgs: TArgs; const ADbPath: string): string;
+var
+  Manifest: TIndexManifest;
+  I       : Integer       ;
+  ProjFile: string        ;
+begin
+  if AArgs.ProjectPath <> '' then
+    Exit(ExcludeTrailingPathDelimiter(ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath))));
+
+  Result:= AnchorDirForDb(ADbPath);
+  if Result <> '' then Exit;
+
+  try
+    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    for I:= 0 to High(Manifest.Sections) do
+    begin
+      ProjFile:= SectionProjectFile(Manifest, Manifest.Sections[I]);
+      if ProjFile = '' then Continue;
+      if SameText(ExpandSectionDb(Manifest, Manifest.Sections[I]), ExpandFileName(ADbPath)) then
+        Exit(ExcludeTrailingPathDelimiter(ExtractFilePath(ProjFile)));
+    end;
+  except
+    { No manifest, or an unreadable one, is not a lint failure. }
+    on E: Exception do Result:= '';
+  end;
+end;
+
+{ Collapse skipped files into the fewest honest lines. Grouping by directory
+  would print DelphiAST twice (Source, and Source\SimpleParser) instead of
+  naming the dependency once, so each file's group is the HIGHEST ancestor
+  directory that is not itself an ancestor of one of our own roots: walking up
+  from DelphiAST\Source\SimpleParser stops at C:\Projects\DelphiAST, because the
+  next step reaches C:\Projects, which contains our own root C:\Projects\YADF. }
+function GroupKeyFor(const AFilePath: string; const AOwn: TOwnRoots): string;
+var
+  Dir, Parent, R: string;
+  Blocked       : Boolean;
+begin
+  Result:= ExtractFileDir(ExpandFileName(AFilePath));
+  while True do
+  begin
+    Dir   := Result;
+    Parent:= ExtractFileDir(Dir);
+    if (Parent = '') or SameText(Parent, Dir) then Break;   { drive root }
+    Blocked:= False;
+    for R in AOwn.Roots do
+      if StartsText(IncludeTrailingPathDelimiter(Parent), R) then begin Blocked:= True; Break; end;
+    if Blocked then Break;
+    Result:= Parent;
+  end;
+end;
+
 // v0.61: drag-lint lint-all [--db <index.sqlite>] [--project <.dproj>]
 //   [--disable id,...] [--output <report.txt>] [--json]
 // Batch lint runner: runs ALL per-file AST rules over every indexed .pas file,
@@ -9437,14 +9502,22 @@ begin
     quality signal for any rule), so an excluded file must never reach the
     scanner, and the banner below must report the count actually scanned. }
   var Cfg: TLintConfig:= LoadLintConfig(AArgs);
+  { Ownership is a SCOPE decision, exactly like exclude_paths, so it belongs
+    here -- before the scan, so an out-of-scope file never reaches the scanner
+    and the banner counts what was actually scanned. }
+  var Own: TOwnRoots:= TOwnRoots.Load(LintAnchorDir(AArgs, ProjectDb));
+  if Own.Error <> '' then begin EmitStatusLine(AArgs, 'ERROR: ' + Own.Error); Exit(2); end;
   FilePaths:= nil;
   var ExcludedCount: Integer:= 0;
+  var SkippedThird : TArray<string>:= nil;
   for Fid in Store.GetAllFileIds do
   begin
     PasPath:= Store.GetFilePath(Fid);
     if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then
     begin
       if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
+      if (not AArgs.LintThirdParty) and (not Own.IsOurs(PasPath)) then
+        begin SkippedThird:= SkippedThird + [PasPath]; Continue; end;
       if (ScopeSet = nil) or ScopeSet.ContainsKey(ScopeKey(PasPath)) then FilePaths:= FilePaths + [PasPath];
     end;
   end;
@@ -9456,6 +9529,35 @@ begin
     no-op reindex made a stale-DB run look like a successful one. }
   if ExcludedCount > 0 then
     EmitStatusLine(AArgs, Format('lint-all: %d file(s) skipped by exclude_paths', [ExcludedCount]));
+  { A scope filter that reports nothing is indistinguishable from a clean
+    codebase. Name what was dropped, grouped, and say how to include it. }
+  if Length(SkippedThird) > 0 then
+  begin
+    EmitStatusLine(AArgs, Format('lint-all: %d file(s) outside the project''s own roots skipped', [Length(SkippedThird)]));
+    var Groups: TDictionary<string, Integer>:= TDictionary<string, Integer>.Create;
+    try
+      for var SkPath: string in SkippedThird do
+      begin
+        var K: string:= GroupKeyFor(SkPath, Own);
+        var N: Integer:= 0;
+        Groups.TryGetValue(K, N);
+        Groups.AddOrSetValue(K, N + 1);
+      end;
+      var Keys: TArray<string>:= Groups.Keys.ToArray;
+      TArray.Sort<string>(Keys, TComparer<string>.Construct(
+        function(const L, R: string): Integer
+        begin Result:= Groups[R] - Groups[L]; end));
+      for var Idx: Integer:= 0 to Min(9, High(Keys)) do
+        EmitStatusLine(AArgs, Format('          %6d  %s', [Groups[Keys[Idx]], Keys[Idx]]));
+      if Length(Keys) > 10 then
+        EmitStatusLine(AArgs, Format('          + %d more root(s)', [Length(Keys) - 10]));
+      if Own.Anchor <> '' then
+        EmitStatusLine(AArgs, Format('          declare in %s to include; --lint-third-party to lint everything',
+          [TPath.Combine(TPath.Combine(Own.Anchor, DRAG_HOME_DIR), 'drag-lint-project.json')]));
+    finally
+      Groups.Free;
+    end;
+  end;
 
   { Per-file rules: external .scm rules + all built-in AST checks }
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
@@ -9561,6 +9663,20 @@ begin
   if AArgs.ProjectPath <> '' then Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
   { Used-unit resolvability (used-unit-not-resolvable) }
   Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
+
+  { The per-file filter above only narrowed the SCAN. Every rule between the
+    scan and here reads the whole store -- god-class, clone detection, layering,
+    the doc rules, used-unit-not-resolvable -- so without this the third-party
+    findings walk straight back in through the project-wide pass. Exactly the
+    failure the --project ScopeSet filter below already documents.
+    A finding with no file path belongs to the run, not to a file: keep it. }
+  if (not AArgs.LintThirdParty) and Own.Active then
+  begin
+    var Ours: TArray<TLintFinding>:= nil;
+    for F in Findings do
+      if (F.FilePath = '') or Own.IsOurs(F.FilePath) then Ours:= Ours + [F];
+    Findings:= Ours;
+  end;
 
   { Scope the PROJECT-WIDE rules too. Filtering FilePaths above only narrowed the
     per-file pass; every rule between here and there reads the whole store (god-
