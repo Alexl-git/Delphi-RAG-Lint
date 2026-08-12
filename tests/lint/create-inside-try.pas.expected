@@ -1,8 +1,22 @@
-# create-inside-try (#5): a try..finally whose FIRST protected statement is
-# X := TFoo.Create. Fires on line 10 (Create inside the try); NOT on the correct
-# pattern where the object is created before the try (line 15) and the try's first
-# statement is SL.Add (line 16/17).
+# create-inside-try, narrowed (Task 9a): fires ONLY when the try's own
+# finally block actually frees the just-constructed variable.
+#
+# P (genuine hazard -- rule fires): line 10 constructs SL as the first
+# protected statement, and the SAME try's finally at line 13 frees SL. NOT on
+# the correct pattern where the object is created before the try (line 15)
+# and the try's first statement is SL.Add (line 16/17).
 create-inside-try 10
 !create-inside-try 15
 !create-inside-try 16
 !create-inside-try 17
+#
+# Q (YADF 5483 shape -- no finding): Sb is constructed at line 35 as the
+# first statement of the OUTER try, but that try's finally (line 42) frees
+# Root, not Sb -- Sb has its own nested try..finally (Sb.Free at line 39)
+# immediately after. The outer finally never touches an undefined Sb.
+!create-inside-try 35
+#
+# R (finally frees a different var -- no finding): A is constructed at line
+# 55 as the first statement of the try, but the try's finally (line 58)
+# frees B, a different, already-assigned variable -- not A.
+!create-inside-try 55
