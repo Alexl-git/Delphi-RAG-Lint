@@ -19,9 +19,23 @@
 ; This does NOT weaken the real case: a value spliced into WHERE/VALUES/SET
 ; follows a comparison, a comma or a space -- never an identifier quote -- so
 ; every genuine injection shape still fires.
+; TIGHTENED AGAIN 2026-08-13 -- ENGLISH PROSE IS NOT SQL.
+; A single keyword match fires on ordinary sentences. Measured on DataCopy:
+;
+;   'DataCopy is ACTIVE and is the only thing transferring files from the
+;    FROM folder right now.' + sLineBreak + ...
+;
+; -- a MessageDlg string, reported as SQL injection because it contains " from ".
+; A real injectable statement carries a VERB and a CLAUSE keyword, essentially
+; without exception: SELECT..FROM, INSERT..VALUES, UPDATE..SET, DELETE..WHERE.
+; So require a leading verb AND a clause keyword, rather than any one word.
+; The verb is anchored to the start of the literal (allowing leading whitespace)
+; because that is where a statement begins; a sentence that merely mentions
+; "update" mid-prose no longer qualifies.
 ((exprBinary
   lhs: (literalString) @sql
   operator: (kAdd)
   rhs: (identifier)) @warn
-  (#match? @sql "(?i)(select | from | where |insert |update |delete |values | set )")
+  (#match? @sql "(?i)^'\\s*(select|insert|update|delete|merge|with)\\b")
+  (#match? @sql "(?i)( from | where | values | set |\\(| join )")
   (#not-match? @sql "[\"\\[`]\\s*'$"))
