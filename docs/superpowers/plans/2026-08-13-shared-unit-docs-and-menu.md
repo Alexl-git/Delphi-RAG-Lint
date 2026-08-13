@@ -49,7 +49,7 @@ step 1 establishes it before anything is changed.
 - Consumes: nothing from earlier tasks.
 - Produces: a repair path that reaches zero on a converged project. Tasks 2 and 4 measure against it.
 
-- [ ] **Step 1: Reproduce and capture WHY each edit is refused**
+- [x] **Step 1: Reproduce and capture WHY each edit is refused**
 
 Run, and keep the output -- this is the evidence the fix is judged against:
 
@@ -70,7 +70,7 @@ and actual differ.** The two candidate causes, neither yet confirmed:
 line; (b) the anchor text recorded at build time does not match what
 `TDocumenter.BuildFor` regenerated.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/autotest/run_autofix_apply_accounting.ps1`. It builds a scratch
 unit with THREE decls that all need the same fixable doc repair, indexes it,
@@ -89,7 +89,7 @@ Check 'second pass converges: nothing left to skip' ($secondSkipped -eq 0) `
   'a skip that survives a reindex is unrepairable by any command'
 ```
 
-- [ ] **Step 3: Run it and watch it fail**
+- [x] **Step 3: Run it and watch it fail**
 
 ```powershell
 pwsh -File tests\autotest\run_autofix_apply_accounting.ps1
@@ -98,7 +98,7 @@ pwsh -File tests\autotest\run_autofix_apply_accounting.ps1
 Expected: FAIL on `applied is 0 when no file was touched` (the current line says
 `applied 11 across 0 file(s)`), and/or on convergence.
 
-- [ ] **Step 4: Fix the accounting**
+- [x] **Step 4: Fix the accounting**
 
 `FixCount` is the count of fixable FINDINGS, not of applied edits, and one
 finding yields a delete+insert PAIR -- which is why 11 findings produced 22
@@ -118,7 +118,7 @@ edits. Report what actually happened:
         [Written, Touched, SkipSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
 ```
 
-- [ ] **Step 5: Fix the skip cause found in step 1**
+- [x] **Step 5: Fix the skip cause found in step 1**
 
 Implement the fix your step-1 diagnosis names, and nothing else. If it is (a),
 sort edits descending by (file, start offset) before applying so an earlier
@@ -126,7 +126,7 @@ write cannot move a later target. If it is (b), the anchor recorded by
 `FixEditsForDocDrift` must be re-derived from the same render the applier
 checks against.
 
-- [ ] **Step 6: Run the test and the battery**
+- [x] **Step 6: Run the test and the battery**
 
 ```powershell
 pwsh -File tests\autotest\run_autofix_apply_accounting.ps1
@@ -135,7 +135,7 @@ pwsh -File tests\run_battery.ps1
 
 Expected: new test PASS; battery **266/266** (265 + this one).
 
-- [ ] **Step 7: Prove it on the real project**
+- [x] **Step 7: Prove it on the real project**
 
 ```powershell
 cd C:\Projects\YADF
@@ -146,7 +146,7 @@ cd C:\Projects\YADF
 
 Expected: YADF `doc-drift` reaches **0** (it is stuck at 2 today), total 10 -> 8.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/cli/DRagLint.CLI.pas src/refactor/DRagLint.Refactor.TextEdit.pas tests/autotest/run_autofix_apply_accounting.ps1
@@ -176,14 +176,14 @@ that had not converged.
 - Consumes: Task 1's converging repair path (so "0 left" is reachable and provable).
 - Produces: `document --project` whose edit count agrees with `lint-all --fix`'s fixable count for `doc-drift`.
 
-- [ ] **Step 1: Find the divergence**
+- [x] **Step 1: Find the divergence**
 
 Both paths reach `TDocumenter.BuildFor`. Find what the batch planner does that
 the per-symbol path does not -- the candidate is a per-decl "does this need
 documenting?" pre-filter that asks a different question than
 `TDocDrift.Analyze` does. Name the exact predicate and line before writing code.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/autotest/run_doc_batch_sees_drift.ps1`: index a scratch project
 whose managed block has been hand-edited to be stale, then assert the two paths
@@ -201,7 +201,7 @@ Check 'the batch planner sees the drift the repair path sees' ($batchEdits -gt 0
   "document said 'nothing to document' while lint-all --fix found $driftFixable"
 ```
 
-- [ ] **Step 3: Run it and watch it fail**
+- [x] **Step 3: Run it and watch it fail**
 
 ```powershell
 pwsh -File tests\autotest\run_doc_batch_sees_drift.ps1
@@ -209,14 +209,14 @@ pwsh -File tests\autotest\run_doc_batch_sees_drift.ps1
 
 Expected: FAIL -- `$batchEdits` is 0.
 
-- [ ] **Step 4: Make the planner ask the same question**
+- [x] **Step 4: Make the planner ask the same question**
 
 Route the batch planner's per-decl decision through the same
 `TDocDrift.Analyze`-based test the repair path uses, so a decl with a fixable
 drift signal is always planned. Add a comment naming this as the fourth incident
 on the writer-vs-checker seam and pointing at the spec.
 
-- [ ] **Step 5: Run the test and the battery**
+- [x] **Step 5: Run the test and the battery**
 
 ```powershell
 pwsh -File tests\autotest\run_doc_batch_sees_drift.ps1
@@ -225,7 +225,7 @@ pwsh -File tests\run_battery.ps1
 
 Expected: new test PASS; battery **267/267**.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/doc/DRagLint.Doc.Document.pas tests/autotest/run_doc_batch_sees_drift.ps1
@@ -265,7 +265,7 @@ VERIFY the claim instead of trusting it.
   - `TSharedUnit.AddProject(const AUnitPath, AProject: string; out ANewText: string): Boolean` -- returns False when the project is already listed (idempotent no-op).
   Task 4 consumes `IsShared`; Task 5 consumes `AddProject`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/autotest/run_shared_unit_marker.ps1` with four fixtures: no marker;
 marker with one project; marker with the project already listed; marker on a unit
@@ -281,7 +281,7 @@ Check 'marker is found below a line-1 block comment' (IsSharedPerCli $blockComme
   'line 1 here is often the { of a header comment -- the anchoring trap that already breaks unit-too-large'
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```powershell
 pwsh -File tests\autotest\run_shared_unit_marker.ps1
@@ -289,7 +289,7 @@ pwsh -File tests\autotest\run_shared_unit_marker.ps1
 
 Expected: FAIL -- no such CLI surface yet.
 
-- [ ] **Step 3: Implement the marker**
+- [x] **Step 3: Implement the marker**
 
 Add to `DRagLint.Lint.ReviewMarker.pas`:
 
@@ -347,7 +347,7 @@ text starts with `interface` (case-insensitive), inclusive. That covers the
 `unit` line, a header block comment, and the `interface` line, and stops before
 the body.
 
-- [ ] **Step 4: Add the CLI surface the test drives**
+- [x] **Step 4: Add the CLI surface the test drives**
 
 ```
 drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json]
@@ -355,7 +355,7 @@ drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json]
 
 Dry-run by default, matching `allow`. Print the resolved project list.
 
-- [ ] **Step 5: Run the test and the battery**
+- [x] **Step 5: Run the test and the battery**
 
 ```powershell
 pwsh -File tests\autotest\run_shared_unit_marker.ps1
@@ -364,7 +364,7 @@ pwsh -File tests\run_battery.ps1
 
 Expected: new test PASS; battery **268/268**.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lint/DRagLint.Lint.SharedUnit.pas src/lint/DRagLint.Lint.ReviewMarker.pas src/cli/DRagLint.CLI.pas tests/autotest/run_shared_unit_marker.ps1
@@ -379,6 +379,49 @@ git commit -m "feat(shared): dl:shared unit marker, reader and CLI surface"
 the stored block against a freshly rendered one, so a block written while
 project A's index was open is reported stale by project B, whose closure
 truthfully holds fewer callers.
+
+**RE-MEASURED 2026-08-13, engine `e6d0b8b` -- the premise HOLDS, and the doubt
+recorded in `RESUME-2026-08-13c` is resolved.** That resume doc was right that
+Task 4's ORIGINAL evidence had evaporated (YADF's residual `doc-drift` was the
+seealso option mismatch, fixed in `9414826`, and the `dxRibbon` /
+`TestCachedUpdates.dpr` junk was deleted from the source by the repair). It was
+wrong that the underlying problem had gone with it. Read-only `lint-all
+--project`, no `--fix`, on all three projects:
+
+| Project | findings | `doc-drift` | was (47c5791) |
+|---|---|---|---|
+| YADF | 8 | **0** | 10 / 2 |
+| YADFOT | 64 | **31** | 45 |
+| YADFSetup | 58 | **34** | 45 |
+
+The churn did not merely survive, it got WORSE: repairing YADF rewrote the shared
+units' blocks under YADF's narrower closure, and YADFOT/YADFSetup went 45 -> 64
+and 45 -> 58. Every drift finding lands on a shared unit -- `YADF.Options.pas`
+21 under each, then `YADF.OptionsFrame.pas`, `YADF.Tokens.pas`, `YADF.Groups.pas`,
+`YADF.Layout.pas` -- while YADF reports 0 on those same files. That is "project A
+documents, project B calls it stale", measured, not inferred.
+
+THE ONE CONCRETE DISAGREEMENT, as Step 2 of the resume doc demanded.
+`YADF.Options.ParseEncoding`, stored on disk (`YADF.Options.pas:159`, written
+under YADF):
+
+```
+/// Called from: YADF.Options.OptionTable (YADF.Options.pas), YadfMain.ParseFlags (YadfMain.pas)
+```
+
+the same decl rendered under `_D-RAG\YADFOT.sqlite`:
+
+```
+/// Called from: YADF.Options.OptionTable (YADF.Options.pas)
+```
+
+Every other line of the block -- `Calls:`, `Returns:`, `Complexity:`, `Pure` --
+is byte-identical. YADFOT does not compile `YadfMain.pas`, so its closure
+truthfully holds one caller fewer; the byte compare calls the block stale and the
+repair would DROP `YadfMain.ParseFlags`, at which point YADF calls it stale in
+the other direction. The loop has no fixed point. The forgiven entry here is
+inbound, names a unit outside the current closure, and is `certain` -- all three
+conditions of the rule below, on the first decl examined.
 
 **Files:**
 - Modify: `src/doc/DRagLint.Doc.Drift.pas` (the `ddFactsBlockStale` branch, currently `if CollapseAllWhitespace(CurBlock) <> CollapseAllWhitespace(Fresh)`)
@@ -434,6 +477,30 @@ The rendering already carries what step 3 needs -- every entry names its unit in
 parentheses, e.g. `YADF.Groups.ParseGroups (YADF.Groups.pas)`. **Do not change
 that format**: re-rendering every block to a new shape would report mass drift
 across all four projects for a cosmetic change.
+
+**GAP FOUND 2026-08-13, before implementing: the plan above does not say what to
+do about `(+N more)`.** Every inbound list is CAPPED and the overflow is rendered
+as a `MoreSuffix` -- `Called from: A (a.pas), B (b.pas) (+18 more)`
+(`Doc.Regions.pas:2164`, `:2167`, `:2186`). When either side of the comparison is
+truncated, the visible entries are a WINDOW onto the list, not the list, so
+"present in STORED but absent from FRESH" stops meaning what step 3 assumes: an
+entry can vanish from the window purely because the cap fell differently, and a
+genuine deletion can hide inside the `+N`. Set comparison over a truncated list
+is not sound, and the caps differ between projects because the underlying counts
+do.
+
+RECOMMENDED RULE, conservative and statable: **forgiveness applies only when
+NEITHER side of that fact line carries a `(+N more)` suffix. A truncated line
+keeps today's byte-compare semantics exactly.** It cannot make anything worse
+than the current behaviour, it needs no reasoning about what is inside the `+N`,
+and the case that motivated the feature is not truncated -- the measured
+disagreement on `YADF.Options.ParseEncoding` has two entries and no suffix. The
+cost is that a heavily-called shared symbol keeps churning; that is a known,
+bounded remainder to measure in Step 5, not a silent one.
+
+Add an assertion for it: `Check 'a truncated inbound list is not forgiven'`.
+Whatever is decided, decide it explicitly -- an unstated answer here writes wrong
+facts into four real projects' source.
 
 Comment the `certain` condition honestly: it is insurance, not the load bearer.
 The junk it guards against (`TestCachedUpdates.dpr`, `dxRibbon`) was measured on
