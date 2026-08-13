@@ -16,6 +16,7 @@ uses
   , DRagLint.Core  .Encoding
   , DRagLint.Parser.Delphi13
   , DRagLint.Lint  .QueryRules
+  , DRagLint.Lint  .ReviewMarker { REVIEW_MARK -- a tool-written marker is not a hand-written inline comment }
   ;
 
 type
@@ -289,6 +290,15 @@ begin
       // Whole-line comments aren't the YADF hazard; only trailing
       // (post-value) ones are. Require non-whitespace BEFORE `//`.
       if Trim(Copy(Infos[I].Text, 1, Infos[I].SlashSlashCol - 1)) = '' then Continue;
+      { A `dl:ok` review marker is written by `drag-lint allow`, never by hand,
+        and it MUST sit on the finding's own line -- that is what attributes it,
+        so there is nowhere else to put it. Flagging it means every allow of a
+        finding inside a multi-line argument list manufactures a NEW finding.
+        Measured on YADF: 87 allows produced 8 of these, all self-inflicted.
+        Only a comment that is ENTIRELY a marker is skipped. A HUMAN comment
+        that merely also carries a marker is still a genuine reflow hazard and
+        still fires -- the payload check, not Parse(), is what draws that line. }
+      if StartsText(REVIEW_MARK, Trim(Copy(Infos[I].Text, Infos[I].SlashSlashCol + 2, MaxInt))) then Continue;
       // Also skip lines that close out of the multi-line construct -
       // YADF can't reflow into a comment that has no following sibling.
       if Infos[I].DepthExit = 0 then Continue;

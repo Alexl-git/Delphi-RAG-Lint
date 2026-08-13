@@ -255,7 +255,14 @@ begin
     B('identical-then-else',   'dead-code', 'warning', 'then and else branches are identical');
     B('referenced-never-set',  'dead-code', 'warning', 'Private field is read but never assigned');
     B('redundant-parentheses', 'dead-code', 'hint',    'Redundant parentheses around a single term or nested parens');
-    B('commented-out-code',    'dead-code', 'hint',    'Comment appears to be commented-out code (assignment or call)');
+    { OFF by default -- owner ruling, 2026-08-13: "I often do this and forget to
+      clean it, or comment out debug output when I do not need it but might need
+      it later." Deliberately-parked code is a normal working habit here, so the
+      rule was reporting an intent it cannot distinguish from an accident.
+      It also cannot tell code from PROSE ABOUT code: both YADF findings were a
+      doc comment showing a before/after example of what the formatter does.
+      Opt back in per project with "enabled":["commented-out-code"]. }
+    B('commented-out-code',    'dead-code', 'hint',    'Comment appears to be commented-out code (assignment or call)', False);
     B('function-result-ignored','dead-code','hint',    'Result of a same-unit function call is discarded', False); { OFF by default -- FP-prone (builders/adders/runners legitimately discard results); opt in via "enabled" }
     B('redundant-cast',        'dead-code', 'hint',    'Cast of a value to the type it already has (no-op)');
 

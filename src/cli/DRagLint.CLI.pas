@@ -5544,7 +5544,14 @@ const
   MARK = 'drag-lint:ignore';
   { Rules that count a comment as content, so the marker itself stops them
     firing. Measured, not assumed -- see the note at the unused-marker scan. }
-  COMMENT_SENSITIVE: array[0..1] of string = ('empty-except', 'empty-case-branch');
+  { commented-out-code added 2026-08-13, measured the same way the first two
+    were: allowing the two findings at YADF.Layout.pas:2321-2322 -- a doc comment
+    showing a before/after EXAMPLE of what the formatter does -- made the rule
+    stop firing, and both markers were then reported unused on the next run.
+    That is the loop with no exit this list exists to break: the finding is about
+    a COMMENT, so appending a marker comment changes the very text the rule
+    reads. }
+  COMMENT_SENSITIVE: array[0..2] of string = ('empty-except', 'empty-case-branch', 'commented-out-code');
 var
   LineCache : TDictionary<string, TArray<string>>;
   Lines     : TArray<string>                     ;
@@ -6956,6 +6963,12 @@ begin
         common in this codebase -- opt in via "enabled": ["boolean-flag-parameter"]
         or --rule boolean-flag-parameter). }
       if AArgs.Rule <> 'boolean-flag-parameter' then DefDisabled:= DefDisabled + ['boolean-flag-parameter'];
+      { commented-out-code OFF by default -- owner ruling 2026-08-13: parking code
+        or a debug Writeln behind a comment is a deliberate working habit here,
+        and the rule cannot tell that from an accident. It also cannot tell code
+        from PROSE ABOUT code (both YADF hits were a doc comment showing a
+        before/after example). Opt in via "enabled":["commented-out-code"]. }
+      if AArgs.Rule <> 'commented-out-code' then DefDisabled:= DefDisabled + ['commented-out-code'];
       { string-equality-comparison + nil-comparison ship OFF here too, and they
         HAVE to be listed on every surface separately: the per-file `lint`, the
         `lint-project` and the `lint-all` verbs each build this list by hand, so
@@ -10083,6 +10096,13 @@ begin
       'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter',
       'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy',
       'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier', 'missing-doc',
+      { commented-out-code -- owner ruling 2026-08-13. Parking code, or commenting
+        out a debug Writeln that may be wanted again, is a deliberate habit here,
+        and the rule cannot distinguish that from an oversight. Nor can it tell
+        code from PROSE ABOUT code: both YADF hits were one doc comment showing a
+        before/after example of what the formatter does. Opt in per project with
+        "enabled":["commented-out-code"]. }
+      'commented-out-code',
       { string-equality-comparison ships OFF for the same reason as the rest of
         this list, and it is the largest single contributor the list has ever
         had: 406 findings on drag-lint's own source. It fires on EVERY '=' whose
@@ -10178,6 +10198,10 @@ begin
     set here too; the --rule guard keeps explicit --rule missing-doc opt-in-able, and
     config "enabled":["missing-doc"] still overrides via ShouldKeep. doc-drift stays ON. }
   if AArgs.Rule <> 'missing-doc' then DefDisabled:= DefDisabled + ['missing-doc'];
+  { Same reasoning, same trap: commented-out-code is a BUILT-IN, so the
+    catalogue's default_enabled=false does not reach DefDisabled on its own.
+    See DoLint for the owner ruling this encodes. }
+  if AArgs.Rule <> 'commented-out-code' then DefDisabled:= DefDisabled + ['commented-out-code'];
   Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, AArgs.Rule);
   { v0.51: interface reference cycles -- needs the AST of all project files (parsed here) }
   if (AArgs.Rule = '') or (AArgs.Rule = 'interface-reference-cycle') then
@@ -15059,6 +15083,7 @@ var
   LineStart: Integer;
   LineEnd  : Integer;
   C        : Char   ;
+  M        : TReviewMarker; { round-trip check: the marker must parse back }
 begin
   if (AArgs.Target = '') or (AArgs.FixLine <= 0) or (AArgs.FixRule = '') then
   begin
@@ -15137,6 +15162,32 @@ begin
       Writeln('Refusing to write: the resulting line is not 7-bit ASCII.');
       Exit(1);
     end;
+
+  { ROUND-TRIP: the marker we are about to write must PARSE BACK as a marker for
+    this rule. Without this check `allow` can write a marker that does nothing,
+    and a marker that does nothing is worse than no marker -- it reads as
+    "a human reviewed and accepted this" while the finding keeps firing.
+
+    Measured on YADF 2026-08-13. `unit-too-large` and one comment rule anchor at
+    LINE 1, which in both files is the `{` that opens the unit's header block
+    comment. Appending `// dl:ok <rule>@<hash>` there puts the marker INSIDE that
+    block comment, where Parse correctly refuses to see it -- so the write
+    "succeeded", exit code 0, and the finding was still reported on the next run.
+
+    Checking the parse is also the only check that generalises: it catches the
+    block-comment case, the inside-a-string case, and whatever the next one turns
+    out to be, because it asks the same question the reader will ask. }
+  var RoundTripped: Boolean:= False;
+  for M in TReviewMarkers.Parse(NewLine) do
+    if SameText(M.RuleId, AArgs.FixRule) then begin RoundTripped:= True; Break; end;
+  if not RoundTripped then
+  begin
+    Writeln(Format('Refusing to write: a dl:ok marker on %s:%d would not parse back ' +
+      '(the line is inside a block comment or a string literal, so the marker would be invisible ' +
+      'and the finding would keep firing). Anchor the review elsewhere, or silence "%s" via configuration.',
+      [AArgs.Target, AArgs.FixLine, AArgs.FixRule]));
+    Exit(1);
+  end;
 
   if not AArgs.Apply then
   begin
@@ -17452,6 +17503,29 @@ begin
     Args:= ParseArgs;
     if Args.ShowHelp then begin PrintHelp; Exit(0); end;
     if Args.ShowVersion then begin Writeln('drag-lint ', VERSION); Exit(0); end;
+
+    { THE DEFAULT SCHEME: a project's own index + the platform library index.
+      Owner ruling, 2026-08-13 -- "by default and maybe always", overridable only
+      where a user says otherwise, which is exactly three places: an explicit
+      --db, a manifest section's explicit "db", and a "db" in a .drag-lint.json.
+
+      Applied HERE rather than per verb, because it kept being missed one verb at
+      a time. `lint-all` was fixed on its own and `document --project` still
+      opened <cwd>\drag-lint.sqlite -- i.e. whatever the shell happened to be
+      standing in -- and bailed with "index schema v19 < v21" from a completely
+      unrelated project's database. Every project-scoped verb (document,
+      refresh-findings, forms-csv, uses-fix, check-unit...) reads AArgs.DbPath,
+      so defaulting it once covers all of them and the next one added.
+
+      Only when the user gave NO explicit --db (DbPaths empty). ResolveConsumerDbs
+      already promotes the project's own DB to the front and leaves the list
+      alone when the project cannot be resolved unambiguously, so taking [0] here
+      inherits that caution rather than re-deciding it. }
+    if (Args.ProjectPath <> '') and (Length(Args.DbPaths) = 0) then
+    begin
+      var ProjDbs: TArray<string>:= ResolveConsumerDbs(Args);
+      if (Length(ProjDbs) > 0) and (ProjDbs[0] <> '') and TFile.Exists(ProjDbs[0]) then Args.DbPath:= ProjDbs[0];
+    end;
     if Args.Command = 'index' then
     begin
       { The MODE flags name opposite intents, so passing both is a usage error
