@@ -99,6 +99,7 @@ type
       FItemDocUnit    : TMenuItem   ; { ADF T10 AutoDocument: 'Document unit' -- any node, active editor file }
       FItemDocProject : TMenuItem   ; { ADF T10 AutoDocument: 'Document project' -- any node, active .dproj }
       FItemEnumHelper : TMenuItem   ; { Task 8 enum-helper: 'Create helper class' -- skEnum/skEnumValue node, no existing helper }
+      FItemAllow      : TMenuItem   ; { 'Allow this message' -- dl:ok review of a single finding }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
       procedure BtnRefreshClick(Sender: TObject);
@@ -124,6 +125,9 @@ type
       procedure EnsureFixableRules;
       function  NodeIsDiagnosticsRoot(ANode: TTreeNode): Boolean;
       function  NodeIsFixableFinding (ANode: TTreeNode): Boolean;
+      { 'Allow this message': record a dl:ok review of ONE finding on ONE line. }
+      function  NodeIsAllowableFinding(ANode: TTreeNode): Boolean;
+      procedure AllowClick             (Sender: TObject);
       procedure ReloadCurrentFileBuffer;
       procedure PopupPopup             (Sender: TObject);
       procedure FixItClick             (Sender: TObject);
@@ -452,6 +456,12 @@ begin
   FItemFixIt     := FPopup.Items[FPopup.Items.Count - 3];
   FItemFixUnit   := FPopup.Items[FPopup.Items.Count - 2];
   FItemFixProject:= FPopup.Items[FPopup.Items.Count - 1];
+  { 'Allow this message' sits with the fix verbs because it is the other answer
+    to a finding: fix the code, or record that a human looked and accepted it.
+    Deliberately LAST, and deliberately not the default -- suppression should
+    take one more deliberate movement than fixing. }
+  AddPopupItem(FPopup, '&Allow this message'         , AllowClick             );
+  FItemAllow:= FPopup.Items[FPopup.Items.Count - 1];
   FPopup.OnPopup := PopupPopup;
   FTree.PopupMenu:= FPopup;
 end; // constructor
@@ -973,6 +983,7 @@ begin
   FItemDocUnit   .Enabled:= FCurrentFile <> '';
   FItemDocProject.Enabled:= GetActiveProjectFilePath <> '';
   FItemEnumHelper.Enabled:= NodeIsEnumHelperTarget(Node); { Task 8: skEnum/skEnumValue node, no existing helper }
+  FItemAllow     .Enabled:= NodeIsAllowableFinding(Node);
 end;
 
 { 'Fix it' -- apply the single fixable finding under the cursor:
@@ -997,6 +1008,64 @@ begin
     else DLT('autofix', 'Fix it non-zero exit; output: ' + Copy(Output, 1, 400));
   except
     on E: Exception do DLT('autofix', 'FixItClick failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end; // procedure
+
+{ An allowable finding node hangs off the Diagnostics root and carries a rule-id.
+  Unlike 'Fix it' there is no fixable-rule set to consult: ANY finding can be
+  reviewed and accepted -- that is the whole point, and it is how a project gets
+  to zero without pretending the remaining findings are not there.
+
+  The two review-marker bookkeeping rules are the exception. Allowing
+  review-marker-stale would let a review outlive the code it reviewed, which is
+  the single failure the hash exists to prevent; the cure is to allow the REAL
+  finding again, which re-hashes its marker. review-marker-unused is cured by
+  deleting the marker. The engine refuses both as well -- this predicate only
+  greys them out so the refusal is visible before the click. }
+function TDragLintStructureForm.NodeIsAllowableFinding(ANode: TTreeNode): Boolean;
+var
+  ND: TStructureNodeData;
+begin
+  Result:= False;
+  if (ANode = nil) or (ANode.Data = nil) then Exit;
+  if ANode.Parent <> FRootDiag then Exit; { only diagnostics children are findings }
+  ND:= TStructureNodeData(ANode.Data);
+  if ND.Code = '' then Exit;
+  if SameText(ND.Code, 'review-marker-stale' ) then Exit;
+  if SameText(ND.Code, 'review-marker-unused') then Exit;
+  Result:= True;
+end;
+
+{ 'Allow this message' -- record that a human read this one finding on this one
+  line and accepted it:
+    drag-lint allow <file> --fix-line <L> --fix-rule <id> --apply
+  The marker text is built by the ENGINE (TReviewMarkers.InsertInto), never here.
+  One formatter and one hash rule means the IDE, the CLI and any future editor
+  produce byte-identical markers; a second implementation here would drift the
+  first time the format changed.
+
+  On exit 0 the buffer is reloaded, the live runner re-lints, and the message
+  drops off the Diagnostics list on the next tick. Other findings on the same
+  line are untouched -- the marker names one rule. }
+procedure TDragLintStructureForm.AllowClick(Sender: TObject);
+var
+  ND     : TStructureNodeData;
+  Cmd    : string           ;
+  Output : string           ;
+  ExitVal: Integer          ;
+begin
+  try
+    if not NodeIsAllowableFinding(FTree.Selected) then Exit;
+    ND:= TStructureNodeData(FTree.Selected.Data);
+    if FCurrentFile = '' then Exit;
+    Cmd:= Format('"%s" allow "%s" --fix-line %d --fix-rule "%s" --apply',
+      [ResolveExePath, FCurrentFile, ND.Line, ND.Code]);
+    ExitVal:= RunAndCaptureStdout(Cmd, Output, 30000);
+    DLT('allow', Format('Allow %s line %d rule %s -> exit=%d', [ExtractFileName(FCurrentFile), ND.Line, ND.Code, ExitVal]));
+    if ExitVal = 0 then ReloadCurrentFileBuffer
+    else DLT('allow', 'Allow non-zero exit; output: ' + Copy(Output, 1, 400));
+  except
+    on E: Exception do DLT('allow', 'AllowClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
 end; // procedure
 

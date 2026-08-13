@@ -91,9 +91,15 @@ type
     /// <param name="AReason">Optional free text. An existing reason is preserved.</param>
     /// <returns>The whole new line: 7-bit ASCII, no trailing whitespace, original
     /// indentation and code untouched.</returns>
-    /// <remarks>Idempotent -- re-marking a rule the line already records returns
-    /// ALineText unchanged. The marker is a comment, so the hash it stores is
-    /// unaffected by its own insertion.</remarks>
+    /// <remarks>Idempotent only when the review is still valid: a rule already
+    /// recorded with a hash matching the current line returns ALineText
+    /// byte-identical. A rule recorded with a STALE hash -- or with none at all --
+    /// has that one entry re-hashed to the line as it now stands, which is how a
+    /// human re-accepts a review after the code moved on. Neighbouring markers
+    /// keep their own hashes, stale ones included: re-validating a review of code
+    /// nobody re-examined is the failure this design exists to prevent. The marker
+    /// is a comment, so the hash it stores is unaffected by its own
+    /// insertion.</remarks>
     class function InsertInto(const ALineText, ARuleId, AReason: string): string; static;
   end;
 
@@ -368,13 +374,22 @@ var
   TagPos  : Integer              ;
   Prefix  : string               ;
   Head    : string               ;
+  Refreshed: Boolean             ;
 begin
   Hash    := HashLine(ALineText);
   Existing:= Parse(ALineText);
 
-  { Idempotent: a rule this line already records is not recorded twice. }
+  { Idempotent: a rule this line already records AND whose hash still matches the
+    code is not recorded twice, and the line comes back byte-identical so an
+    Allow on an already-clean finding cannot dirty an editor buffer.
+
+    Matching on the rule id ALONE would be wrong. A stale marker re-reports its
+    finding by design, and the way a human clears that is to allow it again --
+    the same action, not a separate one. Bailing out here would make that click
+    a silent no-op. A hashless hand-written marker takes the same path and
+    acquires a hash. }
   for M in Existing do
-    if SameText(M.RuleId, ARuleId) then Exit(ALineText);
+    if SameText(M.RuleId, ARuleId) and SameText(M.Hash, Hash) then Exit(ALineText);
 
   if Length(Existing) = 0 then
   begin
@@ -391,13 +406,25 @@ begin
   Reason:= Existing[0].Reason;
   if Trim(Reason) = '' then Reason:= Trim(AReason);
 
-  Body:= REVIEW_MARK + ' ';
+  Refreshed:= False;
+  Body     := REVIEW_MARK + ' ';
   for var K: Integer:= 0 to High(Existing) do
   begin
     if K > 0 then Body:= Body + ', ';
-    Body:= Body + RuleToken(Existing[K].RuleId, Existing[K].Hash);
+    if SameText(Existing[K].RuleId, ARuleId) then
+    begin
+      { Re-accepting a review whose code moved on: THIS entry is re-hashed to the
+        line as it now stands. Every neighbour keeps its own hash verbatim --
+        including a stale one. Refreshing the whole line would silently
+        re-validate a review of code nobody re-examined, which is the single
+        failure this design exists to prevent. Second finding, second click. }
+      Body     := Body + RuleToken(ARuleId, Hash);
+      Refreshed:= True;
+    end
+    else
+      Body:= Body + RuleToken(Existing[K].RuleId, Existing[K].Hash);
   end;
-  Body:= Body + ', ' + RuleToken(ARuleId, Hash);
+  if not Refreshed then Body:= Body + ', ' + RuleToken(ARuleId, Hash);
   if Trim(Reason) <> '' then Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(Reason);
 
   CStart := LineCommentStart(ALineText);

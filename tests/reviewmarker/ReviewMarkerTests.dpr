@@ -183,12 +183,86 @@ begin
     TReviewMarkers.HashLine(L2) = TReviewMarkers.HashLine('    except'));
 end;
 
+{ ---- re-accepting a review whose code changed ------------------------------
+
+  A stale marker re-reports its finding, which is the whole point of the hash.
+  The way back is to allow it again: the SAME action, not a separate one. That
+  makes InsertInto's old guard wrong -- it matched on rule id alone and bailed,
+  so re-allowing a stale marker was a silent no-op with nothing to show for the
+  click. }
+
+procedure TestRefresh;
+var
+  Marked, Stale, Fresh : string;
+  Two, StaleTwo, Mixed : string;
+  OldHash              : string;
+  M                    : TArray<TReviewMarker>;
+begin
+  Marked:= TReviewMarkers.InsertInto('  x := 1;', 'magic-number', 'small and clear');
+
+  { An edit to the code the review covered. The marker rides along unchanged,
+    which is exactly the state the hash exists to detect. }
+  Stale:= StringReplace(Marked, 'x := 1;', 'x := 2;', []);
+  M    := TReviewMarkers.Parse(Stale);
+  Check('12 precondition: marker is stale',
+    (Length(M) = 1) and (M[0].Hash <> TReviewMarkers.HashLine(Stale)));
+
+  Fresh:= TReviewMarkers.InsertInto(Stale, 'magic-number', '');
+  M    := TReviewMarkers.Parse(Fresh);
+  Check('12 re-allow refreshes the hash',
+    (Length(M) = 1) and (M[0].Hash = TReviewMarkers.HashLine(Fresh)));
+  Check('12 re-allow does not duplicate the rule', Length(M) = 1);
+  Check('12 re-allow still one dl:ok comment', OccurrenceCount(LowerCase(Fresh), 'dl:ok') = 1);
+  if Length(M) = 1 then
+    Check('12 re-allow preserves the reason', M[0].Reason = 'small and clear');
+  Check('12 re-allow keeps the code', Pos('x := 2;', Fresh) > 0);
+  Check('12 re-allow keeps indentation', Copy(Fresh, 1, 2) = '  ');
+  Check('12 re-allow stays 7-bit ASCII', IsAscii7(Fresh));
+  Check('12 re-allow leaves no trailing space', (Fresh = '') or (Fresh[Length(Fresh)] <> ' '));
+
+  { 13: a marker that still matches its line is untouched -- byte-identical, not
+    merely equivalent, so an Allow on an already-clean finding cannot dirty the
+    editor buffer. }
+  Check('13 matching re-allow is a byte no-op',
+    TReviewMarkers.InsertInto(Marked, 'magic-number', '') = Marked);
+
+  { 14: THE trap. Two reviews on one line, both stale; re-allowing one must not
+    silently re-validate the other. Its code was not re-examined, and a review
+    that outlives the code it reviewed is worse than no review. }
+  Two     := TReviewMarkers.InsertInto('  x := 1;', 'magic-number', 'why');
+  Two     := TReviewMarkers.InsertInto(Two, 'deep-nesting', '');
+  StaleTwo:= StringReplace(Two, 'x := 1;', 'x := 2;', []);
+  M       := TReviewMarkers.Parse(StaleTwo);
+  Check('14 precondition: two stale markers', Length(M) = 2);
+  if Length(M) = 2 then
+  begin
+    OldHash:= M[1].Hash;
+    Mixed  := TReviewMarkers.InsertInto(StaleTwo, 'magic-number', '');
+    M      := TReviewMarkers.Parse(Mixed);
+    Check('14 both markers survive the refresh', Length(M) = 2);
+    if Length(M) = 2 then
+    begin
+      Check('14 clicked rule is refreshed', M[0].Hash = TReviewMarkers.HashLine(Mixed));
+      Check('14 neighbour keeps its stale hash', M[1].Hash = OldHash);
+      Check('14 neighbour is still reported stale', M[1].Hash <> TReviewMarkers.HashLine(Mixed));
+    end;
+  end;
+
+  { 15: a hand-written marker carries no hash, so the CLI honours it but says it
+    cannot be verified. Allowing it again is how that gets fixed. }
+  Fresh:= TReviewMarkers.InsertInto('  y := 3;  // dl:ok bare-except', 'bare-except', '');
+  M    := TReviewMarkers.Parse(Fresh);
+  Check('15 hashless marker gains a hash',
+    (Length(M) = 1) and (M[0].Hash = TReviewMarkers.HashLine(Fresh)));
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
     TestHash;
     TestParse;
     TestInsert;
+    TestRefresh;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

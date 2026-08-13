@@ -495,6 +495,7 @@ begin
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
+  Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
@@ -994,6 +995,7 @@ begin
     else if (Result.Command = 'check-ast') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'dump-refs') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'format'   ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
+    else if (Result.Command = 'allow'    ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); end
     else if (A = '--parent-pid') and (i < ParamCount) then begin Inc(i); Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0)); end
@@ -5689,7 +5691,12 @@ begin
       original finding stays visible rather than vanishing behind a misspelling. }
     var Known: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
     try
-      for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry do
+      { BuildCatalog, not BuiltinRegistry: the external .scm query rules are more
+        than half the catalogue, and leaving them out meant a dl:ok naming one was
+        never reported unused -- it fails safe, but it silently under-counts, which
+        is exactly wrong when the target is zero findings. BuildCatalog('') reads
+        the default <exe-dir>\rules. }
+      for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog('', '') do
         Known.AddOrSetValue(LowerCase(RI.Id), True);
       for var SF: string in AScannedFiles do
       begin
@@ -15011,6 +15018,125 @@ begin
   Result:= 0;
 end; // function
 
+{ `drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply]`
+
+  Records a human review of ONE finding on ONE line by writing a `dl:ok` marker
+  through TReviewMarkers.InsertInto -- the single place a marker is ever
+  formatted. Editors shell out to this rather than building the text themselves,
+  so the Delphi IDE popup, a future VS Code code action and a shell script all
+  produce byte-identical markers, and the hash rules live in exactly one unit.
+
+  Dry-run by default: prints the line it WOULD write. --apply rewrites the file.
+
+  Splices the one line back into the raw text by byte offset rather than
+  round-tripping through ReadAllLines/WriteAllLines, so every other byte in the
+  file -- line terminators, a missing final newline -- survives untouched. That
+  matters because these sources are strict 7-bit ASCII + CRLF and a rewrite that
+  "helpfully" normalises them shows up as a whole-file diff. }
+function DoAllow(const AArgs: TArgs): Integer;
+var
+  Raw      : string ;
+  OldLine  : string ;
+  NewLine  : string ;
+  Known    : Boolean;
+  P        : Integer;
+  LN       : Integer;
+  LineStart: Integer;
+  LineEnd  : Integer;
+  C        : Char   ;
+begin
+  if (AArgs.Target = '') or (AArgs.FixLine <= 0) or (AArgs.FixRule = '') then
+  begin
+    Writeln('Usage: drag-lint allow <file> --fix-line <L> --fix-rule <rule-id> [--apply]');
+    Exit(2);
+  end;
+  if not FileExists(AArgs.Target) then
+  begin
+    Writeln(Format('File not found: %s', [AArgs.Target]));
+    Exit(2);
+  end;
+
+  { The rule id must name a real rule. A typo fails safe everywhere else -- it
+    suppresses nothing AND is not counted as a marker -- but silently, so the
+    caller would never learn it had misspelled anything. Say so here instead.
+
+    BuildCatalog, NOT BuiltinRegistry: better than half the catalogue arrives as
+    external .scm query rules (empty-except among them), and validating against
+    the built-ins alone would refuse to allow findings the linter reports every
+    day. }
+  Known:= False;
+  for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(AArgs.RulesDir, '') do
+    if SameText(RI.Id, AArgs.FixRule) then begin Known:= True; Break; end;
+  if not Known then
+  begin
+    Writeln(Format('Unknown rule id: %s', [AArgs.FixRule]));
+    Exit(2);
+  end;
+
+  { The marker bookkeeping rules are not themselves allowable. Allowing a stale
+    marker would let a review outlive the code it reviewed -- the one thing the
+    hash exists to stop -- and the cure for a stale marker is to allow the REAL
+    finding again, which re-hashes it. An unused marker is cured by deleting it. }
+  if SameText(AArgs.FixRule, 'review-marker-stale') or SameText(AArgs.FixRule, 'review-marker-unused') then
+  begin
+    Writeln(Format('Rule "%s" cannot be allowed: re-allow the finding it reports, or remove the marker.', [AArgs.FixRule]));
+    Exit(2);
+  end;
+
+  Raw:= TFile.ReadAllText(AArgs.Target, TEncoding.ANSI);
+
+  { Walk to the 1-based target line. }
+  P := 1;
+  LN:= 1;
+  while (LN < AArgs.FixLine) and (P <= Length(Raw)) do
+  begin
+    if Raw[P] = #10 then Inc(LN);
+    Inc(P);
+  end;
+  if LN <> AArgs.FixLine then
+  begin
+    Writeln(Format('Line %d is past the end of %s', [AArgs.FixLine, AArgs.Target]));
+    Exit(2);
+  end;
+
+  LineStart:= P;
+  LineEnd  := P;
+  while (LineEnd <= Length(Raw)) and not CharInSet(Raw[LineEnd], [#13, #10]) do Inc(LineEnd);
+  OldLine:= Copy(Raw, LineStart, LineEnd - LineStart);
+
+  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '');
+  if NewLine = OldLine then
+  begin
+    { Already reviewed and the hash still matches -- nothing to write, and the
+      file is not touched, so an Allow on an already-clean finding cannot show up
+      as a spurious modification. }
+    Writeln(Format('%s:%d already allows "%s"', [AArgs.Target, AArgs.FixLine, AArgs.FixRule]));
+    Exit(0);
+  end;
+
+  { InsertInto only ever appends ASCII, but this file must stay 7-bit and the
+    check is one pass -- cheaper than discovering it in a later diff. }
+  for C in NewLine do
+    if Ord(C) > 127 then
+    begin
+      Writeln('Refusing to write: the resulting line is not 7-bit ASCII.');
+      Exit(1);
+    end;
+
+  if not AArgs.Apply then
+  begin
+    Writeln(Format('%s:%d (dry-run, pass --apply to write)', [AArgs.Target, AArgs.FixLine]));
+    Writeln('  - ' + OldLine);
+    Writeln('  + ' + NewLine);
+    Exit(0);
+  end;
+
+  Raw:= Copy(Raw, 1, LineStart - 1) + NewLine + Copy(Raw, LineEnd, MaxInt);
+  TFile.WriteAllText(AArgs.Target, Raw, TEncoding.ANSI);
+  Writeln(Format('%s:%d allows "%s"', [AArgs.Target, AArgs.FixLine, AArgs.FixRule]));
+  Result:= 0;
+end; // function
+
 // v0.34: drag-lint workspace index|status|add [--config PATH]
 // index: loads workspace config, indexes each project into the shared DB.
 // status: lists projects and file counts in the shared DB.
@@ -17285,6 +17411,7 @@ begin
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)
+    else if Args.Command = 'allow'             then Result:= DoAllow           (Args)
     else if Args.Command = 'export'            then Result:= DoExport          (Args)
     else if Args.Command = 'top'               then Result:= DoTop             (Args)
     else if Args.Command = 'import-log'        then Result:= DoImportLog       (Args)
