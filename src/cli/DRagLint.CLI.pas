@@ -9771,6 +9771,7 @@ var
   ProjectDb: string                      ;
   LibDb    : string                      ;
   Store    : ISymbolStore                ;
+  LibStore : ISymbolStore                ;
   Findings : TArray<TLintFinding>        ;
   FilePaths: TArray<string>              ;
   Fid      : Int64                       ;
@@ -9812,6 +9813,18 @@ begin
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
         begin LibDb:= D; Break; end;
+  { Fallback: if no library DB was found in Dbs or DbPaths, look for the
+    platform-specific library DB in the standard location (C:\Projects\.drag-lint\). }
+  if LibDb = '' then
+  begin
+    { Check the standard shared library DB location. Try Win64 first (most
+      common for modern Delphi), then Win32. }
+    var LibDir: string:= 'C:\Projects\.drag-lint';
+    var Win64Lib: string:= TPath.Combine(LibDir, 'library-Win64.sqlite');
+    var Win32Lib: string:= TPath.Combine(LibDir, 'library-Win32.sqlite');
+    if TFile.Exists(Win64Lib) then LibDb:= Win64Lib
+    else if TFile.Exists(Win32Lib) then LibDb:= Win32Lib;
+  end;
   if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }
@@ -9819,6 +9832,17 @@ begin
   Prof.Phase('open+migrate store');
   Store:= TSQLiteSymbolStore.Create(ProjectDb);
   Store.Migrate;
+  LibStore:= nil;
+  if (LibDb <> '') and TFile.Exists(LibDb) then
+  begin
+    try
+      LibStore:= TSQLiteSymbolStore.Create(LibDb);
+      LibStore.Migrate;
+    except
+      on E: Exception do
+        EmitStatusLine(AArgs, Format('WARNING: failed to open library store %s: %s', [LibDb, E.Message]));
+    end;
+  end;
   Findings:= nil;
 
   { --project: restrict the whole run to the units this project actually
@@ -9953,7 +9977,7 @@ begin
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD));
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD));
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath)); { v12 (M1): cross-unit }
-        Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)); { M2: flow checks, store-exact managed types }
+        Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore); { M2: flow checks, store-exact managed types, ownership via library store }
         { v0.68: naming-convention prefix rules (store-optional; enables exception-ancestry sub-check) }
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set);
@@ -12693,7 +12717,7 @@ begin
   if Store <> nil then TcFid:= Store.FindFileIdByPath(AArgs.Target);
   Findings:= Findings + TAstChecker.CheckTypeAware           (AArgs.Target, Store, TcFid);
   Findings:= Findings + TAstChecker.CheckVirtualInConstructor(AArgs.Target, Store, TcFid); { v12 (M1) }
-  Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(AArgs.Target, Store, TcFid); { M2: flow checks }
+  Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(AArgs.Target, Store, TcFid, nil); { M2: flow checks }
   DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
 
   Result:= FinalizeAndOutput(

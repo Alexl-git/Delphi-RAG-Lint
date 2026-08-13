@@ -26,10 +26,13 @@ type
   public
     /// <summary>Run every flow check on AFile. AStore (optional, nil-safe)
     /// enables exact managed-type classification via M1 ResolveTypeCategory and
-    /// (later) the interprocedural object-leak refinement.</summary>
+    /// interprocedural object-leak refinement. ALibStore (optional, nil-safe)
+    /// supplements AStore for library-only symbols (e.g., VCL TComponent)
+    /// when checking ownership transfer.</summary>
     /// <param name="AFile">Path to the .pas/.inc file.</param>
     /// <param name="AStore">Optional symbol store; nil on the bare lint path.</param>
     /// <param name="AFileId">File id within AStore (0 when no store).</param>
+    /// <param name="ALibStore">Optional library symbol store for cross-DB lookups; nil disables.</param>
     /// <returns>All flow findings for the file.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -46,7 +49,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore = nil;
-      AFileId: Int64 = 0): TArray<TLintFinding>;
+      AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
   end;
 
 implementation
@@ -203,7 +206,7 @@ begin
 end;
 
 function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;
-  const AStore: ISymbolStore; AFileId: Int64): Boolean;
+  const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): Boolean;
 var
   Ent, TypeNode, ArgsN, FirstArg: TTSNode;
   TypeName: string;
@@ -225,14 +228,32 @@ begin
   if TypeNode.IsNull then Exit;
   if TypeNode.NodeType = 'exprDot' then TypeNode := TypeNode.ChildByField('rhs');
   TypeName := Trim(NodeStr(TypeNode, ASrc));
-  if (TypeName = '') or (not AStore.IsDescendantOf(TypeName, 'TComponent', AFileId)) then Exit;
-  ArgsN := AConstructorNode.ChildByField('args');
-  if ArgsN.IsNull or (ArgsN.NamedChildCount = 0) then Exit; { no AOwner arg at all }
-  FirstArg := ArgsN.NamedChild(0);
-  if FirstArg.IsNull then Exit;
-  { the nil-literal check IS case-insensitive (Pascal keyword) -- NodeText's
-    lowercasing is correct and safe here, unlike for the type name above. }
-  Result := NodeText(FirstArg, ASrc) <> 'nil';
+  if TypeName = '' then Exit;
+  { Try project store first, then fall back to library store. This handles
+    VCL components (TComponent, TTimer, etc.) that live in the library index. }
+  if AStore.IsDescendantOf(TypeName, 'TComponent', AFileId) then
+  begin
+    ArgsN := AConstructorNode.ChildByField('args');
+    if ArgsN.IsNull or (ArgsN.NamedChildCount = 0) then Exit; { no AOwner arg at all }
+    FirstArg := ArgsN.NamedChild(0);
+    if FirstArg.IsNull then Exit;
+    { the nil-literal check IS case-insensitive (Pascal keyword) -- NodeText's
+      lowercasing is correct and safe here, unlike for the type name above. }
+    Result := NodeText(FirstArg, ASrc) <> 'nil';
+  end
+  else if ALibStore <> nil then
+  begin
+    { Type not in project store; try the library store for VCL components.
+      Use AFileId=0 for library store queries (file scope is not applicable). }
+    if ALibStore.IsDescendantOf(TypeName, 'TComponent', 0) then
+    begin
+      ArgsN := AConstructorNode.ChildByField('args');
+      if ArgsN.IsNull or (ArgsN.NamedChildCount = 0) then Exit;
+      FirstArg := ArgsN.NamedChild(0);
+      if FirstArg.IsNull then Exit;
+      Result := NodeText(FirstArg, ASrc) <> 'nil';
+    end;
+  end;
 end;
 
 { True for the Try-pattern: a FUNCTION whose name begins with `Try`.
@@ -500,7 +521,7 @@ begin
 end;
 
 class function TFlowChecker.Check(const AFile: string; const AStore: ISymbolStore;
-  AFileId: Int64): TArray<TLintFinding>;
+  AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   PF: TParsedFile;
   Findings: TList<TLintFinding>;
@@ -1000,7 +1021,7 @@ var
                  { a TComponent descendant constructed with a non-nil AOwner
                    transfers ownership to that owner (freed on its teardown) --
                    do NOT record it as a leak candidate. }
-                 and not ConstructorTransfersOwnership(It.Node.ChildByField('rhs'), PF.Src, AStore, AFileId) then
+                 and not ConstructorTransfersOwnership(It.Node.ChildByField('rhs'), PF.Src, AStore, AFileId, ALibStore) then
               begin
                 CreateRow[Tgt] := Integer(It.Node.StartPoint.Row) + 1;
                 CreateCol[Tgt] := Integer(It.Node.StartPoint.Column) + 1;
