@@ -108,6 +108,8 @@ const
   REVIEW_MARK = 'dl:ok';
   /// <summary>Separator between the rule list and the free-text reason.</summary>
   REVIEW_REASON_SEP = '--';
+  /// <summary>The shared-unit marker tag. Same family as dl:ok.</summary>
+  SHARED_MARK = 'dl:shared';
 
 implementation
 
