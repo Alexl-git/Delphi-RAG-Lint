@@ -637,6 +637,7 @@ end;
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
+function ResolveLibraryDb  (const AArgs: TArgs): string        ; forward;
 
 // v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
 // before CLI flags. Recognized keys:
@@ -9813,18 +9814,22 @@ begin
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
         begin LibDb:= D; Break; end;
-  { Fallback: if no library DB was found in Dbs or DbPaths, look for the
-    platform-specific library DB in the standard location (C:\Projects\.drag-lint\). }
-  if LibDb = '' then
-  begin
-    { Check the standard shared library DB location. Try Win64 first (most
-      common for modern Delphi), then Win32. }
-    var LibDir: string:= 'C:\Projects\.drag-lint';
-    var Win64Lib: string:= TPath.Combine(LibDir, 'library-Win64.sqlite');
-    var Win32Lib: string:= TPath.Combine(LibDir, 'library-Win32.sqlite');
-    if TFile.Exists(Win64Lib) then LibDb:= Win64Lib
-    else if TFile.Exists(Win32Lib) then LibDb:= Win32Lib;
-  end;
+  { Last resort: ask the MANIFEST for this run's library index.
+
+    Reached when ResolveConsumerDbs returned no library slot, which happens
+    legitimately on `lint-all --db <project>.sqlite`: an explicit --db is honoured
+    without modification, by design, so the list is exactly what was asked for and
+    carries no library. The checks that want one -- used-unit-not-resolvable's
+    DCU fallback, object-leak's ownership test -- would otherwise degrade in
+    silence.
+
+    It must resolve through the manifest for the run's OWN platform, never a
+    hardcoded path with a fixed platform preference. Two reasons, both already
+    paid for once: the shared library folder is a machine-level setting that
+    lives in the manifest (and the per-project DBs moved OUT of it in August), and
+    handing a Win32 run the Win64 library is the same class of mis-selection that
+    made used-unit-not-resolvable fire 99 times on DataCopy. }
+  if LibDb = '' then LibDb:= ResolveLibraryDb(AArgs);
   if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }
@@ -9832,15 +9837,28 @@ begin
   Prof.Phase('open+migrate store');
   Store:= TSQLiteSymbolStore.Create(ProjectDb);
   Store.Migrate;
+  { The library store, opened ONCE per run (it is ~2.2 GB) and consulted for
+    symbols a project index cannot contain -- today, whether a constructed type
+    descends from TComponent, which is how object-leak tells an owned VCL
+    component from a leak.
+
+    Opened but NOT migrated, matching OpenLibraryStores: this is a shared,
+    read-mostly index that other runs and the IDE also hold open, and running
+    schema migrations on it as a side effect of linting would take a write lock
+    on 2.2 GB of someone else's data. A failure here degrades the answer and is
+    reported; it never fails the run, because every other check is still valid
+    without it. }
   LibStore:= nil;
   if (LibDb <> '') and TFile.Exists(LibDb) then
   begin
     try
       LibStore:= TSQLiteSymbolStore.Create(LibDb);
-      LibStore.Migrate;
     except
       on E: Exception do
-        EmitStatusLine(AArgs, Format('WARNING: failed to open library store %s: %s', [LibDb, E.Message]));
+      begin
+        LibStore:= nil;
+        EmitStatusLine(AArgs, Format('WARNING: failed to open library store %s: %s -- ownership and DCU checks degrade to project-only.', [LibDb, E.Message]));
+      end;
     end;
   end;
   Findings:= nil;
@@ -15636,6 +15654,62 @@ begin
     for D in Result do
       if not SameText(ExpandFileName(D), ExpandFileName(ProjDb)) then Reordered:= Reordered + [D];
     Result:= Reordered;
+  end;
+end; // function
+
+{ The LIBRARY index for this run's platform, from the manifest; '' when the
+  manifest declares none or cannot be read.
+
+  Separate from ResolveConsumerDbs because that function honours an explicit
+  --db WITHOUT MODIFICATION and returns early -- correctly, since `--db a --db b`
+  has to mean exactly a and b. But the library index is not a peer of the project
+  index; it answers a different question ("what does the RTL/VCL declare?"), and a
+  caller that named its project DB explicitly did not thereby decline it. So the
+  lookup runs the manifest resolution again, ignoring DbPaths, and keeps only the
+  `library-*` slot.
+
+  Platform precedence is deliberately IDENTICAL to ResolveConsumerDbs -- CLI
+  --platform, then the project's own folder, then cwd, then the manifest default.
+  Divergence here would be invisible: the run would open a project index for one
+  platform beside a library index for another, and every cross-DB answer would be
+  quietly wrong rather than missing. }
+function ResolveLibraryDb(const AArgs: TArgs): string;
+var
+  Manifest : TIndexManifest                            ;
+  Resolver : DRagLint.Project.Resolver.TProjectResolver;
+  EngineDir: string                                    ;
+  Platform : string                                    ;
+  Resolved : TArray<string>                            ;
+  D        : string                                    ;
+begin
+  Result:= '';
+  try
+    EngineDir:= ExtractFilePath(ParamStr(0));
+    Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+
+    if AArgs.CheckPlatform <> '' then Platform:= AArgs.CheckPlatform
+    else
+    begin
+      Platform:= '';
+      if AArgs.ProjectPath <> '' then
+        try Platform:= DetectPlatformFromDproj(Manifest, ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath))); except Platform:= ''; end;
+      if Platform = '' then Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
+      if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
+    end;
+
+    Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      Resolved:= TDbSelect.Resolve(Manifest, Platform, Resolver, True);
+    finally
+      Resolver.Free;
+    end;
+
+    for D in Resolved do
+      if StartsText('library-', ExtractFileName(D)) and TFile.Exists(D) then Exit(D);
+  except
+    { A manifest that will not load is not this function's problem to report --
+      every caller already treats '' as "no library index" and degrades. }
+    Result:= '';
   end;
 end; // function
 

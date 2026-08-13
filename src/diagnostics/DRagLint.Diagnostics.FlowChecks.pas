@@ -229,31 +229,29 @@ begin
   if TypeNode.NodeType = 'exprDot' then TypeNode := TypeNode.ChildByField('rhs');
   TypeName := Trim(NodeStr(TypeNode, ASrc));
   if TypeName = '' then Exit;
-  { Try project store first, then fall back to library store. This handles
-    VCL components (TComponent, TTimer, etc.) that live in the library index. }
-  if AStore.IsDescendantOf(TypeName, 'TComponent', AFileId) then
-  begin
-    ArgsN := AConstructorNode.ChildByField('args');
-    if ArgsN.IsNull or (ArgsN.NamedChildCount = 0) then Exit; { no AOwner arg at all }
-    FirstArg := ArgsN.NamedChild(0);
-    if FirstArg.IsNull then Exit;
-    { the nil-literal check IS case-insensitive (Pascal keyword) -- NodeText's
-      lowercasing is correct and safe here, unlike for the type name above. }
-    Result := NodeText(FirstArg, ASrc) <> 'nil';
-  end
-  else if ALibStore <> nil then
-  begin
-    { Type not in project store; try the library store for VCL components.
-      Use AFileId=0 for library store queries (file scope is not applicable). }
-    if ALibStore.IsDescendantOf(TypeName, 'TComponent', 0) then
-    begin
-      ArgsN := AConstructorNode.ChildByField('args');
-      if ArgsN.IsNull or (ArgsN.NamedChildCount = 0) then Exit;
-      FirstArg := ArgsN.NamedChild(0);
-      if FirstArg.IsNull then Exit;
-      Result := NodeText(FirstArg, ASrc) <> 'nil';
-    end;
-  end;
+  { Is it a TComponent? Ask the PROJECT store first, then the LIBRARY store.
+
+    Both are needed, and neither alone is enough. A project-local component
+    (`TMyPanel = class(TPanel)`) is only in the project index; TTimer, TButton and
+    every other stock VCL component is only in the library index. Asking the
+    project store alone -- which is what this did until 2026-08-13 -- meant
+    IsDescendantOf returned False for the entire VCL, ownership was never
+    detected, and `Timer := TTimer.Create(Self)` was reported as a leak. That is
+    the owner's two-DB model in miniature: the question needs both databases and
+    this call site only had one.
+
+    AFileId is meaningful only for the project store (it scopes the lookup to the
+    file's own resolution context); the library store is asked with 0, since a
+    project file id names nothing in it. }
+  if not (AStore.IsDescendantOf(TypeName, 'TComponent', AFileId)
+          or ((ALibStore <> nil) and ALibStore.IsDescendantOf(TypeName, 'TComponent', 0))) then Exit;
+  ArgsN := AConstructorNode.ChildByField('args');
+  if ArgsN.IsNull or (ArgsN.NamedChildCount = 0) then Exit; { no AOwner arg at all }
+  FirstArg := ArgsN.NamedChild(0);
+  if FirstArg.IsNull then Exit;
+  { the nil-literal check IS case-insensitive (Pascal keyword) -- NodeText's
+    lowercasing is correct and safe here, unlike for the type name above. }
+  Result := NodeText(FirstArg, ASrc) <> 'nil';
 end;
 
 { True for the Try-pattern: a FUNCTION whose name begins with `Try`.

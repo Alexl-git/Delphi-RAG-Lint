@@ -11,7 +11,7 @@ begin
   try
     Writeln('x');
   except
-    // swallowed -- nothing here
+
   end;
 end;
 
@@ -66,6 +66,24 @@ begin
     Writeln('x');
   except
     Dummy := False;
+  end;
+end;
+
+// OWNER RULING 2026-08-13: a DOCUMENTED deliberate swallow is ACCEPTED -- an
+// except body that runs no code and says in writing why dropping the exception
+// is the lesser evil. Appended at the END of this fixture on purpose: every
+// expectation above is anchored to a line number, so a case inserted anywhere
+// else would silently renumber all of them.
+// Note what this does NOT accept: a handler that RUNS something and merely
+// carries a comment, and a body whose only comment is a dl:ok marker. The full
+// matrix lives in tests\autotest\run_swallow_documented.ps1.
+procedure DocumentedSwallow;
+begin
+  try
+    Writeln('x');
+  except
+    // Deliberately swallowed: this runs during finalization, where letting an
+    // exception escape is worse than the work being skipped.
   end;
 end;
 

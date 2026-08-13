@@ -1,0 +1,19 @@
+# OWNER RULING 2026-08-13: `F` is a BACKING-FIELD convention. It marks a private
+# field that backs a property, so the two can share a name (FCount / Count). A
+# field on the type's SURFACE backs nothing, and prefixing it would put an
+# implementation marker in an API name. So the prefix is required in private and
+# strict-private sections only.
+#
+# This fixture is what makes the replaced heuristic un-reintroducible. The old
+# rule asked "is the type T-something?" and honoured that skip only in the
+# implicit-first section -- which on a hand-written class exempted
+# `Name: TStringList` and `Ready: Boolean` while flagging `Count: Integer`, a
+# split with no meaning. Line 5 below (`Tag: Integer`, implicit-first, non-T)
+# fired under that rule and must not now.
+field-name-prefix 12
+field-name-prefix 15
+!field-name-prefix 5
+!field-name-prefix 7
+!field-name-prefix 8
+!field-name-prefix 10
+!field-name-prefix 13

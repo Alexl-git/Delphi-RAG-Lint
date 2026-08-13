@@ -186,6 +186,41 @@ type
 
 implementation
 
+{ True when ABareName (already lower-cased, unqualified) is the name of a
+  published TForm/TFrame event handler.
+
+  The list is the VCL's own set, written out rather than pattern-matched. Its
+  purpose is narrow: unused-parameter must not report parameters on a method
+  whose signature is fixed by the DFM wiring, and the general Sender guard misses
+  the few TForm events that take no Sender (FormHelp, FormShortCut). Kept as an
+  exact list because the obvious shortcut -- "starts with Form" -- would also
+  exempt Format, FormatValue, FormatCaption and anything else a form happens to
+  name that way, turning a precision fix into a coverage hole.
+
+  The better long-term answer is the index: SymbolFacts already carries a
+  DfmEvent flag, which states the fact instead of inferring it from a name. This
+  check runs with no symbol store, so that is a plumbing change, not a rewrite of
+  this list. }
+function IsVclFormEventName(const ABareName: string): Boolean;
+const
+  FORM_EVENTS: array[0..35] of string = (
+    'formactivate', 'formaftermonitordpichanged', 'formbeforemonitordpichanged',
+    'formcanresize', 'formclose', 'formclosequery', 'formconstrainedresize',
+    'formcontextpopup', 'formcreate', 'formdblclick', 'formdeactivate',
+    'formdestroy', 'formdockdrop', 'formdockover', 'formdragdrop',
+    'formdragover', 'formenddock', 'formgesture', 'formhelp', 'formhide',
+    'formkeydown', 'formkeypress', 'formkeyup', 'formmouseactivate',
+    'formmousedown', 'formmousemove', 'formmouseup', 'formmousewheel',
+    'formmousewheeldown', 'formmousewheelup', 'formpaint', 'formresize',
+    'formshortcut', 'formshow', 'formstartdock', 'formundock');
+var
+  E: string;
+begin
+  Result:= False;
+  for E in FORM_EVENTS do
+    if ABareName = E then Exit(True);
+end;
+
 class function TDeadCodeChecker.Check(const AFile: string; AMinCaseBranches: Integer;
   AMaxBoolOps: Integer; AMaxUnitLines: Integer; AMaxChainHops: Integer): TArray<TLintFinding>;
 var
@@ -496,6 +531,20 @@ var
       if DotPos > 0 then BareName:= Copy(FullName, DotPos + 1, MaxInt)
       else BareName:= FullName;
       if ContractMethods.ContainsKey(BareName) then Exit;
+      { A TForm/TFrame event handler whose signature carries NO Sender.
+        The Sender guard below catches the great majority of DFM-wired handlers,
+        but a handful of TForm events simply do not have one --
+        `FormHelp(Command: Word; Data: NativeInt; var CallHelp: Boolean)` is the
+        measured case (TfrmZeissCopy) -- so their unused parameters were reported
+        as removable when the .dfm wiring fixes the signature exactly as firmly
+        as an override does.
+
+        Only for a QUALIFIED name (DotPos > 0), i.e. an actual method: a free
+        routine that happens to be called FormShow is nobody's event handler.
+        An exact name list, never a `Form*` prefix -- a prefix test would also
+        exempt every `TFoo.Format`, and silently widening a rule's blind spot is
+        worse than the seven findings it was meant to remove. }
+      if (DotPos > 0) and IsVclFormEventName(BareName) then Exit;
     end;
 
     { Skip asm bodies -- identifier nodes are not emitted inside asm blocks. }

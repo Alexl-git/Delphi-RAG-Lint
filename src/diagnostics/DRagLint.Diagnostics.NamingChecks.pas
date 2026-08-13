@@ -4,8 +4,10 @@ unit DRagLint.Diagnostics.NamingChecks;
   Rules implemented here:
     type-name-prefix      : class/interface/pointer type name must carry the
                             configured prefix.
-    field-name-prefix     : class instance field name must carry the configured
-                            prefix.
+    field-name-prefix     : PRIVATE class instance field name must carry the
+                            configured prefix. Owner ruling 2026-08-13: F is a
+                            backing-field convention, so it is required in
+                            private/strict-private sections only.
     param-name-prefix     : routine parameter name must carry the configured
                             prefix.
     method-pascalcase     : routine/method name must match MethodCase.
@@ -55,11 +57,12 @@ type
     /// Thread-safe if the parse cache is thread-safe for the caller's
     /// use pattern; the checker itself has no shared mutable state.
     /// Prefix matching is case-SENSITIVE (so a 'PName' param fails the lowercase
-    /// 'p' ParamPrefix and is flagged). The field-name-prefix guard is
-    /// section-aware: a T-typed field is skipped ONLY in the implicit-first
-    /// section (the auto-generated published DFM component dump, whose fields
-    /// sit directly under declClass); a T-typed field in an EXPLICIT
-    /// private/protected/public/published section still must carry the F prefix.
+    /// 'p' ParamPrefix and is flagged). field-name-prefix is VISIBILITY-scoped:
+    /// the prefix is required in private and strict-private sections only,
+    /// because F marks a field that BACKS a property. Public, published,
+    /// protected and implicit-first fields are part of the type's surface and
+    /// are exempt -- which is also what excuses the IDE's auto-generated DFM
+    /// component dump, since that is written into the implicit-first section.
     /// local-var-casing fires only for variables declared inside a defProc body
     /// (not unit-level var sections or class fields).
     /// unit-name-matches-file fires when the unit name differs from the file
@@ -311,6 +314,10 @@ var
     a declField reached while this is True must carry the F prefix regardless
     of type. Saved/restored around each declSection recursion. }
   InExplicitSection: Boolean;
+  { Section state for field-name-prefix: True while the walker is inside an
+    explicit PRIVATE (or STRICT PRIVATE) section. That is the only place the F
+    prefix is required -- see the owner ruling quoted at the declField handler. }
+  InPrivateSection: Boolean;
   { Body state for local-var-casing: True while the walker is inside a defProc
     body (implementation block). Saved/restored on defProc entry. Local var
     sections inside a defProc are the ones we check; unit-level var sections
@@ -454,6 +461,18 @@ var
     the published visibility section (as opposed to private/protected/public).
     Form event-handler declarations live in published sections and are IDE-
     generated / DFM-wired -- skipped for method-pascalcase. }
+  { True when ASection (a declSection) is a PRIVATE section. `strict private`
+    carries both kStrict and kPrivate, so testing kPrivate alone covers both --
+    and correctly does NOT match `strict protected`, which carries kProtected. }
+  function SectionIsPrivate(const ASection: TTSNode): Boolean;
+  var
+    K: Integer;
+  begin
+    Result:= False;
+    for K:= 0 to ASection.NamedChildCount - 1 do
+      if ASection.NamedChild(K).NodeType = 'kPrivate' then Exit(True);
+  end;
+
   function SectionIsPublished(const ASection: TTSNode): Boolean;
   var
     K : Integer;
@@ -664,11 +683,14 @@ var
     begin
       var SavedSkipMeth   : Boolean:= CurSectionSkipsMethodCase;
       var SavedExplicit   : Boolean:= InExplicitSection;
+      var SavedPrivate    : Boolean:= InPrivateSection;
       CurSectionSkipsMethodCase := True; { implicit-first until a section is entered }
       InExplicitSection         := False;
+      InPrivateSection          := False; { implicit-first members are published, never private }
       for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
       CurSectionSkipsMethodCase := SavedSkipMeth;
       InExplicitSection         := SavedExplicit;
+      InPrivateSection          := SavedPrivate;
       Exit;
     end;
 
@@ -683,63 +705,51 @@ var
     begin
       var SavedSection : Boolean:= InExplicitSection;
       var SavedSkipMeth: Boolean:= CurSectionSkipsMethodCase;
+      var SavedPrivate : Boolean:= InPrivateSection;
       InExplicitSection         := SectionIsExplicit(N);
+      InPrivateSection          := SectionIsPrivate(N);
       CurSectionSkipsMethodCase := (not InExplicitSection) or SectionIsPublished(N);
       for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
       InExplicitSection         := SavedSection;
+      InPrivateSection          := SavedPrivate;
       CurSectionSkipsMethodCase := SavedSkipMeth;
       Exit;
     end;
 
     { field-name-prefix: visit declField nodes inside class bodies.
-      Section-aware guard: the T-typed component-field skip applies ONLY in the
-      implicit-first section (InExplicitSection=False). Verified AST shape:
-      implicit-first fields (e.g. `Button1: TButton;` on a form) sit as DIRECT
-      children of declClass with no enclosing declSection, so InExplicitSection
-      is False there and the T-typed skip suppresses the auto-generated DFM
-      component dump. Fields inside an EXPLICIT private/protected/public/
-      published section (InExplicitSection=True) must carry the F prefix
-      regardless of their declared type -- a private `Grid: TStringList`
-      missing F is a real violation and fires. }
+
+      OWNER RULING (2026-08-13): `F` is a BACKING-FIELD convention. It marks a
+      private field that backs a property, so the property and its storage can
+      share a name (`FCount` / `Count`). A field that is part of a type's public
+      surface -- a public/published data member, a record-like carrier such as
+      TGroup's seven public fields -- is not backing anything, and prefixing it
+      would put an implementation marker in an API name. So the rule now applies
+      in PRIVATE (and strict private) sections only.
+
+      This REPLACES a type-based heuristic that got the question wrong from both
+      ends. It asked "is the type T-something?" to detect the IDE's auto-
+      generated DFM component dump, and honoured that skip only in the
+      implicit-first section. On a hand-written class in an implicit-first
+      section, that exempted `Name: TStringList` and `Ready: Boolean` while
+      flagging `Count: Integer` and `Caption: string` -- a split with no meaning,
+      because the declared TYPE never had any bearing on whether a field backs a
+      property. Visibility does, and it is what the convention is actually about.
+
+      The DFM component dump is still exempt, now for the right reason: it is
+      written into the implicit-first (published) section, which is not private.
+      Nothing type-shaped is needed to reach that conclusion. }
     if N.NodeType = 'declField' then
     begin
-      if (ANaming.FieldPrefix <> '') and (not InRecordDecl) then
+      if (ANaming.FieldPrefix <> '') and (not InRecordDecl) and InPrivateSection then
       begin
         NameNode:= N.ChildByField('name');
-        TypeNode:= N.ChildByField('type');
         if not NameNode.IsNull then
         begin
           TypeName:= Trim(NodeStr(NameNode));
-          if TypeName <> '' then
-          begin
-            { Component-field skip: only honoured in the implicit-first section.
-              In an explicit section a T-typed field still must carry F. }
-            var IsComponentField: Boolean:= False;
-            if not InExplicitSection then
-            begin
-              var FieldType: string:= '';
-              if not TypeNode.IsNull then FieldType:= Trim(NodeStr(TypeNode));
-              { The IDE writes the DFM component dump with a namespace-QUALIFIED
-                type whenever the short name is ambiguous -- 'Timer1:
-                Vcl.ExtCtrls.TTimer' beside 'StTrayIcon1: TStTrayIcon'. Testing
-                the first character of the whole expression then saw 'V', missed
-                the skip, and demanded an F prefix on a published component that
-                cannot be renamed without breaking the .dfm. Test the LAST dotted
-                segment, which is the actual type name. }
-              var ShortType: string:= FieldType;
-              var DotAt: Integer:= LastDelimiter('.', ShortType);
-              if DotAt > 0 then ShortType:= Copy(ShortType, DotAt + 1, MaxInt);
-              IsComponentField:= (Length(ShortType) >= 2)
-                and (ShortType[1] = 'T') and CharInSet(ShortType[2], ['A'..'Z', 'a'..'z']);
-            end;
-            if not IsComponentField then
-            begin
-              if not StartsWithPrefix(TypeName, ANaming.FieldPrefix) then
-                EmitAt(NameNode, 'field-name-prefix',
-                  Format('Field "%s" should start with the "%s" prefix',
-                    [TypeName, ANaming.FieldPrefix]));
-            end;
-          end;
+          if (TypeName <> '') and (not StartsWithPrefix(TypeName, ANaming.FieldPrefix)) then
+            EmitAt(NameNode, 'field-name-prefix',
+              Format('Private field "%s" should start with the "%s" prefix',
+                [TypeName, ANaming.FieldPrefix]));
         end;
       end;
       { Recurse into children (the type node may contain nested expressions). }
@@ -1011,6 +1021,7 @@ begin
   Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
   InExplicitSection         := False; { root and class-body level = implicit-first section }
+  InPrivateSection          := False; { ... which is never private, so F is not required there }
   InProcBody                := False; { not inside a routine body at the root level }
   CurSectionSkipsMethodCase := False; { root-level routines are always checked }
   try

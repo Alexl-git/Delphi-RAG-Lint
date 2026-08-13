@@ -3,9 +3,19 @@
 # do not -- Task 9c: an assignment to Result or a var/out parameter converts
 # the exception into a status the caller must inspect (the TryXxx idiom), so
 # it counts as handling. An assignment to a plain local does not.
+#
+# 2026-08-13, OWNER RULING: a DOCUMENTED deliberate swallow is accepted -- an
+# except body that runs no code and explains in writing why dropping the
+# exception is the lesser evil (84). Case 13 was previously written as an
+# "empty" handler that still carried `// swallowed -- nothing here`, which is
+# exactly the newly-accepted shape; it is now genuinely empty, so it still
+# tests what it was named for. Its line number is unchanged -- the comment was
+# replaced by a blank line rather than deleted -- because every expectation
+# below is anchored by line.
 try-except-swallowed 13
 !try-except-swallowed 22
 !try-except-swallowed 31
 !try-except-swallowed 43
 !try-except-swallowed 53
 try-except-swallowed 67
+!try-except-swallowed 84

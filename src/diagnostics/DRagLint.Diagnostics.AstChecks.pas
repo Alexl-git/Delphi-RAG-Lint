@@ -4990,11 +4990,54 @@ var
       if HandlesException(N.Child(I), AHandled) then Exit(True);
   end;
 
+  { True when a comment carries HUMAN PROSE rather than a tool-written marker.
+
+    `// dl:ok <rule>@<hash>` and `// drag-lint:ignore <rule>` are written by
+    drag-lint itself (or for it), never as an explanation of why an exception is
+    dropped. Letting one count as documentation would make the marker
+    self-fulfilling: allow the finding, the marker silences the rule, the marker
+    is then reported unused, removing it brings the finding back. Excluding them
+    here is what keeps `try-except-swallowed` OUT of COMMENT_SENSITIVE -- the
+    marker leaves the rule firing, so it suppresses normally and is accounted
+    for. A human comment that merely also carries a marker still documents the
+    swallow and still counts; the payload check, not Parse(), draws that line. }
+  function IsExplanatoryComment(const AComment: TTSNode): Boolean;
+  const
+    MARKERS: array[0..1] of string = ('dl:ok', 'drag-lint:ignore');
+  var
+    S: string;
+    M: string;
+  begin
+    S:= Trim(NodeStr(AComment));
+    if Copy(S, 1, 2) = '//' then Delete(S, 1, 2)
+    else if Copy(S, 1, 2) = '(*' then
+    begin
+      Delete(S, 1, 2);
+      if Copy(S, Length(S) - 1, 2) = '*)' then SetLength(S, Length(S) - 2);
+    end
+    else if Copy(S, 1, 1) = '{' then
+    begin
+      Delete(S, 1, 1);
+      if Copy(S, Length(S), 1) = '}' then SetLength(S, Length(S) - 1);
+    end;
+    { A doc-comment's third slash, and the leading $ of a compiler directive,
+      are not prose either. A directive is code; it explains nothing. }
+    while Copy(S, 1, 1) = '/' do Delete(S, 1, 1);
+    if Copy(S, 1, 1) = '$' then Exit(False);
+    S:= Trim(S);
+    if S = '' then Exit(False);
+    for M in MARKERS do
+      if SameText(Copy(S, 1, Length(M)), M) then Exit(False);
+    Result:= True;
+  end;
+
   procedure Visit(const N: TTSNode);
   var
     I        : Integer ;
     HasExcept: Boolean ;
     Handled  : Boolean ;
+    Documented  : Boolean;
+    CommentsOnly: Boolean;
     C        : TTSNode ;
     ExceptPt : TTSPoint;
     F        : TLintFinding;
@@ -5005,6 +5048,8 @@ var
     begin
       HasExcept:= False;
       Handled  := False;
+      Documented  := False;
+      CommentsOnly:= True;
       ExceptPt := Default(TTSPoint);
       HandledNames:= TStringList.Create;
       try
@@ -5018,15 +5063,51 @@ var
             HasExcept:= True;
             ExceptPt := C.StartPoint;
           end
-          else if HasExcept and (C.NodeType <> 'kEnd') and (C.NodeType <> 'kFinally') then
+          else if HasExcept then
           begin
-            if HandlesException(C, HandledNames) then Handled:= True;
+            { STOP at the closing keyword, do not merely skip it. A `try` node's
+              LAST child is an anonymous `;` that sits AFTER kEnd, and the
+              s-expression form of the tree does not show it (ToString prints
+              named children only). Skipping kEnd and continuing therefore let
+              that semicolon through as "a non-comment child of the handler",
+              which silently set CommentsOnly to False on EVERY try node in the
+              file -- so a documented swallow still fired and the shape looked
+              impossible to reproduce. `tools\dumpnode` prints named and
+              anonymous children alike, which is what made it visible. }
+            if (C.NodeType = 'kEnd') or (C.NodeType = 'kFinally') then Break;
+            if not C.IsNamed then Continue; { punctuation is not code }
+            if C.NodeType = 'comment' then
+            begin
+              if IsExplanatoryComment(C) then Documented:= True;
+            end
+            else
+            begin
+              CommentsOnly:= False;
+              if HandlesException(C, HandledNames) then Handled:= True;
+            end;
           end;
         end;
       finally
         HandledNames.Free;
       end;
-      if HasExcept and (not Handled) then
+      { v(2026-08-13, owner ruling): a DOCUMENTED deliberate swallow is accepted.
+        The shape is an except body that runs NO code and carries an explanation
+        of why dropping the exception is the lesser evil -- the canonical case
+        being a destructor running during Spring's GlobalContainer finalization,
+        where an escaping exception is far worse than a lost settings write.
+
+        Both halves are required. `CommentsOnly` is what keeps the rule's teeth:
+        a handler that DOES run code and merely carries a trailing `// retry
+        backoff` still fires, because there the exception vanishes while
+        something else happens -- the more dangerous case, not the documented
+        one. Only a handler that visibly does nothing, on purpose, in writing,
+        is accepted.
+
+        This also lines the rule up with `empty-except`, which stops firing on
+        the same shape (its .scm anchors kExcept ADJACENT to kEnd, and a comment
+        breaks the adjacency). Before this, a documented empty handler produced
+        one finding and not the other, from the same two lines of source. }
+      if HasExcept and (not Handled) and (not (Documented and CommentsOnly)) then
       begin
         F:= Default(TLintFinding);
         F.RuleId  := 'try-except-swallowed';
