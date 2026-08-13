@@ -599,6 +599,7 @@ var
   K, EntTxt: string;
   Cond, ThenN, ElseN, StartN, EntityN, IterN, LhsN: TTSNode;
   ThenAfter, ElseAfter, JoinIdx, HdrIdx, BodyIdx, FollowIdx, TestIdx, BodyAfter: Integer;
+  ElseIdx: Integer; { index of a case's kElse among its named children, -1 = none }
   TryAfter, FinAfter, ExcAfter: Integer;
   TryNode, FinNode: TTSNode;
   Ctx: TLoopCtx;
@@ -638,12 +639,37 @@ begin
 
   if K = 'case' then
   begin
+    { The named-child shape, verified against tree-sitter-delphi13 rather than
+      assumed. Both bugs below came from assuming it, so the probe that settled
+      it is checked in: tools\dumpcase\dumpcase.dpr prints the named children of
+      every `case` node in any file. The shape is:
+
+        kCase, <selector>, kOf, caseCase*, [ kElse, <else statement>* ,] kEnd
+
+      Two things about it are easy to get wrong, and both were:
+        - KEYWORDS ARE NAMED NODES here (kCase/kOf/kElse/kEnd), so "the first
+          named child" is the `case` keyword, not the selector.
+        - THE ELSE ARM IS NOT A NODE and not a field. Unlike `ifElse`, which
+          answers ChildByField('else'), a case's else body is a run of BARE
+          SIBLINGS between kElse and kEnd. }
+
+    { SELECTOR -- a READ of everything it names. This used to be "the first
+      named child that is not a caseCase", which is kCase: the keyword was
+      recorded as the block item and the selector expression was never added at
+      all. Every read that happens in a case selector was therefore invisible to
+      the data-flow rules -- write-only-local called CurLineLast "assigned but
+      never read" at YADF.Layout.pas:3325 while line 3512 reads it as
+      `case CurLineLast of`. Take what sits between kCase and kOf. }
     for I := 0 to ANode.NamedChildCount - 1 do
-      if ANode.NamedChild(I).NodeType <> 'caseCase' then
-      begin
-        Cfg.Blocks[ACur].AddItem(ANode.NamedChild(I), WithDepth > 0);
-        Break;
-      end;
+    begin
+      { Either terminator ends the selector. kOf is the real one; caseCase is a
+        guard for a malformed/partially-parsed case, so a missing kOf cannot
+        turn this into "add every arm as an item". }
+      if (ANode.NamedChild(I).NodeType = 'kOf') or (ANode.NamedChild(I).NodeType = 'caseCase') then Break;
+      if ANode.NamedChild(I).NodeType = 'kCase' then Continue;
+      Cfg.Blocks[ACur].AddItem(ANode.NamedChild(I), WithDepth > 0);
+    end;
+
     JoinIdx := Cfg.NewBlock.Index;
     for I := 0 to ANode.NamedChildCount - 1 do
       if ANode.NamedChild(I).NodeType = 'caseCase' then
@@ -653,7 +679,37 @@ begin
         ThenAfter := EmitStmt(BodyIdx, ANode.NamedChild(I).ChildByField('body'));
         if ThenAfter >= 0 then Cfg.Blocks[ThenAfter].AddSucc(JoinIdx);
       end;
-    Cfg.Blocks[ACur].AddSucc(JoinIdx); { else / no-match fall-through }
+
+    { ELSE ARM. This used to be a single `AddSucc(JoinIdx)` -- a fall-through
+      edge and nothing else -- so the else BODY was never emitted. Two bugs in
+      one line: assignments inside `case..else` were invisible, and the CFG
+      carried a path through the case that assigns nothing. That path is what
+      made function-result-not-set fire on YADF.Options.pas:593 EncodingOf,
+      whose every arm (else included) sets Result.
+      The correct shape is the `if` handler above: emit the body as its own
+      block and join it. }
+    ElseIdx := -1;
+    for I := 0 to ANode.NamedChildCount - 1 do
+      if ANode.NamedChild(I).NodeType = 'kElse' then begin ElseIdx := I; Break; end;
+
+    if ElseIdx >= 0 then
+    begin
+      BodyIdx := Cfg.NewBlock.Index;
+      Cfg.Blocks[ACur].AddSucc(BodyIdx);
+      ElseAfter := BodyIdx;
+      for I := ElseIdx + 1 to ANode.NamedChildCount - 1 do
+      begin
+        if ANode.NamedChild(I).NodeType = 'kEnd' then Break;
+        if ElseAfter < 0 then Break; { unreachable tail -- same rule as EmitList }
+        ElseAfter := EmitStmt(ElseAfter, ANode.NamedChild(I));
+      end;
+      if ElseAfter >= 0 then Cfg.Blocks[ElseAfter].AddSucc(JoinIdx);
+      { NO direct ACur -> JoinIdx edge here: a case WITH an else is exhaustive.
+        Leaving it would keep exactly the assigns-nothing path this fix exists
+        to remove, and function-result-not-set would go on firing. }
+    end
+    else
+      Cfg.Blocks[ACur].AddSucc(JoinIdx); { no else -> an unmatched selector skips to the join }
     Exit(JoinIdx);
   end;
 
