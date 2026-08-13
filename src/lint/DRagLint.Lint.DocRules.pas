@@ -163,7 +163,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FixEditsForDocDrift(const AStore: ISymbolStore;
-      const ATargeted: TArray<TLintFinding>): TArray<TTextEdit>;
+      const ATargeted: TArray<TLintFinding>;
+      AIncludeSeeAlso: Boolean = True): TArray<TTextEdit>;
 
     /// <summary>Builds the DocInsight comment insert edits for a set of TARGETED
     /// missing-doc findings -- the SINGLE-FIX "Fix it" on an undocumented public
@@ -483,7 +484,7 @@ begin
 end;
 
 class function TDocLintRules.FixEditsForDocDrift(const AStore: ISymbolStore;
-  const ATargeted: TArray<TLintFinding>): TArray<TTextEdit>;
+  const ATargeted: TArray<TLintFinding>; AIncludeSeeAlso: Boolean): TArray<TTextEdit>;
 var
   Edits   : TList<TTextEdit>    ;
   Sym     : TSymbol             ;
@@ -500,8 +501,21 @@ var
   Reported: TDictionary<string, Boolean>;
   PathMemo: TDictionary<Int64, string> ;
   SymPath : string              ;
+  Trace   : Boolean             ;
+
+  { Why a decl the user was told about produced no repair. Four gates can drop
+    one silently -- including a bare `except` -- and reading the code cannot tell
+    you which fired, so this prints it. Off unless DRAGLINT_FIXDOC_TRACE is set;
+    goes to ErrOutput so it never pollutes --json. Kept because this seam has
+    now cost four separate investigations. }
+  procedure ReportTrace(const AWhat, AQName: string);
+  begin
+    if Trace then Writeln(ErrOutput, Format('  FIXDOC %-22s %s', [AWhat, AQName]));
+  end;
+
 begin
   Result:= nil;
+  Trace:= GetEnvironmentVariable('DRAGLINT_FIXDOC_TRACE') <> '';
   if AStore = nil then Exit;
   if Length(ATargeted) = 0 then Exit;
   Edits:= TList<TTextEdit>.Create;
@@ -533,18 +547,27 @@ begin
           PathMemo.Add(Sym.FileId, SymPath);
         end;
         if not Reported.ContainsKey(SymPath + '|' + LowerCase(Sym.Name)) then Continue;
+        ReportTrace('considering', Sym.QualifiedName);
 
         Live:= TDocumenter.ExistingDocFor(AStore, Sym.QualifiedName, ResSym, Found, HasDoc);
-        if (not Found) or (not HasDoc) then Continue;
+        if (not Found) or (not HasDoc) then
+        begin
+          ReportTrace(Format('DROP not-found=%d no-doc=%d', [Ord(not Found), Ord(not HasDoc)]), Sym.QualifiedName);
+          Continue;
+        end;
 
         { Only repair a decl that actually carries a FIXABLE drift signal --
           report-only drift (renamed param, spurious <returns>, never-raised
           <exception>, ...) produces NO edit; a human decides on those. }
-        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live);
+        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AIncludeSeeAlso);
         AnyFix:= False;
         for D in Drifts do
           if D.Fixable then begin AnyFix:= True; Break; end;
-        if not AnyFix then Continue;
+        if not AnyFix then
+        begin
+          ReportTrace(Format('DROP no-fixable-of-%d', [Length(Drifts)]), ResSym.QualifiedName);
+          Continue;
+        end;
 
         { One BuildFor per decl regenerates the WHOLE managed comment via
           MergeComment (refresh facts block + add missing <param>/<returns>
@@ -552,10 +575,27 @@ begin
           decl collapse into a single delete+insert edit pair -- no overlapping
           edits over one doc span. daUnchanged (already current) yields no edits,
           which is what makes a second --fix a no-op. }
-        DocRes:= TDocumenter.BuildFor(AStore, ResSym.QualifiedName);
+        { AIncludeSeeAlso, NOT the two-argument convenience overload. That
+          overload hardcodes AIncludeSeeAlso := False (DRagLint.Doc.Document.pas
+          :129), so the REPAIRER regenerated a block without <seealso> while the
+          CHECKER analysed with it on -- the exact failure DoLintAll's own
+          comment warns about: "the staleness compare measures the option
+          difference, not drift". The checker took the flag from AArgs.DocSeeAlso
+          and this path never did, so on YADF.LineScan.TLineScanState.Reset and
+          YADF.Groups.TGroup.Create doc-drift reported "managed facts block is
+          out of date" while --fix regenerated something byte-identical to disk
+          and reported nothing to do. Unrepairable by any command, and stable
+          across reindexes, which is what made it read as an index problem. }
+        DocRes:= TDocumenter.BuildFor(AStore, ResSym.QualifiedName, AIncludeSeeAlso);
+        if Length(DocRes.Edits) = 0 then ReportTrace('DROP BuildFor-0-edits', ResSym.QualifiedName)
+                                     else ReportTrace(Format('OK %d edit(s)', [Length(DocRes.Edits)]), ResSym.QualifiedName);
         for E in DocRes.Edits do Edits.Add(E);
       except
-        { A single malformed decl must not abort the whole fix sweep. }
+        on Ex: Exception do
+          { A single malformed decl must not abort the whole fix sweep -- but a
+            swallowed exception looks exactly like "nothing to repair", which is
+            how this seam hid for so long. Name it under the trace. }
+          ReportTrace('DROP raised ' + Ex.ClassName + ': ' + Ex.Message, Sym.QualifiedName);
       end;
     end;
     Result:= Edits.ToArray;

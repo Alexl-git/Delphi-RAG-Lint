@@ -6568,7 +6568,7 @@ begin
           2026-08-13). Targeted has already been through the ownership and
           --project filters, so passing it inherits both. See
           TDocLintRules.FixEditsForDocDrift's remarks. }
-        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore, Targeted);
+        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore, Targeted, AArgs.DocSeeAlso);
         if Length(DDEdits) > 0 then
         begin
           Edits:= Edits + DDEdits;
