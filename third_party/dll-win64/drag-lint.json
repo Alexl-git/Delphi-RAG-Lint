@@ -262,6 +262,30 @@
         "sqlOnlyMS": true
       },
       {
+        "sqlOnlyMS": true,
+        "include": [
+          "C:\\Projects\\YADF\\Test\\GuardTest.dproj"
+        ],
+        "useIgnoreFiles": true,
+        "name": "YADF-GuardTest"
+      },
+      {
+        "sqlOnlyMS": true,
+        "include": [
+          "C:\\Projects\\YADF\\Test\\OptionsTest.dproj"
+        ],
+        "useIgnoreFiles": true,
+        "name": "YADF-OptionsTest"
+      },
+      {
+        "sqlOnlyMS": true,
+        "include": [
+          "C:\\Projects\\DataCopy\\Tests\\DataCopyTests.dproj"
+        ],
+        "useIgnoreFiles": true,
+        "name": "DataCopy-Tests"
+      },
+      {
         "name": "Library",
         "db": "library-{platform}.sqlite",
         "source": "registry-libraries",

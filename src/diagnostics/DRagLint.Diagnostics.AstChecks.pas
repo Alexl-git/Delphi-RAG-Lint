@@ -4976,6 +4976,15 @@ var
         the direction that costs more for this rule. }
       if (Pos('writeln', T) > 0) or (Pos('outputdebugstring', T) > 0)
          or (Pos('showmessage', T) > 0) then Exit(True);
+      { v(2026-08-13): a MODAL DIALOG carrying the exception is reporting, and it
+        is the loudest form of it -- the user cannot miss it. The rule already
+        accepted ShowMessage but not MessageDlg/MessageBox, which are the VCL and
+        Win32 idioms for the same act. Measured on YADFOT: two of three sampled
+        findings were `except on E: Exception do MessageDlg('YADFOT: format
+        failed.' + E.ClassName + ': ' + E.Message, mtError, [mbOK], 0)` --
+        reported as "silently swallowed" while putting the class AND message on
+        screen. }
+      if (Pos('messagedlg', T) > 0) or (Pos('messagebox', T) > 0) then Exit(True);
     end;
     for I:= 0 to N.ChildCount - 1 do
       if HandlesException(N.Child(I), AHandled) then Exit(True);
