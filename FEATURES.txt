@@ -367,6 +367,22 @@ Lint engine capabilities:
   it.
 - Four severity levels: error > warning > info > hint.
 - Suppression: // drag-lint:ignore (whole line) or // drag-lint:ignore <rule-id>.
+- Accountable review markers: // dl:ok <rule-id>@<hash> [-- reason], one rule per
+  entry, several comma-separated entries per line. Other findings on the same
+  line stay active. The @hash is 4 hex over the line's CODE TOKENS -- comments
+  excluded, whitespace dropped, identifiers lowercased, string-literal content
+  kept verbatim -- so reindentation and case normalisation (YADF, autofix) cannot
+  invalidate a review, while a real edit does. A stale marker RE-REPORTS its
+  finding rather than silently suppressing code nobody re-examined, and rules
+  review-marker-stale / review-marker-unused police the markers themselves.
+- `drag-lint allow <file> --fix-line L --fix-rule id [--apply]` writes one marker;
+  dry-run without --apply. Re-running it on a STALE marker re-hashes that entry
+  (how a human re-accepts a review after editing the code) and leaves every other
+  marker on the line alone. Rule ids are validated against the full catalogue,
+  built-in and .scm alike. This is the only code path that formats a marker: the
+  IDE popup and any future editor action come through it.
+- IDE: right-click a message in the Structure form's Diagnostics list ->
+  "Allow this message". The finding drops off on the next live tick.
 - CI ergonomics: --format text|json|sarif (SARIF 2.1.0 for GitHub code-scanning),
   --fail-on error|warning|info|none, and --baseline / --write-baseline
   (line-shift-stable fingerprints for "new findings only" gating).
