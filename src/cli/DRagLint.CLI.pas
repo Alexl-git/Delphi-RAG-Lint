@@ -9774,16 +9774,31 @@ var
   ScopeSet : TDictionary<string, Boolean>;
   Prof     : TLintPhaseProfiler          ;
 begin
-  { Resolve DBs: first existing = project index; second = library index }
+  { Resolve DBs: first existing = project index (ResolveConsumerDbs promotes
+    --project's own index to the front, so this is that project's store).
+
+    The second slot is the LIBRARY index SPECIFICALLY, not "whatever DB came
+    next". CheckUsedUnitResolvable parses the platform back out of the file name
+    (library-Win64.sqlite -> Win64) to find DCU-only units on the Library path.
+    Hand it another PROJECT's index instead and two things break at once: that
+    project's units count as library units, and the DCU fallback switches itself
+    off because the name yields no platform -- so used-unit-not-resolvable fires
+    on units the compiler resolves perfectly well. A manifest with many project
+    sections put a project DB in second place on every single run.
+    An explicit `--db <proj> --db <lib>` keeps its documented meaning. }
   Dbs:= ResolveConsumerDbs(AArgs);
   ProjectDb:= '';
   LibDb    := '';
   for var D in Dbs do
   begin
     if not TFile.Exists(D) then Continue;
-    if ProjectDb  = '' then ProjectDb:= D
-    else if LibDb = '' then LibDb:= D;
+    if ProjectDb = '' then ProjectDb:= D;
+    if (LibDb = '') and StartsText('library-', ExtractFileName(D)) then LibDb:= D;
   end;
+  if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
+    for var D in AArgs.DbPaths do
+      if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
+        begin LibDb:= D; Break; end;
   if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }
@@ -15467,6 +15482,8 @@ end; // function DetectPlatformFromDproj
 //      use that list.
 //   3. If no manifest is found or the resolved list is empty, fall back to the
 //      default .\drag-lint.sqlite so existing behaviour is preserved.
+//   4. --project names the ONE index that owns that project, so when it is given
+//      (and resolves unambiguously) that DB is promoted to the FRONT of the list.
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
@@ -15474,18 +15491,35 @@ var
   EngineDir: string                                    ;
   Platform : string                                    ;
   Resolved : TArray<string>                            ;
+  ProjDb   : string                                    ;
+  Claimants: TArray<string>                            ;
+  D        : string                                    ;
 begin
   // User supplied explicit --db: honour without modification.
   if Length(AArgs.DbPaths) > 0 then begin Result:= AArgs.DbPaths; Exit; end;
 
+  ProjDb:= '';
   // Try manifest-driven selection.
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
     Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
-    // Pick platform: CLI --platform > .dproj detection > manifest defaultPlatform.
+    { Pick platform: CLI --platform > the PROJECT'S OWN folder when --project
+      names one > cwd detection > manifest defaultPlatform. Reading only the cwd
+      is how `lint-all --project C:\Projects\YADF\YADF.dproj`, run from this
+      repo, took its platform from a directory the project has nothing to do
+      with -- and then resolved a foreign index to match. --project is a far
+      stronger signal about which project is meant than where the shell
+      happens to be standing. }
     if AArgs.CheckPlatform <> '' then Platform:= AArgs.CheckPlatform
-    else begin Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir); if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform; end;
+    else
+    begin
+      Platform:= '';
+      if AArgs.ProjectPath <> '' then
+        try Platform:= DetectPlatformFromDproj(Manifest, ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath))); except Platform:= ''; end;
+      if Platform = '' then Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
+      if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
+    end;
 
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
@@ -15493,9 +15527,16 @@ begin
     finally
       Resolver.Free;
     end;
+
+    { The one DB that owns --project. Same function the IDE's Rebuild Index and
+      `resolve-dbs --project` use, so all three agree by construction. Anything
+      short of pdmUnique is left alone: a guessed owner is worse than none. }
+    if AArgs.ProjectPath <> '' then
+      if ResolveProjectDb(Manifest, AArgs.ProjectPath, ProjDb, Claimants) <> pdmUnique then ProjDb:= '';
   except
     // Any manifest parse / IO error: fall through to default.
     Resolved:= nil;
+    ProjDb  := '';
   end; // try
 
   if Length(Resolved) > 0 then Result:= Resolved
@@ -15503,6 +15544,23 @@ begin
   begin
     // Fallback: single default DB (preserves pre-Task-9 behaviour).
     Result:= [AArgs.DbPath];
+  end;
+
+  { Promote the owning index to the front. Consumers read the list as "the
+    project index first, everything else after" -- lint-all literally takes
+    Result[0] as its store -- so leaving the manifest's own section order in
+    charge meant `--project` opened whichever project happened to be declared
+    first. With --project scoping the FILE LIST to one closure and the store
+    coming from a different project, the intersection is empty: `0 finding(s),
+    0 file(s) scanned` on a correctly indexed project, which reads as success.
+    Promote rather than replace -- the library DB and the rest of the list are
+    still wanted, just not in front. }
+  if (ProjDb <> '') and TFile.Exists(ProjDb) then
+  begin
+    var Reordered: TArray<string>:= [ProjDb];
+    for D in Result do
+      if not SameText(ExpandFileName(D), ExpandFileName(ProjDb)) then Reordered:= Reordered + [D];
+    Result:= Reordered;
   end;
 end; // function
 
