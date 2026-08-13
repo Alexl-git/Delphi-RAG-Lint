@@ -458,6 +458,54 @@ pwsh -File tests\autotest\run_shared_unit_staleness.ps1
 
 Expected: FAIL on the first two checks -- each project reports the other's block stale.
 
+> **BLOCKER FOUND 2026-08-13 while writing Step 1's fixture: Step 1's first two
+> assertions cannot both hold under Step 3's rules, and closing the gap means
+> changing the WRITER -- which this plan's Architecture line says is
+> unchanged.**
+>
+> Step 1 asserts BOTH `A documents, B sees no drift` AND `B documents, A sees no
+> drift`. Step 3 rule 4 says an entry present in FRESH but absent from STORED is
+> ALWAYS drift, and the Architecture says "a narrower project still writes a
+> narrower block, it is simply no longer told that block is stale."
+>
+> Walk it. B is the narrow project. B documents and writes a block with no
+> `Called from:` entry for `AOnly` -- correctly, it cannot see AOnly. Now A
+> regenerates: `AOnly` is in A's FRESH and not in STORED, which is rule 4, which
+> is drift. So the second assertion fails BY CONSTRUCTION. Forgiveness is
+> one-directional: it stops the NARROW project complaining about the wide
+> project's block, and does nothing about the wide project re-adding what the
+> narrow one dropped. The cycle still has no fixed point, it just runs one
+> direction instead of two.
+>
+> This is not reachable by tuning the comparison. Rule 4 is the load-bearing
+> half -- dropping it means a real new caller never gets recorded. The options
+> are:
+>
+> 1. **The writer MERGES instead of replacing** -- when rewriting a marked
+>    shared unit, keep the stored inbound entries whose units are outside this
+>    closure and union them with the fresh ones. Both directions then converge
+>    and the block becomes the true union across projects, which is what a reader
+>    of a shared unit actually wants. Costs: the writer changes (contra the
+>    Architecture line), and entries can only accumulate -- a caller deleted in
+>    another project's code is never reaped by this project, so `check-shared`
+>    becomes load-bearing rather than optional.
+> 2. **One documenting owner per shared unit** -- the first project in the
+>    `dl:shared` list writes the block; the others only read. Writer unchanged,
+>    rule 4 unchanged, converges. Costs: a shared unit's docs are only as fresh
+>    as the owner project's last run, and the menu item must not let a
+>    non-owner write.
+>
+> **Recommendation: option 1.** It is the only one that makes the block true for
+> every project that compiles the unit, which is the case that motivated the
+> feature. It also subsumes the `(+N more)` gap above: a merge does not need
+> sound set-difference semantics, only a union, so a truncated list stops being
+> a correctness hazard and becomes only a display cap.
+>
+> **Owner decision required before Step 3.** Both options change what gets
+> written into four real projects' source, and this plan has already had five
+> stated mechanisms die on contact with a built engine -- a sixth invented at
+> the keyboard is not the way to settle it.
+
 - [ ] **Step 3: Implement the structured comparison**
 
 Replace the byte compare with:
