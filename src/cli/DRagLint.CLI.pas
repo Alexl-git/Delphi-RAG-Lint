@@ -74,6 +74,7 @@ uses
   , DRagLint.Lint   .ProjectRules
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .DocRules
+  , DRagLint.Lint   .SharedUnit
   , DRagLint.Project.Resolver
   , DRagLint.Project.Members
   , DRagLint.Project.Coherence
@@ -429,6 +430,11 @@ type
     // dfm|pas picks the TARGET (To-side) visibility bar for auto-'#link'
     // matching. '' (default/unset) -> DoConvertScaffold applies 'dfm'.
     Surface       : string ; // convert-scaffold: --surface dfm|pas ('' = default 'dfm')
+    // shared-unit (dl:shared marker). The unit is --in and the write switch is
+    // --apply -- both already parsed into InFile/Apply, so this command adds one
+    // field, not three. A second field for a flag that already exists is how two
+    // switches with the same name end up meaning different things.
+    AddProjectName: string ; // shared-unit: --add-project <ProjectName>
   end; // record
 
 procedure PrintHelp;
@@ -496,6 +502,7 @@ begin
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
+  Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
@@ -967,6 +974,7 @@ begin
     else if (A = '--fix-rule') and (i < ParamCount) then begin Inc(i); Result.FixRule:= ParamStr(i); end
     else if A = '--include-private' then Result.IncludePrivate:= True
     else if (A = '--target') and (i < ParamCount) then begin Inc(i); Result.Target:= ParamStr(i); end
+    else if (A = '--add-project') and (i < ParamCount) then begin Inc(i); Result.AddProjectName:= ParamStr(i); end
     else if (A = '--shadow') and (i < ParamCount) then begin Inc(i); Result.Shadow:= ParamStr(i); end
     else if A = '--resolve-uses'  then Result.ResolveUsesFlag:= True
     else if A = '--edges'         then Result.Edges          := True
@@ -8232,6 +8240,133 @@ begin
   end;
   Result:= P + '  ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age);
   if Sz >= 0 then Result:= Result + '  ' + IntToStr(Sz) + ' bytes';
+end;
+
+{ `drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json]`
+
+  Reads -- and optionally extends -- the `dl:shared` marker that declares a unit
+  to be compiled by more than one project.
+
+  DRY-RUN BY DEFAULT, like `allow`: without --apply the new line is printed as a
+  -/+ pair and nothing is written. Adding a project that is already listed is a
+  no-op at every level -- no edit, no write, `was_added:false` -- because the IDE
+  menu item behind this will be pressed twice.
+
+  ROUND-TRIP BEFORE WRITE. The text about to be written is re-parsed and must
+  report the project back. This is the same check `allow` carries
+  (`CLI.pas:15322`) and for the same reason: on YADF a marker appended to line 1
+  landed INSIDE the unit's header block comment, the write "succeeded" with exit
+  code 0, and the reader never saw it. A marker that does not parse back reads as
+  "declared shared" while behaving as unshared. }
+function DoSharedUnit(const AArgs: TArgs): Integer;
+var
+  UnitPath, ProjName, OldText, NewText: string;
+  UseJson, WasAdded: Boolean;
+  Projects: TArray<string>;
+  JRoot: TJSONObject;
+  JProjects: TJSONArray;
+  I: Integer;
+  C: Char;
+  RoundTripped: Boolean;
+begin
+  Result  := 0;
+  UseJson := AArgs.AsJson or SameText(AArgs.Format, 'json');
+  UnitPath:= AArgs.InFile;
+  ProjName:= Trim(AArgs.AddProjectName);
+  WasAdded:= False;
+
+  if UnitPath = '' then
+  begin
+    Writeln('Usage: drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json]');
+    Exit(1);
+  end;
+
+  if not FileExists(UnitPath) then
+  begin
+    Writeln('error: file not found: ' + UnitPath);
+    Exit(2);
+  end;
+
+  OldText:= TFile.ReadAllText(UnitPath, TEncoding.ANSI);
+  NewText:= OldText;
+
+  if ProjName <> '' then
+  begin
+    WasAdded:= TSharedUnit.AddProjectToText(OldText, ProjName, NewText);
+
+    if WasAdded then
+    begin
+      { The marker is appended to source that must stay 7-bit; one pass here is
+        cheaper than finding it in a later diff. }
+      for C in ProjName do
+        if Ord(C) > 127 then
+        begin
+          Writeln('Refusing to write: "' + ProjName + '" is not 7-bit ASCII.');
+          Exit(1);
+        end;
+
+      RoundTripped:= False;
+      Projects:= TSharedUnit.ProjectsOfText(NewText);
+      for I := 0 to High(Projects) do
+        if SameText(Projects[I], ProjName) then
+        begin
+          RoundTripped:= True;
+          Break;
+        end;
+      if not RoundTripped then
+      begin
+        Writeln(Format('Refusing to write: a dl:shared marker on %s would not parse back ' +
+          '(the anchor line is inside a block comment or a string literal, so the marker ' +
+          'would be invisible). Place the marker by hand on the unit declaration.', [UnitPath]));
+        Exit(1);
+      end;
+
+      if AArgs.Apply then
+        TFile.WriteAllText(UnitPath, NewText, TEncoding.ANSI);
+    end;
+  end;
+
+  { Report the state as it now stands: after a write that is the new list, after
+    a dry run it is the list the write WOULD produce. }
+  Projects:= TSharedUnit.ProjectsOfText(NewText);
+
+  if UseJson then
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('file', UnitPath);
+      JRoot.AddPair('is_shared', TJSONBool.Create(TSharedUnit.IsSharedText(NewText)));
+      JProjects:= TJSONArray.Create;
+      for I:= 0 to High(Projects) do
+        JProjects.Add(Projects[I]);
+      JRoot.AddPair('projects', JProjects);
+      if ProjName <> '' then
+      begin
+        JRoot.AddPair('was_added', TJSONBool.Create(WasAdded));
+        JRoot.AddPair('already_listed', TJSONBool.Create(not WasAdded));
+        JRoot.AddPair('applied', TJSONBool.Create(WasAdded and AArgs.Apply));
+      end;
+      Writeln(JRoot.ToJSON);
+    finally
+      JRoot.Free;
+    end;
+    Exit(0);
+  end;
+
+  Writeln(Format('%s: %s', [UnitPath,
+    IfThen(TSharedUnit.IsSharedText(NewText), 'shared', 'not shared')]));
+  if Length(Projects) > 0 then
+    Writeln('  projects: ' + string.Join(', ', Projects));
+
+  if ProjName <> '' then
+  begin
+    if not WasAdded then
+      Writeln(Format('  "%s" is already listed (no change)', [ProjName]))
+    else if AArgs.Apply then
+      Writeln(Format('  added "%s"', [ProjName]))
+    else
+      Writeln(Format('  would add "%s" (dry-run, pass --apply to write)', [ProjName]));
+  end;
 end;
 
 /// <summary>drag-lint info [--json] -- prints engine self-info: version, build
@@ -17676,6 +17811,7 @@ begin
     else if Args.Command = 'uses-report'       then Result:= DoUsesReport      (Args)
     else if Args.Command = 'deps-report'       then Result:= DoDepsReport      (Args)
     else if Args.Command = 'schema'            then Result:= DoSchema          (Args)
+    else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
     else if Args.Command = 'info'              then Result:= DoInfo            (Args)
     else if Args.Command = 'resolve-uses'      then Result:= DoResolveUses     (Args)
     else if Args.Command = 'fb-snapshot'       then Result:= DoFbSnapshot      (Args)

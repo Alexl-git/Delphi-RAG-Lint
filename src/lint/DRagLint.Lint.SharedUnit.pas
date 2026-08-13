@@ -15,17 +15,38 @@ unit DRagLint.Lint.SharedUnit;
   which only asks "is this unit shared". It is there so the blast radius is
   readable in the source without running the tool -- the case that motivated the
   whole feature -- and so `check-shared` can verify the claim instead of trusting
-  it. A marker nobody checks decays into a lie, and this one decides staleness. }
+  it. A marker nobody checks decays into a lie, and this one decides staleness.
+
+  WHY THE READER IS A COMMENT-STATE SCANNER AND NOT A LINE SPLIT. Line 1 of a
+  unit here is frequently the brace that opens a header block comment -- the same
+  anchoring trap already recorded for `unit-too-large` and for `allow` writing a
+  `dl:ok` into a block comment where the reader could not see it
+  (`CLI.pas:15322`). Splitting on lines and matching text answers "does the
+  string appear", which is a different question from "is there a marker here":
+  it accepts `dl:shared` inside a string literal and it rejects a marker on the
+  second line of a braced block. The scanner below tracks brace, star-paren and
+  slash-slash comments plus string state, so both cases come out right.
+
+  (This comment names those delimiters in prose rather than showing them: a
+  closing brace inside a braced comment ends it early, which is the same trap one
+  level up, and it cost a build today.)
+
+  SCOPE. Only the HEADER REGION is scanned: everything up to and including the
+  line that carries the `interface` keyword. A `dl:shared` further down the file
+  is not a unit-level declaration and is ignored. }
 
 interface
 
-uses
-  System.SysUtils;
-
 type
+  /// <summary>Reads and writes the `dl:shared` unit marker.</summary>
+  /// <remarks>Stateless; every entry point re-reads the file. All text handling
+  /// is 7-bit ASCII and the file's original line endings are preserved -- only
+  /// the single marker line is ever rewritten.</remarks>
   TSharedUnit = class
   public
     /// <summary>True when the unit carries a `dl:shared` marker.</summary>
+    /// <param name="AUnitPath">Path to a `.pas` file. A missing file is False,
+    /// not an error.</param>
     /// <remarks>Scans the unit's HEADER REGION, not line 1 alone: line 1 of a
     /// unit here is frequently the `{` of a block comment, which is the same
     /// anchoring trap already recorded for unit-too-large and
@@ -33,213 +54,313 @@ type
     class function IsShared(const AUnitPath: string): Boolean;
 
     /// <summary>The project names listed on the marker, in written order.</summary>
-    /// <remarks>Returns an empty array if the unit is not marked.</remarks>
+    /// <param name="AUnitPath">Path to a `.pas` file.</param>
+    /// <returns>Empty when the unit is unmarked, when the file is missing, or
+    /// when the marker carries no names.</returns>
     class function ProjectsOf(const AUnitPath: string): TArray<string>;
 
     /// <summary>Adds AProject to the marker, creating the marker when absent.</summary>
+    /// <param name="AUnitPath">Path to a `.pas` file. Never written by this
+    /// call -- the caller decides whether to persist ANewText.</param>
+    /// <param name="AProject">Project name, e.g. `YADFOT`. Compared
+    /// case-insensitively against the names already listed.</param>
+    /// <param name="ANewText">The whole file text as it would stand after the
+    /// edit. Set to the CURRENT text (unchanged) whenever the result is False,
+    /// so a caller that writes unconditionally still cannot corrupt the file.</param>
     /// <returns>False when AProject is already listed -- an idempotent no-op, so
-    /// the IDE menu item is safe to press twice.</returns>
-    /// <remarks>Returns the new text with the marker added or updated; caller is
-    /// responsible for writing it to disk with --apply.</remarks>
+    /// the IDE menu item is safe to press twice. Also False when AProject is
+    /// blank, when the file is missing, or when the unit has no `unit` line to
+    /// anchor a new marker to.</returns>
     class function AddProject(const AUnitPath, AProject: string; out ANewText: string): Boolean;
-  private
-    /// <summary>Scan the header region of the file (from start to first 'interface'
-    /// keyword) and find the `dl:shared` marker.</summary>
-    /// <returns>The text after 'dl:shared' on the line where it was found, or ''
-    /// if not found. This is the part that contains the project list.</returns>
-    class function FindMarkerContent(const AFileText: string): string;
 
-    /// <summary>Parse the project list from the marker content.</summary>
-    class function ParseProjects(const AMarkerContent: string): TArray<string>;
+    /// <summary>IsShared, against text already in memory.</summary>
+    /// <remarks>The IDE plugin holds an unsaved editor buffer; making it write a
+    /// temp file just to ask this question is the kind of round-trip that goes
+    /// stale.</remarks>
+    class function IsSharedText(const AText: string): Boolean;
 
-    /// <summary>Format the marker with a project list.</summary>
-    class function FormatMarker(const AProjects: TArray<string>): string;
+    /// <summary>ProjectsOf, against text already in memory.</summary>
+    class function ProjectsOfText(const AText: string): TArray<string>;
 
-    /// <summary>Read the entire file as ASCII text.</summary>
-    class function ReadFileAsText(const AFilePath: string): string;
+    /// <summary>AddProject, against text already in memory.</summary>
+    /// <remarks>This is the seam the round-trip check uses: the caller re-reads
+    /// ANewText with ProjectsOfText and refuses to write anything that does not
+    /// parse back. A marker that does not parse back reads as "declared shared"
+    /// while behaving as unshared, which is worse than no marker at all.</remarks>
+    class function AddProjectToText(const AText, AProject: string; out ANewText: string): Boolean;
   end;
-
-const
-  /// <summary>The marker tag that identifies a shared unit.</summary>
-  SHARED_MARK = 'dl:shared';
 
 implementation
 
-class function TSharedUnit.ReadFileAsText(const AFilePath: string): string;
-begin
-  if not FileExists(AFilePath) then
-    raise EFileNotFound.CreateFmt('File not found: %s', [AFilePath]);
-  Result := TFile.ReadAllText(AFilePath, TEncoding.ASCII);
-end;
+uses
+  System.SysUtils
+  , System.IOUtils
+  , System.Generics.Collections
+  , DRagLint.Lint.ReviewMarker  // SHARED_MARK
+  ;
 
-class function TSharedUnit.FindMarkerContent(const AFileText: string): string;
+const
+  IDENT_CHARS = ['A'..'Z', 'a'..'z', '0'..'9', '_'];
+  EOL_CHARS   = [#13, #10];
+
+type
+  { What one pass of the header scanner is looking for. Both questions need the
+    identical comment/string state machine, and two copies of it would drift. }
+  TScanWant = (swMarkInComment, swUnitKeyword);
+
+{ ---------------------------------------------------------------------------
+  The header scanner
+  --------------------------------------------------------------------------- }
+
+/// <summary>Scans the header region and returns the 1-based position of what
+/// AWant asks for, or 0.</summary>
+/// <remarks>swMarkInComment matches SHARED_MARK only while inside a comment;
+/// swUnitKeyword matches the `unit` keyword only while in code. The region ends
+/// with the line carrying the `interface` keyword -- scanning continues to that
+/// line's end, so a marker parked after the keyword is still seen.</remarks>
+function ScanHeader(const AText: string; AWant: TScanWant): Integer;
 var
-  Lines: TArray<string>;
-  I: Integer;
-  Line: string;
-  MarkerPos: Integer;
-  TrimmedLine: string;
-begin
-  Result := '';
-  Lines := AFileText.Split([#13#10]);
+  N, I, StopAt: Integer;
+  InBrace, InParen, InLineCmt, InStr: Boolean;
+  Ch: Char;
 
-  for I := 0 to High(Lines) do
+  function AtText(const AWhat: string): Boolean;
   begin
-    Line := Lines[I];
-    TrimmedLine := Trim(Line);
+    Result:= (I + Length(AWhat) - 1 <= N) and SameText(Copy(AText, I, Length(AWhat)), AWhat);
+  end;
 
-    { Stop at the 'interface' keyword (case-insensitive) }
-    if UpCase(TrimmedLine).StartsWith('INTERFACE') then
-      Exit;
+  function AtWord(const AWord: string): Boolean;
+  var
+    E: Integer;
+  begin
+    Result:= False;
+    if not AtText(AWord) then Exit;
+    if (I > 1) and CharInSet(AText[I - 1], IDENT_CHARS) then Exit;
+    E:= I + Length(AWord);
+    if (E <= N) and CharInSet(AText[E], IDENT_CHARS) then Exit;
+    Result:= True;
+  end;
 
-    { Look for the marker in a line comment }
-    MarkerPos := Pos('//', Line);
-    if MarkerPos > 0 then
+begin
+  Result   := 0;
+  N        := Length(AText);
+  StopAt   := N;
+  InBrace  := False;
+  InParen  := False;
+  InLineCmt:= False;
+  InStr    := False;
+  I        := 1;
+
+  while (I <= N) and (I <= StopAt) do
+  begin
+    Ch:= AText[I];
+
+    if InLineCmt then
     begin
-      Line := Copy(Line, MarkerPos + 2, MaxInt);
-      MarkerPos := Pos(SHARED_MARK, UpCase(Line));
-      if MarkerPos > 0 then
+      if (AWant = swMarkInComment) and AtText(SHARED_MARK) then Exit(I);
+      if CharInSet(Ch, EOL_CHARS) then InLineCmt:= False;
+      Inc(I);
+      Continue;
+    end;
+
+    if InBrace then
+    begin
+      if (AWant = swMarkInComment) and AtText(SHARED_MARK) then Exit(I);
+      if Ch = '}' then InBrace:= False;
+      Inc(I);
+      Continue;
+    end;
+
+    if InParen then
+    begin
+      if (AWant = swMarkInComment) and AtText(SHARED_MARK) then Exit(I);
+      if (Ch = '*') and (I < N) and (AText[I + 1] = ')') then
       begin
-        Result := Trim(Copy(Line, MarkerPos + Length(SHARED_MARK), MaxInt));
-        Exit;
+        InParen:= False;
+        Inc(I);
       end;
+      Inc(I);
+      Continue;
     end;
-  end;
-end;
 
-class function TSharedUnit.ParseProjects(const AMarkerContent: string): TArray<string>;
-var
-  Parts: TArray<string>;
-  I: Integer;
-begin
-  Result := nil;
-  if AMarkerContent = '' then Exit;
-
-  { Split on ',' to get project list (before any '--' separator for reasons) }
-  Parts := AMarkerContent.Split([',', '-']);
-  for I := 0 to High(Parts) do
-  begin
-    { Stop at the '--' separator }
-    if Parts[I].Trim.StartsWith('-') then
-      Break;
-
-    Parts[I] := Parts[I].Trim;
-    if Parts[I] <> '' then
+    if InStr then
     begin
-      SetLength(Result, Length(Result) + 1);
-      Result[High(Result)] := Parts[I];
+      { A doubled quote inside a literal re-opens it on the next pass, which is
+        the same net state -- no special case needed. }
+      if Ch = '''' then InStr:= False;
+      Inc(I);
+      Continue;
     end;
+
+    { code }
+    if Ch = '''' then begin InStr    := True; Inc(I);    Continue; end;
+    if Ch = '{'  then begin InBrace  := True; Inc(I);    Continue; end;
+    if (Ch = '(') and (I < N) and (AText[I + 1] = '*') then begin InParen  := True; Inc(I, 2); Continue; end;
+    if (Ch = '/') and (I < N) and (AText[I + 1] = '/') then begin InLineCmt:= True; Inc(I, 2); Continue; end;
+
+    if (AWant = swUnitKeyword) and AtWord('unit') then Exit(I);
+
+    if (StopAt = N) and AtWord('interface') then
+    begin
+      StopAt:= I;
+      while (StopAt <= N) and not CharInSet(AText[StopAt], EOL_CHARS) do Inc(StopAt);
+    end;
+
+    Inc(I);
   end;
 end;
 
-class function TSharedUnit.FormatMarker(const AProjects: TArray<string>): string;
+/// <summary>The 1-based bounds of the line containing APos, EOL excluded.</summary>
+procedure LineRangeAt(const AText: string; APos: Integer; out ALineStart, ALineStop: Integer);
+begin
+  ALineStart:= APos;
+  while (ALineStart > 1) and not CharInSet(AText[ALineStart - 1], EOL_CHARS) do Dec(ALineStart);
+  ALineStop:= APos;
+  while (ALineStop < Length(AText)) and not CharInSet(AText[ALineStop + 1], EOL_CHARS) do Inc(ALineStop);
+end;
+
+/// <summary>Splits the text after the marker tag into the project list and the
+/// comment terminator that follows it, if any.</summary>
+/// <remarks>`{ dl:shared YADF, YADFOT }` must not parse its last project as
+/// "YADFOT }".</remarks>
+function SplitCommentTail(const ARest: string; out ATail: string): string;
 var
   I: Integer;
 begin
-  Result := SHARED_MARK + ' ';
-  for I := 0 to High(AProjects) do
+  ATail:= '';
+  I    := 1;
+  while I <= Length(ARest) do
   begin
-    if I > 0 then Result := Result + ', ';
-    Result := Result + AProjects[I];
+    if ARest[I] = '}' then Break;
+    if (ARest[I] = '*') and (I < Length(ARest)) and (ARest[I + 1] = ')') then Break;
+    Inc(I);
   end;
+  if I <= Length(ARest) then
+  begin
+    ATail := Copy(ARest, I, MaxInt);
+    Result:= Copy(ARest, 1, I - 1);
+  end
+  else
+    Result:= ARest;
+end;
+
+/// <summary>Reads a source file as ANSI, or '' when it is not there.</summary>
+/// <remarks>ANSI, not the BOM-sniffing default: these files are strict 7-bit
+/// ASCII and this unit rewrites one line of them, so read and write must be the
+/// same encoding or the untouched bytes do not round-trip.</remarks>
+function ReadUnitText(const AUnitPath: string): string;
+begin
+  Result:= '';
+  if (AUnitPath = '') or (not FileExists(AUnitPath)) then Exit;
+  Result:= TFile.ReadAllText(AUnitPath, TEncoding.ANSI);
+end;
+
+{ ---------------------------------------------------------------------------
+  TSharedUnit
+  --------------------------------------------------------------------------- }
+
+class function TSharedUnit.IsSharedText(const AText: string): Boolean;
+begin
+  Result:= ScanHeader(AText, swMarkInComment) > 0;
 end;
 
 class function TSharedUnit.IsShared(const AUnitPath: string): Boolean;
 begin
-  Result := FindMarkerContent(ReadFileAsText(AUnitPath)) <> '';
+  Result:= IsSharedText(ReadUnitText(AUnitPath));
+end;
+
+class function TSharedUnit.ProjectsOfText(const AText: string): TArray<string>;
+var
+  MarkPos, LineStart, LineStop: Integer;
+  Rest, Body, Tail, Tok: string;
+  Names: TList<string>;
+begin
+  Result := nil;
+  MarkPos:= ScanHeader(AText, swMarkInComment);
+  if MarkPos = 0 then Exit;
+
+  LineRangeAt(AText, MarkPos, LineStart, LineStop);
+  Rest:= Copy(AText, MarkPos + Length(SHARED_MARK),
+              LineStop - (MarkPos + Length(SHARED_MARK)) + 1);
+  Body:= SplitCommentTail(Rest, Tail);
+
+  Names:= TList<string>.Create;
+  try
+    for Tok in Body.Split([',']) do
+    begin
+      if Trim(Tok) <> '' then Names.Add(Trim(Tok));
+    end;
+    Result:= Names.ToArray;
+  finally
+    Names.Free;
+  end;
 end;
 
 class function TSharedUnit.ProjectsOf(const AUnitPath: string): TArray<string>;
 begin
-  Result := ParseProjects(FindMarkerContent(ReadFileAsText(AUnitPath)));
+  Result:= ProjectsOfText(ReadUnitText(AUnitPath));
+end;
+
+class function TSharedUnit.AddProjectToText(const AText, AProject: string;
+  out ANewText: string): Boolean;
+var
+  Proj, Rest, Body, Tail, NewLine: string;
+  MarkPos, UnitPos, LineStart, LineStop, I: Integer;
+  Existing: TArray<string>;
+begin
+  ANewText:= AText;
+  Result  := False;
+
+  Proj:= Trim(AProject);
+  if Proj = '' then Exit;
+
+  MarkPos:= ScanHeader(AText, swMarkInComment);
+  if MarkPos > 0 then
+  begin
+    Existing:= ProjectsOfText(AText);
+    for I:= 0 to High(Existing) do
+      if SameText(Existing[I], Proj) then Exit;  { already listed -- idempotent no-op }
+
+    LineRangeAt(AText, MarkPos, LineStart, LineStop);
+    Rest:= Copy(AText, MarkPos + Length(SHARED_MARK),
+                LineStop - (MarkPos + Length(SHARED_MARK)) + 1);
+    Body:= SplitCommentTail(Rest, Tail);
+
+    if Trim(Body) = '' then
+      Body:= ' ' + Proj
+    else
+      Body:= TrimRight(Body) + ', ' + Proj;
+    if Tail <> '' then
+      Body:= Body + ' ' + TrimLeft(Tail);
+
+    { The tag's own spelling is copied out of the source rather than re-emitted
+      from SHARED_MARK, so a marker written `DL:Shared` keeps its casing and the
+      edit stays a one-token append. }
+    NewLine := Copy(AText, LineStart, MarkPos - LineStart + Length(SHARED_MARK)) + Body;
+    ANewText:= Copy(AText, 1, LineStart - 1) + NewLine + Copy(AText, LineStop + 1, MaxInt);
+    Exit(True);
+  end;
+
+  { No marker yet: anchor a new one on the `unit` declaration line. The scanner
+    finds that keyword in CODE state only, so a `unit` mentioned inside the
+    header block comment cannot be mistaken for the declaration. }
+  UnitPos:= ScanHeader(AText, swUnitKeyword);
+  if UnitPos = 0 then Exit;
+
+  LineRangeAt(AText, UnitPos, LineStart, LineStop);
+  NewLine := TrimRight(Copy(AText, LineStart, LineStop - LineStart + 1)) +
+             '   // ' + SHARED_MARK + ' ' + Proj;
+  ANewText:= Copy(AText, 1, LineStart - 1) + NewLine + Copy(AText, LineStop + 1, MaxInt);
+  Result  := True;
 end;
 
 class function TSharedUnit.AddProject(const AUnitPath, AProject: string;
   out ANewText: string): Boolean;
-var
-  Content: string;
-  MarkerContent: string;
-  Projects: TArray<string>;
-  AlreadyExists: Boolean;
-  I: Integer;
-  NewProjects: TArray<string>;
-  Lines: TArray<string>;
-  J: Integer;
-  Line: string;
-  MarkerPos: Integer;
-  NewLine: string;
 begin
-  { Result = True means the project was added (not already there)
-    Result = False means the project was already listed (idempotent no-op) }
-
-  Content := ReadFileAsText(AUnitPath);
-  MarkerContent := FindMarkerContent(Content);
-  Projects := ParseProjects(MarkerContent);
-
-  { Check if project already exists }
-  AlreadyExists := False;
-  for I := 0 to High(Projects) do
-  begin
-    if SameText(Projects[I], AProject) then
-    begin
-      AlreadyExists := True;
-      Break;
-    end;
-  end;
-
-  if AlreadyExists then
-  begin
-    Result := False;
-    ANewText := Content;
-    Exit;
-  end;
-
-  { Add the project to the list }
-  SetLength(NewProjects, Length(Projects) + 1);
-  for I := 0 to High(Projects) do
-    NewProjects[I] := Projects[I];
-  NewProjects[High(NewProjects)] := AProject;
-
-  { Replace the marker in the file }
-  Lines := Content.Split([#13#10]);
-  for J := 0 to High(Lines) do
-  begin
-    Line := Lines[J];
-    if Pos('//', Line) > 0 then
-    begin
-      MarkerPos := Pos(UpCase(SHARED_MARK), UpCase(Line));
-      if MarkerPos > 0 then
-      begin
-        { Found the marker line, replace it }
-        NewLine := Copy(Line, 1, Pos('//', Line) + 1) + ' ' + FormatMarker(NewProjects);
-        Lines[J] := NewLine;
-        Break;
-      end;
-    end;
-
-    { If no marker found yet and we reached 'interface', we need to insert before it }
-    if UpCase(Trim(Line)).StartsWith('INTERFACE') then
-    begin
-      if MarkerPos = 0 then
-      begin
-        { Insert marker before interface }
-        NewLine := 'unit' + Trim(Copy(Line, 1, Pos(' ', Line) - 1));
-        { Find the unit line and add marker there }
-        for var K := 0 to J - 1 do
-        begin
-          if UpCase(Trim(Lines[K])).StartsWith('UNIT ') then
-          begin
-            Lines[K] := TrimRight(Lines[K]) + '   // ' + FormatMarker(NewProjects);
-            Break;
-          end;
-        end;
-      end;
-      Break;
-    end;
-  end;
-
-  ANewText := string.Join(#13#10, Lines);
-  Result := True;
+  ANewText:= ReadUnitText(AUnitPath);
+  Result  := False;
+  if ANewText = '' then Exit;
+  Result:= AddProjectToText(ANewText, AProject, ANewText);
 end;
 
 end.
