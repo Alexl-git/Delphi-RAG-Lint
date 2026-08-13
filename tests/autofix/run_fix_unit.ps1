@@ -15,7 +15,12 @@
        "autofix: 2 fixable finding(s) -- pass --apply to write" and the file
        on disk is BYTE-IDENTICAL to the fixture; no .bak is written.
     2) apply (--fix --apply): text summary reports
-       "autofix: applied 2 fix(es) across 1 file(s) (.bak written)"; the
+       "autofix: applied 2 edit(s) across 1 file(s) (.bak written)"; the
+       noun is EDITS, not fixes, as of 2026-08-13 -- one finding can emit
+       several edits (a doc repair emits a delete+insert pair; a rename emits
+       one per reference site), so counting findings printed "applied 11
+       fix(es) across 0 file(s)" on a run that wrote nothing at all. Here the
+       two numbers coincide: 2 findings, 1 edit each. The
        resulting file has BOTH fixes -- line 7's outer parens stripped AND
        line 8 (the self-assignment statement) deleted; a .bak exists holding
        the original two-finding source.
@@ -58,7 +63,7 @@ try {
   if (Test-Path $bak) { Remove-Item $bak -Force }
   $ap = & $exePath lint $target --fix --apply 2>$null | Out-String
 
-  Check 'apply: summary reports applied 2 fix(es) across 1 file(s)' ($ap -match 'autofix: applied 2 fix\(es\) across 1 file\(s\) \(\.bak written\)')
+  Check 'apply: summary reports applied 2 edit(s) across 1 file(s)' ($ap -match 'autofix: applied 2 edit\(s\) across 1 file\(s\) \(\.bak written\)')
 
   $lines = [IO.File]::ReadAllLines($target)
   Check 'apply: line 7 parens stripped ("  X := (A + B);")' ($lines.Count -ge 7 -and $lines[6].Trim() -eq 'X := (A + B);')

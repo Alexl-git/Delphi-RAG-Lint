@@ -117,9 +117,32 @@ type
     /// ONLY drift is a missing &lt;param&gt; now contributes no edit here at
     /// all -- report-only, same as a renamed/removed param.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no edits.</param>
+    /// <param name="ATargeted">The findings this repair was asked for. Only decls
+    /// carrying a reported doc-drift-family finding here are repaired; an empty
+    /// array yields no edits. See the remarks -- this parameter is the whole
+    /// point of the 2026-08-13 fix and must not be defaulted away.</param>
     /// <returns>The repair edits (a delete+insert pair per repaired doc span);
     /// empty when nothing fixable drifted.</returns>
     /// <remarks>
+    /// SCOPED TO ATargeted, and that is load-bearing. This used to take the store
+    /// alone and walk every documented public decl in the database, which made
+    /// `lint-all --project X --fix` plan repairs into files X does not own: on
+    /// YADF it emitted 22 edits into C:\Projects\DelphiAST, a vendored root the
+    /// SAME command had just reported as skipped, and wrote .bak files into that
+    /// third-party repo. It is the identical defect `document --project` was
+    /// fixed for on 2026-08-12 (see
+    /// docs\INBOX-document-project-ignores-ownroots-and-writes-into-third-party.md),
+    /// reached by the other entry point. Scoping to the findings inherits the
+    /// ownership and --project filters for free, because those already narrowed
+    /// the finding set before it got here.
+    /// It also ends a skip that could never clear: those DelphiAST rows are
+    /// ghosts the indexer neither re-parses nor evicts, so their line numbers
+    /// were frozen ~150 lines stale and AnchorIsValid refused every edit, forever
+    /// (the eviction defect itself is
+    /// docs\INBOX-ignored-files-already-indexed-are-never-evicted.md).
+    /// The match is (file, short name) and it fails CLOSED -- a decl whose
+    /// finding cannot be matched is left alone. Dropping a repair costs a re-run;
+    /// writing outside the project corrupts someone else's source tree.
     /// NEVER rewrites hand-written prose: BuildFor's MergeComment preserves
     /// Summary/Remarks prose and hand-typed param descriptions, adds managed
     /// param/returns stubs, and merely FLAGS a hand-typed param no longer in the
@@ -139,7 +162,8 @@ type
     /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function FixEditsForDocDrift(const AStore: ISymbolStore): TArray<TTextEdit>;
+    class function FixEditsForDocDrift(const AStore: ISymbolStore;
+      const ATargeted: TArray<TLintFinding>): TArray<TTextEdit>;
 
     /// <summary>Builds the DocInsight comment insert edits for a set of TARGETED
     /// missing-doc findings -- the SINGLE-FIX "Fix it" on an undocumented public
@@ -282,6 +306,10 @@ end;
   the index has a doc for, narrowed to the public API surface and the
   CDD-documentable kinds. Shared by RunDocDrift (report) and
   FixEditsForDocDrift (repair) so both iterate exactly the same population.
+  v(2026-08-13): the repair path then NARROWS that population to the decls whose
+  findings it was actually handed -- same population, filtered by what the caller
+  reported, so it can no longer plan edits into files the caller excluded. See
+  FixEditsForDocDrift's remarks.
 
   v(ADP3 T3d, register D4): "has a doc" is now "has a symbol_docs row" -- the
   exact complement of the FindUndocumented predicate missing-doc uses. It used
@@ -443,7 +471,19 @@ begin
   end;
 end;
 
-class function TDocLintRules.FixEditsForDocDrift(const AStore: ISymbolStore): TArray<TTextEdit>;
+{ The doc-drift FAMILY: every rule id TDocDrift.Analyze's findings are reported
+  under (RunDocDrift splits one analysis across three ids so the catalogue does
+  not have to carry two severities on one id). A decl named by ANY of them is a
+  decl the user was told about, and therefore one this repair may touch. }
+function IsDocDriftFamily(const ARuleId: string): Boolean;
+begin
+  Result:= SameText(ARuleId, 'doc-drift')
+        or SameText(ARuleId, 'doc-param-no-description')
+        or SameText(ARuleId, 'doc-param-not-in-signature');
+end;
+
+class function TDocLintRules.FixEditsForDocDrift(const AStore: ISymbolStore;
+  const ATargeted: TArray<TLintFinding>): TArray<TTextEdit>;
 var
   Edits   : TList<TTextEdit>    ;
   Sym     : TSymbol             ;
@@ -456,14 +496,44 @@ var
   AnyFix  : Boolean             ;
   DocRes  : TDocumentResult     ;
   E       : TTextEdit           ;
+  F       : TLintFinding        ;
+  Reported: TDictionary<string, Boolean>;
+  PathMemo: TDictionary<Int64, string> ;
+  SymPath : string              ;
 begin
   Result:= nil;
   if AStore = nil then Exit;
+  if Length(ATargeted) = 0 then Exit;
   Edits:= TList<TTextEdit>.Create;
+  { The decls the caller actually reported, keyed (file, short name) -- see the
+    interface remarks for why this scope exists. Built once; DocumentedPublicDecls
+    is the whole database and ExistingDocFor is the dominant cost of the doc
+    phase (454.9 s of ORM3-Micronite2027's 732.3 s), so the gate is applied
+    BEFORE that call, not after. }
+  Reported:= TDictionary<string, Boolean>.Create;
+  { GetFilePath builds, prepares and opens a FRESH TFDQuery per call
+    (DRagLint.Storage.SQLite.pas:5589), and the gate below runs on every
+    documented decl in the database -- tens of thousands on ORM3, of which the
+    gate keeps a handful. Memoising by file id turns that into one query per
+    distinct FILE, the same trick the CLI's ownership filter uses on findings for
+    the same reason. }
+  PathMemo:= TDictionary<Int64, string>.Create;
   try
+    for F in ATargeted do
+      if IsDocDriftFamily(F.RuleId) and (F.SymbolName <> '') then
+        Reported.AddOrSetValue(LowerCase(F.FilePath) + '|' + LowerCase(F.SymbolName), True);
+    if Reported.Count = 0 then Exit;
+
     for Sym in DocumentedPublicDecls(AStore) do
     begin
       try
+        if not PathMemo.TryGetValue(Sym.FileId, SymPath) then
+        begin
+          SymPath:= LowerCase(AStore.GetFilePath(Sym.FileId));
+          PathMemo.Add(Sym.FileId, SymPath);
+        end;
+        if not Reported.ContainsKey(SymPath + '|' + LowerCase(Sym.Name)) then Continue;
+
         Live:= TDocumenter.ExistingDocFor(AStore, Sym.QualifiedName, ResSym, Found, HasDoc);
         if (not Found) or (not HasDoc) then Continue;
 
@@ -490,6 +560,8 @@ begin
     end;
     Result:= Edits.ToArray;
   finally
+    PathMemo.Free;
+    Reported.Free;
     Edits.Free;
   end;
 end;

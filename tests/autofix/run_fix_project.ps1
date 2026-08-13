@@ -24,7 +24,11 @@
        names BOTH files; both units on disk are BYTE-IDENTICAL to the fixture;
        no .bak is written.
     2) apply (--fix --apply): text summary reports
-       "autofix: applied 2 fix(es) across 2 file(s) (.bak written)"; unita's
+       "autofix: applied 2 edit(s) across 2 file(s) (.bak written)" -- the noun
+       is EDITS, not fixes, as of 2026-08-13; counting findings printed
+       "applied 11 fix(es) across 0 file(s)" on a run that wrote nothing, since
+       one finding can emit several edits. Here they coincide (2 findings, 1
+       edit each). unita's
        outer parens are stripped AND unitb's self-assignment line is deleted;
        a .bak exists beside EACH fixed unit holding its original source.
     3) json (--fix --json, no --apply): emits an array with one object PER FILE
@@ -129,7 +133,7 @@ try {
   Reset-Fixture
   $ap = & $exePath lint-all --db $db --fix --apply --disable missing-doc,doc-drift --output $report 2>$null | Out-String
 
-  Check 'apply: summary reports applied 2 fix(es) across 2 file(s)' ($ap -match 'autofix: applied 2 fix\(es\) across 2 file\(s\) \(\.bak written\)')
+  Check 'apply: summary reports applied 2 edit(s) across 2 file(s)' ($ap -match 'autofix: applied 2 edit\(s\) across 2 file\(s\) \(\.bak written\)')
 
   $linesA = [IO.File]::ReadAllLines($targetA)
   Check 'apply: unita line 7 parens stripped ("  X := (A + B);")' ($linesA.Count -ge 7 -and $linesA[6].Trim() -eq 'X := (A + B);')

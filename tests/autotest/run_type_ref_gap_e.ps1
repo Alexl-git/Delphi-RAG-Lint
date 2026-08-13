@@ -175,12 +175,19 @@ Write-Host 'PHASE 2: type-name-prefix --fix --apply (Widget -> TWidget), reindex
 # Drive the REAL type-name-prefix autofix. Invocation copied verbatim from
 # run_naming_prefix_autofix.ps1's CASE 3 (lint-all --rule <id> --fix --apply
 # --quiet). Confirmed live during authoring: this renames Widget -> TWidget
-# and reports "autofix: applied 1 fix(es)".
+# and reports "autofix: applied 12 edit(s) across 1 file(s)".
+#
+# The summary counts EDITS, not findings, as of 2026-08-13 (it used to say
+# "applied 1 fix(es)" here). For a rename that is strictly more informative --
+# one finding, but one edit per site rewritten, which is the very coverage this
+# test exists to measure. The exact number is deliberately NOT pinned: the
+# per-site assertions below are what guard coverage, and pinning it here would
+# make every ref-index improvement look like a failure.
 $fixOut = & $Exe lint-all --db $db --config $cfg --rule type-name-prefix --fix --apply --quiet 2>&1
 $fixExit = $LASTEXITCODE
 Write-Host ("  autofix output: {0}" -f ($fixOut -join ' | '))
 Check 'type-name-prefix --fix --apply exits 0 and reports an applied fix' `
-  ($fixExit -eq 0 -and (($fixOut -join ' ') -match 'applied \d+ fix')) `
+  ($fixExit -eq 0 -and (($fixOut -join ' ') -match 'applied [1-9]\d* edit\(s\) across 1 file\(s\)')) `
   "exit=$fixExit; $($fixOut -join ' | ')"
 
 $afterFix = Get-Content -Raw $fixtureFile

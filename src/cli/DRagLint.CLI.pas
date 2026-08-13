@@ -6560,7 +6560,15 @@ begin
         if SameText(F.RuleId, 'doc-drift') then begin WantDocDrift:= True; Break; end;
       if WantDocDrift then
       begin
-        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore);
+        { Targeted, NOT the bare store. Handing it only the store made it plan
+          repairs across every documented decl in the database -- so one
+          doc-drift finding in the project's own code emitted edits into
+          vendored third-party roots the SAME run had just reported as skipped,
+          and wrote .bak files there (measured on YADF -> C:\Projects\DelphiAST,
+          2026-08-13). Targeted has already been through the ownership and
+          --project filters, so passing it inherits both. See
+          TDocLintRules.FixEditsForDocDrift's remarks. }
+        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore, Targeted);
         if Length(DDEdits) > 0 then
         begin
           Edits:= Edits + DDEdits;
@@ -6728,9 +6736,15 @@ begin
         suffix rather than reporting them separately. }
       var ApplySkipped: Integer;
       var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup, ApplySkipped);
+      { Report EDITS WRITTEN, not fixable FINDINGS. FixCount counts findings and
+        one doc-drift finding emits a delete+insert PAIR, so `applied FixCount`
+        overstated the work whenever anything was refused -- it printed
+        "autofix: applied 11 fix(es) across 0 file(s), 22 skipped", which is
+        self-contradictory on its face: eleven fixes applied to no files. }
+      var Written: Integer:= Length(Edits) - ApplySkipped;
       if ApplySkipped > 0 then
         SkipSuffix:= Format(', %d skipped (stale index)', [NFSkippedTotal + ApplySkipped]);
-      Writeln(Format('autofix: applied %d fix(es) across %d file(s)%s%s', [FixCount, Touched, SkipSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s', [Written, Touched, SkipSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
     end
     else
     begin
