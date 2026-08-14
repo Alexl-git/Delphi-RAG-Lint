@@ -125,30 +125,34 @@ const
     is looking. Everything else in the block is computed from this unit's own
     code and is identical under every index.
 
-    'Used in units:' IS inbound and is DELIBERATELY NOT HERE. Measured on YADF
-    2026-08-13, first run against real code: documenting YADF.Tokens under YADFOT
-    rendered
+    'Used in units:' IS here, but it was EXCLUDED for several hours and the
+    reason is worth keeping. Documenting YADF.Tokens under YADFOT rendered
 
         Used in units: dxXMLWriter, FireDAC.Comp.QBE, Spring.Data.ExpressionParser,
                        System.Bindings.Evaluator, System.JSON, XPTestedUnitParser, ...
 
-    where YADF renders only 'YADF.Guard, YADF.Layout, YADF.Tokens, YadfMain'.
-    Those names reach the list through the facts builder's NAME-BASED extra-store
-    fan-out, which is exactly the bucket that cannot be verified. Two properties
-    make them unforgivable HERE, both structural rather than incidental:
+    where the project itself renders four real units -- and none of those names
+    exist in YADFOT's own index. They arrived through the facts builder's
+    NAME-BASED extra-store fan-out, which `document --project` was feeding with
+    every database in the manifest, library index included (CLI.OpenExtraStores;
+    its 'Used in units:' bucket at Doc.Facts.pas:1947 has NO ambiguity gate at
+    all, unlike the CalledFrom sibling at :1669). Forgiving those entries would
+    have welded library noise permanently into every shared unit's source -- the
+    accumulate-only cost, spent on entries that were never trustworthy.
 
-    * the entries are bare unit names with no parenthesised location, and
-    * 'Used in units:' renders through JoinEsc, not JoinRefs, so it carries NO
-      ' ?' confidence marker at all -- the uncertainty guard is VACUOUS for this
-      label, and an unverified name is indistinguishable from a certain one.
+    That was fixed at the source rather than worked around here: the fan-out is
+    now explicit-`--db` only. With it gone, every entry on this line comes from
+    the project's own index, so the label is as trustworthy as the other two and
+    belongs in the feature. It is the reason YADF still drifted by 7 while it sat
+    outside.
 
-    Preserving them would therefore make library noise PERMANENT in the source of
-    every shared unit -- the accumulate-only cost, spent on entries that were
-    never trustworthy. This label keeps today's byte compare, which means it can
-    still churn between projects. That is a known, bounded remainder and it is
-    the safe direction: churn is recoverable, a lie welded into the source is
-    not. }
-  INBOUND_LABELS: array[0..1] of string = ('Called from:', 'Used by:');
+    ONE ASYMMETRY REMAINS, and it is why the entries here are bare names: this
+    label renders through JoinEsc, not JoinRefs, so it carries no ' ?' marker at
+    all. IsUncertainEntry is therefore always False for it. That is now sound --
+    the unverifiable producer is gone -- but if a future change re-introduces any
+    unverified contributor to this list, this is the line that stops screening
+    it. }
+  INBOUND_LABELS: array[0..2] of string = ('Called from:', 'Used by:', 'Used in units:');
 
   { EVERY label RenderFactsBlock and FormatPhase2FactLines can emit. Used only to
     find where one fact ends in the FLATTENED stored text, so a missing entry

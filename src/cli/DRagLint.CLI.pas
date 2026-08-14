@@ -1240,14 +1240,42 @@ end;
 // (non-nil) array when the user passed a single --db or none.
 function OpenExtraStores(const AArgs: TArgs): TArray<ISymbolStore>;
 var
-  DbList: TArray<string>;
-  D     : string        ;
-  EOk   : Boolean       ;
-  ES    : ISymbolStore  ;
+  D  : string      ;
+  EOk: Boolean     ;
+  ES : ISymbolStore;
 begin
   SetLength(Result, 0);
-  DbList:= ResolveConsumerDbs(AArgs);
-  for D in DbList do
+
+  { EXPLICIT --db ONLY. This used to call ResolveConsumerDbs, which AUTO-RESOLVES
+    the whole manifest when no --db is given -- so a run the user scoped to ONE
+    project quietly fanned its name-based fact queries across every index on the
+    machine, the per-platform LIBRARY database included. The comment above always
+    said "every --db the user passed"; the code did not.
+
+    Measured on YADF 2026-08-13. Documenting YADF.Tokens under YADFOT.dproj wrote
+
+        Used in units: dxXMLWriter, FireDAC.Comp.QBE, Spring.Data.ExpressionParser,
+                       System.Bindings.Evaluator, System.JSON, XPTestedUnitParser, ...
+
+    into the shared source, where the project itself renders four real units --
+    and NONE of those names exist in YADFOT's own index (0 hits each, 15 files).
+    They came entirely from this fan-out. The 'Used in units:' bucket
+    (Doc.Facts.pas:1947) has NO ambiguity gate at all, unlike its CalledFrom
+    sibling at :1669, so any same-named symbol anywhere in the library index
+    contributed its unit name.
+
+    This is the true source of the "junk facts" (dxRibbon, TestCachedUpdates.dpr)
+    recorded on 2026-08-13 as "stale TEXT from the union-DB era, which the
+    per-project split already prevents from recurring". They were not stale text.
+    They REGENERATE, and the per-project split never touched them, because the
+    fan-out re-opens the other databases on every run.
+
+    Passing several --db explicitly still fans out -- that is the deliberate
+    cross-project case (an ORM3 COMMON reference) and it is unchanged. What is
+    gone is fanning out when the user asked for one project. }
+  if Length(AArgs.DbPaths) < 2 then Exit;
+
+  for D in AArgs.DbPaths do
     if not SameText(D, AArgs.DbPath) then
     begin
       ES:= OpenReadOnlyStore(D, EOk);
