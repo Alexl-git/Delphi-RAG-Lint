@@ -4,7 +4,13 @@
 
 **Goal:** Make a unit that several projects compile documentable without the projects fighting over its facts block, and clear the three engine defects that currently make any doc repair unverifiable.
 
-**Architecture:** A unit declares itself shared with a `// dl:shared <projects>` marker (same family as the existing `dl:ok` review marker). `TDocDrift` stops byte-comparing the regenerated facts block and instead compares it structurally, forgiving *inbound* entries (`Called from:`, `Used by:`, `Used in units:`, `<seealso>`) that name units outside the current project's closure -- but only in a marked unit, and only when the entry is `certain`. The writer is unchanged: a narrower project still writes a narrower block, it is simply no longer told that block is stale. Three pre-existing defects on the repair path are fixed first, because without them no doc change can be measured.
+**Architecture:** A unit declares itself shared with a `// dl:shared <projects>` marker (same family as the existing `dl:ok` review marker). `TDocDrift` stops byte-comparing the regenerated facts block and instead compares it structurally, forgiving *inbound* entries that name units outside the current project's closure -- but only in a marked unit. Three pre-existing defects on the repair path are fixed first, because without them no doc change can be measured.
+
+> **This paragraph as originally written was wrong in three ways, all corrected below and all found by building the thing. Kept visible rather than silently rewritten, because each was a stated mechanism that did not survive contact with the engine.**
+>
+> 1. *"The writer is unchanged"* -- it is not. Forgiveness alone is one-directional and the cycle has no fixed point without a merge on write; owner ruled option 1 (see Task 4). 
+> 2. *"only when the entry is `certain`"* -- unachievable as stated. `JoinRefs` emits `' ?'` only on a MIXED list, so the ABSENCE of the marker proves nothing and the test is sound in one direction only.
+> 3. *"`Used in units:`, `<seealso>`"* -- neither is in scope. `<seealso>` crefs derive from callees and same-unit siblings, identical under every index. `Used in units:` renders through `JoinEsc` and so carries no confidence marker at all, while being fed by the unverifiable name-based extra-store fan-out -- forgiving it welds library noise permanently into shared source. Measured on YADF: `dxXMLWriter`, `FireDAC.Comp.QBE`, `Spring.Data.ExpressionParser`, `System.JSON`.
 
 **Tech Stack:** Delphi 13 Florence (RAD Studio 37.0), Win32 + Win64, tree-sitter grammar, SQLite symbol store, PowerShell 7 (`pwsh`) test battery, DUnitX not used here.
 
