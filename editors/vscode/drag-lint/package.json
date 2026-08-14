@@ -10,6 +10,13 @@
   "activationEvents": ["onLanguage:pascal"],
   "main": "./extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "dragLint.restartServer",
+        "title": "Restart Language Server",
+        "category": "drag-lint"
+      }
+    ],
     "languages": [
       {
         "id": "pascal",

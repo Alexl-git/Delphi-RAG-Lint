@@ -17960,9 +17960,47 @@ begin
         Server.Free;
       end;
     end // if
-    else begin Writeln('ERROR: unknown command: ', Args.Command); PrintHelp; Result:= 2; end;
+    else begin Writeln(ErrOutput, 'ERROR: unknown command: ', Args.Command); PrintHelp; Result:= 2; end;
   except
-    on E: Exception do begin Writeln('FATAL: ', E.ClassName, ': ', E.Message); Result:= 3; end;
+    on E: Exception do
+    begin
+      { ErrOutput, NOT stdout. For `lsp` and `serve` stdout IS the JSON-RPC
+        transport -- both branches above say so in as many words -- so the bare
+        Writeln that used to be here injected the ONE line explaining the death
+        straight into the wire. The client read `FATAL: ...` where a
+        Content-Length header belongs, tore the connection down, reported
+        `write EPIPE`, and after five restarts inside three minutes latched
+        vscode-languageclient's circuit breaker. Net effect: a dead language
+        server, no diagnostic anywhere, and no recovery short of reloading the
+        window. The crash destroyed its own evidence, which is why the incident
+        of 2026-08-14 could be reproduced but never attributed.
+
+        Reported from the tree-sitter-delphi13 workstream with a byte-for-byte
+        reproduction (`drag-lint lsp --db < init.txt` -- a trailing bare --db
+        fatals in argument parsing, before the first store opens, which is why a
+        healthy start's 32 `FTS5 probe:` lines were absent from the transcript).
+
+        stderr is the right channel for a fatal under EVERY command, not just
+        those two, so this needs no is-stdout-a-protocol mode flag.
+        tests\autotest\run_lsp_stdout_hygiene.ps1 now fails the build if a bare
+        Writeln reappears on either of these two paths -- the invariant lived
+        only in a comment before, and was violated ~60 lines below the comment
+        that stated it. }
+      Writeln(ErrOutput, 'FATAL: ', E.ClassName, ': ', E.Message);
+      { A breadcrumb that survives a broken transport. Without this, a TRANSIENT
+        fatal is unfalsifiable after the fact: there is no --log-file, and
+        stderr is only as durable as whoever happened to be capturing it.
+        Best-effort and swallowed -- a diagnostic that throws is worse than none,
+        and this runs while an exception is already in flight. }
+      try
+        TFile.AppendAllText(ExtractFilePath(ParamStr(0)) + 'drag-lint-fatal.log',
+          Format('%s  cmd=%s  %s: %s'#13#10,
+            [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), Args.Command, E.ClassName, E.Message]));
+      except
+        { deliberately empty }
+      end;
+      Result:= 3;
+    end;
   end; // try
 end; // function
 
