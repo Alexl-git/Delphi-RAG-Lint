@@ -79,6 +79,28 @@ body and welded `AUTO_END` into a fact line in YADF.Tokens.pas.
   while the engine is correct.
 * Battery ~14 min; background it.
 
+## NEXT SESSION STARTS HERE
+
+**Do LoopZero step-by-step, handing off when needed (owner instruction).** Order:
+
+1. **`local-var-casing` first** -- 7 on YADFOT + 7 on YADFSetup, AUTOFIXABLE, and
+   never yet run. `lint-all --project <p> --rule local-var-casing --fix --apply`,
+   then reindex and re-measure. Cheapest real progress available.
+2. **Sample ~12 `try-except-swallowed`** (16 on YADFOT, 6 on YADFSetup) BEFORE
+   believing the count, and sample the ANALYSER, not the source shape. Largest
+   remaining category, so most likely to be one rule bug wearing many hats.
+3. **`unused-public-symbol`** (YADFOT 2, YADFSetup 5) -- BLOCKED on the DB-role
+   design; these are true positives answering the wrong question. Do NOT `allow`.
+4. Then `object-leak`, `used-before-assignment`, `unit-too-large`.
+5. The last 6 `doc-drift` are the `(+N more)` remainder -- needs the
+   `docs.max_callers` decision.
+
+Design decisions all live in
+`docs/superpowers/specs/2026-08-13-db-authority-and-freshness.md`: DB ROLE
+(Library / Project / External-inbound-only) supersedes the flat two-DB rule and
+is what unblocks item 3. Concern 2 (per-project interfaces) was WITHDRAWN as
+wrong. Concern 4 (index from in-memory buffers) is OPEN and architectural.
+
 ## Not done
 
 0. **OWNER RULING 2026-08-13, NOT YET IMPLEMENTED: DB authority is Project DB +
