@@ -65,8 +65,10 @@ var
   i, k, Count: Integer;
   S: string;
   C: Char;
+  Arr: TArray<Integer>;
 begin
   i := 0; k := 0; Count := 2; S := ''; C := 'x';
+  Arr := nil;
   while i < 10 do
   begin
     S := S + C;
@@ -75,8 +77,9 @@ begin
     k := k - 1;
     k := k + 2;
     i := i + Count;
+    Arr := Arr + [i];
   end;
-  Writeln(S, i, k);
+  Writeln(S, i, k, Length(Arr));
 end;
 
 end.
@@ -96,8 +99,9 @@ $lnIncOne    = LineOf 'i := i + 1;'
 $lnDecOne    = LineOf 'k := k - 1;'
 $lnIncTwo    = LineOf 'k := k + 2;'
 $lnAddVar    = LineOf 'i := i + Count;'
-Check 'all six fixture statements located' (
-  @($lnConcatVar,$lnConcatLit,$lnIncOne,$lnDecOne,$lnIncTwo,$lnAddVar) -notcontains -1)
+$lnArrAppend = LineOf 'Arr := Arr + [i];'
+Check 'all seven fixture statements located' (
+  @($lnConcatVar,$lnConcatLit,$lnIncOne,$lnDecOne,$lnIncTwo,$lnAddVar,$lnArrAppend) -notcontains -1)
 
 # `lint --rule` cannot be used: its validator rejects external .scm ids.
 $fired = @()
@@ -117,6 +121,18 @@ Write-Host 'Integer arithmetic in a loop MUST NOT fire' -ForegroundColor Cyan
 Check "i := i + 1   (line $lnIncOne)  -- numeric literal operand" (-not ($fired -contains $lnIncOne))
 Check "k := k + 2   (line $lnIncTwo)  -- numeric literal operand" (-not ($fired -contains $lnIncTwo))
 Check "k := k - 1   (line $lnDecOne)  -- not even an addition"    (-not ($fired -contains $lnDecOne))
+
+Write-Host ''
+Write-Host 'Dynamic-array append in a loop MUST NOT fire' -ForegroundColor Cyan
+# 2026-08-14. `Arr := Arr + [i]` is array append, not string concatenation, and
+# `S := S + ['x']` does not compile -- so a right operand opening with `[` is
+# type-safe to exclude WITHOUT a type, exactly like the numeric-literal rule
+# above. Found by sampling 14 findings on drag-lint's own source: 5 were false
+# positives and 4 of them were this shape (Doc.Facts, Doc.Strip, Lint.Baseline,
+# Diagnostics.AstChecks). Removed 22 findings on drag-lint.
+Check "Arr := Arr + [i] (line $lnArrAppend) -- array constructor operand" `
+  (-not ($fired -contains $lnArrAppend)) `
+  'the message advises TStringList/string.Join, which is nonsense for an array'
 
 Write-Host ''
 Write-Host 'KNOWN LIMITATION, asserted so a future fix is visible' -ForegroundColor Cyan
