@@ -169,8 +169,9 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: accessor, AClassNode, ALower, ArgsHaveNoEncoding, argument, arguments, ATop, base, based, bound (+116 more)
+    /// Calls: accessor, AClassNode, ALhsNorm, ALower, ArgsHaveNoEncoding, argument, arguments, ATop, base, based (+133 more)
     /// Returns: nil; Deduped.ToArray
+    /// Complexity: 18 (cyclomatic, outer body), 2167 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>

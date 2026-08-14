@@ -37,15 +37,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+26 more)
+    /// Calls: ChangeFileExt, constantly, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedSymbolIds (+35 more)
     /// Returns: nil; Findings.ToArray
-    /// Complexity: 48 (cyclomatic, outer body), 239 lines (full implementation)
+    /// Complexity: 46 (cyclomatic, outer body), 390 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Run(const AStore: ISymbolStore; const ARuleId: string = ''): TArray<TLintFinding>;

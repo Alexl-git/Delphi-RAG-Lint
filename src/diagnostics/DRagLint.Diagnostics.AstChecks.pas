@@ -276,7 +276,7 @@ type
       /// One AST walk per routine. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CheckProc, CountNames, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Emit, Format, Integer, MaxNest, NodeStr
+      /// Calls: change, CheckProc, CountNames, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Emit, Format, ifElse, Integer, MaxNest, nesting, NodeStr
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit"/>
@@ -593,7 +593,7 @@ type
       /// try-finally is ignored. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, handler, HandlesException, Integer, LowerCase, NodeStr, Pos
+      /// Calls: above, AHandled, calls, CollectHandlingAssignTargets, Copy, Default, Delete, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EnclosingDefProc (+19 more)
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit"/>

@@ -35,8 +35,8 @@ type
   /// <summary>Top-level settings block from the drag-lint manifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas)
-  /// Used in units: DRagLint.Index.Manifest
+  /// Used by: DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), declaration (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Manifest
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TIndexSettings = record
@@ -59,7 +59,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Default(TIndexSettings).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)
+    /// Called from: DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)
     /// Calls: Default
     /// Pure
     /// <!-- drag-lint:auto END -->
@@ -70,8 +70,8 @@ type
   /// <summary>Doc-generation settings, parsed from the manifest 'docs' object.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas)
-  /// Used in units: DRagLint.Index.Manifest
+  /// Used by: DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), declaration (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Index.Manifest
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocSettings = record
@@ -107,7 +107,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Default(TDocSettings).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)
+    /// Called from: DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)
     /// Calls: Default
     /// Pure
     /// <!-- drag-lint:auto END -->
@@ -137,7 +137,7 @@ type
   /// <summary>Describes one named index section within the manifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.CLI.DetectPlatformFromDproj (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), declaration (DRagLint.Index.Manifest.pas) (+7 more)
+  /// Used by: DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.CLI.DetectPlatformFromDproj (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas) (+9 more)
   /// Used in units: DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.Manifest, DRagLint.Index.Plan
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -170,7 +170,7 @@ type
   /// <summary>Complete parsed and merged manifest for a drag-lint installation.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas) (+20 more)
+  /// Used by: DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas) (+25 more)
   /// Used in units: DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Manifest, DRagLint.Index.Plan
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -207,7 +207,7 @@ type
   /// <summary>Load, parse, validate and save drag-lint index manifests.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+11 more)
+  /// Used by: DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+15 more)
   /// Used in units: DRagLint.CLI, DRagLint.Index.Manifest
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -223,7 +223,7 @@ type
       /// else to AEngineDir.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas) (+7 more)
+      /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas) (+9 more)
       /// Calls: branch, Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, GlobalExclude, SameText, Writeln
       /// Returns: Default(TIndexManifest); GlobalManifest; LocalManifest
       /// Complexity: 24 (cyclomatic, outer body), 129 lines (full implementation)
@@ -243,7 +243,7 @@ type
       /// <returns>Populated TIndexManifest.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas) (+3 more)
+      /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas) (+4 more)
       /// Calls: DRagLint.Index.Manifest.TManifestIO.ParseTextEx
       /// Returns: ParseTextEx(AJson, ARootDir, Keys)
       /// Pure
@@ -312,7 +312,8 @@ type
       /// <param name="APath">Destination file path.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DRagLint.Index.Manifest.TManifestIO.ToJson
+      /// Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas)
+      /// Calls: character, directly, DRagLint.Index.Manifest.TManifestIO.ToJson, exists, first, MoveFileEx, PChar, tooling, write, WriteAllText
       /// Touches: file system
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ToJson"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
@@ -394,7 +395,7 @@ type
 /// data loss once the caller passes --rebuild, which clears the whole DB.
 /// Pure: no file system access, no globals. Safe to call from any thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas)
+/// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas)
 /// Calls: DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.NormalizeProjectPath, ExtractFileExt, SameText
 /// Returns: pdmNone; pdmUnique
 /// Complexity: 10 (cyclomatic, outer body), 43 lines (full implementation)
@@ -417,6 +418,12 @@ function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: s
 /// <remarks>
 /// Handles relative paths, empty paths (defaults), and environment variable expansion.
 /// Used by DB selection logic to match resolved DBs back to manifest sections.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveFolderDb (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas) (+1 more)
+/// Calls: DRagLint.Index.Manifest.SectionProjectFile, ExpandFileName, ExtractFilePath, projects
+/// Touches: file system
+/// <seealso cref="DRagLint.Index.Manifest.SectionProjectFile"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExpandSectionDb(const AManifest: TIndexManifest; const ASection: TIndexSection): string;
 
@@ -425,9 +432,16 @@ function ExpandSectionDb(const AManifest: TIndexManifest; const ASection: TIndex
 /// <param name="AManifest">Parsed manifest; RootDir anchors a relative include.</param>
 /// <param name="ASection">Section to inspect.</param>
 /// <returns>Absolute .dproj/.dpr/.dpk path, or '' for a folder-scan section.</returns>
-/// <remarks>Only the FIRST include is considered. A section whose target is a
+/// <remarks>
+/// Only the FIRST include is considered. A section whose target is a
 /// project indexes that project's compile closure, so a second project target
-/// would be a second section -- which is how the manifest already models it.</remarks>
+/// would be a second section -- which is how the manifest already models it.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas), DRagLint.Index.Manifest.ExpandSectionDb (DRagLint.Index.Manifest.pas)
+/// Calls: ExpandFileName, ExtractFileExt, LowerCase
+/// Touches: file system
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SectionProjectFile(const AManifest: TIndexManifest; const ASection: TIndexSection): string;
 
 /// <summary>Resolves any file to a section DB by FOLDER: the section whose

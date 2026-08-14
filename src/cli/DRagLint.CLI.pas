@@ -18,14 +18,14 @@ const
 /// (Args); DoRules (Args); DoLint (Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext, DRagLint.CLI.DoConvertApply (+81 more)
-/// Complexity: 91 (cyclomatic, outer body), 170 lines (full implementation)
-/// Pure
+/// Calls: db, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck (+85 more)
+/// Complexity: 99 (cyclomatic, outer body), 196 lines (full implementation)
+/// Touches: file system
+/// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
 /// <seealso cref="DRagLint.CLI.DoBenchContext"/>
 /// <seealso cref="DRagLint.CLI.DoButterfly"/>
 /// <seealso cref="DRagLint.CLI.DoCallGraph"/>
-/// <seealso cref="DRagLint.CLI.DoCallPath"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;

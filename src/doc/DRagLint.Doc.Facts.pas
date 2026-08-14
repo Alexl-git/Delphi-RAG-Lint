@@ -426,8 +426,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
-    /// Calls: all, ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+31 more)
-    /// Complexity: 75 (cyclomatic, outer body), 848 lines (full implementation)
+    /// Calls: all, ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+33 more)
+    /// Complexity: 77 (cyclomatic, outer body), 893 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -445,9 +445,17 @@ type
 /// <summary>Per-section cost of every TDocFactsBuilder.Build call so far, as two
 /// printable lines. Diagnostic only; read by the DRAGLINT_PROFILE doc-drift
 /// breakdown.</summary>
-/// <remarks>Build runs once per declaration and dominates both `document` and
+/// <returns><!-- drag-lint:auto type -->string</returns>
+/// <remarks>
+/// Build runs once per declaration and dominates both `document` and
 /// the doc-drift rule, and its cost is NOT where two successive guesses put it
-/// -- hence per-section accumulation rather than argument.</remarks>
+/// -- hence per-section accumulation rather than argument.
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.Doc.Facts.DocFactsBuildProfile.S, Format
+/// Pure
+/// <seealso cref="DRagLint.Doc.Facts.DocFactsBuildProfile.S"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DocFactsBuildProfile: string;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them

@@ -44,7 +44,7 @@ type
   /// <summary>One catalogued rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize (DRagLint.Lint.RuleCatalog.pas)
+  /// Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas) (+1 more)
   /// Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -83,7 +83,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: L.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: code, codebase, DRagLint.Lint.RuleCatalog.MkParam, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B
+    /// Calls: code, codebase, DRagLint.Lint.RuleCatalog.MkParam, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B, IntToStr, scan, untouched
     /// Pure
     /// <seealso cref="DRagLint.Lint.RuleCatalog.MkParam"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B"/>
@@ -101,7 +101,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Res.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
+    /// Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas)
     /// Calls: CompareText, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, ParamStr, SameText
     /// Complexity: 14 (cyclomatic, outer body), 80 lines (full implementation)
     /// Touches: file system

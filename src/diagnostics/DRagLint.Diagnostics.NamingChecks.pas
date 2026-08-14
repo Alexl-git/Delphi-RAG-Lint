@@ -69,7 +69,7 @@ type
     /// base name (case-insensitive); program/library roots are skipped.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: abbreviations, all, body, ChangeFileExt, CharInSet, checked, ChildByField, COMPARED, contract, Copy (+61 more)
+    /// Calls: abbreviations, all, body, ChangeFileExt, CharInSet, checked, ChildByField, COMPARED, contract, Copy (+64 more)
     /// Returns: nil; Deduped.ToArray
     /// Pure
     /// <seealso cref="DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit"/>

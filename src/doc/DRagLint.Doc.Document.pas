@@ -110,7 +110,7 @@ type
     /// iterating actual resolved rows (e.g. one per overload) should call
     /// BuildForSymbol directly instead (see its remarks).
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas)
+    /// Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)
     /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Doc.Document.TDocumenter.BuildForSymbol
     /// Returns: Default(TDocumentResult)
     /// Overload 1 of 2
@@ -132,7 +132,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: BuildFor(AStore, AQName, False).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)
+    /// Called from: DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)
     /// Calls: DRagLint.Doc.Document.TDocumenter.BuildFor/9
     /// Overload 2 of 2
     /// Pure
@@ -170,9 +170,9 @@ type
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove, DRagLint.Doc.Document.NormalizeCommentLines (+12 more)
+    /// Calls: AAllowGap, CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent (+17 more)
     /// Returns: Default(TDocumentResult)
-    /// Complexity: 20 (cyclomatic, outer body), 357 lines (full implementation)
+    /// Complexity: 24 (cyclomatic, outer body), 434 lines (full implementation)
     /// Touches: file system
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>

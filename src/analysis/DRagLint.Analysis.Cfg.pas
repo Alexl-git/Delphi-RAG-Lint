@@ -235,7 +235,7 @@ type
 /// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Diagnostics.FlowChecks.FindCalleeDefProc (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas)
+/// Called from: DRagLint.Diagnostics.FlowChecks.FindCalleeDefProc (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.ProcsForFile (DRagLint.Doc.SymbolFacts.pas)
 /// Calls: DRagLint.Analysis.Cfg.CfgFindProcs.Walk
 /// Pure
 /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs.Walk"/>

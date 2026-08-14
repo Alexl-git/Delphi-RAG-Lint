@@ -286,16 +286,16 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
-      /// Calls: DateTimeToUnix, Delphi, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ReportProgress, DRagLint.Core.Indexer.TIndexer.ResolveEnclosingSymbolId, DRagLint.Core.Indexer.TIndexer.SliceBodyLines, DRagLint.Core.Interfaces.IParser.LanguageName (+30 more)
+      /// Calls: DateTimeToUnix, Delphi, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ReportProgress, DRagLint.Core.Indexer.TIndexer.ResolveEnclosingSymbolId, DRagLint.Core.Indexer.TIndexer.SliceBodyLines (+31 more)
       /// Implements: DRagLint.Core.Interfaces.IIndexer.IndexFile
-      /// Complexity: 25 (cyclomatic, outer body), 303 lines (full implementation)
-      /// Reads: FVisitedKeys, FVisited, FWalkFilter, FForceReparse, FStore, FPreprocessEnabled, FProfile, FDocConfig   Writes: FSkippedUpToDate
+      /// Complexity: 27 (cyclomatic, outer body), 351 lines (full implementation)
+      /// Reads: FVisitedKeys, FVisited, FWalkFilter, FForceReparse, FStore, FPreprocessEnabled, FProfile, FDocConfig   Writes: FSkippedUpToDate, FParsedFiles
       /// Touches: file system
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+      /// <seealso cref="DRagLint.Core.Indexer.BuildEnclosingLineMap"/>
       /// <seealso cref="DRagLint.Core.Indexer.FindDocRegionAbove"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ParserFor"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ReportProgress"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFile(const AFilePath: string);
@@ -315,6 +315,19 @@ type
       function SkippedUpToDate: Integer;
       /// <summary>How many files this indexer got past the incremental
       /// up-to-date skip for -- see IIndexer.ParsedFiles.</summary>
+      /// <returns><!-- drag-lint:auto -->Observed: FParsedFiles.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.ParsedFiles
+      /// Reads: FParsedFiles
+      /// Pure
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ParsedFiles: Integer;
       /// <returns><!-- drag-lint:auto -->Observed: FVisited.ToArray.</returns>
       /// <remarks>

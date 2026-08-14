@@ -39,24 +39,55 @@ interface
 
 type
   /// <summary>Reads and writes the `dl:shared` unit marker.</summary>
-  /// <remarks>Stateless; every entry point re-reads the file. All text handling
+  /// <remarks>
+  /// Stateless; every entry point re-reads the file. All text handling
   /// is 7-bit ASCII and the file's original line endings are preserved -- only
-  /// the single marker line is ever rewritten.</remarks>
+  /// the single marker line is ever rewritten.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.SharedFacts
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSharedUnit = class
   public
     /// <summary>True when the unit carries a `dl:shared` marker.</summary>
     /// <param name="AUnitPath">Path to a `.pas` file. A missing file is False,
     /// not an error.</param>
-    /// <remarks>Scans the unit's HEADER REGION, not line 1 alone: line 1 of a
+    /// <returns><!-- drag-lint:auto -->Observed: IsSharedText(ReadUnitText(AUnitPath)).</returns>
+    /// <remarks>
+    /// Scans the unit's HEADER REGION, not line 1 alone: line 1 of a
     /// unit here is frequently the `{` of a block comment, which is the same
     /// anchoring trap already recorded for unit-too-large and
-    /// compiler-magic-comments.</remarks>
+    /// compiler-magic-comments.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)
+    /// Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.IsSharedText
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.SharedUnit.ReadUnitText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsSharedText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProject"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function IsShared(const AUnitPath: string): Boolean;
 
     /// <summary>The project names listed on the marker, in written order.</summary>
     /// <param name="AUnitPath">Path to a `.pas` file.</param>
     /// <returns>Empty when the unit is unmarked, when the file is missing, or
     /// when the marker carries no names.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText
+    /// Returns: ProjectsOfText(ReadUnitText(AUnitPath))
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.SharedUnit.ReadUnitText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProject"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsShared"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ProjectsOf(const AUnitPath: string): TArray<string>;
 
     /// <summary>Adds AProject to the marker, creating the marker when absent.</summary>
@@ -71,22 +102,79 @@ type
     /// the IDE menu item is safe to press twice. Also False when AProject is
     /// blank, when the file is missing, or when the unit has no `unit` line to
     /// anchor a new marker to.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText
+    /// Returns: False; AddProjectToText(ANewText, AProject, ANewText)
+    /// Mutates: ANewText (out)
+    /// <seealso cref="DRagLint.Lint.SharedUnit.ReadUnitText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsShared"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsSharedText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function AddProject(const AUnitPath, AProject: string; out ANewText: string): Boolean;
 
     /// <summary>IsShared, against text already in memory.</summary>
-    /// <remarks>The IDE plugin holds an unsaved editor buffer; making it write a
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Observed: ScanHeader(AText, swMarkInComment) &gt;
+    /// 0.</returns>
+    /// <remarks>
+    /// The IDE plugin holds an unsaved editor buffer; making it write a
     /// temp file just to ask this question is the kind of round-trip that goes
-    /// stale.</remarks>
+    /// stale.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.IsShared (DRagLint.Lint.SharedUnit.pas)
+    /// Calls: DRagLint.Lint.SharedUnit.ScanHeader
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.SharedUnit.ScanHeader"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProject"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsShared"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function IsSharedText(const AText: string): Boolean;
 
     /// <summary>ProjectsOf, against text already in memory.</summary>
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Observed: nil; Names.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText (DRagLint.Lint.SharedUnit.pas), DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf (DRagLint.Lint.SharedUnit.pas)
+    /// Calls: Copy, DRagLint.Lint.SharedUnit.LineRangeAt, DRagLint.Lint.SharedUnit.ScanHeader, DRagLint.Lint.SharedUnit.SplitCommentTail, Trim
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.SharedUnit.LineRangeAt"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.ScanHeader"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.SplitCommentTail"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProject"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ProjectsOfText(const AText: string): TArray<string>;
 
     /// <summary>AddProject, against text already in memory.</summary>
-    /// <remarks>This is the seam the round-trip check uses: the caller re-reads
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AProject"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ANewText"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Observed: False; True.</returns>
+    /// <remarks>
+    /// This is the seam the round-trip check uses: the caller re-reads
     /// ANewText with ProjectsOfText and refuses to write anything that does not
     /// parse back. A marker that does not parse back reads as "declared shared"
-    /// while behaving as unshared, which is worse than no marker at all.</remarks>
+    /// while behaving as unshared, which is worse than no marker at all.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.AddProject (DRagLint.Lint.SharedUnit.pas)
+    /// Calls: Copy, DRagLint.Lint.SharedUnit.LineRangeAt, DRagLint.Lint.SharedUnit.ScanHeader, DRagLint.Lint.SharedUnit.SplitCommentTail, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText, SameText, Trim, TrimLeft, TrimRight
+    /// Mutates: ANewText (out)
+    /// <seealso cref="DRagLint.Lint.SharedUnit.LineRangeAt"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.ScanHeader"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.SplitCommentTail"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProject"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function AddProjectToText(const AText, AProject: string; out ANewText: string): Boolean;
   end;
 

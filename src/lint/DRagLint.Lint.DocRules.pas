@@ -94,14 +94,14 @@ type
     /// per-symbol failures are swallowed so one bad decl cannot abort the sweep.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze, DRagLint.Lint.DocRules.DocumentedPublicDecls, nothing
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Lint.DocRules.DocumentedPublicDecls, Flush, Format, GetEnvironmentVariable, nothing, Writeln
     /// Returns: nil; Findings.ToArray
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
+    /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks"/>
     /// <seealso cref="DRagLint.Lint.DocRules.DocumentedPublicDecls"/>
-    /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RunDocDrift(const AStore: ISymbolStore;
@@ -121,6 +121,7 @@ type
     /// carrying a reported doc-drift-family finding here are repaired; an empty
     /// array yields no edits. See the remarks -- this parameter is the whole
     /// point of the 2026-08-13 fix and must not be defaulted away.</param>
+    /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto type -->Boolean = True</param>
     /// <returns>The repair edits (a delete+insert pair per repaired doc span);
     /// empty when nothing fixable drifted.</returns>
     /// <remarks>
@@ -152,14 +153,15 @@ type
     /// Never raises; per-symbol failures are swallowed.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
-    /// Calls: daUnchanged, DRagLint.Doc.Document.TDocumenter.BuildFor/2, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze, DRagLint.Lint.DocRules.DocumentedPublicDecls, drift, MergeComment
+    /// Calls: daUnchanged, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildFor/9, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, drift, False (+6 more)
     /// Returns: nil; Edits.ToArray
+    /// Complexity: 13 (cyclomatic, outer body), 121 lines (full implementation)
     /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
     /// <seealso cref="DRagLint.Lint.DocRules.DocumentedPublicDecls"/>
-    /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FixEditsForDocDrift(const AStore: ISymbolStore;

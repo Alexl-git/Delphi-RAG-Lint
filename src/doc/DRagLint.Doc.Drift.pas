@@ -128,25 +128,33 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
-    /// Calls: ContainsText, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile, DRagLint.Doc.Drift.GroupParamNames, DRagLint.Doc.Drift.MakeFinding (+18 more)
+    /// Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile, DRagLint.Doc.Drift.GroupParamNames (+20 more)
     /// Returns: Findings.ToArray
-    /// Complexity: 53 (cyclomatic, outer body), 451 lines (full implementation)
+    /// Complexity: 53 (cyclomatic, outer body), 473 lines (full implementation)
     /// Pure
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
     /// <seealso cref="DRagLint.Doc.Drift.DescReadsInputOnly"/>
     /// <seealso cref="DRagLint.Doc.Drift.EffectiveSignature"/>
     /// <seealso cref="DRagLint.Doc.Drift.ExtractCodeIdents"/>
-    /// <seealso cref="DRagLint.Doc.Drift.ExtractCTokens"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
       const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean = True): TArray<TDocDriftFinding>;
     /// <summary>Ticks spent in TDocFactsBuilder.Build across every Analyze call
     /// so far, for the DRAGLINT_PROFILE doc-drift breakdown. Diagnostic only.</summary>
-    /// <remarks>Analyze regenerates the whole facts block per decl purely to
+    /// <returns><!-- drag-lint:auto -->Observed: GFactsBuildTicks.</returns>
+    /// <remarks>
+    /// Analyze regenerates the whole facts block per decl purely to
     /// compare it, so this separates "rebuilding the facts" from the drift
     /// comparisons themselves. Accumulated unconditionally -- two stopwatch
-    /// reads per decl -- and read only when the profiler prints.</remarks>
+    /// reads per decl -- and read only when the profiler prints.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function FactsBuildTicks: Int64;
   end;
 

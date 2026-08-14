@@ -93,9 +93,15 @@ uses
 type
   /// <summary>Reconciles a managed facts block across the projects that compile
   /// a `dl:shared` unit.</summary>
-  /// <remarks>Both entry points are no-ops on an unmarked unit, so nothing
+  /// <remarks>
+  /// Both entry points are no-ops on an unmarked unit, so nothing
   /// changes for anyone who has not opted in. Not thread-safe: the closure set
-  /// is cached in class state, keyed on the store it was built from.</remarks>
+  /// is cached in class state, keyed on the store it was built from.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas)
+  /// Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSharedFacts = class
   public
     /// <summary>True when the stored block differs from a fresh render in a way
@@ -110,6 +116,20 @@ type
     /// <returns>True to report `doc-drift`. Identical to a whitespace-collapsed
     /// byte compare on an unmarked unit, on a truncated list, and on any block
     /// this unit cannot confidently parse.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas)
+    /// Calls: DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase
+    /// Returns: CollapseWs(AStored) &lt;&gt; CollapseWs(AFresh); False
+    /// Complexity: 16 (cyclomatic, outer body), 74 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BlockDrifted(const AStored, AFresh: string;
       const AStore: ISymbolStore; const AUnitPath: string): Boolean;
 
@@ -119,13 +139,29 @@ type
     /// `///`-prefixed, containing the managed block.</param>
     /// <param name="AStoredRemarks">The existing parsed remarks, holding the old
     /// managed block.</param>
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="AUnitPath"><!-- drag-lint:auto type -->const string</param>
     /// <returns>ADocText unchanged on an unmarked unit or when there is nothing
     /// to preserve; otherwise the same text with its inbound fact lines replaced
     /// by the sorted union.</returns>
-    /// <remarks>Sorting is what makes this idempotent. Without a canonical order
+    /// <remarks>
+    /// Sorting is what makes this idempotent. Without a canonical order
     /// the preserved entry appends after A's own entries under A and after B's
     /// under B, so each project would rewrite the line the other just wrote.
-    /// Order changes only on marked units.</remarks>
+    /// Order changes only on marked units.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)
+    /// Calls: CompareText, Copy, DRagLint.Doc.SharedFacts.ExtractBlockBody, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, IsUncertainEntry, LowerCase, Pos, Trim, UnitInClosure
+    /// Returns: ADocText; Lines.Text
+    /// Complexity: 21 (cyclomatic, outer body), 146 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ExtractBlockBody"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function MergeInboundFacts(const ADocText, AStoredRemarks: string;
       const AStore: ISymbolStore; const AUnitPath: string): string;
   end;

@@ -194,14 +194,14 @@ type
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths
-    /// Returns: AggregateOverFiles(AStore, CR.Files, AOptions)
+    /// Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths
+    /// Returns: AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions)
     /// Pure
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
+    /// <seealso cref="DRagLint.Doc.Batch.FilterToOwnRoots"/>
     /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
     /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Resolve"/>
     /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function DocumentProject(const AStore: ISymbolStore; const AProjectFile: string;

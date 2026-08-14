@@ -37,15 +37,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: alternatives, AssignmentBaseIndex, AssignmentTargetIndex, bail, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy, cycles, Default (+28 more)
-    /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); Findings.ToArray
-    /// Complexity: 17 (cyclomatic, outer body), 567 lines (full implementation)
+    /// Calls: access, ALSO, alternatives, AssignmentBaseIndex, AssignmentTargetIndex, bail, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy (+40 more)
+    /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); Findings.ToArray
+    /// Complexity: 21 (cyclomatic, outer body), 631 lines (full implementation)
     /// Touches: file system
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.FindCalleeDefProc"/>
-    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.ParamClearlyNonOwning"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ResolveTypeNameToClass"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore = nil;
