@@ -192,13 +192,19 @@ procedure CallFromB;
 
 implementation
 
-uses Marked, Plain, MarkFix;
+uses Marked, Plain, MarkFix, MarkTrunc;
 
 procedure CallFromB;
 begin
   MarkedRoutine;
   PlainRoutine;
   MarkFixRoutine;
+  { B must CALL this one, or its fresh render is empty and the empty-render
+    preservation rule (2026-08-14) decides before IsTruncated is ever reached --
+    which is what the truncation case is supposed to be testing. Two rules
+    tangled in one fixture is how the ORIGINAL truncation assertion came to pass
+    for the wrong reason in the first place. }
+  MarkTruncRoutine;
 end;
 
 end.
@@ -328,19 +334,27 @@ Check 'the uncapped block is stable under A' ((DriftCount $dbA 'Busy') -eq 0) `
   'a 7-entry line must be as idempotent as a 5-entry one'
 Check 'no second edit under A on the uncapped block' ((DocEditCount $dbA 'Busy') -eq 0)
 
-# NOT ASSERTED, DELIBERATELY: that B also sees no drift here. B compiles Busy and
-# never calls BusyRoutine, so B's fresh render is EMPTY -- and an empty render is
-# a separate, PRE-EXISTING and destructive defect, not this change's business:
-# TSharedFacts.BlockDrifted exits on `SRes <> FRes` ('Pure' vs '') before it ever
-# reaches the inbound labels, and TDocumenter then emits a pure tekDeleteLines
-# that DESTROYS the wide project's documentation. Measured 2026-08-14 with a
-# minimal repro -- see docs\INBOX-shared-unit-empty-render-deletes-block.md.
+# THE EMPTY-RENDER CASE, fixed 2026-08-14. B compiles Busy and never calls
+# BusyRoutine, so B's fresh render is EMPTY. Until today that was DESTRUCTIVE:
+# TSharedFacts.BlockDrifted exited on `SRes <> FRes` ('Pure' vs '') before ever
+# reaching the inbound labels, and TDocumenter then emitted a pure
+# tekDeleteLines that stripped the wide project's documentation -- which A then
+# rewrote on its next run, the unbounded loop dl:shared exists to end.
 #
-# It predates this change: the residual compare is unconditional and the fresh
-# render is empty whatever the cap was. Which also means the OLD assertion here
-# ('a truncated inbound list is not forgiven') was passing for the WRONG REASON --
-# it exited at the residual compare and never reached IsTruncated at all, so that
-# guard had NO coverage until the MarkTrunc fixture below.
+# Neither half of TSharedFacts could stop it alone: MergeInboundFacts merges
+# INTO a rendered block and there was none. Both halves now ask
+# HoldsForeignInboundEntries first.
+Check 'the empty-render block is not deleted under B' ((DocEditCount $dbB 'Busy') -eq 0) `
+  'B renders nothing; every stored entry names AOnly, which B cannot see'
+Check 'and B reports no drift on it' ((DriftCount $dbB 'Busy') -eq 0) `
+  'the checker half -- it used to decide on the residual compare'
+Check 'A still sees no drift on the same block' ((DriftCount $dbA 'Busy') -eq 0) `
+  'the wide project must not be provoked into rewriting it either'
+
+# Note for the record: the OLD assertion here ('a truncated inbound list is not
+# forgiven') was passing for the WRONG REASON -- it exited at that same residual
+# compare and never reached IsTruncated, so that guard had NO coverage at all
+# until the MarkTrunc fixture below.
 
 # The SECOND capped inbound site, under a different rule (DocDisplayCount). One
 # site fixed and the other left would converge 'Called from:' and leave every

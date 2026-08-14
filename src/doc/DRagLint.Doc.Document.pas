@@ -1044,6 +1044,29 @@ begin
     // correct by enumeration (an unmodeled tag type like <value> would still
     // be silently destroyed) where the raw-region check needs no future
     // maintenance as new tag types appear.
+    { v(2026-08-14): NEVER delete another project's contribution.
+
+      A project that COMPILES a `dl:shared` unit but CALLS nothing in it renders
+      an empty block, so Merged is '' and control arrives here -- at the one
+      place the engine emits a pure deletion. It would then strip a block whose
+      every entry was written by a project that CAN see those callers, and the
+      wide project rewrites it on its next run: the unbounded rewrite loop
+      `dl:shared` exists to end.
+
+      Neither half of TSharedFacts could prevent this on its own.
+      MergeInboundFacts ran a few lines above and could not help -- it merges
+      INTO a rendered block and there is no block to merge into -- and the
+      checker exits on its residual compare before any inbound label is
+      consulted. Both now ask HoldsForeignInboundEntries first.
+
+      Reported as daUnchanged, not daRemoved: nothing was removed, and D1's
+      whole point is that a deletion must stay distinguishable from a repair. }
+    if Existing.HasContent and RegionFullyEngineOwned(Region.RawText)
+       and TSharedFacts.HoldsForeignInboundEntries(Existing.Remarks, AStore, Path) then
+    begin
+      Result.Action:= daUnchanged;
+      Exit;
+    end;
     if Existing.HasContent and RegionFullyEngineOwned(Region.RawText) then
     begin
       E:= Default(TTextEdit);

@@ -164,6 +164,24 @@ type
     /// </remarks>
     class function MergeInboundFacts(const ADocText, AStoredRemarks: string;
       const AStore: ISymbolStore; const AUnitPath: string): string;
+
+    /// <summary>True when the stored block holds inbound entries this project
+    /// cannot see, so deleting or replacing it would destroy another project's
+    /// contribution.</summary>
+    /// <param name="AStoredRemarks">The existing parsed remarks.</param>
+    /// <param name="AStore">The current project's index. Not owned.</param>
+    /// <param name="AUnitPath">Absolute path of the declaring unit.</param>
+    /// <returns>False on an unmarked unit, on an unparseable block, and
+    /// whenever every stored entry is either inside this closure or flagged
+    /// uncertain -- i.e. it answers True only when there is something here that
+    /// ONLY another project could have written.</returns>
+    /// <remarks>Exists because a narrow project that compiles a shared unit but
+    /// CALLS nothing in it renders an empty block, and both halves of this unit
+    /// are downstream of decisions taken before they are consulted: the checker
+    /// exits on the residual compare ('Pure' vs '') and the writer emits a pure
+    /// tekDeleteLines. Both now ask this first.</remarks>
+    class function HoldsForeignInboundEntries(const AStoredRemarks: string;
+      const AStore: ISymbolStore; const AUnitPath: string): Boolean;
   end;
 
 implementation
@@ -462,6 +480,16 @@ begin
   try
     ParseBlock(AFresh, FIn, FRes);
     try
+      { v(2026-08-14): the fresh render produced NO managed block AT ALL -- this
+        project compiles the unit but calls nothing in it. The residual compare
+        below would then decide on 'Pure' vs '' and report drift on a block this
+        project must not touch, which is the checker's half of the pure-deletion
+        defect (the writer's half is guarded in TDocumenter). Only forgiven when
+        the stored block carries entries that ONLY another project could have
+        written; a block with nothing foreign in it is still graded normally. }
+      if (FRes = '') and (FIn.Count = 0) and (SIn.Count > 0)
+         and HoldsForeignInboundEntries(AStored, AStore, AUnitPath) then Exit(False);
+
       { Everything that is not an inbound fact keeps byte-compare semantics --
         nothing about sharing makes a wrong Calls: or Complexity: line right. }
       if SRes <> FRes then Exit(True);
@@ -511,6 +539,40 @@ begin
       Result:= False;
     finally
       FIn.Free;
+    end;
+  finally
+    SIn.Free;
+  end;
+end;
+
+class function TSharedFacts.HoldsForeignInboundEntries(const AStoredRemarks: string;
+  const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+var
+  SIn : TFactMap;
+  SRes: string  ;
+  Lab : string  ;
+  SC  : string  ;
+  E   : string  ;
+  I   : Integer ;
+begin
+  Result:= False;
+  if (AStore = nil) or (not TSharedUnit.IsShared(AUnitPath)) then Exit;
+
+  ParseBlock(AStoredRemarks, SIn, SRes);
+  try
+    for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
+    begin
+      Lab:= INBOUND_LABELS[I];
+      if not SIn.TryGetValue(Lab, SC) then Continue;
+      if SC = '' then Continue;
+      { A TRUNCATED line is deliberately treated as foreign-bearing. The window
+        may hide an entry only another project can see, and the whole point here
+        is to refuse to destroy what cannot be reasoned about. This is the
+        opposite polarity to BlockDrifted's truncation guard and for the same
+        reason: both fail toward PRESERVING the source. }
+      if IsTruncated(SC) then Exit(True);
+      for E in SplitEntries(SC) do
+        if (not UnitInClosure(AStore, E)) and (not IsUncertainEntry(E)) then Exit(True);
     end;
   finally
     SIn.Free;
