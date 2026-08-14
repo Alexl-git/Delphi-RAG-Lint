@@ -44,7 +44,7 @@ type
   /// is 7-bit ASCII and the file's original line endings are preserved -- only
   /// the single marker line is ever rewritten.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)
+  /// Used by: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)
   /// Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.SharedFacts
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -60,7 +60,7 @@ type
     /// anchoring trap already recorded for unit-too-large and
     /// compiler-magic-comments.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)
+    /// Called from: DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)
     /// Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.IsSharedText
     /// Pure
     /// <seealso cref="DRagLint.Lint.SharedUnit.ReadUnitText"/>

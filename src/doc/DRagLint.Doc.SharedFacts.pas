@@ -70,13 +70,23 @@ unit DRagLint.Doc.SharedFacts;
   IsTruncated is never reached). tests\autotest\run_shared_unit_staleness.ps1's
   `MarkTrunc` case is the first that actually reaches it.
 
-  KNOWN HOLE, and it is DESTRUCTIVE: when the narrow project's fresh render is
-  EMPTY -- it compiles the unit but calls nothing in it -- the residual compare
-  below exits on 'Pure' vs '' before any inbound label is consulted, and
-  TDocumenter then emits a pure tekDeleteLines over the wide project's block.
-  Neither half of this unit gets a say. See
-  docs\INBOX-shared-unit-empty-render-deletes-block.md for the repro and a fix
-  sketch; both halves need the same UnitInClosure fact they already use.
+  THE EMPTY-RENDER HOLE, closed 2026-08-14. It was DESTRUCTIVE: when the narrow
+  project's fresh render is EMPTY -- it compiles the unit but calls nothing in it
+  -- the residual compare below exited on 'Pure' vs '' before any inbound label
+  was consulted, and TDocumenter then emitted a pure tekDeleteLines over the wide
+  project's block, which the wide project rewrote on its next run.
+
+  NEITHER HALF ABOVE COULD PREVENT IT, which is the part worth remembering:
+  MergeInboundFacts merges INTO a rendered block and there was none, and the
+  checker's forgiveness rule sits BELOW a byte compare that had already decided.
+  A rule placed under an earlier decision is not a rule. Both halves now call
+  HoldsForeignInboundEntries FIRST -- "does the stored block carry entries only
+  another project could have written" -- and preserve when it says yes.
+
+  Note that predicate treats a TRUNCATED line as foreign-bearing, which is the
+  opposite polarity to the truncation rule above. Both are the same instinct:
+  fail toward PRESERVING the source, because a `(+N more)` window may hide
+  exactly such an entry.
 
   WHY `seealso` IS NOT IN SCOPE, despite being listed as inbound in the plan.
   Its crefs are derived from CALLEES and same-unit siblings, both of which are
@@ -119,9 +129,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas)
-    /// Calls: DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase
+    /// Calls: defect, DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase
     /// Returns: CollapseWs(AStored) &lt;&gt; CollapseWs(AFresh); False
-    /// Complexity: 16 (cyclomatic, outer body), 74 lines (full implementation)
+    /// Complexity: 20 (cyclomatic, outer body), 84 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
@@ -175,11 +185,24 @@ type
     /// whenever every stored entry is either inside this closure or flagged
     /// uncertain -- i.e. it answers True only when there is something here that
     /// ONLY another project could have written.</returns>
-    /// <remarks>Exists because a narrow project that compiles a shared unit but
+    /// <remarks>
+    /// Exists because a narrow project that compiles a shared unit but
     /// CALLS nothing in it renders an empty block, and both halves of this unit
     /// are downstream of decisions taken before they are consulted: the checker
     /// exits on the residual compare ('Pure' vs '') and the writer emits a pure
-    /// tekDeleteLines. Both now ask this first.</remarks>
+    /// tekDeleteLines. Both now ask this first.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas)
+    /// Calls: DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared
+    /// Returns: False
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.UnitInClosure"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function HoldsForeignInboundEntries(const AStoredRemarks: string;
       const AStore: ISymbolStore; const AUnitPath: string): Boolean;
   end;

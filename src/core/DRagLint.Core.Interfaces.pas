@@ -66,7 +66,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.OpenExtraStores (DRagLint.CLI.pas), declaration (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+153 more)
+  /// Used by: DRagLint.CLI.OpenExtraStores (DRagLint.CLI.pas), declaration (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+154 more)
   /// Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.PropTree, DRagLint.Core.Indexer, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.CompileCheck, DRagLint.Diagnostics.FlowChecks, DRagLint.Diagnostics.NamingChecks, DRagLint.Doc.Batch (+26 more)
   /// <!-- drag-lint:auto END -->
   /// </remarks>
