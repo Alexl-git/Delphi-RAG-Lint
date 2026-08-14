@@ -83,6 +83,11 @@ type
     /// <param name="AIncludeSeeAlso">Threaded straight to TDocDrift.Analyze; must
     /// match the flag `document` wrote the managed blocks under (default True).
     /// See that routine for why a mismatch here is reported as drift.</param>
+    /// <param name="AMaxReturnCases">Manifest `docs.max_return_cases`; threaded to
+    /// TDocDrift.Analyze so the CHECKER regenerates under the SAME options the
+    /// DOCUMENTER wrote under. Defaulting it here is what made
+    /// EnumHelper.Generate permanently undrainable -- see Analyze's own note.</param>
+    /// <param name="AMaxCallers">Manifest `docs.max_callers`, same contract.</param>
     /// <returns>'doc-drift' findings, in stable per-symbol/per-signal order; empty
     /// if every documented decl is structurally current.</returns>
     /// <remarks>
@@ -105,7 +110,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RunDocDrift(const AStore: ISymbolStore;
-      AIncludeSeeAlso: Boolean = True): TArray<TLintFinding>;
+      AIncludeSeeAlso: Boolean = True;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TArray<TLintFinding>;
 
     /// <summary>Builds the MergeComment-based text edits that repair the
     /// mechanically-safe subset of doc-drift on AStore's documented public decls.
@@ -122,6 +128,11 @@ type
     /// array yields no edits. See the remarks -- this parameter is the whole
     /// point of the 2026-08-13 fix and must not be defaulted away.</param>
     /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto type -->Boolean = True</param>
+    /// <param name="AMaxReturnCases">Manifest `docs.max_return_cases`. The
+    /// REPAIRER must regenerate under the same options the checker compared
+    /// under, or it writes a block the checker calls stale again -- the same
+    /// divergence one step further along.</param>
+    /// <param name="AMaxCallers">Manifest `docs.max_callers`, same contract.</param>
     /// <returns>The repair edits (a delete+insert pair per repaired doc span);
     /// empty when nothing fixable drifted.</returns>
     /// <remarks>
@@ -155,7 +166,7 @@ type
     /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
     /// Calls: daUnchanged, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildFor/9, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, drift, False (+6 more)
     /// Returns: nil; Edits.ToArray
-    /// Complexity: 13 (cyclomatic, outer body), 121 lines (full implementation)
+    /// Complexity: 13 (cyclomatic, outer body), 127 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
@@ -166,7 +177,8 @@ type
     /// </remarks>
     class function FixEditsForDocDrift(const AStore: ISymbolStore;
       const ATargeted: TArray<TLintFinding>;
-      AIncludeSeeAlso: Boolean = True): TArray<TTextEdit>;
+      AIncludeSeeAlso: Boolean = True;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TArray<TTextEdit>;
 
     /// <summary>Builds the DocInsight comment insert edits for a set of TARGETED
     /// missing-doc findings -- the SINGLE-FIX "Fix it" on an undocumented public
@@ -337,7 +349,7 @@ begin
 end;
 
 class function TDocLintRules.RunDocDrift(const AStore: ISymbolStore;
-  AIncludeSeeAlso: Boolean): TArray<TLintFinding>;
+  AIncludeSeeAlso: Boolean; AMaxReturnCases: Integer; AMaxCallers: Integer): TArray<TLintFinding>;
 var
   Findings: TList<TLintFinding> ;
   Sym     : TSymbol             ;
@@ -386,7 +398,7 @@ begin
         Inc(NDiff);
 
         T0:= Tick;
-        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AIncludeSeeAlso);
+        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AIncludeSeeAlso, AMaxReturnCases, AMaxCallers);
         Inc(TAnalyze, Tick - T0);
         for D in Drifts do
         begin
@@ -486,7 +498,8 @@ begin
 end;
 
 class function TDocLintRules.FixEditsForDocDrift(const AStore: ISymbolStore;
-  const ATargeted: TArray<TLintFinding>; AIncludeSeeAlso: Boolean): TArray<TTextEdit>;
+  const ATargeted: TArray<TLintFinding>; AIncludeSeeAlso: Boolean;
+  AMaxReturnCases: Integer; AMaxCallers: Integer): TArray<TTextEdit>;
 var
   Edits   : TList<TTextEdit>    ;
   Sym     : TSymbol             ;
@@ -561,7 +574,7 @@ begin
         { Only repair a decl that actually carries a FIXABLE drift signal --
           report-only drift (renamed param, spurious <returns>, never-raised
           <exception>, ...) produces NO edit; a human decides on those. }
-        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AIncludeSeeAlso);
+        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AIncludeSeeAlso, AMaxReturnCases, AMaxCallers);
         AnyFix:= False;
         for D in Drifts do
           if D.Fixable then begin AnyFix:= True; Break; end;
@@ -588,7 +601,12 @@ begin
           out of date" while --fix regenerated something byte-identical to disk
           and reported nothing to do. Unrepairable by any command, and stable
           across reindexes, which is what made it read as an index problem. }
-        DocRes:= TDocumenter.BuildFor(AStore, ResSym.QualifiedName, AIncludeSeeAlso);
+        { The caps must match what the CHECKER just compared against, or the
+          repairer regenerates a block the checker will call stale again -- the
+          same divergence, one step further along. See TDocDrift.Analyze. }
+        DocRes:= TDocumenter.BuildFor(AStore, ResSym.QualifiedName, AIncludeSeeAlso,
+                                      {AIncludeSince=}False, {ABaseDir=}'',
+                                      {AExtraStores=}nil, AMaxReturnCases, AMaxCallers);
         if Length(DocRes.Edits) = 0 then ReportTrace('DROP BuildFor-0-edits', ResSym.QualifiedName)
                                      else ReportTrace(Format('OK %d edit(s)', [Length(DocRes.Edits)]), ResSym.QualifiedName);
         for E in DocRes.Edits do Edits.Add(E);

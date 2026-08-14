@@ -508,20 +508,20 @@ C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Document.pas:798:1  [info] meth
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Document.pas:621:1  [info] too-many-exit-points: Routine has 6 Exit statements (max 5) -- consolidate exits or use guard clauses.
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Document.pas:798:1  [info] too-many-exit-points: Routine has 6 Exit statements (max 5) -- consolidate exits or use guard clauses.
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Document.pas:709:6  [info] used-before-assignment: Local "best" may be used before it is assigned.
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:250:5  [info] bare-except: Bare except (no 'on E: ... do') catches every exception, even EOutOfMemory -- catch a specific exception class.
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:853:7  [info] compiler-magic-comments: TODO/FIXME/HACK comment -- track in issue tracker
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:858:7  [info] compiler-magic-comments: TODO/FIXME/HACK comment -- track in issue tracker
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:479:1  [info] method-too-long: Routine TDocDrift.Analyze body is 458 lines (max 250) -- consider breaking it up
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:249:3  [warning] try-except-swallowed: Exception silently swallowed -- add raise, logging, or Application.HandleException.
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:479:1  [info] cyclomatic-complexity: Routine has cyclomatic complexity 53 (max 30) -- consider extracting sub-routines.
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:479:1  [info] cognitive-complexity: Routine cognitive complexity 82 (max 65) -- deeply nested / branchy control flow is hard to follow; flatten or extract sub-routines.
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:864:7  [info] used-before-assignment: Local "hasreturn" may be used before it is assigned.
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:475:1  [info] deep-nesting: Routine TSharedFacts.BlockDrifted nests control structures 6 deep (max 5) -- flatten with early exits or sub-routines
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:475:1  [info] too-many-exit-points: Routine has 12 Exit statements (max 5) -- consolidate exits or use guard clauses.
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:478:8  [info] local-field-prefix: Local variable "FIn" carries the "F" field prefix -- that prefix is reserved for object fields, so a local wearing it reads as one
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:479:9  [info] local-field-prefix: Local variable "FRes" carries the "F" field prefix -- that prefix is reserved for object fields, so a local wearing it reads as one
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:481:7  [info] local-field-prefix: Local variable "FC" carries the "F" field prefix -- that prefix is reserved for object fields, so a local wearing it reads as one
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:482:7  [info] local-field-prefix: Local variable "FE" carries the "F" field prefix -- that prefix is reserved for object fields, so a local wearing it reads as one
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:257:5  [info] bare-except: Bare except (no 'on E: ... do') catches every exception, even EOutOfMemory -- catch a specific exception class.
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:879:7  [info] compiler-magic-comments: TODO/FIXME/HACK comment -- track in issue tracker
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:884:7  [info] compiler-magic-comments: TODO/FIXME/HACK comment -- track in issue tracker
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:486:1  [info] method-too-long: Routine TDocDrift.Analyze body is 476 lines (max 250) -- consider breaking it up
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:256:3  [warning] try-except-swallowed: Exception silently swallowed -- add raise, logging, or Application.HandleException.
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:486:1  [info] cyclomatic-complexity: Routine has cyclomatic complexity 53 (max 30) -- consider extracting sub-routines.
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:486:1  [info] cognitive-complexity: Routine cognitive complexity 82 (max 65) -- deeply nested / branchy control flow is hard to follow; flatten or extract sub-routines.
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Drift.pas:890:7  [info] used-before-assignment: Local "hasreturn" may be used before it is assigned.
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:485:1  [info] deep-nesting: Routine TSharedFacts.BlockDrifted nests control structures 6 deep (max 5) -- flatten with early exits or sub-routines
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:485:1  [info] too-many-exit-points: Routine has 12 Exit statements (max 5) -- consolidate exits or use guard clauses.
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:488:8  [info] local-field-prefix: Local variable "FIn" carries the "F" field prefix -- that prefix is reserved for object fields, so a local wearing it reads as one
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:489:9  [info] local-field-prefix: Local variable "FRes" carries the "F" field prefix -- that prefix is reserved for object fields, so a local wearing it reads as one
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:491:7  [info] local-field-prefix: Local variable "FC" carries the "F" field prefix -- that prefix is reserved for object fields, so a local wearing it reads as one
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:492:7  [info] local-field-prefix: Local variable "FE" carries the "F" field prefix -- that prefix is reserved for object fields, so a local wearing it reads as one
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Batch.pas:3:1  [info] compiler-magic-comments: TODO/FIXME/HACK comment -- track in issue tracker
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Batch.pas:36:3  [info] compiler-magic-comments: TODO/FIXME/HACK comment -- track in issue tracker
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Batch.pas:46:33  [info] compiler-magic-comments: TODO/FIXME/HACK comment -- track in issue tracker
@@ -1389,23 +1389,22 @@ C:\Projects\Delphi-RAG-lint\third_party\delphi-tree-sitter\TreeSitterLib.pas:181
 C:\Projects\Delphi-RAG-lint\third_party\delphi-tree-sitter\TreeSitterLib.pas:1901:1  [info] unused-public-symbol: Exported routine ts_language_state_count has no references in the index -- possible dead public API
 C:\Projects\Delphi-RAG-lint\src\storage\DRagLint.Storage.SQLite.pas:79:3  [info] god-class: God class: TSQLiteSymbolStore has 122 methods and 56 fields -- consider splitting responsibilities
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SymbolFacts.pas:278:1  [info] unused-public-symbol: Exported routine SymbolFactsCsvSplit has no references in the index -- possible dead public API
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Facts.pas:394:3  [info] high-response: High RFC: TDocFactsBuilder has a response set of 51 (>50) -- many methods and calls to test/understand
+C:\Projects\Delphi-RAG-lint\src\mcp\DRagLint.MCP.Server.pas:26:3  [info] high-response: High RFC: TMCPServer has a response set of 96 (>50) -- many methods and calls to test/understand
 C:\Projects\Delphi-RAG-lint\src\lsp\DRagLint.LSP.Completion.pas:32:3  [info] high-response: High RFC: TLspCompletion has a response set of 52 (>50) -- many methods and calls to test/understand
-C:\Projects\Delphi-RAG-lint\src\index\DRagLint.Index.Closure.pas:60:3  [info] high-response: High RFC: TClosureResolver has a response set of 60 (>50) -- many methods and calls to test/understand
-C:\Projects\Delphi-RAG-lint\src\lsp\DRagLint.LSP.Server.pas:39:3  [info] high-response: High RFC: TLSPServer has a response set of 110 (>50) -- many methods and calls to test/understand
-C:\Projects\Delphi-RAG-lint\src\diagnostics\DRagLint.Diagnostics.CompileCheck.pas:46:3  [info] high-response: High RFC: TCompileChecker has a response set of 59 (>50) -- many methods and calls to test/understand
+C:\Projects\Delphi-RAG-lint\src\project\DRagLint.Project.Resolver.pas:37:3  [info] high-response: High RFC: TProjectResolver has a response set of 64 (>50) -- many methods and calls to test/understand
 C:\Projects\Delphi-RAG-lint\src\diagnostics\DRagLint.Diagnostics.AstChecks.pas:26:3  [info] high-response: High RFC: TAstChecker has a response set of 93 (>50) -- many methods and calls to test/understand
 C:\Projects\Delphi-RAG-lint\src\diagnostics\DRagLint.Diagnostics.AstChecks.pas:26:3  [info] low-cohesion: Low cohesion: TAstChecker has LCOM4=29 (>26) -- the class may combine unrelated responsibilities; consider splitting
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Regions.pas:112:3  [info] high-response: High RFC: TDocRegions has a response set of 83 (>50) -- many methods and calls to test/understand
-C:\Projects\Delphi-RAG-lint\src\project\DRagLint.Project.Resolver.pas:37:3  [info] high-response: High RFC: TProjectResolver has a response set of 64 (>50) -- many methods and calls to test/understand
-C:\Projects\Delphi-RAG-lint\src\mcp\DRagLint.MCP.Server.pas:26:3  [info] high-response: High RFC: TMCPServer has a response set of 96 (>50) -- many methods and calls to test/understand
+C:\Projects\Delphi-RAG-lint\src\index\DRagLint.Index.Closure.pas:60:3  [info] high-response: High RFC: TClosureResolver has a response set of 60 (>50) -- many methods and calls to test/understand
 C:\Projects\Delphi-RAG-lint\src\storage\DRagLint.Storage.SQLite.pas:79:3  [info] high-response: High RFC: TSQLiteSymbolStore has a response set of 258 (>50) -- many methods and calls to test/understand
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Facts.pas:394:3  [info] high-response: High RFC: TDocFactsBuilder has a response set of 51 (>50) -- many methods and calls to test/understand
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Regions.pas:112:3  [info] high-response: High RFC: TDocRegions has a response set of 83 (>50) -- many methods and calls to test/understand
+C:\Projects\Delphi-RAG-lint\src\lsp\DRagLint.LSP.Server.pas:39:3  [info] high-response: High RFC: TLSPServer has a response set of 110 (>50) -- many methods and calls to test/understand
 C:\Projects\Delphi-RAG-lint\src\index\DRagLint.Index.CallResolver.pas:47:3  [info] high-response: High RFC: TCallResolver has a response set of 61 (>50) -- many methods and calls to test/understand
 C:\Projects\Delphi-RAG-lint\src\core\DRagLint.Core.Indexer.pas:31:3  [info] high-response: High RFC: TIndexer has a response set of 98 (>50) -- many methods and calls to test/understand
+C:\Projects\Delphi-RAG-lint\src\diagnostics\DRagLint.Diagnostics.CompileCheck.pas:46:3  [info] high-response: High RFC: TCompileChecker has a response set of 59 (>50) -- many methods and calls to test/understand
 C:\Projects\Delphi-RAG-lint\src\project\DRagLint.Project.Resolver.pas:231:7  [warning] doc-drift: documented <exception cref="Exception"> but the body never raises it
 C:\Projects\Delphi-RAG-lint\src\project\DRagLint.Project.Resolver.pas:256:7  [warning] doc-drift: documented <exception cref="Exception"> but the body never raises it
 C:\Projects\Delphi-RAG-lint\src\forms\DRagLint.FormsMap.pas:75:1  [warning] doc-drift: documented <exception cref="Exception"> but the body never raises it
-C:\Projects\Delphi-RAG-lint\src\refactor\DRagLint.Refactor.EnumHelper.pas:236:5  [warning] doc-drift: managed facts block is out of date
 C:\Projects\Delphi-RAG-lint\src\analysis\DRagLint.Analysis.Cfg.pas:819:1  [info] duplicate-code: Duplicated code block (105 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\analysis\DRagLint.Analysis.Cfg.pas:802
 C:\Projects\Delphi-RAG-lint\src\analysis\DRagLint.Analysis.Cfg.pas:819:1  [info] duplicate-code: Duplicated code block (109 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\analysis\DRagLint.Analysis.Cfg.pas:724
 C:\Projects\Delphi-RAG-lint\src\analysis\DRagLint.Analysis.DataFlow.pas:129:1  [info] duplicate-code: Duplicated code block (124 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\analysis\DRagLint.Analysis.DataFlow.pas:117
@@ -1510,7 +1509,7 @@ C:\Projects\Delphi-RAG-lint\src\diagnostics\DRagLint.Diagnostics.NamingChecks.pa
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Document.pas:680:1  [info] duplicate-code: Duplicated code block (178 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\core\DRagLint.Core.Indexer.pas:565
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Facts.pas:899:1  [info] duplicate-code: Duplicated code block (258 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Facts.pas:828
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.GitSince.pas:122:1  [info] duplicate-code: Duplicated code block (114 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\diagnostics\DRagLint.Diagnostics.CompileCheck.pas:400
-C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:276:1  [info] duplicate-code: Duplicated code block (105 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Regions.pas:871
+C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SharedFacts.pas:286:1  [info] duplicate-code: Duplicated code block (105 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.Regions.pas:871
 C:\Projects\Delphi-RAG-lint\src\doc\DRagLint.Doc.SymbolFacts.pas:524:1  [info] duplicate-code: Duplicated code block (102 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\diagnostics\DRagLint.Diagnostics.FlowChecks.pas:57
 C:\Projects\Delphi-RAG-lint\src\index\DRagLint.Index.Reconcile.pas:352:1  [info] duplicate-code: Duplicated code block (217 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\index\DRagLint.Index.Closure.pas:498
 C:\Projects\Delphi-RAG-lint\src\index\DRagLint.Index.Reconcile.pas:541:1  [info] duplicate-code: Duplicated code block (91 tokens) -- also at C:\Projects\Delphi-RAG-lint\src\index\DRagLint.Index.Reconcile.pas:506
@@ -1606,7 +1605,7 @@ C:\Projects\Delphi-RAG-lint\src\cli\drag-lint.dpr:59:1  [warning] unit-not-in-dp
 C:\Projects\Delphi-RAG-lint\src\cli\drag-lint.dpr:59:1  [warning] unit-not-in-dpr: Unit "..\preprocess\DRagLint.Preprocess.Expr.pas" is in the .dproj DCCReference list but missing from the drag-lint.dpr uses clause. Add it so re-IDE-opens keep it in the build.
 C:\Projects\Delphi-RAG-lint\src\lint\DRagLint.Lint.ReviewMarker.pas:6:1  [hint] review-marker-unused: dl:ok marker for "bare-except" no longer matches any finding on this line -- remove it.
 C:\Projects\Delphi-RAG-lint\src\lint\DRagLint.Lint.ReviewMarker.pas:176:1  [hint] review-marker-unused: dl:ok marker for "bare-except" no longer matches any finding on this line -- remove it.
-lint-all: 1608 finding(s) -- 0 error(s), 281 warning(s), 1323 info, 4 hint -- 98 file(s) scanned
+lint-all: 1607 finding(s) -- 0 error(s), 280 warning(s), 1323 info, 4 hint -- 98 file(s) scanned
 
 scanned 98 file(s):
   C:\Projects\Delphi-RAG-lint\src\core\DRagLint.Core.Model.pas

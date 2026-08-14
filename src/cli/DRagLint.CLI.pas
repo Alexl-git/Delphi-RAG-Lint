@@ -6604,7 +6604,7 @@ begin
           2026-08-13). Targeted has already been through the ownership and
           --project filters, so passing it inherits both. See
           TDocLintRules.FixEditsForDocDrift's remarks. }
-        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore, Targeted, AArgs.DocSeeAlso);
+        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore, Targeted, AArgs.DocSeeAlso, LoadDocMaxReturnCases, LoadDocMaxCallers);
         if Length(DDEdits) > 0 then
         begin
           Edits:= Edits + DDEdits;
@@ -10205,7 +10205,7 @@ begin
   { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
   Prof.Phase('doc-drift');
-  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso);
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso, LoadDocMaxReturnCases, LoadDocMaxCallers);
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   Prof.Phase('duplicate-code');
@@ -10455,7 +10455,7 @@ begin
   if (AArgs.Rule = '') or (AArgs.Rule = 'doc-drift') then
     { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
-  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso);
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso, LoadDocMaxReturnCases, LoadDocMaxCallers);
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,

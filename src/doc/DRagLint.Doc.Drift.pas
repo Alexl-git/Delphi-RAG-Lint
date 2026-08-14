@@ -124,13 +124,19 @@ type
     /// writer emitted it reports every such block as stale: that mismatch produced
     /// 514 false 'managed facts block is out of date' findings on this repo, while
     /// `document --unit` on the same files reported "nothing to document".</param>
+    /// <param name="AMaxReturnCases">Manifest `docs.max_return_cases`. MUST be
+    /// the value the DOCUMENTER used, or the byte compare below measures the
+    /// option difference instead of drift -- see the note at the
+    /// TDocFactsBuilder.Build call. The default is `BuildFor`'s default and is
+    /// correct only for a caller that also defaults it.</param>
+    /// <param name="AMaxCallers">Manifest `docs.max_callers`, same contract.</param>
     /// <returns>The drift findings, in a stable per-signal order.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
     /// Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile, DRagLint.Doc.Drift.GroupParamNames (+20 more)
     /// Returns: Findings.ToArray
-    /// Complexity: 53 (cyclomatic, outer body), 473 lines (full implementation)
+    /// Complexity: 53 (cyclomatic, outer body), 492 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
@@ -140,7 +146,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
-      const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean = True): TArray<TDocDriftFinding>;
+      const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean = True;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TArray<TDocDriftFinding>;
     /// <summary>Ticks spent in TDocFactsBuilder.Build across every Analyze call
     /// so far, for the DRAGLINT_PROFILE doc-drift breakdown. Diagnostic only.</summary>
     /// <returns><!-- drag-lint:auto -->Observed: GFactsBuildTicks.</returns>
@@ -477,7 +484,8 @@ begin
 end;
 
 class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
-  const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean): TArray<TDocDriftFinding>;
+  const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean;
+  AMaxReturnCases: Integer; AMaxCallers: Integer): TArray<TDocDriftFinding>;
 var
   Findings  : TList<TDocDriftFinding>;
   Sig       : string                 ;
@@ -504,8 +512,26 @@ begin
     // builds is compared byte-for-byte (whitespace-collapsed) against the block
     // the DOCUMENTER wrote, so the two must be generated under the same options
     // or the comparison measures the option difference instead of drift.
+    //
+    // v(2026-08-14): THE CAPS ARE THREADED FOR THE SAME REASON, and until today
+    // they were not -- this call passed three arguments and took the defaults
+    // for the rest, so the comment above was true and the code did not honour
+    // it. `docs.max_return_cases` is 6 in the manifest and 20 in the default,
+    // so any routine with more than 6 minable return cases deadlocked:
+    // `document` wrote a Returns: list capped at 6, this rebuilt one capped at
+    // 20, called it stale, and `document` then re-rendered the same 6 and
+    // reported "nothing to document". Forever, with no command able to fix it.
+    //
+    // Found in the wild on DRagLint.Refactor.EnumHelper's Generate, which has
+    // exactly this shape -- predicted, and asked to be reproduced, in
+    // docs\INBOX-buildfor-defaulted-args-diverge-between-entry-points.md.
+    // max_callers (5) and complexity_min (10) happen to equal their defaults
+    // today, which is why only return-cases surfaced; that is luck, not design,
+    // and is exactly why they are threaded rather than left to match.
     var TFacts0: Int64:= TStopwatch.GetTimeStamp;
-    Facts:= TDocFactsBuilder.Build(AStore, ASym, AIncludeSeeAlso);
+    Facts:= TDocFactsBuilder.Build(AStore, ASym, AIncludeSeeAlso, {AIncludeSince=}False,
+                                   {ABaseDir=}'', {AExtraStores=}nil,
+                                   AMaxReturnCases, AMaxCallers);
     Inc(GFactsBuildTicks, TStopwatch.GetTimeStamp - TFacts0);
 
     // Findings 1-6 are param/return drift and make sense ONLY for a routine.
