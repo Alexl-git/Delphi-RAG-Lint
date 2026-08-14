@@ -81,6 +81,15 @@ body and welded `AUTO_END` into a fact line in YADF.Tokens.pas.
 
 ## Not done
 
+0. **OWNER RULING 2026-08-13, NOT YET IMPLEMENTED: DB authority is Project DB +
+   Platform Library, nothing else.** Spec + the trap it contains:
+   `docs/INBOX-db-authority-project-plus-platform-library-only.md`. The trap:
+   ALL the junk this session removed came FROM the platform library DB, so the
+   ungated `Used in units:` bucket (`Doc.Facts.pas:1947`) must be gated
+   BEFORE the library DB is restored as an extra store, or the convergence
+   above regresses. Also unsettled: whether the ruling retires explicit
+   multi-`--db` cross-project callers (ORM3 COMMON) -- ASK, do not assume.
+
 1. **The last 6 doc-drift** -- the `(+N more)` decision above.
 2. **The rest of the 71**: `try-except-swallowed` (16 YADFOT), `local-var-casing`
    (7 each, AUTOFIXABLE and not yet run), `object-leak`,
