@@ -500,7 +500,7 @@ type
       /// CreateProcess=1. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CmdArgIndex, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr, SameText
+      /// Calls: ArgIsFixedSchemeUri, CharInSet, CmdArgIndex, CollectAssignments, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer (+11 more)
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit"/>
@@ -4440,9 +4440,11 @@ end; // function
 
 class function TAstChecker.CheckShellExec(const AFile: string): TArray<TLintFinding>;
 var
-  Src     : TBytes             ;
-  PF      : TParsedFile        ;
-  Findings: TList<TLintFinding>;
+  Src      : TBytes             ;
+  PF       : TParsedFile        ;
+  Findings : TList<TLintFinding>;
+  AsgnCount: TDictionary<string, Integer>;
+  AsgnRhs  : TDictionary<string, TTSNode>;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -4455,6 +4457,156 @@ var
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
 
+  { ---------------------------------------------------------------------------
+    v(2026-08-14): the FIXED-SCHEME URI exemption.
+
+    THE FALSE POSITIVE. This rule asked one syntactic question -- "is the command
+    argument a literalString?" -- and answered `error` for everything else. That
+    reports CWE-78 on the standard, correct way to open a URL:
+
+        Uri:= 'obsidian://open?vault=' + TNetEncoding.URL.Encode(BaseName);
+        ShellExecute(0, 'open', PChar(Uri), nil, nil, SW_SHOWNORMAL);
+
+    which is `DRagLint.CLI.DoObsidian`, where the argument had ALREADY been
+    hardened for this rule (the encode call exists because of it) and the finding
+    fired anyway. A rule whose advice has been followed and which still fires
+    teaches people to disable it.
+
+    THE PRINCIPLE, not a heuristic. CWE-78 is about the attacker choosing WHAT
+    RUNS. When the argument opens with a hardcoded URI scheme, the program is
+    selected by the OS registration for that scheme; the variable part lands in
+    the path/query of a URI whose handler is already decided, and no amount of
+    user data changes it. So a fixed scheme is a genuine safety property, not a
+    guess about intent.
+
+    `file:` IS DELIBERATELY EXCLUDED from the exemption, and it is the whole
+    reason this is scheme-aware rather than "starts with a literal": `file://` +
+    user data lets the caller pick an arbitrary file, and the program that then
+    runs is chosen by that file's EXTENSION -- exactly the thing this rule
+    exists to catch. `'cmd.exe /c ' + X` is likewise unaffected: it has no
+    scheme, so it is still reported.
+
+    ONE ASSIGNMENT ONLY. The argument is normally a variable (`PChar(Uri)`), so
+    this has to look at what was assigned to it. It does that file-wide and
+    refuses to reason when the name is assigned more than ONCE anywhere in the
+    file -- a second assignment could be the unsafe one, and this is a security
+    rule where a false negative costs more than a false positive. Same-named
+    locals in other routines only push the count up, so the failure direction is
+    "keep reporting", which is the safe one.
+    --------------------------------------------------------------------------- }
+
+  { Leftmost string literal of a (possibly nested) binary chain: `'a' + X + Y`
+    descends to 'a'. '' when the leftmost leaf is not a literal. }
+  function LeftmostLiteralText(const N: TTSNode): string;
+  var
+    Cur, L: TTSNode;
+  begin
+    Result:= '';
+    Cur   := N;
+    while (not Cur.IsNull) and (Cur.NodeType = 'exprBinary') do
+    begin
+      L:= Cur.ChildByField('lhs');
+      if L.IsNull then Exit;
+      Cur:= L;
+    end;
+    if (not Cur.IsNull) and (Cur.NodeType = 'literalString') then Result:= NodeStr(Cur);
+  end;
+
+  { True when ALit is a Delphi string literal opening `scheme://` for a scheme
+    other than file:. }
+  function IsFixedSchemeUri(const ALit: string): Boolean;
+  var
+    S, Scheme: string;
+    I        : Integer;
+  begin
+    Result:= False;
+    if (Length(ALit) < 2) or (ALit[1] <> '''') then Exit;
+    S:= Copy(ALit, 2, MaxInt);
+    if (S = '') or (not CharInSet(S[1], ['A'..'Z', 'a'..'z'])) then Exit;
+    I     := 1;
+    Scheme:= '';
+    while (I <= Length(S)) and CharInSet(S[I], ['A'..'Z', 'a'..'z', '0'..'9', '+', '-', '.']) do
+    begin
+      Scheme:= Scheme + S[I];
+      Inc(I);
+    end;
+    if Copy(S, I, 3) <> '://' then Exit;
+    Result:= not SameText(Scheme, 'file');
+  end;
+
+  { PChar(X) / PWideChar(X) / PAnsiChar(X) -> X; anything else unchanged. }
+  function UnwrapCast(const A: TTSNode): TTSNode;
+  var
+    E, Args: TTSNode;
+    Nm     : string ;
+  begin
+    Result:= A;
+    if A.IsNull or (A.NodeType <> 'exprCall') then Exit;
+    E:= A.ChildByField('entity');
+    if E.IsNull or (E.NodeType <> 'identifier') then Exit;
+    Nm:= NodeStr(E);
+    if not (SameText(Nm, 'PChar') or SameText(Nm, 'PWideChar') or SameText(Nm, 'PAnsiChar')) then Exit;
+    Args:= A.ChildByField('args');
+    if Args.IsNull or (Args.NamedChildCount <> 1) then Exit;
+    Result:= Args.NamedChild(0);
+  end;
+
+  { Every `X := <rhs>` in ASubtree, counted by lowercased LHS name. }
+  procedure CollectAssignments(const N: TTSNode);
+  var
+    I  : Integer;
+    L  : TTSNode;
+    Nm : string ;
+    Cnt: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'assignment' then
+    begin
+      L:= N.ChildByField('lhs');
+      if (not L.IsNull) and (L.NodeType = 'identifier') then
+      begin
+        Nm:= LowerCase(NodeStr(L));
+        if AsgnCount.TryGetValue(Nm, Cnt) then
+          AsgnCount[Nm]:= Cnt + 1
+        else
+        begin
+          AsgnCount.Add(Nm, 1);
+          AsgnRhs  .Add(Nm, N.ChildByField('rhs'));
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectAssignments(N.NamedChild(I));
+  end;
+
+  { AProc is the ENCLOSING routine, and the scope must be exactly that.
+    File-wide counting was tried first and is wrong in the direction that
+    matters: `Uri` / `Cmd` / `S` are assigned once per routine in a dozen
+    routines, the file-wide count is therefore >1 everywhere, and the exemption
+    never applies to the very code it was written for. Measured on the probe --
+    five of six cases behaved and the one real-world shape did not. }
+  function ArgIsFixedSchemeUri(const A0, AProc: TTSNode): Boolean;
+  var
+    A, Rhs: TTSNode;
+    Nm    : string ;
+    Cnt   : Integer;
+  begin
+    Result:= False;
+    A     := UnwrapCast(A0);
+    if A.IsNull then Exit;
+    if A.NodeType = 'exprBinary' then Exit(IsFixedSchemeUri(LeftmostLiteralText(A)));
+    if A.NodeType <> 'identifier' then Exit;
+    { No enclosing routine -> no scope to reason within -> keep reporting. }
+    if AProc.IsNull then Exit;
+    AsgnCount.Clear;
+    AsgnRhs  .Clear;
+    CollectAssignments(AProc);
+    Nm:= LowerCase(NodeStr(A));
+    if not AsgnCount.TryGetValue(Nm, Cnt) then Exit;
+    if Cnt <> 1 then Exit; { assigned more than once IN THIS ROUTINE -- refuse to reason }
+    if not AsgnRhs.TryGetValue(Nm, Rhs) then Exit;
+    Result:= IsFixedSchemeUri(LeftmostLiteralText(Rhs));
+  end;
+
   function CmdArgIndex(const ACallee: string; out AIdx: Integer): Boolean;
   begin
     Result:= True;
@@ -4465,14 +4617,19 @@ var
     else Result:= False;
   end;
 
-  procedure Visit(const N: TTSNode);
+  procedure Visit(const N: TTSNode; const AProc: TTSNode);
   var
     I, Idx      : Integer ;
     Ent, Args, A: TTSNode ;
     P           : TTSPoint;
     F           : TLintFinding;
+    Cur         : TTSNode ;
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
+    { Innermost enclosing routine wins, so a nested procedure reasons about its
+      OWN locals rather than the outer routine's. }
+    Cur:= AProc;
+    if N.NodeType = 'defProc' then Cur:= N;
     if N.NodeType = 'exprCall' then
     begin
       Ent:= N.ChildByField('entity');
@@ -4482,7 +4639,7 @@ var
         if (not Args.IsNull) and (Args.NamedChildCount > Idx) then
         begin
           A:= Args.NamedChild(Idx);
-          if A.NodeType <> 'literalString' then
+          if (A.NodeType <> 'literalString') and (not ArgIsFixedSchemeUri(A, Cur)) then
           begin
             P:= Ent.StartPoint;
             F:= Default(TLintFinding);
@@ -4499,7 +4656,7 @@ var
         end;
       end;
     end;
-    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I), Cur);
   end; // procedure
 
 begin
@@ -4507,13 +4664,18 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
-  Findings:= TList<TLintFinding>.Create;
+  Findings := TList<TLintFinding>.Create;
+  AsgnCount:= TDictionary<string, Integer>.Create;
+  AsgnRhs  := TDictionary<string, TTSNode>.Create;
   try
-
-    Visit(PF.Tree.RootNode);
+    { The maps are (re)built per ShellExecute site from its enclosing routine --
+      see ArgIsFixedSchemeUri -- so nothing is collected up front. }
+    Visit(PF.Tree.RootNode, Default(TTSNode));
     Result:= Findings.ToArray;
   finally
-    Findings.Free;
+    AsgnRhs  .Free;
+    AsgnCount.Free;
+    Findings .Free;
   end;
 end; // function
 
