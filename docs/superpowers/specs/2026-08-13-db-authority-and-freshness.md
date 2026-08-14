@@ -118,3 +118,79 @@ checker, because it converts "I do not know" into a confident answer.
 * `drag-lint resolve-dbs` should report the verdict alongside each path, so
   "which DB" and "is it usable" are one question.
 * The IDE plugin is the only component that can answer the unsaved-buffer half.
+
+---
+
+## Owner answers, 2026-08-13 (second pass)
+
+* **Refresh, do not full-reindex.** Only (a) units held unsaved in the IDE and
+  (b) units post-dating the DB.
+* **ORM3 CLIENT and SERVER each have their own DB.** The only interference is
+  AutoDoc, and the `dl:shared` unit tag resolves it. So cross-project `--db`
+  is not needed for that case.
+* **Same interface implemented by different classes per project** should be
+  handled by the independent-DB model.
+
+## Remaining concerns, in the order they will bite
+
+### 1. The rule makes every shared unit's public API look dead -- ALREADY FIRING
+
+This is the direct, measured consequence of "no cross-project DB". With per-project
+DBs and no fan-out, a public symbol in a shared unit that is only called from
+ANOTHER project has zero callers in this project's index, so
+`unused-public-symbol` fires. Recorded precedent: YADF reports
+`SaveOptionsToIni` unused while it has 15 call sites in a unit only
+YADFOT/YADFSetup compile. Live counts right now: **YADFOT 2, YADFSetup 5**.
+
+`dl:shared` currently affects DOC FACTS ONLY. It does not soften this rule.
+That was deliberate for v1 ("one mechanism changes one behaviour"), but the
+ruling has now removed the other half of the information, so the decision is due.
+Options: have `dl:shared` suppress the rule for exported symbols in marked
+units; or a `dl:api` marker; or accept and `allow`. **Do not reach zero by
+`allow`-ing these -- they are true positives about the wrong question.**
+
+### 2. Same problem, one level up: interfaces implemented per project
+
+An interface declared in a shared unit and implemented by a different class on
+CLIENT and on SERVER is, in each DB, an interface with ONE implementor. Any rule
+reasoning over implementors sees a partial picture -- `unused-public-symbol`,
+`interface-reference-cycle`, and the layering checks. The independent-DB model
+does not by itself make this correct; it makes each DB internally consistent and
+mutually blind. Decide whether that blindness is acceptable per rule, or whether
+those rules need the same marker-based opt-out as #1.
+
+### 3. "Post-dates the DB" is not sufficient as a freshness test
+
+A file restored from backup, a `git checkout` of an older revision, or a clock
+skew all produce an mtime OLDER than the DB with DIFFERENT content. That is why
+`FileIsUpToDate` takes mtime AND sha. Use "differs from what was indexed", not
+"is newer than". Mtime is the fast path; sha is the decider when mtime is equal
+or older but size/content differ.
+
+### 4. Indexing an unsaved buffer poisons the DB for the CLI
+
+If the plugin refreshes an in-RAM buffer INTO the project DB, the DB then holds
+symbols that exist in no file on disk. The next CLI run compares disk mtime/sha,
+sees a mismatch, and re-indexes back to the saved version -- so the two clients
+fight, and a lint run from the command line silently contradicts the IDE.
+Options: keep buffer-derived rows in a per-session OVERLAY rather than the shared
+DB; or mark them provisional with the buffer's hash and have the CLI ignore
+provisional rows. **Decide before implementing the refresh**, because writing
+buffers into the shared DB is very hard to walk back.
+
+### 5. The last 6 doc-drift are still the `(+N more)` remainder
+
+Unaffected by any of the above. 12 truncated inbound lines across the shared
+units; the merge refuses them because a window onto a list is not the list.
+Either raise `docs.max_callers` (currently 5) above the real caller counts, or
+teach the merge to reconcile truncated lists by count.
+
+### 6. Reaching a true zero is mostly NOT autofixable
+
+Of the 71 remaining across the three YADF projects, only `doc-drift` and
+`local-var-casing` are fixable by the engine -- and `local-var-casing`
+(7 + 7) has NOT been run yet. The rest need triage: `try-except-swallowed` 16
+on YADFOT, `object-leak`, `used-before-assignment`, `unit-too-large`,
+plus the `unused-public-symbol` set from #1. YADF has real unit coverage
+(`GuardTest.dpr`, `OptionsTest.dpr`), so source fixes there are verifiable;
+YADFOT is a design-time BPL and is compile-only.
