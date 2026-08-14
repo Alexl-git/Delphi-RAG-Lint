@@ -144,4 +144,29 @@ begin
   end;
 end;
 
+// v(2026-08-13c): `exit(X)` is "assign Result, then return" -- the same TryXxx
+// conversion Task 9c accepts as `Result := False`, in the spelling Delphi code
+// actually uses. Measured on DataCopy: 3 of 5 surviving findings were this.
+function GoodExitWithValue: Boolean;
+begin
+  try
+    Writeln('x');
+  except
+    exit(False);
+  end;
+  Result := True;
+end;
+
+// The control: a BARE `exit;` returns without saying anything, so it is still
+// the swallow this rule exists to catch. Without this case, matching on the
+// word "exit" alone would pass the test above and quietly widen the rule.
+procedure BareExitIsStillASwallow;
+begin
+  try
+    Writeln('x');
+  except
+    exit;
+  end;
+end;
+
 end.

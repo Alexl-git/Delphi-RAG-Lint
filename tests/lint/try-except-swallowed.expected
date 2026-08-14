@@ -32,3 +32,8 @@ try-except-swallowed 116
 # pass 129 and gut the rule.
 !try-except-swallowed 129
 try-except-swallowed 142
+# `exit(X)` is Task 9c's Result conversion in Delphi's usual spelling (154), but
+# a bare `exit;` still says nothing and stays a swallow (167). 167 is the guard:
+# matching the word "exit" alone would pass 154 and quietly widen the rule.
+!try-except-swallowed 154
+try-except-swallowed 167

@@ -4946,6 +4946,20 @@ var
     silent even though it neither raises nor logs. An assignment to any other
     (plain local) name does NOT count -- that is still the case this rule
     exists to catch, and stays flagged. }
+  { True when the already-lowercased node text is a call to `exit` WITH an
+    argument -- `exit(False)`, `exit (X)`. A bare `exit;` answers False: it
+    returns without saying anything, which is the swallow this rule is for. }
+  function StartsWithExitCall(const AText: string): Boolean;
+  var S: string; I: Integer;
+  begin
+    Result:= False;
+    S:= TrimLeft(AText);
+    if Copy(S, 1, 4) <> 'exit' then Exit;
+    I:= 5;
+    while (I <= Length(S)) and (S[I] = ' ') do Inc(I);
+    Result:= (I <= Length(S)) and (S[I] = '(');
+  end;
+
   function HandlesException(const N: TTSNode; const AHandled: TStrings): Boolean;
   var
     I  : Integer;
@@ -5025,6 +5039,21 @@ var
         definition, hands it somewhere else. }
       if (N.NodeType = 'exprCall')
          and ((Pos('.message', T) > 0) or (Pos('.classname', T) > 0)) then Exit(True);
+      { v(2026-08-13c): `exit(X)` IS "assign Result, then return" -- the very
+        TryXxx conversion Task 9c already accepts, written the other way round.
+        The check above it looks for an `assignment` NODE, so the most common
+        Delphi spelling of that idiom read as a silent swallow:
+
+            except
+              exit(False);          <- reported "silently swallowed"
+            end;
+
+        Measured on DataCopy: 3 of the 5 findings that survived every other
+        clause were exactly this (uFileUtils.pas 1099, 1669, 1699), one of them
+        returning a documented safe default. `exit` WITH an argument is legal
+        only in a function, so accepting it cannot loosen the procedure case --
+        a bare `exit;` carries no status and is deliberately NOT matched here. }
+      if (N.NodeType = 'exprCall') and StartsWithExitCall(T) then Exit(True);
     end;
     for I:= 0 to N.ChildCount - 1 do
       if HandlesException(N.Child(I), AHandled) then Exit(True);
