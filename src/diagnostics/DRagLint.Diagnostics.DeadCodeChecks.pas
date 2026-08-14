@@ -2294,6 +2294,66 @@ begin
         Findings.Add(UF);
       end;
     end;
+    { v(2026-08-14): doc-orphan-block -- a managed facts block attached to NO
+      declaration.
+
+      WHY THIS IS A FILE-LEVEL RULE AND CANNOT BE A DOC RULE. doc-drift walks
+      SYMBOLS and asks whether each one's block is current. An orphan block
+      belongs to no symbol -- that is what makes it an orphan -- so a
+      symbol-driven walk cannot reach it by construction. This is why a wide
+      `document --apply` could stack four blocks above one declaration and every
+      convergence gate still reported "nothing to document": the documenter
+      neither rewrites nor removes what it cannot associate, and truthfully says
+      it has no work. Measured 2026-08-14 on YADF at b65b2f9 -- pass B green on
+      three projects while YADF.Options.pas carried a stacked pair.
+
+      THE PREDICATE: between two consecutive `drag-lint:auto BEGIN` markers there
+      must be at least one line of CODE. One declaration gets one managed block,
+      so two blocks with nothing declared between them means the FIRST is
+      unreachable -- it is the one reported, because it is the one to delete.
+
+      DELIBERATELY CONSERVATIVE about what counts as code: any non-blank line
+      that does not open with a comment token. The interior lines of a braced
+      block comment therefore read as code and SUPPRESS the finding. That is a
+      false negative, chosen over the false positive, because this rule exists to
+      be believed -- a stacked block is a rare, specific corruption and a rule
+      that cries wolf about ordinary comments would be turned off. }
+    begin
+      var Txt  : string          := TEncoding.UTF8.GetString(Src);
+      var SLine: TArray<string>  := Txt.Split([#13#10, #10]);
+      var PrevB: Integer         := -1;
+      for var LI:= 0 to High(SLine) do
+      begin
+        if Pos('drag-lint:auto BEGIN', SLine[LI]) = 0 then Continue;
+        if PrevB >= 0 then
+        begin
+          var HasCode: Boolean:= False;
+          for var J:= PrevB + 1 to LI - 1 do
+          begin
+            var T: string:= Trim(SLine[J]);
+            if T = '' then Continue;
+            if T.StartsWith('///') or T.StartsWith('//') or T.StartsWith('{')
+               or T.StartsWith('(*') or T.StartsWith('*)') or T.StartsWith('}') then Continue;
+            HasCode:= True;
+            Break;
+          end;
+          if not HasCode then
+          begin
+            var OF_: TLintFinding:= Default(TLintFinding);
+            OF_.RuleId  := 'doc-orphan-block';
+            OF_.Severity:= 'warning';
+            OF_.Message := Format('Managed facts block at line %d is attached to no declaration -- ' +
+                                  'the next block starts at line %d with no code between. A previous ' +
+                                  '--apply stacked it; delete this one.', [PrevB + 1, LI + 1]);
+            OF_.FilePath:= AFile;
+            OF_.StartLine:= PrevB + 1; OF_.StartCol:= 1;
+            OF_.EndLine  := PrevB + 1; OF_.EndCol  := 1;
+            Findings.Add(OF_);
+          end;
+        end;
+        PrevB:= LI;
+      end;
+    end;
     { Pass 1: collect all declProc names with contract-binding directives. }
     CollectContractDecls(PF.Tree.RootNode);
     { Pass 1b: collect same-unit function names for function-result-ignored. }

@@ -55,6 +55,29 @@ unit DRagLint.Doc.SharedFacts;
   6 of 55 inbound lines on the real shared units, none of them in
   YADF.Options.pas, which is 21 of the 31 findings.
 
+  ...AND WHY THAT COST IS NOW ZERO, 2026-08-14 (Q0). The exclusion above was the
+  only thing keeping the family from converging, so DRagLint.Doc.Facts stopped
+  producing the window: a `dl:shared` unit's inbound lists are rendered UNCAPPED,
+  at both cap sites (CalledFrom's `docs.max_callers` and UsedInUnits'
+  DocDisplayCount). The rule here is UNCHANGED and still live -- a STORED line
+  can carry `(+N more)` because it was written before that change or by hand, and
+  it is no more set-differenceable for having aged. What changed is that the
+  engine no longer creates such lines.
+
+  That also means this guard had NO TEST COVERAGE until 2026-08-14. The fixture
+  that claimed to cover it exercised the residual compare below instead (its
+  narrow project renders no block at all, so `SRes <> FRes` decides first and
+  IsTruncated is never reached). tests\autotest\run_shared_unit_staleness.ps1's
+  `MarkTrunc` case is the first that actually reaches it.
+
+  KNOWN HOLE, and it is DESTRUCTIVE: when the narrow project's fresh render is
+  EMPTY -- it compiles the unit but calls nothing in it -- the residual compare
+  below exits on 'Pure' vs '' before any inbound label is consulted, and
+  TDocumenter then emits a pure tekDeleteLines over the wide project's block.
+  Neither half of this unit gets a say. See
+  docs\INBOX-shared-unit-empty-render-deletes-block.md for the repro and a fix
+  sketch; both halves need the same UnitInClosure fact they already use.
+
   WHY `seealso` IS NOT IN SCOPE, despite being listed as inbound in the plan.
   Its crefs are derived from CALLEES and same-unit siblings, both of which are
   properties of this unit's own code, so every project that compiles the unit

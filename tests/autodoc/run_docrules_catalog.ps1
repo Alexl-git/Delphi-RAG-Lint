@@ -115,10 +115,22 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # them on the first battery run after the change -- which is the tripwire doing its
 # job, so it is bumped deliberately rather than loosened. Verified the delta is
 # exactly those two ids and that `documentation` is still 4.
-Assert ("built-in rule count = 118 (116 + review-marker-stale + review-marker-unused); got {0}" -f $builtins.Count) ($builtins.Count -eq 118)
+# 2026-08-14: +1 -> 119, documentation 4 -> 5, from `doc-orphan-block` (a managed
+# facts block attached to no declaration). Both numbers bumped together and
+# deliberately, and this tripwire caught it on the first battery run after the
+# change -- which is the tripwire working, not a nuisance.
+#
+# Worth recording WHY this rule had to exist, because the obvious question is why
+# doc-drift did not already cover it: doc-drift walks SYMBOLS, and an orphan block
+# belongs to no symbol -- that is what makes it an orphan -- so it is invisible to
+# doc-drift by construction, and so was every convergence gate built on doc-drift.
+# Measured 2026-08-14: three YADF projects all reported "nothing to document" over
+# source that already carried a stacked pair. Hence a FILE-level scan, and hence a
+# fifth documentation-category rule rather than another doc-drift signal.
+Assert ("built-in rule count = 119 (118 + doc-orphan-block); got {0}" -f $builtins.Count) ($builtins.Count -eq 119)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
-Assert ("exactly 4 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 4)
+Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)
 
 Write-Host ''
 if ($fail -gt 0) { Write-Host "docrules-catalog: $fail FAIL" -ForegroundColor Red; exit 1 } else { Write-Host 'docrules-catalog: all pass' -ForegroundColor Green; exit 0 }

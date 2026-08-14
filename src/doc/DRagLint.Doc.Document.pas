@@ -989,6 +989,44 @@ begin
     the whole rendering layer. }
   Merged:= TSharedFacts.MergeInboundFacts(Merged, Existing.Remarks, AStore, Path);
 
+  { v(2026-08-14) THE STALE-ANCHOR ROOT CAUSE. One line, and it is the cause of
+    INBOX-autodoc-not-idempotent-on-yadf, INBOX-document-qname-second-apply-nests-
+    block-on-stale-anchor, and the "unexplained" block duplication -- all three.
+
+    TTextEditApplier splits an insert's Text on CRLF/LF and inserts each part as
+    its own line (Refactor.TextEdit:423). A Text ending in a line break therefore
+    splits to a trailing EMPTY part, and every replace wrote one blank line more
+    than it deleted.
+
+    MEASURED on committed YADF at b65b2f9, ONE `document --project YADFOT --apply`:
+
+        blank lines between the block and its declaration   1  ->  2
+        TYadfOptions declaration line                      42  ->  43
+        YADF.Options.pas                                 1044  ->  1046 lines
+
+    That single extra blank is what makes the damage PERMANENT and SELF-
+    INFLICTED. FindDocRegionAbove associates through DocRegionInGapWindow with
+    AAllowGap = 1 -- window [DeclLine-2, DeclLine-1] -- so at a gap of 2 the
+    block is invisible to its own declaration FOREVER AFTER. The next run finds
+    no region, Existing.StartLine stays 0, the replace path is skipped, and
+    control reaches the unconditional insert at the bottom of this routine. A
+    second block appears; the gap grows again; repeat once per run. That is the
+    "54 pending edits after a full apply", and it needs no second project -- the
+    shared-unit case merely makes the two blocks differ, so the duplicate-insert
+    guard cannot recognise them and the corruption becomes visible.
+
+    Fixed HERE, at the single point where Merged is final, so the replace path
+    and the fresh-insert path below cannot diverge -- they took the same Text and
+    only one of them was ever examined.
+
+    NOT fixed by widening AAllowGap (shared by the indexer, harvest, facts and
+    strip -- it decides which declaration a comment BELONGS to) and not by
+    widening the duplicate guard again: CommentRunStartAbove was already added
+    for this symptom on 2026-08-13 and could only ever suppress the second
+    insert, never stop the gap from growing. }
+  while (Merged <> '') and CharInSet(Merged[Length(Merged)], [#13, #10]) do
+    SetLength(Merged, Length(Merged) - 1);
+
   // v(ADP3 T3): MergeComment returns '' when omit-when-empty suppression
   // leaves NOTHING to say (no summary/param/returns content and no facts to
   // render) -- see its own comment. A fresh symbol then gets NO edit at all

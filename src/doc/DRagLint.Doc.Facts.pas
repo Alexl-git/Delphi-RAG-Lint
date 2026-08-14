@@ -483,7 +483,15 @@ uses
   // would be a second answer to one question -- the drift channel this repo
   // keeps paying for. CallResolver reaches only Core.Model / Core.Interfaces,
   // so this adds no cycle.
-  DRagLint.Index.CallResolver;
+  DRagLint.Index.CallResolver,
+  // v(Q0, 2026-08-14): TSharedUnit.IsShared -- the `dl:shared` marker decides
+  // whether an INBOUND list may be truncated (see UnitIsShared below and the two
+  // cap sites in Build). Reaches only System units and Lint.ReviewMarker, so no
+  // cycle. DELIBERATELY the same reader DRagLint.Doc.SharedFacts asks: the
+  // checker forgives entries on a marked unit and this decides what the renderer
+  // may drop, so a second answer to "is this unit shared" would let the two
+  // disagree about the same file.
+  DRagLint.Lint.SharedUnit;
 
 { PERF ATTRIBUTION for Build, printed by the DRAGLINT_PROFILE doc-drift
   breakdown. Build is called once per declaration and dominated both the
@@ -1006,6 +1014,43 @@ begin
   if (AFilePath = '') or (ALine <= 0) then Exit;
   Lines:= SourceLines(AFilePath);
   if ALine <= Length(Lines) then Result:= Trim(Lines[ALine - 1]);
+end;
+
+{ v(Q0, 2026-08-14): is the declaring unit marked `dl:shared`?
+
+  Asked once per Build, i.e. once per DECLARATION, so it gets the same
+  single-entry stamp-keyed memo as SourceLines above and for the same two
+  reasons: decls arrive grouped by file, and `document --apply` rewrites these
+  files mid-run, so a path-only key would answer for the pre-edit text.
+
+  NOT built on SourceLines' line array. TSharedUnit.IsSharedText runs a
+  comment/string state machine over the raw text, and that machine is the whole
+  point of it -- it is what stops `dl:shared` inside a string literal counting as
+  a marker and what lets a marker on the second line of a braced header block
+  count as one. Rejoining split lines to feed it would be a second encoding of
+  the file's structure sitting next to the audited one. }
+var
+  GShrCachePath : string    ;
+  GShrCacheStamp: TDateTime ;
+  GShrCacheValue: Boolean   ;
+
+function UnitIsShared(const AFilePath: string): Boolean;
+var
+  Stamp: TDateTime;
+begin
+  Result:= False;
+  if AFilePath = '' then Exit;
+  try
+    Stamp:= System.IOUtils.TFile.GetLastWriteTime(AFilePath);
+  except
+    Exit; { missing/unreadable -- unmarked, which is the no-change answer }
+  end;
+  { Bit-exact for the same reason SourceLines is -- see its comment. }
+  if (GShrCachePath = AFilePath) and (PInt64(@GShrCacheStamp)^ = PInt64(@Stamp)^) then Exit(GShrCacheValue);
+  GShrCacheValue:= TSharedUnit.IsShared(AFilePath);
+  GShrCachePath := AFilePath;
+  GShrCacheStamp:= Stamp;
+  Result        := GShrCacheValue;
 end;
 
 // v(ADP3 T7): fills AFacts.HarvestedSummary / .HarvestedRemarks from the
@@ -1713,6 +1758,27 @@ begin
     Inc(GBUnresolved, BTick - TB0);
     Result.CalledFromTotal:= Distinct.Count;
     if Distinct.Count > AMaxCallers then Shown:= AMaxCallers else Shown:= Distinct.Count;
+    // v(Q0, 2026-08-14): NO CAP ON A `dl:shared` UNIT. This is an INBOUND fact --
+    // its entries come from OUTSIDE the unit, so each project that compiles the
+    // unit computes a DIFFERENT set, and the several projects have to agree on one
+    // line in one shared file. DRagLint.Doc.SharedFacts makes them agree by
+    // reconciling the sets, and it can only do that on a WHOLE list: a '(+N more)'
+    // window cannot be set-differenced soundly in either direction (an entry can
+    // leave the window because the cap fell differently, and a real deletion can
+    // hide inside the count), so TSharedFacts.BlockDrifted withholds forgiveness
+    // on a truncated line and the block drifts forever. Measured 2026-08-13: every
+    // remaining doc-drift finding on YADFOT/YADFSetup was a truncated line.
+    //
+    // RAISING THE CAP IS NOT THE SAME FIX and was declined: any finite cap only
+    // moves the cliff, and it lengthens every line in every project to buy a
+    // shared unit's convergence. Only marked units pay, and only they benefit.
+    //
+    // THE PRICE, which is real and is the reason this is opt-in: a marked unit's
+    // reference line grows without bound, and units get marked precisely because
+    // several projects call them. Attribution (WHICH project sees a caller) is a
+    // separate want that no union can serve -- see the per-project attributed
+    // segments item in docs\BACKLOG-shared-unit-attribution.md.
+    if UnitIsShared(AStore.GetFilePath(ASym.FileId)) then Shown:= Distinct.Count;
     if Shown < 0 then Shown:= 0;
     SetLength(Result.CalledFrom, Shown);
     for I:= 0 to Shown - 1 do Result.CalledFrom[I]:= Distinct[I];
@@ -1954,6 +2020,16 @@ begin
       end;
       Result.UsedInTotal:= UnitSet.Count;
       var ShownU: Integer:= DocDisplayCount(UnitSet.Count);
+      // v(Q0, 2026-08-14): the SECOND capped inbound site -- see the long note on
+      // CalledFrom's cap above for why a marked unit is never truncated. Capped by
+      // a DIFFERENT rule (DocDisplayCount's >15-total->10-shown, not
+      // docs.max_callers), which is exactly why it needs its own exemption and its
+      // own fixture: fixing one label and leaving the other converges routines and
+      // leaves every shared TYPE drifting, which is the same bug wearing a
+      // different label. `Calls:` shares DocDisplayCount and is deliberately NOT
+      // exempted -- it is derived from this unit's OWN code, so every project that
+      // compiles the unit computes the same set and there is nothing to reconcile.
+      if UnitIsShared(AStore.GetFilePath(ASym.FileId)) then ShownU:= UnitSet.Count;
       SetLength(Result.UsedInUnits, ShownU);
       for var K:= 0 to ShownU - 1 do Result.UsedInUnits[K]:= UnitSet[K];
     finally
