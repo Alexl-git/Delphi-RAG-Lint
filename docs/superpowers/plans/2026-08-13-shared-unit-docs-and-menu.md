@@ -432,7 +432,7 @@ conditions of the rule below, on the first decl examined.
 - Consumes: `TSharedUnit.IsShared` from Task 3; the converging repair path from Task 1.
 - Produces: the behaviour LoopZero (Task 7) measures.
 
-- [ ] **Step 1: Write the failing test -- the assertion that would have caught all four incidents**
+- [x] **Step 1: Write the failing test -- the assertion that would have caught all four incidents**
 
 Create `tests/autotest/run_shared_unit_staleness.ps1`. Build ONE shared unit and
 TWO projects that both compile it, index both, then:
@@ -450,7 +450,7 @@ Check 'an UNMARKED shared unit keeps old behaviour' ($driftUnmarked -gt 0) `
 Check 'idempotent: document twice, no second edit' ($secondPassEdits -eq 0)
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```powershell
 pwsh -File tests\autotest\run_shared_unit_staleness.ps1
