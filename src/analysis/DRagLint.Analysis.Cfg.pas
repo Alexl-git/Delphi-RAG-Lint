@@ -613,20 +613,61 @@ begin
   { ----- containers ----- }
   if (K = 'block') or (K = 'statements') then Exit(EmitList(ACur, ANode));
 
+  { A single-statement branch body arrives wrapped in a `statement` node. For a
+    LEAF that is harmless -- the wrapper becomes the block item, exactly as
+    before -- but a nested if/else is not a leaf, and the grammar does not type
+    that one `ifElse`. For the DANGLING ELSE
+
+      if A then if B then S1 else S2
+
+    tree-sitter-delphi13 emits statement(exprIf(...)). Verified with
+    tools\dumpnode, not assumed -- see the `case` arm below for what assuming a
+    node shape costs in this file.
+
+    Neither 'statement' nor 'exprIf' had an arm here, so the WHOLE nested
+    construct fell through to the opaque-item path at the end of this routine
+    and every dataflow rule saw one indivisible statement. That is how
+    used-before-assignment came to report an `out` argument DEFINED in the inner
+    condition as read-before-assignment in a branch that the condition
+    dominates: DataCopy uZeissRoutines.pas:1375 and :1675, where the line the
+    finding pointed at is a WRITE. Bisected over 13 variants
+    (tests\autotest\run_dangling_else_cfg.ps1); an if/else nested in a `for`,
+    `while`, `case` or `begin..end` is a plain `ifElse` and always came through
+    here correctly, which is why only this one shape was ever wrong. }
+  if (K = 'statement') and (ANode.NamedChildCount = 1)
+     and (ANode.NamedChild(0).NodeType = 'exprIf') then
+    Exit(EmitStmt(ACur, ANode.NamedChild(0)));
+
   { ----- conditionals ----- }
-  if (K = 'if') or (K = 'ifElse') then
+  if (K = 'if') or (K = 'ifElse') or (K = 'exprIf') then
   begin
     Cond := ANode.ChildByField('condition');
-    if not Cond.IsNull then Cfg.Blocks[ACur].AddItem(Cond, WithDepth > 0);
     ThenN := ANode.ChildByField('then');
+    ElseN := ANode.ChildByField('else');
+    { `exprIf` carries the same kIf / cond / kThen / then [/ kElse / else] child
+      sequence as `ifElse`, but it is not guaranteed to DECLARE those fields, so
+      resolve positionally whenever the fields come back null. The keywords are
+      NAMED children here -- the same trap the `case` arm documents -- so they
+      have to be skipped by type rather than by index. }
+    if Cond.IsNull or ThenN.IsNull then
+      for I := 0 to ANode.NamedChildCount - 1 do
+      begin
+        EntTxt := ANode.NamedChild(I).NodeType;
+        if (EntTxt = 'kIf') or (EntTxt = 'kThen') or (EntTxt = 'kElse') then Continue;
+        if Cond.IsNull then Cond := ANode.NamedChild(I)
+        else if ThenN.IsNull then ThenN := ANode.NamedChild(I)
+        else if ElseN.IsNull then ElseN := ANode.NamedChild(I);
+      end;
+    if not Cond.IsNull then Cfg.Blocks[ACur].AddItem(Cond, WithDepth > 0);
     JoinIdx := Cfg.NewBlock.Index;
     BodyIdx := Cfg.NewBlock.Index;
     Cfg.Blocks[ACur].AddSucc(BodyIdx);
     ThenAfter := EmitStmt(BodyIdx, ThenN);
     if ThenAfter >= 0 then Cfg.Blocks[ThenAfter].AddSucc(JoinIdx);
-    if K = 'ifElse' then
+    { Branch on the PRESENCE of an else, not on the node's type name: `ifElse`
+      always has one, `if` never does, and `exprIf` may go either way. }
+    if not ElseN.IsNull then
     begin
-      ElseN := ANode.ChildByField('else');
       BodyIdx := Cfg.NewBlock.Index;
       Cfg.Blocks[ACur].AddSucc(BodyIdx);
       ElseAfter := EmitStmt(BodyIdx, ElseN);
