@@ -249,3 +249,35 @@ Direction: re-address ALL indexing to the in-memory data, so there is one source
 of truth rather than a disk index that the IDE's buffers silently contradict.
 This is an architectural change, not a patch. Do not implement the unsaved-buffer
 refresh until it is designed.
+### Refinement: DESTINATION is a third axis, and OUTGOING vs INCOMING is the line
+
+"Library must not answer who-calls-X" was too blunt. The owner's correction:
+
+* We MAY ask the library DB who uses `Max(Int, Int)` and where. That answer is
+  legitimate **for an IDE popup**. It may **never** be written into documentation.
+* What MAY be documented is that our own `HugeValues` **calls** the library
+  function `MAX` -- and that is the total extent of it. That is an OUTGOING
+  call fact, not an incoming one.
+
+So three axes govern every query, not two:
+
+| | Library | Project | External |
+|---|---|---|---|
+| declaration / type resolution | yes | yes | no |
+| OUTGOING facts (`Calls:`) | yes -- naming an RTL callee is true and useful | yes | no |
+| INCOMING facts (`Called from:`, `Used by:`, `Used in units:`) -- **persisted to source** | **NEVER** | yes | yes (this is its only job) |
+| INCOMING facts -- **interactive display only** (hover, popup, `find-callers` at the console) | yes | yes | yes |
+
+**Why outgoing is safe and incoming is not.** An outgoing fact is anchored in OUR
+source: the call site is in a unit this project compiles, so the project's own
+index already records it, and the library DB is needed only to RESOLVE the callee
+-- which is the declaration-lookup role already granted. An incoming fact sourced
+from the library is the reverse: it asserts something about code we do not own,
+discovered by an unverified name match, and then welds it into our source. That
+is exactly how `dxXMLWriter` and `FireDAC.Comp.QBE` reached YADF's shared
+units.
+
+**The operative test is therefore not "which DB" but "does this fact get
+WRITTEN?"** A fact that is rendered and discarded can afford to be speculative;
+a fact that is committed to a `.pas` file cannot. Any future surface that
+persists what a hover currently only shows inherits this rule.
