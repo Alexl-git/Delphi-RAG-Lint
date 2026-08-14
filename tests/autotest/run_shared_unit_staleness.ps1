@@ -283,6 +283,26 @@ Check 'a truncated inbound list is not forgiven' ((DriftCount $dbB 'Busy') -gt 0
 # path inherits the merge; that is exactly what was believed both previous times.
 # Assert it instead. Runs LAST because --fix repairs everything fixable in scope,
 # including the controls asserted above.
+# REGRESSION, YADF 2026-08-13. Every fixture above ends its block with 'Pure',
+# which is a LABEL, so the stored-side slice always stopped in time and the bug
+# below could not show. On YADF.Tokens the last fact in the block was the inbound
+# line itself, so the slice ran past AUTO_END and swallowed the marker into an
+# entry, writing this into the source:
+#     /// Used in units: ..., YadfMain, YadfMain <!-- drag-lint:auto END -->
+#     /// <!-- drag-lint:auto END -->
+# -- a duplicated entry, a marker inside a fact line, and a doubled terminator.
+$tokPath = Join-Path $shDir 'Marked.pas'
+$tokText = [System.IO.File]::ReadAllText($tokPath)
+Check 'no marker text leaked into a fact line' (-not ($tokText -match '(?m)^\s*///\s*(Called from|Used by|Used in units):.*drag-lint:auto')) `
+  'the stored-side parse must stop at AUTO_END, not at the next label'
+Check 'exactly one END marker in the block' (([regex]::Matches($tokText, [regex]::Escape('drag-lint:auto END'))).Count -eq 1) `
+  "found $((([regex]::Matches($tokText, [regex]::Escape('drag-lint:auto END')))).Count)"
+Check 'no entry is duplicated in the merged list' (
+  $(  $ln = (BlockLine 'Marked' 'Called from')
+      $es = ($ln -replace '.*Called from:', '') -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+      ($es | Sort-Object -Unique).Count -eq $es.Count )) `
+  "list: $(BlockLine 'Marked' 'Called from')"
+
 Check 'the --fix path starts from real drift' ((DriftCount $dbB 'MarkFix') -gt 0)
 
 & $Exe lint-all --db $dbB --fix --apply --no-backup 2>$null | Out-Null

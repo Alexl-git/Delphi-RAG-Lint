@@ -123,8 +123,32 @@ uses
 const
   { The inbound labels -- the only facts whose contents depend on WHICH project
     is looking. Everything else in the block is computed from this unit's own
-    code and is identical under every index. }
-  INBOUND_LABELS: array[0..2] of string = ('Called from:', 'Used by:', 'Used in units:');
+    code and is identical under every index.
+
+    'Used in units:' IS inbound and is DELIBERATELY NOT HERE. Measured on YADF
+    2026-08-13, first run against real code: documenting YADF.Tokens under YADFOT
+    rendered
+
+        Used in units: dxXMLWriter, FireDAC.Comp.QBE, Spring.Data.ExpressionParser,
+                       System.Bindings.Evaluator, System.JSON, XPTestedUnitParser, ...
+
+    where YADF renders only 'YADF.Guard, YADF.Layout, YADF.Tokens, YadfMain'.
+    Those names reach the list through the facts builder's NAME-BASED extra-store
+    fan-out, which is exactly the bucket that cannot be verified. Two properties
+    make them unforgivable HERE, both structural rather than incidental:
+
+    * the entries are bare unit names with no parenthesised location, and
+    * 'Used in units:' renders through JoinEsc, not JoinRefs, so it carries NO
+      ' ?' confidence marker at all -- the uncertainty guard is VACUOUS for this
+      label, and an unverified name is indistinguishable from a certain one.
+
+    Preserving them would therefore make library noise PERMANENT in the source of
+    every shared unit -- the accumulate-only cost, spent on entries that were
+    never trustworthy. This label keeps today's byte compare, which means it can
+    still churn between projects. That is a known, bounded remainder and it is
+    the safe direction: churn is recoverable, a lie welded into the source is
+    not. }
+  INBOUND_LABELS: array[0..1] of string = ('Called from:', 'Used by:');
 
   { EVERY label RenderFactsBlock and FormatPhase2FactLines can emit. Used only to
     find where one fact ends in the FLATTENED stored text, so a missing entry
@@ -179,6 +203,22 @@ begin
   finally
     Sb.Free;
   end;
+end;
+
+{ The managed block's BODY -- what lies between the BEGIN and END markers.
+  Returns AText unchanged when there are no markers, which is the right answer for
+  a freshly rendered block that has not been wrapped in them yet. }
+function ExtractBlockBody(const AText: string): string;
+var
+  B, E: Integer;
+begin
+  Result:= AText;
+  B:= Pos(AUTO_BEGIN, AText);
+  if B = 0 then Exit;
+  Inc(B, Length(AUTO_BEGIN));
+  E:= PosEx(AUTO_END, AText, B);
+  if E = 0 then Exit;
+  Result:= Copy(AText, B, E - B);
 end;
 
 function IsTruncated(const AContent: string): Boolean;
@@ -482,7 +522,21 @@ begin
   if (AStore = nil) or (AStoredRemarks = '') then Exit;
   if not TSharedUnit.IsShared(AUnitPath) then Exit;
 
-  ParseBlock(AStoredRemarks, SIn, SRes);
+  { PARSE THE BLOCK BODY, NOT THE WHOLE REMARKS. The remarks continue past
+    AUTO_END, and ParseBlock ends a fact at the next LABEL -- so when the last
+    fact in the block is an inbound one, its slice ran to the end of the remarks
+    and swallowed the END marker into an entry. That wrote
+
+        /// Used in units: ..., YadfMain, YadfMain <!-- drag-lint:auto END -->
+        /// <!-- drag-lint:auto END -->
+
+    into YADF.Tokens.pas on the first run against real code: a duplicated entry,
+    a marker inside a fact line, and a doubled terminator. BlockDrifted never had
+    the bug because its caller hands it ExtractManagedBlockBody's output already.
+    The unit test missed it because every fixture block ended with 'Pure', which
+    IS a label, so the slice stopped in time -- see the regression fixture whose
+    block ends on the inbound line itself. }
+  ParseBlock(ExtractBlockBody(AStoredRemarks), SIn, SRes);
   try
     if SIn.Count = 0 then Exit;
 
