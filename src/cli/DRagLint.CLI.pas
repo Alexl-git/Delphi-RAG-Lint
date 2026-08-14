@@ -5786,6 +5786,31 @@ begin
   if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
 end;
 
+{ The "may drag-lint touch this file at all?" half of ownership, as a predicate
+  the doc batch can hold. EVERY `document*` command must set
+  TDocBatchOptions.IsExcluded from this -- see that field's remarks for what
+  happened when the doc path knew about ownRoots and not about exclude_paths.
+
+  It exists as one function rather than four inline closures so that adding a
+  fifth document entry point cannot quietly omit it: the omission is then a
+  missing call to a named thing, not a missing idea.
+
+  Config DISCOVERY belongs out here, not in the doc unit: LoadLintConfig honours
+  --config and falls back to the CWD, and re-deriving that inside Doc.Batch
+  would find nothing on precisely the runs that matter (this repo's own config
+  sits at the repo root while the pipeline runs from C:\TEMP). }
+function DocExcludePredicate(const AArgs: TArgs): TFunc<string, Boolean>;
+var
+  Cfg: TLintConfig;
+begin
+  Cfg:= LoadLintConfig(AArgs);
+  Result:=
+    function(APath: string): Boolean
+    begin
+      Result:= Cfg.IsPathExcluded(APath);
+    end;
+end;
+
 { The set of rule-ids that have a registered, mechanical, side-effect-free
   quick-fix. Single source of truth for both the rules-catalog 'fixable' flag
   and the fix verbs. Widening AutoFix = add an id here AND a branch in
@@ -8729,6 +8754,8 @@ begin
   if AArgs.DocStrip then
   begin
     Opts:= Default(TDocBatchOptions);
+    { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
+    Opts.IsExcluded:= DocExcludePredicate(AArgs);
     Opts.Strip:= True;
     Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
     Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
@@ -8742,6 +8769,8 @@ begin
   if not Ok then Exit(2);
 
   Opts:= Default(TDocBatchOptions);
+  { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
+  Opts.IsExcluded:= DocExcludePredicate(AArgs);
   // --stubs flips the facts-only default: on = keep pure all-TODO creates too.
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -8926,6 +8955,8 @@ begin
   end;
 
   Opts:= Default(TDocBatchOptions);
+  { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
+  Opts.IsExcluded:= DocExcludePredicate(AArgs);
   Opts.Stubs:= AArgs.DocStubs;
   Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -8978,6 +9009,8 @@ begin
   if not Ok then Exit(2);
 
   Opts:= Default(TDocBatchOptions);
+  { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
+  Opts.IsExcluded:= DocExcludePredicate(AArgs);
   Opts.Stubs:= AArgs.DocStubs;
   Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
