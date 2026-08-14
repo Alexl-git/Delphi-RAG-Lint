@@ -413,6 +413,50 @@ begin
     end;
 end;
 
+// v(2026-08-13): first line of the contiguous COMMENT-or-BLANK run immediately
+// above ADeclLine; ADeclLine itself when the line above is neither.
+//
+// Exists for ONE caller: the duplicate-insert guard. FindDocRegionAbove
+// associates a comment with a declaration through DocRegionInGapWindow, whose
+// AAllowGap is 1 "everywhere today" -- so the window is
+// [DeclLine-2, DeclLine-1] and a block separated from its declaration by TWO
+// blank lines is invisible.
+//
+// MEASURED on real committed source (YADF.Groups.pas): the facts block ends at
+// line 62, `TGroup = class` is at 65, window = [63,64]. FindDocRegionAbove
+// returns nothing, Existing.StartLine stays 0, the CommentLinesContain guard
+// below is skipped for want of a region, and the block is inserted AGAIN. That
+// file already carries TWO identical <remarks> blocks in committed source, and
+// a dry run proposes a THIRD ("insert after line 64"). Every run adds one --
+// this is the mechanism behind INBOX-autodoc-not-idempotent-on-yadf's
+// "54 pending edits after a full apply".
+//
+// Deliberately NOT fixed by raising AAllowGap: that constant is shared by the
+// indexer, harvest, facts and strip, and widening it changes which declaration
+// a comment BELONGS to everywhere at once -- a semantic change, with the
+// obvious risk of attaching a comment to the wrong declaration. Widening only
+// the guard changes nothing about association: it can only ever SUPPRESS a
+// duplicate insert, never move, delete or re-target a comment.
+function CommentRunStartAbove(const ASrc: string; ADeclLine: Integer): Integer;
+var
+  L: Integer;
+  T: string;
+begin
+  Result:= ADeclLine;
+  L     := ADeclLine - 1;
+  while L >= 1 do
+  begin
+    T:= Trim(ExtractSourceSpan(ASrc, L, L));
+    if (T = '') or (Copy(T, 1, 2) = '//') or (Copy(T, 1, 1) = '{')
+       or (Copy(T, 1, 2) = '(*') then
+    begin
+      Result:= L;
+      Dec(L);
+    end
+    else Break;
+  end;
+end;
+
 // v(ADP3 T3g): the leading whitespace of the 1-based line ALine of ASrc --
 // the indentation every emitted /// line for that declaration is built from.
 // Reads the line through ExtractSourceSpan rather than splitting ASrc a second
@@ -1110,6 +1154,26 @@ begin
     if (Existing.StartLine >= 1) and (Existing.EndLine >= Existing.StartLine)
        and CommentLinesContain(
              NormalizeCommentLines(ExtractSourceSpan(Src, Existing.StartLine, Existing.EndLine)),
+             NormalizeCommentLines(Merged)) then
+    begin
+      Result.Action:= daUnchanged;
+      Exit;
+    end;
+
+    // v(2026-08-13): the same guard, over the WHOLE comment/blank run above the
+    // declaration rather than over FindDocRegionAbove's association window.
+    // The guard above is only reachable when a region was ASSOCIATED, and
+    // association tolerates a gap of 1 -- so two blank lines between a facts
+    // block and its declaration made the block invisible and it was inserted
+    // again on every run. See CommentRunStartAbove for the measured case.
+    //
+    // Suppression only. It cannot move or delete a comment, so the
+    // non-destructive argument the guard above makes for itself holds here
+    // unchanged.
+    var RunStart: Integer := CommentRunStartAbove(Src, ASym.StartLine);
+    if (RunStart < ASym.StartLine)
+       and CommentLinesContain(
+             NormalizeCommentLines(ExtractSourceSpan(Src, RunStart, ASym.StartLine - 1)),
              NormalizeCommentLines(Merged)) then
     begin
       Result.Action:= daUnchanged;
