@@ -581,12 +581,15 @@ type
       /// <returns>One finding per swallowing except clause, pinned to the 'except' keyword.</returns>
       /// <remarks>
       /// Severity warning. A handler counts as handling if it contains a raise, an
-      /// identifier/call whose text contains handleexception/showexception/log/report, OR an
+      /// identifier/call whose text contains handleexception/showexception/log/report, a CALL
+      /// whose text carries the exception's own .Message or .ClassName (a sink may be named
+      /// anything, but an exception cannot be reported without being touched), OR an
       /// assignment to the enclosing routine's Result (function only) or one of its var/out
       /// parameters (Task 9c) -- the standard Delphi TryXxx idiom that converts a caught
       /// exception into a status the caller must inspect. Deliberately does NOT extend this to
       /// plain locals: an assignment nothing outside the routine can observe still communicates
-      /// nothing, and stays flagged (see tests/lint/try-except-swallowed.pas's LocalOnly case).
+      /// nothing, and stays flagged (see tests/lint/try-except-swallowed.pas's LocalOnly case) --
+      /// which is why the .Message/.ClassName test is restricted to a call and not an assignment.
       /// try-finally is ignored. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
@@ -4957,6 +4960,22 @@ var
       Lhs:= N.ChildByField('lhs');
       if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier')
          and (AHandled.IndexOf(LowerCase(Trim(NodeStr(Lhs)))) >= 0) then Exit(True);
+      { v(2026-08-13b): writing the exception's own text THROUGH another object --
+        `FResult.Text := '[Format error] ' + E.ClassName + ': ' + E.Message` puts
+        it in a VCL memo on screen -- is reporting, and Task 9c's own test says
+        why: the question is whether anything outside this routine can observe
+        it. A member access reaches an object that outlives the routine, so it
+        can. A bare local cannot, which is why this is keyed on exprDot and the
+        LocalOnly/LocalOnlyFromException cases still fire.
+
+        Deliberately narrower than "any exprDot LHS": the RHS must carry the
+        exception. Assigning an unrelated value to a field is not reporting, and
+        blanket-accepting a field write would gut the rule. }
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'exprDot') then
+      begin
+        T:= LowerCase(NodeStr(N));
+        if (Pos('.message', T) > 0) or (Pos('.classname', T) > 0) then Exit(True);
+      end;
     end;
     if (N.NodeType = 'identifier') or (N.NodeType = 'exprCall') or (N.NodeType = 'exprDot') then
     begin
@@ -4985,6 +5004,27 @@ var
         reported as "silently swallowed" while putting the class AND message on
         screen. }
       if (Pos('messagedlg', T) > 0) or (Pos('messagebox', T) > 0) then Exit(True);
+      { v(2026-08-13b): stop guessing the SINK's name and look at what is being
+        passed instead. The three amendments above (log/report, then writeln,
+        then messagedlg/messagebox) are the same patch three times: each new
+        codebase reports through a routine whose name nobody had listed yet.
+        YADF's idiom is `DoIniStatus('  (save failed: ' + E.Message + ')')` --
+        a UI status line carrying the message, matching none of the substrings,
+        reported as "silently swallowed" on six handlers that visibly show the
+        error.
+
+        A sink can be called anything, but an exception cannot be reported
+        without TOUCHING it. So: a CALL whose text carries the exception's own
+        message or class name is reporting it, whoever it calls.
+
+        Restricted to exprCall on purpose -- that is what keeps Task 9c's line
+        intact. `FLocal := E.Message` is an ASSIGNMENT, not a call, and stays
+        flagged exactly as tests/lint/try-except-swallowed.pas's LocalOnly case
+        requires: handing the text to a local nothing outside the routine can
+        observe still communicates nothing, while handing it to a callee, by
+        definition, hands it somewhere else. }
+      if (N.NodeType = 'exprCall')
+         and ((Pos('.message', T) > 0) or (Pos('.classname', T) > 0)) then Exit(True);
     end;
     for I:= 0 to N.ChildCount - 1 do
       if HandlesException(N.Child(I), AHandled) then Exit(True);

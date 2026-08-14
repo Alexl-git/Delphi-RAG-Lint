@@ -19,3 +19,16 @@ try-except-swallowed 13
 !try-except-swallowed 53
 try-except-swallowed 67
 !try-except-swallowed 84
+# v(2026-08-13b): a CALL carrying the exception's own .Message/.ClassName is
+# reporting, whatever the sink is named (99) -- but handing that same text to a
+# plain LOCAL is still a swallow (116). The pair is the point: 99 alone would
+# also pass a naive "mentions .Message" check, and 116 is what proves the test
+# is on the call and not on the substring.
+!try-except-swallowed 99
+try-except-swallowed 116
+# Same observability test applied to a member access: writing the exception
+# THROUGH an object is reporting (129), writing an unrelated value to a field is
+# still a swallow (142). 142 is the guard -- accepting any exprDot LHS would
+# pass 129 and gut the rule.
+!try-except-swallowed 129
+try-except-swallowed 142
