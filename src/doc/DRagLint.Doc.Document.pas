@@ -220,7 +220,8 @@ implementation
 uses
   System.IOUtils, System.Generics.Collections,
   DRagLint.Doc.Facts, DRagLint.Doc.Regions,
-  DRagLint.Parser.DocComments, DRagLint.Refactor.DocStub;
+  DRagLint.Parser.DocComments, DRagLint.Refactor.DocStub,
+  DRagLint.Doc.SharedFacts;
 
 // Splits S into lines (normalizing CRLF/CR -> LF first), Trims each line, and
 // drops trailing empty lines. Used to compare the current source-comment span
@@ -924,6 +925,25 @@ begin
     Existing.HasSummaryTag or Existing.HasReturnsTag or (Length(Existing.Params) > 0)
     or Existing.HasRemarksTag or Existing.HasContent;
   Merged:= TDocRegions.MergeComment(Existing, SigParams, Facts, HasRet, Prefix, AComplexityMin, ExistingHasAnyTag);
+
+  { v0.95 Task 4: on a unit marked `dl:shared`, the managed block is the UNION of
+    what every project that compiles it can see -- not just what THIS index can.
+
+    MergeComment renders from Facts, and Facts come from one store, so a write
+    from a narrow project replaces the wide project's caller entries with its
+    own. That is what made YADFOT/YADFSetup and YADF rewrite the same blocks past
+    each other: 31 and 34 doc-drift findings against YADF's 0, on the same files.
+    Forgiving the difference in the CHECKER alone does not fix it -- an entry
+    present in FRESH and absent from STORED is still drift, correctly, so the
+    wide project re-adds what the narrow one just deleted and the cycle has no
+    fixed point. The writer has to preserve what it cannot see.
+
+    A no-op on every unmarked unit, so nothing changes for anyone who has not
+    opted in. Placed AFTER MergeComment rather than inside it because the store
+    and the declaring path live here and MergeComment takes neither -- giving it
+    two more parameters to reach one line would put a store dependency through
+    the whole rendering layer. }
+  Merged:= TSharedFacts.MergeInboundFacts(Merged, Existing.Remarks, AStore, Path);
 
   // v(ADP3 T3): MergeComment returns '' when omit-when-empty suppression
   // leaves NOTHING to say (no summary/param/returns content and no facts to

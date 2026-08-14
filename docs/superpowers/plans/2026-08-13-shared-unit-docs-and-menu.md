@@ -495,16 +495,41 @@ Expected: FAIL on the first two checks -- each project reports the other's block
 >    as the owner project's last run, and the menu item must not let a
 >    non-owner write.
 >
-> **Recommendation: option 1.** It is the only one that makes the block true for
-> every project that compiles the unit, which is the case that motivated the
-> feature. It also subsumes the `(+N more)` gap above: a merge does not need
-> sound set-difference semantics, only a union, so a truncated list stops being
-> a correctness hazard and becomes only a display cap.
+> **OWNER RULED 2026-08-13: OPTION 1, the writer merges.** This supersedes the
+> Architecture line's "the writer is unchanged" -- that sentence is now wrong and
+> the merge is the design.
 >
-> **Owner decision required before Step 3.** Both options change what gets
-> written into four real projects' source, and this plan has already had five
-> stated mechanisms die on contact with a built engine -- a sixth invented at
-> the keyboard is not the way to settle it.
+> WHAT THAT MEANS FOR THE TASK. BOTH halves are needed and neither is sufficient
+> alone:
+>
+> * **Checker** (Step 3) forgives a STORED entry missing from FRESH when the unit
+>   is marked, the entry is out-of-closure, and the entry is `certain`. Without
+>   this the narrow project reports the union block as stale forever.
+> * **Writer** (new Step 3b) unions those same out-of-closure stored entries into
+>   what it renders, so a write from ANY project preserves every other project's
+>   entries instead of destroying them. Without this, rule 4 fires on the wide
+>   project the first time the narrow one writes.
+>
+> The block on a marked unit therefore becomes the UNION across every project
+> that compiles it, which is what a reader of a shared unit actually wants.
+>
+> CONSEQUENCE, stated plainly: entries can only accumulate. A caller deleted in
+> ANOTHER project's code is never reaped by this project, because this project
+> cannot see that it is gone -- it looks identical to an out-of-closure entry.
+> Reaping is `check-shared`'s job, which makes that command load-bearing rather
+> than optional. Do not paper over this in the doc comment.
+>
+> It also retires the `(+N more)` gap above as a CORRECTNESS hazard: a union
+> needs no sound set-difference, so a truncated list is only a display cap. The
+> conservative rule still applies to the CHECKER's forgiveness test, which is a
+> set difference.
+>
+> ORDERING. The merged list must have a canonical order or the writer is not
+> idempotent: under A the preserved entry appends after A's own, under B it
+> appends after B's, and the two orders differ, so each project would rewrite the
+> line the other just wrote. Sort the merged inbound entries. This changes byte
+> order ONLY on marked units -- every unmarked unit renders exactly as it does
+> today, so the "do not change that format" constraint above is respected.
 
 - [ ] **Step 3: Implement the structured comparison**
 
@@ -549,6 +574,22 @@ bounded remainder to measure in Step 5, not a silent one.
 Add an assertion for it: `Check 'a truncated inbound list is not forgiven'`.
 Whatever is decided, decide it explicitly -- an unstated answer here writes wrong
 facts into four real projects' source.
+
+**THE `certain` TEST IS ONE-WAY, measured 2026-08-13.** `JoinRefs`
+(`Doc.Regions.pas:2104`) emits the `' ?'` marker ONLY when the list is MIXED --
+"a marker on EVERY entry distinguishes nothing". So in an all-uncertain list not
+one entry carries `?`, and absence of the marker does NOT prove an entry is
+certain. Reading it back off STORED TEXT can therefore only ever be sound in one
+direction. Implement it that way and say so: **an entry carrying `' ?'` is never
+forgiven; the absence of `' ?'` proves nothing and forgiveness rests on the other
+two conditions.** Anything stronger is a claim the rendering cannot support.
+
+**TRUNCATION IS REAL BUT A MINORITY, measured on the shared units:** 6 of 55
+inbound lines carry `(+N more)` (`max_callers` is 5 in the manifest, not the
+default). `YADF.Options.pas` -- 21 of the 31 drift findings -- has ZERO. So the
+conservative rule costs little: a truncated line keeps today's byte compare in
+the checker AND is rendered fresh, unmerged, by the writer. That leaves a small,
+stated remainder of churn instead of an unsound set difference.
 
 Comment the `certain` condition honestly: it is insurance, not the load bearer.
 The junk it guards against (`TestCachedUpdates.dpr`, `dxRibbon`) was measured on

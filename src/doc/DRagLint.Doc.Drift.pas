@@ -155,7 +155,8 @@ implementation
 uses
   System.Diagnostics, { TStopwatch -- FactsBuildTicks, see TDocDrift }
   System.IOUtils,
-  DRagLint.Refactor.DocStub, DRagLint.Doc.Facts, DRagLint.Doc.Regions;
+  DRagLint.Refactor.DocStub, DRagLint.Doc.Facts, DRagLint.Doc.Regions,
+  DRagLint.Doc.SharedFacts;
 
 // ---------------------------------------------------------------------------
 // Small deterministic helpers
@@ -856,9 +857,29 @@ begin
         and (not TDocRegions.IsManagedDesc(ADoc.ReturnsText))
         and (Length(Facts.ReturnCases) > 0);
       var Fresh   : string:= TDocRegions.RenderFactsBlock(Facts, '', IncludeRet);
-      // Whitespace-normalized compare: the parser flattens the stored remarks to
-      // single spaces, so both sides are collapsed the same way before diffing.
-      if CollapseAllWhitespace(CurBlock) <> CollapseAllWhitespace(Fresh) then
+      // v0.95 Task 4: the compare is STILL a whitespace-normalized byte compare
+      // -- TSharedFacts.BlockDrifted degrades to exactly that -- for every
+      // unmarked unit, every truncated list, and every block it cannot parse
+      // confidently. What it adds is one exemption, and only on a unit that has
+      // declared itself `dl:shared`: an INBOUND entry (Called from:/Used by:/
+      // Used in units:) that the source records, this index does not render, and
+      // whose unit is not in this project's closure at all.
+      //
+      // Measured 2026-08-13: YADFOT reported 31 'managed facts block is out of
+      // date' findings and YADFSetup 34, every one on a unit all three projects
+      // compile, while YADF reported 0 on those same files. YADF.Options.
+      // ParseEncoding stored a caller in YadfMain.pas -- a unit YADFOT does not
+      // compile -- so YADFOT called the block stale and the repair deleted the
+      // entry, after which YADF called it stale the other way. Neither index was
+      // wrong; each held its own closure truthfully.
+      //
+      // An entry in FRESH and not in STORED is still drift, unconditionally.
+      // That is what records a genuinely new caller, and it is why the WRITER
+      // has to merge (Doc.Document.BuildForSymbol) rather than the checker
+      // simply forgiving more: forgiveness alone silences the narrow project
+      // while the wide one keeps re-adding what the narrow one dropped.
+      if TSharedFacts.BlockDrifted(CurBlock, Fresh, AStore,
+           AStore.GetFilePath(ASym.FileId)) then
         Findings.Add(MakeFinding(ddFactsBlockStale,
           'managed facts block is out of date', True, DocLine));
     end;

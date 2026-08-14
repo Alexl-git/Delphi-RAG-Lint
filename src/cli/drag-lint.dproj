@@ -148,6 +148,7 @@
         <DCCReference Include="..\doc\DRagLint.Doc.Regions.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.Document.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.Drift.pas"/>
+        <DCCReference Include="..\doc\DRagLint.Doc.SharedFacts.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.Batch.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.Strip.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.Harvest.pas"/>
