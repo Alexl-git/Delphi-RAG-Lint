@@ -15,3 +15,9 @@ object-leak 8
 !object-leak 47
 # P7 CONTROL: the exit is OUTSIDE the try, so nothing frees it -> leak
 object-leak 61
+# v(2026-08-13): an enclosing try..EXCEPT made the inner try..finally invisible,
+# because tryEntry->handler models "the exception fired before the body ran" and
+# so skips the finally. Suppressed on the finally, NOT on the except -- P9 is
+# the control that proves it (same except, no finally, still a leak).
+!object-leak 74
+object-leak 91

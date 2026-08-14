@@ -431,6 +431,97 @@ begin
     if ExprMentionsIdent(N.NamedChild(I), AName, ASrc) then Exit(True);
 end;
 
+{ True when S contains AWhat at an IDENTIFIER BOUNDARY -- 'l.free' must not be
+  found inside 'xl.free'. Cheap left-boundary check; the right side is already
+  pinned by the '.' or '(' the caller appends. }
+function ContainsAtIdentBoundary(const S, AWhat: string): Boolean;
+var P: Integer; Ch: Char;
+begin
+  Result := False;
+  P := Pos(AWhat, S);
+  while P > 0 do
+  begin
+    if P = 1 then Exit(True);
+    Ch := S[P - 1];
+    if not (CharInSet(Ch, ['a'..'z', '0'..'9', '_'])) then Exit(True);
+    P := Pos(AWhat, S, P + 1);   { 3-arg System.Pos -- no StrUtils dependency }
+  end;
+end;
+
+{ True when the routine frees AName inside a `finally` block.
+
+  v(2026-08-13): this suppresses an object-leak FALSE POSITIVE whose cause is a
+  deliberate CFG edge, and it is deliberately a syntactic guard rather than a
+  change to that edge.
+
+  MEASURED shape (probe): a create guarded by `try..finally X.Free` is reported
+  as a leak the moment ANY enclosing `try..except` exists -- and only for
+  except, never for finally:
+
+      A  X := T.Create; try .. finally X.Free end;                  silent  (correct)
+      B  try X := T.Create; try .. finally X.Free end; except .. end  FIRES  (wrong)
+      C  X := T.Create; <never freed>                                FIRES  (correct)
+
+  Cause: `try..except` wires tryEntry -> handler, modelling "the exception fired
+  before the body ran". On that edge the inner finally never executes, so X
+  reaches the exit still open. That edge is NOT a bug -- used-before-assignment
+  depends on exactly the "try body's assignments never ran" state it carries,
+  and the comment on it records that it was tuned twice. Rerouting it through
+  nested finallys would perturb every dataflow rule at once.
+
+  So the fix is scoped to the rule that is wrong: if the routine hands this
+  variable to a `finally`, the standard Delphi ownership idiom is present and
+  the remaining "leak" is the modelling artifact above. Real leaks (case C) have
+  no such finally and still fire.
+
+  Known, accepted narrowness: a variable created on a second path that the
+  finally does not protect is no longer reported. That is the FP-safe direction
+  for an `info` rule already recorded as majority-false
+  (INBOX-group-E-dataflow-rules-are-majority-false.md). }
+function FreedInFinallyBlock(const AProc: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var
+  Found: Boolean;
+  Nm   : string;
+
+  procedure Walk(const N: TTSNode);
+  var I: Integer; C: TTSNode; SeenFinally: Boolean; S: string;
+  begin
+    if Found or N.IsNull then Exit;
+    if N.NodeType = 'try' then
+    begin
+      SeenFinally := False;
+      for I := 0 to N.ChildCount - 1 do
+      begin
+        C := N.Child(I);
+        if C.NodeType = 'kFinally' then SeenFinally := True
+        else if SeenFinally then
+        begin
+          if C.NodeType = 'kEnd' then Break;
+          S := LowerCase(NodeStr(C, ASrc));
+          if ContainsAtIdentBoundary(S, Nm + '.free')
+             or ContainsAtIdentBoundary(S, Nm + '.disposeof')
+             or ContainsAtIdentBoundary(S, 'freeandnil(' + Nm) then
+          begin
+            Found := True;
+            Exit;
+          end;
+        end;
+      end;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do
+    begin
+      Walk(N.NamedChild(I));
+      if Found then Exit;
+    end;
+  end;
+
+begin
+  Found := False;
+  Nm    := LowerCase(Trim(AName));
+  if Nm <> '' then Walk(AProc);
+  Result := Found;
+end;
+
 { The lowercased name of the AArgIdx-th parameter (flattening multi-name declArgs). }
 function ParamNameAtIndex(const ADefProc: TTSNode; AArgIdx: Integer; const ASrc: TBytes): string;
 var Hdr, Args, DA, NameId: TTSNode; I, J, Idx: Integer;
@@ -1044,7 +1135,11 @@ var
             leak, because neither shape can leak by construction. }
           for I := 0 to Vars.Count - 1 do
             if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and EIn2[Cfg.ExitIdx][I]
-               and not TypeIsRefCountedOrValue(Vars.Get(I).TypeText, AStore) then
+               and not TypeIsRefCountedOrValue(Vars.Get(I).TypeText, AStore)
+               { the variable is handed to a `finally` -- see FreedInFinallyBlock:
+                 what remains open at the exit is the try..except modelling edge,
+                 not a missed Free. }
+               and not FreedInFinallyBlock(AProc, Vars.Get(I).Name, PF.Src) then
               Emit('object-leak', 'info',
                 Format('Object "%s" may be leaked: created but not freed or transferred on some path.',
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
