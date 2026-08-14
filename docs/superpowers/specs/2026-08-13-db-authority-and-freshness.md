@@ -194,3 +194,58 @@ on YADFOT, `object-leak`, `used-before-assignment`, `unit-too-large`,
 plus the `unused-public-symbol` set from #1. YADF has real unit coverage
 (`GuardTest.dpr`, `OptionsTest.dpr`), so source fixes there are verifiable;
 YADFOT is a design-time BPL and is compile-only.
+---
+
+## Owner answers, third pass -- and one concern WITHDRAWN
+
+### Concern 2 is WITHDRAWN. It was wrong.
+
+The claim was that an interface implemented by different classes on CLIENT and
+SERVER leaves each DB with a partial picture. It does not. Each project compiles
+the interface AND its own implementation AND its own call sites, so each DB is
+COMPLETE and self-consistent for that project -- and "one implementor" is the
+correct answer for that project, not a missing one. COMMON\OBJECTS interfaces
+used 1000+ times in each of CLIENT and SERVER are fully represented in both.
+
+The only shape that would still bite is a rule advising "this interface has a
+single implementor, consider removing it". No such rule appears in the observed
+findings. Nothing to do.
+
+### DB ROLE, not just DB identity -- the owner's refinement, and it is better
+
+The tension in concern 1 was: dropping cross-project DBs is required to stop
+noise, but it is also what makes shared-unit public API read as dead. The
+resolution is to classify each DB by the ROLE it plays, and let role decide which
+questions it may answer:
+
+| Role | May answer | Must NOT answer |
+|---|---|---|
+| **Library** (`library-<Platform>.sqlite`) | which unit declares X; type resolution | who calls X; used-in-units |
+| **Project** (this project's own) | everything, authoritative | -- |
+| **External / sibling project** (explicitly declared, "extra documentation only") | INCOMING facts only: `Called from:`, `Used by:`, `Used in units:` | declaration lookup, type resolution, any finding |
+
+This is exactly the distinction the 2026-08-13 incident violated: the LIBRARY DB
+was allowed to answer an INCOMING-facts question, which is the one thing it must
+never do, and that is where `dxXMLWriter`/`FireDAC`/`Spring`/`System.JSON`
+came from. Role-scoping fixes that WITHOUT losing cross-project inbound facts --
+so it also addresses `unused-public-symbol` on shared units, because an
+external role DB can supply the missing callers.
+
+**Prerequisite unchanged:** the ungated `Used in units:` bucket
+(`Doc.Facts.pas:1947`) must be gated first. Roles decide WHICH DB may
+contribute; the gate decides whether a name match is evidence at all.
+
+### Concern 3 -- accepted, with a stated budget
+
+Any mismatch between DB and source triggers a COMPLETE reindex. Time it: the
+budget is **under 2 minutes**; consider multi-threading for large projects.
+Note the existing ghost-row problem: only `--rebuild` evicts rows for files
+that left the compile closure, so "complete reindex" must mean rebuild
+semantics, not `--force-reparse` (which parses 9 files while the DB reports 18).
+
+### Concern 4 -- OPEN, owner wants it thought through
+
+Direction: re-address ALL indexing to the in-memory data, so there is one source
+of truth rather than a disk index that the IDE's buffers silently contradict.
+This is an architectural change, not a patch. Do not implement the unsaved-buffer
+refresh until it is designed.
