@@ -59,7 +59,7 @@ type
     /// a clean project, the same reasoning as the empty --project refusal.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)
-    /// Calls: Default, DRagLint.Project.OwnRoots.NormalizeDir, EInvalidCast, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONObject, Trim
+    /// Calls: Default, DRagLint.Project.OwnRoots.NormalizeDir, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONObject, Trim
     /// Returns: Default(TOwnRoots)
     /// Touches: file system
     /// <seealso cref="DRagLint.Project.OwnRoots.NormalizeDir"/>

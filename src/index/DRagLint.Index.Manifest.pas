@@ -224,7 +224,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas) (+9 more)
-      /// Calls: branch, Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, GlobalExclude, SameText, Writeln
+      /// Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, SameText, Writeln
       /// Returns: Default(TIndexManifest); GlobalManifest; LocalManifest
       /// Complexity: 24 (cyclomatic, outer body), 129 lines (full implementation)
       /// Touches: file system
@@ -265,7 +265,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas)
-      /// Calls: Default, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, guard, Include, TJSONArray, TJSONObject
+      /// Calls: Default, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, Include, TJSONArray, TJSONObject
       /// Returns: Default(TIndexManifest)
       /// Complexity: 25 (cyclomatic, outer body), 131 lines (full implementation)
       /// Mutates: ASettingsKeys (out)
@@ -313,7 +313,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas)
-      /// Calls: character, directly, DRagLint.Index.Manifest.TManifestIO.ToJson, exists, first, MoveFileEx, PChar, tooling, write, WriteAllText
+      /// Calls: DRagLint.Index.Manifest.TManifestIO.ToJson, MoveFileEx, PChar
       /// Touches: file system
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ToJson"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
@@ -420,7 +420,7 @@ function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: s
 /// Used by DB selection logic to match resolved DBs back to manifest sections.
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveFolderDb (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas) (+1 more)
-/// Calls: DRagLint.Index.Manifest.SectionProjectFile, ExpandFileName, ExtractFilePath, projects
+/// Calls: DRagLint.Index.Manifest.SectionProjectFile, ExpandFileName, ExtractFilePath
 /// Touches: file system
 /// <seealso cref="DRagLint.Index.Manifest.SectionProjectFile"/>
 /// <!-- drag-lint:auto END -->
@@ -499,7 +499,7 @@ function ResolveFolderDb(const AManifest: TIndexManifest; const AFilePath: strin
 /// Pure: no file system access. Safe to call from any thread.
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas)
-/// Calls: DRagLint.Index.Manifest.ResolveFolderDb, DRagLint.Index.Manifest.ResolveProjectDb, project, SameText
+/// Calls: DRagLint.Index.Manifest.ResolveFolderDb, DRagLint.Index.Manifest.ResolveProjectDb, SameText
 /// Pure
 /// <seealso cref="DRagLint.Index.Manifest.ResolveFolderDb"/>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
@@ -553,7 +553,7 @@ type
 /// Pure apart from AContains. Cost is one probe per candidate (small list).
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas)
-/// Calls: AContains, closures, SameText
+/// Calls: AContains, SameText
 /// Returns: ACandidates; Holders + Others
 /// Complexity: 11 (cyclomatic, outer body), 49 lines (full implementation)
 /// Pure

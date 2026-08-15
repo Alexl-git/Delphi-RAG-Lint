@@ -1067,7 +1067,7 @@ const
 /// the caller controls where it is spliced.
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.FormsMap.FindFormViaHook (DRagLint.FormsMap.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindUnresolvedNameCallers (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetAmbiguousCalls (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)
-/// Calls: QuotedStr, Trim, v
+/// Calls: QuotedStr, Trim
 /// Returns: ARefAlias + '.kind = ' + QuotedStr(REF_KIND_CALL)
 /// Pure
 /// <!-- drag-lint:auto END -->

@@ -37,7 +37,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: ChangeFileExt, constantly, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedSymbolIds (+35 more)
+    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedSymbolIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile (+23 more)
     /// Returns: nil; Findings.ToArray
     /// Complexity: 46 (cyclomatic, outer body), 390 lines (full implementation)
     /// Pure

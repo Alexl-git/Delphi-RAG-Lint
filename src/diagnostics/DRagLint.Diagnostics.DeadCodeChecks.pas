@@ -111,8 +111,6 @@ type
     /// <param name="AMaxChainHops"><!-- drag-lint:auto type -->Integer = 4</param>
     /// <returns>Array of findings (severity 'warning'); empty when the file is
     /// clean or could not be parsed.</returns>
-    /// <exception cref="bug"><!-- drag-lint:auto --></exception>
-    /// <exception cref="wraps"><!-- drag-lint:auto --></exception>
     /// <remarks>
     /// Rules implemented: unused-parameter, identical-then-else,
     /// referenced-never-set, redundant-parentheses, commented-out-code, and
@@ -169,7 +167,7 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: accessor, AClassNode, ALhsNorm, ALower, ArgsHaveNoEncoding, argument, arguments, ATop, base, based (+133 more)
+    /// Calls: ArgsHaveNoEncoding, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses, CollectPrivateFields, Copy, CountBoolOps (+57 more)
     /// Returns: nil; Deduped.ToArray
     /// Complexity: 18 (cyclomatic, outer body), 2167 lines (full implementation)
     /// Pure

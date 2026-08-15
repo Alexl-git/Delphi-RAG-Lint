@@ -227,7 +227,7 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
-/// Calls: below, BuildPropTree, converted, Default, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile, DRagLint.Convert.Apply.BuildApplyPlan.TreeFor, DRagLint.Convert.Apply.FindConstructionSites, DRagLint.Convert.Apply.FindConvertInstances, DRagLint.Convert.Apply.FindDfmInstanceSymbol, DRagLint.Convert.Apply.FindMemberAccessSites (+23 more)
+/// Calls: BuildPropTree, Default, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile, DRagLint.Convert.Apply.BuildApplyPlan.TreeFor, DRagLint.Convert.Apply.FindConstructionSites, DRagLint.Convert.Apply.FindConvertInstances, DRagLint.Convert.Apply.FindDfmInstanceSymbol, DRagLint.Convert.Apply.FindMemberAccessSites, DRagLint.Convert.Apply.LeadingIndent, DRagLint.Convert.Apply.LocateFieldTypeToken (+10 more)
 /// Returns: Default(TApplyResult)
 /// Complexity: 33 (cyclomatic, outer body), 380 lines (full implementation)
 /// Touches: file system

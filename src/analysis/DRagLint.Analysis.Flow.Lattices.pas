@@ -774,10 +774,11 @@ function NodeText(const N: TTSNode; const ASrc: TBytes): string;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectCallArgs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.DetectFreedVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind (DRagLint.Analysis.Flow.Lattices.pas) (+1 more)
-/// Calls: DRagLint.Analysis.Flow.Lattices.FirstIdentChild, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, LowerCase
-/// Complexity: 11 (cyclomatic, outer body), 22 lines (full implementation)
+/// Calls: DRagLint.Analysis.Flow.Lattices.FirstIdentChild, DRagLint.Analysis.Flow.Lattices.FirstOperandChild, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, LowerCase
+/// Complexity: 10 (cyclomatic, outer body), 35 lines (full implementation)
 /// Pure
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.FirstIdentChild"/>
+/// <seealso cref="DRagLint.Analysis.Flow.Lattices.FirstOperandChild"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeStr"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf"/>
 /// <!-- drag-lint:auto END -->
@@ -803,7 +804,7 @@ function LeftmostBaseVar(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVa
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Liveness.ApplyItemBackward (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.CollectInterfaceDerefs.CollectLocalCallDefs (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas) (+2 more)
-/// Calls: access, AIsRecordMethodDef, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk, LeftmostBaseVar, LowerCase, NodeStr, qualifies
+/// Calls: AIsRecordMethodDef, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk, IsAddrOfExpr, LeftmostBaseVar, LowerCase, NodeStr
 /// Pure
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk"/>
 /// <!-- drag-lint:auto END -->
@@ -879,6 +880,35 @@ begin
   Result := Default(TTSNode);
   for I := 0 to N.NamedChildCount - 1 do
     if N.NamedChild(I).NodeType = 'identifier' then Exit(N.NamedChild(I));
+end;
+
+{ True for a grammar KEYWORD/OPERATOR node -- kAt, kIf, kThen, kElse, kOf, kEnd.
+  These are NAMED children in tree-sitter-delphi13, so "the first named child" is
+  frequently the operator rather than the operand. That trap is already recorded
+  twice in this tree (the `case` arm in DRagLint.Analysis.Cfg names it in as many
+  words, and the dangling-else `exprIf` fix hit it again); this is the third. }
+function IsKeywordNode(const N: TTSNode): Boolean;
+var T: string;
+begin
+  T := N.NodeType;
+  Result := (Length(T) >= 2) and (T[1] = 'k') and CharInSet(T[2], ['A'..'Z']);
+end;
+
+{ The first named child that is an OPERAND rather than an operator. }
+function FirstOperandChild(const N: TTSNode): TTSNode;
+var I: Integer;
+begin
+  Result := Default(TTSNode);
+  for I := 0 to N.NamedChildCount - 1 do
+    if not IsKeywordNode(N.NamedChild(I)) then Exit(N.NamedChild(I));
+end;
+
+{ True for an address-of expression: `@X`, `@Buf[0]`, `@Rec.Field`. Shape verified
+  with tools\dumpnode -- exprUnary whose first named child is the kAt operator. }
+function IsAddrOfExpr(const N: TTSNode): Boolean;
+begin
+  Result := (not N.IsNull) and (N.NodeType = 'exprUnary')
+            and (N.NamedChildCount > 0) and (N.NamedChild(0).NodeType = 'kAt');
 end;
 
 { ----- TRoutineVarTable ----- }
@@ -1109,7 +1139,20 @@ begin
     end;
     Nxt := Cur.ChildByField('lhs');
     if Nxt.IsNull then Nxt := Cur.ChildByField('entity');
-    if Nxt.IsNull and (Cur.NamedChildCount > 0) then Nxt := Cur.NamedChild(0);
+    { FirstOperandChild, not NamedChild(0). `@Buf[0]` parses as
+      exprUnary(kAt, exprSubscript) -- verified with tools\dumpnode -- and the
+      operator is a NAMED child, so NamedChild(0) was kAt, which has no
+      identifier beneath it, so this returned -1 and the address-of was not
+      treated as a possible def of Buf at all. CollectReadsAndCallDefs then fell
+      through to its read walk and recorded Buf as a READ.
+
+      That inverted the meaning of the line: `Reader.GetText(Pos, @Chunk[0], N)`
+      FILLS the buffer, and used-before-assignment reported it as a use before
+      assignment (YADFOT.Wizard.pas:243 and :247, where 243 is the fill call, so
+      a dl:ok there would have recorded something untrue). Note this function's
+      own doc-comment already claimed `@x` was treated as a possible def -- the
+      intent was right and only the descent was wrong. }
+    if Nxt.IsNull then Nxt := FirstOperandChild(Cur);
     if Nxt.IsNull then Exit(-1);
     Cur := Nxt;
   end;
@@ -1171,7 +1214,33 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
           Idx := LeftmostBaseVar(Arg, ASrc, AVars);
           if (Idx >= 0) and (ACallDefs.IndexOf(Idx) < 0) then ACallDefs.Add(Idx);
           { still walk non-identifier args for reads of OTHER vars (indices etc.) }
-          if Arg.NodeType <> 'identifier' then Walk(Arg, False);
+          if Arg.NodeType <> 'identifier' then
+          begin
+            { `@X` is a WRITE of X, so the base must not come back out of that
+              walk as a read. The walk still has to happen -- an index expression
+              (`@Buf[Ofs]`) can read other variables -- so the base's read is
+              removed afterwards, and ONLY when this walk is what introduced it,
+              so an earlier genuine read of X in the same item survives.
+
+              Without this, fixing LeftmostBaseVar was not enough: the CallDef was
+              recorded correctly and then the very next line put the same variable
+              in AReads, and FlowChecks tests reads against the state BEFORE the
+              item's own CallDefs are applied. So `GetModuleFileNameA(0, @Buf[0],
+              Length(Buf))` still reported Buf as used-before-assignment on the
+              line that fills it.
+
+              Scoped to address-of deliberately. Dropping every read that is also
+              a CallDef would silence the genuine case too -- `Writeln(Arr[0])`
+              with Arr never assigned adds Arr to BOTH lists, and that one must
+              keep firing. }
+            var BaseWasRead: Boolean := (Idx >= 0) and (AReads.IndexOf(Idx) >= 0);
+            Walk(Arg, False);
+            if (Idx >= 0) and (not BaseWasRead) and IsAddrOfExpr(Arg) then
+            begin
+              var RP: Integer := AReads.IndexOf(Idx);
+              if RP >= 0 then AReads.Delete(RP);
+            end;
+          end;
         end;
       Walk(N.ChildByField('entity'), False);
       Exit;

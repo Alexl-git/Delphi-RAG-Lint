@@ -47,7 +47,7 @@ type
   /// default.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), declaration (DRagLint.Lint.ClassMetrics.pas) (+3 more)
+  /// Used by: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) (+4 more)
   /// Used in units: DRagLint.CLI, DRagLint.Lint.ClassMetrics, DRagLint.Lint.Config, DRagLint.LSP.Completion
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -116,7 +116,7 @@ type
     /// <param name="AReplace"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef, unchanged
+    /// Calls: DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef
     /// Complexity: 17 (cyclomatic, outer body), 68 lines (full implementation)
     /// Reads: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues   Writes: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyNamingObject"/>
@@ -236,7 +236,7 @@ type
     /// suppression, because vendored code is not this codebase's quality
     /// signal for ANY rule.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
+    /// Called from: DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
     /// Calls: LowerCase, MatchesMask, StringReplace
     /// Returns: False; True
     /// Reads: FExcludePaths

@@ -256,7 +256,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.OpenFileTx (DRagLint.Storage.SQLite.pas)
-      /// Calls: DRagLint.Storage.SQLite.IsTypeDeclaringKind, having, LowerCase
+      /// Calls: DRagLint.Storage.SQLite.IsTypeDeclaringKind, LowerCase
       /// Reads: FScopeWhole, FScopeFiles, FScopeMaxFiles, FScopeNames, FScopeTypesBefore, FScopeTypesAfter, FConn   Writes: FScopeMaxFiles, FScopeWhole
       /// SQL: reads SYMBOLS
       /// <seealso cref="DRagLint.Storage.SQLite.IsTypeDeclaringKind"/>
@@ -272,7 +272,6 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas)
-      /// Calls: connection, fails, maintenance, read, ReadOnly
       /// Reads: FConn   Writes: FConn
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths"/>
@@ -285,7 +284,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate (DRagLint.Storage.SQLite.pas)
-      /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements.NewQuery, unreferenced
+      /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements.NewQuery
       /// Reads: FStatementsPrepared, FQUpsertSymbolDoc, FQPutSymbolFacts, FQInsertCompilerFinding, FQInsertUnitUse, FQDeleteFileUnitUses, FQGetFileUnitUses, FQFindUsersOfUnit   Writes: FQUpsertFile, FQInsertFile, FQInsertSymbol, FQInsertTrigram, FQInsertRef, FQInsertCallEdge, FQDeleteFileSymbols, FQDeleteFileRefs (+33 more)
       /// SQL: reads COMPILER_FINDINGS, FILES, REFS, SYMBOL_DOCS, SYMBOL_FACTS, SYMBOLS, UNIT_USES; writes CALL_EDGES, COMPILER_FINDINGS, DI_BINDINGS, FILES, REFS, STRING_LITERALS, SYMBOL_DOCS, SYMBOL_FACTS (+3 more)
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements.NewQuery"/>
@@ -309,7 +308,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate (DRagLint.Storage.SQLite.pas)
-      /// Calls: DRagLint.Storage.SQLite.NormalizeStoredPath, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths.Beats, DRagLint.Storage.SQLite.TSQLiteSymbolStore.DeleteStringLiteralsForFile, Format, LowerCase, sweeps, Writeln
+      /// Calls: DRagLint.Storage.SQLite.NormalizeStoredPath, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths.Beats, DRagLint.Storage.SQLite.TSQLiteSymbolStore.DeleteStringLiteralsForFile, Format, LowerCase, Writeln
       /// Complexity: 19 (cyclomatic, outer body), 116 lines (full implementation)
       /// Reads: FReadOnly, FConn
       /// SQL: reads FILES; writes FILES
@@ -358,7 +357,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByQualifiedName (DRagLint.Storage.SQLite.pas)
-      /// Calls: constantly, Writeln
+      /// Calls: Writeln
       /// Reads: FNocaseWarned, FConn   Writes: FNocaseWarned
       /// SQL: reads SQLITE_MASTER
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
@@ -372,7 +371,6 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas)
-      /// Calls: trigrams
       /// Reads: FReadOnly, FConn
       /// SQL: reads SYMBOLS; writes SYMBOL_TRIGRAMS
       /// Transaction: starts, commits, rolls back
@@ -430,7 +428,7 @@ type
       /// pre-current schema. Not thread-safe; single owning thread only.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+40 more)
-      /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, Migrate, path, SearchText
+      /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements
       /// constructor
       /// Reads: FReadOnly   Writes: FReadOnly, FLateAncCache, FAnchorCache, FDerivingAnchor, FScopeFiles, FScopeNames, FScopeTypesBefore, FScopeTypesAfter (+3 more)
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect"/>
@@ -457,7 +455,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas), DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas)
-      /// Calls: busy_timeout, callers, Create, declaration, DeleteStringLiteralsForFile, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropTriggerVerbose, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.PrintTriggerCount, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.TryExec, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements (+18 more)
+      /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropTriggerVerbose, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.PrintTriggerCount, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.TryExec, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, IntToStr, LowerCase, Pos, Writeln
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.Migrate
       /// Reads: FConn, FFts5Available   Writes: FFts5Available
       /// SQL: writes SCHEMA_META
@@ -560,7 +558,7 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DateTimeToUnix, DRagLint.Storage.SQLite.NormalizeStoredPath, DRagLint.Storage.SQLite.TSQLiteSymbolStore.NoteScopeRemoval, yet
+      /// Calls: DateTimeToUnix, DRagLint.Storage.SQLite.NormalizeStoredPath, DRagLint.Storage.SQLite.TSQLiteSymbolStore.NoteScopeRemoval
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.OpenFileTx
       /// Reads: FConn, FQUpsertFile, FQInsertFile, FQDeleteFileRefs, FQDeleteFileDiBindings, FQDeleteFileSymbols
       /// SQL: reads FILES
@@ -816,7 +814,7 @@ type
       /// an interface-typed caller and a class-typed caller would silently get different behaviour.
       /// Every caller goes through ISymbolStore, so omitting it here costs nothing.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Core.Model.CallSiteRefKindSql, entirely, ExtractFileName, itself, NULL, pattern, receiver, surfaces, target_file_id, Trim
+      /// Calls: Default, DRagLint.Core.Model.CallSiteRefKindSql, ExtractFileName, Trim
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers
       /// Reads: FConn
       /// Pure
@@ -863,7 +861,6 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: Q.FieldByName('n').AsLargeInt.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: ExecSQL, NULLed, TARGETS, TYPES
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.PurgeLocals
       /// Reads: FConn
       /// SQL: reads SYMBOLS; writes SYMBOLS
@@ -894,7 +891,6 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: rows
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges
       /// Reads: FConn
       /// SQL: reads UNIT_USES
@@ -909,7 +905,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, routines
+      /// Calls: Default
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.GetUnitLevelRoutines
       /// Reads: FConn
       /// SQL: reads SYMBOLS
@@ -941,7 +937,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: all, Default, DRagLint.Core.Model.CallSiteRefKindSql, ExtractFileName, file, index, Migrate, name, ref, symbols, table, TWO, v
+      /// Calls: Default, DRagLint.Core.Model.CallSiteRefKindSql, ExtractFileName
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.GetAmbiguousCalls
       /// Reads: FConn
       /// Pure
@@ -1109,7 +1105,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolByExactNameAnywhere (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeCategoryDepth (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeSymbolId (DRagLint.Storage.SQLite.pas), DRagLint.CLI.DoUsesAudit.UnitsDefining (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFixSweep.UnitsDefining (DRagLint.CLI.pas) (+2 more)
-      /// Calls: DRagLint.Storage.SQLite.ReadSymbolFromQuery, DRagLint.Storage.SQLite.TSQLiteSymbolStore.WarnIfNocaseIndexMissing, store
+      /// Calls: DRagLint.Storage.SQLite.ReadSymbolFromQuery, DRagLint.Storage.SQLite.TSQLiteSymbolStore.WarnIfNocaseIndexMissing
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName
       /// Reads: FQFindByName, FQFindByNameCI
       /// Pure
@@ -1175,7 +1171,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindCallersByNameWithContext (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindEventHandlersForForm (DRagLint.Storage.SQLite.pas)
-      /// Calls: Default, refs
+      /// Calls: Default
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName
       /// Reads: FConn
       /// SQL: reads REFS
@@ -1224,7 +1220,7 @@ type
       /// ProbeExists('SELECT 1 FROM files WHERE path LIKE ''%Test%'' LIMIT 1').</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: backed, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ProbeExists
+      /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ProbeExists
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers
       /// Reads: FTestMarkersKnown, FTestMarkersValue   Writes: FTestMarkersValue, FTestMarkersKnown
       /// SQL: reads FILES, TYPE_ANCESTORS
@@ -1480,7 +1476,7 @@ type
       function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: CANDIDATE, ChangeFileExt, Copy, dialects, DRagLint.Core.Model.IsGuiFrameworkPrefix, DRagLint.Core.Model.UnitFrameworkPrefix, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, every, ExtractFileExt (+15 more)
+      /// Calls: ChangeFileExt, Copy, DRagLint.Core.Model.IsGuiFrameworkPrefix, DRagLint.Core.Model.UnitFrameworkPrefix, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, ExtractFileExt, Format, LastDelimiter, LowerCase, Pos
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveUnitUseTargets
       /// Complexity: 18 (cyclomatic, outer body), 270 lines (full implementation)
       /// Reads: FConn
@@ -1498,7 +1494,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto -->v11 (M1): type &amp; hierarchy resolution (see ISymbolStore).
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: declines, Default, DRagLint.Storage.SQLite.NormalizeAncestorName, DRagLint.Storage.SQLite.PickAncestorCandidateByScope, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.SplitHeritageList, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveAncestry.NoteScopeName, Format, FrameworkAnchorForFile (+6 more)
+      /// Calls: Default, DRagLint.Storage.SQLite.NormalizeAncestorName, DRagLint.Storage.SQLite.PickAncestorCandidateByScope, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.SplitHeritageList, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveAncestry.NoteScopeName, Format, LowerCase
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveAncestry
       /// Complexity: 23 (cyclomatic, outer body), 242 lines (full implementation)
       /// Reads: FAnchorCache, FConn
@@ -1517,7 +1513,7 @@ type
       /// cross-unit via the in-scope uses graph). Run after ResolveAncestry.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Storage.SQLite.NormalizeAncestorName, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.SplitHeritageList, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveHelpers.CandInScope, Format, LowerCase, targets, text, type
+      /// Calls: Default, DRagLint.Storage.SQLite.NormalizeAncestorName, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.SplitHeritageList, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveHelpers.CandInScope, Format, LowerCase
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveHelpers
       /// Complexity: 16 (cyclomatic, outer body), 157 lines (full implementation)
       /// Reads: FConn
@@ -1536,7 +1532,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto -->v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: closes, Default, DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Index.CallResolver.TCallResolver.Create, DRagLint.Index.CallResolver.TCallResolver.ResolveOne, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertCallEdge, Format, GetEnvironmentVariable (+8 more)
+      /// Calls: Default, DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Index.CallResolver.TCallResolver.Create, DRagLint.Index.CallResolver.TCallResolver.ResolveOne, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertCallEdge, Format, GetEnvironmentVariable, SameText
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveCallTargets
       /// Complexity: 22 (cyclomatic, outer body), 273 lines (full implementation)
       /// Reads: FConn, FScopeFiles
@@ -1571,7 +1567,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetVirtualMethodsIncludingAncestors (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ImplementsInterface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsDescendantOf (DRagLint.Storage.SQLite.pas)
-      /// Calls: attempt, Default, disambiguate, DRagLint.Core.Model.CrossesGuiFramework, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolById, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass, IntToStr, LowerCase, Trim
+      /// Calls: Default, DRagLint.Core.Model.CrossesGuiFramework, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolById, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass, IntToStr, LowerCase, Trim
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors
       /// Complexity: 18 (cyclomatic, outer body), 140 lines (full implementation)
       /// Reads: FConn, FLateAncCache
@@ -1605,7 +1601,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: List.ToStringArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: class, edges, Trim
+      /// Calls: Trim
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames
       /// Reads: FConn
       /// Pure
@@ -1705,7 +1701,7 @@ type
       /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DRagLint.Storage.SQLite.ReadHelperEdges, target_symbol_id
+      /// Calls: DRagLint.Storage.SQLite.ReadHelperEdges
       /// Implements: DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol
       /// Reads: FConn
       /// SQL: reads SYMBOLS, TYPE_HELPERS
@@ -2277,7 +2273,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByFile (DRagLint.Storage.SQLite.pas)
-      /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindFileIdByPath, exact, outright, SameText
+      /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindFileIdByPath, SameText
       /// Complexity: 11 (cyclomatic, outer body), 65 lines (full implementation)
       /// Reads: FConn
       /// SQL: reads FILES

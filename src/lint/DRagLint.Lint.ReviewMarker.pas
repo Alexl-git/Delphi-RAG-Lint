@@ -61,14 +61,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse (DRagLint.Lint.ReviewMarker.pas)
-    /// Calls: Pos
     /// Complexity: 20 (cyclomatic, outer body), 47 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function LineCommentStart(const ALineText: string): Integer; static;
@@ -87,7 +86,7 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure SplitReason(const AText: string; out ARules, AReason: string); static;
@@ -104,11 +103,56 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RuleToken(const ARuleId, AHash: string): string; static;
   public
+    /// <summary>For each line of a whole file, whether a `dl:ok` on that line
+    /// could be a REAL marker rather than prose ABOUT one.</summary>
+    /// <param name="ALines">Every line of the file, in order, without terminators.</param>
+    /// <returns>One flag per input line, same indexing (0-based array, so line N
+    /// is Result[N - 1]).</returns>
+    /// <remarks>
+    /// WHY A WHOLE-FILE PASS AND NOT A PER-LINE TEST. LineCommentStart above
+    /// already skips string literals and block comments that open AND close on
+    /// the one line it is given, but a single line cannot know that a `{` on an
+    /// EARLIER line is still open. `review-marker-unused` walks every line of
+    /// every scanned file looking for the tag, so it hit exactly that: two
+    /// findings on the unit that DEFINES the marker syntax, neither line
+    /// carrying a marker --
+    /// * a line inside this unit's own `{ }` header block whose text reads
+    /// like code plus a trailing marker, and is entirely commented out;
+    /// * a `///` doc-comment line quoting the marker grammar as an example.
+    /// The rule said a marker "no longer matches any finding" on lines that
+    /// never had one, and advised removing documentation.
+    /// "IGNORE MARKERS IN COMMENTS" IS NOT THE TEST -- a real marker is ALWAYS
+    /// in a comment. The discriminator is WHICH comment: a `//` reached in code
+    /// state can carry one; a `{ }` or `(* *)` block cannot, and neither can a
+    /// `///` doc comment.
+    /// DELIBERATELY NOT CHECKED: whether code precedes the `//`. A real marker
+    /// always trails code, so requiring it would be MORE correct -- and would
+    /// also stop reporting a stranded own-line marker as unused, which is a
+    /// behaviour change neither reported case needs. Both come out right on
+    /// block state and `///` alone, so that is all this does.
+    /// SCOPE, and why this is safe: consumed ONLY by the unused-marker
+    /// reporter, never by the suppression path. Suppression is decided against
+    /// a line that already carries a finding, so this cannot cause a real
+    /// `dl:ok` to stop suppressing -- the failure mode that would return every
+    /// suppressed finding across every project at once with no signal as to
+    /// why. Gating suppression too is a separate, measured change.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)
+    /// Complexity: 20 (cyclomatic, outer body), 76 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function MarkerBearingLines(const ALines: TArray<string>): TArray<Boolean>; static;
     /// <summary>The line reduced to its code tokens: comments removed,
     /// whitespace dropped, identifiers lowercased, string-literal content kept
     /// verbatim and case-sensitive. Compiler directives (`{$...}`, `(*$...*)`)
@@ -127,7 +171,7 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function NormalizeLine(const ALineText: string): string; static;
@@ -147,7 +191,7 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function HashLine(const ALineText: string): string; static;
@@ -185,7 +229,7 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FormatMarker(const ARuleId, ALineText, AReason: string): string; static;
@@ -362,6 +406,84 @@ end;
 { ---------------------------------------------------------------------------
   Parsing
   --------------------------------------------------------------------------- }
+
+class function TReviewMarkers.MarkerBearingLines(const ALines: TArray<string>): TArray<Boolean>;
+var
+  LI, I, Len : Integer;
+  { Named in prose, not shown: a closing brace inside a braced comment ends it
+    early. That is the same trap DRagLint.Lint.SharedUnit's header records
+    paying for, and writing these two comments the obvious way cost a build
+    here too. }
+  InBrace    : Boolean; { brace comment     -- spans lines }
+  InParen    : Boolean; { star-paren comment -- spans lines }
+  Line       : string ;
+  CanBear    : Boolean;
+begin
+  SetLength(Result, Length(ALines));
+  { Block-comment state is the whole point: it is carried ACROSS lines. String
+    and `//` state are not -- neither can span a line in Object Pascal -- so both
+    are re-initialised per line below. }
+  InBrace:= False;
+  InParen:= False;
+  for LI:= 0 to High(ALines) do
+  begin
+    Line   := ALines[LI];
+    Len    := Length(Line);
+    CanBear:= False;
+    I      := 1;
+    while I <= Len do
+    begin
+      if InBrace then
+      begin
+        if Line[I] = '}' then InBrace:= False;
+        Inc(I);
+        Continue;
+      end;
+      if InParen then
+      begin
+        if (Line[I] = '*') and (I < Len) and (Line[I + 1] = ')') then
+        begin
+          InParen:= False;
+          Inc(I, 2);
+          Continue;
+        end;
+        Inc(I);
+        Continue;
+      end;
+      { A string literal, so a `//` or `{` inside one opens nothing. A doubled
+        quote just re-opens the literal on the next pass -- same net state. }
+      if Line[I] = '''' then
+      begin
+        Inc(I);
+        while I <= Len do
+        begin
+          if Line[I] = '''' then begin Inc(I); Break; end;
+          Inc(I);
+        end;
+        Continue;
+      end;
+      if Line[I] = '{' then begin InBrace:= True; Inc(I); Continue; end;
+      if (Line[I] = '(') and (I < Len) and (Line[I + 1] = '*') then
+      begin
+        InParen:= True;
+        Inc(I, 2);
+        Continue;
+      end;
+      if (Line[I] = '/') and (I < Len) and (Line[I + 1] = '/') then
+      begin
+        { `///` is a DocInsight doc comment -- prose, and the home of the quoted
+          grammar example that produced one of the two false positives. A `//`
+          reached here is in code state and can carry a real marker. Either way
+          the rest of the line is comment, so block state cannot change again and
+          the line is done. }
+        CanBear:= not ((I + 2 <= Len) and (Line[I + 2] = '/'));
+        Break;
+      end;
+      Inc(I);
+    end; // while
+    Result[LI]:= CanBear;
+  end; // for
+end;
 
 class function TReviewMarkers.LineCommentStart(const ALineText: string): Integer;
 var

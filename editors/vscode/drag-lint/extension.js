@@ -16,6 +16,11 @@ const { LanguageClient, TransportKind, CloseAction, ErrorAction } = require('vsc
 const fs = require('fs');
 
 let client;
+// Held so a restart can dispose the previous one. The LanguageClient does NOT
+// take ownership of a watcher handed to it via synchronize.fileEvents, so
+// building a fresh client per restart -- which is what the restart command does
+// -- would otherwise leak one file-system watcher per invocation.
+let manifestWatcher;
 
 // Redeploying the engine REPLACES THE FILE A RUNNING SERVER IS EXECUTING FROM.
 // dragLint.serverPath deliberately points at the same deployed binary the
@@ -87,15 +92,19 @@ function makeClient(exe) {
     debug: { command: exe, args, transport: TransportKind.stdio }
   };
 
+  if (manifestWatcher) {
+    manifestWatcher.dispose();
+    manifestWatcher = undefined;
+  }
+  // The index is rebuilt out-of-band; watching the manifest means a reindex that
+  // adds a section does not require reloading the window.
+  manifestWatcher = workspace.createFileSystemWatcher('**/drag-lint.json');
+
   const clientOptions = {
     documentSelector: [{ scheme: 'file', language: 'pascal' }],
     outputChannelName: 'drag-lint',
     errorHandler: makeErrorHandler(),
-    synchronize: {
-      // The index is rebuilt out-of-band; watching the manifest means a
-      // reindex that adds a section does not require reloading the window.
-      fileEvents: workspace.createFileSystemWatcher('**/drag-lint.json')
-    }
+    synchronize: { fileEvents: manifestWatcher }
   };
 
   return new LanguageClient('dragLint', 'drag-lint', serverOptions, clientOptions);
@@ -148,10 +157,19 @@ function activate(context) {
 
   client = makeClient(exe);
   client.start();
-  context.subscriptions.push({ dispose: () => client && client.stop() });
+  context.subscriptions.push({
+    dispose: () => {
+      if (manifestWatcher) manifestWatcher.dispose();
+      return client && client.stop();
+    }
+  });
 }
 
 function deactivate() {
+  if (manifestWatcher) {
+    manifestWatcher.dispose();
+    manifestWatcher = undefined;
+  }
   return client ? client.stop() : undefined;
 }
 

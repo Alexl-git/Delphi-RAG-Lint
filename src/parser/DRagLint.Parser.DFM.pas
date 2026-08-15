@@ -118,7 +118,7 @@ external 'tree-sitter-dfm';
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas)
-/// Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, given, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
+/// Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
 /// Pure
 /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
 /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>

@@ -83,7 +83,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: L.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: code, codebase, DRagLint.Lint.RuleCatalog.MkParam, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B, IntToStr, scan, untouched
+    /// Calls: DRagLint.Lint.RuleCatalog.MkParam, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B, IntToStr
     /// Pure
     /// <seealso cref="DRagLint.Lint.RuleCatalog.MkParam"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B"/>

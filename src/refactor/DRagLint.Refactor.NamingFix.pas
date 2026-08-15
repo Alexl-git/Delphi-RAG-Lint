@@ -123,7 +123,7 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// DROPPED and counted in ASkippedCount -- never written.
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
-/// Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf, DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.LocalNameCollides, DRagLint.Refactor.NamingFix.ReadIdentifierAt, DRagLint.Refactor.NamingFix.ResolveSymbolAt, DRagLint.Refactor.NamingFix.StyleFromConfigText, DRagLint.Refactor.NamingFix.SynthesizeCasedName, DRagLint.Refactor.NamingFix.SynthesizePrefixedName (+15 more)
+/// Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf, DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.LocalNameCollides, DRagLint.Refactor.NamingFix.ReadIdentifierAt, DRagLint.Refactor.NamingFix.ResolveSymbolAt, DRagLint.Refactor.NamingFix.StyleFromConfigText, DRagLint.Refactor.NamingFix.SynthesizeCasedName, DRagLint.Refactor.NamingFix.SynthesizePrefixedName (+8 more)
 /// Returns: nil; Edits.ToArray
 /// Complexity: 28 (cyclomatic, outer body), 222 lines (full implementation)
 /// Mutates: AFixCount (out), ASkippedCount (out)

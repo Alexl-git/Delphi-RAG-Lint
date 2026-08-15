@@ -481,7 +481,7 @@ type
   /// contribute separators. Pure over ALines.
   /// <!-- drag-lint:auto BEGIN -->
   /// Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)
-  /// Calls: DRagLint.Index.CallResolver.IsIdentPart, M
+  /// Calls: DRagLint.Index.CallResolver.IsIdentPart
   /// Returns: 0; Commas + 1
   /// Complexity: 57 (cyclomatic, outer body), 152 lines (full implementation)
   /// Mutates: AKnown (out)
@@ -502,7 +502,7 @@ type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// Called from: DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas), DRagLint.Index.CallResolver.TCallResolver.PickFromMatches (DRagLint.Index.CallResolver.pas)
-  /// Calls: Copy, parens, Pos, SplitString, StartsText, Trim
+  /// Calls: Copy, Pos, SplitString, StartsText, Trim
   /// Returns: False; True
   /// Complexity: 25 (cyclomatic, outer body), 103 lines (full implementation)
   /// Mutates: AMin (out), AMax (out)

@@ -37,7 +37,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: access, ALSO, alternatives, AssignmentBaseIndex, AssignmentTargetIndex, bail, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy (+40 more)
+    /// Calls: AssignmentBaseIndex, AssignmentTargetIndex, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy, Default, DetectFreedVarKind, DRagLint.Analysis.Cfg.CfgFindProcs, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName (+21 more)
     /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); Findings.ToArray
     /// Complexity: 21 (cyclomatic, outer body), 631 lines (full implementation)
     /// Touches: file system

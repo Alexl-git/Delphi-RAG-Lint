@@ -229,7 +229,7 @@ type
       /// now one, and this unit reads it through its existing DRagLint.Core.Model dependency.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)
-      /// Calls: alphabetically, cap, component, Copy, DB, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Hover.Returns.MineReturnExpressions (+18 more)
+      /// Calls: Copy, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Hover.Returns.MineReturnExpressions, DRagLint.LSP.Server.DeclLineFor, DRagLint.LSP.Server.DedupAndPreferSource, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (+6 more)
       /// Complexity: 54 (cyclomatic, outer body), 315 lines (full implementation)
       /// Reads: FStores
       /// Touches: file system
@@ -331,7 +331,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleWorkspaceSymbol (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2 (DRagLint.LSP.Server.pas)
-      /// Calls: DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, FStore
+      /// Calls: DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2
       /// Overload 2 of 2
       /// Reads: FStore
       /// Recursive

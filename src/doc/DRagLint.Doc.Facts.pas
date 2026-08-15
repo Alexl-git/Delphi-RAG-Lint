@@ -426,8 +426,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
-    /// Calls: all, ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+33 more)
-    /// Complexity: 77 (cyclomatic, outer body), 893 lines (full implementation)
+    /// Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+32 more)
+    /// Complexity: 77 (cyclomatic, outer body), 899 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -792,12 +792,60 @@ end;
 // target, which is the same reason the other fourteen are here; these four were
 // simply never added because nothing in the corpora that built this list had an
 // anonymous method in it.
+type
+  { Comment state the body scanners carry BETWEEN lines.
+
+    Both scanners below used to declare their brace depth as a LOCAL, reset to
+    zero on every line, so a block comment opened on an EARLIER line was
+    invisible and its prose was read as code. Since the call scan matches
+    "Identifier" followed by an open paren, ordinary English does match it: a
+    comment reading "the defect (2026-08-14) was ..." yields a callee named
+    `defect`, and ", so (in this case) ..." yields `so`. Measured 150 such
+    entries across this repo's own committed documentation -- `constantly`,
+    `unreferenced`, `untouched`, `until`, `yet` -- and that count is a FLOOR,
+    since it only counted all-lowercase single tokens.
+
+    Worse than noise: the block then ASSERTS A CALL THAT DOES NOT EXIST, the
+    class this repo treats as more serious than an absent fact (the reason
+    doc-param-not-in-signature was split out and raised to error). And it is
+    self-reinforcing, because the rendered fact becomes prose the next
+    extraction reads -- `defect` was harvested from a comment written in the
+    same session by the pass that rendered it.
+
+    Star-paren comments were not handled at all, on any line.
+
+    Third unit to hit "a text scan cannot tell code from comment"; see
+    DRagLint.Lint.SharedUnit's header, which argues it at length for dl:shared. }
+  TBodyScanState = record
+    InBrace    : Integer; { brace-comment depth }
+    InStarParen: Boolean; { star-paren comment  }
+  end;
+
 function IsCallSkipWord(const AWord: string): Boolean;
 const
-  SKIP: array[0..17] of string = (
-    'if', 'while', 'for', 'case', 'with', 'and', 'or', 'not', 'in',
-    'array', 'set', 'string', 'to', 'downto',
-    'function', 'procedure', 'constructor', 'destructor');
+  { RESERVED WORDS ONLY. A reserved word cannot name a routine in Object Pascal,
+    so skipping one can never hide a real callee -- which is why this list may be
+    exhaustive while IsCompilerIntrinsic must stay deliberately narrow (Copy,
+    Insert and Delete are absent from THAT list precisely because a project may
+    define them). DIRECTIVES are therefore excluded here too: `name`, `index`,
+    `read`, `write`, `message`, `out` and friends are legal identifiers.
+
+    The list was 18 entries and the tail was missing, which showed up in the
+    corpus sweep for comment-harvested callees: after the comment-state fix took
+    that count from 150 to 1, the single survivor was `until` -- from a real
+    `repeat ... until (cond)` in code, where `until (` matches the
+    "Identifier followed by an open paren" call shape exactly. Every reserved
+    word that can precede a parenthesis has the same problem. }
+  SKIP: array[0..62] of string = (
+    'and', 'array', 'as', 'asm', 'begin', 'case', 'class', 'const',
+    'constructor', 'destructor', 'dispinterface', 'div', 'do', 'downto',
+    'else', 'end', 'except', 'exports', 'file', 'finalization', 'finally',
+    'for', 'function', 'goto', 'if', 'implementation', 'in', 'inherited',
+    'initialization', 'inline', 'interface', 'is', 'label', 'library', 'mod',
+    'nil', 'not', 'object', 'of', 'or', 'packed', 'procedure', 'program',
+    'raise', 'record', 'repeat', 'resourcestring', 'set', 'shl', 'shr',
+    'string', 'then', 'threadvar', 'to', 'try', 'type', 'unit', 'until',
+    'uses', 'var', 'while', 'with', 'xor');
 var W: string;
 begin
   W:= LowerCase(AWord);
@@ -825,24 +873,39 @@ end;
 // { } brace-comment depth. LIMITATION: a { } comment that OPENS on an earlier
 // line is not seen here (we scan one line at a time) -- accepted best-effort
 // for Chunk 1. Reserved words (if/while/etc.) are dropped via IsCallSkipWord.
-procedure CollectCallIdents(const ALine: string; AAcc: TStringList);
+procedure CollectCallIdents(const ALine: string; AAcc: TStringList; var AState: TBodyScanState);
 var
   I, N, J, K   : Integer;
-  InBrace      : Integer; // { } comment nesting depth on this line
   Ident        : string ;
 begin
   I:= 1;
   N:= Length(ALine);
-  InBrace:= 0;
   while I <= N do
   begin
-    if InBrace > 0 then
+    if AState.InBrace > 0 then
     begin
-      if ALine[I] = '}' then Dec(InBrace);
+      if ALine[I] = '}' then Dec(AState.InBrace);
       Inc(I);
       Continue;
     end;
-    if ALine[I] = '{' then begin Inc(InBrace); Inc(I); Continue; end;
+    if AState.InStarParen then
+    begin
+      if (ALine[I] = '*') and (I < N) and (ALine[I + 1] = ')') then
+      begin
+        AState.InStarParen:= False;
+        Inc(I, 2);
+        Continue;
+      end;
+      Inc(I);
+      Continue;
+    end;
+    if ALine[I] = '{' then begin Inc(AState.InBrace); Inc(I); Continue; end;
+    if (ALine[I] = '(') and (I < N) and (ALine[I + 1] = '*') then
+    begin
+      AState.InStarParen:= True;
+      Inc(I, 2);
+      Continue;
+    end;
     if (ALine[I] = '/') and (I < N) and (ALine[I + 1] = '/') then Break; // line comment
     if ALine[I] = '''' then
     begin
@@ -895,25 +958,43 @@ end;
 
 // Scans ONE source line for 'raise <Ident>' -- the whole-word keyword 'raise'
 // followed by an identifier (the exception class). Adds the class name to AAcc.
-// Same string/comment skipping and single-line limitation as CollectCallIdents.
-procedure CollectRaiseClass(const ALine: string; AAcc: TStringList);
+// Shares CollectCallIdents' string handling and its CROSS-LINE comment state:
+// prose is even likelier to fool this one, since "we raise EFoo when ..." inside
+// a block comment names a class that is never raised, and the result is not a
+// noisy fact line but a FABRICATED <exception cref> tag.
+procedure CollectRaiseClass(const ALine: string; AAcc: TStringList; var AState: TBodyScanState);
 var
   I, N, J, K : Integer;
-  InBrace    : Integer;
   Ident      : string ;
 begin
   I:= 1;
   N:= Length(ALine);
-  InBrace:= 0;
   while I <= N do
   begin
-    if InBrace > 0 then
+    if AState.InBrace > 0 then
     begin
-      if ALine[I] = '}' then Dec(InBrace);
+      if ALine[I] = '}' then Dec(AState.InBrace);
       Inc(I);
       Continue;
     end;
-    if ALine[I] = '{' then begin Inc(InBrace); Inc(I); Continue; end;
+    if AState.InStarParen then
+    begin
+      if (ALine[I] = '*') and (I < N) and (ALine[I + 1] = ')') then
+      begin
+        AState.InStarParen:= False;
+        Inc(I, 2);
+        Continue;
+      end;
+      Inc(I);
+      Continue;
+    end;
+    if ALine[I] = '{' then begin Inc(AState.InBrace); Inc(I); Continue; end;
+    if (ALine[I] = '(') and (I < N) and (ALine[I + 1] = '*') then
+    begin
+      AState.InStarParen:= True;
+      Inc(I, 2);
+      Continue;
+    end;
     if (ALine[I] = '/') and (I < N) and (ALine[I + 1] = '/') then Break;
     if ALine[I] = '''' then
     begin
@@ -1913,8 +1994,13 @@ begin
         CallSet.Duplicates:= dupIgnore;
         CallSet.CaseSensitive:= False;
         var Src: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error, as before }
+        { Comment state initialised ONCE, then carried across the body's lines --
+          see TBodyScanState. Starting "not in a comment" is right because the
+          span begins at the implementation header, and the routine's own
+          doc-comment sits ABOVE that line and is therefore not scanned. }
+        var ScanState: TBodyScanState:= Default(TBodyScanState);
         for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src)) do
-          CollectCallIdents(Src[Ln - 1], CallSet);
+          CollectCallIdents(Src[Ln - 1], CallSet, ScanState);
 
         // 3. Add a bare name only when its leaf is NOT already covered by a
         // resolved qualified callee (suppress the duplicate, keep the unresolved).
@@ -2056,8 +2142,9 @@ begin
       RaiseSet.Duplicates:= dupIgnore;
       RaiseSet.CaseSensitive:= False;
       var Src2: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error, as before }
+      var RaiseState: TBodyScanState:= Default(TBodyScanState); { see TBodyScanState }
       for var Ln2:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src2)) do
-        CollectRaiseClass(Src2[Ln2 - 1], RaiseSet);
+        CollectRaiseClass(Src2[Ln2 - 1], RaiseSet, RaiseState);
       Result.Raises:= RaiseSet.ToStringArray;
     finally
       RaiseSet.Free;

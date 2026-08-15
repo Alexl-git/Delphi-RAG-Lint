@@ -18,8 +18,8 @@ const
 /// (Args); DoRules (Args); DoLint (Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: db, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck (+85 more)
-/// Complexity: 99 (cyclomatic, outer body), 196 lines (full implementation)
+/// Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+85 more)
+/// Complexity: 99 (cyclomatic, outer body), 234 lines (full implementation)
 /// Touches: file system
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
@@ -5745,9 +5745,20 @@ begin
       for var SF: string in AScannedFiles do
       begin
         Lines:= LinesOf(SF);
+        { PROSE ABOUT A MARKER IS NOT A MARKER. This walk sees every line of the
+          file, including lines inside a braced header block and inside `///`
+          doc-comments quoting the grammar as an example -- and TReviewMarkers.Parse
+          takes ONE LINE, so it cannot tell that a brace opened earlier is still
+          open. Two findings on the unit that DEFINES the marker syntax came from
+          exactly that, on lines carrying no marker, advising the reader to delete
+          documentation. MarkerBearingLines carries block-comment state across
+          lines and rejects `///`; see its remarks for why this gate is applied to
+          the REPORTER only and never to suppression. }
+        var CanBear: TArray<Boolean>:= TReviewMarkers.MarkerBearingLines(Lines);
         for var LN: Integer:= 1 to Length(Lines) do
         begin
           if Pos(REVIEW_MARK, LowerCase(Lines[LN - 1])) = 0 then Continue; { cheap reject }
+          if (LN <= Length(CanBear)) and (not CanBear[LN - 1]) then Continue;
           for M in TReviewMarkers.Parse(Lines[LN - 1]) do
           begin
             if not Known.ContainsKey(LowerCase(M.RuleId)) then Continue;
@@ -15865,6 +15876,31 @@ begin
       if not SameText(ExpandFileName(D), ExpandFileName(ProjDb)) then Reordered:= Reordered + [D];
     Result:= Reordered;
   end;
+
+  { Then reorder by what the indexes ACTUALLY CONTAIN, when this run names a
+    target file. `resolve-dbs --in <file>` has answered this correctly all along
+    -- DoResolveDbsList calls OrderDbsByMembership -- but the DIAGNOSTIC had the
+    ordering and the CONSUMERS did not, so a bare `lint <file>` took Result[0],
+    i.e. the manifest's FIRST section, and opened an index that does not hold the
+    file. Observed as `index schema v19 < v21` from ORM3's Micronite2027.sqlite
+    while linting a YADF unit whose own index was current -- and the quiet form is
+    worse than the warning: every store-backed per-file rule and every
+    index-dependent autofix (CheckTypeAware, the naming fixes, hover, find-unit)
+    silently consults a foreign project's symbols and returns a
+    wrong-but-plausible answer.
+
+    Target file resolved with DoLint's own precedence -- positional Path wins,
+    else --file/--in -- so the two cannot disagree about which file the run is
+    about. OrderDbsByMembership returns its input UNCHANGED when the path is
+    empty or when no index contains it, so this is a no-op for the commands that
+    name no file (the library-source case included) and for lint-all's directory
+    targets. It runs AFTER the --project promotion above deliberately: an explicit
+    --project is a stronger statement than membership, and OrderDbsByMembership
+    takes ProjDb as its tiebreak, which is what ORM3's shared COMMON\ units need. }
+  var TargetFile: string:= AArgs.Path;
+  if TargetFile = '' then TargetFile:= AArgs.InFile;
+  if TargetFile <> '' then
+    Result:= OrderDbsByMembership(Result, ProjDb, TargetFile, DbContainsFile);
 end; // function
 
 { The LIBRARY index for this run's platform, from the manifest; '' when the
