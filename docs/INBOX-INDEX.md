@@ -1,4 +1,4 @@
-# INBOX index -- 59 open notes, triaged 2026-08-15
+# INBOX index -- 56 open notes (was 59); 4 retired + 1 filed on 2026-08-16
 
 **49 notes were retired to `INBOX-Done/`** in this pass (108 -> 59). Every retired
 note carries a one-line banner saying WHY, so the trail survives the move; nothing
@@ -21,16 +21,24 @@ progress here, and worth trying first on anything below:
 
 ---
 
+> **2026-08-16: four notes RETIRED to `INBOX-Done/` (files moved, renames staged).**
+> `group-E-dataflow-rules-are-majority-false` (all three sections fixed;
+> `double-free` 42 -> 0), `shared-unit-empty-render-deletes-block` (already
+> guarded), `audit-store-backed-fix-paths-for-stale-positions` (~80% stale, the
+> residual measured NOT reachable), `returns-type-baseline-destroys-malformed-blocks`
+> (misclassified -- a reverted design record, its open precondition now proven).
+> One note FILED: `context-bundle-empty-for-bare-name`.
+> **Priority 1 is now TWO items.**
+
 ## Priority 1 -- known-wrong output, worth fixing next
+
+Two items. Four former members were retired on 2026-08-16 (see the banner above);
+their summaries live in their retired notes, not here.
 
 | note | why it ranks here |
 |---|---|
-| `group-E-dataflow-rules-are-majority-false` | **DONE 2026-08-16 -- retire it.** All three sections fixed: `overwrite-before-read` 56 -> 32, `used-before-assignment` closed to a path-sensitivity residue, `double-free` **42 -> 0**. The last one was THREE bugs, not one (member/element free credited to the base var; the for-in iterator not rebound; an inline `var X := ..` not counting as a definition at all -- the fourth "keywords are NAMED nodes" bug). Guard: `run_double_free_loops_and_members.ps1`, 7/7 with three positive controls. |
-| `remaining-raw-text-scans-read-comments-as-code` | The audit result for the nine-instance family. Three left: FormsMap launch/show detection (wrong CSV rows), TypeAt hover inference, the `todos` verb. Also records what was CLEARED so nobody re-audits. |
-| `audit-store-backed-fix-paths-for-stale-positions` | **DONE 2026-08-16 -- retire it, NOT a live defect.** The note was ~80% stale: `ReplaceEditIsValid` already rejects a past-EOL Col, `AnchorIsValid` + `ExpectLine`/`ExpectText` already IS the one shared boundary assertion, `StampAnchor` already arms it. The one unstamped site (the pure deletion) turned out to be unreachable when stale -- measured: `document --unit`, `document --qname` and `lint-all --fix --apply` all refuse, because `Existing` is recomputed from CURRENT file text. Stamp added for consistency; **no test ships**, because the guard I wrote passed without the fix. |
+| `remaining-raw-text-scans-read-comments-as-code` | The audit result for the nine-instance family, six fixed. **Only #1 (FormsMap) is worth doing**: `IsLaunchLine`/`IsShowLine` are bare `Pos` over unscrubbed lines, so a commented-out `.Create` or `.ShowModal` produces wrong forms-map CSV rows and wrong hook edges. #3 (the `todos` verb) is *"left alone on purpose"*; #2 (TypeAt hover) is transient and user-invoked. **The full implementation design is written into the note** -- the four read sites, which to leave alone and why (`:304` is a LINE COUNT), and the structural answer to the off-by-one. |
 | `bare-except-anchor-defeats-a-hand-written-marker` | A hand-written `dl:ok` at the obvious place never matches, then gets reported unused. Fixing the anchor invalidates every recorded `@hash` for the rule -- take that churn deliberately, once, and check sibling rules first. |
-| `returns-type-baseline-destroys-malformed-blocks` | **MISCLASSIFIED -- not a defect, and now discharged.** The destructive change was REVERTED and never shipped; listing it as DESTRUCTIVE sent a session hunting a live bug that does not exist. Its real content was one unproven precondition ("make the malformed-region guard hold on a declaration the engine DOES have output for") -- **measured 2026-08-16, it holds**, and is now pinned by `run_doc_malformed_region_holds.ps1` (5/5, with the control arm that D5 lacked). Move to a design-record section; the recommendation to NOT generate `<returns>` baselines stands. |
-| `shared-unit-empty-render-deletes-block` | **DONE 2026-08-16 -- retire it. It was already guarded.** The fixture this note asks to "check in this time" is inside `run_shared_unit_staleness.ps1:337-352` -- the `Busy` unit, three assertions, naming this defect's mechanism verbatim. Nothing to write; the note simply outlived its fix. |
 
 ## Priority 2 -- false positives blocking a true zero
 
