@@ -99,13 +99,23 @@ the IDE closed).
 
 ## Open -- not defects, kept here deliberately
 
-`rule-hardening-plan-2026-08-13` (a plan answering an owner question) ·
+`rule-hardening-plan-2026-08-13` (a plan answering an owner question -- **item 4
+`unused-parameter` CLOSED 2026-08-16 (session 23)**, and the note's own proposed
+mechanism was wrong: not override/interface/DFM-wired-from-the-store, but
+callback registration, caught same-file and SYNTACTICALLY because one real
+registration sits in an inactive `$IFDEF` the store cannot see. DataCopy 5 -> 1,
+own source 99 -> 75, the one true positive preserved) ·
 `exception-class-unit-and-generated-exception-types` (feature request --
 **MEASURED 2026-08-16: 64 distinct messages on ORM3, not the 400 that would have
 killed it**, and normalization collapses 64 -> 63, so build Stage 1) ·
 `converter-editor-phase-g-engine-findings` (workstream status: *"NOT pushed, NOT
 merged, NOT deployed. Deliberate."* -- its one concrete engine ask, the
-`#mapping`/`#apply` rejection, is **FIXED 2026-08-16**; findings 2.4-2.11 remain)
+`#mapping`/`#apply` rejection, is **FIXED 2026-08-16**; findings **2.4-2.11 are
+now ALL CLOSED (session 23)** -- 2.7 was disproved as stale by a new suite,
+2.8's exit-code contract was documented AND corrected (usage is 2 and fatal is 3,
+not the recorded "2 = usage" alone), the rest verified live. The note stays open
+for exactly one thing: 2.5's `--framework vcl|fmx` tie-break, which is an OWNER
+RULING, not engine debt)
 · `ide-lsp-ram-and-shim-todo` (items 3-4 still blocked on the IDE being
 startable; §1.1's ask **folded into the union design 2026-08-16**, correcting a
 wrong premise there) · `yadf-share-review-marker-hash` (owner request for a

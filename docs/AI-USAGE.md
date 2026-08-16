@@ -121,7 +121,7 @@ in 2b.
 **Query / search (find symbols, callers, text)**
 | Verb | What it does |
 |------|--------------|
-| `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss |
+| `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss, `--exact` suppresses the fallback so 0 rows means "no such symbol", `--case-sensitive` opts out of the NOCASE retry. Exit 0 = hits / 1 = zero hits / 2 = bad usage (no selector, unreadable `--db`) / 3 = fatal (unrecognised argument) |
 | `query --text "<phrase>"` | full-text search over `.pas`/`.dfm`/`.sql` constants: messages, DFM captions, SQL exception text (`--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N`) |
 | `query find-callers --name X` | callers of a symbol (`--context N`; `--resolved` for precise call-edge callers) |
 | `query find` | doc-driven find (`--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public`) |

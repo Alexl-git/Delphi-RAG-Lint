@@ -1,3 +1,28 @@
+> # 2026-08-16 (session 23): 2.4-2.11 ALL CLOSED. One owner question keeps the note open.
+>
+> Re-measured live against `library-Win64.sqlite`, not read off the note. Every
+> engine finding 2.4 through 2.11 is fixed and covered; **2.7 was the only one
+> still in doubt and it turned out to be stale.**
+>
+> | finding | verdict |
+> |---|---|
+> | 2.4 substring / no `--exact` | FIXED. Lookup is exact SQL; the "substring" behaviour was the FUZZY FALLBACK, and `--exact` suppresses it so 0 rows means "no such symbol". |
+> | 2.5 tie order / FMX-over-VCL | **Engine half FIXED** (total documented ordering, `run_qname_row_order.ps1`). **Product half OPEN -- see below.** |
+> | 2.6 enum members unreachable | FIXED. `surface --qname System.Classes.TAlignment` prints members with ordinals. |
+> | 2.7 ad-hoc DB has no FTS tables | **STALE -- disproved.** New suite `tests\autotest\run_text_query_adhoc_db.ps1`: ad-hoc `index <dir> --db` then `query --text --substring` finds the phrase and exits 0; a nonsense phrase exits 1 (the control that rules out a match-everything bug). The 2026-08-02 measurement almost certainly hit a pre-v10 DB kept alive by the since-fixed fingerprint-less skip. |
+> | 2.8 exit codes / stderr banner | CLOSED. Banner was already fixed by `--quiet`; the exit-code contract is now on the `query` row of `docs\AI-USAGE.md`. **Measured, and the previously recorded contract was wrong:** 0 = hits, 1 = zero hits, **2** = bad usage (no selector / unreadable `--db`), **3** = fatal (unrecognised argument). The note and last session's plan both said "2 = usage" and stopped there. |
+> | 2.9 `--refs-as-leaves` not pruning | FIXED. Verified live: 12 output lines for `FireDAC.Comp.Client.TFDUpdateSQL --min-visibility published --refs-as-leaves`, versus the reported 364 leaves / 354 phantoms. |
+> | 2.10 case-sensitive `--name` | FIXED. Exact-then-NOCASE retry with a `--case-sensitive` opt-out. |
+> | 2.11 strong type aliases | FIXED. Verified live: `TFileName` -> `System.SysUtils.TFileName : string`, `TCaption` -> `Vcl.Controls.TCaption : string`. Root cause was the 2.1 shape exactly -- the strong form carries TWO `type:` fields, the `(kType)` keyword first and the real target second, so reading the first via `ChildByField` found a keyword and bailed. Fix takes the LAST `type:` wrapper (`Parser.Delphi13.pas:943-977`), gated on `kType` so it can only ADD rows. Covered by `run_type_decl_shapes.ps1`. |
+>
+> **WHY THIS NOTE STAYS OPEN -- one owner ruling, not an engine defect.** 2.5's
+> product half asks for a `--framework vcl|fmx` hint so a same-named VCL and FMX
+> type do not tie. That is a small post-filter, but which framework wins by
+> default is a product decision. **Do not invent it silently.** Everything else
+> here is discharged.
+>
+> ---
+>
 > # 2026-08-16 (session 22): the one concrete ask is DONE. The note stays open.
 >
 > **Done:** `convert-validate` no longer rejects `#mapping` / `#apply`. They are
