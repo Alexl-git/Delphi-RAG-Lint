@@ -1,3 +1,30 @@
+> # CLOSED 2026-08-16 (session 22) -- both halves accounted for.
+>
+> The 6 survivors split exactly as the session-21 measurement said:
+>
+> * **3 were `exception-cref-transitive-raise`** -- FIXED (one-hop callee
+>   resolution). `DRagLint.FormsMap.GenerateFormsCsv` now yields zero findings.
+> * **3 were the `TreeSitter.pas` "managed facts block is out of date" shape**,
+>   which this note characterised as *"the doc WRITER and the doc CHECKER
+>   disagree about the same block"*.
+>
+> Re-measured after reindexing: the checker reports `ddFactsBlockStale` on
+> `TTSNodeHelper.Child` (:970), `TTSNodeHelper.NamedChild` (:1026) and
+> `TTSNode` (:206) -- and `document` DOES now produce an edit for each. **Writer
+> and checker agree.** These are ordinary pending regeneration, not a
+> disagreement, and running autodoc over `third_party\delphi-tree-sitter` clears
+> them.
+>
+> The likely reason they agree now is the caller-list fix landed in the same
+> session ([[INBOX-autodoc-caller-list-fabricates-callers-for-common-method-names]]):
+> those three blocks carried the fabricated 59-entry `Called from:` list, so the
+> writer previously regenerated the same wrong content and reported convergence
+> while the checker kept flagging it. With the fabricated list suppressed the
+> writer now emits a genuinely different, shorter block.
+>
+> **Not applied here on purpose** -- `third_party\delphi-tree-sitter` is vendored
+> source, and rewriting vendored files is a separate decision for the owner.
+
 > **MEASURED 2026-08-16 (session 21). CONFIRMED, count is 6 not 4, and HALF of it is a different note.**
 >
 > Ran `document --project` -> reindex -> `lint-all` three times on drag-lint's own source:

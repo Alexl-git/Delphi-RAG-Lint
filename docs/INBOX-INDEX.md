@@ -1,4 +1,4 @@
-# INBOX index -- 21 open notes (was 23; 60 at the start of 2026-08-16)
+# INBOX index -- 15 open notes (was 23 that morning; 60 at the start of 2026-08-16)
 
 > **Session 22 (2026-08-16, later).** Two notes CLOSED and moved to
 > `INBOX-Done\` (88 retired): `exception-cref-transitive-raise` (one-hop callee
@@ -7,6 +7,18 @@
 > just the three units that happened to fail loudly). Four more notes advanced
 > without closing; see their banners. Release gate unchanged: nothing to GitHub
 > until Group A is finished.
+>
+> **Session 22, later the same day: Group A is DONE bar one owner decision.**
+> Eight more notes closed (91 retired). Closed: `qualified-type-receiver`
+> (did not reproduce -- both its diagnoses were stale; cross-unit coverage
+> added), `whole-db-resolve-degrades-a-stale-index` (stale files are now
+> excluded from the delete AND the stream), `autodoc-returns-section-incomplete`
+> (did not reproduce), `autodoc-caller-list-fabricates-callers`
+> (the ambiguity gate counted only call targets; 59 fabricated callers on ONE
+> symbol), `cycles-scope-and-local-var-refs`, `docdrift-4-survive-a-converged-autodoc`.
+> `loader2019-formcreate-inifile-leak` is a correct finding about an EXTERNAL
+> project and is the only Group A item left -- it needs an owner decision, not
+> engineering. Group C now has a written plan: `docs\PLAN-GROUP-C-2026-08-16.md`.
 
 **Rewritten 2026-08-16 (session 21).** The previous index had drifted badly from
 the notes it indexed -- it listed fixed items as open, carried per-priority
@@ -42,27 +54,42 @@ switched off.
 
 ## Open -- verifiable now
 
+Group A is finished except for one item that is not an engineering decision.
+
 | note | shape |
 |---|---|
-| `qualified-type-receiver-does-not-resolve` | RE-DIAGNOSED: the gap is in call-ref EXTRACTION, not receiver typing. Start at the extractor. |
-| `used-before-assignment-real-shape-is-intra-item-ordering` | Partly addressed (`and`/`or` sequencing modelled); the general position-ordered case is not. |
-| `whole-db-resolve-degrades-a-stale-index` | Needs a deliberately staled index; small setup, not yet done. |
-| `autodoc-caller-list-fabricates-callers-for-common-method-names` | Its own banner warns only `Create` was re-measured. |
-| `autodoc-returns-section-incomplete` | Inbound from YADF, 2026-07-27. |
-| `buildfor-defaulted-args-diverge-between-entry-points` | Two callers render the same declaration differently. |
-| `docdrift-4-survive-a-converged-autodoc` | 3 of its 6 were `exception-cref-transitive-raise`, now FIXED. The remaining shape is the `TreeSitter.pas` one: the doc WRITER and the doc CHECKER disagree about the same managed block. |
-| `cycles-scope-and-local-var-refs` | A local resolved to another unit's field. |
-| `loader2019-formcreate-inifile-leak` | RE-MEASURED 2026-08-16: still fires against a fresh DB, unaffected by the object-leak fixes. A correct finding about an EXTERNAL project; closing it needs an edit to `C:\Projects\Loader2019`, which is the owner's call. |
+| `loader2019-formcreate-inifile-leak` | RE-MEASURED 2026-08-16: still fires against a fresh DB, unaffected by the object-leak fixes. **A correct finding about an EXTERNAL project** -- closing it means editing `C:\Projects\Loader2019`, which is the owner's call, not engine debt. |
+| `used-before-assignment-real-shape-is-intra-item-ordering` | NOT re-measured in session 22 -- said plainly rather than implied. `and`/`or` sequencing is modelled; the general position-ordered case is not. **Read `rule-hardening-plan` item 3 first**: it blames a different cause (an `out` arg counted as a READ, 7 findings, cost S). Measure which one is live before coding. |
+| `buildfor-defaulted-args-diverge-between-entry-points` | STALE for the function it names (the two caps are threaded now). `FixEditsForMissingDoc` fixed in session 22. Remaining: `ABaseDir` / `AIncludeSince` / `AExtraStores` / `AComplexityMin` still defaulted on the repair path -- `AExtraStores` is the risky one (cross-DB fan-out), so use a cross-DB fixture. |
 
 ## Open -- NOT verifiable in a normal session
 
-These need a large corpus or an hours-long rebuild, and **were not re-measured
-today** -- say so rather than implying they were.
+These need a large corpus, an hours-long rebuild, or a live IDE. A Fable review
+in session 22 found the group is **less blocked than its label suggests**: three
+were already fixed in code, one had an INVERTED premise, and one does not belong
+here at all.
 
-`library-reindex-25x-slower-on-large-db` (cause identified and measured) ·
-`incremental-index-hangs-on-large-db` · `indexer-livelock-when-two-platforms-run-concurrently`
-(diagnosed) · `index-all-win32-library-rebuild-aborts` ·
-`lint-all-project-wide-phase-dominates-runtime` (largely fixed 2026-08-12) ·
+**`lint-all-project-wide-phase-dominates-runtime` should move to Group A.** Its
+dominant phase (doc-drift, 454.9s of 732s) reproduces on YADF in 40-second runs,
+so it is profileable in a normal session; the full ORM3 confirmation is 12
+minutes, which also fits. Leftover #3 (`idx_refs_name_nocase`) is already done.
+
+`library-reindex-25x-slower-on-large-db` (FK indexes landed; **index-path size
+guard added 2026-08-16**; progress/ETA line still missing; the 25x itself stays a
+projection -- a small fixture cannot show a cost that is O(child-table rows)) ·
+`incremental-index-hangs-on-large-db` (the "hang" is the whole-DB resolve;
+scoped resolve fixes the body-edit shape but an ADDED type still falls back to
+whole-DB. A synthetic 2M-symbol DB built by direct SQL insert would exercise it
+in minutes -- positive control: assert the calls line reports millions of refs
+streamed, else the pass streamed nothing and "fast" is vacuous) ·
+`indexer-livelock-when-two-platforms-run-concurrently` (**the concurrency theory
+was REFUTED**; nothing concurrency-shaped needs fixing. `DRAGLINT_NO_SCOPED_RESOLVE`
+exists precisely to make the scoped/unscoped A/B a one-binary comparison, and no
+autotest uses it yet -- ~1h to turn two landed fixes from "believed" into
+"row-identical proven") · `index-all-win32-library-rebuild-aborts` (the
+"crashed mid-DIAG-line" clue was a **128-byte stdout buffer artifact**; the
+per-file flush now preserves evidence, so the next failure is diagnosable. Can be
+launched unattended and harvested later) ·
 `index-runs-are-not-resumable` (**CORRECTNESS HALF FIXED 2026-08-16** -- the
 fingerprint was stamped BEFORE the walk, so a killed run silently kept stale
 parses; now committed only on completion. Per-file resume still open) ·

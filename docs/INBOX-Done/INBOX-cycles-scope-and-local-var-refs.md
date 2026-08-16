@@ -1,3 +1,40 @@
+> # CLOSED 2026-08-16 (session 22) -- FIXED. The ref's own scope is asked first.
+>
+> Reproduced on a purpose-built implementation-only cycle: `cycles --plan`
+> reported
+>
+>     - line 29: `SharedName`  [var]  -> declared in `ucycb`
+>
+> for a name that is a routine LOCAL in `ucyca`. Delphi resolves it to the local;
+> it is not coupling to `ucycb` at all, yet it was listed among the symbols to
+> "move, extract, or inline" to break the cycle.
+>
+> **The note's mechanism is right in spirit but imprecise.** This is NOT the
+> shared reference resolver failing to consult local scope -- it is a standalone
+> name heuristic inside the `cycles` command that never asks the resolver at all
+> (`DRagLint.CLI.pas`, the "Why it cycles (implementation-section edges)" scan).
+> There was already a partial guard skipping candidates that were THEMSELVES
+> local/param-kind, but the loop simply walked on to the next same-named
+> candidate and matched the unit-level declaration in the other unit.
+>
+> Fix: before scanning candidates, ask the ref's OWN enclosing routine
+> (`FindChildSymbolByName`) whether it declares that name as a local or param,
+> and discard the whole ref if so. There is no candidate such a ref could
+> legitimately match.
+>
+> Test: `testsutotestun_cycles_local_var_scope.ps1` +
+> `fixtures\cyclescope`. Two things it pins deliberately:
+>
+> * the fixture is an **implementation-only** cycle, because an interface-coupled
+>   cycle takes a completely different code path and would never exercise this;
+> * `RealThing` is the POSITIVE CONTROL. Asserting only "SharedName is gone"
+>   would pass if the cause-list broke entirely -- and it would do so quietly,
+>   since the list already prints a "(no specific symbol resolved -- index gap)"
+>   fallback when empty.
+>
+> RED verified: with the scope check neutralised and rebuilt, `SharedName`
+> reappears alongside `RealThing`.
+
 # INBOX: two defects found while fixing a `cycles --plan` report (DataCopy, 2026-08-03)
 
 Source: `drag-lint cycles --plan` run from the IDE plugin for

@@ -1,3 +1,31 @@
+> # CLOSED 2026-08-16 (session 22) -- DOES NOT REPRODUCE. Fixed since filing.
+>
+> Re-measured against current code on a scratch fixture reproducing
+> `PrevSignificantIdx` exactly (seed + `Dec(Result)`), and against the real
+> `YADF.Groups.PrevSignificantIdx` in `C:\Projects\YADF\_D-RAG\YADF.sqlite`.
+> Today's engine emits the declared-type fallback
+> `&lt;returns&gt;&lt;!-- drag-lint:auto type --&gt;Integer&lt;/returns&gt;`, NOT the misleading
+> `Observed: AFrom.` this note reported.
+>
+> * Main defect: fixed by `MineReturnExpressionsEx` bailing on a mutated Result
+>   -- `src\cli\DRagLint.Hover.Returns.pas:1024`, `if HasResultMutation(Code) then Exit;`
+>   ("absence over wrong": a mutated Result makes every whole-Result assignment
+>   a mere seed).
+> * Sub-issue 3.2 (a nested anonymous method's `Result` leaking into the
+>   enclosing routine) is fixed by `MaskNestedRoutines`, `Hover.Returns.pas:1019`
+>   -- verified on a fixture matching `OptionTable`'s shape; no leaked `end,`
+>   fragment.
+> * Sub-issue 3.1 (truncation at nested `TPath.Combine(`) does not reproduce
+>   either; the full nested expression is emitted.
+>
+> **The stale text still sitting in `C:\Projects\YADF\YADF.Options.pas:364,430`
+> is old output from before these fixes and has simply never been regenerated.**
+> It is not evidence of a live defect -- regenerating those two blocks clears it.
+>
+> What remains is a design tradeoff, not a bug: the engine falls back to
+> type-only rather than narrating the walk. If that is wanted, it is a feature
+> request and needs its own note.
+
 # INBOX: autodoc `<returns>` is incomplete -- only whole-`Result` assignments are seen
 
 - **From:** YADF (Alexander Liberov) -- reported 2026-07-27

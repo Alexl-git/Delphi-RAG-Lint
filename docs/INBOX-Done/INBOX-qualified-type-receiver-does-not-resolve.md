@@ -1,3 +1,32 @@
+> # CLOSED 2026-08-16 (session 22) -- DOES NOT REPRODUCE. Both diagnoses were stale.
+>
+> Re-measured against current code. The defect is gone, and BOTH earlier
+> statements about it were wrong:
+>
+> * The original note said `call_edges` held 1 row (only `MakeOne`). Measured
+>   now: **2 edges**, and `find-callers --resolved` reports BOTH
+>   `receiver_bucket.MakeOne` and `receiver_bucket.MakeQualified` as `[certain]`.
+> * The session-21 banner said *"no `Create` ref exists in the index at all"* for
+>   the qualified form. It does exist -- `find-callers` shows it at `:70:39`.
+>   That banner sent readers to the ref EXTRACTOR, which was never the problem.
+>
+> `tests\callresolveun_receiver_bucket.ps1` already asserts *"both callers are
+> RESOLVED (no uncertainty marker anywhere on the line)"* and passes, so this was
+> fixed some time ago -- almost certainly by `TypeReceiver`'s Kind 7
+> unit-qualified rung -- and the note was simply never closed.
+>
+> **One real coverage gap was found and filled.** `receiver_bucket.pas` qualifies
+> with its OWN unit name, the easy case. Delphi FORCES qualification when two
+> used units export the same type name, i.e. ACROSS units, and nothing pinned
+> that. New `tests\callresolveun_receiver_qualified_cross_unit.ps1` +
+> `fixtures\qual_decl.pas` / `qual_call.pas` cover it: cross-unit
+> `qual_decl.TOnlyOnce.Create` resolves `[certain]`, with an unqualified call as
+> the positive control and an unindexed dotted receiver as the negative control
+> (so a resolver that matched every leaf name would fail).
+>
+> Original note follows, retained because its "suspected fix" describes what the
+> shipped rung actually does.
+
 > **RE-DIAGNOSED 2026-08-16 (session 21) -- the stated cause is already FIXED; the real one is upstream.**
 >
 > The note attributes this to receiver resolution. That half is done: `TCallResolver.TypeReceiver` has a **Kind 7** rung for exactly this shape (*"a UNIT-QUALIFIED TYPE receiver, 'Unit.TType.M'"*), taking the LAST segment as the type name, added in v20b.

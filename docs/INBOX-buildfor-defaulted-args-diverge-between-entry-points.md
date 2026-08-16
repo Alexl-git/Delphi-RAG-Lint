@@ -1,3 +1,28 @@
+> # 2026-08-16 (session 22): the note is STALE for the function it names; the
+> residual is now half fixed. Kept open for the last four arguments.
+>
+> **Re-measured.** `TDocLintRules.FixEditsForDocDrift` no longer defaults the two
+> caps: it takes `AMaxReturnCases` / `AMaxCallers` as real parameters and threads
+> them into both `TDocDrift.Analyze` and `TDocumenter.BuildFor`, and its caller
+> passes the same manifest values `document` uses. The divergence this note was
+> filed about is gone -- it was written just after `AIncludeSeeAlso` landed, and
+> the other two caps landed since.
+>
+> **Fixed here:** `TDocLintRules.FixEditsForMissingDoc` was still calling the
+> fully-defaulted 2-arg `BuildFor` -- a DIFFERENT function from the one this note
+> names, with the same hazard and arguably worse: a block it CREATES could be
+> graded stale by the checker the moment it was written, and neither side could
+> repair it because each kept regenerating its own version. It now takes and
+> passes the same caps.
+>
+> **Still open, and why this note stays:** `ABaseDir`, `AIncludeSince` and
+> `AExtraStores` remain hardcoded (`''`, `False`, `nil`) on the doc-drift repair
+> path, and `AComplexityMin` is not passed at all (so it silently takes 10).
+> Threading those four is the same mechanical change -- **but `AExtraStores` is
+> the risky one**: it changes cross-DB fan-out, so a multi-DB project's repair
+> output could move, and nothing here tests that. Do it with a cross-DB fixture,
+> not blind.
+
 # INBOX -- `BuildFor`'s defaulted arguments still diverge between entry points
 
 - **Filed:** 2026-08-13, immediately after fixing the `AIncludeSeeAlso` half of it

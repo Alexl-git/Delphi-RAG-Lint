@@ -1,3 +1,25 @@
+> # 2026-08-16 (session 22): the fix is in code; one of the two residuals is DONE.
+>
+> **Already landed (not this session):** the three FK-child indexes at
+> `DRagLint.Storage.SQLite.pas`, added without a schema bump so existing DBs pick
+> them up on next open, with the both-orders 2.7x measurement recorded in the
+> comment.
+>
+> **Done this session:** `SizeGuardCheck` is now called on the INDEX path
+> (`DoIndex`, before the walk), not only on the consumer commands. That gap is
+> why a 1500 MB guard sat silent while the library index grew past 2 GB -- the
+> only runs touching it were index runs, and those were the ones not checking.
+> The guard still no-ops outside a 32-bit process, so it is free on Win64.
+>
+> **Still open:** progress reporting has no `n/total` or ETA -- `ReportProgress`
+> prints per-file only, so an hours-long library reindex is indistinguishable
+> from a hang. Cheap (~30-60 min) and autotest-verifiable; the positive control
+> must assert the progress line APPEARS, not merely that no error occurred.
+>
+> **The 25x figure remains a projection**, and a downscaled fixture cannot
+> confirm it -- the cost is O(child-table rows), which is exactly what a small
+> fixture lacks. Only a real library reindex converts it to a measurement.
+
 # INBOX -- library reindex is 25x slower per file on a large DB
 
 **Filed:** 2026-08-10, while the Library[Win64] schema v20->v21 re-parse was running.

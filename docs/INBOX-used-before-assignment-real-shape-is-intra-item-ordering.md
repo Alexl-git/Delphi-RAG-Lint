@@ -1,3 +1,18 @@
+> # NOT re-measured in session 22 (2026-08-16) -- stating that rather than implying progress.
+>
+> This note was NOT touched this session. Its status is exactly as the
+> session-21 assessment left it: `and`/`or` left-to-right sequencing is modelled
+> (`CollectAndOrLeftDefs`); the general position-ordered case is not.
+>
+> **Read this alongside `INBOX-rule-hardening-plan-2026-08-13.md` before picking
+> it up.** That plan lists `used-before-assignment` as its item 3 with a
+> DIFFERENT stated cause -- *an `out` argument is counted as a READ* -- 7
+> findings, cost S, and the signature it needs is already indexed. The two are
+> not the same defect, and the rule-hardening one is much cheaper. Measure which
+> of the two actually accounts for the current findings before writing code;
+> this project's repeated lesson is that the note's stated mechanism is often not
+> the live one.
+
 # `used-before-assignment` -- the backlog's premise was wrong; here is the real shape
 
 > **PARTLY ADDRESSED 2026-08-15. The `and`/`or` case is modelled; the general

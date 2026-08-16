@@ -1,3 +1,38 @@
+> # CLOSED 2026-08-16 (session 22) -- FIXED. Stale files are now left entirely alone.
+>
+> `ResolveCallTargets` now PRESCANS the distinct source files in its resolve
+> universe and probes each against the index (raw bytes -> ANSI -> SHA2, plus
+> mtime -- the same basis `FileIsUpToDate` uses). Files that no longer match are
+> excluded from BOTH the delete and the resolve stream, so their existing call
+> edges and receivers survive untouched.
+>
+> Both fix candidates 1 and 2 from below, unified: the prescan implements (1)
+> exactly (only refs whose file still matches get re-derived) and `LinesOf`'s
+> probe implements (2) (an unreadable file is "unknown", never "no receiver").
+> Candidate 3 is done too -- the pass now prints how many files were withheld
+> and says to reindex.
+>
+> `TCallResolver.LinesOf` / `FileIsStaleProbe`; `TCallEdge.ReceiverUnknown`;
+> `ResolveCallTargets` in `DRagLint.Storage.SQLite.pas`.
+> Test: `testsutotestun_resolve_stale_receiver_guard.ps1`.
+>
+> **Two things worth knowing for anyone touching this.**
+>
+> 1. Fixing the receiver write ALONE is not enough and looks like it works. The
+>    first implementation withheld only `receiver_text`; the whole-DB pass then
+>    still cleared and rebuilt the edge from the same bad line, so the caller was
+>    destroyed anyway -- half the measured damage, silently. The delete had to
+>    learn the same exclusion.
+> 2. The suite's discriminating assertion is "DATA SURVIVED", not "the guard
+>    fires". Verified by neutralising the prescan and rebuilding: the
+>    guard-fires assertion still PASSED (the narrower receiver-level guard fires
+>    either way) while DATA SURVIVED failed with `0 caller(s)`.
+>
+> Note also that re-indexing the DECLARING unit legitimately drops a caller's
+> edge -- the target symbol id is re-issued and the FK cascades. That is correct
+> behaviour and is not this defect; the fixture uses an unrelated third file
+> specifically to keep the two apart.
+
 # INBOX: a whole-DB call-target resolve DEGRADES an index whose sources have moved
 
 Found 2026-08-11 while building the equivalence harness for the scoped

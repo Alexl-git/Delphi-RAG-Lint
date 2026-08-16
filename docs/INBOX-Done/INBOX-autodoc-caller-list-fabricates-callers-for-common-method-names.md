@@ -1,3 +1,39 @@
+> # CLOSED 2026-08-16 (session 22) -- FIXED. The gate measured the wrong population.
+>
+> The banner's warning was right: only `Create` had been re-measured. Re-measured
+> other names and it REPRODUCED on `TreeSitter.TTSNodeHelper.Child` --
+> `find-callers --name Child --resolved` returns **0 callers**, while the
+> generated `Called from:` list carried **59 entries** ("+54 more").
+>
+> **Root cause: `LeafNameIsUnambiguous` counted only CALL TARGETS.** It answered
+> *"is there exactly one routine with this name"*, when what the bucket needs is
+> *"could an unresolved ref carrying this name be something other than a call to
+> me"*. `Child` is declared once as a method -- so the gate said unambiguous --
+> while **23 distinct local variables named `Child`** exist in the same index.
+> Those variable uses emit same-named refs, and the bucket claimed them all.
+>
+> This is the SIBLING of the `Create` case, not the same shape: `Create` was many
+> constructors sharing a name; this is ONE method colliding with MANY variable
+> bindings. Fixing the first could never have fixed the second.
+>
+> Fix: the gate now also fails on a collision with `skLocalVar` / `skParam` /
+> `skField` -- the binders that put a bare identifier where the extractor sees a
+> call shape. Types and constants are deliberately NOT counted (they collide
+> rarely and gating on them would delete legitimate buckets). The resolved-anchor
+> escape is untouched: when even one caller resolves, the bucket is still added
+> and the ' ?' marker marks the weak entries.
+>
+> `DRagLint.Doc.Facts.pas`; test
+> `testsutodocun_doc_leafname_localvar_collision.ps1`.
+>
+> **A vacuous-assertion trap was caught while verifying this, and it is worth
+> knowing.** `document --qname X --json` emits only a per-symbol SUMMARY
+> (qname/file/line/action/edits) and NEVER the block text -- so
+> "output does not contain 'Called from'" passes against it no matter what the
+> engine generated. The first verification of this fix, and the first version of
+> the test, were both vacuous for that reason. The suite now reads the rendered
+> (non-JSON) edit and additionally asserts an edit was produced at all.
+
 # INBOX -- the "Called from:" list FABRICATES callers for common method names, and the uncertainty marker hides it
 
 Found 2026-08-10 while applying the full autodoc pass to drag-lint's own source.
