@@ -55,6 +55,39 @@ unit DRagLint.Doc.SharedFacts;
   6 of 55 inbound lines on the real shared units, none of them in
   YADF.Options.pas, which is 21 of the 31 findings.
 
+  ...AND WHY THAT COST IS NOW ZERO, 2026-08-14 (Q0). The exclusion above was the
+  only thing keeping the family from converging, so DRagLint.Doc.Facts stopped
+  producing the window: a `dl:shared` unit's inbound lists are rendered UNCAPPED,
+  at both cap sites (CalledFrom's `docs.max_callers` and UsedInUnits'
+  DocDisplayCount). The rule here is UNCHANGED and still live -- a STORED line
+  can carry `(+N more)` because it was written before that change or by hand, and
+  it is no more set-differenceable for having aged. What changed is that the
+  engine no longer creates such lines.
+
+  That also means this guard had NO TEST COVERAGE until 2026-08-14. The fixture
+  that claimed to cover it exercised the residual compare below instead (its
+  narrow project renders no block at all, so `SRes <> FRes` decides first and
+  IsTruncated is never reached). tests\autotest\run_shared_unit_staleness.ps1's
+  `MarkTrunc` case is the first that actually reaches it.
+
+  THE EMPTY-RENDER HOLE, closed 2026-08-14. It was DESTRUCTIVE: when the narrow
+  project's fresh render is EMPTY -- it compiles the unit but calls nothing in it
+  -- the residual compare below exited on 'Pure' vs '' before any inbound label
+  was consulted, and TDocumenter then emitted a pure tekDeleteLines over the wide
+  project's block, which the wide project rewrote on its next run.
+
+  NEITHER HALF ABOVE COULD PREVENT IT, which is the part worth remembering:
+  MergeInboundFacts merges INTO a rendered block and there was none, and the
+  checker's forgiveness rule sits BELOW a byte compare that had already decided.
+  A rule placed under an earlier decision is not a rule. Both halves now call
+  HoldsForeignInboundEntries FIRST -- "does the stored block carry entries only
+  another project could have written" -- and preserve when it says yes.
+
+  Note that predicate treats a TRUNCATED line as foreign-bearing, which is the
+  opposite polarity to the truncation rule above. Both are the same instinct:
+  fail toward PRESERVING the source, because a `(+N more)` window may hide
+  exactly such an entry.
+
   WHY `seealso` IS NOT IN SCOPE, despite being listed as inbound in the plan.
   Its crefs are derived from CALLEES and same-unit siblings, both of which are
   properties of this unit's own code, so every project that compiles the unit
@@ -70,9 +103,15 @@ uses
 type
   /// <summary>Reconciles a managed facts block across the projects that compile
   /// a `dl:shared` unit.</summary>
-  /// <remarks>Both entry points are no-ops on an unmarked unit, so nothing
+  /// <remarks>
+  /// Both entry points are no-ops on an unmarked unit, so nothing
   /// changes for anyone who has not opted in. Not thread-safe: the closure set
-  /// is cached in class state, keyed on the store it was built from.</remarks>
+  /// is cached in class state, keyed on the store it was built from.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas)
+  /// Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSharedFacts = class
   public
     /// <summary>True when the stored block differs from a fresh render in a way
@@ -87,6 +126,20 @@ type
     /// <returns>True to report `doc-drift`. Identical to a whitespace-collapsed
     /// byte compare on an unmarked unit, on a truncated list, and on any block
     /// this unit cannot confidently parse.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas)
+    /// Calls: DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase
+    /// Returns: CollapseWs(AStored) &lt;&gt; CollapseWs(AFresh); False
+    /// Complexity: 20 (cyclomatic, outer body), 84 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BlockDrifted(const AStored, AFresh: string;
       const AStore: ISymbolStore; const AUnitPath: string): Boolean;
 
@@ -96,15 +149,62 @@ type
     /// `///`-prefixed, containing the managed block.</param>
     /// <param name="AStoredRemarks">The existing parsed remarks, holding the old
     /// managed block.</param>
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="AUnitPath"><!-- drag-lint:auto type -->const string</param>
     /// <returns>ADocText unchanged on an unmarked unit or when there is nothing
     /// to preserve; otherwise the same text with its inbound fact lines replaced
     /// by the sorted union.</returns>
-    /// <remarks>Sorting is what makes this idempotent. Without a canonical order
+    /// <remarks>
+    /// Sorting is what makes this idempotent. Without a canonical order
     /// the preserved entry appends after A's own entries under A and after B's
     /// under B, so each project would rewrite the line the other just wrote.
-    /// Order changes only on marked units.</remarks>
+    /// Order changes only on marked units.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)
+    /// Calls: CompareText, Copy, DRagLint.Doc.SharedFacts.ExtractBlockBody, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, IsUncertainEntry, LowerCase, Pos, Trim, UnitInClosure
+    /// Returns: ADocText; Lines.Text
+    /// Complexity: 21 (cyclomatic, outer body), 146 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ExtractBlockBody"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function MergeInboundFacts(const ADocText, AStoredRemarks: string;
       const AStore: ISymbolStore; const AUnitPath: string): string;
+
+    /// <summary>True when the stored block holds inbound entries this project
+    /// cannot see, so deleting or replacing it would destroy another project's
+    /// contribution.</summary>
+    /// <param name="AStoredRemarks">The existing parsed remarks.</param>
+    /// <param name="AStore">The current project's index. Not owned.</param>
+    /// <param name="AUnitPath">Absolute path of the declaring unit.</param>
+    /// <returns>False on an unmarked unit, on an unparseable block, and
+    /// whenever every stored entry is either inside this closure or flagged
+    /// uncertain -- i.e. it answers True only when there is something here that
+    /// ONLY another project could have written.</returns>
+    /// <remarks>
+    /// Exists because a narrow project that compiles a shared unit but
+    /// CALLS nothing in it renders an empty block, and both halves of this unit
+    /// are downstream of decisions taken before they are consulted: the checker
+    /// exits on the residual compare ('Pure' vs '') and the writer emits a pure
+    /// tekDeleteLines. Both now ask this first.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas)
+    /// Calls: DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared
+    /// Returns: False
+    /// Pure
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.UnitInClosure"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function HoldsForeignInboundEntries(const AStoredRemarks: string;
+      const AStore: ISymbolStore; const AUnitPath: string): Boolean;
   end;
 
 implementation
@@ -403,6 +503,16 @@ begin
   try
     ParseBlock(AFresh, FIn, FRes);
     try
+      { v(2026-08-14): the fresh render produced NO managed block AT ALL -- this
+        project compiles the unit but calls nothing in it. The residual compare
+        below would then decide on 'Pure' vs '' and report drift on a block this
+        project must not touch, which is the checker's half of the pure-deletion
+        defect (the writer's half is guarded in TDocumenter). Only forgiven when
+        the stored block carries entries that ONLY another project could have
+        written; a block with nothing foreign in it is still graded normally. }
+      if (FRes = '') and (FIn.Count = 0) and (SIn.Count > 0)
+         and HoldsForeignInboundEntries(AStored, AStore, AUnitPath) then Exit(False);
+
       { Everything that is not an inbound fact keeps byte-compare semantics --
         nothing about sharing makes a wrong Calls: or Complexity: line right. }
       if SRes <> FRes then Exit(True);
@@ -452,6 +562,40 @@ begin
       Result:= False;
     finally
       FIn.Free;
+    end;
+  finally
+    SIn.Free;
+  end;
+end;
+
+class function TSharedFacts.HoldsForeignInboundEntries(const AStoredRemarks: string;
+  const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+var
+  SIn : TFactMap;
+  SRes: string  ;
+  Lab : string  ;
+  SC  : string  ;
+  E   : string  ;
+  I   : Integer ;
+begin
+  Result:= False;
+  if (AStore = nil) or (not TSharedUnit.IsShared(AUnitPath)) then Exit;
+
+  ParseBlock(AStoredRemarks, SIn, SRes);
+  try
+    for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
+    begin
+      Lab:= INBOUND_LABELS[I];
+      if not SIn.TryGetValue(Lab, SC) then Continue;
+      if SC = '' then Continue;
+      { A TRUNCATED line is deliberately treated as foreign-bearing. The window
+        may hide an entry only another project can see, and the whole point here
+        is to refuse to destroy what cannot be reasoned about. This is the
+        opposite polarity to BlockDrifted's truncation guard and for the same
+        reason: both fail toward PRESERVING the source. }
+      if IsTruncated(SC) then Exit(True);
+      for E in SplitEntries(SC) do
+        if (not UnitInClosure(AStore, E)) and (not IsUncertainEntry(E)) then Exit(True);
     end;
   finally
     SIn.Free;

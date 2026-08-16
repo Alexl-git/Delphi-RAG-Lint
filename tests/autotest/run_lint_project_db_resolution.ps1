@@ -230,6 +230,70 @@ try {
   $leavesB = @($autoB | ForEach-Object { Split-Path $_.file_path -Leaf } | Sort-Object -Unique)
   Check 'AppB run keeps UnitB'  ($leavesB -contains 'UnitB.pas') ($leavesB -join ',')
   Check 'AppB run drops UnitA'  (-not ($leavesB -contains 'UnitA.pas')) ($leavesB -join ',')
+
+  # -------------------------------------------------------------------------
+  # 4) A bare `lint <file>` -- NO --project and NO --db -- must open the index
+  #    that HOLDS the file, not the manifest's first section.
+  #
+  #    ResolveConsumerDbs honoured --project but nothing consulted the FILE, so
+  #    consumers took Result[0] = the first declared section. `resolve-dbs --in`
+  #    had the membership ordering all along; the diagnostic had it and the
+  #    consumers did not. Field symptom: `index schema v19 < v21` from ORM3's
+  #    Micronite2027.sqlite while linting a YADF unit whose own index was
+  #    current. The QUIET form is the dangerous one -- every store-backed
+  #    per-file rule and every index-dependent autofix silently answers from a
+  #    foreign project's symbols.
+  #
+  #    This fixture is already the right shape: the manifest declares the WRONG
+  #    project first, so a run that ignores membership picks it.
+  # -------------------------------------------------------------------------
+  Write-Host ''
+  Write-Host 'Under test: bare `lint <file>` (no --project, no --db)' -ForegroundColor Cyan
+  $unitA = Join-Path (Split-Path $dprojA) 'UnitA.pas'
+  Check 'fixture has UnitA.pas to lint' (Test-Path $unitA) $unitA
+  if (Test-Path $unitA) {
+    $bareOut  = Get-Findings (& $exeCopy lint $unitA --json 2>$null)
+    $refOut   = Get-Findings (& $exeCopy lint $unitA --db $dbA --json 2>$null)
+    $wrongOut = Get-Findings (& $exeCopy lint $unitA --db $dbB --json 2>$null)
+    Check 'bare `lint <file>` emitted parseable JSON' ($null -ne $bareOut)
+    # The reference run is what "correct" means here. If IT is empty the
+    # comparison below is vacuous -- two zeros match -- so say so.
+    Check 'reference (explicit --db) run is NOT empty (else the match is vacuous)' `
+      ($refOut.Count -gt 0) "ref=$($refOut.Count)"
+
+    # PRECONDITION, and it is the whole point of this case: the two indexes must
+    # give DIFFERENT answers for UnitA, or "the bare run matches the right index"
+    # is satisfied by matching the wrong one too.
+    #
+    # Measured 2026-08-14: on this fixture they do NOT differ -- 5 findings either
+    # way -- because the rules that fire on UnitA are syntactic and never ask the
+    # store. So the assertion below PASSED against a build that did not have the
+    # membership ordering at all. It is reported rather than quietly kept, because
+    # a green assertion that cannot fail is worse than a missing one: the next
+    # reader would take this case as proof the defect is pinned.
+    $canTell = ($refOut.Count -ne $wrongOut.Count)
+    if (-not $canTell) {
+      Write-Host ("  [NOTE] case 4 is NON-DISCRIMINATING on this fixture: right-db=$($refOut.Count) " +
+                  "wrong-db=$($wrongOut.Count) are equal, so the match below cannot detect the " +
+                  "wrong index. It still guards against a CRASH or an empty result. " +
+                  "To make it real, UnitA needs a finding from a STORE-BACKED per-file " +
+                  "rule -- one whose answer differs when the index does not contain the file.") `
+                  -ForegroundColor Yellow
+    } else {
+      Check 'the two indexes DO give different answers (case 4 can discriminate)' $true `
+        "right=$($refOut.Count) wrong=$($wrongOut.Count)"
+      Check 'bare run does NOT match the wrong index' `
+        ($bareOut.Count -ne $wrongOut.Count) "bare=$($bareOut.Count) wrong=$($wrongOut.Count)"
+    }
+    Check 'bare run finding count == explicit --db count' `
+      ($bareOut.Count -eq $refOut.Count) "bare=$($bareOut.Count) db=$($refOut.Count)"
+    # No schema-version complaint: that warning names the wrong index out loud,
+    # and it is the observable that reported this defect in the first place.
+    $bareBanner = ((& $exeCopy lint $unitA 2>&1 | ForEach-Object { "$_" }) -join "`n")
+    Check 'bare run does not report a schema mismatch (i.e. it opened a current index)' `
+      (-not ($bareBanner -match 'schema v\d+ < v\d+')) `
+      (($bareBanner -split "`n" | Where-Object { $_ -match 'schema v' } | Select-Object -First 1))
+  }
 }
 finally {
   Pop-Location

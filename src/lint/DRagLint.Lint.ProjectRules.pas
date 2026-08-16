@@ -23,6 +23,8 @@ uses
   , DRagLint.Core.Interfaces
   , DRagLint.Index.Glob
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Lint.SharedUnit { ProjectsOf -- unused-public-symbol must not call a
+                               shared unit's API dead on one project's index }
   ;
 
 type
@@ -37,15 +39,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+26 more)
+    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedSymbolIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile (+24 more)
     /// Returns: nil; Findings.ToArray
-    /// Complexity: 48 (cyclomatic, outer body), 239 lines (full implementation)
+    /// Complexity: 48 (cyclomatic, outer body), 421 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Run(const AStore: ISymbolStore; const ARuleId: string = ''): TArray<TLintFinding>;
@@ -985,7 +987,38 @@ begin
             Parent:= AStore.GetSymbolById(Sym.ParentId);
             if (Parent.Id = Sym.ParentId) and (Parent.Kind = skUnit) then
               if not IsReferenced(Sym) then
-                Add('unused-public-symbol', 'info', Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);
+              begin
+                { A SHARED UNIT MAKES THIS RULE'S CONCLUSION UNPROVABLE, so say
+                  what is actually known instead of asserting dead API.
+
+                  IsReferenced asks ONE project's index. YADF, YADFOT and
+                  YADFSetup are three projects over one source folder, so a
+                  routine defined in a shared unit and called only from a sibling
+                  is unreferenced HERE and very much alive. Measured 2026-08-16:
+                  5 of 6 YADF findings were false this way -- SaveOptionsToIni
+                  alone has 10 caller refs in sibling DBs.
+
+                  NOT SUPPRESSED, deliberately. The one genuine finding in that
+                  set (OptionsHelpText, 0 refs anywhere) lives in YADF.Options.pas,
+                  which is itself shared -- skipping shared units would have
+                  traded a false positive for a false negative in the same file.
+                  So the finding stands and the MESSAGE carries the caveat, with
+                  the sibling projects named from the unit's own dl:shared header
+                  so the reader knows exactly where to look before deleting.
+                  Severity drops to hint because a question this index cannot
+                  answer should not block a true-zero run.
+                  See docs\INBOX-unused-public-symbol-lies-on-shared-units.md. }
+                var UPath  : string          := AStore.GetFilePath(Sym.FileId);
+                var UProjs : TArray<string>  := nil;
+                if UPath <> '' then UProjs:= DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf(UPath);
+                if Length(UProjs) > 1 then
+                  Add('unused-public-symbol', 'hint',
+                    Format('Exported routine %s is not referenced within this project. Its unit is shared with %s -- check there before treating it as dead.',
+                           [Sym.Name, string.Join(', ', UProjs)]), Sym)
+                else
+                  Add('unused-public-symbol', 'info',
+                    Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);
+              end;
           end;
           Inc(TUpub, Tick - TS); TS:= Tick;
 

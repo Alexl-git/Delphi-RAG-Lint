@@ -110,7 +110,7 @@ type
     /// iterating actual resolved rows (e.g. one per overload) should call
     /// BuildForSymbol directly instead (see its remarks).
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas)
+    /// Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)
     /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Doc.Document.TDocumenter.BuildForSymbol
     /// Returns: Default(TDocumentResult)
     /// Overload 1 of 2
@@ -132,7 +132,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: BuildFor(AStore, AQName, False).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)
+    /// Called from: DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)
     /// Calls: DRagLint.Doc.Document.TDocumenter.BuildFor/9
     /// Overload 2 of 2
     /// Pure
@@ -170,9 +170,9 @@ type
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove, DRagLint.Doc.Document.NormalizeCommentLines (+12 more)
+    /// Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan (+16 more)
     /// Returns: Default(TDocumentResult)
-    /// Complexity: 20 (cyclomatic, outer body), 357 lines (full implementation)
+    /// Complexity: 27 (cyclomatic, outer body), 474 lines (full implementation)
     /// Touches: file system
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -989,6 +989,44 @@ begin
     the whole rendering layer. }
   Merged:= TSharedFacts.MergeInboundFacts(Merged, Existing.Remarks, AStore, Path);
 
+  { v(2026-08-14) THE STALE-ANCHOR ROOT CAUSE. One line, and it is the cause of
+    INBOX-autodoc-not-idempotent-on-yadf, INBOX-document-qname-second-apply-nests-
+    block-on-stale-anchor, and the "unexplained" block duplication -- all three.
+
+    TTextEditApplier splits an insert's Text on CRLF/LF and inserts each part as
+    its own line (Refactor.TextEdit:423). A Text ending in a line break therefore
+    splits to a trailing EMPTY part, and every replace wrote one blank line more
+    than it deleted.
+
+    MEASURED on committed YADF at b65b2f9, ONE `document --project YADFOT --apply`:
+
+        blank lines between the block and its declaration   1  ->  2
+        TYadfOptions declaration line                      42  ->  43
+        YADF.Options.pas                                 1044  ->  1046 lines
+
+    That single extra blank is what makes the damage PERMANENT and SELF-
+    INFLICTED. FindDocRegionAbove associates through DocRegionInGapWindow with
+    AAllowGap = 1 -- window [DeclLine-2, DeclLine-1] -- so at a gap of 2 the
+    block is invisible to its own declaration FOREVER AFTER. The next run finds
+    no region, Existing.StartLine stays 0, the replace path is skipped, and
+    control reaches the unconditional insert at the bottom of this routine. A
+    second block appears; the gap grows again; repeat once per run. That is the
+    "54 pending edits after a full apply", and it needs no second project -- the
+    shared-unit case merely makes the two blocks differ, so the duplicate-insert
+    guard cannot recognise them and the corruption becomes visible.
+
+    Fixed HERE, at the single point where Merged is final, so the replace path
+    and the fresh-insert path below cannot diverge -- they took the same Text and
+    only one of them was ever examined.
+
+    NOT fixed by widening AAllowGap (shared by the indexer, harvest, facts and
+    strip -- it decides which declaration a comment BELONGS to) and not by
+    widening the duplicate guard again: CommentRunStartAbove was already added
+    for this symptom on 2026-08-13 and could only ever suppress the second
+    insert, never stop the gap from growing. }
+  while (Merged <> '') and CharInSet(Merged[Length(Merged)], [#13, #10]) do
+    SetLength(Merged, Length(Merged) - 1);
+
   // v(ADP3 T3): MergeComment returns '' when omit-when-empty suppression
   // leaves NOTHING to say (no summary/param/returns content and no facts to
   // render) -- see its own comment. A fresh symbol then gets NO edit at all
@@ -1006,6 +1044,29 @@ begin
     // correct by enumeration (an unmodeled tag type like <value> would still
     // be silently destroyed) where the raw-region check needs no future
     // maintenance as new tag types appear.
+    { v(2026-08-14): NEVER delete another project's contribution.
+
+      A project that COMPILES a `dl:shared` unit but CALLS nothing in it renders
+      an empty block, so Merged is '' and control arrives here -- at the one
+      place the engine emits a pure deletion. It would then strip a block whose
+      every entry was written by a project that CAN see those callers, and the
+      wide project rewrites it on its next run: the unbounded rewrite loop
+      `dl:shared` exists to end.
+
+      Neither half of TSharedFacts could prevent this on its own.
+      MergeInboundFacts ran a few lines above and could not help -- it merges
+      INTO a rendered block and there is no block to merge into -- and the
+      checker exits on its residual compare before any inbound label is
+      consulted. Both now ask HoldsForeignInboundEntries first.
+
+      Reported as daUnchanged, not daRemoved: nothing was removed, and D1's
+      whole point is that a deletion must stay distinguishable from a repair. }
+    if Existing.HasContent and RegionFullyEngineOwned(Region.RawText)
+       and TSharedFacts.HoldsForeignInboundEntries(Existing.Remarks, AStore, Path) then
+    begin
+      Result.Action:= daUnchanged;
+      Exit;
+    end;
     if Existing.HasContent and RegionFullyEngineOwned(Region.RawText) then
     begin
       E:= Default(TTextEdit);
@@ -1013,6 +1074,23 @@ begin
       E.Kind    := tekDeleteLines;
       E.Line    := Existing.StartLine;
       E.EndLine := Existing.EndLine;
+      // v(2026-08-16, store-backed fix-path audit): stamp the anchor here too,
+      // for CONSISTENCY -- not because a defect was reproduced. Every other edit
+      // this unit emits was stamped and this one, the only pure deletion, was
+      // not. MEASURED before adding it: with the stamp removed and the index
+      // deliberately stale, all three entry points already refuse without ever
+      // reaching this branch -- `document --unit` says "nothing to document",
+      // `document --qname` says "up to date", `lint-all --fix --apply` says "no
+      // fixable findings". The reason is that `Existing` is recomputed from the
+      // CURRENT file text, so a store line that no longer holds the declaration
+      // yields no engine-owned region and no edit at all.
+      //
+      // So this line is defence in depth against a FUTURE caller that resolves
+      // the span from store coordinates directly, and it is deliberately not
+      // guarded by a regression test: a test asserting "the stale case is
+      // refused" passes with or without it, which is the vacuous-guard trap this
+      // repo has been bitten by before.
+      StampAnchor(E, ASym);
       Result.Edits:= Result.Edits + [E];
       // v(ADP3 T3k, register D1): this is the ONE place the engine emits a pure
       // deletion -- a tekDeleteLines with no matching insert. It reported

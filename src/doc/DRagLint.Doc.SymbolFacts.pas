@@ -302,9 +302,10 @@ function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
-/// Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk, DRagLint.Doc.SymbolFacts.JoinCappedDisplay, IsTestRoutine, LastSegment
+/// Calls: DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers, DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk, DRagLint.Doc.SymbolFacts.JoinCappedDisplay, IsTestRoutine, LastSegment
 /// Returns: ''; JoinCappedDisplay(Capped, COVERED_BY_CAP)
 /// Pure
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers"/>
 /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
 /// <seealso cref="DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk"/>
 /// <seealso cref="DRagLint.Doc.SymbolFacts.JoinCappedDisplay"/>
@@ -438,14 +439,14 @@ type
       /// unanimity + object-type-gate ruleset.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
-      /// Calls: Default, DRagLint.Analysis.Cfg.CfgFindProcs, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches, DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity, Integer
+      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches, DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity, DRagLint.Doc.SymbolFacts.ProcsForFile, Integer
       /// Returns: Default(TSymbolFacts)
       /// Pure
-      /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent"/>
       /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams"/>
+      /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore): TSymbolFacts; static;

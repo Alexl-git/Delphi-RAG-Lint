@@ -1,3 +1,11 @@
+> **CONFIRMED 2026-08-16 (session 21) with a worked example, and it is costing more than this note claims.**
+>
+> `DRagLint.FormsMap.pas:76` documents `<exception cref=""Exception"">` on the SINGULAR `GenerateFormsCsv` overload (declared `:95`). Its implementation at `:1561` is exactly one line -- `Result := GenerateFormsCsv([ADbPath], AProjectFile, ARootForm);` -- and the `raise Exception.Create('forms-csv: no DB paths')` is at `:1545`, inside the ARRAY overload it delegates to. The documented exception is real for any caller; the checker reports *""the body never raises it""* because it inspects only the routine's own body.
+>
+> **Scope, measured:** this accounts for **3 of the 6** doc-drift findings that survive a fully converged autodoc on our own source (`Project.Resolver.pas:231` and `:256` are the other two). Fixing it would halve that residue -- see `INBOX-docdrift-4-survive-a-converged-autodoc`.
+>
+> A one-line delegating overload is the cheapest possible case to handle: follow a body that consists of a single call, one level.
+
 # INBOX -- `<exception cref>` is graded body-locally, so a DELEGATING routine is reported
 
 Filed 2026-08-10. Follow-up to commit `176cfb9`, which closed the BODYLESS half of
@@ -70,3 +78,27 @@ today, so `EFoo` does NOT currently satisfy a documented `Exception`.
 Absence over a wrong verdict. A rule that silently accepts any cref because
 something somewhere raises is worse than one that over-reports three known
 sites: the first cannot be audited, the second is a list of three.
+
+## Implementation note (2026-08-16, session 21) -- the cheap fix is WRONG, do not take it
+
+The tempting fix is to reuse the carve-out already sitting directly above this
+check in `Doc.Drift.pas`, which skips grading when the declaration has no body
+on the grounds that the rule *""was not observing an absent raise; it was
+observing that it had never looked""*. A delegating body is arguably the same
+situation, so: skip when `Facts.Raises` is empty and `Facts.Calls` is not.
+
+**That would gut the rule.** *""Calls something and raises nothing itself""*
+describes the majority of routines, so the tag would stop being graded almost
+everywhere -- trading three false positives for a rule that no longer works.
+Narrowing it to `Length(Facts.Calls) = 1` is better but still arbitrary: a
+routine that happens to call exactly one helper is not necessarily delegating.
+
+**The correct fix resolves the callee.** `TDocFacts` carries both `Calls` and
+`Raises`, and `TDocDrift.Analyze` already receives `AStore`, so the pieces
+are present: for each name in `Facts.Calls`, resolve it and ask whether ITS
+body raises the documented type; accept the tag if any does. One level is enough
+for all three known cases -- each is a one-line delegation.
+
+Cost is the reason it was not done in this session: it needs per-callee facts (or
+a store query for raises) inside a checker that currently does no such lookup,
+and doing it badly would be worse than the three findings it removes.

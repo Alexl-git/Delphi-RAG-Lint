@@ -57,7 +57,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) (+2 more)
-      /// Calls: by, children, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindContainingSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindEnclosingRoutineByImpl, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Resolver.TypeAt.FindGenericBaseAnywhere, DRagLint.Resolver.TypeAt.FindTypeAnywhere, DRagLint.Resolver.TypeAt.InferLocalVarType, DRagLint.Resolver.TypeAt.ParseGenericBase (+10 more)
+      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindContainingSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindEnclosingRoutineByImpl, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Resolver.TypeAt.FindGenericBaseAnywhere, DRagLint.Resolver.TypeAt.FindTypeAnywhere, DRagLint.Resolver.TypeAt.InferLocalVarType, DRagLint.Resolver.TypeAt.ParseGenericBase, DRagLint.Resolver.TypeAt.ResolveMemberOnType, DRagLint.Resolver.TypeAt.StoreIndexOf, DRagLint.Resolver.TypeAt.TTypeAtResolver.ExtractTokenAt, DRagLint.Resolver.TypeAt.TypeIdentOfSignature, FillChar, Format
       /// Overload 1 of 2
       /// Complexity: 37 (cyclomatic, outer body), 193 lines (full implementation)
       /// Touches: file system

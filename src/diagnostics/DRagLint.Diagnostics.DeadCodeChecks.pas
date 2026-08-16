@@ -111,8 +111,6 @@ type
     /// <param name="AMaxChainHops"><!-- drag-lint:auto type -->Integer = 4</param>
     /// <returns>Array of findings (severity 'warning'); empty when the file is
     /// clean or could not be parsed.</returns>
-    /// <exception cref="bug"><!-- drag-lint:auto --></exception>
-    /// <exception cref="wraps"><!-- drag-lint:auto --></exception>
     /// <remarks>
     /// Rules implemented: unused-parameter, identical-then-else,
     /// referenced-never-set, redundant-parentheses, commented-out-code, and
@@ -169,8 +167,9 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: accessor, AClassNode, ALower, ArgsHaveNoEncoding, argument, arguments, ATop, base, based, bound (+116 more)
+    /// Calls: ArgsHaveNoEncoding, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses, CollectPrivateFields, Copy, CountBoolOps (+58 more)
     /// Returns: nil; Deduped.ToArray
+    /// Complexity: 18 (cyclomatic, outer body), 2204 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>
@@ -1947,6 +1946,24 @@ var
   { Find the leftmost base identifier in an LHS expression (handles
     FField, FField.Sub, FField[i], FField.Sub[j] etc.).
     Returns the lowercased name or '' when no identifier found. }
+  { The MEMBER side of a one-level dotted lhs: for `Result.FField` returns
+    'ffield'. Returns '' for anything that is not exactly <base>.<identifier> --
+    in particular it does NOT peel `A.B.C`, because only a direct member of the
+    receiver can be this class's own field. Paired with the `result`/`self`
+    guard at the single call site; see the comment there for why the pairing is
+    what makes this exact rather than merely conservative. }
+  function LhsMemberIdent(const ALhsNode: TTSNode): string;
+  var
+    RhsNode: TTSNode;
+  begin
+    Result:= '';
+    if ALhsNode.IsNull then Exit;
+    RhsNode:= ALhsNode.ChildByField('rhs');
+    if RhsNode.IsNull then Exit;
+    if RhsNode.NodeType <> 'identifier' then Exit;
+    Result:= LowerCase(Trim(NodeStr(RhsNode)));
+  end;
+
   function LhsBaseIdent(const ALhsNode: TTSNode): string;
   var
     Cur: TTSNode;
@@ -2005,6 +2022,25 @@ var
       if not LhsNode.IsNull then
       begin
         BaseName:= LhsBaseIdent(LhsNode);
+        { `Result.FField := x` and `Self.FField := x` ARE writes to FField.
+          LhsBaseIdent peels to the LEFTMOST identifier, which is `result` or
+          `self` -- neither is a field, so no write was recorded and the field
+          was then reported "read but never written". Measured 2026-08-16: all
+          three live findings on our own source were this exact shape, a record
+          factory doing `Result.FActive := ...` (Project.OwnRoots.pas:157/182/
+          194/209) -- 100% false on the only population there was.
+
+          DELIBERATELY LIMITED TO `result` AND `self`. Crediting the rightmost
+          member of any dotted lhs would mis-attribute `SomeOther.FField := x`
+          -- another object's field that happens to share a name -- and silently
+          suppress a genuine finding. These two receivers are the only ones that
+          provably denote the object/record being constructed here, so the
+          narrow rule is exact rather than merely safer. }
+        if (BaseName = 'result') or (BaseName = 'self') then
+        begin
+          var MemberName: string:= LhsMemberIdent(LhsNode);
+          if (MemberName <> '') and AFields.ContainsKey(MemberName) then BaseName:= MemberName;
+        end;
         if (BaseName <> '') and AFields.ContainsKey(BaseName) then
         begin
           if AWrites.TryGetValue(BaseName, Cnt) then AWrites[BaseName]:= Cnt + 1
@@ -2292,6 +2328,66 @@ begin
         UF.FilePath:= AFile;
         UF.StartLine:= 1; UF.StartCol:= 1; UF.EndLine:= 1; UF.EndCol:= 1;
         Findings.Add(UF);
+      end;
+    end;
+    { v(2026-08-14): doc-orphan-block -- a managed facts block attached to NO
+      declaration.
+
+      WHY THIS IS A FILE-LEVEL RULE AND CANNOT BE A DOC RULE. doc-drift walks
+      SYMBOLS and asks whether each one's block is current. An orphan block
+      belongs to no symbol -- that is what makes it an orphan -- so a
+      symbol-driven walk cannot reach it by construction. This is why a wide
+      `document --apply` could stack four blocks above one declaration and every
+      convergence gate still reported "nothing to document": the documenter
+      neither rewrites nor removes what it cannot associate, and truthfully says
+      it has no work. Measured 2026-08-14 on YADF at b65b2f9 -- pass B green on
+      three projects while YADF.Options.pas carried a stacked pair.
+
+      THE PREDICATE: between two consecutive `drag-lint:auto BEGIN` markers there
+      must be at least one line of CODE. One declaration gets one managed block,
+      so two blocks with nothing declared between them means the FIRST is
+      unreachable -- it is the one reported, because it is the one to delete.
+
+      DELIBERATELY CONSERVATIVE about what counts as code: any non-blank line
+      that does not open with a comment token. The interior lines of a braced
+      block comment therefore read as code and SUPPRESS the finding. That is a
+      false negative, chosen over the false positive, because this rule exists to
+      be believed -- a stacked block is a rare, specific corruption and a rule
+      that cries wolf about ordinary comments would be turned off. }
+    begin
+      var Txt  : string          := TEncoding.UTF8.GetString(Src);
+      var SLine: TArray<string>  := Txt.Split([#13#10, #10]);
+      var PrevB: Integer         := -1;
+      for var LI:= 0 to High(SLine) do
+      begin
+        if Pos('drag-lint:auto BEGIN', SLine[LI]) = 0 then Continue;
+        if PrevB >= 0 then
+        begin
+          var HasCode: Boolean:= False;
+          for var J:= PrevB + 1 to LI - 1 do
+          begin
+            var T: string:= Trim(SLine[J]);
+            if T = '' then Continue;
+            if T.StartsWith('///') or T.StartsWith('//') or T.StartsWith('{')
+               or T.StartsWith('(*') or T.StartsWith('*)') or T.StartsWith('}') then Continue;
+            HasCode:= True;
+            Break;
+          end;
+          if not HasCode then
+          begin
+            var OF_: TLintFinding:= Default(TLintFinding);
+            OF_.RuleId  := 'doc-orphan-block';
+            OF_.Severity:= 'warning';
+            OF_.Message := Format('Managed facts block at line %d is attached to no declaration -- ' +
+                                  'the next block starts at line %d with no code between. A previous ' +
+                                  '--apply stacked it; delete this one.', [PrevB + 1, LI + 1]);
+            OF_.FilePath:= AFile;
+            OF_.StartLine:= PrevB + 1; OF_.StartCol:= 1;
+            OF_.EndLine  := PrevB + 1; OF_.EndCol  := 1;
+            Findings.Add(OF_);
+          end;
+        end;
+        PrevB:= LI;
       end;
     end;
     { Pass 1: collect all declProc names with contract-binding directives. }

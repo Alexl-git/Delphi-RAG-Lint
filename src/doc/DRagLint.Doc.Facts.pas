@@ -426,8 +426,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
-    /// Calls: all, ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+31 more)
-    /// Complexity: 75 (cyclomatic, outer body), 848 lines (full implementation)
+    /// Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+32 more)
+    /// Complexity: 77 (cyclomatic, outer body), 899 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -445,9 +445,17 @@ type
 /// <summary>Per-section cost of every TDocFactsBuilder.Build call so far, as two
 /// printable lines. Diagnostic only; read by the DRAGLINT_PROFILE doc-drift
 /// breakdown.</summary>
-/// <remarks>Build runs once per declaration and dominates both `document` and
+/// <returns><!-- drag-lint:auto type -->string</returns>
+/// <remarks>
+/// Build runs once per declaration and dominates both `document` and
 /// the doc-drift rule, and its cost is NOT where two successive guesses put it
-/// -- hence per-section accumulation rather than argument.</remarks>
+/// -- hence per-section accumulation rather than argument.
+/// <!-- drag-lint:auto BEGIN -->
+/// Calls: DRagLint.Doc.Facts.DocFactsBuildProfile.S, Format
+/// Pure
+/// <seealso cref="DRagLint.Doc.Facts.DocFactsBuildProfile.S"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DocFactsBuildProfile: string;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
@@ -467,6 +475,10 @@ implementation
 
 uses
   System.Diagnostics, // TStopwatch -- DocFactsBuildProfile's per-section counters
+  // StripPasCommentsKeepLayout only, for ReadDeclLine -- see its header. A pure
+  // leaf despite the unit name (its interface pulls in nothing but System.*), so
+  // no cycle and no lint machinery enters the doc engine.
+  DRagLint.Lint.ProjectChecks.Parse,
   DRagLint.Doc.SymbolFacts, // v(ADP2 T5): ComputeCoveredBy -- see TDocFacts.CoveredBy's comment
   // v(ADP3 T7): HarvestScan / HarvestText, called from Build via
   // HarvestInterfaceComment. IMPLEMENTATION-side because Doc.Harvest reaches
@@ -483,7 +495,15 @@ uses
   // would be a second answer to one question -- the drift channel this repo
   // keeps paying for. CallResolver reaches only Core.Model / Core.Interfaces,
   // so this adds no cycle.
-  DRagLint.Index.CallResolver;
+  DRagLint.Index.CallResolver,
+  // v(Q0, 2026-08-14): TSharedUnit.IsShared -- the `dl:shared` marker decides
+  // whether an INBOUND list may be truncated (see UnitIsShared below and the two
+  // cap sites in Build). Reaches only System units and Lint.ReviewMarker, so no
+  // cycle. DELIBERATELY the same reader DRagLint.Doc.SharedFacts asks: the
+  // checker forgives entries on a marked unit and this decides what the renderer
+  // may drop, so a second answer to "is this unit shared" would let the two
+  // disagree about the same file.
+  DRagLint.Lint.SharedUnit;
 
 { PERF ATTRIBUTION for Build, printed by the DRAGLINT_PROFILE doc-drift
   breakdown. Build is called once per declaration and dominated both the
@@ -776,12 +796,60 @@ end;
 // target, which is the same reason the other fourteen are here; these four were
 // simply never added because nothing in the corpora that built this list had an
 // anonymous method in it.
+type
+  { Comment state the body scanners carry BETWEEN lines.
+
+    Both scanners below used to declare their brace depth as a LOCAL, reset to
+    zero on every line, so a block comment opened on an EARLIER line was
+    invisible and its prose was read as code. Since the call scan matches
+    "Identifier" followed by an open paren, ordinary English does match it: a
+    comment reading "the defect (2026-08-14) was ..." yields a callee named
+    `defect`, and ", so (in this case) ..." yields `so`. Measured 150 such
+    entries across this repo's own committed documentation -- `constantly`,
+    `unreferenced`, `untouched`, `until`, `yet` -- and that count is a FLOOR,
+    since it only counted all-lowercase single tokens.
+
+    Worse than noise: the block then ASSERTS A CALL THAT DOES NOT EXIST, the
+    class this repo treats as more serious than an absent fact (the reason
+    doc-param-not-in-signature was split out and raised to error). And it is
+    self-reinforcing, because the rendered fact becomes prose the next
+    extraction reads -- `defect` was harvested from a comment written in the
+    same session by the pass that rendered it.
+
+    Star-paren comments were not handled at all, on any line.
+
+    Third unit to hit "a text scan cannot tell code from comment"; see
+    DRagLint.Lint.SharedUnit's header, which argues it at length for dl:shared. }
+  TBodyScanState = record
+    InBrace    : Integer; { brace-comment depth }
+    InStarParen: Boolean; { star-paren comment  }
+  end;
+
 function IsCallSkipWord(const AWord: string): Boolean;
 const
-  SKIP: array[0..17] of string = (
-    'if', 'while', 'for', 'case', 'with', 'and', 'or', 'not', 'in',
-    'array', 'set', 'string', 'to', 'downto',
-    'function', 'procedure', 'constructor', 'destructor');
+  { RESERVED WORDS ONLY. A reserved word cannot name a routine in Object Pascal,
+    so skipping one can never hide a real callee -- which is why this list may be
+    exhaustive while IsCompilerIntrinsic must stay deliberately narrow (Copy,
+    Insert and Delete are absent from THAT list precisely because a project may
+    define them). DIRECTIVES are therefore excluded here too: `name`, `index`,
+    `read`, `write`, `message`, `out` and friends are legal identifiers.
+
+    The list was 18 entries and the tail was missing, which showed up in the
+    corpus sweep for comment-harvested callees: after the comment-state fix took
+    that count from 150 to 1, the single survivor was `until` -- from a real
+    `repeat ... until (cond)` in code, where `until (` matches the
+    "Identifier followed by an open paren" call shape exactly. Every reserved
+    word that can precede a parenthesis has the same problem. }
+  SKIP: array[0..62] of string = (
+    'and', 'array', 'as', 'asm', 'begin', 'case', 'class', 'const',
+    'constructor', 'destructor', 'dispinterface', 'div', 'do', 'downto',
+    'else', 'end', 'except', 'exports', 'file', 'finalization', 'finally',
+    'for', 'function', 'goto', 'if', 'implementation', 'in', 'inherited',
+    'initialization', 'inline', 'interface', 'is', 'label', 'library', 'mod',
+    'nil', 'not', 'object', 'of', 'or', 'packed', 'procedure', 'program',
+    'raise', 'record', 'repeat', 'resourcestring', 'set', 'shl', 'shr',
+    'string', 'then', 'threadvar', 'to', 'try', 'type', 'unit', 'until',
+    'uses', 'var', 'while', 'with', 'xor');
 var W: string;
 begin
   W:= LowerCase(AWord);
@@ -809,24 +877,39 @@ end;
 // { } brace-comment depth. LIMITATION: a { } comment that OPENS on an earlier
 // line is not seen here (we scan one line at a time) -- accepted best-effort
 // for Chunk 1. Reserved words (if/while/etc.) are dropped via IsCallSkipWord.
-procedure CollectCallIdents(const ALine: string; AAcc: TStringList);
+procedure CollectCallIdents(const ALine: string; AAcc: TStringList; var AState: TBodyScanState);
 var
   I, N, J, K   : Integer;
-  InBrace      : Integer; // { } comment nesting depth on this line
   Ident        : string ;
 begin
   I:= 1;
   N:= Length(ALine);
-  InBrace:= 0;
   while I <= N do
   begin
-    if InBrace > 0 then
+    if AState.InBrace > 0 then
     begin
-      if ALine[I] = '}' then Dec(InBrace);
+      if ALine[I] = '}' then Dec(AState.InBrace);
       Inc(I);
       Continue;
     end;
-    if ALine[I] = '{' then begin Inc(InBrace); Inc(I); Continue; end;
+    if AState.InStarParen then
+    begin
+      if (ALine[I] = '*') and (I < N) and (ALine[I + 1] = ')') then
+      begin
+        AState.InStarParen:= False;
+        Inc(I, 2);
+        Continue;
+      end;
+      Inc(I);
+      Continue;
+    end;
+    if ALine[I] = '{' then begin Inc(AState.InBrace); Inc(I); Continue; end;
+    if (ALine[I] = '(') and (I < N) and (ALine[I + 1] = '*') then
+    begin
+      AState.InStarParen:= True;
+      Inc(I, 2);
+      Continue;
+    end;
     if (ALine[I] = '/') and (I < N) and (ALine[I + 1] = '/') then Break; // line comment
     if ALine[I] = '''' then
     begin
@@ -879,25 +962,43 @@ end;
 
 // Scans ONE source line for 'raise <Ident>' -- the whole-word keyword 'raise'
 // followed by an identifier (the exception class). Adds the class name to AAcc.
-// Same string/comment skipping and single-line limitation as CollectCallIdents.
-procedure CollectRaiseClass(const ALine: string; AAcc: TStringList);
+// Shares CollectCallIdents' string handling and its CROSS-LINE comment state:
+// prose is even likelier to fool this one, since "we raise EFoo when ..." inside
+// a block comment names a class that is never raised, and the result is not a
+// noisy fact line but a FABRICATED <exception cref> tag.
+procedure CollectRaiseClass(const ALine: string; AAcc: TStringList; var AState: TBodyScanState);
 var
   I, N, J, K : Integer;
-  InBrace    : Integer;
   Ident      : string ;
 begin
   I:= 1;
   N:= Length(ALine);
-  InBrace:= 0;
   while I <= N do
   begin
-    if InBrace > 0 then
+    if AState.InBrace > 0 then
     begin
-      if ALine[I] = '}' then Dec(InBrace);
+      if ALine[I] = '}' then Dec(AState.InBrace);
       Inc(I);
       Continue;
     end;
-    if ALine[I] = '{' then begin Inc(InBrace); Inc(I); Continue; end;
+    if AState.InStarParen then
+    begin
+      if (ALine[I] = '*') and (I < N) and (ALine[I + 1] = ')') then
+      begin
+        AState.InStarParen:= False;
+        Inc(I, 2);
+        Continue;
+      end;
+      Inc(I);
+      Continue;
+    end;
+    if ALine[I] = '{' then begin Inc(AState.InBrace); Inc(I); Continue; end;
+    if (ALine[I] = '(') and (I < N) and (ALine[I + 1] = '*') then
+    begin
+      AState.InStarParen:= True;
+      Inc(I, 2);
+      Continue;
+    end;
     if (ALine[I] = '/') and (I < N) and (ALine[I + 1] = '/') then Break;
     if ALine[I] = '''' then
     begin
@@ -999,13 +1100,75 @@ end;
 // file, out-of-range line) -- same tolerant pattern the Calls/Raises sections
 // above use for their own reads (source is strict ANSI/CRLF per repo
 // convention). Now served from SourceLines' memo.
+{ The declaration line, WITH ITS COMMENTS BLANKED.
+
+  Every consumer of this line regex-matches it for DIRECTIVES -- virtual,
+  dynamic, abstract, override, deprecated, and the constructor test -- so comment
+  text on the line was being read as part of the declaration:
+
+    procedure Foo; // override in subclasses     -> documented as override
+    procedure Bar; // deprecated;                -> a fabricated <deprecated> tag
+
+  Both write a FALSE CLAIM into generated documentation, which this repo treats
+  as worse than an absent fact. Fixed HERE rather than in each detector because
+  this is the one function they all read through -- DetectDeprecated,
+  DetectMethodDirectives, and DRagLint.Doc.Drift's own decl-line read -- so a
+  fifth consumer cannot reintroduce it.
+
+  StripPasCommentsKeepLayout blanks comments to spaces and PRESERVES STRING
+  LITERAL CONTENT (it tracks string state only so that a slash-slash or brace
+  inside a literal opens nothing). That distinction is load-bearing: masking
+  strings would destroy the message in `deprecated 'use Bar instead'`, which
+  DetectDeprecated extracts. Layout is preserved, so the Trim below and any
+  column arithmetic behave as before.
+
+  Same function ParseUsesFromContent and ParseDprUses scrub with -- one
+  implementation. This is the family whose every previous instance came from a
+  site growing its own half-scanner. }
 function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
 var Lines: TArray<string>;
 begin
   Result:= '';
   if (AFilePath = '') or (ALine <= 0) then Exit;
   Lines:= SourceLines(AFilePath);
-  if ALine <= Length(Lines) then Result:= Trim(Lines[ALine - 1]);
+  if ALine <= Length(Lines) then Result:= Trim(StripPasCommentsKeepLayout(Lines[ALine - 1]));
+end;
+
+{ v(Q0, 2026-08-14): is the declaring unit marked `dl:shared`?
+
+  Asked once per Build, i.e. once per DECLARATION, so it gets the same
+  single-entry stamp-keyed memo as SourceLines above and for the same two
+  reasons: decls arrive grouped by file, and `document --apply` rewrites these
+  files mid-run, so a path-only key would answer for the pre-edit text.
+
+  NOT built on SourceLines' line array. TSharedUnit.IsSharedText runs a
+  comment/string state machine over the raw text, and that machine is the whole
+  point of it -- it is what stops `dl:shared` inside a string literal counting as
+  a marker and what lets a marker on the second line of a braced header block
+  count as one. Rejoining split lines to feed it would be a second encoding of
+  the file's structure sitting next to the audited one. }
+var
+  GShrCachePath : string    ;
+  GShrCacheStamp: TDateTime ;
+  GShrCacheValue: Boolean   ;
+
+function UnitIsShared(const AFilePath: string): Boolean;
+var
+  Stamp: TDateTime;
+begin
+  Result:= False;
+  if AFilePath = '' then Exit;
+  try
+    Stamp:= System.IOUtils.TFile.GetLastWriteTime(AFilePath);
+  except
+    Exit; { missing/unreadable -- unmarked, which is the no-change answer }
+  end;
+  { Bit-exact for the same reason SourceLines is -- see its comment. }
+  if (GShrCachePath = AFilePath) and (PInt64(@GShrCacheStamp)^ = PInt64(@Stamp)^) then Exit(GShrCacheValue);
+  GShrCacheValue:= TSharedUnit.IsShared(AFilePath);
+  GShrCachePath := AFilePath;
+  GShrCacheStamp:= Stamp;
+  Result        := GShrCacheValue;
 end;
 
 // v(ADP3 T7): fills AFacts.HarvestedSummary / .HarvestedRemarks from the
@@ -1713,6 +1876,27 @@ begin
     Inc(GBUnresolved, BTick - TB0);
     Result.CalledFromTotal:= Distinct.Count;
     if Distinct.Count > AMaxCallers then Shown:= AMaxCallers else Shown:= Distinct.Count;
+    // v(Q0, 2026-08-14): NO CAP ON A `dl:shared` UNIT. This is an INBOUND fact --
+    // its entries come from OUTSIDE the unit, so each project that compiles the
+    // unit computes a DIFFERENT set, and the several projects have to agree on one
+    // line in one shared file. DRagLint.Doc.SharedFacts makes them agree by
+    // reconciling the sets, and it can only do that on a WHOLE list: a '(+N more)'
+    // window cannot be set-differenced soundly in either direction (an entry can
+    // leave the window because the cap fell differently, and a real deletion can
+    // hide inside the count), so TSharedFacts.BlockDrifted withholds forgiveness
+    // on a truncated line and the block drifts forever. Measured 2026-08-13: every
+    // remaining doc-drift finding on YADFOT/YADFSetup was a truncated line.
+    //
+    // RAISING THE CAP IS NOT THE SAME FIX and was declined: any finite cap only
+    // moves the cliff, and it lengthens every line in every project to buy a
+    // shared unit's convergence. Only marked units pay, and only they benefit.
+    //
+    // THE PRICE, which is real and is the reason this is opt-in: a marked unit's
+    // reference line grows without bound, and units get marked precisely because
+    // several projects call them. Attribution (WHICH project sees a caller) is a
+    // separate want that no union can serve -- see the per-project attributed
+    // segments item in docs\BACKLOG-shared-unit-attribution.md.
+    if UnitIsShared(AStore.GetFilePath(ASym.FileId)) then Shown:= Distinct.Count;
     if Shown < 0 then Shown:= 0;
     SetLength(Result.CalledFrom, Shown);
     for I:= 0 to Shown - 1 do Result.CalledFrom[I]:= Distinct[I];
@@ -1839,8 +2023,13 @@ begin
         CallSet.Duplicates:= dupIgnore;
         CallSet.CaseSensitive:= False;
         var Src: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error, as before }
+        { Comment state initialised ONCE, then carried across the body's lines --
+          see TBodyScanState. Starting "not in a comment" is right because the
+          span begins at the implementation header, and the routine's own
+          doc-comment sits ABOVE that line and is therefore not scanned. }
+        var ScanState: TBodyScanState:= Default(TBodyScanState);
         for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src)) do
-          CollectCallIdents(Src[Ln - 1], CallSet);
+          CollectCallIdents(Src[Ln - 1], CallSet, ScanState);
 
         // 3. Add a bare name only when its leaf is NOT already covered by a
         // resolved qualified callee (suppress the duplicate, keep the unresolved).
@@ -1954,6 +2143,16 @@ begin
       end;
       Result.UsedInTotal:= UnitSet.Count;
       var ShownU: Integer:= DocDisplayCount(UnitSet.Count);
+      // v(Q0, 2026-08-14): the SECOND capped inbound site -- see the long note on
+      // CalledFrom's cap above for why a marked unit is never truncated. Capped by
+      // a DIFFERENT rule (DocDisplayCount's >15-total->10-shown, not
+      // docs.max_callers), which is exactly why it needs its own exemption and its
+      // own fixture: fixing one label and leaving the other converges routines and
+      // leaves every shared TYPE drifting, which is the same bug wearing a
+      // different label. `Calls:` shares DocDisplayCount and is deliberately NOT
+      // exempted -- it is derived from this unit's OWN code, so every project that
+      // compiles the unit computes the same set and there is nothing to reconcile.
+      if UnitIsShared(AStore.GetFilePath(ASym.FileId)) then ShownU:= UnitSet.Count;
       SetLength(Result.UsedInUnits, ShownU);
       for var K:= 0 to ShownU - 1 do Result.UsedInUnits[K]:= UnitSet[K];
     finally
@@ -1972,8 +2171,9 @@ begin
       RaiseSet.Duplicates:= dupIgnore;
       RaiseSet.CaseSensitive:= False;
       var Src2: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error, as before }
+      var RaiseState: TBodyScanState:= Default(TBodyScanState); { see TBodyScanState }
       for var Ln2:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src2)) do
-        CollectRaiseClass(Src2[Ln2 - 1], RaiseSet);
+        CollectRaiseClass(Src2[Ln2 - 1], RaiseSet, RaiseState);
       Result.Raises:= RaiseSet.ToStringArray;
     finally
       RaiseSet.Free;

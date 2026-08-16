@@ -1,0 +1,9 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>Scrub.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="uScrubMain.pas"><Form>frmRootS</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uScrubReal.pas"><Form>frmRealS</Form><FormType>dfm</FormType></DCCReference>
+  </ItemGroup>
+</Project>

@@ -61,7 +61,7 @@ function NormUnit(const AName: string): string;
 /// <returns><!-- drag-lint:auto -->Observed: ASrc.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Lint.ProjectChecks.Parse.ParseUsesFromContent (DRagLint.Lint.ProjectChecks.Parse.pas)
+/// Called from: DRagLint.Doc.Facts.ReadDeclLine (DRagLint.Doc.Facts.pas), DRagLint.FormsMap.ReadPasLinesScrubbed (DRagLint.FormsMap.pas), DRagLint.Index.Closure.TClosureResolver.ParseDprUses (DRagLint.Index.Closure.pas), DRagLint.Lint.ProjectChecks.Parse.ParseUsesFromContent (DRagLint.Lint.ProjectChecks.Parse.pas)
 /// Calls: DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout.Blank
 /// Complexity: 23 (cyclomatic, outer body), 53 lines (full implementation)
 /// Pure

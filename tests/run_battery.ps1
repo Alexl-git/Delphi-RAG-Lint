@@ -268,6 +268,41 @@ $missingRules = @($rulesDsts | Where-Object {
   (-not (Test-Path -LiteralPath $p)) -or
   (@(Get-ChildItem -LiteralPath $p -File -Filter '*.scm' -ErrorAction SilentlyContinue).Count -eq 0)
 })
+# CONTENT, not just presence (register K41, extended 2026-08-16). The check
+# below asks "is there a corpus beside the exe?"; a directory holding 113 STALE
+# .scm files answers yes and prints "present". That happened during the
+# bare-except anchor fix: rules\bare-except.scm was edited, the battery reported
+# the catalogue present, and every suite silently measured the OLD rule. Nothing
+# stages these directories (they are gitignored build outputs that no build
+# produces), so drift is the normal state, not the exception.
+$staleRules = @()
+if ($missingRules.Count -eq 0) {
+  foreach ($d in $rulesDsts) {
+    $dst = Join-Path $repoRoot $d
+    foreach ($srcFile in (Get-ChildItem -LiteralPath $rulesSrc -File -Include '*.scm','*.json' -Recurse -ErrorAction SilentlyContinue)) {
+      $dstFile = Join-Path $dst $srcFile.Name
+      if (-not (Test-Path -LiteralPath $dstFile)) { $staleRules += ("{0}: MISSING {1}" -f $d, $srcFile.Name); continue }
+      if ((Get-FileHash -LiteralPath $srcFile.FullName).Hash -ne (Get-FileHash -LiteralPath $dstFile).Hash) {
+        $staleRules += ("{0}: DIFFERS {1}" -f $d, $srcFile.Name)
+      }
+    }
+  }
+}
+if ($staleRules.Count -gt 0) {
+  Write-Host '  *** RULE CATALOGUE BESIDE THE EXE IS STALE ***' -ForegroundColor Red
+  foreach ($s in $staleRules | Select-Object -First 12) { Write-Host ("      {0}" -f $s) -ForegroundColor Red }
+  if ($staleRules.Count -gt 12) { Write-Host ("      ... and {0} more" -f ($staleRules.Count - 12)) -ForegroundColor Red }
+  Write-Host  '      The suites below will measure the OLD rules, and will PASS while doing it.' -ForegroundColor Red
+  Write-Host  '      Fix:' -ForegroundColor Red
+  foreach ($m in $rulesDsts) {
+    Write-Host ("        Copy-Item ""{0}\*.scm"",""{0}\*.json"" ""{1}\{2}\"" -Force" -f $rulesSrc, $repoRoot, $m) -ForegroundColor Red
+  }
+  Write-Host  '      Continuing anyway -- same reasoning as the presence check below.' -ForegroundColor Red
+  Write-Host ''
+} elseif ($missingRules.Count -eq 0) {
+  Write-Host '  rule catalogue matches rules\ by content     : yes' -ForegroundColor Gray
+}
+
 if ($missingRules.Count -gt 0) {
   Write-Host '  *** PRECONDITION MISSING: no rule catalogue beside the exe ***' -ForegroundColor Red
   foreach ($m in $missingRules) { Write-Host ("      absent or empty: {0}" -f $m) -ForegroundColor Red }

@@ -44,7 +44,7 @@ type
   /// <summary>One catalogued rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize (DRagLint.Lint.RuleCatalog.pas)
+  /// Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas) (+2 more)
   /// Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -83,7 +83,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: L.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: code, codebase, DRagLint.Lint.RuleCatalog.MkParam, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B
+    /// Calls: DRagLint.Lint.RuleCatalog.MkParam, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B, IntToStr
     /// Pure
     /// <seealso cref="DRagLint.Lint.RuleCatalog.MkParam"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B"/>
@@ -101,7 +101,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Res.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
+    /// Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas)
     /// Calls: CompareText, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, ParamStr, SameText
     /// Complexity: 14 (cyclomatic, outer body), 80 lines (full implementation)
     /// Touches: file system
@@ -347,6 +347,13 @@ begin
     { --- documentation (ADF milestone) --- }
     B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment', False); // OFF by default -- fires 1302x on drag-lint's own first-run wave; opt in via "enabled"
     B('doc-drift',   'documentation', 'warning', 'DocInsight comment has drifted from the code it documents (--fix repairs the mechanically-safe subset)');
+    { The gate doc-drift STRUCTURALLY cannot be. doc-drift walks symbols; an
+      orphan block belongs to no symbol, so a stacked block is invisible to it
+      and to every convergence check built on it -- measured 2026-08-14, pass B
+      green on three YADF projects over source that already carried one. This is
+      a FILE-level scan (DRagLint.Diagnostics.DeadCodeChecks) for exactly that
+      reason. See docs\INBOX-autodoc-not-idempotent-on-yadf.md. }
+    B('doc-orphan-block', 'documentation', 'warning', 'Managed facts block is attached to no declaration -- a previous --apply stacked it above an existing block');
     { USER RULING 2026-08-09. Split out of doc-drift so the severity can be
       ERROR: the rest of doc-drift reports documentation that is INCOMPLETE,
       while a <param> naming a parameter the signature does not have is

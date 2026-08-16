@@ -108,8 +108,28 @@ New-SharedUnit 'Plain'   'PlainRoutine'   $false   # the unmarked control
 New-SharedUnit 'MarkQ'   'MarkQRoutine'   $true    # a '?' entry is still drift
 New-SharedUnit 'MarkDel' 'MarkDelRoutine' $true    # an in-closure deletion is still drift
 New-SharedUnit 'MarkInt' 'MarkIntRoutine' $true    # intrinsic drift is unaffected
-New-SharedUnit 'Busy'    'BusyRoutine'    $true    # a truncated list is not forgiven
+New-SharedUnit 'Busy'    'BusyRoutine'    $true    # a marked unit is never truncated
+New-SharedUnit 'MarkTrunc' 'MarkTruncRoutine' $true # a truncated STORED line is still not forgiven
 New-SharedUnit 'MarkFix' 'MarkFixRoutine' $true    # the SECOND writer entry point: --fix
+
+# v(Q0, 2026-08-14) -- the 'Used in units:' label is a SECOND capped inbound site
+# with the same defect, and it is capped by a DIFFERENT rule (DocDisplayCount,
+# >15 total -> 10 shown) than 'Called from:'/'Used by:' (docs.max_callers). It
+# needs its own fixture because it only exists for skClass/skInterface/skRecord,
+# so none of the procedure-only units above can reach it.
+Write-Ascii (Join-Path $shDir 'MarkType.pas') @'
+unit MarkType;   // dl:shared ProjA, ProjB
+
+interface
+
+type
+  TMarkType = class
+  end;
+
+implementation
+
+end.
+'@
 
 # --- project A: calls everything, and calls Busy SEVEN times so its caller list
 #     exceeds the display cap (max_callers is 5) and renders '(+N more)'.
@@ -122,7 +142,7 @@ procedure CallFromA;
 
 implementation
 
-uses Marked, Plain, MarkQ, MarkDel, MarkInt, Busy, MarkFix;
+uses Marked, Plain, MarkQ, MarkDel, MarkInt, Busy, MarkTrunc, MarkFix;
 
 procedure CallFromA;
 begin
@@ -131,6 +151,7 @@ begin
   MarkQRoutine;
   MarkDelRoutine;
   MarkIntRoutine;
+  MarkTruncRoutine;
   MarkFixRoutine;
 end;
 
@@ -141,6 +162,27 @@ foreach ($i in 1..7) {
 $aBody += "end.`n"
 Write-Ascii (Join-Path $aDir 'AOnly.pas') $aBody
 
+# 16 A-only units referencing TMarkType, so its 'Used in units:' total clears
+# DocDisplayCount's >15 threshold. A-only because the convergence question is
+# about entries the OTHER project cannot see.
+foreach ($i in 1..16) {
+  $nm = 'AUser{0:D2}' -f $i
+  Write-Ascii (Join-Path $aDir "$nm.pas") @"
+unit $nm;
+
+interface
+
+uses MarkType;
+
+var
+  G$nm : TMarkType;
+
+implementation
+
+end.
+"@
+}
+
 Write-Ascii (Join-Path $bDir 'BOnly.pas') @'
 unit BOnly;
 
@@ -150,13 +192,19 @@ procedure CallFromB;
 
 implementation
 
-uses Marked, Plain, MarkFix;
+uses Marked, Plain, MarkFix, MarkTrunc;
 
 procedure CallFromB;
 begin
   MarkedRoutine;
   PlainRoutine;
   MarkFixRoutine;
+  { B must CALL this one, or its fresh render is empty and the empty-render
+    preservation rule (2026-08-14) decides before IsTruncated is ever reached --
+    which is what the truncation case is supposed to be testing. Two rules
+    tangled in one fixture is how the ORIGINAL truncation assertion came to pass
+    for the wrong reason in the first place. }
+  MarkTruncRoutine;
 end;
 
 end.
@@ -198,7 +246,7 @@ Write-Host 'shared-unit staleness' -ForegroundColor Cyan
 
 # ---------------------------------------------------------------- convergence --
 # A documents everything it can see, then both stores are refreshed.
-foreach ($u in 'Marked', 'Plain', 'MarkQ', 'MarkDel', 'MarkInt', 'Busy', 'MarkFix') { DocApply $dbA $u | Out-Null }
+foreach ($u in 'Marked', 'Plain', 'MarkQ', 'MarkDel', 'MarkInt', 'Busy', 'MarkTrunc', 'MarkType', 'MarkFix') { DocApply $dbA $u | Out-Null }
 Reindex $dbA @($shDir)
 Reindex $dbB @($shDir)
 
@@ -263,12 +311,72 @@ $iText = $iText -replace '(?m)(///\s*Called from:.*?\r?\n)', "`$1/// Calls: NoSu
 Reindex $dbA @($shDir)
 Check 'intrinsic drift is unaffected' ((DriftCount $dbA 'MarkInt') -gt 0)
 
-# A truncated list is a WINDOW onto the entries, not the entries, so set
-# difference is unsound in both directions and forgiveness is withheld.
+# v(Q0, 2026-08-14) -- A MARKED UNIT'S INBOUND LISTS ARE NEVER TRUNCATED, and
+# that is the whole fix. Truncation was the ONE thing that stopped the union
+# converging: a '(+N more)' window cannot be set-differenced soundly in either
+# direction, so forgiveness had to be withheld, so a shared unit with more than
+# `docs.max_callers` callers drifted forever. Uncapping the marked unit -- rather
+# than raising the cap, which only moves the cliff -- lets the union that already
+# ships do the rest.
+#
+# THE PRICE, stated because it is real: a line on a marked unit grows without
+# bound, and marked units are marked precisely because many things call them.
+#
+# PAIRED GUARD: tests\autodoc\run_doc_cap.ps1 holds the cap in place for an
+# UNMARKED unit (16 callers -> 5 shown, '(+11 more)'). Without it this change
+# would "pass" by uncapping everything.
 $busy = BlockLine 'Busy' 'Called from'
-Check 'the truncation fixture actually truncated' ($busy -match '\(\+\d+ more\)') `
+Check 'a marked unit''s inbound list is not truncated' (-not ($busy -match '\(\+\d+ more\)')) `
   "block says: $busy"
-Check 'a truncated inbound list is not forgiven' ((DriftCount $dbB 'Busy') -gt 0) `
+Check 'all 7 callers are shown, not the cap''s 5' ((([regex]::Matches($busy, 'BusyCaller\d')).Count) -eq 7) `
+  "block says: $busy"
+Check 'the uncapped block is stable under A' ((DriftCount $dbA 'Busy') -eq 0) `
+  'a 7-entry line must be as idempotent as a 5-entry one'
+Check 'no second edit under A on the uncapped block' ((DocEditCount $dbA 'Busy') -eq 0)
+
+# THE EMPTY-RENDER CASE, fixed 2026-08-14. B compiles Busy and never calls
+# BusyRoutine, so B's fresh render is EMPTY. Until today that was DESTRUCTIVE:
+# TSharedFacts.BlockDrifted exited on `SRes <> FRes` ('Pure' vs '') before ever
+# reaching the inbound labels, and TDocumenter then emitted a pure
+# tekDeleteLines that stripped the wide project's documentation -- which A then
+# rewrote on its next run, the unbounded loop dl:shared exists to end.
+#
+# Neither half of TSharedFacts could stop it alone: MergeInboundFacts merges
+# INTO a rendered block and there was none. Both halves now ask
+# HoldsForeignInboundEntries first.
+Check 'the empty-render block is not deleted under B' ((DocEditCount $dbB 'Busy') -eq 0) `
+  'B renders nothing; every stored entry names AOnly, which B cannot see'
+Check 'and B reports no drift on it' ((DriftCount $dbB 'Busy') -eq 0) `
+  'the checker half -- it used to decide on the residual compare'
+Check 'A still sees no drift on the same block' ((DriftCount $dbA 'Busy') -eq 0) `
+  'the wide project must not be provoked into rewriting it either'
+
+# Note for the record: the OLD assertion here ('a truncated inbound list is not
+# forgiven') was passing for the WRONG REASON -- it exited at that same residual
+# compare and never reached IsTruncated, so that guard had NO coverage at all
+# until the MarkTrunc fixture below.
+
+# The SECOND capped inbound site, under a different rule (DocDisplayCount). One
+# site fixed and the other left would converge 'Called from:' and leave every
+# shared TYPE drifting, which is the same bug with a different label.
+$ut = BlockLine 'MarkType' 'Used in units'
+Check 'the Used-in-units fixture clears the cap' ((([regex]::Matches($ut, 'AUser\d\d')).Count) -eq 16) `
+  "block says: $ut"
+Check 'Used in units: is not truncated on a marked unit' (-not ($ut -match '\(\+\d+ more\)')) `
+  "block says: $ut"
+
+# The truncation guard in TSharedFacts is STILL LIVE and still needs a case:
+# source written before this change, or by hand, can carry a '(+N more)' in the
+# STORED line, and set difference over that window is unsound whatever produced
+# it. Without the guard B forgives every entry here -- they all name AOnly,
+# outside B's closure -- and reports no drift on a line it cannot reason about.
+$tPath = Join-Path $shDir 'MarkTrunc.pas'
+$tText = [System.IO.File]::ReadAllText($tPath)
+$tText = $tText -replace '(?m)(///\s*Called from:.*?)(\r?\n)', '$1 (+3 more)$2'
+[System.IO.File]::WriteAllText($tPath, $tText, [System.Text.Encoding]::ASCII)
+Reindex $dbA @($shDir)
+Reindex $dbB @($shDir)
+Check 'a truncated STORED line is still not forgiven' ((DriftCount $dbB 'MarkTrunc') -gt 0) `
   'a window onto the list is not the list; today''s byte compare stands'
 
 # ------------------------------------------------- the OTHER writer entry point --

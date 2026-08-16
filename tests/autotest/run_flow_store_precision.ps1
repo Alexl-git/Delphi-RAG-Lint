@@ -194,10 +194,27 @@ Check "TTimer.Create(nil) IS a leak (line $lnOrphan)" `
   'one argument apart from the case above -- keeps the fix honest'
 
 Write-Host ''
-Write-Host 'B. KNOWN LIMITATION, asserted so a future fix is visible' -ForegroundColor Cyan
-Check "short-circuited read after an out-def still fires (line $lnShort)" `
-  ($fired.ContainsKey("used-before-assignment@$lnShort")) `
-  'flip this when intra-item evaluation order is modelled'
+Write-Host 'B. intra-item evaluation order IS modelled (was a known limitation)' -ForegroundColor Cyan
+# FLIPPED 2026-08-15, exactly as the old assertion's own note instructed
+# ("flip this when intra-item evaluation order is modelled").
+#
+# `if TryFetch('k', G) and (G.Tag > 1)` short-circuits left to right, so the
+# out-arg def of G in the left operand happens BEFORE the right operand reads it.
+# Both operands are one AST node and therefore one CFG item, and the per-item
+# replay tested every read against the state from before the item's own defs --
+# so the read was reported as a use before assignment.
+#
+# CollectAndOrLeftDefs (DRagLint.Diagnostics.FlowChecks) now carries the same
+# left-to-right refinement that CollectInterfaceDerefs already had for
+# `not-assigned-interface`, so the two checks agree about this idiom instead of
+# one of them being wrong about it.
+#
+# This assertion is the RIGHT way round now: the shape is safe, so silence is
+# correct. Section A above remains the positive control for the run -- if the
+# rules were simply off, "TTimer.Create(nil) IS a leak" would fail too.
+Check "short-circuited read after an out-def is NOT reported (line $lnShort)" `
+  (-not $fired.ContainsKey("used-before-assignment@$lnShort")) `
+  'left-to-right and/or sequencing is modelled; see CollectAndOrLeftDefs'
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

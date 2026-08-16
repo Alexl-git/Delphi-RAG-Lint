@@ -220,7 +220,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?
-    /// Calls: b, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.EnumHelper.DetectExplicitOrdinal, DRagLint.Refactor.EnumHelper.ReadDeclSpan
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.EnumHelper.DetectExplicitOrdinal, DRagLint.Refactor.EnumHelper.ReadDeclSpan
     /// Returns: Default(TEnumHelperResolve)
     /// Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)
     /// Pure
@@ -257,7 +257,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
-    /// Calls: Default, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase, so
+    /// Calls: Default, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase
     /// Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue))
     /// Complexity: 20 (cyclomatic, outer body), 164 lines (full implementation)
     /// Pure
@@ -298,7 +298,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas)
-    /// Calls: BodiesLine, breaks, clause, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Refactor.EnumHelper.FindImplementationLine, DRagLint.Refactor.EnumHelper.IndentLines, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (+13 more)
+    /// Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Refactor.EnumHelper.FindImplementationLine, DRagLint.Refactor.EnumHelper.IndentLines, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve, DRagLint.Refactor.EnumHelper.UsesContainsTypInfo, ExtractFileName, Format, TrimLeft
     /// Returns: Default(TEnumHelperResult)
     /// Complexity: 23 (cyclomatic, outer body), 193 lines (full implementation)
     /// Touches: file system

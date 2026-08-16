@@ -28,6 +28,7 @@ unit DRagLint.Doc.Batch;
 interface
 
 uses
+  System.SysUtils, { TFunc, for TDocBatchOptions.IsExcluded }
   DRagLint.Core.Model, DRagLint.Core.Interfaces,
   DRagLint.Refactor.TextEdit;
 
@@ -105,6 +106,37 @@ type
     /// is strictly worse than reporting on it, so the same declaration governs
     /// both. Mirrors --lint-third-party as --document-third-party.</remarks>
     DocumentThirdParty: Boolean;
+    /// <summary>"Is this file excluded from all drag-lint processing?" --
+    /// normally TLintConfig.IsPathExcluded, supplied by the caller. Nil means no
+    /// exclusions, which is what Default(TDocBatchOptions) gives.</summary>
+    /// <remarks>OWNERSHIP IS TWO SETTINGS AND ONLY ONE WAS THREADED HERE. On
+    /// 2026-08-14 an autodoc pass over drag-lint's OWN source left 2,300
+    /// generated lines in third_party\delphi-tree-sitter, vendored upstream
+    /// bindings the repo explicitly declines to restyle. Its ownRoots is the
+    /// REPO ROOT on purpose (the .dproj sits in src\cli, so defaulting to the
+    /// project folder would classify the rest of the repo as third-party), and
+    /// the vendored-code exclusion therefore lives entirely in
+    /// drag-lint-lint.json's exclude_paths -- which was a LINT-ONLY concept.
+    /// TOwnRoots reached the writers; its neighbour did not. The two checks sit
+    /// on ADJACENT LINES in lint-all's file loop (DRagLint.CLI.pas, around the
+    /// Cfg.IsPathExcluded / Own.IsOurs pair) and only the second was propagated.
+    ///
+    /// Passed as a PREDICATE rather than as the glob list, so the one
+    /// implementation of the match answers for both commands instead of a second
+    /// copy of the glob logic drifting from the first. Passed rather than loaded
+    /// here for two reasons: TOwnRoots is deliberately standalone (its own header
+    /// explains that the LSP and the IDE plugin must not drag in the lint
+    /// configuration machinery), and config DISCOVERY is CWD-sensitive -- the
+    /// caller already resolved --config correctly, and re-deriving it here from
+    /// the current directory would silently find nothing on exactly the runs
+    /// that matter.
+    ///
+    /// Applied UNCONDITIONALLY, before the DocumentThirdParty escape hatch,
+    /// mirroring lint-all: exclude_paths means "never touch these", while
+    /// ownRoots means "mine versus third-party" and is what the flag opens up.
+    /// --lint-third-party does not defeat exclude_paths, so
+    /// --document-third-party must not either.</remarks>
+    IsExcluded: TFunc<string, Boolean>;
   end;
 
   /// <summary>Aggregated batch result. Edits is the union of every kept
@@ -165,9 +197,9 @@ type
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Batch.HasManagedBlock, DRagLint.Doc.Batch.IsDocumentableKind, DRagLint.Doc.Batch.IsTrivialAccessor, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Strip.TDocStripper.StripFile, SameText
+    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Batch.HasManagedBlock, DRagLint.Doc.Batch.IsDocumentableKind, DRagLint.Doc.Batch.IsTrivialAccessor, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Strip.TDocStripper.StripFile, Format, SameText, Writeln
     /// Returns: Default(TDocBatchResult)
-    /// Complexity: 12 (cyclomatic, outer body), 109 lines (full implementation)
+    /// Complexity: 14 (cyclomatic, outer body), 126 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Doc.Batch.HasManagedBlock"/>
@@ -194,14 +226,14 @@ type
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths
-    /// Returns: AggregateOverFiles(AStore, CR.Files, AOptions)
+    /// Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths
+    /// Returns: AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions)
     /// Pure
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
+    /// <seealso cref="DRagLint.Doc.Batch.FilterToOwnRoots"/>
     /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
     /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Resolve"/>
     /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function DocumentProject(const AStore: ISymbolStore; const AProjectFile: string;
@@ -236,7 +268,9 @@ type
 implementation
 
 uses
-  System.SysUtils, System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
+  { System.SysUtils is in the INTERFACE uses now -- TDocBatchOptions.IsExcluded
+    needs TFunc there -- so repeating it here is E2004. }
+  System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
   DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Strip,
   DRagLint.Index.Closure, DRagLint.Project.Resolver,
   { Ownership for DocumentProject -- the same declaration lint-all reads, so the
@@ -315,6 +349,23 @@ var
   E      : TTextEdit         ;
 begin
   Result := Default(TDocBatchResult);
+
+  { THE ONE PLACE exclude_paths is enforced, because this is the one place every
+    entry point funnels through: `document --project` and `document-all` arrive
+    via AggregateOverFiles, and `document --unit` calls straight in here, never
+    touching AggregateOverFiles or FilterToOwnRoots. Putting the check beside
+    ownRoots -- the intuitive home -- would have missed --unit and would have
+    been defeated by --document-third-party, which is exactly the "fixed it per
+    COMMAND" mistake this defect's own predecessor note closed with.
+    Before --strip too: stripping engine output from vendored source is still
+    writing to it.
+    AggregateOverFiles counts these and reports once for the batch, so the
+    message below is only reached on the direct --unit path. }
+  if Assigned(AOptions.IsExcluded) and AOptions.IsExcluded(AUnitFile) then
+  begin
+    Writeln(ErrOutput, Format('doc: %s skipped by exclude_paths.', [AUnitFile]));
+    Exit;
+  end;
 
   // v(ADP3 T2): --strip bypasses the whole per-symbol facts pipeline below --
   // it never queries AStore at all, just scans AUnitFile's raw lines for
@@ -422,19 +473,30 @@ end;
 function AggregateOverFiles(const AStore: ISymbolStore;
   const AFiles: TArray<string>; const AOptions: TDocBatchOptions): TDocBatchResult;
 var
-  F        : string;
-  Sub      : TDocBatchResult;
-  Collected: TList<TTextEdit>;
-  E        : TTextEdit;
+  F            : string;
+  Sub          : TDocBatchResult;
+  Collected    : TList<TTextEdit>;
+  E            : TTextEdit;
+  ExcludedCount: Integer;
 begin
   Result := Default(TDocBatchResult);
   Collected := TList<TTextEdit>.Create;
+  ExcludedCount := 0;
   try
     for F in AFiles do
     begin
       // Only Delphi sources carry documentable decls; skip include files and
       // any non-.pas closure member so DocumentUnit is not asked to parse them.
       if not SameText(ExtractFileExt(F), '.pas') then Continue;
+      { Counted and reported ONCE for the batch. DocumentUnit refuses an excluded
+        file on its own too -- that is the guarantee, and it covers `document
+        --unit`, which never comes through here -- but its per-file message would
+        repeat a hundred times on a whole-project run. }
+      if Assigned(AOptions.IsExcluded) and AOptions.IsExcluded(F) then
+      begin
+        Inc(ExcludedCount);
+        Continue;
+      end;
       Sub := TDocBatch.DocumentUnit(AStore, F, AOptions);
       Inc(Result.DeclCount, Sub.DeclCount);
       Inc(Result.DocCount , Sub.DocCount );
@@ -444,6 +506,12 @@ begin
       for E in Sub.Edits do Collected.Add(E);
     end;
     Result.Edits := Collected.ToArray;
+    { Named, not silent, for the same reason FilterToOwnRoots names its skipped
+      roots: a silent drop is indistinguishable from "there was nothing there",
+      which is exactly how 2,300 generated lines reached vendored source without
+      anyone noticing. }
+    if ExcludedCount > 0 then
+      Writeln(ErrOutput, Format('doc: %d file(s) skipped by exclude_paths.', [ExcludedCount]));
   finally
     Collected.Free;
   end;
@@ -471,6 +539,11 @@ begin
   Own:= TOwnRoots.Load(ExtractFilePath(AProjectFile));
   if not Own.Active then Exit;
 
+  { exclude_paths is deliberately NOT checked here. It is not an ownership
+    question and it must hold even when this filter bails out early (under
+    --document-third-party, or with no declaration active), so it lives at the
+    one place every entry point funnels through -- DocumentUnit -- rather than
+    beside ownRoots. See TDocBatchOptions.IsExcluded. }
   Kept   := TList<string>.Create;
   Skipped:= TDictionary<string, Integer>.Create;
   try

@@ -43,7 +43,7 @@ interface
 /// a handle that a concurrent `index --all` would have to drop.
 /// Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.Storage.FileMembership.NormalizeForLookup, index
+/// Calls: DRagLint.Storage.FileMembership.NormalizeForLookup
 /// Returns: False; not Q.Eof
 /// SQL: reads FILES
 /// Touches: file system

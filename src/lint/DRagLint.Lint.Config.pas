@@ -32,7 +32,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TNamingConfig</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.DoScanAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ? (+37 more)
+    /// Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.DoScanAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ? (+40 more)
     /// Pure
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -47,7 +47,7 @@ type
   /// default.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), declaration (DRagLint.Lint.ClassMetrics.pas) (+3 more)
+  /// Used by: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) (+4 more)
   /// Used in units: DRagLint.CLI, DRagLint.Lint.ClassMetrics, DRagLint.Lint.Config, DRagLint.LSP.Completion
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -116,9 +116,9 @@ type
     /// <param name="AReplace"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef, unchanged
-    /// Complexity: 15 (cyclomatic, outer body), 63 lines (full implementation)
-    /// Reads: FDisabled, FEnabled, FAutoFix, FThreshNames, FThreshValues   Writes: FDisabled, FEnabled, FAutoFix, FThreshNames, FThreshValues
+    /// Calls: DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef
+    /// Complexity: 17 (cyclomatic, outer body), 68 lines (full implementation)
+    /// Reads: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues   Writes: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyNamingObject"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetSeverityPair"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
@@ -229,11 +229,25 @@ type
     /// <param name="AFilePath">Full path of the candidate source file.</param>
     /// <returns>True to SKIP the file; False to lint it. Always False when no
     /// exclude_paths are configured, so behaviour is unchanged by default.</returns>
-    /// <remarks>Case-insensitive, and matched against the WHOLE path so a glob
+    /// <remarks>
+    /// Case-insensitive, and matched against the WHOLE path so a glob
     /// like <c>*\third_party\*</c> selects a directory subtree. This drops the
     /// file before any rule runs -- it is a scope decision, not a per-rule
     /// suppression, because vendored code is not this codebase's quality
-    /// signal for ANY rule.</remarks>
+    /// signal for ANY rule.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
+    /// Calls: LowerCase, MatchesMask, StringReplace
+    /// Returns: False; True
+    /// Reads: FExcludePaths
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyConfigObject"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyNamingObject"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsPathExcluded(const AFilePath: string): Boolean;
     /// <summary>Returns the configured threshold for AName, else ADefault.</summary>
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>

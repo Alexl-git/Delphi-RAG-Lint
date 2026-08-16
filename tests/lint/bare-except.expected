@@ -1,3 +1,8 @@
-# bare except body (plain statements, no on-clause) pins to the statements at line 12
-bare-except 12
+# Pins to the `except` KEYWORD on line 11, NOT to the statements on line 12.
+# Changed 2026-08-16 with the @warn capture move to (kExcept): the reported line
+# is where a reviewer must write an accountable `dl:ok bare-except` marker, and
+# on line 12 that was the handler's first statement rather than the construct
+# the rule is about. See docs/INBOX-bare-except-anchor-defeats-a-hand-written-marker.md
+# and tests/autotest/run_bare_except_anchor.ps1.
+bare-except 11
 !empty-except

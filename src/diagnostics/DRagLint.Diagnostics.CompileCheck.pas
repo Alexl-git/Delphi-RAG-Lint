@@ -110,7 +110,7 @@ type
       /// (path(line) Severity: code message).
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas)
-      /// Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SeverityFromCode, letter, StrToIntDef, Trim, word
+      /// Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SeverityFromCode, StrToIntDef, Trim
       /// Returns: False; True
       /// Mutates: AFinding (out)
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
@@ -148,7 +148,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)
-      /// Calls: blanked, dirs, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf, filter, flags, GetShortPathName, long, LowerCase, Pos, PWideChar, SetString, StringReplace, Trim, Win32
+      /// Calls: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf, GetShortPathName, LowerCase, Pos, PWideChar, SetString, StringReplace, Trim
       /// Complexity: 14 (cyclomatic, outer body), 103 lines (full implementation)
       /// Touches: file system, registry
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf"/>

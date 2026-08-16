@@ -91,15 +91,15 @@ type
 /// Not thread-safe; call from a single thread.
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas)
-/// Calls: Default, DRagLint.Index.Manifest.TIndexManifest.FindSection, DRagLint.Index.Plan.BuildFilter, DRagLint.Index.Plan.ClassifyMode, DRagLint.Index.Plan.CollectRootsByName, DRagLint.Index.Plan.CollectRootsExcept, DRagLint.Index.Plan.ExpandDbPath, DRagLint.Index.Plan.PlatformAllowed, DRagLint.Index.Plan.ResolveRoots, DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms, DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths
+/// Calls: Default, DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.TIndexManifest.FindSection, DRagLint.Index.Plan.BuildFilter, DRagLint.Index.Plan.ClassifyMode, DRagLint.Index.Plan.CollectRootsByName, DRagLint.Index.Plan.CollectRootsExcept, DRagLint.Index.Plan.ExpandDbPath, DRagLint.Index.Plan.PlatformAllowed, DRagLint.Index.Plan.ResolveRoots, DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms, DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths
 /// Returns: Default(TIndexPlan)
-/// Complexity: 14 (cyclomatic, outer body), 121 lines (full implementation)
+/// Complexity: 13 (cyclomatic, outer body), 126 lines (full implementation)
 /// Touches: file system
+/// <seealso cref="DRagLint.Index.Manifest.ExpandSectionDb"/>
 /// <seealso cref="DRagLint.Index.Manifest.TIndexManifest.FindSection"/>
 /// <seealso cref="DRagLint.Index.Plan.BuildFilter"/>
 /// <seealso cref="DRagLint.Index.Plan.ClassifyMode"/>
 /// <seealso cref="DRagLint.Index.Plan.CollectRootsByName"/>
-/// <seealso cref="DRagLint.Index.Plan.CollectRootsExcept"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ResolvePlan(const AManifest: TIndexManifest; const APlatformsFilter: TArray<string>; AResolver: TProjectResolver): TIndexPlan;

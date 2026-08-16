@@ -37,15 +37,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: alternatives, AssignmentBaseIndex, AssignmentTargetIndex, bail, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy, cycles, Default (+28 more)
-    /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); Findings.ToArray
-    /// Complexity: 17 (cyclomatic, outer body), 567 lines (full implementation)
+    /// Calls: ApplyEntryDefs, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructedTypeText, ConstructorTransfersOwnership, Copy, Default (+26 more)
+    /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); Findings.ToArray
+    /// Complexity: 21 (cyclomatic, outer body), 676 lines (full implementation)
     /// Touches: file system
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.FindCalleeDefProc"/>
-    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.ParamClearlyNonOwning"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ResolveTypeNameToClass"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore = nil;
@@ -80,6 +80,28 @@ begin
   if (T = 'string') or (T = 'unicodestring') or (T = 'ansistring') or (T = 'widestring')
      or (T = 'rawbytestring') or (T = 'variant') or (T = 'olevariant') then Exit(True);
   if (Pos('array of', T) > 0) or (Pos('tarray<', T) > 0) then Exit(True);
+  { A STATIC array is managed iff its ELEMENT type is. `array[0..2] of string`
+    is zero-initialised by the compiler exactly as a bare string local is, so
+    reading an element before any write yields '' -- defined behaviour, and not
+    something used-before-assignment can describe as a defect.
+
+    The dynamic-array test above misses it: 'array of' is not a substring of
+    'array[0..2] of'. That gap produced all three surviving
+    used-before-assignment findings on DataCopy (uZeissRoutines LRestore/LBackup,
+    both `array[0..2] of string`), and the rule was already declining to report
+    the ANALOGOUS scalar case -- a bare `string` local, and even an uninitialised
+    `Integer` -- so reporting the array was inconsistent with its own bar.
+
+    Recurse rather than assume: `array[0..2] of Integer` is NOT zero-initialised
+    on the stack and stays reportable. Split on the LAST ' of ' so nested
+    `array[..] of array[..] of string` resolves to the innermost element.
+    See docs\INBOX-used-before-assignment-array-local-never-counted-as-defined.md. }
+  if T.StartsWith('array') then
+  begin
+    var OfPos: Integer := T.LastIndexOf(' of ');
+    if OfPos > 0 then
+      Exit(IsManagedType(Trim(Copy(T, OfPos + 5, MaxInt)), AStore, AFileId));
+  end;
   { I-prefixed interface convention: 'I' + uppercase letter }
   if (Length(ATypeText) >= 2) and (ATypeText[1] = 'I') and ATypeText[2].IsUpper then Exit(True);
   Result := False;
@@ -203,6 +225,53 @@ begin
      or SameText(Head, 'TGUID') or SameText(Head, 'TPoint') or SameText(Head, 'TRect') then
     Exit(True);
   Result:= (Length(Head) >= 2) and (Head[1] = 'I') and CharInSet(Head[2], ['A'..'Z']);
+end;
+
+{ The type a constructor expression names, bare: `TRegEx.Create(..)` -> TRegEx,
+  `System.RegularExpressions.TRegEx.Create(..)` -> TRegEx. Empty when ANode is
+  not one of the two constructor shapes ExprIsConstructor accepts.
+
+  This exists ONLY to give TypeIsRefCountedOrValue something to decide on for an
+  inline `var X := T.Create(..)`, which carries no declared type. It is not a
+  general type inference and must not be used as one: it reports what the source
+  WROTE at the call, which for a class-reference variable or a virtual
+  constructor is not the runtime type. That is safe here because the only
+  question asked of it is "is this a record/interface, which cannot leak" -- a
+  question about the named type itself. }
+function ConstructedTypeText(const ANode: TTSNode; const ASrc: TBytes): string;
+var Recv, Ent: TTSNode; P: Integer;
+begin
+  Result:= '';
+  if ANode.IsNull then Exit;
+  Recv:= Default(TTSNode);
+  if ANode.NodeType = 'exprDot' then
+    Recv:= ANode.ChildByField('lhs')
+  else if ANode.NodeType = 'exprCall' then
+  begin
+    Ent:= ANode.ChildByField('entity');
+    if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then Recv:= Ent.ChildByField('lhs');
+  end;
+  if Recv.IsNull then Exit;
+  Result:= Trim(NodeStr(Recv, ASrc));
+  { keep the last dotted segment -- the unit qualification is not the type }
+  P:= LastDelimiter('.', Result);
+  if P > 0 then Result:= Trim(Copy(Result, P + 1, MaxInt));
+end;
+
+{ True when the assignment's TARGET variable also appears among the constructor
+  call's arguments -- `Cur := TNode.Create(Cur)`. See the call site for why that
+  is a structure-linking idiom rather than an owned allocation. Reuses
+  CollectCallArgs so this agrees with the escape lattice by construction instead
+  of by a second parse of the same node. }
+function SelfLinkedConstruction(const AAssignNode: TTSNode; const ASrc: TBytes;
+  const AVars: TRoutineVarTable; ATargetIdx: Integer): Boolean;
+var
+  CA: TCallArgRef;
+begin
+  Result := False;
+  if ATargetIdx < 0 then Exit;
+  for CA in CollectCallArgs(AAssignNode, ASrc, AVars) do
+    if CA.VarIdx = ATargetIdx then Exit(True);
 end;
 
 function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;
@@ -522,6 +591,185 @@ begin
   Result := Found;
 end;
 
+{ Vars that an EARLIER operand of an `and`/`or` chain assigns via a call argument,
+  and which a LATER operand of the same chain may therefore read safely.
+
+  Delphi short-circuits left to right, so
+
+      if VerQueryValue(Pointer(Buf), '\', Pointer(Fixed), Len) and (Fixed <> nil)
+
+  assigns Fixed in the left operand BEFORE the right one reads it -- but both
+  operands are ONE AST node and therefore ONE CFG item, and the per-item replay
+  tests every read against the state from BEFORE the item's own defs are applied.
+  So the read of Fixed was reported as a use before assignment.
+
+  CollectInterfaceDerefs already carries exactly this refinement for
+  `not-assigned-interface` (its `LocallyAssigned` + `CollectLocalCallDefs`, and its
+  header explains the `Supports(Intf, IFoo, V) and V.Method` idiom). The plain read
+  check never had it. This is that same left-to-right refinement, extracted so the
+  two checks cannot disagree about the same idiom.
+
+  WHY HERE AND NOT INSIDE CollectReadsAndCallDefs: that function feeds liveness and
+  several other rules, and dropping a read there would change what they see. This
+  is consumed by the used-before-assignment read check only.
+
+  WHY THIS SURFACED NOW: the shape above sits inside `if A then if B then ...`,
+  and until the dangling-else `exprIf` arm was added to Cfg.pas.EmitStmt the whole
+  nested `if` was ONE OPAQUE ITEM -- and opaque items are skipped by the read check
+  entirely. Decomposing the nest correctly exposed this latent defect; the fix for
+  one bug made a second one visible, which is the honest description of what
+  happened rather than a new regression in the analysis itself. }
+procedure CollectAndOrLeftDefs(const ANode: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable; AAcc: TList<Integer>);
+
+  procedure Walk(const N: TTSNode);
+  var
+    I, K  : Integer;
+    Op, L, R: TTSNode;
+    OpText: string;
+    Reads, CallDefs: TList<Integer>;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'exprBinary' then
+    begin
+      Op := N.ChildByField('operator');
+      OpText := '';
+      if not Op.IsNull then OpText := LowerCase(Trim(NodeStr(Op, ASrc)));
+      if (OpText = 'and') or (OpText = 'or') then
+      begin
+        L := N.ChildByField('lhs');
+        R := N.ChildByField('rhs');
+        Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+        try
+          CollectReadsAndCallDefs(L, ASrc, AVars, Reads, CallDefs);
+          for K := 0 to CallDefs.Count - 1 do
+            if AAcc.IndexOf(CallDefs[K]) < 0 then AAcc.Add(CallDefs[K]);
+        finally
+          Reads.Free; CallDefs.Free;
+        end;
+        Walk(L);
+        Walk(R);
+        Exit;
+      end;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+
+begin
+  Walk(ANode);
+end;
+
+{ True when S contains AWhat as a WHOLE identifier -- BOTH boundaries checked.
+
+  ContainsAtIdentBoundary above checks only the left side, because its callers pin
+  the right one by appending '.' or '(' to the name. A bare variable name cannot
+  do that, so it needs its own test: without a right-boundary check, `Edges` would
+  be found inside `EdgeList` and a store would be called protected by a handler
+  that never mentions it. }
+function ContainsWholeIdent(const S, AWhat: string): Boolean;
+var P, L, N: Integer;
+begin
+  Result := False;
+  L := Length(AWhat);
+  N := Length(S);
+  if (L = 0) or (N < L) then Exit;
+  P := Pos(AWhat, S);
+  while P > 0 do
+  begin
+    if ((P = 1) or (not CharInSet(S[P - 1], ['a'..'z', '0'..'9', '_'])))
+       and ((P + L > N) or (not CharInSet(S[P + L], ['a'..'z', '0'..'9', '_']))) then Exit(True);
+    P := Pos(AWhat, S, P + 1);   { 3-arg System.Pos -- no StrUtils dependency }
+  end;
+end;
+
+{ True when the store AAsg is the (possibly not last) member of a run of
+  assignments immediately preceding a `try` whose except/finally MENTIONS AName.
+
+  WHY: overwrite-before-read reported the nil-initialisation before a `try` as a
+  dead store, and ITS ADVICE WAS WRONG -- deleting that store leaves an
+  uninitialised variable to be tested or freed on the exception path, so
+  following the finding converts correct code into a crash. Measured on this
+  repo's own source at 56 findings, majority of this shape:
+
+      Bindings := nil;                        <- reported as a dead store
+      try
+        Bindings := ExtractDfmEventBindings(...);
+      except
+        Bindings := nil;
+      end;
+
+  Liveness is right about the CFG and wrong about the code. `try..except` wires
+  the handler edge from the END of the try body (Cfg.pas), modelling "the
+  exception fired after the body's assignments ran", so the pre-try store is
+  killed before any exception-path use is seen. That edge is deliberate and
+  tuned -- used-before-assignment depends on the state it carries -- which is
+  exactly the reasoning FreedInFinallyBlock above records for object-leak's
+  identical cause. So this is again a SYNTACTIC guard scoped to the one wrong
+  rule, not a change to the edge.
+
+  THE RUN MATTERS. Five nil-inits before one shared `try` is the common form, so
+  the walk skips over consecutive sibling assignments: protection covers every
+  variable initialised between the previous statement and the `try`, not just the
+  closest one. (object-leak's Cause A needs the same shape.)
+
+  WHY "MENTIONS" AND NOT "READS": an assignment in the handler
+  (`Bindings := nil` again) is itself a use for a managed type -- it releases the
+  old value -- and a `finally` typically FREES rather than reads. Testing for any
+  occurrence covers read, free and re-assign without having to classify them, and
+  is the FP-safe direction for an `info` rule already recorded as majority-false.
+
+  DELIBERATELY NOT the cheap version ("a try merely follows"): that suppresses a
+  genuine dead store sitting before an unrelated try, which is the banned failure
+  mode for this whole rule family -- the cheap fix for every one of these rules
+  is to stop reporting near a `try`. A store before a try whose handler never
+  names it STILL FIRES, and the guard test asserts exactly that. }
+function ProtectedByFollowingTry(const AAsg: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var
+  Cur, C: TTSNode;
+  Nm, S : string;
+  I     : Integer;
+  Guard : Integer;
+  SeenHandler: Boolean;
+
+  { A single statement can arrive wrapped in a `statement` node -- the same
+    wrapper the dangling-else fix had to unwrap in Cfg.pas.EmitStmt. }
+  function Unwrap(const N: TTSNode): TTSNode;
+  begin
+    Result := N;
+    if (not Result.IsNull) and (Result.NodeType = 'statement')
+       and (Result.NamedChildCount = 1) then Result := Result.NamedChild(0);
+  end;
+
+begin
+  Result := False;
+  Nm := LowerCase(Trim(AName));
+  if Nm = '' then Exit;
+
+  Cur   := Unwrap(AAsg.NextNamedSibling);
+  Guard := 0;
+  while (not Cur.IsNull) and (Cur.NodeType = 'assignment') and (Guard < 64) do
+  begin
+    Cur := Unwrap(Cur.NextNamedSibling);
+    Inc(Guard);
+  end;
+  if Cur.IsNull or (Cur.NodeType <> 'try') then Exit;
+
+  SeenHandler := False;
+  for I := 0 to Cur.ChildCount - 1 do
+  begin
+    C := Cur.Child(I);
+    { KEYWORDS ARE NAMED NODES in this grammar, so the handler section is found by
+      walking children and watching for the keyword -- not by a field lookup. }
+    if (C.NodeType = 'kExcept') or (C.NodeType = 'kFinally') then SeenHandler := True
+    else if SeenHandler then
+    begin
+      if C.NodeType = 'kEnd' then Break;
+      S := LowerCase(NodeStr(C, ASrc));
+      if ContainsWholeIdent(S, Nm) then Exit(True);
+    end;
+  end;
+end;
+
 { The lowercased name of the AArgIdx-th parameter (flattening multi-name declArgs). }
 function ParamNameAtIndex(const ADefProc: TTSNode; AArgIdx: Integer; const ASrc: TBytes): string;
 var Hdr, Args, DA, NameId: TTSNode; I, J, Idx: Integer;
@@ -635,6 +883,7 @@ var
     AIn, AOut: TArray<TDefAsgnVal>; ExitVal: TDefAsgnVal;
     B, I, J, ROW, COL, Tgt, Idx, RIx: Integer; It: TCfgItem; V: TRoutineVar;
     Reads, CallDefs: TList<Integer>;
+    SeqDefs: TList<Integer>; { and/or left-operand defs -- see CollectAndOrLeftDefs }
     CurMust, CurMay: TArray<Boolean>;
     Derefs: TList<TIfaceDeref>; Dr: TIfaceDeref;
     LiveAna: IDataFlowAnalysis<TArray<Boolean>>;
@@ -643,6 +892,10 @@ var
     EscAna: IDataFlowAnalysis<TArray<Boolean>>;
     EIn2, EOut2: TArray<TArray<Boolean>>;
     CreateRow, CreateCol: TArray<Integer>;
+    { The type NAME the constructor names, for locals with no declared type
+      (`var Re := TRegEx.Create(..)`). TypeIsRefCountedOrValue decides from the
+      DECLARED type, which an inline var does not have. }
+    CreateType: TArray<string>;
     FreedAna: IDataFlowAnalysis<TFreedVal>;
     FIn, FOut: TArray<TFreedVal>;
     CurFMust, CurFMay: TArray<Boolean>;
@@ -656,6 +909,7 @@ var
       if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, Ana, AIn, AOut) then Exit;
 
       Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+      SeqDefs := TList<Integer>.Create;
       Derefs := TList<TIfaceDeref>.Create;
       try
         { ---- used-before-assignment: per-item replay of must/may within a block ---- }
@@ -663,11 +917,7 @@ var
         begin
           CurMust := Copy(AIn[B].Must); CurMay := Copy(AIn[B].May);
           { synthetic entry defs (foreach iterator) }
-          for J := 0 to High(Cfg.Blocks[B].EntryDefs) do
-          begin
-            Idx := Vars.IndexOf(Cfg.Blocks[B].EntryDefs[J]);
-            if Idx >= 0 then begin CurMust[Idx] := True; CurMay[Idx] := True; end;
-          end;
+          ApplyEntryDefs(Cfg.Blocks[B], Vars, CurMust, CurMay, True);
           for I := 0 to Cfg.Blocks[B].Items.Count - 1 do
           begin
             It := Cfg.Blocks[B].Items[I];
@@ -677,10 +927,17 @@ var
             else
               CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef);
             { flag reads of unmanaged locals not yet must-assigned (skip opaque with-bodies) }
+            { Left-to-right sequencing inside this item's own and/or chains, so
+              `Supports(.., V) and V.Method` and
+              `VerQueryValue(.., Pointer(Fixed), ..) and (Fixed <> nil)` are not
+              reported as reads before assignment. See CollectAndOrLeftDefs. }
+            SeqDefs.Clear;
+            if not It.Opaque then CollectAndOrLeftDefs(It.Node, PF.Src, Vars, SeqDefs);
             if not It.Opaque then
               for J := 0 to Reads.Count - 1 do
               begin
                 RIx := Reads[J];
+                if SeqDefs.IndexOf(RIx) >= 0 then Continue;
                 V := Vars.Get(RIx);
                 if V.Kind <> vkLocal then Continue;
                 if IsManagedType(V.TypeText, AStore, AFileId) then Continue;
@@ -754,6 +1011,11 @@ var
           for B := 0 to Cfg.BlockCount - 1 do
           begin
             CurFMust := Copy(FIn[B].Must); CurFMay := Copy(FIn[B].May);
+            { Mirror TFreedState.Transfer's EntryDefs kill. FIn[B] is the JOIN of
+              the predecessors, so it still carries the back-edge's dangling
+              state; the replay must rebind the foreach iterator before it walks
+              the items or `for L in List do L.Free` reports itself. }
+            ApplyEntryDefs(Cfg.Blocks[B], Vars, CurFMust, CurFMay, False);
             for I := 0 to Cfg.Blocks[B].Items.Count - 1 do
             begin
               It := Cfg.Blocks[B].Items[I];
@@ -880,7 +1142,11 @@ var
               begin
                 Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars); { whole-var only }
                 if (Tgt >= 0) and (Vars.Get(Tgt).Kind = vkLocal)
-                   and ReadAny[Tgt] and (not Live[Tgt]) then
+                   and ReadAny[Tgt] and (not Live[Tgt])
+                   { A nil-init guarding an exception path is not a dead store,
+                     and reporting it advises a change that CRASHES. See
+                     ProtectedByFollowingTry. }
+                   and (not ProtectedByFollowingTry(It.Node, Vars.Get(Tgt).Name, PF.Src)) then
                 begin
                   ROW := Integer(It.Node.StartPoint.Row) + 1;
                   COL := Integer(It.Node.StartPoint.Column) + 1;
@@ -1097,7 +1363,8 @@ var
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, EscAna, EIn2, EOut2) then
         begin
           SetLength(CreateRow, Vars.Count); SetLength(CreateCol, Vars.Count);
-          for I := 0 to Vars.Count - 1 do begin CreateRow[I] := 0; CreateCol[I] := 0; end;
+          SetLength(CreateType, Vars.Count);
+          for I := 0 to Vars.Count - 1 do begin CreateRow[I] := 0; CreateCol[I] := 0; CreateType[I] := ''; end;
           { record each local's constructor-assignment site }
           for B := 0 to Cfg.BlockCount - 1 do
             for J := 0 to Cfg.Blocks[B].Items.Count - 1 do
@@ -1110,10 +1377,28 @@ var
                  { a TComponent descendant constructed with a non-nil AOwner
                    transfers ownership to that owner (freed on its teardown) --
                    do NOT record it as a leak candidate. }
-                 and not ConstructorTransfersOwnership(It.Node.ChildByField('rhs'), PF.Src, AStore, AFileId, ALibStore) then
+                 and not ConstructorTransfersOwnership(It.Node.ChildByField('rhs'), PF.Src, AStore, AFileId, ALibStore)
+                 { SELF-LINKING CONSTRUCTION IS NOT A LEAK CANDIDATE.
+                   `Cur := TGroup.Create(kind, i, k, Cur)` passes the variable
+                   being assigned as an ARGUMENT to its own constructor: the new
+                   node takes the old one as its parent, links itself into the
+                   structure, and is reachable from the root the routine returns
+                   -- so it is freed with that structure. This is the surviving
+                   cause in INBOX-object-leak-is-systematically-false, described
+                   there as "a tree cursor whose nodes escape via the returned
+                   root".
+
+                   The guard is needed HERE as well as in TEscape.Transfer: the
+                   lattice computes block state, but THIS replay is what records
+                   the reportable site, so fixing only the lattice changed
+                   nothing observable. Narrow on purpose -- it fires only when
+                   the assignment target itself is among the arguments, so
+                   `A := T.Create(B)` is untouched. }
+                 and not SelfLinkedConstruction(It.Node, PF.Src, Vars, Tgt) then
               begin
                 CreateRow[Tgt] := Integer(It.Node.StartPoint.Row) + 1;
                 CreateCol[Tgt] := Integer(It.Node.StartPoint.Column) + 1;
+                CreateType[Tgt] := ConstructedTypeText(It.Node.ChildByField('rhs'), PF.Src);
               end;
             end;
           { a created local still may-open at the routine exit -> possible leak }
@@ -1135,7 +1420,15 @@ var
             leak, because neither shape can leak by construction. }
           for I := 0 to Vars.Count - 1 do
             if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and EIn2[Cfg.ExitIdx][I]
-               and not TypeIsRefCountedOrValue(Vars.Get(I).TypeText, AStore)
+               { An inline `var X := T.Create(..)` has NO declared type, so the
+                 value/interface narrowing below had nothing to read and every
+                 such local was a leak candidate regardless of its kind. Fall
+                 back to the type the constructor names. (Latent until inline
+                 vars started registering as assignment targets at all -- see
+                 AssignmentTargetIndex's varAssignDef fix.) }
+               and not TypeIsRefCountedOrValue(
+                     if Trim(Vars.Get(I).TypeText) <> '' then Vars.Get(I).TypeText else CreateType[I],
+                     AStore)
                { the variable is handed to a `finally` -- see FreedInFinallyBlock:
                  what remains open at the exit is the try..except modelling edge,
                  not a missed Free. }
@@ -1145,7 +1438,7 @@ var
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
         end;
 
-      finally Reads.Free; CallDefs.Free; Derefs.Free; end;
+      finally Reads.Free; CallDefs.Free; SeqDefs.Free; Derefs.Free; end;
     finally Cfg.Free; Vars.Free; end;
   end;
 

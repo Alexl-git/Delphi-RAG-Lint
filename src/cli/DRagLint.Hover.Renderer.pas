@@ -51,7 +51,7 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown, itself
+/// Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown
 /// Complexity: 13 (cyclomatic, outer body), 107 lines (full implementation)
 /// Pure
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
@@ -195,7 +195,7 @@ function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUni
 /// <returns>A single-line JSON object string.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, from, IntToStr, parallel
+/// Calls: DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, IntToStr
 /// Returns: SB.ToString
 /// Overload 2 of 2
 /// Pure

@@ -77,13 +77,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas)
-      /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Diagnostics.AstChecks.TAstChecker.IsKeyword, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get
+      /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Diagnostics.AstChecks.MaskCommentsAndStrings, DRagLint.Diagnostics.AstChecks.TAstChecker.IsKeyword, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get
       /// Pure
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.MaskCommentsAndStrings"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.IsKeyword"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckUndeclared(const AStore: ISymbolStore; const AFile: string): TArray<TLintFinding>;
@@ -186,7 +186,6 @@ type
       /// <summary>Flags a 'raise' statement located inside a 'finally' block.</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
       /// <returns>One finding per raise found within a finally body (capped at 100); nil/empty if none.</returns>
-      /// <exception cref="inside"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// A raise in a finally masks the exception currently propagating out of the protected
       /// section. The walk does not descend into nested try blocks, so each try's finally is attributed
@@ -213,7 +212,7 @@ type
       /// mark code after the if/case as dead. Pure tree-sitter AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CheckList, children, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsTerminator, LowerCase, NodeStr
+      /// Calls: CheckList, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsTerminator, LowerCase, NodeStr
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.Visit"/>
@@ -304,7 +303,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
-      /// Calls: alias, apply, approximation, authoritative, cast, CatOf, CharInSet, Copy, declEnum, Default (+53 more)
+      /// Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectDecls, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+24 more)
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectDecls"/>
@@ -339,14 +338,13 @@ type
       /// code between creation and Free raises).</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
       /// <returns>'unprotected-object-free' findings; empty if none.</returns>
-      /// <exception cref="is"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// Per routine, in program order: records 'X := ...Create...' constructions, then flags a
       /// later 'X.Free' / 'FreeAndNil(X)' on the same variable that is NOT lexically inside a finally
       /// block. Requiring same-routine construction filters destructor field-frees. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CollectLocals, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, flagged, Format, Integer, IsConstruction, IsFree, leak, LowerCase, NodeStr, SameText, UpperCase, WalkBody
+      /// Calls: CollectLocals, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsConstruction, IsFree, LowerCase, NodeStr, SameText, UpperCase, WalkBody
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree.VisitProcs"/>
@@ -431,7 +429,7 @@ type
       /// no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: ChangeFileExt, ChildByField, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CheckGlobalVarDecls, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CollectClassNames, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, Move, NodeStr
+      /// Calls: ChangeFileExt, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CheckGlobalVarDecls, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CollectClassNames, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, Move, NodeStr
       /// Returns: nil; Findings.ToArray
       /// Touches: file system
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CheckGlobalVarDecls"/>
@@ -454,7 +452,7 @@ type
       /// this method does not modify. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Move, nodes, NodeStr
+      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Move, NodeStr
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls"/>
@@ -479,7 +477,7 @@ type
       /// mutators). Fires at most once per function. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: AddIdentsUnder, BodyMutatesField, CharInSet, CollectLocalsAndParams, Default, defProcs, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsFunction (+10 more)
+      /// Calls: AddIdentsUnder, BodyMutatesField, CharInSet, CollectLocalsAndParams, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsFunction, LooksLikeFieldName (+7 more)
       /// Returns: Hit; nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier.VisitProcs"/>
@@ -500,7 +498,7 @@ type
       /// CreateProcess=1. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CmdArgIndex, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr, SameText
+      /// Calls: ArgIsFixedSchemeUri, CharInSet, CmdArgIndex, CollectAssignments, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer (+6 more)
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit"/>
@@ -542,7 +540,7 @@ type
       /// Exit nested in an if is not flagged. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: body, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FirstStmtInner, Integer, IsAtMostOnceExit, itself, node, NodeStr, SameText
+      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FirstStmtInner, Integer, IsAtMostOnceExit, NodeStr, SameText
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce.Visit"/>
@@ -563,7 +561,7 @@ type
       /// skips silently otherwise. Variable arguments are not type-checked. Pure AST; no DB.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: call, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, index, Integer, LowerCase, NodeStr, Pos, SameText, SpecKinds, StringReplace
+      /// Calls: CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, NodeStr, Pos, SameText, SpecKinds, StringReplace
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall.Visit"/>
@@ -593,7 +591,7 @@ type
       /// try-finally is ignored. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, handler, HandlesException, Integer, LowerCase, NodeStr, Pos
+      /// Calls: CollectHandlingAssignTargets, Copy, Default, Delete, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EnclosingDefProc, HandlesException, Integer, IsExplanatoryComment (+7 more)
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit"/>
@@ -614,7 +612,7 @@ type
       /// Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: alone, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, FreeAndNil, Integer, IsActiveAssign, IsDestroyingCall, LowerCase, NodeStr, SameText, WalkBody
+      /// Calls: Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsActiveAssign, IsDestroyingCall, LowerCase, NodeStr, SameText, WalkBody
       /// Returns: nil; Findings.ToArray
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs"/>
@@ -776,7 +774,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, operator, Score, separately
+      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Score
       /// Overload 2 of 2
       /// Pure
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit"/>
@@ -874,6 +872,113 @@ begin
   Result:= D;
 end;
 
+{ Returns ASource with every character that sits inside a comment or a string
+  literal replaced by a SPACE, keeping length and all line breaks -- so byte
+  offsets and the line/column arithmetic downstream stay valid.
+
+  CheckUndeclared regex-scans the raw file text for capitalised words. It lives in
+  AstChecks and is wired in under `check-ast`, but it is not AST-based, and
+  nothing stripped comments before the regex ran. So any capitalised 3+-character
+  word in a comment that is not already an indexed symbol was reported as an
+  undeclared identifier: `Fixture`, `This`, `MUST`, `FIELD`, `CallDefs`, and the
+  three segments of `YADF.LineScan.ComputeBlockCommentLock` -- eight spurious
+  findings from four comment blocks in one fixture. It specifically punishes
+  well-commented code: the more explanatory prose, the more false findings.
+
+  FOURTH instance in this tree of "a text scan cannot tell code from comment",
+  after the dl:shared reader (which ships the original state machine and argues
+  the point at length in DRagLint.Lint.SharedUnit's header), the dl:ok
+  unused-marker walk, and the Calls:/raises body scans in DRagLint.Doc.Facts.
+  String literals are masked too -- the note that reported this suspected they
+  were affected but had not verified it; masking both costs nothing extra. }
+function MaskCommentsAndStrings(const ASource: string): string;
+var
+  I, N       : Integer;
+  InBrace    : Integer;
+  InStarParen: Boolean;
+  InLineCmt  : Boolean;
+  InStr      : Boolean;
+
+  procedure Blank(ACount: Integer);
+  var K: Integer;
+  begin
+    for K := 0 to ACount - 1 do
+      if (I + K <= N) and (Result[I + K] <> #10) and (Result[I + K] <> #13) then
+        Result[I + K] := ' ';
+  end;
+
+begin
+  Result     := ASource;
+  N          := Length(Result);
+  InBrace    := 0;
+  InStarParen:= False;
+  InLineCmt  := False;
+  InStr      := False;
+  I          := 1;
+  while I <= N do
+  begin
+    if InLineCmt then
+    begin
+      if (Result[I] = #10) or (Result[I] = #13) then InLineCmt := False
+      else Result[I] := ' ';
+      Inc(I);
+      Continue;
+    end;
+    if InBrace > 0 then
+    begin
+      { Brace comments in Object Pascal do NOT nest: the FIRST closing brace ends
+        the comment, whatever appeared inside it. An earlier draft of this
+        function incremented the depth on an inner opening brace, which would
+        have kept the mask open past the real end and blanked live code -- and a
+        comment that documents a compiler directive contains one routinely.
+        Blanking live code here is a FALSE NEGATIVE: it hides genuine undeclared
+        identifiers, which is the quiet direction and the harder one to notice. }
+      if Result[I] = '}' then Dec(InBrace);
+      Blank(1);
+      Inc(I);
+      Continue;
+    end;
+    if InStarParen then
+    begin
+      if (Result[I] = '*') and (I < N) and (Result[I + 1] = ')') then
+      begin
+        InStarParen := False;
+        Blank(2);
+        Inc(I, 2);
+        Continue;
+      end;
+      Blank(1);
+      Inc(I);
+      Continue;
+    end;
+    if InStr then
+    begin
+      if Result[I] = '''' then InStr := False;
+      Blank(1);
+      Inc(I);
+      Continue;
+    end;
+    { code }
+    if Result[I] = '''' then begin InStr := True; Blank(1); Inc(I); Continue; end;
+    if Result[I] = '{'  then begin Inc(InBrace);  Blank(1); Inc(I); Continue; end;
+    if (Result[I] = '(') and (I < N) and (Result[I + 1] = '*') then
+    begin
+      InStarParen := True;
+      Blank(2);
+      Inc(I, 2);
+      Continue;
+    end;
+    if (Result[I] = '/') and (I < N) and (Result[I + 1] = '/') then
+    begin
+      InLineCmt := True;
+      Blank(2);
+      Inc(I, 2);
+      Continue;
+    end;
+    Inc(I);
+  end;
+end;
+
 class function TAstChecker.CheckUndeclared(const AStore: ISymbolStore; const AFile: string): TArray<TLintFinding>;
 var
   Source   : string                      ;
@@ -895,7 +1000,10 @@ begin
   if AStore = nil then Exit(nil);
   PF:= TAstParseCache.Get(AFile);
   SrcBytes:= PF.Src;
-  Source:= TEncoding.Default.GetString(SrcBytes);
+  { Comments and string literals blanked to spaces -- same length, same line
+    breaks, so the line/column arithmetic below is unaffected. Without this the
+    regex reads prose as code; see MaskCommentsAndStrings. }
+  Source:= MaskCommentsAndStrings(TEncoding.Default.GetString(SrcBytes));
 
   Findings:= TList<TLintFinding>.Create;
   Seen:= TDictionary<string, Boolean>.Create;
@@ -2118,20 +2226,43 @@ var
   begin
     Result:= ADepth;
     if N.IsNull then Exit;
+    { 'exprIf', NOT 'ifElse'. An if WITH an else parses as `exprIf` in this
+      grammar; there is no `ifElse` node at all, so the old list counted the
+      plain `if` form and scored the else form ZERO. One trailing else on the
+      innermost statement therefore cost a whole level: a routine nested 6 deep
+      measured 5 and, against the default max of 5, said nothing. Measured
+      2026-08-16 with three routines side by side -- six plain ifs fired "6
+      deep", seven fired "7 deep", and six whose innermost was
+      `if A6 then Go1 else Go2` was SILENT.
+      The dead `ifElse` branch is removed rather than kept alongside: a
+      condition keyed on a node type the grammar never produces reads as
+      coverage that does not exist. (Same family as the kAt/kVar/exprIf
+      "keywords are NAMED nodes" bugs already fixed in this tree.)
+      See docs\INBOX-deep-nesting-silent-on-trailing-else-call.md. }
     Inc1:= 0;
-    if (N.NodeType = 'if') or (N.NodeType = 'ifElse') or (N.NodeType = 'while') or (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
+    if (N.NodeType = 'if') or (N.NodeType = 'exprIf') or (N.NodeType = 'while') or (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
       (N.NodeType = 'with') or (N.NodeType = 'try') then Inc1:= 1;
-    if N.NodeType = 'ifElse' then ElseN:= N.ChildByField('else')
-    else ElseN:= Default(TTSNode);
+
+    { The else BRANCH is the child immediately after the kElse keyword --
+      exprIf's children are positional (kIf, cond, kThen, then, kElse, else) and
+      expose no 'else' field, so ChildByField('else') returned null and the
+      chain guard never fired even when the node type matched. Locate it by
+      index instead. }
+    var ElseIdx: Integer:= -1;
+    if Inc1 = 1 then
+      for I:= 0 to N.ChildCount - 1 do
+        if N.Child(I).NodeType = 'kElse' then begin ElseIdx:= I + 1; Break; end;
+
     M:= ADepth;
     for I:= 0 to N.ChildCount - 1 do
     begin
       C:= N.Child(I);
       ChildDepth:= ADepth + Inc1;
-      if (Inc1 = 1) and (not ElseN.IsNull) and (not C.IsNull) and
-         ((C.NodeType = 'if') or (C.NodeType = 'ifElse')) and
-         (C.StartPoint.Row = ElseN.StartPoint.Row) and
-         (C.StartPoint.Column = ElseN.StartPoint.Column) then
+      { `else if ...` is a CHAIN, not deeper nesting -- flattening it is not what
+        the rule is asking for, and counting it would make any long dispatch
+        chain look pathological. }
+      if (I = ElseIdx) and (not C.IsNull) and
+         ((C.NodeType = 'if') or (C.NodeType = 'exprIf')) then
         ChildDepth:= ADepth;   { chain continuation -- same logical level }
       D:= MaxNest(C, ChildDepth);
       if D > M then M:= D;
@@ -4440,9 +4571,11 @@ end; // function
 
 class function TAstChecker.CheckShellExec(const AFile: string): TArray<TLintFinding>;
 var
-  Src     : TBytes             ;
-  PF      : TParsedFile        ;
-  Findings: TList<TLintFinding>;
+  Src      : TBytes             ;
+  PF       : TParsedFile        ;
+  Findings : TList<TLintFinding>;
+  AsgnCount: TDictionary<string, Integer>;
+  AsgnRhs  : TDictionary<string, TTSNode>;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -4455,6 +4588,156 @@ var
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
 
+  { ---------------------------------------------------------------------------
+    v(2026-08-14): the FIXED-SCHEME URI exemption.
+
+    THE FALSE POSITIVE. This rule asked one syntactic question -- "is the command
+    argument a literalString?" -- and answered `error` for everything else. That
+    reports CWE-78 on the standard, correct way to open a URL:
+
+        Uri:= 'obsidian://open?vault=' + TNetEncoding.URL.Encode(BaseName);
+        ShellExecute(0, 'open', PChar(Uri), nil, nil, SW_SHOWNORMAL);
+
+    which is `DRagLint.CLI.DoObsidian`, where the argument had ALREADY been
+    hardened for this rule (the encode call exists because of it) and the finding
+    fired anyway. A rule whose advice has been followed and which still fires
+    teaches people to disable it.
+
+    THE PRINCIPLE, not a heuristic. CWE-78 is about the attacker choosing WHAT
+    RUNS. When the argument opens with a hardcoded URI scheme, the program is
+    selected by the OS registration for that scheme; the variable part lands in
+    the path/query of a URI whose handler is already decided, and no amount of
+    user data changes it. So a fixed scheme is a genuine safety property, not a
+    guess about intent.
+
+    `file:` IS DELIBERATELY EXCLUDED from the exemption, and it is the whole
+    reason this is scheme-aware rather than "starts with a literal": `file://` +
+    user data lets the caller pick an arbitrary file, and the program that then
+    runs is chosen by that file's EXTENSION -- exactly the thing this rule
+    exists to catch. `'cmd.exe /c ' + X` is likewise unaffected: it has no
+    scheme, so it is still reported.
+
+    ONE ASSIGNMENT ONLY. The argument is normally a variable (`PChar(Uri)`), so
+    this has to look at what was assigned to it. It does that file-wide and
+    refuses to reason when the name is assigned more than ONCE anywhere in the
+    file -- a second assignment could be the unsafe one, and this is a security
+    rule where a false negative costs more than a false positive. Same-named
+    locals in other routines only push the count up, so the failure direction is
+    "keep reporting", which is the safe one.
+    --------------------------------------------------------------------------- }
+
+  { Leftmost string literal of a (possibly nested) binary chain: `'a' + X + Y`
+    descends to 'a'. '' when the leftmost leaf is not a literal. }
+  function LeftmostLiteralText(const N: TTSNode): string;
+  var
+    Cur, L: TTSNode;
+  begin
+    Result:= '';
+    Cur   := N;
+    while (not Cur.IsNull) and (Cur.NodeType = 'exprBinary') do
+    begin
+      L:= Cur.ChildByField('lhs');
+      if L.IsNull then Exit;
+      Cur:= L;
+    end;
+    if (not Cur.IsNull) and (Cur.NodeType = 'literalString') then Result:= NodeStr(Cur);
+  end;
+
+  { True when ALit is a Delphi string literal opening `scheme://` for a scheme
+    other than file:. }
+  function IsFixedSchemeUri(const ALit: string): Boolean;
+  var
+    S, Scheme: string;
+    I        : Integer;
+  begin
+    Result:= False;
+    if (Length(ALit) < 2) or (ALit[1] <> '''') then Exit;
+    S:= Copy(ALit, 2, MaxInt);
+    if (S = '') or (not CharInSet(S[1], ['A'..'Z', 'a'..'z'])) then Exit;
+    I     := 1;
+    Scheme:= '';
+    while (I <= Length(S)) and CharInSet(S[I], ['A'..'Z', 'a'..'z', '0'..'9', '+', '-', '.']) do
+    begin
+      Scheme:= Scheme + S[I];
+      Inc(I);
+    end;
+    if Copy(S, I, 3) <> '://' then Exit;
+    Result:= not SameText(Scheme, 'file');
+  end;
+
+  { PChar(X) / PWideChar(X) / PAnsiChar(X) -> X; anything else unchanged. }
+  function UnwrapCast(const A: TTSNode): TTSNode;
+  var
+    E, Args: TTSNode;
+    Nm     : string ;
+  begin
+    Result:= A;
+    if A.IsNull or (A.NodeType <> 'exprCall') then Exit;
+    E:= A.ChildByField('entity');
+    if E.IsNull or (E.NodeType <> 'identifier') then Exit;
+    Nm:= NodeStr(E);
+    if not (SameText(Nm, 'PChar') or SameText(Nm, 'PWideChar') or SameText(Nm, 'PAnsiChar')) then Exit;
+    Args:= A.ChildByField('args');
+    if Args.IsNull or (Args.NamedChildCount <> 1) then Exit;
+    Result:= Args.NamedChild(0);
+  end;
+
+  { Every `X := <rhs>` in ASubtree, counted by lowercased LHS name. }
+  procedure CollectAssignments(const N: TTSNode);
+  var
+    I  : Integer;
+    L  : TTSNode;
+    Nm : string ;
+    Cnt: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'assignment' then
+    begin
+      L:= N.ChildByField('lhs');
+      if (not L.IsNull) and (L.NodeType = 'identifier') then
+      begin
+        Nm:= LowerCase(NodeStr(L));
+        if AsgnCount.TryGetValue(Nm, Cnt) then
+          AsgnCount[Nm]:= Cnt + 1
+        else
+        begin
+          AsgnCount.Add(Nm, 1);
+          AsgnRhs  .Add(Nm, N.ChildByField('rhs'));
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectAssignments(N.NamedChild(I));
+  end;
+
+  { AProc is the ENCLOSING routine, and the scope must be exactly that.
+    File-wide counting was tried first and is wrong in the direction that
+    matters: `Uri` / `Cmd` / `S` are assigned once per routine in a dozen
+    routines, the file-wide count is therefore >1 everywhere, and the exemption
+    never applies to the very code it was written for. Measured on the probe --
+    five of six cases behaved and the one real-world shape did not. }
+  function ArgIsFixedSchemeUri(const A0, AProc: TTSNode): Boolean;
+  var
+    A, Rhs: TTSNode;
+    Nm    : string ;
+    Cnt   : Integer;
+  begin
+    Result:= False;
+    A     := UnwrapCast(A0);
+    if A.IsNull then Exit;
+    if A.NodeType = 'exprBinary' then Exit(IsFixedSchemeUri(LeftmostLiteralText(A)));
+    if A.NodeType <> 'identifier' then Exit;
+    { No enclosing routine -> no scope to reason within -> keep reporting. }
+    if AProc.IsNull then Exit;
+    AsgnCount.Clear;
+    AsgnRhs  .Clear;
+    CollectAssignments(AProc);
+    Nm:= LowerCase(NodeStr(A));
+    if not AsgnCount.TryGetValue(Nm, Cnt) then Exit;
+    if Cnt <> 1 then Exit; { assigned more than once IN THIS ROUTINE -- refuse to reason }
+    if not AsgnRhs.TryGetValue(Nm, Rhs) then Exit;
+    Result:= IsFixedSchemeUri(LeftmostLiteralText(Rhs));
+  end;
+
   function CmdArgIndex(const ACallee: string; out AIdx: Integer): Boolean;
   begin
     Result:= True;
@@ -4465,14 +4748,19 @@ var
     else Result:= False;
   end;
 
-  procedure Visit(const N: TTSNode);
+  procedure Visit(const N: TTSNode; const AProc: TTSNode);
   var
     I, Idx      : Integer ;
     Ent, Args, A: TTSNode ;
     P           : TTSPoint;
     F           : TLintFinding;
+    Cur         : TTSNode ;
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
+    { Innermost enclosing routine wins, so a nested procedure reasons about its
+      OWN locals rather than the outer routine's. }
+    Cur:= AProc;
+    if N.NodeType = 'defProc' then Cur:= N;
     if N.NodeType = 'exprCall' then
     begin
       Ent:= N.ChildByField('entity');
@@ -4482,7 +4770,7 @@ var
         if (not Args.IsNull) and (Args.NamedChildCount > Idx) then
         begin
           A:= Args.NamedChild(Idx);
-          if A.NodeType <> 'literalString' then
+          if (A.NodeType <> 'literalString') and (not ArgIsFixedSchemeUri(A, Cur)) then
           begin
             P:= Ent.StartPoint;
             F:= Default(TLintFinding);
@@ -4499,7 +4787,7 @@ var
         end;
       end;
     end;
-    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I), Cur);
   end; // procedure
 
 begin
@@ -4507,13 +4795,18 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
-  Findings:= TList<TLintFinding>.Create;
+  Findings := TList<TLintFinding>.Create;
+  AsgnCount:= TDictionary<string, Integer>.Create;
+  AsgnRhs  := TDictionary<string, TTSNode>.Create;
   try
-
-    Visit(PF.Tree.RootNode);
+    { The maps are (re)built per ShellExecute site from its enclosing routine --
+      see ArgIsFixedSchemeUri -- so nothing is collected up front. }
+    Visit(PF.Tree.RootNode, Default(TTSNode));
     Result:= Findings.ToArray;
   finally
-    Findings.Free;
+    AsgnRhs  .Free;
+    AsgnCount.Free;
+    Findings .Free;
   end;
 end; // function
 

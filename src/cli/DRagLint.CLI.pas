@@ -18,14 +18,14 @@ const
 /// (Args); DoRules (Args); DoLint (Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext, DRagLint.CLI.DoConvertApply (+81 more)
-/// Complexity: 91 (cyclomatic, outer body), 170 lines (full implementation)
-/// Pure
+/// Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+85 more)
+/// Complexity: 99 (cyclomatic, outer body), 234 lines (full implementation)
+/// Touches: file system
+/// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
 /// <seealso cref="DRagLint.CLI.DoBenchContext"/>
 /// <seealso cref="DRagLint.CLI.DoButterfly"/>
 /// <seealso cref="DRagLint.CLI.DoCallGraph"/>
-/// <seealso cref="DRagLint.CLI.DoCallPath"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;
@@ -1008,6 +1008,31 @@ begin
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); end
     else if (A = '--parent-pid') and (i < ParamCount) then begin Inc(i); Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0)); end
+    { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
+      vscode-languageclient appends a transport flag to argv from the client's
+      `transport:` declaration (node/main.js: `args.push('--stdio')`), so the
+      VS Code extension launches `drag-lint lsp --stdio` even though its own
+      args array is just ['lsp']. ParseArgs' strict catch-all killed the process
+      during arg parsing, before the `lsp` command was ever dispatched -- so the
+      client got EPIPE, retried, and latched its circuit breaker after five
+      tries. The extension has therefore NEVER completed a start since it landed
+      on 2026-08-11; commit 587546e did not cause that, it only moved the fatal
+      off stdout so the message became readable.
+
+      stdio is the only transport this server implements, so the flag is a
+      truthful no-op. Accepting it here fixes every already-installed extension
+      build without republishing a .vsix, and matches how most LSP servers
+      behave. --clientProcessId is accepted for the same reason: several clients
+      append it unconditionally. --node-ipc/--pipe/--socket are deliberately NOT
+      accepted -- this server cannot speak them, and silently ignoring a
+      transport it will not honour would hang the client instead of failing it.
+      See docs\INBOX-lsp-rejects-the-stdio-flag-its-own-client-appends.md. }
+    else if A = '--stdio' then { accepted, no-op: the only transport we speak }
+    else if A.StartsWith('--clientProcessId') then
+    begin
+      { Both spellings: `--clientProcessId=<n>` and `--clientProcessId <n>`. }
+      if (A = '--clientProcessId') and (i < ParamCount) then Inc(i);
+    end
     // --unit routes to DocUnit for the `document` command (whole-unit batch),
     // else to GhostUnit (ghost-check overlay). Distinct fields avoid a collision.
     else if (A = '--unit') and (i < ParamCount) then
@@ -2083,6 +2108,11 @@ begin
   // Apply --only filter: keep only items whose Name is in OnlySections.
   if Length(AArgs.OnlySections) > 0 then
   begin
+    { Capture the selectable names BEFORE filtering -- after it, Plan.Items is
+      exactly what matched, so there is nothing left to tell the user about. }
+    var Selectable: TArray<string>:= nil;
+    for i:= 0 to High(Plan.Items) do Selectable:= Selectable + [Plan.Items[i].Name];
+
     var Filtered: TArray<TPlanSection>;
     for i:= 0 to High(Plan.Items) do
     begin
@@ -2093,6 +2123,41 @@ begin
       if Keep then begin SetLength(Filtered, Length(Filtered) + 1); Filtered[High(Filtered)]:= PS; end;
     end;
     Plan.Items:= Filtered;
+
+    { A --only name matching no section used to leave Plan.Items EMPTY and then
+      run to completion: no output, exit 0. A typo, a renamed section or a stale
+      script was therefore indistinguishable from a successful incremental index
+      with nothing to do. That cost one entire invalid pipeline measurement -- a
+      reported +163-finding lint regression and a failed convergence gate that
+      were both artifacts of indexing nothing.
+
+      Reported per unmatched selector, because `--only A,B` with A valid and B a
+      typo is the case a bare "matched nothing" check misses entirely: A alone
+      would satisfy it while B is silently dropped.
+
+      Selectable names are listed from the plan AFTER --platform filtering, so a
+      section that exists in the manifest but belongs to the other platform reads
+      as unavailable here -- which is true for this invocation, and the hint says
+      so rather than claiming the section does not exist.
+      See docs\INBOX-index-only-nonmatching-section-is-a-silent-noop.md. }
+    var Unmatched: TArray<string>:= nil;
+    for var OnlyName in AArgs.OnlySections do
+    begin
+      var Hit:= False;
+      for var SelName in Selectable do
+        if SameText(SelName, OnlyName) then begin Hit:= True; Break; end;
+      if not Hit then Unmatched:= Unmatched + [OnlyName];
+    end;
+    if Length(Unmatched) > 0 then
+    begin
+      Writeln(ErrOutput, Format('ERROR: --only matched no configured section: %s',
+        [string.Join(', ', Unmatched)]));
+      TArray.Sort<string>(Selectable);
+      Writeln(ErrOutput, Format('selectable for this platform (%d): %s',
+        [Length(Selectable), string.Join(', ', Selectable)]));
+      Writeln(ErrOutput, 'nothing was indexed.');
+      Exit(2);
+    end;
   end; // if
 
   if AArgs.DryRun then
@@ -5682,7 +5747,12 @@ begin
           begin
             if not SameText(M.RuleId, F.RuleId) then Continue;
             Accounted.AddOrSetValue(MarkerKey(F.FilePath, F.StartLine, M.RuleId), True);
-            Want:= TReviewMarkers.HashLine(LineTxt);
+            { Window, not line. Hashing LineTxt alone made every bare-except
+              marker identical once that rule anchored on the `except` keyword:
+              the normalized line is one invariant token, so the hash could never
+              go stale and the marker verified forever however the handler was
+              rewritten. See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
+            Want:= TReviewMarkers.HashWindow(Lines, F.StartLine - 1);
             if M.Hash = '' then
             begin
               { Hand-written, no hash: honour it, but say that it cannot be
@@ -5745,9 +5815,20 @@ begin
       for var SF: string in AScannedFiles do
       begin
         Lines:= LinesOf(SF);
+        { PROSE ABOUT A MARKER IS NOT A MARKER. This walk sees every line of the
+          file, including lines inside a braced header block and inside `///`
+          doc-comments quoting the grammar as an example -- and TReviewMarkers.Parse
+          takes ONE LINE, so it cannot tell that a brace opened earlier is still
+          open. Two findings on the unit that DEFINES the marker syntax came from
+          exactly that, on lines carrying no marker, advising the reader to delete
+          documentation. MarkerBearingLines carries block-comment state across
+          lines and rejects `///`; see its remarks for why this gate is applied to
+          the REPORTER only and never to suppression. }
+        var CanBear: TArray<Boolean>:= TReviewMarkers.MarkerBearingLines(Lines);
         for var LN: Integer:= 1 to Length(Lines) do
         begin
           if Pos(REVIEW_MARK, LowerCase(Lines[LN - 1])) = 0 then Continue; { cheap reject }
+          if (LN <= Length(CanBear)) and (not CanBear[LN - 1]) then Continue;
           for M in TReviewMarkers.Parse(Lines[LN - 1]) do
           begin
             if not Known.ContainsKey(LowerCase(M.RuleId)) then Continue;
@@ -5780,10 +5861,64 @@ var
   Path: string;
 begin
   Path:= AArgs.ConfigPath;
+
+  { DISCOVER THE CONFIG BESIDE THE PROJECT, not only in the CWD.
+    Before this, `lint-all --project C:\Projects\YADF\YADF.dproj` ignored
+    C:\Projects\YADF\drag-lint-lint.json unless --config named it explicitly,
+    because the only fallback was a relative filename resolved against the
+    CURRENT directory -- and lint runs are launched from anywhere. An owner
+    ruling recorded as a config file therefore did nothing, silently, and the
+    only symptom was findings the owner believed were disabled.
+
+    Precedence, most specific first: --config, then beside the .dproj, then the
+    project's own _D-RAG folder (where per-project drag-lint state lives), then
+    the CWD as before. The CWD fallback is kept LAST so no existing invocation
+    changes behaviour unless a project-scoped config actually exists.
+    See docs\INBOX-lint-config-not-discovered-beside-project.md. }
+  if (Path = '') and (AArgs.ProjectPath <> '') then
+  begin
+    var ProjDir: string:= ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath));
+    if ProjDir <> '' then
+    begin
+      var Cand: string:= TPath.Combine(ProjDir, 'drag-lint-lint.json');
+      if TFile.Exists(Cand) then Path:= Cand
+      else
+      begin
+        Cand:= TPath.Combine(TPath.Combine(ProjDir, '_D-RAG'), 'drag-lint-lint.json');
+        if TFile.Exists(Cand) then Path:= Cand;
+      end;
+    end;
+  end;
+
   if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
   Result:= TLintConfig.Load(Path, AArgs.Profile);
   if AArgs.Disable <> '' then Result.AddDisabled(AArgs.Disable.Split([',', ' ', ';']));
   if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
+end;
+
+{ The "may drag-lint touch this file at all?" half of ownership, as a predicate
+  the doc batch can hold. EVERY `document*` command must set
+  TDocBatchOptions.IsExcluded from this -- see that field's remarks for what
+  happened when the doc path knew about ownRoots and not about exclude_paths.
+
+  It exists as one function rather than four inline closures so that adding a
+  fifth document entry point cannot quietly omit it: the omission is then a
+  missing call to a named thing, not a missing idea.
+
+  Config DISCOVERY belongs out here, not in the doc unit: LoadLintConfig honours
+  --config and falls back to the CWD, and re-deriving that inside Doc.Batch
+  would find nothing on precisely the runs that matter (this repo's own config
+  sits at the repo root while the pipeline runs from C:\TEMP). }
+function DocExcludePredicate(const AArgs: TArgs): TFunc<string, Boolean>;
+var
+  Cfg: TLintConfig;
+begin
+  Cfg:= LoadLintConfig(AArgs);
+  Result:=
+    function(APath: string): Boolean
+    begin
+      Result:= Cfg.IsPathExcluded(APath);
+    end;
 end;
 
 { The set of rule-ids that have a registered, mechanical, side-effect-free
@@ -5798,12 +5933,15 @@ end;
   NamingFixEdits (the rename engine), both via a store-backed append in
   FinalizeAndOutput, not from the pure-text edit builder. }
 const
-  FIXABLE_RULE_IDS: array[0..20] of string = (
+  FIXABLE_RULE_IDS: array[0..21] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
     'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc',
     'method-pascalcase', 'local-var-casing', 'const-casing',
     'field-name-prefix', 'param-name-prefix', 'type-name-prefix',
-    'nil-comparison', 'uppercase-compare', 'uppercase-compare-always-false', 'unused-local');
+    'nil-comparison', 'uppercase-compare', 'uppercase-compare-always-false', 'unused-local',
+    { local-field-prefix: strips an F prefix off a LOCAL. Safest rename in the
+      family -- single-routine scope, so no call site can be affected. }
+    'local-field-prefix');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var
@@ -6604,7 +6742,7 @@ begin
           2026-08-13). Targeted has already been through the ownership and
           --project filters, so passing it inherits both. See
           TDocLintRules.FixEditsForDocDrift's remarks. }
-        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore, Targeted, AArgs.DocSeeAlso);
+        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore, Targeted, AArgs.DocSeeAlso, LoadDocMaxReturnCases, LoadDocMaxCallers);
         if Length(DDEdits) > 0 then
         begin
           Edits:= Edits + DDEdits;
@@ -6656,11 +6794,37 @@ begin
         joining the always-on doc-drift append). The synthesizers + rename
         engine live in DRagLint.Refactor.NamingFix. }
       var NamingTargets: TArray<TLintFinding>:= nil;
+      { Findings whose rule CAN be fixed but is not opted in. Counted separately
+        so the summary can say which it is: "no fixable findings" is false and
+        actively misleading here -- the rule IS registered fixable, the catalog
+        advertises `"fixable": true` for it, and the fix demonstrably works the
+        moment the config opts in. Reporting the opt-in as an absence of
+        capability sent a triage session down the path of believing the fixer
+        was broken (docs\INBOX-field-name-prefix-fixable-flag-lies.md). }
+      var NamingOptOut: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+      try
       for F in Targeted do
         if (SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'local-var-casing')
             or SameText(F.RuleId, 'const-casing') or SameText(F.RuleId, 'field-name-prefix')
-            or SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'type-name-prefix')) and Cfg.IsAutoFix(F.RuleId) then
-          NamingTargets:= NamingTargets + [F];
+            or SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'type-name-prefix')
+            or SameText(F.RuleId, 'local-field-prefix')) then
+        begin
+          if Cfg.IsAutoFix(F.RuleId) then NamingTargets:= NamingTargets + [F]
+          else NamingOptOut.AddOrSetValue(LowerCase(F.RuleId), True);
+        end;
+      if NamingOptOut.Count > 0 then
+      begin
+        var OptOutIds: TArray<string>:= NamingOptOut.Keys.ToArray;
+        TArray.Sort<string>(OptOutIds);
+        Writeln(ErrOutput, Format(
+          'drag-lint: note: %d naming rule(s) here are fixable but NOT opted in: %s. ' +
+          'Naming fixes rewrite call sites project-wide, so they are opt-in -- add them to ' +
+          '"autofix": [...] in drag-lint-lint.json to apply.',
+          [Length(OptOutIds), string.Join(', ', OptOutIds)]));
+      end;
+      finally
+        NamingOptOut.Free;
+      end;
       if Length(NamingTargets) > 0 then
       begin
         { Naming-prefix autofixes rewrite the declaration + every use the ref
@@ -6932,46 +7096,38 @@ begin
     the fix path. }
   EffPath:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
   if (EffPath = '') and (AArgs.ProjectPath = '') then begin Writeln('ERROR: lint requires a <path> or --project <file.dproj>'); Exit (2 ); end;
-  if (AArgs.Rule <> '') and (AArgs.Rule <> 'field-by-name-in-loop') and (AArgs.Rule <> 'unit-not-in-dpr') and (AArgs.Rule <> 'inline-comment-in-multiline-args') and
-  (AArgs.Rule <> 'unused-local') and (AArgs.Rule <> 'syntax-error') and (AArgs.Rule <> 'unbalanced-begin-end') and (AArgs.Rule <> 'raise-in-finally') and
-  (AArgs.Rule <> 'code-after-exit') and (AArgs.Rule <> 'missing-inherited-ctor') and (AArgs.Rule <> 'missing-inherited-dtor') and
-  (AArgs.Rule <> 'control-flow-in-finally') and (AArgs.Rule <> 'too-many-parameters') and (AArgs.Rule <> 'too-many-locals') and
-  (AArgs.Rule <> 'method-too-long') and (AArgs.Rule <> 'deep-nesting') and (AArgs.Rule <> 'float-equality-comparison') and
-  (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') and (AArgs.Rule <> 'unprotected-object-free') and
-  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'redundant-cast') and (AArgs.Rule <> 'unsafe-typecast-without-is')
-    and (AArgs.Rule <> 'exhaustive-enum-case') and (AArgs.Rule <> 'length-zero-compare') and (AArgs.Rule <> 'ui-access-in-thread') and (AArgs.Rule <> 'interface-object-mixing') and
-  (AArgs.Rule <> 'global-form-variable') and (AArgs.Rule <> 'unsafe-shellexecute') and (AArgs.Rule <> 'path-traversal') and (AArgs.Rule <> 'loop-executes-at-most-once') and
-  (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed')
-    and (AArgs.Rule <> 'dataset-open-without-close') and (AArgs.Rule <> 'criticalsection-not-released') and (AArgs.Rule <> 'too-many-exit-points')
-    and (AArgs.Rule <> 'cyclomatic-complexity') and (AArgs.Rule <> 'virtual-method-in-constructor') and
-  (AArgs.Rule <> 'used-before-assignment') and (AArgs.Rule <> 'function-result-not-set') and (AArgs.Rule <> 'out-param-not-set'  ) and
-  (AArgs.Rule <> 'overwrite-before-read' ) and (AArgs.Rule <> 'write-only-local'       ) and (AArgs.Rule <> 'loop-var-after-loop') and
-  (AArgs.Rule <> 'object-leak') and (AArgs.Rule <> 'not-assigned-interface') and (AArgs.Rule <> 'split-variable') and (AArgs.Rule <> 'separate-query-from-modifier') and
-  (AArgs.Rule <> 'type-name-prefix') and (AArgs.Rule <> 'field-name-prefix') and (AArgs.Rule <> 'param-name-prefix') and
-  (AArgs.Rule <> 'method-pascalcase') and (AArgs.Rule <> 'const-casing') and (AArgs.Rule <> 'local-var-casing') and (AArgs.Rule <> 'unit-name-matches-file') and
-  (AArgs.Rule <> 'reserved-word-casing') and (AArgs.Rule <> 'hungarian-or-short-identifier') and (AArgs.Rule <> 'unused-parameter') and (AArgs.Rule <> 'identical-then-else') and
-  (AArgs.Rule <> 'referenced-never-set') and (AArgs.Rule <> 'redundant-parentheses') and (AArgs.Rule <> 'commented-out-code') and (AArgs.Rule <> 'function-result-ignored') and
-  (AArgs.Rule <> 'destructor-without-override'  ) and (AArgs.Rule <> 'case-with-too-few-branches'          ) and
-  (AArgs.Rule <> 'boolean-expression-complexity') and (AArgs.Rule <> 'exception-constructed-but-not-raised') and
-  (AArgs.Rule <> 'duplicate-exception-handler'  ) and (AArgs.Rule <> 'repeated-else-if-condition'          ) and
-  (AArgs.Rule <> 'property-references-itself') and (AArgs.Rule <> 'unit-too-large') and (AArgs.Rule <> 'weak-random-for-security') and (AArgs.Rule <> 'create-inside-try') and
-  (AArgs.Rule <> 'dfm-hardcoded-credential') and (AArgs.Rule <> 'insecure-temp-file') and (AArgs.Rule <> 'multiple-statements-per-line') and
-  (AArgs.Rule <> 'abstract-method-instantiation') and (AArgs.Rule <> 'nativeint-truncation') and (AArgs.Rule <> 'lossy-cast') and (AArgs.Rule <> 'cognitive-complexity') and
-  (AArgs.Rule <> 'duplicate-code') and (AArgs.Rule <> 'magic-literal') and (AArgs.Rule <> 'boolean-flag-parameter') and
-  (AArgs.Rule <> 'message-chain') and (AArgs.Rule <> 'public-writable-field') and (AArgs.Rule <> 'loop-control-flag') and (AArgs.Rule <> 'double-free') and
-  (AArgs.Rule <> 'mutable-global-variable') and (AArgs.Rule <> 'default-encoding-io') then
+  { KNOWN-RULE VALIDATION COMES FROM THE CATALOG, NOT A HAND-KEPT LIST.
+    This was ~40 lines of "and (AArgs.Rule <> '<id>')" naming the BUILT-IN rules
+    only, plus a second copy of the same list inside the error message. The 56
+    external .scm/.json query rules appeared in neither, so --rule bare-except --
+    a rule the tool ships, documents and reports on every run -- was rejected as
+    "unknown", and the error then printed a "known:" list that did not contain
+    it. Anyone filtering to a query rule concluded the rule did not exist.
+
+    BuildCatalog is the single source of truth and already merges both
+    registries. DoReviewMarkers reached this same conclusion for the same reason
+    -- see its "BuildCatalog, not BuiltinRegistry" comment, which notes the .scm
+    rules are more than half the catalogue. Passing AArgs.RulesDir rather than ''
+    means --rules-dir is honoured here exactly as it is by the pass that will
+    actually run the rules, so validation can neither accept a rule the run would
+    ignore nor reject one it would have executed.
+    See docs\INBOX-lint-rule-filter-leaks-other-rules.md. }
+  if AArgs.Rule <> '' then
   begin
-    Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, '
-          + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, '
-          + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, '
-          + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, '
-          + 'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, '
-          + 'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, split-variable, separate-query-from-modifier, double-free, '
-          + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, '
-          + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable, default-encoding-io, interface-object-mixing)',
-        [AArgs.Rule]));
-    Exit(2);
+    var KnownRule: Boolean:= False;
+    var KnownIds : TArray<string>:= nil;
+    for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(AArgs.RulesDir, '') do
+    begin
+      KnownIds:= KnownIds + [RI.Id];
+      if SameText(RI.Id, AArgs.Rule) then KnownRule:= True;
+    end;
+    if not KnownRule then
+    begin
+      TArray.Sort<string>(KnownIds);
+      Writeln(Format('ERROR: unknown rule "%s"', [AArgs.Rule]));
+      Writeln(Format('known rules (%d): %s', [Length(KnownIds), string.Join(', ', KnownIds)]));
+      Exit(2);
+    end;
   end;
   Findings:= nil;
   // Project-level lint: --project triggers DCC/DPR membership check.
@@ -7068,9 +7224,28 @@ begin
         field-write predicate keeps FP low, but ships OFF. Opt in via "enabled":
         ["separate-query-from-modifier"] or --rule separate-query-from-modifier. }
       if AArgs.Rule <> 'separate-query-from-modifier' then DefDisabled:= DefDisabled + ['separate-query-from-modifier'];
-      if TFile.Exists(EffPath) then Findings:= Findings + Linter.LintFile(EffPath)
-      else if TDirectory.Exists(EffPath) then Findings:= Findings + Linter.LintFolder(EffPath, True)
+      { --rule MUST gate the external query-rule pass too, not just the built-in
+        checks above. Every builtin is wrapped in `if (AArgs.Rule = '') or
+        (AArgs.Rule = '<id>')`, but these two lines appended the .scm findings
+        unconditionally -- so `lint <f> --rule write-only-local` returned
+        bare-except findings and no write-only-local ones at all. The filter
+        looked like it worked (output shrank) while reporting a rule nobody
+        asked for. Filtering the RESULT, rather than teaching the Linter about
+        the flag, keeps the one place that knows rule ids (the catalog) in
+        charge and cannot fall out of step with the .scm corpus.
+        See docs\INBOX-lint-rule-filter-leaks-other-rules.md. }
+      var QueryFindings: TArray<TLintFinding>;
+      if TFile.Exists(EffPath) then QueryFindings:= Linter.LintFile(EffPath)
+      else if TDirectory.Exists(EffPath) then QueryFindings:= Linter.LintFolder(EffPath, True)
       else begin Writeln('ERROR: path does not exist: ', EffPath); Exit(2); end;
+      if AArgs.Rule <> '' then
+      begin
+        var KeptQ: TArray<TLintFinding>:= nil;
+        for var QF: TLintFinding in QueryFindings do
+          if SameText(QF.RuleId, AArgs.Rule) then KeptQ:= KeptQ + [QF];
+        QueryFindings:= KeptQ;
+      end;
+      Findings:= Findings + QueryFindings;
     finally
       Linter.Free;
     end; // try
@@ -7220,6 +7395,24 @@ begin
     Store:= OpenReadOnlyStore(AArgs.DbPath, StoreOk);
     if not StoreOk then Store:= nil;
   end;
+  { SAY WHAT THIS VERB CANNOT SEE. `lint <file>` runs only the per-file rules;
+    the whole-run rules (index-wide project rules, and the review-marker
+    reporters, which must see every file before they can know a marker matches
+    nothing) run under lint-all. Measured 2026-08-16 on a one-file fixture
+    carrying a stranded dl:ok: `lint <f>` printed "0 finding(s)" while
+    `lint-all` over that SAME single file printed 2. A zero that means "I did
+    not look" is indistinguishable from a zero that means "nothing is wrong",
+    and this verb is what the IDE plugin calls on every buffer.
+
+    Written to stderr and only in the human path, so JSON consumers and the
+    plugin's diagnostic stream are untouched.
+    See docs\INBOX-lint-single-file-silently-omits-lint-all-rules.md. }
+  if (not AArgs.AsJson) and (not AArgs.Quiet) then
+    Writeln(ErrOutput,
+      'drag-lint: note: `lint <file>` runs per-file rules only. Whole-run rules ' +
+      '(project-wide checks, review-marker-unused/stale) need `lint-all` and are ' +
+      'NOT reported here -- a 0 above does not mean they are clean.');
+
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
@@ -8729,6 +8922,8 @@ begin
   if AArgs.DocStrip then
   begin
     Opts:= Default(TDocBatchOptions);
+    { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
+    Opts.IsExcluded:= DocExcludePredicate(AArgs);
     Opts.Strip:= True;
     Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
     Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
@@ -8742,6 +8937,8 @@ begin
   if not Ok then Exit(2);
 
   Opts:= Default(TDocBatchOptions);
+  { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
+  Opts.IsExcluded:= DocExcludePredicate(AArgs);
   // --stubs flips the facts-only default: on = keep pure all-TODO creates too.
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -8926,6 +9123,8 @@ begin
   end;
 
   Opts:= Default(TDocBatchOptions);
+  { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
+  Opts.IsExcluded:= DocExcludePredicate(AArgs);
   Opts.Stubs:= AArgs.DocStubs;
   Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -8978,6 +9177,8 @@ begin
   if not Ok then Exit(2);
 
   Opts:= Default(TDocBatchOptions);
+  { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
+  Opts.IsExcluded:= DocExcludePredicate(AArgs);
   Opts.Stubs:= AArgs.DocStubs;
   Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -10086,7 +10287,20 @@ begin
   for Fid in Store.GetAllFileIds do
   begin
     PasPath:= Store.GetFilePath(Fid);
-    if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then
+    { .dpr TOO. A program body is Object Pascal and is indexed like any other
+      compiled input, but this filter admitted only '.pas', so every rule that
+      works on a file was silently skipped for it. Measured 2026-08-16: a real
+      bare `except` inside a .dpr produced NO finding, and a two-file project
+      reported "1 file(s) scanned" -- the count agreed with the filter, not with
+      the project, so nothing looked wrong. The only rule ever seen on a .dpr in
+      our own report was unit-not-in-dpr, a PROJECT-level rule that reports AT
+      the .dpr without scanning it, which is what made the gap easy to miss.
+
+      .dpr bodies are where Application.CreateForm, initialization order and
+      top-level exception handling live -- exactly the code worth linting.
+      See docs\INBOX-lint-all-never-scans-dpr-files.md. }
+    if (SameText(ExtractFileExt(PasPath), '.pas') or SameText(ExtractFileExt(PasPath), '.dpr'))
+       and TFile.Exists(PasPath) then
     begin
       if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
       if (not AArgs.LintThirdParty) and (not Own.IsOurs(PasPath)) then
@@ -10205,7 +10419,7 @@ begin
   { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
   Prof.Phase('doc-drift');
-  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso);
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso, LoadDocMaxReturnCases, LoadDocMaxCallers);
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   Prof.Phase('duplicate-code');
@@ -10455,7 +10669,7 @@ begin
   if (AArgs.Rule = '') or (AArgs.Rule = 'doc-drift') then
     { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
-  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso);
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso, LoadDocMaxReturnCases, LoadDocMaxCallers);
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
@@ -15363,7 +15577,16 @@ begin
   while (LineEnd <= Length(Raw)) and not CharInSet(Raw[LineEnd], [#13, #10]) do Inc(LineEnd);
   OldLine:= Copy(Raw, LineStart, LineEnd - LineStart);
 
-  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '');
+  { Compute the SAME window hash the checker will compute, from the same file
+    text this edit is about to be applied to. InsertInto only ever sees one
+    line, so it cannot derive a window itself; letting it fall back to
+    HashLine here would write a marker that the checker -- which hashes a
+    window -- immediately reports as stale. Splitting on #10 with empties kept
+    keeps element i aligned to line i+1, which is what FixLine indexes.
+    See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
+  var WinLines: TArray<string>:= Raw.Replace(#13#10, #10).Split([#10]);
+  var WinHash : string        := TReviewMarkers.HashWindow(WinLines, AArgs.FixLine - 1);
+  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '', WinHash);
   if NewLine = OldLine then
   begin
     { Already reviewed and the hash still matches -- nothing to write, and the
@@ -15832,6 +16055,31 @@ begin
       if not SameText(ExpandFileName(D), ExpandFileName(ProjDb)) then Reordered:= Reordered + [D];
     Result:= Reordered;
   end;
+
+  { Then reorder by what the indexes ACTUALLY CONTAIN, when this run names a
+    target file. `resolve-dbs --in <file>` has answered this correctly all along
+    -- DoResolveDbsList calls OrderDbsByMembership -- but the DIAGNOSTIC had the
+    ordering and the CONSUMERS did not, so a bare `lint <file>` took Result[0],
+    i.e. the manifest's FIRST section, and opened an index that does not hold the
+    file. Observed as `index schema v19 < v21` from ORM3's Micronite2027.sqlite
+    while linting a YADF unit whose own index was current -- and the quiet form is
+    worse than the warning: every store-backed per-file rule and every
+    index-dependent autofix (CheckTypeAware, the naming fixes, hover, find-unit)
+    silently consults a foreign project's symbols and returns a
+    wrong-but-plausible answer.
+
+    Target file resolved with DoLint's own precedence -- positional Path wins,
+    else --file/--in -- so the two cannot disagree about which file the run is
+    about. OrderDbsByMembership returns its input UNCHANGED when the path is
+    empty or when no index contains it, so this is a no-op for the commands that
+    name no file (the library-source case included) and for lint-all's directory
+    targets. It runs AFTER the --project promotion above deliberately: an explicit
+    --project is a stronger statement than membership, and OrderDbsByMembership
+    takes ProjDb as its tiebreak, which is what ORM3's shared COMMON\ units need. }
+  var TargetFile: string:= AArgs.Path;
+  if TargetFile = '' then TargetFile:= AArgs.InFile;
+  if TargetFile <> '' then
+    Result:= OrderDbsByMembership(Result, ProjDb, TargetFile, DbContainsFile);
 end; // function
 
 { The LIBRARY index for this run's platform, from the manifest; '' when the
@@ -17960,9 +18208,47 @@ begin
         Server.Free;
       end;
     end // if
-    else begin Writeln('ERROR: unknown command: ', Args.Command); PrintHelp; Result:= 2; end;
+    else begin Writeln(ErrOutput, 'ERROR: unknown command: ', Args.Command); PrintHelp; Result:= 2; end;
   except
-    on E: Exception do begin Writeln('FATAL: ', E.ClassName, ': ', E.Message); Result:= 3; end;
+    on E: Exception do
+    begin
+      { ErrOutput, NOT stdout. For `lsp` and `serve` stdout IS the JSON-RPC
+        transport -- both branches above say so in as many words -- so the bare
+        Writeln that used to be here injected the ONE line explaining the death
+        straight into the wire. The client read `FATAL: ...` where a
+        Content-Length header belongs, tore the connection down, reported
+        `write EPIPE`, and after five restarts inside three minutes latched
+        vscode-languageclient's circuit breaker. Net effect: a dead language
+        server, no diagnostic anywhere, and no recovery short of reloading the
+        window. The crash destroyed its own evidence, which is why the incident
+        of 2026-08-14 could be reproduced but never attributed.
+
+        Reported from the tree-sitter-delphi13 workstream with a byte-for-byte
+        reproduction (`drag-lint lsp --db < init.txt` -- a trailing bare --db
+        fatals in argument parsing, before the first store opens, which is why a
+        healthy start's 32 `FTS5 probe:` lines were absent from the transcript).
+
+        stderr is the right channel for a fatal under EVERY command, not just
+        those two, so this needs no is-stdout-a-protocol mode flag.
+        tests\autotest\run_lsp_stdout_hygiene.ps1 now fails the build if a bare
+        Writeln reappears on either of these two paths -- the invariant lived
+        only in a comment before, and was violated ~60 lines below the comment
+        that stated it. }
+      Writeln(ErrOutput, 'FATAL: ', E.ClassName, ': ', E.Message);
+      { A breadcrumb that survives a broken transport. Without this, a TRANSIENT
+        fatal is unfalsifiable after the fact: there is no --log-file, and
+        stderr is only as durable as whoever happened to be capturing it.
+        Best-effort and swallowed -- a diagnostic that throws is worse than none,
+        and this runs while an exception is already in flight. }
+      try
+        TFile.AppendAllText(ExtractFilePath(ParamStr(0)) + 'drag-lint-fatal.log',
+          Format('%s  cmd=%s  %s: %s'#13#10,
+            [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), Args.Command, E.ClassName, E.Message]));
+      except
+        { deliberately empty }
+      end;
+      Result:= 3;
+    end;
   end; // try
 end; // function
 

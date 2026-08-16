@@ -27,8 +27,14 @@ interface
 type
   /// <summary>The directory roots whose files a lint run treats as the project's
   /// own code, plus the answer to "is this file one of them?".</summary>
-  /// <remarks>Value type; copy freely. Immutable after Load. Thread-safe to
-  /// share for reading.</remarks>
+  /// <remarks>
+  /// Value type; copy freely. Immutable after Load. Thread-safe to
+  /// share for reading.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// Used by: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), declaration (DRagLint.Project.OwnRoots.pas)
+  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Project.OwnRoots
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOwnRoots = record
   strict private
     FRoots   : TArray<string>;
@@ -45,19 +51,39 @@ type
     /// <returns>A populated record. Check Error before use: a non-empty Error
     /// means the declaration was present but unusable and the caller must refuse
     /// to lint rather than silently scope to something unintended.</returns>
-    /// <remarks>An entry may be absolute or relative to AAnchorDir; a relative
+    /// <remarks>
+    /// An entry may be absolute or relative to AAnchorDir; a relative
     /// entry keeps a declaration portable ("[..]" from ORM3\CLIENT). A missing,
     /// unreadable or malformed file is NOT an error -- it defaults. An explicit
     /// empty "ownRoots": [] IS an error, because scoping to nothing would report
-    /// a clean project, the same reasoning as the empty --project refusal.</remarks>
+    /// a clean project, the same reasoning as the empty --project refusal.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)
+    /// Calls: Default, DRagLint.Project.OwnRoots.NormalizeDir, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONObject, Trim
+    /// Returns: Default(TOwnRoots)
+    /// Touches: file system
+    /// <seealso cref="DRagLint.Project.OwnRoots.NormalizeDir"/>
+    /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.IsOurs"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Load(const AAnchorDir: string): TOwnRoots; static;
     /// <summary>True when AFilePath sits under one of the roots.</summary>
     /// <param name="AFilePath">Absolute or relative source path.</param>
     /// <returns>True for our code; always True when the record is inactive
     /// (no anchor).</returns>
-    /// <remarks>Path comparison mirrors
+    /// <remarks>
+    /// Path comparison mirrors
     /// DRagLint.Storage.FileMembership.NormalizeForLookup: forward slashes
-    /// folded to backslashes, compared case-insensitively.</remarks>
+    /// folded to backslashes, compared case-insensitively.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
+    /// Calls: ExpandFileName, StartsText, StringReplace
+    /// Returns: True; False
+    /// Reads: FActive, FRoots
+    /// Pure
+    /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.Load"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsOurs(const AFilePath: string): Boolean;
     /// <summary>Resolved roots, each with a trailing path delimiter.</summary>
     property Roots: TArray<string> read FRoots;
@@ -76,9 +102,17 @@ type
 /// <param name="ADbPath">Path to a .sqlite index.</param>
 /// <returns>The parent of the _D-RAG folder, without a trailing delimiter, or
 /// '' when the DB is not inside one.</returns>
-/// <remarks>This is why the index moved next to its project: the anchor is a
+/// <remarks>
+/// This is why the index moved next to its project: the anchor is a
 /// property of the path, so no manifest lookup and no CWD-sensitive config
-/// discovery is needed to find a project's declaration.</remarks>
+/// discovery is needed to find a project's declaration.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas)
+/// Calls: ExpandFileName, ExtractFileDir, ExtractFileName, SameText, StringReplace
+/// Returns: ''; ExtractFileDir(Dir)
+/// Pure
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AnchorDirForDb(const ADbPath: string): string;
 
 implementation

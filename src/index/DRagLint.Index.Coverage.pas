@@ -79,7 +79,7 @@ type
 /// Not thread-safe; call from the owning thread only.
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas)
-/// Calls: Default, DRagLint.Index.Coverage.IsBuiltinPrune, DRagLint.Index.Coverage.IsUnderRoot, DRagLint.Index.Coverage.NormPath, DRagLint.Index.Glob.TGlob.Matches, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths, LowerCase, paths
+/// Calls: Default, DRagLint.Index.Coverage.IsBuiltinPrune, DRagLint.Index.Coverage.IsUnderRoot, DRagLint.Index.Coverage.NormPath, DRagLint.Index.Glob.TGlob.Matches, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths, LowerCase
 /// Returns: nil; Results.ToArray
 /// Complexity: 21 (cyclomatic, outer body), 185 lines (full implementation)
 /// Touches: file system
