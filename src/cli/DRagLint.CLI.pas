@@ -2580,6 +2580,29 @@ begin
   if PpPlatform = '' then PpPlatform:= 'Win64';
   Indexer.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  { SIZE GUARD ON THE INDEX PATH TOO (INBOX-library-reindex-25x-slower-on-large-db).
+
+    SizeGuardCheck was wired only into the CONSUMER commands (lint / lsp /
+    serve), so the one command that actually MAKES a database large never warned
+    about it. That is why a 1500 MB guard sat silent while the platform library
+    index grew past 2 GB -- the only runs touching it were index runs, and they
+    were the ones not checking.
+
+    A 32-bit process is where this bites (the Win32 exe OOMs well before the
+    Win64 one does), and SizeGuardCheck already no-ops outside that case, so the
+    call is free on a normal Win64 run. Emitted BEFORE the walk, while the
+    warning can still change what the operator does. }
+  begin
+    var IdxGuardMB: Integer:= 1500;
+    if AArgs.SizeGuardMBSet then IdxGuardMB:= AArgs.SizeGuardMB
+    else
+      try
+        IdxGuardMB:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir).Settings.SizeGuardMB;
+      except
+        { best-effort, exactly as the consumer path treats a missing manifest }
+      end;
+    SizeGuardCheck(ResolvedDb, IdxGuardMB, AArgs.Force32);
+  end;
   if not AArgs.NoPreprocess then Writeln('Preprocess: ON  (per-config directive resolution; platform=', PpPlatform, ')')
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
   { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
@@ -6813,7 +6836,8 @@ begin
           if SameText(F.RuleId, 'missing-doc') and IsSingleFixOnlyRule(F.RuleId) then begin WantMissingDoc:= True; Break; end;
       if WantMissingDoc then
       begin
-        var MDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc(AStore, Targeted);
+        var MDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc(
+          AStore, Targeted, LoadDocMaxReturnCases, LoadDocMaxCallers);
         if Length(MDEdits) > 0 then
         begin
           Edits:= Edits + MDEdits;
@@ -12100,6 +12124,30 @@ begin
                     begin
                       if R.StartLine < ImplL then Continue;   { implementation only }
                       if Seen.ContainsKey(LowerCase(R.NameText)) then Continue;
+                      { THE REF'S OWN SCOPE WINS, so ask it before asking the whole
+                        DB (INBOX-cycles-scope-and-local-var-refs).
+
+                        The kind filter below skips candidates that are THEMSELVES
+                        local/param-kind, but it does not stop the loop walking on
+                        to the next same-named candidate and matching a unit-level
+                        declaration in B. So a routine-local `ZFileDir` in A still
+                        got reported as coupling to a field `ZFileDir` in B -- a
+                        name the compiler resolves to the local and which creates
+                        no cross-unit dependency at all.
+
+                        This scan is a standalone name heuristic; it never consults
+                        the call resolver, so nothing else was going to catch it.
+                        Checking the ref's OWN enclosing routine for a local or
+                        parameter of that name discards the ref outright, which is
+                        the only correct answer -- there is no candidate in B that
+                        such a ref could legitimately match. }
+                      if R.EnclosingSymbolId > 0 then
+                      begin
+                        var LocalDecl: TSymbol:=
+                          Store.FindChildSymbolByName(R.EnclosingSymbolId, R.NameText);
+                        if (LocalDecl.Id > 0) and (LocalDecl.Kind in [skLocalVar, skParam]) then
+                          Continue;
+                      end;
                       for var Sym in Store.FindSymbolsByExactName(R.NameText) do
                       begin
                         { A local var / parameter is routine-scoped -- it can NEVER

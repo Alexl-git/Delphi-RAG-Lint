@@ -217,7 +217,15 @@ type
     /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function FixEditsForMissingDoc(const AStore: ISymbolStore; const ATargeted: TArray<TLintFinding>): TArray<TTextEdit>;
+    { AMaxReturnCases / AMaxCallers must be the SAME caps the doc-drift checker
+      will later grade this block with. They are passed rather than defaulted for
+      the reason spelled out in FixEditsForDocDrift: a block generated under
+      different caps is one the checker immediately calls stale, and no command
+      can repair it because each side keeps regenerating its own version. That
+      applies just as much to a block being CREATED here as to one being
+      repaired. Defaults match TDocumenter.BuildFor's own. }
+    class function FixEditsForMissingDoc(const AStore: ISymbolStore; const ATargeted: TArray<TLintFinding>;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TArray<TTextEdit>;
   end;
 
 implementation
@@ -626,7 +634,8 @@ begin
   end;
 end;
 
-class function TDocLintRules.FixEditsForMissingDoc(const AStore: ISymbolStore; const ATargeted: TArray<TLintFinding>): TArray<TTextEdit>;
+class function TDocLintRules.FixEditsForMissingDoc(const AStore: ISymbolStore; const ATargeted: TArray<TLintFinding>;
+  AMaxReturnCases: Integer; AMaxCallers: Integer): TArray<TTextEdit>;
 var
   Edits : TList<TTextEdit>;
   F     : TLintFinding    ;
@@ -679,7 +688,12 @@ begin
         if Seen.ContainsKey(LowerCase(QName)) then Continue;
         Seen.Add(LowerCase(QName), True);
 
-        DocRes:= TDocumenter.BuildFor(AStore, QName);
+        { Explicit caps -- see the declaration's comment. The fully-defaulted
+          2-arg overload was used here, so a freshly CREATED block could be
+          graded stale by the checker the moment it was written. }
+        DocRes:= TDocumenter.BuildFor(AStore, QName, {AIncludeSeeAlso=}False,
+                                      {AIncludeSince=}False, {ABaseDir=}'',
+                                      {AExtraStores=}nil, AMaxReturnCases, AMaxCallers);
         for E in DocRes.Edits do Edits.Add(E);
       except
         { A single malformed decl must not abort the whole fix sweep. }
