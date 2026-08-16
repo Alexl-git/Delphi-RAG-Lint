@@ -14,6 +14,11 @@ Backlog is still `docs/INBOX-INDEX.md`.
 | `double-free` | 42 | **0** |
 | `overwrite-before-read` | 32 | 34 (+2, both GENUINE) |
 | priority-1 INBOX items | 6 | **3** |
+| battery | 281/282 | **282/282, 0 fail** (15.1 min) |
+
+Battery verified green AFTER the final rebuild + reindex. The one failure in the
+first run was `run_exe_freshness`, correctly: a source edit landed mid-run.
+`run_double_free_loops_and_members.ps1` passes at [126/282].
 
 ## What shipped
 
@@ -112,6 +117,21 @@ than the alternative:
 **The mechanism is always the same:** a note records the world as it was when
 WRITTEN, and nothing walks back to amend it when the fix lands. So: **read the
 guard file and re-run the measurement before writing any code.**
+
+## One index gap filed (and one non-gap worth knowing)
+
+**Filed:** `INBOX-context-bundle-empty-for-bare-name.md`.
+`context --task "modify <BareName>"` returns an empty bundle with
+`Token count (estimated): 0` and **exit 0**, while `query --name` resolves the
+same bare name to one exact match and the QUALIFIED form builds a full bundle.
+Confirmed twice, two days apart, different symbols -- the 2026-08-14 hit was in
+`draglint-gaps.log` and never filed. It ranks above its size because CLAUDE.md
+tells every session to run this verb before reading a large `.pas`: the silent
+empty answer looks like "no context exists" and costs exactly the ~60x saving.
+
+**Not a gap:** `query find-callers --name <field>` DOES work -- it returned all
+8 `ExpectText` sites including both writers. I reached for Grep first and did
+not need to.
 
 ## NEXT -- in order
 

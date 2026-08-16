@@ -49,6 +49,11 @@ the general position-ordered case is not) · `inherited-bare-fires-on-the-mandat
 ## Priority 3 -- silent no-ops and wrong-scope commands
 
 These share one shape: **the command reports success while doing less than asked.**
+`context-bundle-empty-for-bare-name` (**new 2026-08-16, confirmed twice**:
+`context --task "modify <BareName>"` emits an empty bundle and exit 0 while
+`query --name` resolves the same name fine. Ranks high for its size -- CLAUDE.md
+tells every session to run this verb BEFORE reading a large `.pas`, so the silent
+empty answer costs exactly the ~60x saving the feature exists to provide) ·
 `index-all-only-silently-does-nothing` · `index-only-nonmatching-section-is-a-silent-noop` ·
 `lint-all-never-scans-dpr-files` · `lint-rule-filter-leaks-other-rules` ·
 `lint-config-not-discovered-beside-project` · `lint-scope-stale-files-and-project-members` ·
