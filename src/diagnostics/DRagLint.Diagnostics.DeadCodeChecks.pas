@@ -1946,6 +1946,24 @@ var
   { Find the leftmost base identifier in an LHS expression (handles
     FField, FField.Sub, FField[i], FField.Sub[j] etc.).
     Returns the lowercased name or '' when no identifier found. }
+  { The MEMBER side of a one-level dotted lhs: for `Result.FField` returns
+    'ffield'. Returns '' for anything that is not exactly <base>.<identifier> --
+    in particular it does NOT peel `A.B.C`, because only a direct member of the
+    receiver can be this class's own field. Paired with the `result`/`self`
+    guard at the single call site; see the comment there for why the pairing is
+    what makes this exact rather than merely conservative. }
+  function LhsMemberIdent(const ALhsNode: TTSNode): string;
+  var
+    RhsNode: TTSNode;
+  begin
+    Result:= '';
+    if ALhsNode.IsNull then Exit;
+    RhsNode:= ALhsNode.ChildByField('rhs');
+    if RhsNode.IsNull then Exit;
+    if RhsNode.NodeType <> 'identifier' then Exit;
+    Result:= LowerCase(Trim(NodeStr(RhsNode)));
+  end;
+
   function LhsBaseIdent(const ALhsNode: TTSNode): string;
   var
     Cur: TTSNode;
@@ -2004,6 +2022,25 @@ var
       if not LhsNode.IsNull then
       begin
         BaseName:= LhsBaseIdent(LhsNode);
+        { `Result.FField := x` and `Self.FField := x` ARE writes to FField.
+          LhsBaseIdent peels to the LEFTMOST identifier, which is `result` or
+          `self` -- neither is a field, so no write was recorded and the field
+          was then reported "read but never written". Measured 2026-08-16: all
+          three live findings on our own source were this exact shape, a record
+          factory doing `Result.FActive := ...` (Project.OwnRoots.pas:157/182/
+          194/209) -- 100% false on the only population there was.
+
+          DELIBERATELY LIMITED TO `result` AND `self`. Crediting the rightmost
+          member of any dotted lhs would mis-attribute `SomeOther.FField := x`
+          -- another object's field that happens to share a name -- and silently
+          suppress a genuine finding. These two receivers are the only ones that
+          provably denote the object/record being constructed here, so the
+          narrow rule is exact rather than merely safer. }
+        if (BaseName = 'result') or (BaseName = 'self') then
+        begin
+          var MemberName: string:= LhsMemberIdent(LhsNode);
+          if (MemberName <> '') and AFields.ContainsKey(MemberName) then BaseName:= MemberName;
+        end;
         if (BaseName <> '') and AFields.ContainsKey(BaseName) then
         begin
           if AWrites.TryGetValue(BaseName, Cnt) then AWrites[BaseName]:= Cnt + 1
