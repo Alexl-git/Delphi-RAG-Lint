@@ -69,6 +69,37 @@ re-stamp**, not any rule work: move each marker from the statement line up onto
 its `except`, and re-hash. Expected result YADF 14->6, YADFOT 12->6,
 YADFSetup 15->9, DataCopy 60->44.
 
+### RESTAMP DONE 2026-08-16 -- exactly the predicted numbers
+
+| project | before | after | bare-except | marker-unused | marker-stale |
+|---|---|---|---|---|---|
+| YADF | 14 | **6** | 0 | 0 | 0 |
+| YADFOT | 12 | **6** | 0 | 0 | 0 |
+| YADFSetup | 15 | **9** | 0 | 0 | 0 |
+| DataCopy | 60 | **44** | 0 | 0 | 0 |
+
+Zero errors throughout. Two passes: strip the 12 stale markers (byte delta
+exactly 27 each, no encoding or trailing-newline drift), reindex, then
+`allow --fix-line <except line> --fix-rule bare-except --apply` at the 12 sites
+the linter reported. Consumer diffs are 2 lines per marker and nothing else.
+**Left UNCOMMITTED in both repos for review** -- they are the owner's trees, and
+DataCopy also carries pre-existing `.dsv`/`.dsk` churn that should not be swept
+into a lint commit.
+
+The `--reason` problem turned out not to bite: all 12 live markers were
+reason-less, so nothing was lost. `allow --reason` remains a real gap (see
+below) -- the examples carrying prose were in the spec, not in the source.
+
+**IT ALSO INTRODUCED A NEW DEFECT, now filed** as
+`INBOX-bare-except-marker-hash-is-now-constant.md`: all 12 restamped markers
+hash to `@b112`, where the 12 originals carried 8 distinct hashes. `NormalizeLine`
+of the `except` keyword is the same single token everywhere, so the hash can no
+longer go stale and the marker verifies forever regardless of what the handler
+does. The anchor move gained the right report line and lost the checkable
+content. Likely a FAMILY -- every sibling keyword-anchored rule
+(`empty-except`, `empty-finally`, `empty-on-handler`, `empty-conditional`,
+`empty-loop-body`, `empty-case-branch`) probably already has it.
+
 ### The restamp METHOD -- settled 2026-08-16, and it is not the obvious one
 
 `drag-lint allow` is the only code path that formats a marker, so the instinct is
