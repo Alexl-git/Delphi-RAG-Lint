@@ -83,6 +83,50 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
    before. Not yet investigated. It is also the subject of
    `docs\INBOX-autodoc-not-idempotent-on-yadf.md`, so the two are worth looking
    at together.
+
+   > ### RE-MEASURED 2026-08-16 (session 23) -- YADF IS NOT A PROXY FOR ORM3.
+   >
+   > Session 23's plan proposed profiling YADF as the cheap stand-in for ORM3,
+   > on the reasoning that doc-drift "reproduces on YADF in ~40-second runs, so
+   > it was never environment-blocked". **Measured, that reasoning does not
+   > hold.** YADF's whole run is now 11.82 s, and the split is:
+   >
+   > ```
+   >   per-file scan (9 files)            9.55 s     <-- 81%
+   >   doc-drift                          1.30 s     <-- 11%
+   >   project-rules                      0.62 s
+   >   everything else                    0.35 s
+   >   TOTAL                             11.82 s
+   > ```
+   >
+   > doc-drift is **11% on YADF and 62% on ORM3**, because the two phases scale
+   > on DIFFERENT quantities: per-file scan on file count and size (9 vs 565),
+   > doc-drift on the number of DOCUMENTED DECLARATIONS (53 on YADF; ORM3's is
+   > untold but far larger). A YADF profile therefore cannot attribute ORM3's
+   > doc-drift cost, and this item **cannot be closed from YADF** -- the earlier
+   > "21.6 s of YADF's 34.6 s" figure predates the 2026-08-12 fixes and no longer
+   > describes the phase either.
+   >
+   > **What DOES transfer, and it is the actual optimisation target.** The
+   > per-phase profiler now breaks doc-drift down internally, and on YADF:
+   >
+   > ```
+   >   TDocDrift.Analyze                  1.08 s   (of doc-drift's 1.30 s)
+   >     of which facts rebuild           1.04 s   <-- 80% of Analyze
+   >     calls 0.35 | unresolved-name 0.21 | harvest 0.10 | resolved-callers 0.09
+   > ```
+   >
+   > **The facts rebuild is 80% of Analyze**, and it is per-declaration work, so
+   > it is the component that should scale to ORM3's 62%. If the ratio holds,
+   > roughly 360 s of ORM3's 454.9 s is facts rebuild -- and `calls` is its
+   > largest single contributor. That is a hypothesis from one small project, NOT
+   > a measurement of ORM3, and it must be confirmed by a real ORM3 profile
+   > (~12 min) before anybody optimises against it.
+   >
+   > So the item stays in the "needs a long run" bucket rather than moving to
+   > Group A. It is not environment-blocked -- ORM3 completes in 12.2 min and the
+   > profiler already emits everything needed -- it is simply not answerable from
+   > a 12-second project.
 2. **`unused-unit-in-uses` is still 17.4 s** -- the memo removed the repetition
    but the remaining cost is one `FindSymbolsByExactName` per DISTINCT name,
    each an indexed lookup returning every symbol with that name.

@@ -50,6 +50,21 @@ type
       FProfile        : TDefineProfile                     ; { PP-Task-9: active define profile when preprocessing }
       FPreprocessFellBack: Boolean                         ; { PP-Task-9: one-shot fallback-log latch }
       FForceReparse   : Boolean                            ; { INBOX 2.3: bypass the incremental skip for this whole run }
+      { Walk progress (2026-08-16). A per-file line with no counter makes an
+        hours-long library reindex indistinguishable from a hang, which is
+        exactly the confusion that made the Win32 rebuild abort hard to diagnose.
+        IndexFolder therefore walks TWICE: once in count-only mode to learn the
+        denominator, then for real.
+
+        The count pass runs the SAME WalkAndIndex with the SAME filters and the
+        SAME ignore-stack, and that is load-bearing -- a pre-count that globbed
+        the tree itself would disagree with what actually gets indexed and would
+        report a total the run never reaches. It is cheap: directory enumeration
+        and glob tests, no parsing, no store access. }
+      FCountOnly      : Boolean                            ;
+      FProgressTotal  : Integer                            ;
+      FProgressDone   : Integer                            ;
+      FProgressWatch  : TStopwatch                         ;
       /// <summary>PP-Task-9: log a per-file preprocess fallback the FIRST time it
       /// happens in this run, then stay silent so a bad batch does not flood the
       /// output with one line per file. The file is still indexed from its RAW
@@ -532,9 +547,45 @@ begin
   Result:= nil;
 end;
 
-procedure TIndexer.ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
+{ Renders a coarse duration. Deliberately coarse: an ETA accurate to the second
+  invites the reader to believe it, and this one is a straight-line extrapolation
+  from the mean so far, which a directory of large units will falsify. }
+function HumanDuration(ASeconds: Double): string;
+var
+  S: Int64;
 begin
+  if ASeconds < 0 then ASeconds:= 0;
+  S:= Round(ASeconds);
+  if S < 60 then Exit(Format('%ds', [S]));
+  if S < 3600 then Exit(Format('%dm%02ds', [S div 60, S mod 60]));
+  Result:= Format('%dh%02dm', [S div 3600, (S mod 3600) div 60]);
+end;
+
+procedure TIndexer.ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
+var
+  Elapsed: Double;
+  Eta    : Double;
+begin
+  { The stdout line is UNCHANGED and must stay so -- several suites regex it
+    (run_index_fingerprint_commit.ps1 among them), and breaking them to add a
+    counter would be a poor trade. The counter goes to stderr instead, where it
+    reaches a human watching the run without entering any suite's captured
+    stdout. }
   Writeln(Format('  %s -> %d symbols, %d refs, %d errors', [APath, ASymbols, ARefs, AErrors]));
+
+  if FProgressTotal <= 0 then Exit;   { single-file index: no walk, no denominator }
+  Inc(FProgressDone);
+  Elapsed:= FProgressWatch.Elapsed.TotalSeconds;
+  if (FProgressDone > 0) and (Elapsed > 0) then
+  begin
+    Eta:= Elapsed / FProgressDone * (FProgressTotal - FProgressDone);
+    Writeln(ErrOutput, Format('  [%d/%d] %.0f%%  elapsed %s  ~%s left',
+      [FProgressDone, FProgressTotal,
+       FProgressDone / FProgressTotal * 100,
+       HumanDuration(Elapsed), HumanDuration(Eta)]));
+  end
+  else
+    Writeln(ErrOutput, Format('  [%d/%d]', [FProgressDone, FProgressTotal]));
 end;
 
 // Returns the TDocCommentRegion immediately preceding ASymStartLine
@@ -1171,6 +1222,15 @@ begin
       if (Length(FWalkFilter.IncludeOnly) > 0) and (not TGlob.MatchesAny(FBaseName, FWalkFilter.IncludeOnly)) then Continue;
       { v0.45: ignore-file gate (highest precedence). }
       if (FIgnoreStack <> nil) and FIgnoreStack.IsIgnored(F, False) then Continue;
+      { Count-only pass: this file passed every admission rule above, so it is
+        exactly one unit of the denominator. Counting HERE rather than at the
+        top of the loop is the whole point -- a file excluded by a glob or an
+        ignore rule has already been skipped by a Continue and must not count. }
+      if FCountOnly then
+      begin
+        Inc(FProgressTotal);
+        Continue;
+      end;
       try
         IndexFile(F);
       except
@@ -1199,6 +1259,21 @@ end; // procedure
 
 procedure TIndexer.IndexFolder(const APath: string; ARecursive: Boolean);
 begin
+  { Pass 1 -- count only, to learn the denominator. }
+  FProgressTotal:= 0;
+  FProgressDone := 0;
+  FCountOnly    := True;
+  try
+    WalkAndIndex(APath, ARecursive);
+  finally
+    FCountOnly:= False;   { in a finally: an exception mid-count must not leave
+                            the indexer in a mode where it silently indexes
+                            nothing on the next call }
+  end;
+  if FProgressTotal > 0 then
+    Writeln(ErrOutput, Format('  walking %d file(s) under %s', [FProgressTotal, APath]));
+  FProgressWatch:= TStopwatch.StartNew;
+  { Pass 2 -- index for real. }
   WalkAndIndex(APath, ARecursive);
 end;
 
