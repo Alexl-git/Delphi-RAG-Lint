@@ -13,7 +13,7 @@ Backlog is still `docs/INBOX-INDEX.md`.
 | drag-lint own source | 1575, 0 err | **1535, 0 err** |
 | `double-free` | 42 | **0** |
 | `overwrite-before-read` | 32 | 34 (+2, both GENUINE) |
-| priority-1 INBOX items | 6 | **3** |
+| priority-1 INBOX items | 6 | **2** |
 | battery | 281/282 | **282/282, 0 fail** (15.1 min) |
 
 Battery verified green AFTER the final rebuild + reindex. The one failure in the
@@ -133,15 +133,45 @@ empty answer looks like "no context exists" and costs exactly the ~60x saving.
 8 `ExpectText` sites including both writers. I reached for Grep first and did
 not need to.
 
+### 3. `returns-type-baseline` was MISCLASSIFIED, and its open precondition now holds
+
+The index listed it as a DESTRUCTIVE priority-1 defect. It is neither -- the
+destructive change was **reverted and never shipped**. Its real content was one
+unproven precondition, and that is the valuable half:
+
+> *"the guard was never really guarding the malformed block; it was guarded by
+> accident, because nothing wanted to write there."*
+
+`run_doc_p3_guards.ps1`'s D5 arm passed because its routine had no minable return
+case, so the engine emitted nothing and the protection was never exercised.
+**Measured: the protection does hold.** A routine WITH a caller -- so the engine
+has `Called from:` + `Pure` to write -- is left completely alone when its block
+opens an auto fence that never closes: `nothing to document`, byte-identical
+file, hand-written `<value>` intact. Pinned by
+`tests\autodoc\run_doc_malformed_region_holds.ps1` (**5/5**), whose control arm
+runs the SAME routine with no block and asserts `1 edit(s)` -- without it,
+"nothing to document" is equally consistent with an engine that had no facts,
+which is precisely how D5 came to pass for the wrong reason.
+
+**Second time in one session a control decided whether an assertion was real.**
+The recommendation not to generate `<returns>` baselines still stands.
+
 ## NEXT -- in order
 
-1. **Priority 1 has three items left:**
-   `remaining-raw-text-scans-read-comments-as-code` (3 of 9 instances left:
-   FormsMap launch/show, TypeAt hover, the `todos` verb),
-   `bare-except-anchor-defeats-a-hand-written-marker` (take the `@hash` churn
-   once, deliberately), `returns-type-baseline-destroys-malformed-blocks`
-   (DESTRUCTIVE, unverified -- **re-measure it first**, on this session's
-   evidence it is as likely to be stale as not).
+1. **Priority 1 has TWO items left**, and one of those is mostly a non-item:
+   * `remaining-raw-text-scans-read-comments-as-code` -- of its three, #3 (the
+     `todos` verb) is *"left alone on purpose"*, and #2 (TypeAt hover) is
+     transient and user-invoked. **#1 (FormsMap) is the only harmful one**:
+     wrong rows in the forms-map CSV and wrong hook edges, because
+     `IsLaunchLine`/`IsShowLine` are bare `Pos` over unscrubbed lines.
+     **The design is now written into the note** -- the four read sites
+     (:537, :670, :769, :822, the last inside the cached `FileLines` closure),
+     which sites to leave alone and why (:304 is a LINE COUNT), and the
+     structural answer to the off-by-one: take `ReadAllLines`' count as
+     authoritative, truncate the scrubbed split to it, and fail OPEN to raw text
+     rather than ever shift a reported line.
+   * `bare-except-anchor-defeats-a-hand-written-marker` -- take the `@hash`
+     churn once, deliberately, and check sibling rules first.
 2. **Expect more from fix C.** Inline `var X := ..` now registers as a
    whole-var definition for every rule reading `AssignmentTargetIndex`. Only +2
    surfaced on this repo, but no other project has been measured since.
