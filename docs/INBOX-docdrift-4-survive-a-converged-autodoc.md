@@ -1,3 +1,22 @@
+> **MEASURED 2026-08-16 (session 21). CONFIRMED, count is 6 not 4, and HALF of it is a different note.**
+>
+> Ran `document --project` -> reindex -> `lint-all` three times on drag-lint's own source:
+>
+> | round | autodoc | doc-drift |
+> |---|---|---|
+> | 1 | 22/1031 decls, 44 edits applied | 6 |
+> | 2 | **nothing to document** | 6 |
+> | 3 | nothing to document | 6 |
+>
+> So autodoc CONVERGES on the first pass -- no oscillation, which is what the convergence guard exists to catch -- and six findings survive it.
+>
+> **They are two unrelated kinds, and the note treats them as one:**
+>
+> * **3 x `managed facts block is out of date` in `TreeSitter.pas`.** The CHECKER says stale while the WRITER says *""nothing to document""*. Two components disagreeing about the same block -- this is the real content of this note.
+> * **3 x `documented <exception cref="Exception"> but the body never raises it""`** (`Project.Resolver` x2, `FormsMap` x1). **These are NOT this note's defect** -- they are `INBOX-exception-cref-transitive-raise`, now confirmed with a worked example: `FormsMap.pas:76` documents the SINGULAR `GenerateFormsCsv` overload (declared `:95`), whose implementation at `:1561` is a one-line delegation to the array overload, and the `raise Exception.Create` lives in THAT overload at `:1545`. The tag is correct; the checker only inspects the routine's own body.
+>
+> **Fixing the transitive-raise checker would take this note from 6 to 3** and leave a much sharper question: why do the writer and the checker disagree on three TreeSitter.pas blocks?
+
 # 4 `doc-drift` findings survive an autodoc run that reports "nothing to document"
 
 Observed 2026-08-14, LoopZero round 2 on drag-lint's own source, immediately

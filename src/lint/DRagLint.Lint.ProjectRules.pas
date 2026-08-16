@@ -39,9 +39,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedSymbolIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile (+23 more)
+    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedSymbolIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile (+24 more)
     /// Returns: nil; Findings.ToArray
-    /// Complexity: 46 (cyclomatic, outer body), 390 lines (full implementation)
+    /// Complexity: 48 (cyclomatic, outer body), 421 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>

@@ -560,8 +560,8 @@ type
   /// name (empty for method calls), the 0-based argument position, and the var.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Analysis.Flow.Lattices.CollectCallArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TEscape.Transfer (DRagLint.Analysis.Flow.Lattices.pas)
-  /// Used in units: DRagLint.Analysis.Flow.Lattices
+  /// Used by: DRagLint.Analysis.Flow.Lattices.CollectCallArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TEscape.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.SelfLinkedConstruction (DRagLint.Diagnostics.FlowChecks.pas)
+  /// Used in units: DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCallArgRef = record CalleeName: string; ArgIdx, VarIdx: Integer; end;
@@ -641,7 +641,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Calls: Copy, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.CollectCallArgs, DRagLint.Analysis.Flow.Lattices.DetectFreedVar, DRagLint.Analysis.Flow.Lattices.ExprIsConstructor, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, FOwns, LowerCase
-    /// Complexity: 17 (cyclomatic, outer body), 45 lines (full implementation)
+    /// Complexity: 19 (cyclomatic, outer body), 69 lines (full implementation)
     /// Reads: FSrc, FVars, FOwns
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex"/>
@@ -739,7 +739,7 @@ function DetectFreedVarKind(const ANode: TTSNode; const ASrc: TBytes; AVars: TRo
 /// <returns><!-- drag-lint:auto -->Observed: Acc.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Analysis.Flow.Lattices.TEscape.Transfer (DRagLint.Analysis.Flow.Lattices.pas)
+/// Called from: DRagLint.Analysis.Flow.Lattices.TEscape.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.SelfLinkedConstruction (DRagLint.Diagnostics.FlowChecks.pas)
 /// Calls: DRagLint.Analysis.Flow.Lattices.CollectCallArgs.Walk, LeftmostBaseVar, NodeStr, Trim
 /// Pure
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.CollectCallArgs.Walk"/>

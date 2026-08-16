@@ -44,7 +44,7 @@ type
   /// <summary>One catalogued rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas) (+1 more)
+  /// Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas) (+2 more)
   /// Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -101,7 +101,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: Res.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas)
+    /// Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas)
     /// Calls: CompareText, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, ParamStr, SameText
     /// Complexity: 14 (cyclomatic, outer body), 80 lines (full implementation)
     /// Touches: file system

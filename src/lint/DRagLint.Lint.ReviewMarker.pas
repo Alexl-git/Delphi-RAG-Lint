@@ -65,9 +65,9 @@ type
     /// Pure
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function LineCommentStart(const ALineText: string): Integer; static;
@@ -84,9 +84,9 @@ type
     /// Mutates: ARules (out), AReason (out)
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure SplitReason(const AText: string; out ARules, AReason: string); static;
@@ -101,9 +101,9 @@ type
     /// Pure
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RuleToken(const ARuleId, AHash: string): string; static;
@@ -147,9 +147,9 @@ type
     /// Pure
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MarkerBearingLines(const ALines: TArray<string>): TArray<Boolean>; static;
@@ -162,16 +162,16 @@ type
     /// <returns>The normalized token string; '' for a blank or comment-only line.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine (DRagLint.Lint.ReviewMarker.pas)
+    /// Called from: DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow (DRagLint.Lint.ReviewMarker.pas)
     /// Calls: CharInSet, LowerCase
     /// Returns: SB.ToString
     /// Complexity: 34 (cyclomatic, outer body), 115 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function NormalizeLine(const ALineText: string): string; static;
@@ -183,15 +183,15 @@ type
     /// one changed line suppressed, which is the same failure mode as carrying no
     /// hash at all, and more characters buy only line noise.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto (DRagLint.Lint.ReviewMarker.pas)
+    /// Called from: DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto (DRagLint.Lint.ReviewMarker.pas)
     /// Calls: Copy, DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine, LowerCase
     /// Returns: LowerCase(Copy(THashSHA2.GetHashString(NormalizeLine(ALineText)), 1, 4))
     /// Pure
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function HashLine(const ALineText: string): string; static;
@@ -211,10 +211,8 @@ type
     /// hash that cannot vary cannot go stale, so the marker verified forever no
     /// matter how the handler was rewritten -- the accountability property was
     /// gone while every count looked better.
-    ///
     /// The window is bounded and stops after a line normalizing to `end`, so it
     /// covers the construct the reviewer actually accepted, not the file.
-    ///
     /// KNOWN OVER-SENSITIVITY, ACCEPTED DELIBERATELY: NormalizeLine is a
     /// per-line function and cannot see that a `{` opened on an earlier line, so
     /// prose inside a multi-line comment within the window counts as content.
@@ -223,6 +221,18 @@ type
     /// is to re-approve), never make one verify wrongly (silent). Threading
     /// block state here would mean a second implementation of what
     /// MarkerBearingLines already does; do that only if the noise is observed.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas)
+    /// Calls: Copy, DRagLint.Lint.ReviewMarker.NormalizedIsLoneKeyword, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine, LowerCase
+    /// Returns: HashLine(ALines[AStartIdx]); LowerCase(Copy(THashSHA2.GetHashString(SB.ToString), 1, 4))
+    /// Complexity: 10 (cyclomatic, outer body), 60 lines (full implementation)
+    /// Pure
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.NormalizedIsLoneKeyword"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function HashWindow(const ALines: TArray<string>; AStartIdx: Integer;
       AMaxLines: Integer = 6): string; static;
@@ -239,7 +249,7 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.SplitReason"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Parse(const ALineText: string): TArray<TReviewMarker>; static;
@@ -258,9 +268,9 @@ type
     /// Pure
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FormatMarker(const ARuleId, ALineText, AReason: string): string; static;
@@ -270,6 +280,7 @@ type
     /// <param name="ALineText">One source line, without its line terminator.</param>
     /// <param name="ARuleId">Rule id being accepted.</param>
     /// <param name="AReason">Optional free text. An existing reason is preserved.</param>
+    /// <param name="AHashOverride"><!-- drag-lint:auto type -->const string = ''</param>
     /// <returns>The whole new line: 7-bit ASCII, no trailing whitespace, original
     /// indentation and code untouched.</returns>
     /// <remarks>
@@ -286,7 +297,7 @@ type
     /// Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas)
     /// Calls: Copy, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken, LowerCase, Pos, SameText, Trim, TrimRight
     /// Returns: TrimRight(Result); TrimRight(Prefix + Body)
-    /// Complexity: 12 (cyclomatic, outer body), 71 lines (full implementation)
+    /// Complexity: 13 (cyclomatic, outer body), 77 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>

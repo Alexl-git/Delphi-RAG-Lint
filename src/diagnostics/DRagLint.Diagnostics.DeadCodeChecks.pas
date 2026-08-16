@@ -167,9 +167,9 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: ArgsHaveNoEncoding, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses, CollectPrivateFields, Copy, CountBoolOps (+57 more)
+    /// Calls: ArgsHaveNoEncoding, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses, CollectPrivateFields, Copy, CountBoolOps (+58 more)
     /// Returns: nil; Deduped.ToArray
-    /// Complexity: 18 (cyclomatic, outer body), 2167 lines (full implementation)
+    /// Complexity: 18 (cyclomatic, outer body), 2204 lines (full implementation)
     /// Pure
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>

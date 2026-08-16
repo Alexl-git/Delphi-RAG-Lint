@@ -78,6 +78,7 @@ type
     /// when the marker carries no names.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)
     /// Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText
     /// Returns: ProjectsOfText(ReadUnitText(AUnitPath))
     /// Pure
