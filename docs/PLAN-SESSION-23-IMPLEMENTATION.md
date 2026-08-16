@@ -231,7 +231,44 @@ now states `TFileName` IS `string` -- the fact Auto-Match needed.
 
 ---
 
-## 4. `used-before-assignment` -- RECOMMENDATION: DO NOT IMPLEMENT THE FULL FIX
+## 4. `used-before-assignment` -- SHAPE A **IMPLEMENTED** (owner request); rest still DO NOT IMPLEMENT
+
+> ### DONE 2026-08-16 (end of session 22): same-predicate suppression shipped
+>
+> Owner: *"Can we at least textually compare the predicate ... just to remove
+> this very specific false positive?"* Yes -- shape A only, and it is in.
+>
+> `DRagLint.Diagnostics.FlowChecks.pas` -- `ThenGuardName` / `CollectThenGuards`
+> / `AssignedInRange` / `AssignedUnderSameGuard`, hooked into the emit site in
+> the **info arm only**. A `must` finding says the variable is unassigned on
+> EVERY path, which no guard correlation can excuse, so the warning arm is
+> untouched: this can downgrade noise, never hide a certain use-before-assignment.
+>
+> **Self-index 39 -> 35**, removing exactly the four `tmark` sites.
+> Test: `testsutotestun_flow_same_predicate_guard.ps1`.
+>
+> Scope is deliberately tiny: only a BARE LOCAL IDENTIFIER predicate, only when
+> the assignment sits under a textually identical one, and only when that
+> predicate variable is not rewritten in between. A compound or call-bearing
+> predicate is refused outright -- `if Ready(X) then` twice is no guarantee the
+> second call returns what the first did.
+>
+> **A vacuous-fixture trap was caught here and is worth remembering.** The first
+> fixture read the variable as `Other(V)`. A bare identifier passed as an
+> argument is recorded as a **CallDef, not a read**, so the fixture produced NO
+> findings at all and every assertion -- including the SILENT one -- passed
+> vacuously. Reads in flow fixtures must be ARITHMETIC (`Sum := Sum + V`).
+>
+> RED verified: with the suppression neutralised and rebuilt, `SamePredicate`
+> fails and all five controls still pass.
+>
+> **Shapes B, C and D remain, and the recommendation for them is UNCHANGED:
+> do not implement.** The reasoning below still holds -- 12 of the remaining
+> findings are arrays/records no predicate check can reach, and shape B needs a
+> flag-pairing proof where any gap suppresses TRUE positives.
+
+### Original analysis (still current for shapes B/C/D)
+
 
 **My session-22 claim that all 39 are one shape was WRONG.** Every site was read.
 They are FOUR shapes, and the flag-correlated one the note leads with is the

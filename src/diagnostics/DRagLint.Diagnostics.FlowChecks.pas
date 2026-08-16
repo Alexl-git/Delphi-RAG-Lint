@@ -545,6 +545,157 @@ begin
   end;
 end;
 
+{ ---------------------------------------------------------------------------
+  SAME-PREDICATE SUPPRESSION for used-before-assignment.
+
+  The narrow, deliberately-minimal case (INBOX-used-before-assignment...):
+
+      if Profiled then TMark := TStopwatch.GetTimeStamp;
+      ...
+      if Profiled then Inc(AccRes, TStopwatch.GetTimeStamp - TMark);
+
+  The read of TMark is guarded by the SAME predicate that guarded its
+  assignment, so it cannot execute unassigned -- but the lattice carries no
+  predicate at all (TDefAsgnVal is just Must/May bit arrays) and the CFG models
+  branching purely as edges, so the correlation is invisible to the analysis.
+  This is therefore a syntactic AST check at EMISSION time, not a lattice
+  extension; the latter would be path-sensitivity.
+
+  SCOPE, AND WHY IT IS THIS SMALL. Only a BARE LOCAL IDENTIFIER predicate is
+  honoured, and only when the assignment sits under a textually identical one.
+  That is the measured shape and nothing more. Deliberately NOT handled:
+
+    * witness-flag pairs (`if C then begin X := ..; HaveX := True end;
+      if HaveX then Use(X)`) -- the predicates differ, so proving that one
+      implies the other needs a pairing argument, and ANY GAP in that argument
+      SUPPRESSES A TRUE POSITIVE. Wrong failure direction for this rule.
+    * `if not F` forms, else-arms, case, and loop-crossing guards.
+    * arrays/records only ever element-written -- a granularity problem that no
+      predicate check can reach.
+
+  A compound or call-bearing predicate is rejected outright: `if Ready(X) then`
+  twice is not a guarantee that the second call returns what the first did.
+  --------------------------------------------------------------------------- }
+
+{ The bare local identifier a THEN-branch is guarded by, '' for anything else.
+  Anything with a call, a dot, an index or an operator is refused -- only a
+  simple identifier can be compared textually and still mean the same thing at
+  two different points in the routine. }
+function ThenGuardName(const AIf, AChild: TTSNode; const ASrc: TBytes): string;
+var
+  I, CondIx, ThenIx, ElseIx: Integer;
+  C, Cond                  : TTSNode;
+begin
+  Result := '';
+  if AIf.IsNull then Exit;
+  if (AIf.NodeType <> 'if') and (AIf.NodeType <> 'exprIf') then Exit;
+  { Children are POSITIONAL (kIf, cond, kThen, then, kElse, else) -- exprIf
+    exposes no 'then'/'else' fields, which is why this indexes rather than
+    calling ChildByField. Same lesson as MaxNest in AstChecks. }
+  CondIx := -1; ThenIx := -1; ElseIx := -1;
+  for I := 0 to AIf.ChildCount - 1 do
+  begin
+    C := AIf.Child(I);
+    if      C.NodeType = 'kIf'   then CondIx := I + 1
+    else if C.NodeType = 'kThen' then ThenIx := I + 1
+    else if C.NodeType = 'kElse' then ElseIx := I + 1;
+  end;
+  if (CondIx < 0) or (ThenIx < 0) or (CondIx >= AIf.ChildCount) or (ThenIx >= AIf.ChildCount) then Exit;
+  { The child must be the THEN arm. An else-arm read is guarded by the NEGATION
+    and must never match. }
+  if AIf.Child(ThenIx).StartByte <> AChild.StartByte then
+  begin
+    { AChild may be nested deeper than the arm itself -- compare by containment. }
+    if (AChild.StartByte < AIf.Child(ThenIx).StartByte) or
+       (AChild.EndByte   > AIf.Child(ThenIx).EndByte  ) then Exit;
+  end;
+  if (ElseIx >= 0) and (ElseIx < AIf.ChildCount) then
+    if (AChild.StartByte >= AIf.Child(ElseIx).StartByte) and
+       (AChild.EndByte   <= AIf.Child(ElseIx).EndByte  ) then Exit;
+  Cond := AIf.Child(CondIx);
+  if Cond.IsNull then Exit;
+  if Cond.NodeType <> 'identifier' then Exit; { compound / call / not -> refuse }
+  Result := LowerCase(Trim(NodeStr(Cond, ASrc)));
+end;
+
+{ Collects the bare-identifier THEN-guards governing ANode, innermost first,
+  stopping at ARoutine. }
+procedure CollectThenGuards(const ANode, ARoutine: TTSNode; const ASrc: TBytes;
+  AAcc: TList<string>);
+var
+  Cur, Par: TTSNode;
+  G       : string ;
+begin
+  Cur := ANode;
+  while True do
+  begin
+    Par := Cur.Parent;
+    if Par.IsNull then Break;
+    G := ThenGuardName(Par, Cur, ASrc);
+    if G <> '' then AAcc.Add(G);
+    if Par.StartByte = ARoutine.StartByte then Break;
+    Cur := Par;
+  end;
+end;
+
+{ True when AName is assigned anywhere in the byte range (AFrom, ATo). Used to
+  refuse the suppression when the predicate variable itself is rewritten between
+  the guarded assignment and the guarded read -- the one way two textually equal
+  predicates can denote different values. }
+function AssignedInRange(const ANode: TTSNode; const ASrc: TBytes;
+  const AName: string; AFrom, ATo: Integer): Boolean;
+var
+  I  : Integer;
+  Lhs: TTSNode;
+begin
+  Result := False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'assignment' then
+  begin
+    Lhs := ANode.ChildByField('lhs');
+    if (not Lhs.IsNull)
+       and (Integer(ANode.StartByte) > AFrom) and (Integer(ANode.StartByte) < ATo)
+       and SameText(Trim(NodeStr(Lhs, ASrc)), AName) then Exit(True);
+  end;
+  for I := 0 to ANode.NamedChildCount - 1 do
+    if AssignedInRange(ANode.NamedChild(I), ASrc, AName, AFrom, ATo) then Exit(True);
+end;
+
+{ True when AVar has an assignment EARLIER in the routine that is governed by
+  exactly one of AGuards, and that guard variable is not rewritten in between. }
+function AssignedUnderSameGuard(const ANode, ARoutine: TTSNode; const ASrc: TBytes;
+  const AVar: string; AReadStart: Integer; AGuards: TList<string>): Boolean;
+var
+  I    : Integer    ;
+  Lhs  : TTSNode    ;
+  Own  : TList<string>;
+  K    : Integer    ;
+begin
+  Result := False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'assignment' then
+  begin
+    Lhs := ANode.ChildByField('lhs');
+    if (not Lhs.IsNull) and (Integer(ANode.StartByte) < AReadStart)
+       and SameText(Trim(NodeStr(Lhs, ASrc)), AVar) then
+    begin
+      Own := TList<string>.Create;
+      try
+        CollectThenGuards(ANode, ARoutine, ASrc, Own);
+        for K := 0 to Own.Count - 1 do
+          if (AGuards.IndexOf(Own[K]) >= 0)
+             and (not AssignedInRange(ARoutine, ASrc, Own[K],
+                                      Integer(ANode.EndByte), AReadStart)) then
+            Exit(True);
+      finally
+        Own.Free;
+      end;
+    end;
+  end;
+  for I := 0 to ANode.NamedChildCount - 1 do
+    if AssignedUnderSameGuard(ANode.NamedChild(I), ARoutine, ASrc, AVar, AReadStart, AGuards) then Exit(True);
+end;
+
 function ContainsAtIdentBoundary(const S, AWhat: string): Boolean;
 var P: Integer; Ch: Char;
 begin
@@ -998,6 +1149,26 @@ var
                 begin
                   ROW := Integer(It.Node.StartPoint.Row) + 1;
                   COL := Integer(It.Node.StartPoint.Column) + 1;
+                  { SAME-PREDICATE SUPPRESSION -- see ThenGuardName above.
+
+                    Applied ONLY in the `may` (info) arm. A `must` finding says
+                    the variable is unassigned on EVERY path, which no guard
+                    correlation can excuse, so the warning arm is deliberately
+                    left alone: this can downgrade noise, never hide a certain
+                    use-before-assignment. }
+                  if CurMay[RIx] then
+                  begin
+                    var Guards: TList<string> := TList<string>.Create;
+                    try
+                      CollectThenGuards(It.Node, Cfg.RoutineNode, PF.Src, Guards);
+                      if (Guards.Count > 0)
+                         and AssignedUnderSameGuard(Cfg.RoutineNode, Cfg.RoutineNode,
+                               PF.Src, V.Name, Integer(It.Node.StartByte), Guards) then
+                        Continue;
+                    finally
+                      Guards.Free;
+                    end;
+                  end;
                   if CurMay[RIx] then
                     Emit('used-before-assignment', 'info',
                       Format('Local "%s" may be used before it is assigned.', [V.Name]), ROW, COL)
