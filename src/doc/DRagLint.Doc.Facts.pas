@@ -475,6 +475,10 @@ implementation
 
 uses
   System.Diagnostics, // TStopwatch -- DocFactsBuildProfile's per-section counters
+  // StripPasCommentsKeepLayout only, for ReadDeclLine -- see its header. A pure
+  // leaf despite the unit name (its interface pulls in nothing but System.*), so
+  // no cycle and no lint machinery enters the doc engine.
+  DRagLint.Lint.ProjectChecks.Parse,
   DRagLint.Doc.SymbolFacts, // v(ADP2 T5): ComputeCoveredBy -- see TDocFacts.CoveredBy's comment
   // v(ADP3 T7): HarvestScan / HarvestText, called from Build via
   // HarvestInterfaceComment. IMPLEMENTATION-side because Doc.Harvest reaches
@@ -1096,13 +1100,38 @@ end;
 // file, out-of-range line) -- same tolerant pattern the Calls/Raises sections
 // above use for their own reads (source is strict ANSI/CRLF per repo
 // convention). Now served from SourceLines' memo.
+{ The declaration line, WITH ITS COMMENTS BLANKED.
+
+  Every consumer of this line regex-matches it for DIRECTIVES -- virtual,
+  dynamic, abstract, override, deprecated, and the constructor test -- so comment
+  text on the line was being read as part of the declaration:
+
+    procedure Foo; // override in subclasses     -> documented as override
+    procedure Bar; // deprecated;                -> a fabricated <deprecated> tag
+
+  Both write a FALSE CLAIM into generated documentation, which this repo treats
+  as worse than an absent fact. Fixed HERE rather than in each detector because
+  this is the one function they all read through -- DetectDeprecated,
+  DetectMethodDirectives, and DRagLint.Doc.Drift's own decl-line read -- so a
+  fifth consumer cannot reintroduce it.
+
+  StripPasCommentsKeepLayout blanks comments to spaces and PRESERVES STRING
+  LITERAL CONTENT (it tracks string state only so that a slash-slash or brace
+  inside a literal opens nothing). That distinction is load-bearing: masking
+  strings would destroy the message in `deprecated 'use Bar instead'`, which
+  DetectDeprecated extracts. Layout is preserved, so the Trim below and any
+  column arithmetic behave as before.
+
+  Same function ParseUsesFromContent and ParseDprUses scrub with -- one
+  implementation. This is the family whose every previous instance came from a
+  site growing its own half-scanner. }
 function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
 var Lines: TArray<string>;
 begin
   Result:= '';
   if (AFilePath = '') or (ALine <= 0) then Exit;
   Lines:= SourceLines(AFilePath);
-  if ALine <= Length(Lines) then Result:= Trim(Lines[ALine - 1]);
+  if ALine <= Length(Lines) then Result:= Trim(StripPasCommentsKeepLayout(Lines[ALine - 1]));
 end;
 
 { v(Q0, 2026-08-14): is the declaring unit marked `dl:shared`?

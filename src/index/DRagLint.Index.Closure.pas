@@ -179,14 +179,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Calls: Copy, Pos, SameText
-      /// Complexity: 13 (cyclomatic, outer body), 91 lines (full implementation)
+      /// Calls: Copy, DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout, Pos, SameText
       /// Touches: file system
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindIncFile"/>
-      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindUnitFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ParseDprUses(const AContent, ABaseDir: string; AUnitNames, AUnitFiles: TStringList);
@@ -368,6 +367,14 @@ uses
   DRagLint.Index.Glob
   , DRagLint.Preprocess       // PP-Task-10: Preprocess(bytes, profile)
   , DRagLint.Core.Encoding    // PP-Task-10: EnsureUtf8Bytes
+  { StripPasCommentsKeepLayout -- ONE implementation, shared with
+    ParseUsesFromContent, so the .dpr and .pas uses-clause readers cannot drift.
+    Despite its unit name this is a pure leaf: its interface pulls in nothing but
+    System.*, so there is no dependency cycle and no lint machinery is dragged
+    into the indexer. (The name is now wrong for its role; renaming it means
+    touching the .dpr and .dproj of four projects, so it is left alone
+    deliberately rather than overlooked.) }
+  , DRagLint.Lint.ProjectChecks.Parse
   ;
 
 { ---- TClosureResolver ------------------------------------------------------- }
@@ -481,65 +488,63 @@ const
 var
   UsesPos  : Integer         ;
   SemiPos  : Integer         ;
-  UsesBlock: string          ;
   Stripped : string          ;
   ItemPat  : string          ;
   Matches  : TMatchCollection;
   M        : TMatch          ;
   UName    : string          ;
   UFile    : string          ;
-  I        : Integer         ;
-  Len      : Integer         ;
-  InBrace  : Boolean         ;
-  SB       : TStringBuilder  ;
 begin
+  { SCRUB COMMENTS FIRST, over the WHOLE FILE, before anything is located in it.
+
+    (Delimiters named in prose below, not shown: a closing brace inside a braced
+    comment ends it early, which is the same trap DRagLint.Lint.SharedUnit's
+    header records and it has now cost three builds in this codebase.)
+
+    The ad-hoc stripper that used to live below handled BRACE comments ONLY --
+    not slash-slash, not star-paren -- and it ran only AFTER the `uses` clause had
+    been located. Both halves were wrong, and both put PHANTOM UNITS INTO THE
+    COMPILE CLOSURE, which is the input to project index membership:
+
+      * `\buses\b` was matched against UNSCRUBBED text, so the word "uses" in a
+        .dpr header comment anchored the search and everything after it was read
+        as a uses clause.
+      * a commented-out member inside a real clause --
+        `// OldUnit in 'old.pas',` -- survived the brace-only strip and was
+        harvested as a live unit.
+
+    A phantom closure member is not cosmetic: the unit is indexed, its symbols
+    answer queries, and `lint-all --project` reports on a file the project does
+    not compile. A member wrongly DROPPED is the same defect in the quiet
+    direction.
+
+    StripPasCommentsKeepLayout blanks every comment form to spaces while keeping
+    length and line breaks, so every position computed below is still a position
+    in the original text. It is the SAME function ParseUsesFromContent already
+    scrubs with (DRagLint.Lint.ProjectChecks.Parse), so the .dpr path and the
+    .pas path now agree by construction instead of by coincidence -- this family
+    of defect spreads by each site growing its own half-scanner, and the fix is
+    to stop having more than one.
+
+    It also subsumes what the removed comment was worried about: a conditional
+    directive such as an IFDEF for EurekaLog, and the form-name annotation that
+    follows a member, are both braced, so they are blanked too. PAT_ITEM still
+    never sees identifiers inside braces, and the
+    ERegularExpressionError-on-optional-group-2 path that used to describe stays
+    closed. }
+  var Scrubbed: string:= StripPasCommentsKeepLayout(AContent);
+
   // Find `uses` keyword (word-boundary, case-insensitive)
   var Re:= TRegEx.Create('\buses\b', [roIgnoreCase]);
-  var UsesMatch:= Re.Match(AContent);
+  var UsesMatch:= Re.Match(Scrubbed);
   if not UsesMatch.Success then Exit;
 
   UsesPos:= UsesMatch.Index + UsesMatch.Length - 1; // 1-based, end of 'uses'
   // Find the closing semicolon of the uses block
-  SemiPos:= Pos(';', AContent, UsesPos);
+  SemiPos:= Pos(';', Scrubbed, UsesPos);
   if SemiPos = 0 then Exit;
 
-  UsesBlock:= Copy(AContent, UsesPos + 1, SemiPos - UsesPos - 1);
-
-  // Strip {$IFDEF}/{$ENDIF}/{form-comment} braces so PAT_ITEM only sees real
-  // unit names.  Real .dpr uses blocks can contain:
-  //   {$IFDEF EurekaLog}  ... {$ENDIF EurekaLog}
-  //   UnitName in 'file.pas' {FormName: TFormClass}
-  // Without stripping, PAT_ITEM would match identifiers inside the braces
-  // (IFDEF, EurekaLog, FormName, etc.) as spurious unit names, and on some
-  // inputs the Delphi regex engine raises ERegularExpressionError when
-  // accessing optional group 2 for those spurious matches.
-  SB:= TStringBuilder.Create(Length(UsesBlock));
-  try
-    I:= 1;
-    Len:= Length(UsesBlock);
-    InBrace:= False;
-    while I <= Len do
-    begin
-      if InBrace then
-      begin
-        if UsesBlock[I] = '}' then InBrace:= False;
-        SB.Append(' ');
-      end
-      else
-      begin
-        if UsesBlock[I] = '{' then
-        begin
-          InBrace:= True;
-          SB.Append(' ');
-        end
-        else SB.Append(UsesBlock[I]);
-      end;
-      Inc(I);
-    end; // while
-    Stripped:= SB.ToString;
-  finally
-    SB.Free;
-  end; // try
+  Stripped:= Copy(Scrubbed, UsesPos + 1, SemiPos - UsesPos - 1);
 
   ItemPat:= PAT_ITEM;
   Matches:= TRegEx.Matches(Stripped, ItemPat, [roIgnoreCase]);

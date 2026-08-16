@@ -37,9 +37,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: AssignmentBaseIndex, AssignmentTargetIndex, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy, Default, DetectFreedVarKind, DRagLint.Analysis.Cfg.CfgFindProcs, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName (+21 more)
+    /// Calls: AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy, Default, DetectFreedVarKind, DRagLint.Analysis.Cfg.CfgFindProcs (+23 more)
     /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); Findings.ToArray
-    /// Complexity: 21 (cyclomatic, outer body), 631 lines (full implementation)
+    /// Complexity: 21 (cyclomatic, outer body), 644 lines (full implementation)
     /// Touches: file system
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
@@ -522,6 +522,185 @@ begin
   Result := Found;
 end;
 
+{ Vars that an EARLIER operand of an `and`/`or` chain assigns via a call argument,
+  and which a LATER operand of the same chain may therefore read safely.
+
+  Delphi short-circuits left to right, so
+
+      if VerQueryValue(Pointer(Buf), '\', Pointer(Fixed), Len) and (Fixed <> nil)
+
+  assigns Fixed in the left operand BEFORE the right one reads it -- but both
+  operands are ONE AST node and therefore ONE CFG item, and the per-item replay
+  tests every read against the state from BEFORE the item's own defs are applied.
+  So the read of Fixed was reported as a use before assignment.
+
+  CollectInterfaceDerefs already carries exactly this refinement for
+  `not-assigned-interface` (its `LocallyAssigned` + `CollectLocalCallDefs`, and its
+  header explains the `Supports(Intf, IFoo, V) and V.Method` idiom). The plain read
+  check never had it. This is that same left-to-right refinement, extracted so the
+  two checks cannot disagree about the same idiom.
+
+  WHY HERE AND NOT INSIDE CollectReadsAndCallDefs: that function feeds liveness and
+  several other rules, and dropping a read there would change what they see. This
+  is consumed by the used-before-assignment read check only.
+
+  WHY THIS SURFACED NOW: the shape above sits inside `if A then if B then ...`,
+  and until the dangling-else `exprIf` arm was added to Cfg.pas.EmitStmt the whole
+  nested `if` was ONE OPAQUE ITEM -- and opaque items are skipped by the read check
+  entirely. Decomposing the nest correctly exposed this latent defect; the fix for
+  one bug made a second one visible, which is the honest description of what
+  happened rather than a new regression in the analysis itself. }
+procedure CollectAndOrLeftDefs(const ANode: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable; AAcc: TList<Integer>);
+
+  procedure Walk(const N: TTSNode);
+  var
+    I, K  : Integer;
+    Op, L, R: TTSNode;
+    OpText: string;
+    Reads, CallDefs: TList<Integer>;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'exprBinary' then
+    begin
+      Op := N.ChildByField('operator');
+      OpText := '';
+      if not Op.IsNull then OpText := LowerCase(Trim(NodeStr(Op, ASrc)));
+      if (OpText = 'and') or (OpText = 'or') then
+      begin
+        L := N.ChildByField('lhs');
+        R := N.ChildByField('rhs');
+        Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+        try
+          CollectReadsAndCallDefs(L, ASrc, AVars, Reads, CallDefs);
+          for K := 0 to CallDefs.Count - 1 do
+            if AAcc.IndexOf(CallDefs[K]) < 0 then AAcc.Add(CallDefs[K]);
+        finally
+          Reads.Free; CallDefs.Free;
+        end;
+        Walk(L);
+        Walk(R);
+        Exit;
+      end;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+
+begin
+  Walk(ANode);
+end;
+
+{ True when S contains AWhat as a WHOLE identifier -- BOTH boundaries checked.
+
+  ContainsAtIdentBoundary above checks only the left side, because its callers pin
+  the right one by appending '.' or '(' to the name. A bare variable name cannot
+  do that, so it needs its own test: without a right-boundary check, `Edges` would
+  be found inside `EdgeList` and a store would be called protected by a handler
+  that never mentions it. }
+function ContainsWholeIdent(const S, AWhat: string): Boolean;
+var P, L, N: Integer;
+begin
+  Result := False;
+  L := Length(AWhat);
+  N := Length(S);
+  if (L = 0) or (N < L) then Exit;
+  P := Pos(AWhat, S);
+  while P > 0 do
+  begin
+    if ((P = 1) or (not CharInSet(S[P - 1], ['a'..'z', '0'..'9', '_'])))
+       and ((P + L > N) or (not CharInSet(S[P + L], ['a'..'z', '0'..'9', '_']))) then Exit(True);
+    P := Pos(AWhat, S, P + 1);   { 3-arg System.Pos -- no StrUtils dependency }
+  end;
+end;
+
+{ True when the store AAsg is the (possibly not last) member of a run of
+  assignments immediately preceding a `try` whose except/finally MENTIONS AName.
+
+  WHY: overwrite-before-read reported the nil-initialisation before a `try` as a
+  dead store, and ITS ADVICE WAS WRONG -- deleting that store leaves an
+  uninitialised variable to be tested or freed on the exception path, so
+  following the finding converts correct code into a crash. Measured on this
+  repo's own source at 56 findings, majority of this shape:
+
+      Bindings := nil;                        <- reported as a dead store
+      try
+        Bindings := ExtractDfmEventBindings(...);
+      except
+        Bindings := nil;
+      end;
+
+  Liveness is right about the CFG and wrong about the code. `try..except` wires
+  the handler edge from the END of the try body (Cfg.pas), modelling "the
+  exception fired after the body's assignments ran", so the pre-try store is
+  killed before any exception-path use is seen. That edge is deliberate and
+  tuned -- used-before-assignment depends on the state it carries -- which is
+  exactly the reasoning FreedInFinallyBlock above records for object-leak's
+  identical cause. So this is again a SYNTACTIC guard scoped to the one wrong
+  rule, not a change to the edge.
+
+  THE RUN MATTERS. Five nil-inits before one shared `try` is the common form, so
+  the walk skips over consecutive sibling assignments: protection covers every
+  variable initialised between the previous statement and the `try`, not just the
+  closest one. (object-leak's Cause A needs the same shape.)
+
+  WHY "MENTIONS" AND NOT "READS": an assignment in the handler
+  (`Bindings := nil` again) is itself a use for a managed type -- it releases the
+  old value -- and a `finally` typically FREES rather than reads. Testing for any
+  occurrence covers read, free and re-assign without having to classify them, and
+  is the FP-safe direction for an `info` rule already recorded as majority-false.
+
+  DELIBERATELY NOT the cheap version ("a try merely follows"): that suppresses a
+  genuine dead store sitting before an unrelated try, which is the banned failure
+  mode for this whole rule family -- the cheap fix for every one of these rules
+  is to stop reporting near a `try`. A store before a try whose handler never
+  names it STILL FIRES, and the guard test asserts exactly that. }
+function ProtectedByFollowingTry(const AAsg: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var
+  Cur, C: TTSNode;
+  Nm, S : string;
+  I     : Integer;
+  Guard : Integer;
+  SeenHandler: Boolean;
+
+  { A single statement can arrive wrapped in a `statement` node -- the same
+    wrapper the dangling-else fix had to unwrap in Cfg.pas.EmitStmt. }
+  function Unwrap(const N: TTSNode): TTSNode;
+  begin
+    Result := N;
+    if (not Result.IsNull) and (Result.NodeType = 'statement')
+       and (Result.NamedChildCount = 1) then Result := Result.NamedChild(0);
+  end;
+
+begin
+  Result := False;
+  Nm := LowerCase(Trim(AName));
+  if Nm = '' then Exit;
+
+  Cur   := Unwrap(AAsg.NextNamedSibling);
+  Guard := 0;
+  while (not Cur.IsNull) and (Cur.NodeType = 'assignment') and (Guard < 64) do
+  begin
+    Cur := Unwrap(Cur.NextNamedSibling);
+    Inc(Guard);
+  end;
+  if Cur.IsNull or (Cur.NodeType <> 'try') then Exit;
+
+  SeenHandler := False;
+  for I := 0 to Cur.ChildCount - 1 do
+  begin
+    C := Cur.Child(I);
+    { KEYWORDS ARE NAMED NODES in this grammar, so the handler section is found by
+      walking children and watching for the keyword -- not by a field lookup. }
+    if (C.NodeType = 'kExcept') or (C.NodeType = 'kFinally') then SeenHandler := True
+    else if SeenHandler then
+    begin
+      if C.NodeType = 'kEnd' then Break;
+      S := LowerCase(NodeStr(C, ASrc));
+      if ContainsWholeIdent(S, Nm) then Exit(True);
+    end;
+  end;
+end;
+
 { The lowercased name of the AArgIdx-th parameter (flattening multi-name declArgs). }
 function ParamNameAtIndex(const ADefProc: TTSNode; AArgIdx: Integer; const ASrc: TBytes): string;
 var Hdr, Args, DA, NameId: TTSNode; I, J, Idx: Integer;
@@ -635,6 +814,7 @@ var
     AIn, AOut: TArray<TDefAsgnVal>; ExitVal: TDefAsgnVal;
     B, I, J, ROW, COL, Tgt, Idx, RIx: Integer; It: TCfgItem; V: TRoutineVar;
     Reads, CallDefs: TList<Integer>;
+    SeqDefs: TList<Integer>; { and/or left-operand defs -- see CollectAndOrLeftDefs }
     CurMust, CurMay: TArray<Boolean>;
     Derefs: TList<TIfaceDeref>; Dr: TIfaceDeref;
     LiveAna: IDataFlowAnalysis<TArray<Boolean>>;
@@ -656,6 +836,7 @@ var
       if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, Ana, AIn, AOut) then Exit;
 
       Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+      SeqDefs := TList<Integer>.Create;
       Derefs := TList<TIfaceDeref>.Create;
       try
         { ---- used-before-assignment: per-item replay of must/may within a block ---- }
@@ -677,10 +858,17 @@ var
             else
               CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef);
             { flag reads of unmanaged locals not yet must-assigned (skip opaque with-bodies) }
+            { Left-to-right sequencing inside this item's own and/or chains, so
+              `Supports(.., V) and V.Method` and
+              `VerQueryValue(.., Pointer(Fixed), ..) and (Fixed <> nil)` are not
+              reported as reads before assignment. See CollectAndOrLeftDefs. }
+            SeqDefs.Clear;
+            if not It.Opaque then CollectAndOrLeftDefs(It.Node, PF.Src, Vars, SeqDefs);
             if not It.Opaque then
               for J := 0 to Reads.Count - 1 do
               begin
                 RIx := Reads[J];
+                if SeqDefs.IndexOf(RIx) >= 0 then Continue;
                 V := Vars.Get(RIx);
                 if V.Kind <> vkLocal then Continue;
                 if IsManagedType(V.TypeText, AStore, AFileId) then Continue;
@@ -880,7 +1068,11 @@ var
               begin
                 Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars); { whole-var only }
                 if (Tgt >= 0) and (Vars.Get(Tgt).Kind = vkLocal)
-                   and ReadAny[Tgt] and (not Live[Tgt]) then
+                   and ReadAny[Tgt] and (not Live[Tgt])
+                   { A nil-init guarding an exception path is not a dead store,
+                     and reporting it advises a change that CRASHES. See
+                     ProtectedByFollowingTry. }
+                   and (not ProtectedByFollowingTry(It.Node, Vars.Get(Tgt).Name, PF.Src)) then
                 begin
                   ROW := Integer(It.Node.StartPoint.Row) + 1;
                   COL := Integer(It.Node.StartPoint.Column) + 1;
@@ -1145,7 +1337,7 @@ var
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
         end;
 
-      finally Reads.Free; CallDefs.Free; Derefs.Free; end;
+      finally Reads.Free; CallDefs.Free; SeqDefs.Free; Derefs.Free; end;
     finally Cfg.Free; Vars.Free; end;
   end;
 

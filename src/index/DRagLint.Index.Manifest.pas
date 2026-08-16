@@ -552,7 +552,7 @@ type
 /// keeps library-source browsing working.
 /// Pure apart from AContains. Cost is one probe per candidate (small list).
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas)
+/// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas)
 /// Calls: AContains, SameText
 /// Returns: ACandidates; Holders + Others
 /// Complexity: 11 (cyclomatic, outer body), 49 lines (full implementation)
