@@ -1,3 +1,30 @@
+> # CLOSED 2026-08-16 (session 22) -- FIXED, tested, one-hop callee resolution.
+>
+> `ddExceptionNotRaised` now resolves ONE hop of callee before reporting.
+> `DRagLint.FormsMap.GenerateFormsCsv` yields **zero** doc-drift findings.
+>
+> * `DRagLint.Doc.Facts.pas` -- the raises scan extracted to a public
+>   `TDocFactsBuilder.MineRaises`, so `Build` and the drift checker share ONE
+>   miner and cannot drift apart.
+> * `DRagLint.Doc.Drift.pas` -- new `CalleeRaisesType`, wired into rule 7.
+> * `tests\autodoc\run_doc_exception_transitive.ps1` + fixture `transitive.pas`.
+>
+> **The plan's premise about overloads was WRONG and the fix does not use it.**
+> Fable's plan said overloads share a qualified name and prescribed
+> `FindSymbolsByQualifiedName`. They do not: a qname here carries the signature
+> (`transitive.Go (const AItem: string)`), so that lookup finds nothing extra and
+> the first implementation still failed RED-A. What actually happens is that
+> `Go([AItem])` inside `Go` resolves to the ENCLOSING declaration, which the
+> self-recursion guard then discarded. The shipped fix keys on
+> `FindSymbolsByExactName` bounded to the same `ParentId` + `FileId`.
+>
+> Suppression requires a POSITIVELY mined raise; unresolved edges, missing
+> symbols and bodyless callees all still report. Four positive controls pin
+> this, and the suite was run against the UNFIXED build first (RED-A + RED-B
+> failed, all four controls passed).
+>
+> Original note follows.
+
 > **CONFIRMED 2026-08-16 (session 21) with a worked example, and it is costing more than this note claims.**
 >
 > `DRagLint.FormsMap.pas:76` documents `<exception cref=""Exception"">` on the SINGULAR `GenerateFormsCsv` overload (declared `:95`). Its implementation at `:1561` is exactly one line -- `Result := GenerateFormsCsv([ADbPath], AProjectFile, ARootForm);` -- and the `raise Exception.Create('forms-csv: no DB paths')` is at `:1545`, inside the ARRAY overload it delegates to. The documented exception is real for any caller; the checker reports *""the body never raises it""* because it inspects only the routine's own body.

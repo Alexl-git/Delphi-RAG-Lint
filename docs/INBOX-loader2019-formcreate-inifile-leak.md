@@ -1,5 +1,23 @@
 # INBOX -- Loader2019: `INIFile` leaks on the early-exit path in `FormCreate`
 
+> **RE-MEASURED 2026-08-16 -- still fires, still a true positive.** The next-session
+> plan asked for a re-check against this session's object-leak fixes (self-linking
+> construction, `Result.`/`Self.` writes). Those did not touch it:
+>
+> ```
+> Loader2019.Main.pas:3121:5  [info] object-leak: Object "inifile" may be leaked:
+>   created but not freed or transferred on some path.
+> ```
+>
+> DB `C:\Projects\Loader2019\_D-RAG\Loader2025.sqlite` indexed 2026-08-16 06:17,
+> source last modified 2026-05-26 -- fresh, so the finding is authoritative.
+> Source re-read: the leak is exactly as described, and the earlier `Exit` at
+> `:3131` is BEFORE the `Create` at `:3121`, so only the `:3142` path leaks.
+>
+> **This is not drag-lint debt.** It is a correct finding about an external
+> project. Closing it here requires an edit to `C:\Projects\Loader2019`, which is
+> the owner's call -- not made.
+
 Found 2026-08-07 by drag-lint, while measuring the blast radius of the B9 CFG fix
 (`exit` now diverts). Not a drag-lint defect -- a real defect in Loader2019 that the
 tool could not see before, recorded here so it is not lost with the measurement.

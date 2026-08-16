@@ -1,3 +1,41 @@
+> # MEASURED 2026-08-16 (session 22). Design question 5 is ANSWERED: build it.
+>
+> The note said *"Measure the distinct-message count on ORM3 before committing to
+> this -- if it is 400, the feature is wrong as stated."* Measured on
+> `C:\Projects\DB\ORM3`, all `.pas`:
+>
+> | | count |
+> |---|---|
+> | `raise Exception.Create` sites, total text matches | 98 |
+> | of which **commented out** and correctly excluded | **9** |
+> | LIVE raise sites | **89** |
+> | live sites with a static string literal | 87 |
+> | live sites building the message from an expression | 2 |
+> | **DISTINCT live messages** | **64** |
+>
+> **64, not 400.** The scope objection does not hold: this is a per-project unit
+> of a few dozen classes, not hundreds. Stage 1 and Stage 2 are viable as stated.
+>
+> **Design question 1 (near-duplicates) is also much smaller than feared.**
+> Normalizing (strip format specifiers and punctuation, lowercase, drop
+> stopwords) takes 64 distinct messages to **63** -- exactly ONE collapsing pair,
+> `'LookupAccountName failed: '` vs `'LookupAccountName failed: %s'`. So the
+> normalization layer is still needed (that pair is precisely the
+> `EInvoiceNotFound` / `EInvoiceWasNotFound` hazard, and it is real), but it is a
+> small, testable component rather than the load-bearing risk the note assumed.
+>
+> **Method note, because it changes the number:** a naive text scan reports 98
+> and is wrong by 10%. Nine of the matches are commented-out code
+> (`// raise Exception.CreateFmt(...)`), and Pascal doubled-quote escapes
+> (`'Can''t ...'`) truncate a naive literal extraction mid-message. Any
+> implementation must read the AST, not the text -- the index already
+> distinguishes these.
+>
+> **Not implemented, deliberately.** Design questions 2, 3 and 4 (static-prefix
+> boundary, hierarchy, managed-block ownership) are untouched and still gate
+> Stage 3. What changed is that the measurement which was blocking the decision
+> now exists, and it points at "build Stage 1".
+
 # INBOX -- a project exception-class unit, and generating exception types from messages
 
 **Filed:** 2026-08-11, from the owner, while triaging the `lint-all` groups.

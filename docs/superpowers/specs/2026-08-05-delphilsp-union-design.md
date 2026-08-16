@@ -86,8 +86,30 @@ This is the only genuinely new component.
 
 ### 4.4 Resolver merge policy
 
-The real design decision. For the four overlapping request kinds -- hover,
-definition, references, completion -- decide who answers.
+The real design decision. For the **three** genuinely overlapping request kinds
+-- hover, definition, completion -- decide who answers.
+
+> **Corrected 2026-08-16 from a measured `initialize` handshake** (identical for
+> the x86 and x64 servers; see `docs\INBOX-ide-lsp-ram-and-shim-todo.md` §1.1).
+> This section used to list **references** as a fourth overlapping kind. It is
+> not overlapping, because DelphiLSP does not advertise it.
+>
+> DelphiLSP advertises: `textDocumentSync`, `definitionProvider`,
+> `declarationProvider`, `implementationProvider`, `documentSymbolProvider`,
+> `hoverProvider`, `completionProvider`, `signatureHelpProvider`,
+> `publishDiagnostics`.
+>
+> **Absent: `referencesProvider`, `workspaceSymbolProvider`, `renameProvider`.**
+>
+> drag-lint's LSP server implements `textDocument/references` and
+> `workspace/symbol`. For those two methods there is **nothing to merge and no
+> ambiguity to resolve -- drag-lint is the only provider.** The merge policy
+> below does not apply to them; they are answered from the index
+> unconditionally, and no DelphiLSP fallback exists to consult.
+>
+> This also sharpens the case for the union generally: it is not only "the index
+> answers faster", it is "the index answers requests the compiler server cannot
+> answer at all".
 
 **Proposed default:** index answers first, because it is always available and
 fast. DelphiLSP is consulted when it is available **and** one of:

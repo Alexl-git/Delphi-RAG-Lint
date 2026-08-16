@@ -1,3 +1,37 @@
+> # RE-COUNTED 2026-08-16 (session 22). The "change is nearly free" window has CLOSED.
+>
+> The note's own gate is *"Do not change the normaliser without counting first"*,
+> and it predicted the cost would rise once the zero-findings push put markers
+> into the consumer repos. It has. Counted today:
+>
+> | repo | files | `dl:ok` markers |
+> |---|---|---|
+> | Delphi-RAG-lint | 9 | **43** (was 27 at filing) |
+> | YADF | 10 | **147** (was **0** at filing) |
+> | DataCopy | 11 | **59** |
+> | **total** | 30 | **249** |
+>
+> A normaliser change now costs **249 re-stamps across three repos**, two of them
+> consumer repos currently holding uncommitted owner edits. Treat `NormalizeLine`
+> as frozen unless there is a correctness reason, and budget the re-stamp.
+>
+> **YADF still has NO copy of the unit** -- the sharing has not happened, so the
+> two cannot yet disagree. But note what the 147 means: those markers were
+> written INTO YADF by drag-lint, not produced by YADF. YADF is already a
+> consumer of the hash without owning the function.
+>
+> **The live hazard for whoever ships this.** The hash function changed after
+> this note was filed: `TReviewMarkers.HashWindow` now hashes a bounded WINDOW
+> for lone-keyword anchors, instead of `HashLine`'s single line. Any copy handed
+> to YADF must ship `HashWindow` (and `NormalizedIsLoneKeyword`) or the two
+> implementations will disagree on exactly the anchors that motivated the change
+> -- and the disagreement will look like stale reviews, not like a version skew.
+> Existing markers stamped before that change may also need re-stamping.
+>
+> Nothing was written to YADF or DataCopy here, per the standing "consumer files
+> will wait" instruction. Recommendation unchanged and now better evidenced:
+> **VERIFY and WARN, never rewrite.**
+
 # Share the dl:ok hash function with YADF -- to VERIFY, not to refresh
 
 Filed 2026-08-12, at the owner's request: *"could you provide the same hashing

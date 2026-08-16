@@ -1,3 +1,24 @@
+> # STILL OPEN, but the CORRECTNESS half is fixed (2026-08-16, session 22).
+>
+> Re-measurement found this note understated the problem: a killed run did not
+> merely "restart from zero", it could silently **keep stale parses**.
+> `ApplyIndexerFingerprint` stamped the NEW fingerprint via `SetMetaValue`
+> **before the walk started**, so an interrupted engine-change re-parse left the
+> next run reading `Prev = Cur`, concluding nothing had changed, and taking the
+> up-to-date skip over every file the killed run never reached. Strictly worse
+> than restarting, because the index then looked complete.
+>
+> Fixed by splitting the stamp into `CommitIndexerFingerprint`, called only once
+> a walk finishes (`DRagLint.CLI.pas`, both the manifest and single-root paths).
+> An interrupted run now costs time and nothing else.
+> Test: `tests\autotest\run_index_fingerprint_commit.ps1`.
+>
+> **What remains is this note's actual subject:** there is still no per-file
+> resume, so an interrupted run restarts from the beginning. That needs the
+> per-file `indexed_at_version` column described below, which can use the
+> additive-ALTER-without-schema-bump pattern already at
+> `DRagLint.Storage.SQLite.pas:2981-2985`.
+
 # INBOX -- a killed index run restarts from zero (no resume)
 
 **Filed:** 2026-08-11.

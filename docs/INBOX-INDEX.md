@@ -1,4 +1,12 @@
-# INBOX index -- 23 open notes (was 60 at the start of 2026-08-16)
+# INBOX index -- 21 open notes (was 23; 60 at the start of 2026-08-16)
+
+> **Session 22 (2026-08-16, later).** Two notes CLOSED and moved to
+> `INBOX-Done\` (88 retired): `exception-cref-transitive-raise` (one-hop callee
+> resolution) and `parse-error-shellshock-units` (the indexer discarded
+> `{$DEFINE}`s from `{$I}` includes -- a SILENT wrong-branch bug everywhere, not
+> just the three units that happened to fail loudly). Four more notes advanced
+> without closing; see their banners. Release gate unchanged: nothing to GitHub
+> until Group A is finished.
 
 **Rewritten 2026-08-16 (session 21).** The previous index had drifted badly from
 the notes it indexed -- it listed fixed items as open, carried per-priority
@@ -39,14 +47,12 @@ switched off.
 | `qualified-type-receiver-does-not-resolve` | RE-DIAGNOSED: the gap is in call-ref EXTRACTION, not receiver typing. Start at the extractor. |
 | `used-before-assignment-real-shape-is-intra-item-ordering` | Partly addressed (`and`/`or` sequencing modelled); the general position-ordered case is not. |
 | `whole-db-resolve-degrades-a-stale-index` | Needs a deliberately staled index; small setup, not yet done. |
-| `exception-cref-transitive-raise` | Fixture-testable. |
 | `autodoc-caller-list-fabricates-callers-for-common-method-names` | Its own banner warns only `Create` was re-measured. |
 | `autodoc-returns-section-incomplete` | Inbound from YADF, 2026-07-27. |
 | `buildfor-defaulted-args-diverge-between-entry-points` | Two callers render the same declaration differently. |
-| `docdrift-4-survive-a-converged-autodoc` | Under measurement at the time of writing. |
+| `docdrift-4-survive-a-converged-autodoc` | 3 of its 6 were `exception-cref-transitive-raise`, now FIXED. The remaining shape is the `TreeSitter.pas` one: the doc WRITER and the doc CHECKER disagree about the same managed block. |
 | `cycles-scope-and-local-var-refs` | A local resolved to another unit's field. |
-| `parse-error-shellshock-units` | Needs the named units to reproduce. |
-| `loader2019-formcreate-inifile-leak` | An external-project finding; re-check against the object-leak fixes. |
+| `loader2019-formcreate-inifile-leak` | RE-MEASURED 2026-08-16: still fires against a fresh DB, unaffected by the object-leak fixes. A correct finding about an EXTERNAL project; closing it needs an edit to `C:\Projects\Loader2019`, which is the owner's call. |
 
 ## Open -- NOT verifiable in a normal session
 
@@ -57,7 +63,9 @@ today** -- say so rather than implying they were.
 `incremental-index-hangs-on-large-db` · `indexer-livelock-when-two-platforms-run-concurrently`
 (diagnosed) · `index-all-win32-library-rebuild-aborts` ·
 `lint-all-project-wide-phase-dominates-runtime` (largely fixed 2026-08-12) ·
-`index-runs-are-not-resumable` (confirmed: only WAL checkpoints exist) ·
+`index-runs-are-not-resumable` (**CORRECTNESS HALF FIXED 2026-08-16** -- the
+fingerprint was stamped BEFORE the walk, so a killed run silently kept stale
+parses; now committed only on completion. Per-file resume still open) ·
 `codelens-cache-has-no-eviction` (confirmed unbounded -- `Clear` and a per-file
 `Remove`, no size bound; lives in the IDE plugin BPL, which needs a build with
 the IDE closed).
@@ -65,8 +73,14 @@ the IDE closed).
 ## Open -- not defects, kept here deliberately
 
 `rule-hardening-plan-2026-08-13` (a plan answering an owner question) ·
-`exception-class-unit-and-generated-exception-types` (feature request) ·
+`exception-class-unit-and-generated-exception-types` (feature request --
+**MEASURED 2026-08-16: 64 distinct messages on ORM3, not the 400 that would have
+killed it**, and normalization collapses 64 -> 63, so build Stage 1) ·
 `converter-editor-phase-g-engine-findings` (workstream status: *"NOT pushed, NOT
-merged, NOT deployed. Deliberate."*) · `ide-lsp-ram-and-shim-todo` (items 3-4
-blocked on the IDE being startable) · `yadf-share-review-marker-hash` (owner
-request for a shared hashing helper).
+merged, NOT deployed. Deliberate."* -- its one concrete engine ask, the
+`#mapping`/`#apply` rejection, is **FIXED 2026-08-16**; findings 2.4-2.11 remain)
+· `ide-lsp-ram-and-shim-todo` (items 3-4 still blocked on the IDE being
+startable; §1.1's ask **folded into the union design 2026-08-16**, correcting a
+wrong premise there) · `yadf-share-review-marker-hash` (owner request for a
+shared hashing helper -- **RE-COUNTED 2026-08-16: 249 markers across three
+repos**, so the "changing the normaliser is nearly free" window has closed).

@@ -1,3 +1,25 @@
+> # 2026-08-16 (session 22): §1.1's ask is DONE. TODOs 3 and 4 remain IDE-blocked.
+>
+> **Done:** §1.1 said the capability finding was *"worth folding into section 4.4
+> of the union design as a hard argument"*. Folded in. Section 4.4 had actually
+> been WRONG -- it listed `references` as one of four *overlapping* request kinds
+> to arbitrate between, when the measured handshake shows DelphiLSP does not
+> advertise `referencesProvider` at all. It is now three overlapping kinds
+> (hover / definition / completion), with `textDocument/references` and
+> `workspace/symbol` documented as index-only: nothing to merge, no fallback to
+> consult.
+>
+> **Verified:** all four `tools\lsp-diag\*.ps1` scripts exist and parse cleanly
+> (arm / collect / disarm / watch). Checked by parsing only -- deliberately NOT
+> executed, since `arm` mutates the registry and User environment. This matters
+> because TODO 2b gets ONE shot at the next IDE start, and a capture script that
+> fails then wastes the whole opportunity.
+>
+> **Still blocked, correctly:** TODO 3 (design-time package RAM audit) needs a
+> running IDE by construction. TODO 4 (superset shim) is gated on 2b's error
+> text, which needs an IDE start. Neither is startable here; nothing about them
+> changed.
+
 # INBOX: IDE LSP / RAM investigation -- deferred TODOs 3 and 4
 
 **Date:** 2026-08-09

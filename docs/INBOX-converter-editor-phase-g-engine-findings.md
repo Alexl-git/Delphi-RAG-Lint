@@ -1,3 +1,26 @@
+> # 2026-08-16 (session 22): the one concrete ask is DONE. The note stays open.
+>
+> **Done:** `convert-validate` no longer rejects `#mapping` / `#apply`. They are
+> recognised and SKIPPED -- accepted as well-formed, no rule emitted, no error.
+> The original repro in section 1 now prints `OK` / exit 0 instead of four
+> `unknown directive` lines, so a rule book carrying them saves cleanly.
+>
+> Deliberately NO evaluation semantics: emitting a rule kind would invite
+> `convert-apply` to act on a mapping it cannot correctly evaluate. G6.1
+> (conditional per-instance application) remains untouched and unimplemented.
+>
+> `DRagLint.Convert.Rules.pas`; assertions added to
+> `tests\autotest\run_convert_rules.ps1`, where the pre-existing `#frobnicate`
+> check is the positive control -- it still exits 1, so unknown-directive
+> detection was narrowed, not switched off.
+>
+> **Still open in this note:** findings 2.4-2.11 (2.1/2.2/2.3 were already fixed
+> and are acknowledged in the revision log above). 2.11 (strong type aliases
+> `T = type X` never indexed) is called out as HIGH and as the same defect class
+> as the already-fixed 2.1, so it is the obvious next one. The status line below
+> ("NOT pushed, NOT merged, NOT deployed. Deliberate.") describes the CONVERTER
+> WORKSTREAM's own branch and is unaffected by any of this.
+
 # INBOX -- Converter editor Phase G: what shipped, and 8 engine/index findings
 
 **From:** converter-editor workstream (Claude session, 2026-08-01 -> 2026-08-02)
