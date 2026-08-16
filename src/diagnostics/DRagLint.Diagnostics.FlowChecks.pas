@@ -236,6 +236,22 @@ begin
   if P > 0 then Result:= Trim(Copy(Result, P + 1, MaxInt));
 end;
 
+{ True when the assignment's TARGET variable also appears among the constructor
+  call's arguments -- `Cur := TNode.Create(Cur)`. See the call site for why that
+  is a structure-linking idiom rather than an owned allocation. Reuses
+  CollectCallArgs so this agrees with the escape lattice by construction instead
+  of by a second parse of the same node. }
+function SelfLinkedConstruction(const AAssignNode: TTSNode; const ASrc: TBytes;
+  const AVars: TRoutineVarTable; ATargetIdx: Integer): Boolean;
+var
+  CA: TCallArgRef;
+begin
+  Result := False;
+  if ATargetIdx < 0 then Exit;
+  for CA in CollectCallArgs(AAssignNode, ASrc, AVars) do
+    if CA.VarIdx = ATargetIdx then Exit(True);
+end;
+
 function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;
   const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): Boolean;
 var
@@ -1339,7 +1355,24 @@ var
                  { a TComponent descendant constructed with a non-nil AOwner
                    transfers ownership to that owner (freed on its teardown) --
                    do NOT record it as a leak candidate. }
-                 and not ConstructorTransfersOwnership(It.Node.ChildByField('rhs'), PF.Src, AStore, AFileId, ALibStore) then
+                 and not ConstructorTransfersOwnership(It.Node.ChildByField('rhs'), PF.Src, AStore, AFileId, ALibStore)
+                 { SELF-LINKING CONSTRUCTION IS NOT A LEAK CANDIDATE.
+                   `Cur := TGroup.Create(kind, i, k, Cur)` passes the variable
+                   being assigned as an ARGUMENT to its own constructor: the new
+                   node takes the old one as its parent, links itself into the
+                   structure, and is reachable from the root the routine returns
+                   -- so it is freed with that structure. This is the surviving
+                   cause in INBOX-object-leak-is-systematically-false, described
+                   there as "a tree cursor whose nodes escape via the returned
+                   root".
+
+                   The guard is needed HERE as well as in TEscape.Transfer: the
+                   lattice computes block state, but THIS replay is what records
+                   the reportable site, so fixing only the lattice changed
+                   nothing observable. Narrow on purpose -- it fires only when
+                   the assignment target itself is among the arguments, so
+                   `A := T.Create(B)` is untouched. }
+                 and not SelfLinkedConstruction(It.Node, PF.Src, Vars, Tgt) then
               begin
                 CreateRow[Tgt] := Integer(It.Node.StartPoint.Row) + 1;
                 CreateCol[Tgt] := Integer(It.Node.StartPoint.Column) + 1;

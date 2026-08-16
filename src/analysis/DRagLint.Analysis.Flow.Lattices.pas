@@ -1774,7 +1774,31 @@ begin
         Tgt := AssignmentTargetIndex(It.Node, FSrc, FVars);
         if (Tgt >= 0) and (FVars.Get(Tgt).Kind = vkLocal) then
         begin
-          if ExprIsConstructor(Rhs, FSrc) then Result[Tgt] := True   { created }
+          if ExprIsConstructor(Rhs, FSrc) then
+          begin
+            { SELF-LINKING CONSTRUCTION IS NOT OWNERSHIP -- it is a node joining
+              a structure. `Cur := TGroup.Create(kind, i, k, Cur)` passes the
+              variable being assigned as an ARGUMENT to its own constructor: the
+              new node takes the old one as its parent and links itself into the
+              tree, so it is reachable from the root the routine returns and is
+              freed with it. Reported as a leak, this is the exact shape
+              INBOX-object-leak-is-systematically-false calls "a tree cursor
+              whose nodes escape via the returned root".
+
+              The arg-escape pass a few lines above ALREADY marked this variable
+              transferred; the constructor branch then overwrote it with
+              `created`, so the escape was computed and discarded in the same
+              statement. Detect the self-reference and keep the escape.
+
+              Narrow on purpose: it fires only when the assignment TARGET itself
+              appears among the constructor's arguments. `A := T.Create(B)` is
+              untouched -- that really is a fresh object A owns. }
+            var SelfLinked: Boolean := False;
+            for CA in CollectCallArgs(It.Node, FSrc, FVars) do
+              if CA.VarIdx = Tgt then begin SelfLinked := True; Break; end;
+            if SelfLinked then Result[Tgt] := False   { linked into a structure }
+            else Result[Tgt] := True;                 { created }
+          end
           else if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
           begin
             SrcIdx := FVars.IndexOf(LowerCase(NodeStr(Rhs, FSrc)));

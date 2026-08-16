@@ -202,6 +202,37 @@ begin
   Result.GeneratedAt:= Now;
 
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+
+  { BARE NAME FALLBACK. FindSymbolsByQualifiedName matches the FULL dotted name,
+    so `context --task "modify TypeIsRefCountedOrValue"` found nothing and this
+    function returned an empty bundle with `Token count (estimated): 0` and exit
+    0 -- indistinguishable from "this symbol has no context". Meanwhile
+    `query --name <same bare name>` resolved it to exactly one symbol, so the
+    information was there and only this lookup could not reach it.
+
+    It matters out of proportion to its size: CLAUDE.md instructs every session
+    to run this verb BEFORE reading a large .pas, so the silent empty answer
+    costs exactly the ~60x token saving the feature exists to provide, and looks
+    like the feature working.
+
+    Resolved ONLY when the name is unambiguous. Picking Syms[0] out of several
+    same-named symbols would hand back a confidently-wrong bundle -- a worse
+    failure than the empty one, because nothing about it looks wrong. Ambiguous
+    bare names still return empty, and the caller reports "not found", which
+    remains the honest answer for a name that does not identify one symbol.
+    See docs\INBOX-context-bundle-empty-for-bare-name.md. }
+  if (Length(Syms) = 0) and (Pos('.', AQName) = 0) then
+  begin
+    var ByName: TArray<TSymbol>:= AStore.FindSymbolsByExactName(AQName);
+    if Length(ByName) = 1 then
+    begin
+      Syms:= ByName;
+      { Report the resolved QUALIFIED name, not the bare one the caller typed --
+        the bundle header is the reader's evidence of WHICH symbol they got. }
+      Result.QName:= ByName[0].QualifiedName;
+    end;
+  end;
+
   if Length(Syms) = 0 then Exit;
   Sym:= Syms[0];
 
