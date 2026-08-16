@@ -2226,20 +2226,43 @@ var
   begin
     Result:= ADepth;
     if N.IsNull then Exit;
+    { 'exprIf', NOT 'ifElse'. An if WITH an else parses as `exprIf` in this
+      grammar; there is no `ifElse` node at all, so the old list counted the
+      plain `if` form and scored the else form ZERO. One trailing else on the
+      innermost statement therefore cost a whole level: a routine nested 6 deep
+      measured 5 and, against the default max of 5, said nothing. Measured
+      2026-08-16 with three routines side by side -- six plain ifs fired "6
+      deep", seven fired "7 deep", and six whose innermost was
+      `if A6 then Go1 else Go2` was SILENT.
+      The dead `ifElse` branch is removed rather than kept alongside: a
+      condition keyed on a node type the grammar never produces reads as
+      coverage that does not exist. (Same family as the kAt/kVar/exprIf
+      "keywords are NAMED nodes" bugs already fixed in this tree.)
+      See docs\INBOX-deep-nesting-silent-on-trailing-else-call.md. }
     Inc1:= 0;
-    if (N.NodeType = 'if') or (N.NodeType = 'ifElse') or (N.NodeType = 'while') or (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
+    if (N.NodeType = 'if') or (N.NodeType = 'exprIf') or (N.NodeType = 'while') or (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
       (N.NodeType = 'with') or (N.NodeType = 'try') then Inc1:= 1;
-    if N.NodeType = 'ifElse' then ElseN:= N.ChildByField('else')
-    else ElseN:= Default(TTSNode);
+
+    { The else BRANCH is the child immediately after the kElse keyword --
+      exprIf's children are positional (kIf, cond, kThen, then, kElse, else) and
+      expose no 'else' field, so ChildByField('else') returned null and the
+      chain guard never fired even when the node type matched. Locate it by
+      index instead. }
+    var ElseIdx: Integer:= -1;
+    if Inc1 = 1 then
+      for I:= 0 to N.ChildCount - 1 do
+        if N.Child(I).NodeType = 'kElse' then begin ElseIdx:= I + 1; Break; end;
+
     M:= ADepth;
     for I:= 0 to N.ChildCount - 1 do
     begin
       C:= N.Child(I);
       ChildDepth:= ADepth + Inc1;
-      if (Inc1 = 1) and (not ElseN.IsNull) and (not C.IsNull) and
-         ((C.NodeType = 'if') or (C.NodeType = 'ifElse')) and
-         (C.StartPoint.Row = ElseN.StartPoint.Row) and
-         (C.StartPoint.Column = ElseN.StartPoint.Column) then
+      { `else if ...` is a CHAIN, not deeper nesting -- flattening it is not what
+        the rule is asking for, and counting it would make any long dispatch
+        chain look pathological. }
+      if (I = ElseIdx) and (not C.IsNull) and
+         ((C.NodeType = 'if') or (C.NodeType = 'exprIf')) then
         ChildDepth:= ADepth;   { chain continuation -- same logical level }
       D:= MaxNest(C, ChildDepth);
       if D > M then M:= D;
