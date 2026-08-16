@@ -1,4 +1,9 @@
-# INBOX index -- 57 open notes (was 59); 4 retired + 2 filed on 2026-08-16
+# INBOX index -- 58 open note files on disk; 4 retired + 3 filed + 2 closed on 2026-08-16
+
+> **Count discipline:** 58 is the number of `docs\INBOX-*.md` files excluding this
+> index. One of them (`bare-except-anchor-defeats-a-hand-written-marker`) is now
+> DISCHARGED and is only still on disk because it has not been moved to
+> `INBOX-Done\`; retire it on the next pass. `INBOX-Done\` holds 55.
 
 **49 notes were retired to `INBOX-Done/`** in this pass (108 -> 59). Every retired
 note carries a one-line banner saying WHY, so the trail survives the move; nothing
