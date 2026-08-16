@@ -9,7 +9,14 @@ unit DragLint.Plugin.CodeLensCache;
 
   PaintLine reads from the cache only -- no subprocess calls during paint.
   Cache is invalidated (file entry dropped) on BufferSaved via
-  InvalidateFile so it repopulates on the next EditorViewActivated. }
+  InvalidateFile so it repopulates on the next EditorViewActivated.
+
+  BOUNDED (2026-08-16). The cache retains at most CODELENS_MAX_FILES files and
+  evicts least-recently-used first. Before that it only ever shrank via Clear or
+  InvalidateFile, so an IDE session that visited many files grew it without any
+  limit. "Used" means painted (GetForLine) or activated (PopulateOnce), which is
+  why both touch -- an LRU that only ordered by INSERTION would evict the file
+  the user has been staring at all afternoon. }
 
 interface
 
@@ -19,19 +26,62 @@ uses
   , System.SyncObjs
   ;
 
+const
+  { Default ceiling on how many FILES the cache retains. Chosen to comfortably
+    cover an ordinary editing session's open tabs and recent navigation while
+    keeping the worst case bounded: each entry is one line->label map for one
+    file, so a few dozen is kilobytes, not megabytes. Before this bound existed
+    the cache only ever shrank via Clear or InvalidateFile, so a long IDE session
+    that visited many files grew it without limit. }
+  CODELENS_MAX_FILES = 32;
+
 type
   TDragLintCodeLensCache = class
     strict private
       { outer key: lowercase filepath; inner key: 0-based line number }
-      FByFile: TDictionary<string, TDictionary<Integer, string>>;
-      FLock  : TCriticalSection                                 ;
+      FByFile  : TDictionary<string, TDictionary<Integer, string>>;
+      { Most-recently-used FIRST. Kept in step with FByFile under FLock; its
+        length is therefore always FByFile.Count. This is a plain TList rather
+        than anything cleverer because it is bounded by FMaxFiles, so the O(n)
+        Remove on touch is a few dozen string compares -- and GetForLine sits on
+        the IDE paint path, where predictability matters more than asymptotics. }
+      FOrder   : TList<string>                                    ;
+      FMaxFiles: Integer                                          ;
+      FLock    : TCriticalSection                                 ;
+
+      { Both assume FLock is already held. }
+      procedure TouchLocked(const AKey: string);
+      procedure EvictLocked;
     public
-      constructor Create;
+      /// <summary>Creates the cache with a bound on how many files it retains.</summary>
+      /// <param name="AMaxFiles">File ceiling; values below 1 are clamped to 1.
+      /// Defaults to CODELENS_MAX_FILES.</param>
+      constructor Create(AMaxFiles: Integer = CODELENS_MAX_FILES);
       destructor Destroy; override;
 
       { Returns "[N callers]" string for the given file + 0-based line,
-      or "" if nothing is cached for that line. }
+      or "" if nothing is cached for that line.
+
+      A HIT ALSO TOUCHES the entry, which is what makes this an LRU rather than
+      a FIFO: the file currently being painted is exactly the one that must not
+      be evicted, and it may have been populated long ago. }
       function GetForLine(const AFilePath: string; ALine: Integer): string;
+
+      /// <summary>Stores (and takes ownership of) the line->label map for one
+      /// file, evicting the least recently used entries past the cap.</summary>
+      /// <param name="AFilePath">File the map belongs to; keyed case-insensitively.</param>
+      /// <param name="AInner">Line->label map. The cache OWNS it from this call
+      /// on and frees it on eviction, invalidation or destruction. Passing nil
+      /// is a no-op.</param>
+      /// <remarks>PopulateOnce's own store path; also the seam a console test
+      /// uses to fill the cache without shelling out to the exe.</remarks>
+      procedure StoreForFile(const AFilePath: string; AInner: TDictionary<Integer, string>);
+
+      /// <summary>Number of FILES currently retained (never exceeds MaxFiles).</summary>
+      function FileCount: Integer;
+
+      /// <summary>The configured file ceiling.</summary>
+      property MaxFiles: Integer read FMaxFiles;
 
       { Drop the cached entry for AFilePath so the next Populate re-runs. }
       procedure InvalidateFile(const AFilePath: string);
@@ -234,10 +284,15 @@ end; // function
 
 { ---- TDragLintCodeLensCache ---- }
 
-constructor TDragLintCodeLensCache.Create;
+constructor TDragLintCodeLensCache.Create(AMaxFiles: Integer);
 begin
   inherited Create;
   FByFile:= TDictionary<string, TDictionary<Integer, string>>.Create;
+  FOrder := TList<string>.Create;
+  { Clamped rather than asserted: a zero or negative cap would make every store
+    immediately evict what it just stored, which reads as "the cache is broken"
+    rather than "the cap was misconfigured". }
+  if AMaxFiles < 1 then FMaxFiles:= 1 else FMaxFiles:= AMaxFiles;
   FLock:= TCriticalSection.Create;
 end;
 
@@ -249,11 +304,42 @@ begin
   try
     for Inner in FByFile.Values do Inner.Free;
     FByFile.Free;
+    FOrder.Free;
   finally
     FLock.Leave;
   end;
   FLock.Free;
   inherited;
+end;
+
+{ Move AKey to the front of the MRU order. FLock must already be held. }
+procedure TDragLintCodeLensCache.TouchLocked(const AKey: string);
+var
+  Idx: Integer;
+begin
+  Idx:= FOrder.IndexOf(AKey);
+  if Idx = 0 then Exit;              { already newest -- nothing to do }
+  if Idx > 0 then FOrder.Delete(Idx);
+  FOrder.Insert(0, AKey);
+end;
+
+{ Drop least-recently-used entries until the cap is met, freeing each inner map
+  as it goes -- the cache owns them. FLock must already be held. }
+procedure TDragLintCodeLensCache.EvictLocked;
+var
+  Victim: string                      ;
+  Inner : TDictionary<Integer, string>;
+begin
+  while FOrder.Count > FMaxFiles do
+  begin
+    Victim:= FOrder[FOrder.Count - 1];
+    FOrder.Delete(FOrder.Count - 1);
+    if FByFile.TryGetValue(Victim, Inner) then
+    begin
+      Inner.Free;
+      FByFile.Remove(Victim);
+    end;
+  end;
 end;
 
 function TDragLintCodeLensCache.GetForLine(const AFilePath: string; ALine: Integer): string;
@@ -265,7 +351,44 @@ begin
   Key:= LowerCase(AFilePath);
   FLock.Enter;
   try
-    if FByFile.TryGetValue(Key, Inner) then Inner.TryGetValue(ALine, Result);
+    if FByFile.TryGetValue(Key, Inner) then
+    begin
+      Inner.TryGetValue(ALine, Result);
+      { Touch on a FILE hit, not on a label hit: a painted line with no lens
+        label is still evidence the file is in active use. }
+      TouchLocked(Key);
+    end;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TDragLintCodeLensCache.StoreForFile(const AFilePath: string;
+  AInner: TDictionary<Integer, string>);
+var
+  Key : string                      ;
+  Prev: TDictionary<Integer, string>;
+begin
+  if AInner = nil then Exit;
+  Key:= LowerCase(AFilePath);
+  FLock.Enter;
+  try
+    { Replacing an existing entry must free the old map, or the overwrite leaks
+      exactly what the cap was added to bound. }
+    if FByFile.TryGetValue(Key, Prev) and (Prev <> AInner) then Prev.Free;
+    FByFile.AddOrSetValue(Key, AInner);
+    TouchLocked(Key);
+    EvictLocked;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+function TDragLintCodeLensCache.FileCount: Integer;
+begin
+  FLock.Enter;
+  try
+    Result:= FByFile.Count;
   finally
     FLock.Leave;
   end;
@@ -284,6 +407,10 @@ begin
       Inner.Free;
       FByFile.Remove(Key);
     end;
+    { Unconditional: FOrder must never outlive its entry, or a later evict would
+      pick a victim that is no longer in FByFile and silently under-evict. }
+    var OIdx: Integer:= FOrder.IndexOf(Key);
+    if OIdx >= 0 then FOrder.Delete(OIdx);
   finally
     FLock.Leave;
   end;
@@ -309,10 +436,13 @@ begin
 
   Key:= LowerCase(AFilePath);
 
-  { Skip if already populated }
+  { Skip if already populated. Activating a view is a USE, so touch it too --
+    otherwise a file the user keeps returning to but never repaints could age
+    out from under them. }
   FLock.Enter;
   try
     HaveIt:= FByFile.ContainsKey(Key);
+    if HaveIt then TouchLocked(Key);
   finally
     FLock.Leave;
   end;
@@ -326,13 +456,7 @@ begin
   if Length(Methods) = 0 then
   begin
     { Store empty inner dict so we don't re-shell }
-    Inner:= TDictionary<Integer, string>.Create;
-    FLock.Enter;
-    try
-      FByFile.AddOrSetValue(Key, Inner);
-    finally
-      FLock.Leave;
-    end;
+    StoreForFile(Key, TDictionary<Integer, string>.Create);
     Exit;
   end;
 
@@ -352,12 +476,7 @@ begin
     end;
   end;
 
-  FLock.Enter;
-  try
-    FByFile.AddOrSetValue(Key, Inner);
-  finally
-    FLock.Leave;
-  end;
+  StoreForFile(Key, Inner);
 end; // procedure
 
 procedure TDragLintCodeLensCache.Clear;
@@ -368,6 +487,7 @@ begin
   try
     for Inner in FByFile.Values do Inner.Free;
     FByFile.Clear;
+    FOrder.Clear;
   finally
     FLock.Leave;
   end;

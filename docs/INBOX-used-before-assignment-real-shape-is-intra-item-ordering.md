@@ -1,3 +1,28 @@
+> # CURRENT STATE 2026-08-16 (session 23): shape A SHIPPED. B/C/D stay DO-NOT-IMPLEMENT.
+>
+> Shape A (assignment and read under a TEXTUALLY IDENTICAL bare-local predicate)
+> is implemented and in: `ThenGuardName` / `CollectThenGuards` / `AssignedInRange`
+> / `AssignedUnderSameGuard` in `DRagLint.Diagnostics.FlowChecks.pas`, hooked into
+> the emit site in the **info arm only**. A `must` finding says the variable is
+> unassigned on EVERY path, which no guard correlation can excuse, so the warning
+> arm is untouched: this can downgrade noise, never hide a certain
+> use-before-assignment. **Self-index 39 -> 35**, removing exactly the four
+> `tmark` sites. Test `run_flow_same_predicate_guard.ps1`.
+>
+> **The remaining 35 are B=21 / C=12 / D=2, and the recommendation below is
+> UNCHANGED for all of them.** Nothing in session 23 alters it: still 0 findings
+> on all four consumer projects, still all hedged `info`, still 14 of them
+> unreachable by ANY predicate correlation, and shape B still needs a flag-pairing
+> proof in which any gap SUPPRESSES TRUE POSITIVES.
+>
+> Worth remembering from shape A's implementation: the first fixture read the
+> variable as `Other(V)`. **A bare identifier passed as an argument is recorded as
+> a CallDef, not a read**, so that fixture produced no findings at all and every
+> assertion -- including the SILENT one -- passed vacuously. Reads in flow
+> fixtures must be ARITHMETIC (`Sum := Sum + V`).
+>
+> ---
+>
 > # RE-MEASURED 2026-08-16 (session 22): BOTH stated causes are DEAD. A third shape is live.
 >
 > **0 findings** in YADF, YADFOT, YADFSetup and DataCopy. The two competing
