@@ -143,10 +143,19 @@ type
     /// unused parameter produces zero unused-parameter findings. This is
     /// deliberate -- the external body is in a foreign module and the
     /// parameter cannot be removed.
+    /// A routine that is HANDED SOMEWHERE as a value rather than called -- a bare
+    /// identifier argument, an `@X` address-of, or the rhs of an assignment --
+    /// is also skipped: its parameter list belongs to the procedural type it is
+    /// being assigned to, so a parameter cannot be removed. Detected
+    /// syntactically and same-file only (see CollectAddrTaken); matching is by
+    /// BARE NAME, so a method sharing a name with an addr-taken free routine is
+    /// skipped too, the same trade-off ContractMethods makes.
     /// Known limitation: interface-method implementations are not detected
     /// syntactically (requires a symbol store). If an interface method body slips
     /// through with an unused parameter it will be reported; this is an acceptable
-    /// false-positive gap.
+    /// false-positive gap. Likewise a routine passed as a callback from a
+    /// DIFFERENT unit is not seen -- that needs the store (refs.kind='read' rows
+    /// already carry it) and is a documented follow-up, not a regression.
     /// identical-then-else emits one finding at the 'if' node when the then and
     /// else branches normalise to the same text. Plain 'if' nodes (no else) are
     /// not visited.
@@ -173,6 +182,7 @@ type
     /// Pure
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>
+    /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectAddrTaken"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectContractDecls"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectLocalFunctions"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.Visit"/>
@@ -235,6 +245,12 @@ var
     function-result-ignored -- a bare-statement call to one of these discards a
     return value. Same-unit only (pure AST, no symbol store). }
   LocalFunctions : TDictionary<string, Boolean>;
+  { Pass-1c result: bare lower-cased names that appear anywhere in this file in a
+    position that HANDS THE ROUTINE ITSELF to somebody -- a bare identifier
+    argument, an `@X` address-of, or the rhs of an assignment. A defProc whose
+    unqualified name matches an entry here has a signature it does not control,
+    so its unused parameters are not removable and are not reported. }
+  AddrTaken      : TDictionary<string, Boolean>;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -463,6 +479,90 @@ var
     for I:= 0 to N.NamedChildCount - 1 do CollectContractDecls(N.NamedChild(I));
   end;
 
+  { PASS 1c: collect every bare name that is HANDED SOMEWHERE as a value rather
+    than called -- the syntactic signature of a callback registration.
+
+    WHY THIS EXISTS. unused-parameter already exempts the ways a signature can be
+    fixed from outside that it happened to know about: the contract directives
+    above, a leading Sender, and IsVclFormEventName. It knew nothing about the
+    most ordinary mechanism of all, passing the routine itself as a callback --
+    at which point the parameter list belongs to the procedural TYPE, not to the
+    routine, and removing a parameter is a compile error rather than a cleanup.
+    Measured on DataCopy 2026-08-16: FOUR of that project's five findings were
+    callbacks; only TZEISSTransfer.isValidZeissFileName was genuinely dead, and
+    it must keep firing.
+
+    WHY SYNTACTIC AND NOT STORE-BACKED. One of those four registrations sits
+    inside an INACTIVE $IFDEF (EExtraExceptionInfo.pas:533). No symbol and no
+    ref exists for it -- nothing was compiled -- so a store-backed check would
+    still report it, while the raw tree-sitter parse sees it plainly. The rule
+    also has to work on the `lint <file>` path, which has no store at all. A
+    store-backed pass for CROSS-unit passing is a worthwhile separate follow-up;
+    it is an addition to this, not a replacement for it.
+
+    THE THREE SHAPES, and nothing wider:
+      Register(Pred1)     bare identifier in an exprCall argument list
+      Register(@Handler)  exprUnary whose first named child is the kAt operator
+      OnFoo := Handler    bare identifier on the rhs of an assignment
+    `@Buf[0]` reaches the kAt arm too and notes nothing, because its operand is
+    an exprSubscript rather than an identifier -- harmless, and the reason this
+    takes the first identifier among the operands instead of assuming one.
+    kAt is a NAMED child, not anonymous; that trap has produced four separate
+    bugs in this tree already (kAt, kVar, kType, exprIf).
+
+    ACCEPTED IMPRECISION. Matching is by BARE NAME, so a method sharing a name
+    with an addr-taken free routine is suppressed as well. That is exactly the
+    trade-off ContractMethods already makes one screen above, and it is pinned
+    by case A5 of run_unused_param_addr_taken.ps1 so it is found as documented
+    behaviour rather than discovered as a surprise. Note the set is keyed on
+    ROUTINE names at the point of USE: an ordinary `Writeln(S)` adds 's' to it,
+    which can only ever matter if a routine in the same file is also called S. }
+  procedure NoteAddrTaken(const AId: TTSNode);
+  var
+    Nm    : string ;
+    DotPos: Integer;
+  begin
+    if AId.IsNull then Exit;
+    Nm:= LowerCase(Trim(NodeStr(AId)));
+    DotPos:= LastDelimiter('.', Nm);
+    if DotPos > 0 then Nm:= Copy(Nm, DotPos + 1, MaxInt);
+    if Nm <> '' then AddrTaken.AddOrSetValue(Nm, True);
+  end;
+
+  procedure CollectAddrTaken(const N: TTSNode);
+  var
+    I   : Integer;
+    Node: TTSNode;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'exprCall' then
+    begin
+      Node:= N.ChildByField('args');
+      if not Node.IsNull then
+        for I:= 0 to Node.NamedChildCount - 1 do
+          if Node.NamedChild(I).NodeType = 'identifier' then
+            NoteAddrTaken(Node.NamedChild(I));
+    end
+    else if N.NodeType = 'assignment' then
+    begin
+      Node:= N.ChildByField('rhs');
+      if (not Node.IsNull) and (Node.NodeType = 'identifier') then
+        NoteAddrTaken(Node);
+    end
+    else if (N.NodeType = 'exprUnary') and (N.NamedChildCount > 0)
+            and (N.NamedChild(0).NodeType = 'kAt') then
+    begin
+      { Start at 1: child 0 is the kAt operator itself. }
+      for I:= 1 to N.NamedChildCount - 1 do
+        if N.NamedChild(I).NodeType = 'identifier' then
+        begin
+          NoteAddrTaken(N.NamedChild(I));
+          Break;
+        end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectAddrTaken(N.NamedChild(I));
+  end;
+
   { Collect the bare (unqualified, lower-cased) names of every routine declared
     in THIS unit that is a FUNCTION -- its declProc header carries a return-type
     'type' field (grammar: 'function Foo(...): T'). Both interface-section
@@ -530,6 +630,11 @@ var
       if DotPos > 0 then BareName:= Copy(FullName, DotPos + 1, MaxInt)
       else BareName:= FullName;
       if ContractMethods.ContainsKey(BareName) then Exit;
+      { The routine is handed somewhere as a value (bare name, @X, or an event
+        assignment), so its parameter list is the procedural type's, not its
+        own. See CollectAddrTaken for why this is syntactic rather than
+        store-backed, and for the bare-name imprecision it accepts. }
+      if AddrTaken.ContainsKey(BareName) then Exit;
       { A TForm/TFrame event handler whose signature carries NO Sender.
         The Sender guard below catches the great majority of DFM-wired handlers,
         but a handful of TForm events simply do not have one --
@@ -2313,6 +2418,7 @@ begin
   Findings:= TList<TLintFinding>.Create;
   ContractMethods:= TDictionary<string, Boolean>.Create;
   LocalFunctions := TDictionary<string, Boolean>.Create;
+  AddrTaken      := TDictionary<string, Boolean>.Create;
   try
     { v0.74: unit-too-large (#6) -- one info finding when the unit exceeds
       AMaxUnitLines source lines (root node's last row). }
@@ -2394,6 +2500,8 @@ begin
     CollectContractDecls(PF.Tree.RootNode);
     { Pass 1b: collect same-unit function names for function-result-ignored. }
     CollectLocalFunctions(PF.Tree.RootNode);
+    { Pass 1c: collect routines handed somewhere as values, for unused-parameter. }
+    CollectAddrTaken(PF.Tree.RootNode);
     { Pass 2: walk defProc bodies, ifElse, exprParens, comments, exprCall. }
     Visit(PF.Tree.RootNode);
     { Pass 3: referenced-never-set field def-use. }
@@ -2405,6 +2513,7 @@ begin
     Findings.Free;
     ContractMethods.Free;
     LocalFunctions.Free;
+    AddrTaken.Free;
   end;
   { De-duplicate by (RuleId, StartLine, StartCol). }
   Seen:= TDictionary<string, Boolean>.Create;

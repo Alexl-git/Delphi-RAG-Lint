@@ -29,7 +29,7 @@ The table is ordered by findings-removed per unit of work.
 | 1 | `sql-injection-concat` | 1+ | English prose matched a SQL keyword | regex only | XS |
 | 2 | `object-leak` (A) | ~15 | guard is the NEXT statement | AST sibling | S |
 | 3 | `used-before-assignment` | 7 | `out` argument counted as a READ | signature (indexed) | S |
-| 4 | `unused-parameter` | 7 | fixed-signature callbacks/handlers | store facts | S-M |
+| 4 | `unused-parameter` | 7 | fixed-signature callbacks/handlers | ~~store facts~~ **same-file AST -- DONE 2026-08-16** | S-M |
 | 5 | `try-except-swallowed` | 38 | handler reports/logs, or is documented | AST + policy call | M |
 | 6 | `object-leak` (B) | ~10 | VCL `Owner` transfer | ancestry (indexed) | M |
 | 7 | `length-zero-compare` | 1+ | dynamic array read as a string | declared type | M |
@@ -75,14 +75,63 @@ lookup the call resolver already performs.
 
 ## 4. `unused-parameter` -- some signatures are not ours to change
 
+> **DONE 2026-08-16 (session 23). The mechanism this note proposed was the wrong
+> one, and the store it recommended could not have fixed it.**
+>
+> Re-measured: DataCopy's five findings are **4 callbacks + 1 true positive**.
+> Not one of them is an override, an interface method, or DFM-wired -- the three
+> things this note said to look up. The real mechanism is a routine being HANDED
+> SOMEWHERE as a value, at which point the parameter list belongs to the
+> procedural type:
+>
+>     Register(Pred1)       bare identifier argument
+>     Register(@Handler)    address-of
+>     OnFoo := Handler      assignment rhs
+>
+> Shipped as a same-file SYNTACTIC pass 1c (`CollectAddrTaken` in
+> `DRagLint.Diagnostics.DeadCodeChecks.pas`), checked next to the existing
+> `ContractMethods` guard.
+>
+> **Why not the store, which this note assumed.** One of the four registrations
+> (`EExtraExceptionInfo.pas:533`) sits inside an INACTIVE `$IFDEF`. Nothing was
+> compiled, so there is no symbol and no ref -- a store-backed check would still
+> have reported it. The raw tree-sitter parse sees it plainly. The rule must also
+> work on `lint <file>`, which has no store at all. Pinned as case A4 of
+> `tests\autotest\run_unused_param_addr_taken.ps1`.
+>
+> Also measured: `symbol_facts.dfm_event` exists but is **0 for every DataCopy
+> symbol**, i.e. never populated -- so the `DfmEvent` field this note leans on
+> would not have answered either. Use `refs.kind='event-binding'` if that path is
+> ever taken up.
+>
+> **Results.** DataCopy `unused-parameter` **5 -> 1**, the survivor being the true
+> positive `TZEISSTransfer.isValidZeissFileName` (zero refs anywhere -- an owner
+> decision to wire, delete or `dl:ok`, not a rule one). Own source **99 -> 75**;
+> all 24 are `IOTAKeyBindingServices.AddKeyBinding` handlers in
+> `DragLint.Plugin.Keyboard.pas`, each passed by bare name. YADF and YADFSetup
+> unchanged; YADFOT surfaced two now-redundant `dl:ok unused-parameter` markers,
+> which were removed.
+>
+> **Accepted imprecision, deliberately not fixed:** matching is by BARE NAME, so a
+> method sharing a name with an addr-taken free routine is suppressed too -- the
+> same trade-off `ContractMethods` already makes. Pinned as case A5.
+>
+> **Follow-ups, still open and NOT part of this change:**
+> 1. Store-backed addr-taken for CROSS-unit passing. The data exists today
+>    (`refs.kind='read'` on a bare routine argument); needs `Store` + file id
+>    plumbed into `TDeadCodeChecker.Check` as `TNamingChecker.Check` already gets.
+> 2. DFM event bindings via `refs.kind='event-binding'`, which would retire the
+>    hardcoded `IsVclFormEventName` list.
+> 3. Interface implementations -- needs heritage resolution via `type_ancestors`.
+>    Remains the documented gap below.
+
     function TfrmZeissCopy.FormHelp(Command: Word; Data: NativeInt;
                                     var CallHelp: Boolean): Boolean;   { VCL }
     procedure DescribeExceptionInfo(const ACustom: Pointer; ...);      { EurekaLog }
 
-Neither parameter list can be shortened without breaking the contract. Fix: skip
-a routine that is an `override`, implements an interface method, or is DFM-wired.
-All three are answerable from the store -- `SymbolFacts` already carries a
-`DfmEvent` field, and ancestry is resolved at index time.
+Neither parameter list can be shortened without breaking the contract. The
+FormHelp shape was closed earlier by `IsVclFormEventName`; the
+`DescribeExceptionInfo` shape is the callback case closed above.
 
 ## 5. `try-except-swallowed` -- 38 findings, and it needs an owner ruling
 
