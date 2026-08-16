@@ -80,6 +80,28 @@ begin
   if (T = 'string') or (T = 'unicodestring') or (T = 'ansistring') or (T = 'widestring')
      or (T = 'rawbytestring') or (T = 'variant') or (T = 'olevariant') then Exit(True);
   if (Pos('array of', T) > 0) or (Pos('tarray<', T) > 0) then Exit(True);
+  { A STATIC array is managed iff its ELEMENT type is. `array[0..2] of string`
+    is zero-initialised by the compiler exactly as a bare string local is, so
+    reading an element before any write yields '' -- defined behaviour, and not
+    something used-before-assignment can describe as a defect.
+
+    The dynamic-array test above misses it: 'array of' is not a substring of
+    'array[0..2] of'. That gap produced all three surviving
+    used-before-assignment findings on DataCopy (uZeissRoutines LRestore/LBackup,
+    both `array[0..2] of string`), and the rule was already declining to report
+    the ANALOGOUS scalar case -- a bare `string` local, and even an uninitialised
+    `Integer` -- so reporting the array was inconsistent with its own bar.
+
+    Recurse rather than assume: `array[0..2] of Integer` is NOT zero-initialised
+    on the stack and stays reportable. Split on the LAST ' of ' so nested
+    `array[..] of array[..] of string` resolves to the innermost element.
+    See docs\INBOX-used-before-assignment-array-local-never-counted-as-defined.md. }
+  if T.StartsWith('array') then
+  begin
+    var OfPos: Integer := T.LastIndexOf(' of ');
+    if OfPos > 0 then
+      Exit(IsManagedType(Trim(Copy(T, OfPos + 5, MaxInt)), AStore, AFileId));
+  end;
   { I-prefixed interface convention: 'I' + uppercase letter }
   if (Length(ATypeText) >= 2) and (ATypeText[1] = 'I') and ATypeText[2].IsUpper then Exit(True);
   Result := False;
