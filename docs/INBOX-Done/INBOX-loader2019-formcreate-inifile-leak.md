@@ -1,3 +1,28 @@
+> # CLOSED 2026-08-16 (session 22) -- FIXED IN Loader2019, on owner instruction.
+>
+> Owner: *"If the fix is only to free the INI file object then do it."* Done --
+> `FreeAndNil(INIFile);` added immediately before the `Exit;` on the
+> `INIFile.FileName = ''` path in `TfrmLoader2019_Main.FormCreate`
+> (`C:\Projects\Loader2019\Loader2019.Main.pas`).
+>
+> Verified: after reindexing that file, `lint Loader2019.Main.pas` reports **no
+> `object-leak` findings at all** (it reported `object-leak: Object "inifile"
+> may be leaked` at `:3121` immediately before).
+>
+> **The bare free was chosen over `try..finally` deliberately** -- the note
+> offered both, and wrapping would have re-indented ~210 lines of an external
+> project for a leak that costs one `TmeminiFile` at shutdown (WM_QUIT is already
+> posted). A comment at the site warns the next person that a new early return
+> between the create and the free reintroduces the leak, which is the one thing
+> the bare free does not protect against.
+>
+> Note this leaves the SEPARATE `unprotected-object-free` warning standing at
+> `:3150` -- that rule wants the `try..finally` and is not what this note was
+> about. Closing it is a distinct decision about the same routine.
+>
+> Edit made in `C:\Projects\Loader2019`, which is OUTSIDE this repo and is not
+> committed here.
+
 # INBOX -- Loader2019: `INIFile` leaks on the early-exit path in `FormCreate`
 
 > **RE-MEASURED 2026-08-16 -- still fires, still a true positive.** The next-session

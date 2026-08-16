@@ -1,3 +1,31 @@
+> # CLOSED 2026-08-16 (session 22) -- the fixes are now ROW-IDENTICAL PROVEN.
+>
+> The concurrency theory in this note's headline was refuted long ago; the real
+> problem was that an incremental index re-ran the call resolve over the WHOLE
+> database, which at 2 GB is indistinguishable from a hang. The scoped-resolve
+> fix and the per-pass logging were already landed. What was missing was any
+> proof the scoped path AGREES with the unscoped one -- `DRAGLINT_NO_SCOPED_RESOLVE`
+> existed precisely to make that a one-binary A/B, and no test used it that way.
+>
+> `testsutotestun_scoped_resolve_equivalence.ps1` now does: one fixture, one
+> body-only edit, two DBs, and every `refs.receiver_text` / `external_target`
+> plus every resolved call edge compared row for row (keyed on file+line+col+name
+> so re-issued symbol ids cannot register as a difference). They match exactly.
+>
+> **Two vacuity traps had to be closed for that to mean anything**, and both
+> would have passed silently:
+>
+> 1. If `ScopedResolveIsSound` ever returns False for both runs, the comparison
+>    is whole-DB against whole-DB. The suite asserts run A logs
+>    `affected call-site ref(s)` and run B logs `WHOLE DB`.
+> 2. `ScopedResolveIsSound` declines when the changed set reaches a THIRD of the
+>    corpus (`FScopeFiles.Count * 3 >= CountFiles`). The first fixture had 3
+>    units and edited 1 -- so it took the whole-DB path and passed while proving
+>    nothing. The fixture is now 5 units; **do not shrink it**.
+>
+> This matters beyond this note: per-file resume, and any future narrowing of the
+> added-type fallback, both lean on the scoped path being trustworthy. It now is.
+
 # INBOX -- the "livelock" is FOUR whole-database resolve passes (not a concurrency bug)
 
 **Filed:** 2026-08-11. **DIAGNOSED 2026-08-11** -- the original concurrency theory in
