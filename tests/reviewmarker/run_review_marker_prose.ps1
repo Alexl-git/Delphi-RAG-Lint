@@ -95,8 +95,8 @@ procedure RealMarked;
 begin
   try
     Writeln('a');
-  except
-    Writeln('b'); // dl:ok bare-except
+  except // dl:ok bare-except -- accepted here
+    Writeln('b');
   end;
 end;
 
@@ -120,12 +120,17 @@ function Row-Of([string]$Needle) {
 }
 $rowInBlock  = Row-Of 'except // dl:ok bare-except@7f3a'
 $rowInDocTag = Row-Of '/// <returns>e.g. `dl:ok'
-# NOTE the marker sits on the STATEMENT line, not on the `except` keyword:
-# bare-except anchors on the first statement inside the handler, so a marker
-# written at the intuitive place (trailing `except`) never matches its finding and
-# is then reported unused. Measured while building this test; filed as
-# docs\INBOX-bare-except-anchor-defeats-a-hand-written-marker.md.
-$rowReal     = Row-Of "Writeln('b'); // dl:ok bare-except"
+# The marker sits on the `except` KEYWORD, which is where a human writes it and
+# where the design spec has always shown it. It did not use to work: bare-except
+# anchored @warn on the first statement inside the handler, so the intuitive
+# placement never matched its finding AND was then reported unused -- filed as
+# docs\INBOX-bare-except-anchor-defeats-a-hand-written-marker.md, fixed
+# 2026-08-16 by moving the capture to (kExcept), which is what every sibling
+# rule in the family already did.
+#
+# This line is therefore a regression anchor for that fix: put the marker back
+# on Writeln('b') and the suppression assertion below fails.
+$rowReal     = Row-Of 'except // dl:ok bare-except -- accepted here'
 $rowStranded = Row-Of '// dl:ok bare-except@dead'
 foreach ($pair in @(@('block', $rowInBlock), @('doctag', $rowInDocTag), @('real', $rowReal), @('stranded', $rowStranded))) {
   if (-not $pair[1]) { Write-Host "FATAL: fixture anchor '$($pair[0])' not found" -ForegroundColor Red; exit 2 }

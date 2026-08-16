@@ -30,21 +30,37 @@ progress here, and worth trying first on anything below:
 > One note FILED: `context-bundle-empty-for-bare-name`.
 > **Priority 1 is now TWO items.**
 >
-> **2026-08-16 (session 21).** One FILED straight into priority 1:
-> `lsp-rejects-the-stdio-flag-its-own-client-appends` (owner-reported live, owner
-> deferred the fix). One CLOSED: `remaining-raw-text-scans-read-comments-as-code`
-> #1 (FormsMap comment scrub). **Priority 1 is still TWO items.**
+> **2026-08-16 (session 21).** Priority 1 **cleared of its original two**, and one
+> new item filed into it.
+> * CLOSED: `remaining-raw-text-scans-read-comments-as-code` #1 (FormsMap comment
+>   scrub) -- its stated harm was wrong; see the note.
+> * CLOSED: `bare-except-anchor-defeats-a-hand-written-marker` -- fix (A), and the
+>   "is it a family?" question is answered NO: every sibling already anchored on
+>   its own keyword. **Consumer churn measured but deliberately NOT paid**: 12
+>   recorded markers in DataCopy (8) and YADF (4) now need a move + re-stamp.
+> * FILED: `lsp-rejects-the-stdio-flag-its-own-client-appends` (owner-reported
+>   live, owner deferred the fix).
+> * FILED: `rule-edits-are-inert-until-hand-copied-to-three-deploy-dirs` -- found
+>   the hard way during the bare-except fix.
+>
+> **Priority 1 is TWO items**, both new.
 
 ## Priority 1 -- known-wrong output, worth fixing next
 
-Two items. Four former members were retired on 2026-08-16 (see the banner above);
-their summaries live in their retired notes, not here.
+Two items, both filed 2026-08-16. The four originals were retired earlier the
+same day; the last two were closed by the work described in the banner above.
 
 | note | why it ranks here |
 |---|---|
 | `lsp-rejects-the-stdio-flag-its-own-client-appends` | **The VS Code language client has never once completed a start** -- and nothing in `git log -S "'--stdio'"` says otherwise. `vscode-languageclient` appends `--stdio` because `extension.js` declares `transport: TransportKind.stdio`; `ParseArgs`' strict catch-all (`CLI.pas:1075`) kills the process before the `lsp` command is dispatched. `587546e` did not cause this -- it *uncovered* it by moving the fatal off stdout, so a two-week-old outage is only readable today. Two candidate fixes in the note (accept-and-ignore the flag; drop the transport declaration) and a warning that the guard must drive a real handshake, not just assert exit 0. Check the sibling flags a stock client may append (`--clientProcessId`, `--pipe=`, `--socket=`) against the same catch-all. |
-| ~~`remaining-raw-text-scans-read-comments-as-code`~~ | **#1 (FormsMap) FIXED 2026-08-16**, guarded by `run_formsmap_comment_scrub.ps1` (20/20, red first against the unfixed build). Its stated harm was wrong: a comment cannot invent a form edge (the `refs` index is AST-exact) -- the real harm was a **wrong caption on a real edge**, via `CaptionForHandler` step (3). #2 and #3 remain and are both deliberate holds, so the note no longer ranks here. |
-| `bare-except-anchor-defeats-a-hand-written-marker` | A hand-written `dl:ok` at the obvious place never matches, then gets reported unused. Fixing the anchor invalidates every recorded `@hash` for the rule -- take that churn deliberately, once, and check sibling rules first. |
+| `rule-edits-are-inert-until-hand-copied-to-three-deploy-dirs` | **A silent no-op in the build.** `rules\` is the source of truth but the exe reads `<exe-dir>\rules`, and no build script stages it -- so a rule edit is inert and the suite passes, reporting the OLD behaviour as correct. This has already happened unnoticed: the Release and Win32 corpora are 35 and 104 files behind. `run_exe_freshness` does not cover it. Fix is a `copy /Y` beside the existing tree-sitter staging, plus a content-hash drift assertion. |
+
+**Closed the same day** (kept one line each so the trail survives, full detail in
+the notes): ~~`remaining-raw-text-scans-read-comments-as-code`~~ #1 FormsMap --
+the real harm was a wrong CAPTION on a real edge, not a wrong row; and
+~~`bare-except-anchor-defeats-a-hand-written-marker`~~ -- fix (A), no family
+existed, consumer churn (DataCopy 8 + YADF 4 markers) measured and left as its
+own task.
 
 ## Priority 2 -- false positives blocking a true zero
 
