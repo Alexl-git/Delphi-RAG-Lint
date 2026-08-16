@@ -204,6 +204,14 @@ than a verdict I cannot defend.
 | `field-name-prefix-fixable-flag-lies` | `rules --json` reports `"fixable": true`, which is half the claim. The other half -- that `--fix` then refuses -- was NOT exercised; the only live findings are 2 in DataCopy, and running `--fix` there would edit another repo mid-sweep. Untested. |
 | `deep-nesting-silent-on-trailing-else-call` | Built a 5-deep fixture ending in `if E then ... else Writeln(...)`; `deep-nesting` did not fire. **That proves nothing** -- the threshold is 5, so the fixture may simply be under it. Without a positive control (same fixture with the trailing else replaced by another nested `if`, which MUST fire) the silence is unattributable. Exactly the trap this document opens with. |
 
+## Round 2 -- settled by code inspection (no engine calls, ran during a battery)
+
+| note | status | evidence |
+|---|---|---|
+| `schema-migration-not-atomic` | **CONFIRMED** | The INITIAL schema DDL *is* transactional (`SQLite.pas:2798` StartTransaction / Commit / Rollback around `SCHEMA_DDL` + the `schema_version` write). The **migration** path is not: the `ALTER TABLE symbols ADD COLUMN ...` sequence at `:2837-2847` runs via `TryExec` outside any transaction, which is exactly the interrupted-upgrade case the note describes. Do not close this on the presence of the creation-path transaction -- that is a different code path. |
+| `codelens-cache-has-no-eviction` | **CONFIRMED** | `DragLint.Plugin.CodeLensCache.pas` has `Clear` (whole cache) and `FByFile.Remove(Key)` (one file), and no size bound at all -- no `MAX`/`Capacity`/LRU/count check anywhere in the unit. Note it lives in the IDE plugin, not `src\lsp\`, which is why a `src\lsp` search finds nothing. |
+| `index-runs-are-not-resumable` | **CONFIRMED** | The only `checkpoint`/`resume` hits in the CLI are `PRAGMA wal_checkpoint(TRUNCATE)` -- WAL housekeeping, unrelated to resuming an interrupted run. No run-level checkpoint state exists. |
+
 ## SCORE -- 32 of 58 notes settled
 
 | outcome | count | what it means |

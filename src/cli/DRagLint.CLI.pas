@@ -1008,6 +1008,31 @@ begin
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); end
     else if (A = '--parent-pid') and (i < ParamCount) then begin Inc(i); Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0)); end
+    { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
+      vscode-languageclient appends a transport flag to argv from the client's
+      `transport:` declaration (node/main.js: `args.push('--stdio')`), so the
+      VS Code extension launches `drag-lint lsp --stdio` even though its own
+      args array is just ['lsp']. ParseArgs' strict catch-all killed the process
+      during arg parsing, before the `lsp` command was ever dispatched -- so the
+      client got EPIPE, retried, and latched its circuit breaker after five
+      tries. The extension has therefore NEVER completed a start since it landed
+      on 2026-08-11; commit 587546e did not cause that, it only moved the fatal
+      off stdout so the message became readable.
+
+      stdio is the only transport this server implements, so the flag is a
+      truthful no-op. Accepting it here fixes every already-installed extension
+      build without republishing a .vsix, and matches how most LSP servers
+      behave. --clientProcessId is accepted for the same reason: several clients
+      append it unconditionally. --node-ipc/--pipe/--socket are deliberately NOT
+      accepted -- this server cannot speak them, and silently ignoring a
+      transport it will not honour would hang the client instead of failing it.
+      See docs\INBOX-lsp-rejects-the-stdio-flag-its-own-client-appends.md. }
+    else if A = '--stdio' then { accepted, no-op: the only transport we speak }
+    else if A.StartsWith('--clientProcessId') then
+    begin
+      { Both spellings: `--clientProcessId=<n>` and `--clientProcessId <n>`. }
+      if (A = '--clientProcessId') and (i < ParamCount) then Inc(i);
+    end
     // --unit routes to DocUnit for the `document` command (whole-unit batch),
     // else to GhostUnit (ghost-check overlay). Distinct fields avoid a collision.
     else if (A = '--unit') and (i < ParamCount) then
@@ -5836,6 +5861,35 @@ var
   Path: string;
 begin
   Path:= AArgs.ConfigPath;
+
+  { DISCOVER THE CONFIG BESIDE THE PROJECT, not only in the CWD.
+    Before this, `lint-all --project C:\Projects\YADF\YADF.dproj` ignored
+    C:\Projects\YADF\drag-lint-lint.json unless --config named it explicitly,
+    because the only fallback was a relative filename resolved against the
+    CURRENT directory -- and lint runs are launched from anywhere. An owner
+    ruling recorded as a config file therefore did nothing, silently, and the
+    only symptom was findings the owner believed were disabled.
+
+    Precedence, most specific first: --config, then beside the .dproj, then the
+    project's own _D-RAG folder (where per-project drag-lint state lives), then
+    the CWD as before. The CWD fallback is kept LAST so no existing invocation
+    changes behaviour unless a project-scoped config actually exists.
+    See docs\INBOX-lint-config-not-discovered-beside-project.md. }
+  if (Path = '') and (AArgs.ProjectPath <> '') then
+  begin
+    var ProjDir: string:= ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath));
+    if ProjDir <> '' then
+    begin
+      var Cand: string:= TPath.Combine(ProjDir, 'drag-lint-lint.json');
+      if TFile.Exists(Cand) then Path:= Cand
+      else
+      begin
+        Cand:= TPath.Combine(TPath.Combine(ProjDir, '_D-RAG'), 'drag-lint-lint.json');
+        if TFile.Exists(Cand) then Path:= Cand;
+      end;
+    end;
+  end;
+
   if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
   Result:= TLintConfig.Load(Path, AArgs.Profile);
   if AArgs.Disable <> '' then Result.AddDisabled(AArgs.Disable.Split([',', ' ', ';']));
@@ -7312,6 +7366,24 @@ begin
     Store:= OpenReadOnlyStore(AArgs.DbPath, StoreOk);
     if not StoreOk then Store:= nil;
   end;
+  { SAY WHAT THIS VERB CANNOT SEE. `lint <file>` runs only the per-file rules;
+    the whole-run rules (index-wide project rules, and the review-marker
+    reporters, which must see every file before they can know a marker matches
+    nothing) run under lint-all. Measured 2026-08-16 on a one-file fixture
+    carrying a stranded dl:ok: `lint <f>` printed "0 finding(s)" while
+    `lint-all` over that SAME single file printed 2. A zero that means "I did
+    not look" is indistinguishable from a zero that means "nothing is wrong",
+    and this verb is what the IDE plugin calls on every buffer.
+
+    Written to stderr and only in the human path, so JSON consumers and the
+    plugin's diagnostic stream are untouched.
+    See docs\INBOX-lint-single-file-silently-omits-lint-all-rules.md. }
+  if (not AArgs.AsJson) and (not AArgs.Quiet) then
+    Writeln(ErrOutput,
+      'drag-lint: note: `lint <file>` runs per-file rules only. Whole-run rules ' +
+      '(project-wide checks, review-marker-unused/stale) need `lint-all` and are ' +
+      'NOT reported here -- a 0 above does not mean they are clean.');
+
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
@@ -10186,7 +10258,20 @@ begin
   for Fid in Store.GetAllFileIds do
   begin
     PasPath:= Store.GetFilePath(Fid);
-    if SameText(ExtractFileExt(PasPath), '.pas') and TFile.Exists(PasPath) then
+    { .dpr TOO. A program body is Object Pascal and is indexed like any other
+      compiled input, but this filter admitted only '.pas', so every rule that
+      works on a file was silently skipped for it. Measured 2026-08-16: a real
+      bare `except` inside a .dpr produced NO finding, and a two-file project
+      reported "1 file(s) scanned" -- the count agreed with the filter, not with
+      the project, so nothing looked wrong. The only rule ever seen on a .dpr in
+      our own report was unit-not-in-dpr, a PROJECT-level rule that reports AT
+      the .dpr without scanning it, which is what made the gap easy to miss.
+
+      .dpr bodies are where Application.CreateForm, initialization order and
+      top-level exception handling live -- exactly the code worth linting.
+      See docs\INBOX-lint-all-never-scans-dpr-files.md. }
+    if (SameText(ExtractFileExt(PasPath), '.pas') or SameText(ExtractFileExt(PasPath), '.dpr'))
+       and TFile.Exists(PasPath) then
     begin
       if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
       if (not AArgs.LintThirdParty) and (not Own.IsOurs(PasPath)) then
