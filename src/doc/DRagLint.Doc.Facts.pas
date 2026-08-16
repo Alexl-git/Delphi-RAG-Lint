@@ -440,6 +440,19 @@ type
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
       AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TDocFacts;
+
+    /// <summary>Mines the exception class names raised directly in ASym's own
+    /// body, deduped and case-insensitive. This is the same miner Build uses to
+    /// populate TDocFacts.Raises, exposed so the doc-drift rule can ask the same
+    /// question of a CALLEE without building that callee's whole fact set.</summary>
+    /// <param name="AStore">Open symbol store, used only to resolve ASym's file path. Must not be nil.</param>
+    /// <param name="ASym">The symbol whose body is scanned.</param>
+    /// <returns>Raised class names; empty when ASym has no body, or when its
+    /// source cannot be read.</returns>
+    /// <remarks>Deliberately ONE routine, not two: Build and the transitive
+    /// exception-cref check must never disagree about what "the body raises"
+    /// means. Costs a memoised source read plus a line scan of the body.</remarks>
+    class function MineRaises(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
   end;
 
 /// <summary>Per-section cost of every TDocFactsBuilder.Build call so far, as two
@@ -1601,6 +1614,29 @@ begin
   AConstructor:= AConstructor or SignatureIsConstructor(Line);
 end;
 
+class function TDocFactsBuilder.MineRaises(const AStore: ISymbolStore;
+  const ASym: TSymbol): TArray<string>;
+begin
+  Result:= nil;
+  // No body -> nothing was ever looked at. Returning empty here is the SAME
+  // "never looked" state the bodyless carve-out in Doc.Drift already reasons
+  // about; callers must not read empty as "provably raises nothing".
+  if (ASym.ImplStartLine <= 0) or (ASym.ImplEndLine < ASym.ImplStartLine) then Exit;
+  var RaiseSet: TStringList:= TStringList.Create;
+  try
+    RaiseSet.Sorted:= True;
+    RaiseSet.Duplicates:= dupIgnore;
+    RaiseSet.CaseSensitive:= False;
+    var Src2: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error }
+    var RaiseState: TBodyScanState:= Default(TBodyScanState); { see TBodyScanState }
+    for var Ln2:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src2)) do
+      CollectRaiseClass(Src2[Ln2 - 1], RaiseSet, RaiseState);
+    Result:= RaiseSet.ToStringArray;
+  finally
+    RaiseSet.Free;
+  end;
+end;
+
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer): TDocFacts;
@@ -2163,22 +2199,10 @@ begin
   Inc(GBCalls, BTick - TB0);
   TB0:= BTick;
   // Raises: 'raise <Ident>' exception class names in the body, deduped.
-  if (ASym.ImplStartLine > 0) and (ASym.ImplEndLine >= ASym.ImplStartLine) then
-  begin
-    var RaiseSet: TStringList:= TStringList.Create;
-    try
-      RaiseSet.Sorted:= True;
-      RaiseSet.Duplicates:= dupIgnore;
-      RaiseSet.CaseSensitive:= False;
-      var Src2: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error, as before }
-      var RaiseState: TBodyScanState:= Default(TBodyScanState); { see TBodyScanState }
-      for var Ln2:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src2)) do
-        CollectRaiseClass(Src2[Ln2 - 1], RaiseSet, RaiseState);
-      Result.Raises:= RaiseSet.ToStringArray;
-    finally
-      RaiseSet.Free;
-    end;
-  end;
+  // v(2026-08-16): the scan itself moved to MineRaises so the transitive
+  // <exception cref> check in Doc.Drift can ask the same question of a CALLEE
+  // without building that callee's whole fact set. One miner, not two.
+  Result.Raises:= MineRaises(AStore, ASym);
 
   // Deprecated: ground-truth 'deprecated' directive detection (see
   // DetectDeprecated's header comment for the source/probe rationale).

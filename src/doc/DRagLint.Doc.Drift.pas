@@ -483,6 +483,89 @@ begin
   Result:= GFactsBuildTicks;
 end;
 
+{ ---------------------------------------------------------------------------
+  Transitive <exception cref> support (INBOX-exception-cref-transitive-raise).
+
+  ddExceptionNotRaised graded a declaration against its OWN body, so a routine
+  whose body is a one-line delegation was reported as drift for documenting the
+  exception its callee raises. FormsMap.pas:76 -- the singular GenerateFormsCsv
+  overload -- was the worked example, and this shape accounted for 3 of the 6
+  findings that survived a converged autodoc.
+
+  ONE hop, deliberately. Two hops would start suppressing findings that are
+  genuinely about this declaration, and one hop covers every known case.
+
+  The tempting cheap fix -- skip the check when the body raises nothing but
+  calls something -- is WRONG and must not be reinstated: "calls something,
+  raises nothing itself" describes most routines, so it would stop grading the
+  tag almost everywhere. tests\autodoc\run_doc_exception_transitive.ps1
+  CONTROL-1 fails if anyone tries it.
+
+  FAIL-SAFE IN ONE DIRECTION ONLY: suppression requires a POSITIVELY mined
+  raise in a resolved callee. An unresolved edge (TargetSymbolId = 0, i.e. RTL
+  or cross-DB), a missing symbol, or a bodyless callee all leave the finding
+  exactly as it was. Absence of information never silences the rule.
+  --------------------------------------------------------------------------- }
+function CalleeRaisesType(const AStore: ISymbolStore; const ASym: TSymbol;
+  const ATypeName: string; var ACallEdges: TArray<TCallEdge>;
+  var ALoaded: Boolean): Boolean;
+
+  // Does this one symbol's body raise ATypeName? Exact name, case-insensitive:
+  // a descendant does NOT satisfy an ancestor cref, matching what the
+  // own-body test above already does (CONTROL-2 pins this).
+  function BodyRaises(const ACand: TSymbol): Boolean;
+  begin
+    Result:= False;
+    if ACand.ImplStartLine <= 0 then Exit; // bodyless -> never looked, not "raises nothing"
+    for var RC in TDocFactsBuilder.MineRaises(AStore, ACand) do
+      if SameText(RC, ATypeName) then Exit(True);
+  end;
+
+begin
+  Result:= False;
+  // Loaded once per Analyze and shared across every <exception cref> on the
+  // declaration -- the query runs only when a cref is already unmatched by the
+  // own body, i.e. exactly where the rule was about to fire anyway.
+  if not ALoaded then
+  begin
+    ACallEdges:= AStore.GetCallEdgesFromSymbol(ASym.Id);
+    ALoaded:= True;
+  end;
+
+  for var E in ACallEdges do
+  begin
+    if E.TargetSymbolId <= 0 then Continue; // unresolved / external -> fail safe
+    var Callee: TSymbol:= AStore.GetSymbolById(E.TargetSymbolId);
+    if Callee.Id <= 0 then Continue;        // vanished row -> fail safe
+
+    // The resolved callee itself. A declaration can never satisfy its own cref
+    // by recursing, so a self-edge contributes nothing here -- but it is NOT
+    // discarded, because of the overload case immediately below.
+    if (Callee.Id <> ASym.Id) and BodyRaises(Callee) then Exit(True);
+
+    // OVERLOAD SIBLINGS. A qualified name in this index carries the parameter
+    // signature ('transitive.Go (const AItem: string)'), so overloads do NOT
+    // share one -- resolving by qualified name would find nothing extra. What
+    // actually happens at a call site like `Go([AItem])` inside `Go` is that
+    // name-based resolution lands on a sibling overload or on the ENCLOSING
+    // declaration itself. Both shapes are handled here: when the edge points at
+    // this very symbol, or is ambiguous, consider the same-named routines
+    // declared in the SAME scope -- i.e. the overload set.
+    //
+    // Bounded to the same ParentId AND FileId on purpose. This is the one place
+    // the check can suppress a real finding (two same-named routines that
+    // genuinely differ in what they raise), so it must not reach across units
+    // and collect unrelated routines that merely share a name.
+    if (Callee.Id = ASym.Id) or SameText(E.Confidence, 'ambiguous') then
+      for var Cand in AStore.FindSymbolsByExactName(Callee.Name) do
+      begin
+        if Cand.Id = ASym.Id then Continue; // never satisfy a decl from itself
+        if (Cand.ParentId <> Callee.ParentId) or (Cand.FileId <> Callee.FileId) then Continue;
+        if BodyRaises(Cand) then Exit(True);
+      end;
+  end;
+end;
+
 class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
   const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean;
   AMaxReturnCases: Integer; AMaxCallers: Integer): TArray<TDocDriftFinding>;
@@ -818,12 +901,22 @@ begin
     // The same ImplStartLine test the facts builder uses, deliberately: one
     // notion of "has a body", not two that can drift apart. Pinned by
     // tests\autodoc\run_doc_ctor_bodyless.ps1.
+    //
+    // v(2026-08-16): when the OWN body does not raise it, resolve ONE hop of
+    // callee before reporting -- a one-line delegation raises nothing itself
+    // but its <exception cref> is correct. See CalleeRaisesType above for the
+    // fail-safe rules and for why the cheap carve-out is not used.
+    var XEdges: TArray<TCallEdge>:= nil;
+    var XEdgesLoaded: Boolean:= False;
     for DE in ADoc.Exceptions do
       if (Trim(DE.TypeName) <> '') and (ASym.ImplStartLine > 0) then
       begin
         var Raised: Boolean:= False;
         for var RC in Facts.Raises do
           if SameText(RC, DE.TypeName) then begin Raised:= True; Break; end;
+        if (not Raised)
+          and CalleeRaisesType(AStore, ASym, DE.TypeName, XEdges, XEdgesLoaded) then
+          Raised:= True;
         if not Raised then
           Findings.Add(MakeFinding(ddExceptionNotRaised,
             Format('documented <exception cref="%s"> but the body never raises it', [DE.TypeName]),
