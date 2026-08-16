@@ -208,6 +208,42 @@ $unkExit = $LASTEXITCODE
 Check 'unknown directive exit 1' ($unkExit -eq 1) "exit=$unkExit; out=$unkOut"
 
 # ---------------------------------------------------------------------------
+# #mapping / #apply -- RECOGNISED AND SKIPPED, never a parse error.
+#
+# INBOX-converter-editor-phase-g-engine-findings, the one concrete ask in it.
+# The converter editor authors these directives; the engine cannot yet EVALUATE
+# them (conditional per-instance application, spec G6.1) and deliberately still
+# does not. But it used to REJECT them --
+#     line 1: unknown directive: #mapping
+# -- so every save of a well-formed rule book surfaced a validation error and
+# made the feature look broken. Authoring is now decoupled from application:
+# accept as well-formed, do nothing, do not error.
+#
+# The '#frobnicate' check directly above is the positive control that keeps this
+# honest: if unknown-directive detection were simply switched off to make these
+# pass, that assertion fails.
+# ---------------------------------------------------------------------------
+$mapRules = @(
+  '#mapping XYZStyle from XYZ.TXYZButtonStyle to cxButtons.TcxButton, cxButtons.TcxBigButton'
+  '#mapping XYZStyle #when Style = stOK -> Default = True, ModalResult = mrOk'
+  '#mapping XYZStyle #else -> ModalResult = mrNone'
+  '#convert XYZ.TXYZToggleButton -> cxButtons.TcxButton'
+  '  #apply XYZStyle'
+) -join "`r`n"
+$mapFile = Join-Path $WorkDir 'rules-mapping.txt'
+Write-Ascii $mapFile ($mapRules + "`r`n")
+Write-Host ''
+Write-Host 'convert-validate #mapping / #apply (recognised, not applied)' -ForegroundColor Cyan
+$mapOut  = (& $Exe convert-validate --rules $mapFile --print-parsed) -join "`n"
+$mapExit = $LASTEXITCODE
+Check '#mapping/#apply parse exit 0'           ($mapExit -eq 0)                          "exit=$mapExit; out=$mapOut"
+Check '#mapping is not an unknown directive'   ($mapOut -notmatch 'unknown directive: #mapping') "out=$mapOut"
+Check '#apply is not an unknown directive'     ($mapOut -notmatch 'unknown directive: #apply')   "out=$mapOut"
+# The #convert on line 4 is a REAL rule and must still be parsed -- proves the
+# new branches skip only their own lines and do not swallow the rest of the file.
+Check '#convert alongside #mapping still parsed' ($mapOut -match 'TXYZToggleButton')     "out=$mapOut"
+
+# ---------------------------------------------------------------------------
 # Bad-args / missing-file exit codes
 # ---------------------------------------------------------------------------
 Write-Host ''

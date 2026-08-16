@@ -464,6 +464,27 @@ begin
         R.Text:= Arg;
         AddRule(R);
       end
+      else if Directive('#mapping', Arg) or Directive('#apply', Arg) then
+      begin
+        { RECOGNISED AND SKIPPED, deliberately -- no rule is emitted.
+
+          The converter editor authors '#mapping' / '#apply' (a reusable
+          conditional enum-to-property mapping, declared once and narrowed to a
+          source enum plus one or more target classes). Evaluating them needs
+          conditional PER-INSTANCE application, which is spec G6.1 and is not
+          implemented; convert-apply must therefore continue to ignore them.
+
+          What was wrong was not the deferral but the REJECTION: these fell
+          through to the unknown-directive arm below, so every save of a
+          well-formed rule book reported 'unknown directive: #mapping' and made
+          the feature look broken. Accepting them here decouples authoring from
+          application, letting the editor and the engine ship independently.
+
+          Emitting no rule is the point -- a rule kind would invite convert-apply
+          to act on a mapping it cannot correctly evaluate. See
+          docs\INBOX-Done\INBOX-converter-editor-phase-g-engine-findings.md and
+          docs\converter\convrules-dsl.md. }
+      end
       else if Line.StartsWith('#') then
       begin
         // An unknown '#directive' -- capture a parse error, never raise.
