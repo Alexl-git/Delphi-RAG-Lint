@@ -662,11 +662,38 @@ begin
   N:= 0;
   Cands:= AStore.FindSymbolsByExactName(ALeaf);
   for S in Cands do
+  begin
     if CanBeCallTarget(S.Kind) then
     begin
       Inc(N);
       if N > 1 then Exit(False);
-    end;
+    end
+    { v(2026-08-16): A NAME-SHAPED COLLISION IS AMBIGUITY TOO.
+
+      This used to count only call targets, which answers "is there exactly one
+      routine with this name" -- but the question the bucket actually needs
+      answered is "could an unresolved ref carrying this name be something other
+      than a call to me". A variable binder makes it ambiguous just as surely as
+      a second method does, and far more often.
+
+      Measured: TreeSitter.TTSNodeHelper.Child is declared ONCE as a method, so
+      the old test said "unambiguous" -- while 23 distinct local variables named
+      Child exist in the same index. `find-callers --name Child --resolved`
+      returns 0, yet the generated `Called from:` list carried 59 entries. Those
+      are overwhelmingly uses of the locals, not calls to the helper.
+
+      Only skLocalVar / skParam / skField are counted: those are the binders that
+      put a bare identifier into expression position where the extractor sees the
+      same shape as a call. Types and constants are deliberately NOT counted --
+      they collide far less and gating on them would delete legitimate buckets.
+
+      This tightens ONLY the wholly-unresolved case. The resolved-anchor escape
+      at the call site still wins first: when even one caller resolved, the
+      bucket is still added and the ' ?' marker tells the reader which entries
+      are weak. That honest-mixed-list trade is unchanged. }
+    else if S.Kind in [skLocalVar, skParam, skField] then
+      Exit(False);
+  end;
   Result:= N = 1;
 end;
 
