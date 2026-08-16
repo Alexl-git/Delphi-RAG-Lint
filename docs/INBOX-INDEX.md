@@ -27,10 +27,10 @@ progress here, and worth trying first on anything below:
 |---|---|
 | `group-E-dataflow-rules-are-majority-false` | **DONE 2026-08-16 -- retire it.** All three sections fixed: `overwrite-before-read` 56 -> 32, `used-before-assignment` closed to a path-sensitivity residue, `double-free` **42 -> 0**. The last one was THREE bugs, not one (member/element free credited to the base var; the for-in iterator not rebound; an inline `var X := ..` not counting as a definition at all -- the fourth "keywords are NAMED nodes" bug). Guard: `run_double_free_loops_and_members.ps1`, 7/7 with three positive controls. |
 | `remaining-raw-text-scans-read-comments-as-code` | The audit result for the nine-instance family. Three left: FormsMap launch/show detection (wrong CSV rows), TypeAt hover inference, the `todos` verb. Also records what was CLEARED so nobody re-audits. |
-| `audit-store-backed-fix-paths-for-stale-positions` | `doc-drift` and `missing-doc` resolve targets by (file, line) with NO verification; only the rename path was hardened. `tekReplaceInLine` clamps EndCol but not Col, so a stale column silently APPENDS. |
+| `audit-store-backed-fix-paths-for-stale-positions` | **DONE 2026-08-16 -- retire it, NOT a live defect.** The note was ~80% stale: `ReplaceEditIsValid` already rejects a past-EOL Col, `AnchorIsValid` + `ExpectLine`/`ExpectText` already IS the one shared boundary assertion, `StampAnchor` already arms it. The one unstamped site (the pure deletion) turned out to be unreachable when stale -- measured: `document --unit`, `document --qname` and `lint-all --fix --apply` all refuse, because `Existing` is recomputed from CURRENT file text. Stamp added for consistency; **no test ships**, because the guard I wrote passed without the fix. |
 | `bare-except-anchor-defeats-a-hand-written-marker` | A hand-written `dl:ok` at the obvious place never matches, then gets reported unused. Fixing the anchor invalidates every recorded `@hash` for the rule -- take that churn deliberately, once, and check sibling rules first. |
 | `returns-type-baseline-destroys-malformed-blocks` | DESTRUCTIVE. |
-| `shared-unit-empty-render-deletes-block` | DESTRUCTIVE, and **LIKELY already closed** by `eec91d2` + `b3be650` -- but unverified, and its repro script is gone. Rebuild the 3-unit fixture and CHECK IT IN this time; it has been re-diagnosed twice. |
+| `shared-unit-empty-render-deletes-block` | **DONE 2026-08-16 -- retire it. It was already guarded.** The fixture this note asks to "check in this time" is inside `run_shared_unit_staleness.ps1:337-352` -- the `Busy` unit, three assertions, naming this defect's mechanism verbatim. Nothing to write; the note simply outlived its fix. |
 
 ## Priority 2 -- false positives blocking a true zero
 
@@ -94,9 +94,16 @@ finding in another repo's code, not a drag-lint defect)
 
 ## How to work this list
 
-1. **Re-measure before coding.** Two notes closed this pass on measurement alone,
-   and several above are flagged for it. A count quoted in a note is a claim about
-   a build that no longer exists.
+0. **READ THE GUARD FILE FIRST.** Session 20 closed THREE priority-1 notes with
+   no code: one asked for a fixture that was already checked in, one made three
+   headline claims that were all already false, one had been fixed in v0.82.
+   Before rebuilding a repro, `grep` the defect's own vocabulary in
+   `tests\` -- the guard, if it exists, was usually written by the session that
+   fixed it and names the mechanism verbatim.
+1. **Re-measure before coding.** Five notes have now closed on measurement
+   alone. A count quoted in a note is a claim about a build that no longer
+   exists, and **a note records the world as it was when WRITTEN** -- nothing
+   walks back to amend it when the fix lands.
 2. **Sample before believing a number** -- `group-E`'s own method, and it is why
    that note is trustworthy where a raw count is not.
 3. **Every fix needs a positive control** in its guard test. The cheap fix for

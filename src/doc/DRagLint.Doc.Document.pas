@@ -172,7 +172,7 @@ type
     /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas)
     /// Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan (+16 more)
     /// Returns: Default(TDocumentResult)
-    /// Complexity: 27 (cyclomatic, outer body), 457 lines (full implementation)
+    /// Complexity: 27 (cyclomatic, outer body), 474 lines (full implementation)
     /// Touches: file system
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -1074,6 +1074,23 @@ begin
       E.Kind    := tekDeleteLines;
       E.Line    := Existing.StartLine;
       E.EndLine := Existing.EndLine;
+      // v(2026-08-16, store-backed fix-path audit): stamp the anchor here too,
+      // for CONSISTENCY -- not because a defect was reproduced. Every other edit
+      // this unit emits was stamped and this one, the only pure deletion, was
+      // not. MEASURED before adding it: with the stamp removed and the index
+      // deliberately stale, all three entry points already refuse without ever
+      // reaching this branch -- `document --unit` says "nothing to document",
+      // `document --qname` says "up to date", `lint-all --fix --apply` says "no
+      // fixable findings". The reason is that `Existing` is recomputed from the
+      // CURRENT file text, so a store line that no longer holds the declaration
+      // yields no engine-owned region and no edit at all.
+      //
+      // So this line is defence in depth against a FUTURE caller that resolves
+      // the span from store coordinates directly, and it is deliberately not
+      // guarded by a regression test: a test asserting "the stale case is
+      // refused" passes with or without it, which is the vacuous-guard trap this
+      // repo has been bitten by before.
+      StampAnchor(E, ASym);
       Result.Edits:= Result.Edits + [E];
       // v(ADP3 T3k, register D1): this is the ONE place the engine emits a pure
       // deletion -- a tekDeleteLines with no matching insert. It reported
