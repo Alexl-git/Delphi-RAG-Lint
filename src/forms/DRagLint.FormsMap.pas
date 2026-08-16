@@ -21,6 +21,7 @@ uses
   , FireDAC .Stan   .Param
   , DRagLint.Core   .Model
   , DRagLint.Storage.SQLite
+  , DRagLint.Lint   .ProjectChecks.Parse
   ;
 
 type
@@ -117,8 +118,72 @@ function GenerateFormsCsv(const ADbPaths: TArray<string>; const AProjectFile, AR
 
 implementation
 
+/// <summary>Reads a .pas file as lines with comment content blanked out, for
+/// the raw-text scans in this unit. Element i is line i of TFile.ReadAllLines
+/// by construction, so a caller may index it with a line number from the symbol
+/// index. On any count disagreement it fails OPEN to the raw unscrubbed lines:
+/// losing the scrubbing costs a wrong caption, shifting a line costs a wrong
+/// line number in every row.</summary>
+/// <param name="APath">Path to the .pas file.</param>
+/// <returns>Lines with comments blanked; raw lines if the counts disagree;
+/// empty if the file does not exist.</returns>
+/// <remarks>Not a general-purpose reader -- StripPasCommentsKeepLayout keeps
+/// string-literal content, which the launch/show scans want and a directive
+/// scan would not (it blanks {$R} too, since a directive is a brace comment).
+/// </remarks>
+function ReadPasLinesScrubbed(const APath: string): TArray<string>;
+var
+  Raw       : TArray<string>;
+  Scrubbed  : string        ;
+  ScrubLines: TArray<string>;
+  I         : Integer       ;
+begin
+  Result:= [];
+  if not TFile.Exists(APath) then Exit;
+
+  // ReadAllLines' count is authoritative: it is what every OTHER read in this
+  // unit produces, and what the line numbers in the index are relative to.
+  Raw:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+
+  // Layout-preserving: StripPasCommentsKeepLayout starts from Result := ASrc
+  // and only overwrites non-EOL characters with spaces, so the scrubbed text
+  // is byte-parallel to the raw text and line i maps to line i.
+  Scrubbed:= StripPasCommentsKeepLayout(TFile.ReadAllText(APath, TEncoding.ANSI));
+
+  // Split on LF ONLY, and KEEP empty elements, then drop the CR.
+  //
+  // Both halves of that are load-bearing, and getting either wrong disables
+  // this function silently rather than loudly:
+  //   - splitting on [#10, #13] treats a CRLF pair as TWO separators, so every
+  //     line boundary yields a spurious empty element between them;
+  //   - TStringSplitOptions.ExcludeEmpty then deletes those AND every genuine
+  //     blank line, so ScrubLines can never reach Raw's count on any file that
+  //     has a blank line in it -- i.e. every real file. The fallback below
+  //     would fire every time and the scrubbing would never once be applied,
+  //     while the unit test suite kept passing because the result is exactly
+  //     the raw text the caller used to read anyway.
+  ScrubLines:= Scrubbed.Split([#10]);
+  for I:= 0 to High(ScrubLines) do
+    if ScrubLines[I].EndsWith(#13) then
+      ScrubLines[I]:= Copy(ScrubLines[I], 1, Length(ScrubLines[I]) - 1);
+
+  // A trailing newline leaves one empty element that ReadAllLines does not
+  // report; truncating to Raw's count absorbs exactly that, and makes the two
+  // indexings identical by construction rather than by argument.
+  if Length(ScrubLines) >= Length(Raw) then
+  begin
+    SetLength(ScrubLines, Length(Raw));
+    Result:= ScrubLines;
+  end
+  else
+    Result:= Raw; // fail OPEN -- never shift a reported line number
+end;
+
 const
-  FORMS_CSV_ALGORITHM = '4'; // bump when BuildEdges / NavPath algorithm changes
+  // v5: the raw-text scans in this unit (caller lookup, launch/show
+  // confirmation, hook map) now read comment-scrubbed lines, so edges whose
+  // caption used to be resolved from a commented-out call site change.
+  FORMS_CSV_ALGORITHM = '5'; // bump when BuildEdges / NavPath algorithm changes
 
 type
   TKnownPopupEntry = record Name: string; Note: string; end;
@@ -533,8 +598,7 @@ begin
   // Implementation method bodies are NOT indexed as symbols (method symbols are
   // single-line at their declaration). Reuse FindEnclosingImpl text-scan over
   // the form's own .pas lines to find callers.
-  Lines:= [];
-  if TFile.Exists(ANode.PasPath) then Lines:= TFile.ReadAllLines(ANode.PasPath, TEncoding.ANSI);
+  Lines:= ReadPasLinesScrubbed(ANode.PasPath);
   for LineIdx:= 0 to Length(Lines) - 1 do
   begin
     if Pos(ARoutine, Lines[LineIdx]) = 0 then Continue;
@@ -667,8 +731,7 @@ begin
   begin
     if not APasLines.TryGetValue(R.Path, Arr) then
     begin
-      if TFile.Exists(R.Path) then Arr:= TFile.ReadAllLines(R.Path, TEncoding.ANSI)
-      else Arr:= [];
+      Arr:= ReadPasLinesScrubbed(R.Path);
       APasLines.Add(R.Path, Arr);
     end;
     COwner:= '';
@@ -766,8 +829,7 @@ begin
         Path:= Q.FieldByName('p'  ).AsString;
         if not APasLines.TryGetValue(Path, Arr) then
         begin
-          if TFile.Exists(Path) then Arr:= TFile.ReadAllLines(Path, TEncoding.ANSI)
-          else Arr:= [];
+          Arr:= ReadPasLinesScrubbed(Path);
           APasLines.Add(Path, Arr);
         end;
         COwner:= '';
@@ -819,8 +881,7 @@ var
   begin
     if not PasLines.TryGetValue(APath, Result) then
     begin
-      if TFile.Exists(APath) then Result:= TFile.ReadAllLines(APath, TEncoding.ANSI)
-      else Result:= [];
+      Result:= ReadPasLinesScrubbed(APath);
       PasLines.Add(APath, Result);
     end;
   end;

@@ -1,4 +1,4 @@
-# INBOX index -- 56 open notes (was 59); 4 retired + 1 filed on 2026-08-16
+# INBOX index -- 57 open notes (was 59); 4 retired + 2 filed on 2026-08-16
 
 **49 notes were retired to `INBOX-Done/`** in this pass (108 -> 59). Every retired
 note carries a one-line banner saying WHY, so the trail survives the move; nothing
@@ -29,6 +29,11 @@ progress here, and worth trying first on anything below:
 > (misclassified -- a reverted design record, its open precondition now proven).
 > One note FILED: `context-bundle-empty-for-bare-name`.
 > **Priority 1 is now TWO items.**
+>
+> **2026-08-16 (session 21).** One FILED straight into priority 1:
+> `lsp-rejects-the-stdio-flag-its-own-client-appends` (owner-reported live, owner
+> deferred the fix). One CLOSED: `remaining-raw-text-scans-read-comments-as-code`
+> #1 (FormsMap comment scrub). **Priority 1 is still TWO items.**
 
 ## Priority 1 -- known-wrong output, worth fixing next
 
@@ -37,7 +42,8 @@ their summaries live in their retired notes, not here.
 
 | note | why it ranks here |
 |---|---|
-| `remaining-raw-text-scans-read-comments-as-code` | The audit result for the nine-instance family, six fixed. **Only #1 (FormsMap) is worth doing**: `IsLaunchLine`/`IsShowLine` are bare `Pos` over unscrubbed lines, so a commented-out `.Create` or `.ShowModal` produces wrong forms-map CSV rows and wrong hook edges. #3 (the `todos` verb) is *"left alone on purpose"*; #2 (TypeAt hover) is transient and user-invoked. **The full implementation design is written into the note** -- the four read sites, which to leave alone and why (`:304` is a LINE COUNT), and the structural answer to the off-by-one. |
+| `lsp-rejects-the-stdio-flag-its-own-client-appends` | **The VS Code language client has never once completed a start** -- and nothing in `git log -S "'--stdio'"` says otherwise. `vscode-languageclient` appends `--stdio` because `extension.js` declares `transport: TransportKind.stdio`; `ParseArgs`' strict catch-all (`CLI.pas:1075`) kills the process before the `lsp` command is dispatched. `587546e` did not cause this -- it *uncovered* it by moving the fatal off stdout, so a two-week-old outage is only readable today. Two candidate fixes in the note (accept-and-ignore the flag; drop the transport declaration) and a warning that the guard must drive a real handshake, not just assert exit 0. Check the sibling flags a stock client may append (`--clientProcessId`, `--pipe=`, `--socket=`) against the same catch-all. |
+| ~~`remaining-raw-text-scans-read-comments-as-code`~~ | **#1 (FormsMap) FIXED 2026-08-16**, guarded by `run_formsmap_comment_scrub.ps1` (20/20, red first against the unfixed build). Its stated harm was wrong: a comment cannot invent a form edge (the `refs` index is AST-exact) -- the real harm was a **wrong caption on a real edge**, via `CaptionForHandler` step (3). #2 and #3 remain and are both deliberate holds, so the note no longer ranks here. |
 | `bare-except-anchor-defeats-a-hand-written-marker` | A hand-written `dl:ok` at the obvious place never matches, then gets reported unused. Fixing the anchor invalidates every recorded `@hash` for the rule -- take that churn deliberately, once, and check sibling rules first. |
 
 ## Priority 2 -- false positives blocking a true zero

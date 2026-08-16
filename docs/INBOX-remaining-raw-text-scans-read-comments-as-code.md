@@ -1,14 +1,22 @@
 # Three remaining raw-text scans that read comment content as code
 
 Filed 2026-08-15 from a systematic audit of the whole `src\` tree for ONE bug
-family. **The family is now NINE instances, six fixed.** The three below are the
-ones deliberately left, in priority order, with the reason.
+family. **The family is now NINE instances, SEVEN fixed** (#1 below closed
+2026-08-16). The two that remain are #2 (transient, user-invoked) and #3 (left
+alone on purpose), so this note is effectively discharged.
+
+The three below are listed in the original priority order, with the reason.
 
 ## The family, for context
 
 A scanner reads raw source text and mistakes comment or string content for code.
 Fixed so far:
 
+0. **`DRagLint.FormsMap`** -- fixed 2026-08-16, see the banner under #1 below.
+   Adds one lesson the other six did not: **a scrub that fails open is
+   indistinguishable from no scrub at all in a green suite.** Whatever replaces
+   a raw read must be tested against the UNFIXED build, or the fail-open branch
+   can swallow the entire fix without a single red check.
 1. `DRagLint.Lint.SharedUnit.ScanHeader` -- the `dl:shared` reader. **This is the
    good example**: its unit header argues the case at length and ships a correct
    4-state machine.
@@ -36,7 +44,47 @@ blanks comments and **preserves string-literal content** -- load-bearing, becaus
 
 ---
 
-## 1. `DRagLint.FormsMap.pas` -- forms-map launch/show detection
+## 1. `DRagLint.FormsMap.pas` -- forms-map launch/show detection  **[FIXED 2026-08-16]**
+
+> **FIXED.** `ReadPasLinesScrubbed` is now the single `.pas` read behind all four
+> scan sites; guarded by `tests\autotest\run_formsmap_comment_scrub.ps1` (20/20),
+> which was **run red against the unfixed build first**. `FORMS_CSV_ALGORITHM`
+> bumped 4 -> 5. `run_formsmap` and `run_formsmap_multidb` still green.
+>
+> **Two corrections to what is written below -- the harm was MISDIAGNOSED, and
+> the fix was nearly a silent no-op.**
+>
+> **(a) A comment cannot invent a form edge.** The claim "wrong rows in the
+> forms-map CSV" is false. The primary launch edges come from the AST-exact
+> `refs` index, which never sees comment text, so a commented-out
+> `TfrmX.Create` produces no ref and no edge -- the form stays `DEAD FORM`. The
+> first fixture built for this note asserted exactly that and passed against
+> the unfixed build, which is how the misdiagnosis surfaced.
+>
+> The reachable harm is one step later and narrower: **`CaptionForHandler` step
+> (3)** (`:583`). When no control is bound directly to the launching routine, it
+> text-scans the form's own `.pas` for callers of that routine and takes the
+> FIRST match. A commented-out call therefore wins, and a **real** navigation
+> edge is captioned with the **wrong button**. `IsLaunchLine`/`IsShowLine` at
+> `ProcessSite` only ever *confirm* a line the index already pointed at, so they
+> can suppress a real edge but not fabricate one. `BuildHookMap` Pass A can mark
+> a routine a launcher off a comment, but that is inert unless a proc-var hook
+> also names it.
+>
+> **(b) The re-split is where this gets silently disabled.** The first
+> implementation split the scrubbed text with
+> `Split([#10, #13], TStringSplitOptions.ExcludeEmpty)`. That treats a CRLF pair
+> as two separators AND deletes every genuine blank line, so the scrubbed count
+> can never reach `ReadAllLines`' count on any file containing a blank line --
+> i.e. every real file. The fail-open branch fired every single time and the
+> scrubbing was never once applied, **while the whole suite stayed green**,
+> because falling open returns exactly the raw text the callers used to read.
+> Split on `#10` only, keep empties, strip the `CR`, then truncate. The fixture
+> keeps deliberate blank lines for this reason and says so in place.
+>
+> The design below is otherwise sound and was followed as written.
+
+### Original note (kept for the record)
 
 `IsLaunchLine` (:323) and `IsShowLine` (:330) are bare `Pos` over raw lines, and
 the `.pas` reads that feed them (`TFile.ReadAllLines`, :537, :670, :769) do no
