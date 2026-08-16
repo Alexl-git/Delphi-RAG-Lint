@@ -2083,6 +2083,11 @@ begin
   // Apply --only filter: keep only items whose Name is in OnlySections.
   if Length(AArgs.OnlySections) > 0 then
   begin
+    { Capture the selectable names BEFORE filtering -- after it, Plan.Items is
+      exactly what matched, so there is nothing left to tell the user about. }
+    var Selectable: TArray<string>:= nil;
+    for i:= 0 to High(Plan.Items) do Selectable:= Selectable + [Plan.Items[i].Name];
+
     var Filtered: TArray<TPlanSection>;
     for i:= 0 to High(Plan.Items) do
     begin
@@ -2093,6 +2098,41 @@ begin
       if Keep then begin SetLength(Filtered, Length(Filtered) + 1); Filtered[High(Filtered)]:= PS; end;
     end;
     Plan.Items:= Filtered;
+
+    { A --only name matching no section used to leave Plan.Items EMPTY and then
+      run to completion: no output, exit 0. A typo, a renamed section or a stale
+      script was therefore indistinguishable from a successful incremental index
+      with nothing to do. That cost one entire invalid pipeline measurement -- a
+      reported +163-finding lint regression and a failed convergence gate that
+      were both artifacts of indexing nothing.
+
+      Reported per unmatched selector, because `--only A,B` with A valid and B a
+      typo is the case a bare "matched nothing" check misses entirely: A alone
+      would satisfy it while B is silently dropped.
+
+      Selectable names are listed from the plan AFTER --platform filtering, so a
+      section that exists in the manifest but belongs to the other platform reads
+      as unavailable here -- which is true for this invocation, and the hint says
+      so rather than claiming the section does not exist.
+      See docs\INBOX-index-only-nonmatching-section-is-a-silent-noop.md. }
+    var Unmatched: TArray<string>:= nil;
+    for var OnlyName in AArgs.OnlySections do
+    begin
+      var Hit:= False;
+      for var SelName in Selectable do
+        if SameText(SelName, OnlyName) then begin Hit:= True; Break; end;
+      if not Hit then Unmatched:= Unmatched + [OnlyName];
+    end;
+    if Length(Unmatched) > 0 then
+    begin
+      Writeln(ErrOutput, Format('ERROR: --only matched no configured section: %s',
+        [string.Join(', ', Unmatched)]));
+      TArray.Sort<string>(Selectable);
+      Writeln(ErrOutput, Format('selectable for this platform (%d): %s',
+        [Length(Selectable), string.Join(', ', Selectable)]));
+      Writeln(ErrOutput, 'nothing was indexed.');
+      Exit(2);
+    end;
   end; // if
 
   if AArgs.DryRun then
@@ -6968,46 +7008,38 @@ begin
     the fix path. }
   EffPath:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
   if (EffPath = '') and (AArgs.ProjectPath = '') then begin Writeln('ERROR: lint requires a <path> or --project <file.dproj>'); Exit (2 ); end;
-  if (AArgs.Rule <> '') and (AArgs.Rule <> 'field-by-name-in-loop') and (AArgs.Rule <> 'unit-not-in-dpr') and (AArgs.Rule <> 'inline-comment-in-multiline-args') and
-  (AArgs.Rule <> 'unused-local') and (AArgs.Rule <> 'syntax-error') and (AArgs.Rule <> 'unbalanced-begin-end') and (AArgs.Rule <> 'raise-in-finally') and
-  (AArgs.Rule <> 'code-after-exit') and (AArgs.Rule <> 'missing-inherited-ctor') and (AArgs.Rule <> 'missing-inherited-dtor') and
-  (AArgs.Rule <> 'control-flow-in-finally') and (AArgs.Rule <> 'too-many-parameters') and (AArgs.Rule <> 'too-many-locals') and
-  (AArgs.Rule <> 'method-too-long') and (AArgs.Rule <> 'deep-nesting') and (AArgs.Rule <> 'float-equality-comparison') and
-  (AArgs.Rule <> 'freeandnil-on-interface') and (AArgs.Rule <> 'firedac-open-execsql-mismatch') and (AArgs.Rule <> 'unprotected-object-free') and
-  (AArgs.Rule <> 'use-after-free') and (AArgs.Rule <> 'win64-pointer-cast') and (AArgs.Rule <> 'redundant-cast') and (AArgs.Rule <> 'unsafe-typecast-without-is')
-    and (AArgs.Rule <> 'exhaustive-enum-case') and (AArgs.Rule <> 'length-zero-compare') and (AArgs.Rule <> 'ui-access-in-thread') and (AArgs.Rule <> 'interface-object-mixing') and
-  (AArgs.Rule <> 'global-form-variable') and (AArgs.Rule <> 'unsafe-shellexecute') and (AArgs.Rule <> 'path-traversal') and (AArgs.Rule <> 'loop-executes-at-most-once') and
-  (AArgs.Rule <> 'format-argument-count') and (AArgs.Rule <> 'format-specifier-type-mismatch') and (AArgs.Rule <> 'try-except-swallowed')
-    and (AArgs.Rule <> 'dataset-open-without-close') and (AArgs.Rule <> 'criticalsection-not-released') and (AArgs.Rule <> 'too-many-exit-points')
-    and (AArgs.Rule <> 'cyclomatic-complexity') and (AArgs.Rule <> 'virtual-method-in-constructor') and
-  (AArgs.Rule <> 'used-before-assignment') and (AArgs.Rule <> 'function-result-not-set') and (AArgs.Rule <> 'out-param-not-set'  ) and
-  (AArgs.Rule <> 'overwrite-before-read' ) and (AArgs.Rule <> 'write-only-local'       ) and (AArgs.Rule <> 'loop-var-after-loop') and
-  (AArgs.Rule <> 'object-leak') and (AArgs.Rule <> 'not-assigned-interface') and (AArgs.Rule <> 'split-variable') and (AArgs.Rule <> 'separate-query-from-modifier') and
-  (AArgs.Rule <> 'type-name-prefix') and (AArgs.Rule <> 'field-name-prefix') and (AArgs.Rule <> 'param-name-prefix') and
-  (AArgs.Rule <> 'method-pascalcase') and (AArgs.Rule <> 'const-casing') and (AArgs.Rule <> 'local-var-casing') and (AArgs.Rule <> 'unit-name-matches-file') and
-  (AArgs.Rule <> 'reserved-word-casing') and (AArgs.Rule <> 'hungarian-or-short-identifier') and (AArgs.Rule <> 'unused-parameter') and (AArgs.Rule <> 'identical-then-else') and
-  (AArgs.Rule <> 'referenced-never-set') and (AArgs.Rule <> 'redundant-parentheses') and (AArgs.Rule <> 'commented-out-code') and (AArgs.Rule <> 'function-result-ignored') and
-  (AArgs.Rule <> 'destructor-without-override'  ) and (AArgs.Rule <> 'case-with-too-few-branches'          ) and
-  (AArgs.Rule <> 'boolean-expression-complexity') and (AArgs.Rule <> 'exception-constructed-but-not-raised') and
-  (AArgs.Rule <> 'duplicate-exception-handler'  ) and (AArgs.Rule <> 'repeated-else-if-condition'          ) and
-  (AArgs.Rule <> 'property-references-itself') and (AArgs.Rule <> 'unit-too-large') and (AArgs.Rule <> 'weak-random-for-security') and (AArgs.Rule <> 'create-inside-try') and
-  (AArgs.Rule <> 'dfm-hardcoded-credential') and (AArgs.Rule <> 'insecure-temp-file') and (AArgs.Rule <> 'multiple-statements-per-line') and
-  (AArgs.Rule <> 'abstract-method-instantiation') and (AArgs.Rule <> 'nativeint-truncation') and (AArgs.Rule <> 'lossy-cast') and (AArgs.Rule <> 'cognitive-complexity') and
-  (AArgs.Rule <> 'duplicate-code') and (AArgs.Rule <> 'magic-literal') and (AArgs.Rule <> 'boolean-flag-parameter') and
-  (AArgs.Rule <> 'message-chain') and (AArgs.Rule <> 'public-writable-field') and (AArgs.Rule <> 'loop-control-flag') and (AArgs.Rule <> 'double-free') and
-  (AArgs.Rule <> 'mutable-global-variable') and (AArgs.Rule <> 'default-encoding-io') then
+  { KNOWN-RULE VALIDATION COMES FROM THE CATALOG, NOT A HAND-KEPT LIST.
+    This was ~40 lines of "and (AArgs.Rule <> '<id>')" naming the BUILT-IN rules
+    only, plus a second copy of the same list inside the error message. The 56
+    external .scm/.json query rules appeared in neither, so --rule bare-except --
+    a rule the tool ships, documents and reports on every run -- was rejected as
+    "unknown", and the error then printed a "known:" list that did not contain
+    it. Anyone filtering to a query rule concluded the rule did not exist.
+
+    BuildCatalog is the single source of truth and already merges both
+    registries. DoReviewMarkers reached this same conclusion for the same reason
+    -- see its "BuildCatalog, not BuiltinRegistry" comment, which notes the .scm
+    rules are more than half the catalogue. Passing AArgs.RulesDir rather than ''
+    means --rules-dir is honoured here exactly as it is by the pass that will
+    actually run the rules, so validation can neither accept a rule the run would
+    ignore nor reject one it would have executed.
+    See docs\INBOX-lint-rule-filter-leaks-other-rules.md. }
+  if AArgs.Rule <> '' then
   begin
-    Writeln(Format(
-        'ERROR: unknown rule "%s" (known: field-by-name-in-loop, ' + 'unit-not-in-dpr, inline-comment-in-multiline-args, unused-local, '
-          + 'syntax-error, unbalanced-begin-end, raise-in-finally, code-after-exit, ' + 'missing-inherited-ctor, missing-inherited-dtor, control-flow-in-finally, '
-          + 'too-many-parameters, too-many-locals, method-too-long, deep-nesting, '
-          + 'float-equality-comparison, freeandnil-on-interface, firedac-open-execsql-mismatch, unprotected-object-free, '
-          + 'use-after-free, win64-pointer-cast, redundant-cast, unsafe-typecast-without-is, exhaustive-enum-case, length-zero-compare, ui-access-in-thread, global-form-variable, unsafe-shellexecute, path-traversal, loop-executes-at-most-once, format-argument-count, format-specifier-type-mismatch, try-except-swallowed, dataset-open-without-close, criticalsection-not-released, too-many-exit-points, cyclomatic-complexity, virtual-method-in-constructor, '
-          + 'used-before-assignment, function-result-not-set, out-param-not-set, overwrite-before-read, write-only-local, loop-var-after-loop, object-leak, not-assigned-interface, split-variable, separate-query-from-modifier, double-free, '
-          + 'type-name-prefix, field-name-prefix, param-name-prefix, method-pascalcase, const-casing, local-var-casing, unit-name-matches-file, reserved-word-casing, hungarian-or-short-identifier, '
-          + 'unused-parameter, identical-then-else, referenced-never-set, redundant-parentheses, commented-out-code, function-result-ignored, destructor-without-override, case-with-too-few-branches, boolean-expression-complexity, exception-constructed-but-not-raised, duplicate-exception-handler, repeated-else-if-condition, property-references-itself, unit-too-large, weak-random-for-security, create-inside-try, dfm-hardcoded-credential, insecure-temp-file, multiple-statements-per-line, abstract-method-instantiation, nativeint-truncation, lossy-cast, cognitive-complexity, duplicate-code, magic-literal, boolean-flag-parameter, message-chain, public-writable-field, loop-control-flag, mutable-global-variable, default-encoding-io, interface-object-mixing)',
-        [AArgs.Rule]));
-    Exit(2);
+    var KnownRule: Boolean:= False;
+    var KnownIds : TArray<string>:= nil;
+    for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(AArgs.RulesDir, '') do
+    begin
+      KnownIds:= KnownIds + [RI.Id];
+      if SameText(RI.Id, AArgs.Rule) then KnownRule:= True;
+    end;
+    if not KnownRule then
+    begin
+      TArray.Sort<string>(KnownIds);
+      Writeln(Format('ERROR: unknown rule "%s"', [AArgs.Rule]));
+      Writeln(Format('known rules (%d): %s', [Length(KnownIds), string.Join(', ', KnownIds)]));
+      Exit(2);
+    end;
   end;
   Findings:= nil;
   // Project-level lint: --project triggers DCC/DPR membership check.
@@ -7104,9 +7136,28 @@ begin
         field-write predicate keeps FP low, but ships OFF. Opt in via "enabled":
         ["separate-query-from-modifier"] or --rule separate-query-from-modifier. }
       if AArgs.Rule <> 'separate-query-from-modifier' then DefDisabled:= DefDisabled + ['separate-query-from-modifier'];
-      if TFile.Exists(EffPath) then Findings:= Findings + Linter.LintFile(EffPath)
-      else if TDirectory.Exists(EffPath) then Findings:= Findings + Linter.LintFolder(EffPath, True)
+      { --rule MUST gate the external query-rule pass too, not just the built-in
+        checks above. Every builtin is wrapped in `if (AArgs.Rule = '') or
+        (AArgs.Rule = '<id>')`, but these two lines appended the .scm findings
+        unconditionally -- so `lint <f> --rule write-only-local` returned
+        bare-except findings and no write-only-local ones at all. The filter
+        looked like it worked (output shrank) while reporting a rule nobody
+        asked for. Filtering the RESULT, rather than teaching the Linter about
+        the flag, keeps the one place that knows rule ids (the catalog) in
+        charge and cannot fall out of step with the .scm corpus.
+        See docs\INBOX-lint-rule-filter-leaks-other-rules.md. }
+      var QueryFindings: TArray<TLintFinding>;
+      if TFile.Exists(EffPath) then QueryFindings:= Linter.LintFile(EffPath)
+      else if TDirectory.Exists(EffPath) then QueryFindings:= Linter.LintFolder(EffPath, True)
       else begin Writeln('ERROR: path does not exist: ', EffPath); Exit(2); end;
+      if AArgs.Rule <> '' then
+      begin
+        var KeptQ: TArray<TLintFinding>:= nil;
+        for var QF: TLintFinding in QueryFindings do
+          if SameText(QF.RuleId, AArgs.Rule) then KeptQ:= KeptQ + [QF];
+        QueryFindings:= KeptQ;
+      end;
+      Findings:= Findings + QueryFindings;
     finally
       Linter.Free;
     end; // try
