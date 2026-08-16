@@ -5722,7 +5722,12 @@ begin
           begin
             if not SameText(M.RuleId, F.RuleId) then Continue;
             Accounted.AddOrSetValue(MarkerKey(F.FilePath, F.StartLine, M.RuleId), True);
-            Want:= TReviewMarkers.HashLine(LineTxt);
+            { Window, not line. Hashing LineTxt alone made every bare-except
+              marker identical once that rule anchored on the `except` keyword:
+              the normalized line is one invariant token, so the hash could never
+              go stale and the marker verified forever however the handler was
+              rewritten. See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
+            Want:= TReviewMarkers.HashWindow(Lines, F.StartLine - 1);
             if M.Hash = '' then
             begin
               { Hand-written, no hash: honour it, but say that it cannot be
@@ -15458,7 +15463,16 @@ begin
   while (LineEnd <= Length(Raw)) and not CharInSet(Raw[LineEnd], [#13, #10]) do Inc(LineEnd);
   OldLine:= Copy(Raw, LineStart, LineEnd - LineStart);
 
-  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '');
+  { Compute the SAME window hash the checker will compute, from the same file
+    text this edit is about to be applied to. InsertInto only ever sees one
+    line, so it cannot derive a window itself; letting it fall back to
+    HashLine here would write a marker that the checker -- which hashes a
+    window -- immediately reports as stale. Splitting on #10 with empties kept
+    keeps element i aligned to line i+1, which is what FixLine indexes.
+    See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
+  var WinLines: TArray<string>:= Raw.Replace(#13#10, #10).Split([#10]);
+  var WinHash : string        := TReviewMarkers.HashWindow(WinLines, AArgs.FixLine - 1);
+  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '', WinHash);
   if NewLine = OldLine then
   begin
     { Already reviewed and the hash still matches -- nothing to write, and the

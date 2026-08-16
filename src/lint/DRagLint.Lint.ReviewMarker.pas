@@ -195,6 +195,37 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function HashLine(const ALineText: string): string; static;
+    /// <summary>4 hex chars over a WINDOW of normalized lines starting at
+    /// AStartIdx (0-based), rather than over one line.</summary>
+    /// <param name="ALines">The whole file, as lines.</param>
+    /// <param name="AStartIdx">0-based index of the anchor line.</param>
+    /// <param name="AMaxLines">Hard cap on normalized lines consumed.</param>
+    /// <returns>The 4-char hash, or HashLine's value when the window degenerates
+    /// to a single line.</returns>
+    /// <remarks>
+    /// WHY THIS EXISTS. HashLine pins a marker to ONE line, which works only
+    /// while that line carries content that can change. After bare-except moved
+    /// its anchor to the `except` KEYWORD, every marker in every project hashed
+    /// the single token `except` and came out identical (`@b112` x12 across two
+    /// repos, where the same twelve previously held eight distinct hashes). A
+    /// hash that cannot vary cannot go stale, so the marker verified forever no
+    /// matter how the handler was rewritten -- the accountability property was
+    /// gone while every count looked better.
+    ///
+    /// The window is bounded and stops after a line normalizing to `end`, so it
+    /// covers the construct the reviewer actually accepted, not the file.
+    ///
+    /// KNOWN OVER-SENSITIVITY, ACCEPTED DELIBERATELY: NormalizeLine is a
+    /// per-line function and cannot see that a `{` opened on an earlier line, so
+    /// prose inside a multi-line comment within the window counts as content.
+    /// That makes the hash change when a comment changes. It is the SAFE
+    /// direction: the error can only make a marker go stale (loud, and the fix
+    /// is to re-approve), never make one verify wrongly (silent). Threading
+    /// block state here would mean a second implementation of what
+    /// MarkerBearingLines already does; do that only if the noise is observed.
+    /// </remarks>
+    class function HashWindow(const ALines: TArray<string>; AStartIdx: Integer;
+      AMaxLines: Integer = 6): string; static;
     /// <summary>Every `dl:ok` entry on the line, in written order.</summary>
     /// <param name="ALineText">One source line, without its line terminator.</param>
     /// <returns>[] when the line carries no marker. A `dl:ok` occurring inside a
@@ -264,7 +295,8 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function InsertInto(const ALineText, ARuleId, AReason: string): string; static;
+    class function InsertInto(const ALineText, ARuleId, AReason: string;
+      const AHashOverride: string = ''): string; static;
   end;
 
 const
@@ -401,6 +433,88 @@ end;
 class function TReviewMarkers.HashLine(const ALineText: string): string;
 begin
   Result:= LowerCase(Copy(THashSHA2.GetHashString(NormalizeLine(ALineText)), 1, 4));
+end;
+
+{ True when the normalized line is a single Delphi keyword (optionally with a
+  trailing ';'). Such a line is identical in every file that contains it, so a
+  hash over it alone can never go stale. NormalizeLine has already stripped
+  comments and whitespace and lowercased, so this is a plain set test. }
+function NormalizedIsLoneKeyword(const ANorm: string): Boolean;
+const
+  LONE: array[0..10] of string = (
+    'except', 'finally', 'try', 'begin', 'end', 'else', 'do', 'then',
+    'repeat', 'of', 'asm');
+var
+  S: string;
+  K: string;
+begin
+  S:= ANorm;
+  if (S <> '') and (S[Length(S)] = ';') then S:= Copy(S, 1, Length(S) - 1);
+  for K in LONE do
+    if S = K then Exit(True);
+  Result:= False;
+end;
+
+class function TReviewMarkers.HashWindow(const ALines: TArray<string>;
+  AStartIdx: Integer; AMaxLines: Integer): string;
+var
+  SB   : TStringBuilder;
+  I    : Integer       ;
+  Taken: Integer       ;
+  N    : string        ;
+begin
+  if (AStartIdx < 0) or (AStartIdx > High(ALines)) then Exit(HashLine(''));
+
+  { WIDEN ONLY WHERE THE LINE CANNOT CARRY A HASH -- i.e. when the anchor
+    normalizes to a LONE KEYWORD.
+
+    The first cut of this widened unconditionally, and that is a corpus-wide
+    churn event, not a fix: every marker for every rule in every project changes
+    hash at once. Measured on the four consumer projects -- review-marker-stale
+    went 0/0/0/0 -> 102/128/114/49 and the totals 6/6/9/44 -> 232/299/263/152,
+    because ~390 markers anchored on ordinary STATEMENTS were invalidated to
+    repair twelve anchored on a keyword.
+
+    A statement line already varies with the code, so HashLine is exactly right
+    for it and must keep returning the same value it always has. Only an anchor
+    like `except` -- one invariant token, the same in every file forever -- needs
+    the construct behind it to make the hash mean anything.
+
+    So the widening is CONDITIONAL and the condition is a property of the line,
+    not a list of rule ids: any rule that anchors on a bare keyword gets this
+    automatically, including the sibling keyword-anchored rules (empty-except,
+    empty-finally, empty-on-handler, empty-conditional, empty-loop-body,
+    empty-case-branch), and no rule that anchors on real code is disturbed. }
+  if not NormalizedIsLoneKeyword(NormalizeLine(ALines[AStartIdx])) then
+    Exit(HashLine(ALines[AStartIdx]));
+
+  SB:= TStringBuilder.Create;
+  try
+    Taken:= 0;
+    I    := AStartIdx;
+    while (I <= High(ALines)) and (Taken < AMaxLines) do
+    begin
+      N:= NormalizeLine(ALines[I]);
+      { Blank and comment-only lines contribute nothing. Skipping them rather
+        than counting them keeps the window anchored to CODE, so reformatting or
+        commenting inside the handler does not shrink what is covered. }
+      if N <> '' then
+      begin
+        SB.Append(N);
+        SB.Append(#10);
+        Inc(Taken);
+        { Stop AFTER the construct's terminator, never before it: `end` is part
+          of what was reviewed. Guarded on Taken > 1 so an anchor line that is
+          itself an `end` cannot terminate the window at once and collapse this
+          back to a single-line hash -- which is the exact failure being fixed. }
+        if (Taken > 1) and ((N = 'end') or (N = 'end;')) then Break;
+      end;
+      Inc(I);
+    end;
+    Result:= LowerCase(Copy(THashSHA2.GetHashString(SB.ToString), 1, 4));
+  finally
+    SB.Free;
+  end;
 end;
 
 { ---------------------------------------------------------------------------
@@ -606,7 +720,8 @@ begin
   if Trim(AReason) <> '' then Result:= Result + ' ' + REVIEW_REASON_SEP + ' ' + Trim(AReason);
 end;
 
-class function TReviewMarkers.InsertInto(const ALineText, ARuleId, AReason: string): string;
+class function TReviewMarkers.InsertInto(const ALineText, ARuleId, AReason: string;
+  const AHashOverride: string): string;
 var
   Existing: TArray<TReviewMarker>;
   M       : TReviewMarker        ;
@@ -620,7 +735,12 @@ var
   Head    : string               ;
   Refreshed: Boolean             ;
 begin
-  Hash    := HashLine(ALineText);
+  { The WRITER and the CHECKER must agree on the hash input or every marker is
+    born stale. The checker hashes a window (see HashWindow); it passes that
+    value here rather than letting this function re-derive a single-line hash it
+    has no way to reproduce -- InsertInto only ever receives one line. }
+  if AHashOverride <> '' then Hash:= AHashOverride
+  else Hash:= HashLine(ALineText);
   Existing:= Parse(ALineText);
 
   { Idempotent: a rule this line already records AND whose hash still matches the
