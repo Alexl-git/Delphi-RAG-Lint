@@ -4,6 +4,31 @@ Written at the end of session 22 (2026-08-16) for execution after a context
 reset. **Planning was done first, deliberately, so the implementing session can
 start coding immediately rather than re-deriving.**
 
+> # EXECUTED 2026-08-16 (session 23). Everything below is DONE except Group B 5b.
+>
+> Four commits on `main`: `7056bf3`, `f5a01d3`, `5f62f21`, `b3607b4`. Tree clean,
+> **90 unpushed ON PURPOSE** -- still the owner's gate. Battery **307 suites**.
+>
+> | section | outcome |
+> |---|---|
+> | **1** DataCopy `local-field-prefix` | DONE. 5 renames exactly as listed, plus two stale references the line list missed (`uZeissRoutines.pas:2232` commented CodeSite, and an autodoc `<returns>` block). The rename restamped a `dl:ok duplicate-code` marker whose hash went stale. **43 -> 38**, 0 errors. Compiles -- but only with a spring4d search-path override; `DataCopy.dproj` carries none, which is PRE-EXISTING (baseline build fails identically). |
+> | **2** `unused-parameter` | DONE. **The note's proposed mechanism was wrong** -- not override/interface/DFM-wired-from-the-store, but callback registration, and it had to be SYNTACTIC because one registration sits in an inactive `$IFDEF` the store cannot see. `symbol_facts.dfm_event` is also 0 for every DataCopy symbol. DataCopy **5 -> 1** (survivor = the true positive), own source **99 -> 75** (all 24 are `AddKeyBinding` handlers). YADFOT surfaced 2 now-redundant `dl:ok` markers, removed. |
+> | **3** converter-editor-phase-g | DONE. 2.4-2.11 ALL closed. **2.7 disproved as stale** by a new suite with a nonsense-phrase control. **2.8's exit codes were misrecorded here and in the note**: it is 0 hits / 1 no-hits / **2 bad usage** / **3 fatal**, not "2 = usage" alone. Note stays open for ONE thing: 2.5's `--framework vcl\|fmx` tie-break, an OWNER RULING. |
+> | **4** `used-before-assignment` | No code, as recommended. Shape A was already shipped; B/C/D remain DO-NOT-IMPLEMENT. The INBOX note now carries the current 39->35 state so it is not re-derived. |
+> | **5a** walk progress | DONE. Count-only pre-pass through the SAME `WalkAndIndex`; `n/total` + ETA on **stderr**, stdout byte-identical. Control asserts the total is 3 not 5. RED verified. |
+> | **5c** CodeLens LRU | DONE. Capped at 32, LRU (touch on paint AND activation). 26-assertion console test; the two LRU-vs-FIFO assertions CONFIRMED RED with touch neutralised. **In-IDE behaviour still unverified** -- the BPL needs a closed RAD Studio. |
+> | **5d** profile doc-drift | DONE, and **the premise was wrong.** doc-drift is **11% on YADF** (1.30s of 11.82s), not dominant; per-file scan is 81%. The phases scale on different quantities, so **YADF is not a proxy for ORM3** and this does NOT move to Group A. Transferable finding: the FACTS REBUILD is **80% of `TDocDrift.Analyze`**, `calls` its largest contributor -- a hypothesis needing a real ~12 min ORM3 profile. |
+>
+> ## THE ONE THING LEFT: 5b, per-file resume
+>
+> Deliberately not started. It is the plan's own HIGHEST RISK item: an additive
+> schema migration plus a stamp that **must sit inside the transaction
+> `CommitFileTx` closes**, or it recreates the exact silent-staleness bug session
+> 22 fixed. That deserves a fresh session rather than a tail-end push. The design
+> in section 5b below is unchanged and still correct.
+>
+> Also still open and untouched, as before: 5e's three genuinely-blocked items.
+
 ## Resume state
 
 | | |

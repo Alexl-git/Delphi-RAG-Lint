@@ -573,7 +573,14 @@ begin
     stdout. }
   Writeln(Format('  %s -> %d symbols, %d refs, %d errors', [APath, ASymbols, ARefs, AErrors]));
 
-  if FProgressTotal <= 0 then Exit;   { single-file index: no walk, no denominator }
+  { No denominator means no counter, and that is not an oversight. Only the
+    FOLDER walk (IndexFolder -- i.e. smFolderTree/smLibrary sections, and an
+    ad-hoc `index <dir>`) sets a total. A single-file index and a PROJECT
+    section, which indexes its members through IndexFile directly, never walk
+    and so never announce one. That matches the need: the counter exists for
+    hours-long library reindexes, and a project's compile closure is tens of
+    files. Say so here so the next reader does not read the silence as a bug. }
+  if FProgressTotal <= 0 then Exit;
   Inc(FProgressDone);
   Elapsed:= FProgressWatch.Elapsed.TotalSeconds;
   if (FProgressDone > 0) and (Elapsed > 0) then
