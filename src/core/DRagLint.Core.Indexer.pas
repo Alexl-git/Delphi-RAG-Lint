@@ -825,7 +825,24 @@ begin
   if FPreprocessEnabled then
   begin
     try
-      ParseBytes:= Preprocess(Utf8, FProfile);
+      // v(2026-08-16, INBOX-parse-error-shellshock-units): 'defines-only', NOT
+      // the 2-arg overload. That overload uses IncludeMode 'off', which blanks
+      // an {$I} include AND discards its {$DEFINE}s -- so a unit taking its
+      // feature switches from a shared .inc (the standard legacy Delphi idiom)
+      // evaluated its own {$IFDEF}s against defines it never received, and
+      // silently indexed the WRONG BRANCH. It surfaced as a parse error only in
+      // the three ShellShock units, whose dead branch happens to contain a
+      // deliberate `!! Error:` breaker; everywhere else it was invisible.
+      //
+      // BaseDir is the unit's own directory so {$I SsDefine.inc} resolves as a
+      // sibling; NearSearch stays on for the widened search. Include text is
+      // still never spliced -- 'defines-only' contributes defines only, so the
+      // offset-identity invariant is untouched.
+      var PpOpts: TPPOptions:= TPPOptionsDefault;
+      PpOpts.Profile    := FProfile;
+      PpOpts.IncludeMode:= 'defines-only';
+      PpOpts.BaseDir    := TPath.GetDirectoryName(AFilePath);
+      ParseBytes:= Preprocess(Utf8, PpOpts);
     except
       on E: Exception do
       begin
