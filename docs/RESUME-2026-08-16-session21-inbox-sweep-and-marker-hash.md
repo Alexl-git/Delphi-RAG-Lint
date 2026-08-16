@@ -5,8 +5,15 @@ NEXT list is fully discharged.
 
 ## Status
 
-Branch **`session18-q0-orphan-anchor`**, **NOT pushed**, ~45 commits ahead of
-`main`. **Battery 293/293, 0 fail.**
+Branch is **`main`** -- `session18-q0-orphan-anchor` was merged (44 commits) and
+`main` is **71 commits ahead of `origin/main`, deliberately unpushed**.
+
+> **RELEASE GATE.** Owner, 2026-08-16: *"To github we'll publish new release only
+> after all 11+1 are done."* Nothing goes to GitHub until the 11 verifiable notes
+> in `docs\NEXT-SESSION-PLAN-2026-08-16.md` are finished. Do not offer to push
+> before then.
+
+**Battery 293/293, 0 fail.**
 
 | | session start | now |
 |---|---|---|

@@ -1,5 +1,19 @@
 # Next session plan -- the 23 open notes, sorted, with owner instructions
 
+> ## RELEASE GATE -- read before touching `git push`
+>
+> Owner ruling 2026-08-16: *"To github we'll publish new release only after all
+> 11+1 are done."*
+>
+> `session18-q0-orphan-anchor` is MERGED into `main`, and `main` is **71 commits
+> ahead of `origin/main` deliberately**. Nothing goes to GitHub until **Group A
+> below is finished**. Do not offer to push before then.
+>
+> *(Reading of "11+1": the 11 in Group A, of which
+> `exception-cref-transitive-raise` is item 1 and was called out separately
+> because it gets a Fable-authored plan. If the owner meant a twelfth item
+> distinct from the 11, ask -- do not guess and do not release.)*
+
 Written 2026-08-16 at the end of session 21, at the owner's request, so the three
 groups survive a context clear. `docs\INBOX-INDEX.md` carries the same split;
 this file adds the owner's instructions for what to do with each group.
