@@ -503,6 +503,48 @@ end;
 { True when S contains AWhat at an IDENTIFIER BOUNDARY -- 'l.free' must not be
   found inside 'xl.free'. Cheap left-boundary check; the right side is already
   pinned by the '.' or '(' the caller appends. }
+{ Removes whitespace that merely pads punctuation, so a literal match for
+  `x.free` survives the column-aligned `x  .Free` style used throughout this
+  codebase. Whitespace is dropped only when the run abuts a '.' on either side,
+  or directly follows '(' -- never between two identifier characters, so no two
+  tokens can be merged into one. See FreedInFinallyBlock for the measurement. }
+function TightenPunct(const S: string): string;
+var
+  I, J   : Integer      ;
+  B      : TStringBuilder;
+  PrevCh : Char         ;
+  NextCh : Char         ;
+begin
+  B:= TStringBuilder.Create;
+  try
+    I:= 1;
+    while I <= Length(S) do
+    begin
+      if CharInSet(S[I], [' ', #9]) then
+      begin
+        J:= I;
+        while (J <= Length(S)) and CharInSet(S[J], [' ', #9]) do Inc(J);
+        PrevCh:= #0;
+        if B.Length > 0 then PrevCh:= B.Chars[B.Length - 1];
+        NextCh:= #0;
+        if J <= Length(S) then NextCh:= S[J];
+        { Drop the run only where it is pure padding around punctuation. }
+        if (NextCh <> '.') and (PrevCh <> '.') and (PrevCh <> '(') then
+          B.Append(' ');
+        I:= J;
+      end
+      else
+      begin
+        B.Append(S[I]);
+        Inc(I);
+      end;
+    end;
+    Result:= B.ToString;
+  finally
+    B.Free;
+  end;
+end;
+
 function ContainsAtIdentBoundary(const S, AWhat: string): Boolean;
 var P: Integer; Ch: Char;
 begin
@@ -566,7 +608,18 @@ var
         else if SeenFinally then
         begin
           if C.NodeType = 'kEnd' then Break;
-          S := LowerCase(NodeStr(C, ASrc));
+          { TightenPunct, not the raw text. The match is literal, so a
+            COLUMN-ALIGNED free -- `Rows  .Free;`, which is ordinary style in
+            this codebase -- did not match `rows.free` and the object was
+            reported as leaked despite being freed two lines away.
+
+            Natural experiment in one finally block of Storage.SQLite.pas:
+            padded `Rows  .Free;` fired, unpadded `Winner.Free;` did not; the
+            longest name in each aligned column is the one that happens to be
+            unpadded, which is why this looked arbitrary. Unpadding `Rows` by
+            hand took that unit from 7 object-leak findings to 6, removing
+            exactly `rows`. 9 findings on the self-index came from this. }
+          S := TightenPunct(LowerCase(NodeStr(C, ASrc)));
           if ContainsAtIdentBoundary(S, Nm + '.free')
              or ContainsAtIdentBoundary(S, Nm + '.disposeof')
              or ContainsAtIdentBoundary(S, 'freeandnil(' + Nm) then

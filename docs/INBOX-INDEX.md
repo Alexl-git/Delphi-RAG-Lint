@@ -1,4 +1,4 @@
-# INBOX index -- 15 open notes (was 23 that morning; 60 at the start of 2026-08-16)
+# INBOX index -- 13 open notes (was 23 that morning; 60 at the start of 2026-08-16)
 
 > **Session 22 (2026-08-16, later).** Two notes CLOSED and moved to
 > `INBOX-Done\` (88 retired): `exception-cref-transitive-raise` (one-hop callee

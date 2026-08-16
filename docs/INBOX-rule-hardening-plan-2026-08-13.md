@@ -1,3 +1,17 @@
+> # RE-MEASURED 2026-08-16 (session 22): rows 1, 2, 3 and 10 are SETTLED. Kept open for 4-9.
+>
+> | row | plan said | measured today |
+> |---|---|---|
+> | 1 `sql-injection-concat` | 1+ | **0.** Already tightened 2026-08-13 -- the rule now requires an anchored leading SQL verb AND a clause keyword, exactly this plan's proposal. Nothing to do. |
+> | 2 `object-leak` (A) | ~15, "guard is the NEXT statement" | **FIXED, 9 -> 0 on the self-index -- but NOT for the stated reason.** The next-statement shape was already handled. The live cause was that `FreedInFinallyBlock` matched literal text, so a COLUMN-ALIGNED `Rows  .Free;` did not match `rows.free`. |
+> | 3 `used-before-assignment` | 7, "`out` arg counted as a READ" | **0 in all four consumer projects.** Both the plan's cause and the INBOX note's cause are dead. 39 remain on the self-index in a THIRD shape nobody had written down -- see that note's banner. |
+> | 10 `field-name-prefix` | 6, DFM heuristic | **0 false positives.** Visibility-scoped by owner ruling 2026-08-13. DataCopy's 2 are REAL private fields, i.e. true positives. |
+>
+> **Do not work rows 1, 3 or 10 as written.** Row 2 is done. Rows 4-9 were NOT
+> re-measured and their counts should be treated as equally suspect until they
+> are -- this is now seven notes across two sessions whose stated mechanism was
+> not the live one.
+
 # Rule hardening plan -- can we get rid of these false positives?
 
 Owner question, 2026-08-13: *"Can we harden our rules to get rid of these false

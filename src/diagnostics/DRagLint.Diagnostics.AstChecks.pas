@@ -821,6 +821,25 @@ implementation
 function tree_sitter_delphi13: PTSLanguage; cdecl;
 external 'tree-sitter-delphi13';
 
+const
+  { Recorded in the per-file TypeMap when a name is declared with two DIFFERENT
+    types in the same file -- two routines each declaring `W`, say. The map is
+    flat and file-scoped (the class comment on CheckTypeAware admits as much:
+    "no scope resolution, so rare same-name shadowing may mis-type"), so without
+    this the LAST declaration visited silently decided the type for every use in
+    the file, including uses inside the other routine.
+
+    Measured: YADF.Layout.pas declares `W: string` (:1076) and
+    `W: TArray<string>` (:2357). length-zero-compare typed the array one as a
+    string and advised `W = ''` for a dynamic array -- wrong advice, and it fired
+    in all three YADF projects because the unit is shared.
+
+    The value is chosen so no CatOf / IsStringType / IsFloatType /
+    IsInterfaceType / IsPointerType predicate can match it, so EVERY type-aware
+    rule declines at once rather than each needing its own guard. Two
+    declarations of the same type are not a conflict. Absence over wrong. }
+  AMBIGUOUS_DECL_TYPE = '<ambiguous-decl>';
+
 var
   GKeywordSet: TDictionary<string, Boolean> = nil;
 
@@ -2505,7 +2524,33 @@ var
         begin
           NameId:= N.NamedChild(J);
           if (NameId.NodeType = 'identifier') and (Integer(NameId.StartByte) < TypeStart) then
-            TypeMap.AddOrSetValue(LowerCase(NodeStr(NameId)), TTxt);
+          begin
+            { TWO ROUTINES MAY EACH DECLARE THE SAME NAME. TypeMap is flat and
+              FILE-scoped, so a plain AddOrSetValue lets whichever declaration is
+              visited last decide the type for every use in the file -- including
+              uses inside the OTHER routine.
+
+              Measured: YADF.Layout.pas declares `W: string` at :1076 and
+              `W: TArray<string>` at :2357. `length-zero-compare` resolved the
+              array one to `string` and told the author to write `W = ''` for a
+              dynamic array, which is wrong advice. It fired in all three YADF
+              projects, since the unit is shared.
+
+              A name whose declarations DISAGREE is recorded as ambiguous rather
+              than as either answer. The sentinel is deliberately a type name
+              nothing can match, so every type-aware rule reading TypeMap
+              (string / float / interface / pointer / integer / no-op cast) fails
+              safe on it at once, instead of each needing its own guard. Two
+              declarations of the SAME type are not a conflict and are left
+              alone. Absence over wrong -- the same rule MineReturnExpressions
+              follows for a mutated Result. }
+            var LowName: string:= LowerCase(NodeStr(NameId));
+            var Prior  : string;
+            if TypeMap.TryGetValue(LowName, Prior) and (not SameText(Prior, TTxt)) then
+              TypeMap.AddOrSetValue(LowName, AMBIGUOUS_DECL_TYPE)
+            else
+              TypeMap.AddOrSetValue(LowName, TTxt);
+          end;
         end;
       end;
     end;

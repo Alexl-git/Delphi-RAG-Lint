@@ -1,3 +1,40 @@
+> # RE-MEASURED 2026-08-16 (session 22): BOTH stated causes are DEAD. A third shape is live.
+>
+> **0 findings** in YADF, YADFOT, YADFSetup and DataCopy. The two competing
+> explanations are both obsolete:
+>
+> * *out-arg-counted-as-a-READ* (the rule-hardening plan's row 3) was already
+>   disproven and reverted; structurally, a bare identifier argument reaches
+>   `CallDefs` only, never `Reads`.
+> * *intra-item `and`/`or` ordering* (this note's own title) is fixed by
+>   `CollectAndOrLeftDefs` (`DRagLint.Diagnostics.FlowChecks.pas:622-660`). Even
+>   DataCopy's `uAlertGrouper.pas:384` case is silent now.
+>
+> **What IS live: 39 findings on the self-index, all hedged `[info] ... may be
+> used`, and all the same previously undocumented shape -- BOOLEAN-FLAG-CORRELATED
+> GUARDS:**
+>
+> ```pascal
+> if Profiled then TMark := TStopwatch.GetTimeStamp;
+> ...
+> if Profiled then Inc(AccRes, TStopwatch.GetTimeStamp - TMark);
+> ```
+>
+> The assignment and the read sit under the SAME guard, so the read is safe, but
+> the flow analysis cannot see the correlation. Same shape at
+> `Storage.SQLite.pas:8507-8509`, `Core.Indexer.pas:584-593` (`Best`/`HasBest`),
+> `Refactor.TextEdit.pas:603-611` (`LastInSection`/`HaveLast`),
+> `AstChecks.pas:2843-2848` (`Call`/`HaveCall`).
+>
+> A real fix needs predicate correlation -- assignment and read under the same
+> condition, with the flag not mutated between -- which is M-L effort and
+> genuinely risky (a reassignment between the two guards breaks it; comparing
+> condition TEXT is only a proxy).
+>
+> **Accepting them is a legitimate outcome.** They are hedged info findings on a
+> correct and common idiom. Do NOT implement either of the two dead fixes above;
+> if this is picked up, write a fresh note for the flag-correlation shape first.
+
 > # NOT re-measured in session 22 (2026-08-16) -- stating that rather than implying progress.
 >
 > This note was NOT touched this session. Its status is exactly as the
