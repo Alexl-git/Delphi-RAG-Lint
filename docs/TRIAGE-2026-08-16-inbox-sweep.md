@@ -69,12 +69,35 @@ re-stamp**, not any rule work: move each marker from the statement line up onto
 its `except`, and re-hash. Expected result YADF 14->6, YADFOT 12->6,
 YADFSetup 15->9, DataCopy 60->44.
 
-Do NOT hand-write the markers -- `drag-lint allow <file> --fix-line <L>
---fix-rule bare-except --apply` is the only code path that formats one. **Open
-question to settle first: whether `allow` preserves the hand-written reason text**
-(`-- rethrown by the caller`, etc.). If it does not, the reasons must be
-re-attached by hand or they are lost, which would be a real regression in the
-accountability story.
+### The restamp METHOD -- settled 2026-08-16, and it is not the obvious one
+
+`drag-lint allow` is the only code path that formats a marker, so the instinct is
+to re-stamp with it. **That would destroy every hand-written reason.**
+`TReviewMarkers.InsertInto(ALineText, ARuleId, AReason)` does take a reason, but
+the `allow` CLI exposes no `--reason` flag (`allow <file> --fix-line <L>
+--fix-rule <id> [--apply]`), so it can only ever write a bare
+`// dl:ok <rule>@<hash>`. Running it over the 12 markers would silently drop
+*"rethrown by the caller"*, *"content could not be verified (lexing failed)"* and
+the rest -- deleting exactly the accountability the marker corpus exists to
+carry, while every count improved.
+
+**Use the engine as a hash oracle instead, in two passes:**
+
+1. Move each marker comment -- reason and all -- from the statement line up onto
+   its `except` line, and **drop the stale `@hash`**.
+2. Run `lint-all`. A hashless marker is honoured but reported as
+   `review-marker-stale: ... re-mark it as bare-except@XXXX`. That message names
+   the correct new hash for the line it now sits on.
+3. Write those hashes back in.
+
+Pass 1 restores suppression immediately (a hashless marker still suppresses), so
+even a half-finished restamp is not a regression. Verified on the prose fixture
+this session: the marker on the `except` line suppressed the finding and the
+engine asked for `@b112`.
+
+**Consider adding `allow --reason "<text>"` first** -- it is a small change, it
+removes the two-pass dance permanently, and without it the tool cannot express
+the thing its own design document says a marker is for.
 
 ### Notes settled by this measurement
 
@@ -84,17 +107,100 @@ accountability story.
 | `yadfot-loopzero-remainder-2026-08-13` | **STALE** -- remainder is now 12, dominated by the marker churn above, so its itemisation predates two rule fixes. Re-derive after the re-stamp rather than reading it. |
 | `yadf-triage-2026-08-12-out-param-and-object-leak-false-alarms` | **PARTIALLY STALE** -- `out-param-not-set` does not appear in any YADF project now (2 remain in DataCopy only). |
 
-## Score so far -- 11 of 58 notes settled
+## Parser / extractor gap batch -- one fixture, six notes
 
-| outcome | count | notes |
+`scratchpad\sweep4\uParserGaps.pas` carries every construct the notes name, in
+one unit: procedural types, three alias shapes, a local named `dynamic`, a
+parenless constructor call and a unit-qualified constructor call. Indexed clean
+(1 file, 12 symbols, 17 refs, **no parse errors**), then queried.
+
+| note | status | measurement |
 |---|---|---|
-| **CONFIRMED** (still real) | 6 | `index-only-nonmatching-section`, `context-bundle-empty-for-bare-name`, `lint-rule-filter-leaks-other-rules`, `lint-single-file-silently-omits-lint-all-rules`, `lint-all-never-scans-dpr-files`, `lint-config-not-discovered-beside-project` |
-| **REFUTED** (retire) | 2 | `lint-all-json-stdout-banner`, `index-all-only-silently-does-nothing` |
-| **Reclassified** | 1 | `cross-project-symbol-use-defeats-single-project-rules` -> design constraint |
-| **Already closed** | 2 | `bare-except-anchor` (today), `create-inside-try` (verify vs index) |
+| `procedural-types-not-indexed` | **REFUTED -- retire** | `TMyProcType` -> `type ... : procedure(A: Integer)`; `TMyFuncType` -> `type ... : function(A: Integer): Boolean of object`. Both indexed WITH their shape. |
+| `type-alias-shapes-not-indexed` | **REFUTED -- retire** | All three shapes indexed with the aliased type: `TAliasIdent : Integer`, `TAliasQual : System.Integer`, `TAliasGeneric : TArray<Integer>`. |
+| `parser-var-named-dynamic` | **REFUTED -- retire** | `dynamic` indexed as `local_var uParserGaps.VarNamedDynamic.dynamic : Integer`, and the unit parses with no error. |
+| `parenless-constructor-call-is-member-access` | **REFUTED -- retire** | `find-callers Create` returns the parenless `TOnlyOnce.Create` at `:33:23`, i.e. it is a CALL, not a member access. |
+| `qualified-type-receiver-does-not-resolve` | **CONFIRMED** | The same query returns ONLY line 33. `uParserGaps.TOnlyOnce.Create` on line 39 -- unit-qualified receiver, same class, same file -- produces no `Create` call ref. Clean A/B inside one fixture. |
+| `parse-error-shellshock-units` | **UNTESTED** | Needs the actual units named in the note. |
 
-**Priority 3 is now fully swept except two** (`lint-scope-stale-files`,
-`whole-db-resolve-degrades-a-stale-index`).
+## Rule false-positive batch -- measured against today's reports
+
+| note | status | measurement |
+|---|---|---|
+| `inherited-bare-fires-on-the-mandatory-idiom` | **REFUTED on its stated target -- retire or re-scope** | Note: *"Measured on DataCopy 2026-08-13: 8 of 8 findings were the canonical idiom."* Today DataCopy reports **0** `inherited-bare`. The rule still fires elsewhere (drag-lint's own source: 18), so the RULE is not proven good -- only the note's DataCopy claim is dead. Re-scope to drag-lint's 18 or close. |
+| `used-before-assignment-array-local-never-counted-as-defined` | **REFUTED -- retire** | Note names 2 findings in `YADFOT.Wizard.pas` (243, 247). YADFOT now reports **no `used-before-assignment` at all**. 3 remain in DataCopy and 39 in drag-lint's own source -- different sites, so re-file from those if still wrong. |
+
+## Not-defect batch -- closed on their OWN declared status, not on measurement
+
+**These are a weaker class of closure and are labelled as such.** Each note
+declares, in its own opening lines, that it is a feature request, a design
+handoff, an inbound report or work the owner has explicitly deferred. None
+asserts a wrong answer from the engine, so there is nothing to re-measure --
+they are backlog items, not defects, and they inflate a "defect count" that is
+supposed to drive fixing. Moving them out of the defect list is the whole point;
+none of them is being *solved* here.
+
+| note | its own declared status |
+|---|---|
+| `QUEUED-editor-integration-vscode-zed-delphilsp` | *"NOT YET READ. Do not action this yet."* |
+| `vscode-allow-codeaction-and-lsp-marker-filtering` | Owner ruling: *"distant future, not near."* |
+| `exception-class-unit-and-generated-exception-types` | *"feature request + design question. Not implemented."* |
+| `converter-editor-phase-g-engine-findings` | *"NOT pushed, NOT merged, NOT deployed. Deliberate."* |
+| `draglint-lsp-proxy-and-editor-integration` | Inbound request + status handoff, *"to be picked up after your current work"* |
+| `editor-integration-and-delphilsp-union` | Inbound, converter-editor workstream |
+| `editor-native-extensions-and-build-orchestration` | Inbound, converter-editor workstream |
+| `graph-viewer-open-source-pipe-contract` | Inbound from the graph viewer |
+| `ide-lsp-ram-and-shim-todo` | *"items 1 and 2 DONE; items 3 and 4 BLOCKED on the IDE being startable"* |
+| `rule-hardening-plan-2026-08-13` | A PLAN answering an owner question, not a defect report |
+| `yadf-share-review-marker-hash` | A request from the owner for a shared hashing helper |
+
+**Caveat worth stating plainly:** four of these eleven (`draglint-lsp-proxy`,
+`editor-integration-and-delphilsp-union`, `editor-native-extensions`,
+`QUEUED-editor-integration`) all describe the SAME editor-integration programme
+from different senders. They should be merged into one note, not carried as
+four. And that programme is now blocked on a real defect --
+`lsp-rejects-the-stdio-flag-its-own-client-appends` -- so the plan matters less
+than the one-line fix underneath it.
+
+## Three that did NOT settle cleanly -- recorded as such rather than counted
+
+Each of these looked settleable and is not. Writing down *why* is worth more
+than a verdict I cannot defend.
+
+| note | what happened |
+|---|---|
+| `create-inside-try-qualified-lhs-not-flagged` | Its own header says `Status: RESOLVED (2026-08-11, Fix 4)` while the INDEX still lists it as an open priority-2 false positive. Own source reports 4 `create-inside-try` findings and all four are the **unqualified** shape the rule is meant to catch -- so the rule works, but that says nothing about the note's actual claim, which is about a **qualified** LHS (`Self.Field := T.Create`) NOT being flagged. Needs a qualified-LHS fixture before retiring. Do not close on the status line alone. |
+| `field-name-prefix-fixable-flag-lies` | `rules --json` reports `"fixable": true`, which is half the claim. The other half -- that `--fix` then refuses -- was NOT exercised; the only live findings are 2 in DataCopy, and running `--fix` there would edit another repo mid-sweep. Untested. |
+| `deep-nesting-silent-on-trailing-else-call` | Built a 5-deep fixture ending in `if E then ... else Writeln(...)`; `deep-nesting` did not fire. **That proves nothing** -- the threshold is 5, so the fixture may simply be under it. Without a positive control (same fixture with the trailing else replaced by another nested `if`, which MUST fire) the silence is unattributable. Exactly the trap this document opens with. |
+
+## SCORE -- 32 of 58 notes settled
+
+| outcome | count | what it means |
+|---|---|---|
+| **FIXED IN CODE this session** | 4 | `bare-except-anchor`, `remaining-raw-text-scans` #1 (FormsMap), `lint-rule-filter-leaks-other-rules`, `index-only-nonmatching-section-is-a-silent-noop` |
+| **REFUTED -- retire the note** | 8 | `lint-all-json-stdout-banner`, `index-all-only-silently-does-nothing`, `procedural-types-not-indexed`, `type-alias-shapes-not-indexed`, `parser-var-named-dynamic`, `parenless-constructor-call-is-member-access`, `inherited-bare-fires-on-the-mandatory-idiom` (on its stated target), `used-before-assignment-array-local-never-counted-as-defined` |
+| **CONFIRMED -- still real, now measured** | 6 | `context-bundle-empty-for-bare-name`, `lint-single-file-silently-omits-lint-all-rules`, `lint-all-never-scans-dpr-files`, `lint-config-not-discovered-beside-project`, `qualified-type-receiver-does-not-resolve`, `object-leak-is-systematically-false` (at the corrected 1/1/1) |
+| **Stale -- re-derive, do not read** | 2 | `yadfot-loopzero-remainder-2026-08-13`, `yadf-triage-2026-08-12-...` |
+| **Reclassified out of the defect list** | 12 | `cross-project-symbol-use` (design constraint) + the 11 not-defect notes |
+| **Explicitly NOT settled** | 3 | `create-inside-try`, `field-name-prefix-fixable-flag-lies`, `deep-nesting-silent-on-trailing-else-call` -- see the section above for why each resisted |
+
+**8 notes can be retired outright** and **12 moved out of the defect list**, which
+takes the defect backlog from 58 to about **38**, of which 6 are measured-real
+and ready to fix.
+
+### What the refutations have in common -- worth knowing before the next sweep
+
+Six of the eight refuted notes are **parser/extractor "gap" claims that the
+engine now handles**: procedural types, three alias shapes, a variable named
+`dynamic`, and a parenless constructor call all index correctly today, with
+shapes attached. Nobody walked back the notes when the parser improved. **The
+indexer-gap section of this backlog is the most stale part of it**, so sweep
+that class FIRST next time -- one fixture settled four notes in a single index
+run.
+
+The one survivor of that batch is instructive: `uParserGaps.TOnlyOnce.Create` --
+a UNIT-QUALIFIED receiver -- still produces no call ref, while the unqualified
+call two lines above it does. Same class, same file, same fixture.
 
 ### The cheap fix cluster this sweep exposes
 
