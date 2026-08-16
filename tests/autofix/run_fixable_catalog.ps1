@@ -46,7 +46,17 @@ try {
   Check 'unused-local fixable=true'          ($byId['unused-local'].fixable -eq $true)
   # a rule with no fix must be false (pick a stable always-present rule):
   Check 'cyclomatic-complexity fixable=false' ($byId['cyclomatic-complexity'].fixable -eq $false)
+  # local-field-prefix became fixable on 2026-08-16: it STRIPS an F prefix off a
+  # local, the mirror of the phase-2 prefix-adding rules and the safest rename in
+  # the family (a local's scope is one routine body, so no call site can be
+  # affected). Guarded by tests\autotest\run_local_field_prefix_autofix.ps1.
+  Check 'local-field-prefix fixable=true' ($byId['local-field-prefix'].fixable -eq $true)
+  # The COUNT is deliberately pinned, not derived: FIXABLE_RULE_IDS is the single
+  # source of truth for both this catalogue flag and what --fix will attempt, so
+  # a rule appearing or vanishing from it silently is exactly what this catches.
+  # Bump it here, in the same commit that changes the list, and say why: 21 -> 22
+  # on 2026-08-16 (+local-field-prefix).
   $fixableCount = ($obj.rules | Where-Object { $_.fixable -eq $true }).Count
-  Check 'exactly 21 fixable rules' ($fixableCount -eq 21)
+  Check 'exactly 22 fixable rules' ($fixableCount -eq 22) "got $fixableCount"
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
