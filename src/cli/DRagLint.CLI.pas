@@ -1572,6 +1572,11 @@ end;
   comment that explains it. }
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
   AForceArg, ARebuild, APreprocess: Boolean; const APlatform: string): Boolean; forward;
+{ The other half of the fingerprint gate: called ONLY after a walk finishes.
+  See CommitIndexerFingerprint's own comment for why the stamp cannot happen up
+  front. }
+procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
+  APreprocess: Boolean; const APlatform: string); forward;
 
 /// <summary>
 /// Expands a compile closure into the full INDEX scope of a project: the closure
@@ -2031,6 +2036,11 @@ begin
                      [AItem.Name, PlatSuffix, AItem.DbPath, Length(DeadProjects), Store.CountFiles, Store.CountSymbols, Elapsed]));
       Exit(False);
     end;
+    { The section walked to completion, so the parse in this DB really was
+      produced by THIS engine -- only now may the fingerprint be recorded. A
+      section that failed above exits before this point and deliberately leaves
+      the OLD fingerprint in place, so the next run re-parses it. }
+    CommitIndexerFingerprint(Store, APreprocess, AItem.Platform);
     Writeln(Format('=== %s%s -> %s : files=%d symbols=%d [%.1fs] ===', [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols, Elapsed]));
     Result:= True;
   except
@@ -2458,7 +2468,34 @@ begin
     else if AForceArg then Writeln('Force reparse: ON (--force-reparse; ignoring the up-to-date skip)')
     else Writeln(Format('Indexer changed since this DB was built (%s -> %s): re-parsing every file in scope.', [Prev, Cur]));
   AIndexer.SetForceReparse(Result);
-  AStore.SetMetaValue(INDEXER_FP_KEY, Cur);
+  { The stamp DELIBERATELY does not happen here -- see CommitIndexerFingerprint. }
+end;
+
+{ Stamps the current indexer fingerprint. Called ONLY once a walk has run to
+  completion.
+
+  It used to be stamped inside ApplyIndexerFingerprint, i.e. BEFORE the walk
+  started, which inverted the whole point of the gate. An engine/schema/platform
+  change correctly forced a full re-parse -- but the new fingerprint was already
+  recorded, so if that long run was interrupted (Ctrl-C, a crash, a machine
+  restart, and these runs are measured in HOURS on the library indexes) the NEXT
+  run read Prev = Cur, concluded nothing had changed, and took the incremental
+  up-to-date skip over every file the killed run never reached. Those files kept
+  content parsed by the OLD engine, silently and with no diagnostic -- strictly
+  worse than re-parsing from the beginning, because the index looked complete.
+
+  Stamping after the walk makes an interrupted run cost time and nothing else:
+  the fingerprint still reads stale, so the next run re-parses. The failure mode
+  becomes "does redundant work", never "silently keeps stale parses".
+
+  This does NOT give per-file resumability -- an interrupted run still restarts
+  from the beginning. That needs the per-file indexed_at_version column tracked
+  in INBOX-index-runs-are-not-resumable; this is the correctness half only. }
+procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
+  APreprocess: Boolean; const APlatform: string);
+begin
+  AStore.SetMetaValue(INDEXER_FP_KEY,
+                      IndexerFingerprint(AStore, APreprocess, APlatform));
 end;
 
 { v21: opens --library-db paths as read-only extra stores for cross-DB call
@@ -2905,6 +2942,9 @@ begin
       Store.ResolveCallTargets(OpenLibraryStores(AArgs)) { v14 (D5) + v21 cross-DB }
     else
       Writeln('resolve: calls skipped -- no file changed, so every call edge already holds.');
+    { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
+      stamp waits until here rather than happening before the walk. }
+    CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform);
     Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
