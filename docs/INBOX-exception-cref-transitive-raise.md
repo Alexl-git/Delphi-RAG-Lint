@@ -78,3 +78,27 @@ today, so `EFoo` does NOT currently satisfy a documented `Exception`.
 Absence over a wrong verdict. A rule that silently accepts any cref because
 something somewhere raises is worse than one that over-reports three known
 sites: the first cannot be audited, the second is a list of three.
+
+## Implementation note (2026-08-16, session 21) -- the cheap fix is WRONG, do not take it
+
+The tempting fix is to reuse the carve-out already sitting directly above this
+check in `Doc.Drift.pas`, which skips grading when the declaration has no body
+on the grounds that the rule *""was not observing an absent raise; it was
+observing that it had never looked""*. A delegating body is arguably the same
+situation, so: skip when `Facts.Raises` is empty and `Facts.Calls` is not.
+
+**That would gut the rule.** *""Calls something and raises nothing itself""*
+describes the majority of routines, so the tag would stop being graded almost
+everywhere -- trading three false positives for a rule that no longer works.
+Narrowing it to `Length(Facts.Calls) = 1` is better but still arbitrary: a
+routine that happens to call exactly one helper is not necessarily delegating.
+
+**The correct fix resolves the callee.** `TDocFacts` carries both `Calls` and
+`Raises`, and `TDocDrift.Analyze` already receives `AStore`, so the pieces
+are present: for each name in `Facts.Calls`, resolve it and ask whether ITS
+body raises the documented type; accept the tag if any does. One level is enough
+for all three known cases -- each is a one-line delegation.
+
+Cost is the reason it was not done in this session: it needs per-callee facts (or
+a store query for raises) inside a checker that currently does no such lookup,
+and doing it badly would be worse than the three findings it removes.
