@@ -159,7 +159,7 @@ parenless constructor call and a unit-qualified constructor call. Indexed clean
 | note | status | measurement |
 |---|---|---|
 | `inherited-bare-fires-on-the-mandatory-idiom` | **REFUTED on its stated target -- retire or re-scope** | Note: *"Measured on DataCopy 2026-08-13: 8 of 8 findings were the canonical idiom."* Today DataCopy reports **0** `inherited-bare`. The rule still fires elsewhere (drag-lint's own source: 18), so the RULE is not proven good -- only the note's DataCopy claim is dead. Re-scope to drag-lint's 18 or close. |
-| `used-before-assignment-array-local-never-counted-as-defined` | **REFUTED -- retire** | Note names 2 findings in `YADFOT.Wizard.pas` (243, 247). YADFOT now reports **no `used-before-assignment` at all**. 3 remain in DataCopy and 39 in drag-lint's own source -- different sites, so re-file from those if still wrong. |
+| `used-before-assignment-array-local-never-counted-as-defined` | **CORRECTED 2026-08-16 -- NOT refuted. The note's EXAMPLE is stale; the DEFECT is alive.** | First reading: YADFOT reports no `used-before-assignment`, so the note's two `YADFOT.Wizard.pas` sites are gone -> "retire". **That was wrong, and it is the classic error of this sweep in reverse:** I refuted the example and implied the defect had gone with it. Reading DataCopy's 3 survivors against source: `uZeissRoutines.pas:1160/1229` report `lrestore` and `lbackup`, both **arrays assigned element-wise** (`LRestore[LJdx]`) -- exactly the mechanism the note describes. **Retire the example, keep the note, re-anchor it on `uZeissRoutines.pas`.** |
 
 ## Not-defect batch -- closed on their OWN declared status, not on measurement
 
