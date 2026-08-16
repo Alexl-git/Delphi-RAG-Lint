@@ -537,7 +537,7 @@ begin
       IsPrefixRule:= SameText(F.RuleId, 'field-name-prefix') or SameText(F.RuleId, 'param-name-prefix')
                      or SameText(F.RuleId, 'type-name-prefix');
       if not (IsPrefixRule or SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'local-var-casing')
-          or SameText(F.RuleId, 'const-casing')) then Continue;
+          or SameText(F.RuleId, 'const-casing') or SameText(F.RuleId, 'local-field-prefix')) then Continue;
 
       try
         { One fix per (file,line,col) decl -- multiple findings could target the
@@ -551,7 +551,24 @@ begin
         OldName:= ReadIdentifierAt(F.FilePath, F.StartLine, F.StartCol, F.EndCol);
         if OldName = '' then Continue;
 
-        if IsPrefixRule then
+        { local-field-prefix is the MIRROR of the phase-2 prefix rules: the
+          others ADD a missing prefix, this one STRIPS a prefix a local should
+          never have worn. It is the safest rename in the family -- scope is a
+          single routine body, so no call site anywhere can be affected -- which
+          is why it routes through BuildLocal with the same collision guard
+          param-name-prefix uses rather than the store-backed global rename. }
+        if SameText(F.RuleId, 'local-field-prefix') then
+        begin
+          NewName:= OldName;
+          if (ANaming.FieldPrefix <> '') and NewName.StartsWith(ANaming.FieldPrefix, True) then
+            NewName:= Copy(NewName, Length(ANaming.FieldPrefix) + 1, MaxInt);
+          { A local called exactly the prefix ("F") would strip to '', and one
+            whose remainder starts with a digit ("F1") would produce an illegal
+            identifier. Leave both for a human -- silently emitting a broken
+            rename is worse than reporting the finding unfixed. }
+          if (NewName = '') or CharInSet(NewName[1], ['0'..'9']) then Continue;
+        end
+        else if IsPrefixRule then
         begin
           { Phase 2: prefix-adding. Pick the configured prefix per rule; for
             type-name-prefix, resolve the symbol's kind to choose between
@@ -584,7 +601,7 @@ begin
 
         if SameText(F.RuleId, 'local-var-casing') then
           EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, NewName), F.StartLine, F.StartCol, F.EndCol, OldName)
-        else if SameText(F.RuleId, 'param-name-prefix') then
+        else if SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'local-field-prefix') then
         begin
           { Routine-local rename. UNLIKE local-var-casing (collision-free
             re-casing), prefix-adding genuinely changes the identifier, so

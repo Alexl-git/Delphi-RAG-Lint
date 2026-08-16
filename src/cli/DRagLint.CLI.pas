@@ -5933,12 +5933,15 @@ end;
   NamingFixEdits (the rename engine), both via a store-backed append in
   FinalizeAndOutput, not from the pure-text edit builder. }
 const
-  FIXABLE_RULE_IDS: array[0..20] of string = (
+  FIXABLE_RULE_IDS: array[0..21] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
     'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc',
     'method-pascalcase', 'local-var-casing', 'const-casing',
     'field-name-prefix', 'param-name-prefix', 'type-name-prefix',
-    'nil-comparison', 'uppercase-compare', 'uppercase-compare-always-false', 'unused-local');
+    'nil-comparison', 'uppercase-compare', 'uppercase-compare-always-false', 'unused-local',
+    { local-field-prefix: strips an F prefix off a LOCAL. Safest rename in the
+      family -- single-routine scope, so no call site can be affected. }
+    'local-field-prefix');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var
@@ -6791,11 +6794,37 @@ begin
         joining the always-on doc-drift append). The synthesizers + rename
         engine live in DRagLint.Refactor.NamingFix. }
       var NamingTargets: TArray<TLintFinding>:= nil;
+      { Findings whose rule CAN be fixed but is not opted in. Counted separately
+        so the summary can say which it is: "no fixable findings" is false and
+        actively misleading here -- the rule IS registered fixable, the catalog
+        advertises `"fixable": true` for it, and the fix demonstrably works the
+        moment the config opts in. Reporting the opt-in as an absence of
+        capability sent a triage session down the path of believing the fixer
+        was broken (docs\INBOX-field-name-prefix-fixable-flag-lies.md). }
+      var NamingOptOut: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+      try
       for F in Targeted do
         if (SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'local-var-casing')
             or SameText(F.RuleId, 'const-casing') or SameText(F.RuleId, 'field-name-prefix')
-            or SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'type-name-prefix')) and Cfg.IsAutoFix(F.RuleId) then
-          NamingTargets:= NamingTargets + [F];
+            or SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'type-name-prefix')
+            or SameText(F.RuleId, 'local-field-prefix')) then
+        begin
+          if Cfg.IsAutoFix(F.RuleId) then NamingTargets:= NamingTargets + [F]
+          else NamingOptOut.AddOrSetValue(LowerCase(F.RuleId), True);
+        end;
+      if NamingOptOut.Count > 0 then
+      begin
+        var OptOutIds: TArray<string>:= NamingOptOut.Keys.ToArray;
+        TArray.Sort<string>(OptOutIds);
+        Writeln(ErrOutput, Format(
+          'drag-lint: note: %d naming rule(s) here are fixable but NOT opted in: %s. ' +
+          'Naming fixes rewrite call sites project-wide, so they are opt-in -- add them to ' +
+          '"autofix": [...] in drag-lint-lint.json to apply.',
+          [Length(OptOutIds), string.Join(', ', OptOutIds)]));
+      end;
+      finally
+        NamingOptOut.Free;
+      end;
       if Length(NamingTargets) > 0 then
       begin
         { Naming-prefix autofixes rewrite the declaration + every use the ref

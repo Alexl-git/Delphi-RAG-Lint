@@ -2799,7 +2799,15 @@ begin
   try
     // Core schema (no FTS5): required; any failure aborts the migration.
     for I := 0 to SCHEMA_DDL_FTS5_FIRST - 1 do FConn.ExecSQL(SCHEMA_DDL[I]);
-    FConn.ExecSQL( 'INSERT OR REPLACE INTO schema_meta(key, value) VALUES (''schema_version'', ?)', [IntToStr(SCHEMA_VERSION)]);
+    { schema_version is NOT written here -- see the stamp at the END of this
+      procedure. Writing it inside this transaction meant the DB claimed to be
+      at SCHEMA_VERSION before the additive ALTER migrations below had run, so
+      an upgrade interrupted between the two left a database that advertised
+      the new version while missing the new columns -- and the next open, seeing
+      the version already current, had no reason to try again. That is the
+      bricked-index case in
+      docs\INBOX-schema-migration-not-atomic.md: every command, including the
+      read-only `schema` introspection, died on the missing column. }
     FConn.Commit;
   except
     FConn.Rollback;
@@ -2978,6 +2986,23 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_call_edges_receiver ON call_edges(receiver_type_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_facts_symbol ON symbol_facts(symbol_id)'          );
   TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_docs_symbol  ON symbol_docs(symbol_id)'           );
+
+  { STAMP THE VERSION LAST -- this is the real commit point of the migration.
+    Everything above is idempotent (CREATE ... IF NOT EXISTS, plus TryExec'd
+    ALTERs that swallow "duplicate column") and Migrate runs on EVERY open, so
+    re-running a partially-applied upgrade is not merely safe, it is the
+    designed recovery path. The one thing that must not happen early is the
+    CLAIM that the upgrade finished -- and writing schema_version inside the
+    first transaction did exactly that: an upgrade interrupted after that commit
+    but before the additive ALTERs left a DB advertising the new version while
+    missing the new columns, and the next open had no reason to retry. Every
+    command then died on the missing column, including the read-only `schema`
+    introspection. Stamped here, an interruption leaves the OLD version and the
+    next open self-heals. See docs\INBOX-schema-migration-not-atomic.md. }
+  FConn.ExecSQL(
+    'INSERT OR REPLACE INTO schema_meta(key, value) VALUES (''schema_version'', ?)',
+    [IntToStr(SCHEMA_VERSION)]);
+
   PrepareStatements;
   { PHASE C B6: AFTER PrepareStatements, because the merge deletes files rows and
     that has to go through DeleteStringLiteralsForFile (FQDeleteFileStringLiterals)

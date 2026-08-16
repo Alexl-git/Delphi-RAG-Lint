@@ -35,6 +35,24 @@ if errorlevel 1 (
   exit /b 1
 )
 
+REM Stage the RULE CATALOGUE beside both exes. rules\ is the only TRACKED copy;
+REM <exe-dir>\rules is gitignored, and until now nothing produced it -- so a
+REM fresh clone had no external rules at all, and an edit to rules\*.scm was
+REM INERT until someone remembered to copy it by hand. That is not theoretical:
+REM the bare-except anchor fix was edited, built, and measured against the OLD
+REM rule, with the whole suite passing. The Release and Win32 copies were 35 and
+REM 104 files behind when this was found.
+REM
+REM tests\run_battery.ps1 (register K41) now hashes rules\ against both of these
+REM and shouts on drift, so this copy and that check are a matched pair: the
+REM build makes them right, the battery proves they stayed right.
+for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
+  if not exist "%%~D\rules" mkdir "%%~D\rules"
+  copy /Y "%ROOT%\rules\*.scm"  "%%~D\rules\" >NUL
+  copy /Y "%ROOT%\rules\*.json" "%%~D\rules\" >NUL
+  if exist "%ROOT%\rules\builtin-symbols.txt" copy /Y "%ROOT%\rules\builtin-symbols.txt" "%%~D\rules\" >NUL
+)
+
 copy /Y "%ROOT%\src\cli\Win64\Debug\drag-lint.exe" "%ROOT%\third_party\dll-win64\drag-lint.exe" >NUL
 if errorlevel 1 (
   echo ERROR: failed to stage %ROOT%\third_party\dll-win64\drag-lint.exe
