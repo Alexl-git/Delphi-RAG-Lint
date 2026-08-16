@@ -104,7 +104,7 @@ type
     /// <returns><!-- drag-lint:auto -->Observed: -1.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.LeftmostBaseVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TEscape.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas) (+23 more)
+    /// Called from: DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.FreedOperandVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.LeftmostBaseVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas) (+25 more)
     /// Reads: FByName
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
@@ -304,15 +304,14 @@ type
     /// <returns><!-- drag-lint:auto type -->TDefAsgnVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Analysis.Cfg.IsValuedExit, DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf
-    /// Complexity: 11 (cyclomatic, outer body), 48 lines (full implementation)
+    /// Calls: DRagLint.Analysis.Cfg.IsValuedExit, DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs, DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex, DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf
     /// Reads: FVars, FSrc, FIsRecordMethodDef
     /// Pure
     /// <seealso cref="DRagLint.Analysis.Cfg.IsValuedExit"/>
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Transfer(const ABlock: TCfgBlock; const AIn: TDefAsgnVal): TDefAsgnVal;
@@ -425,14 +424,14 @@ type
     /// <returns><!-- drag-lint:auto type -->TFreedVal</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
+    /// Calls: DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs, DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex, DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count
     /// Reads: FVars, FSrc
     /// Pure
+    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Bottom"/>
-    /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TFreedState.Boundary"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Transfer(const ABlock: TCfgBlock; const AIn: TFreedVal): TFreedVal;
@@ -715,16 +714,16 @@ type
 /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
 /// <param name="AKind"><!-- drag-lint:auto type -->out TFreeKind</param>
 /// <returns><!-- drag-lint:auto -->Observed: -1;
-/// LeftmostBaseVar(Inner.ChildByField('lhs'), ASrc, AVars);
-/// LeftmostBaseVar(Ent.ChildByField('lhs'), ASrc, AVars);
-/// LeftmostBaseVar(ArgsN.NamedChild(0), ASrc, AVars).</returns>
+/// FreedOperandVar(Inner.ChildByField('lhs'), ASrc, AVars);
+/// FreedOperandVar(Ent.ChildByField('lhs'), ASrc, AVars);
+/// FreedOperandVar(ArgsN.NamedChild(0), ASrc, AVars).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
-/// Calls: DRagLint.Analysis.Flow.Lattices.LeftmostBaseVar, DRagLint.Analysis.Flow.Lattices.NodeText
+/// Calls: DRagLint.Analysis.Flow.Lattices.FreedOperandVar, DRagLint.Analysis.Flow.Lattices.NodeText
 /// Complexity: 17 (cyclomatic, outer body), 40 lines (full implementation)
 /// Mutates: AKind (out)
-/// <seealso cref="DRagLint.Analysis.Flow.Lattices.LeftmostBaseVar"/>
+/// <seealso cref="DRagLint.Analysis.Flow.Lattices.FreedOperandVar"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeText"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -773,7 +772,7 @@ function NodeText(const N: TTSNode; const ASrc: TBytes): string;
 /// ASrc))); AVars.IndexOf(LowerCase(NodeStr(IdN, ASrc))).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectCallArgs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.DetectFreedVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.DetectFreedVarKind (DRagLint.Analysis.Flow.Lattices.pas) (+1 more)
+/// Called from: DRagLint.Analysis.Flow.Lattices.AssignmentBaseIndex (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectCallArgs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.DetectFreedVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.CollectInterfaceDerefs.Walk (DRagLint.Diagnostics.FlowChecks.pas)
 /// Calls: DRagLint.Analysis.Flow.Lattices.FirstIdentChild, DRagLint.Analysis.Flow.Lattices.FirstOperandChild, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, LowerCase
 /// Complexity: 10 (cyclomatic, outer body), 35 lines (full implementation)
 /// Pure
@@ -825,8 +824,9 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: DRagLint.Analysis.Flow.Lattices.TEscape.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Liveness.ApplyItemBackward (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas) (+2 more)
-/// Calls: DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, LowerCase
+/// Calls: DRagLint.Analysis.Flow.Lattices.FirstIdentChild, DRagLint.Analysis.Flow.Lattices.NodeStr, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf, LowerCase
 /// Pure
+/// <seealso cref="DRagLint.Analysis.Flow.Lattices.FirstIdentChild"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeStr"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf"/>
 /// <!-- drag-lint:auto END -->
@@ -854,6 +854,35 @@ function AssignmentTargetIndex(const ANode: TTSNode; const ASrc: TBytes;
 /// </remarks>
 function AssignmentBaseIndex(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable): Integer;
+
+/// <summary>Apply a block's synthetic entry defs -- today just the
+/// <c>for X in C</c> iterator, recorded by the CFG as
+/// <c>TCfgBlock.EntryDefs</c> -- to a Must/May pair, writing AValue into both.
+/// Names not present in AVars are skipped.</summary>
+/// <param name="ABlock">The block being entered; only its EntryDefs are read.</param>
+/// <param name="AVars">Routine var table used to resolve each name to an index.</param>
+/// <param name="AMust">Must-side bit vector, updated in place.</param>
+/// <param name="AMay">May-side bit vector, updated in place.</param>
+/// <param name="AValue">Value written for each resolved entry def.</param>
+/// <remarks>
+/// Two lattices need this and they differ ONLY in AValue, which is why
+/// it is one routine: definite-assignment marks the iterator ASSIGNED (True),
+/// the freed-state lattice marks it NOT-DANGLING (False), because the loop
+/// rebinds it to a different object on every pass. A lattice that ignores
+/// EntryDefs reads the loop back-edge as if the body saw the same object twice
+/// -- which is how <c>for L in List do L.Free</c> came to be reported as a
+/// double free. The replays in DRagLint.Diagnostics.FlowChecks must call this
+/// too: they restart from the JOIN of the predecessors, which still carries the
+/// back-edge state. Not thread-safe beyond its arguments; it mutates them.
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)
+/// Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf
+/// Mutates: AMust (var), AMay (var)
+/// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure ApplyEntryDefs(const ABlock: TCfgBlock; AVars: TRoutineVarTable;
+  var AMust, AMay: TArray<Boolean>; AValue: Boolean);
 
 implementation
 
@@ -1264,7 +1293,14 @@ begin
   else if Lhs.NodeType = 'varAssignDef' then
   begin
     IdN := Lhs.ChildByField('name');
-    if IdN.IsNull and (Lhs.NamedChildCount > 0) then IdN := Lhs.NamedChild(0);
+    { FirstIdentChild, not NamedChild(0). An inline declaration parses as
+      varAssignDef(kVar, identifier) -- verified with tools\dumpnode -- and the
+      kVar keyword is a NAMED child, so NamedChild(0) was the keyword and this
+      looked up a routine var literally called "var", which never exists. Every
+      inline `var X := Expr` therefore failed to register as a whole-var
+      definition, so the freed/dangling state of X survived the loop back-edge
+      and `X.Free` inside the loop body was reported as a double free. }
+    if IdN.IsNull then IdN := FirstIdentChild(Lhs);
     if not IdN.IsNull then Result := AVars.IndexOf(LowerCase(NodeStr(IdN, ASrc)));
   end;
   { indexed/qualified writes (a[i] := / x.f :=) are NOT whole-var definitions }
@@ -1274,6 +1310,17 @@ function AssignmentBaseIndex(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable): Integer;
 begin
   Result := LeftmostBaseVar(ANode.ChildByField('lhs'), ASrc, AVars);
+end;
+
+procedure ApplyEntryDefs(const ABlock: TCfgBlock; AVars: TRoutineVarTable;
+  var AMust, AMay: TArray<Boolean>; AValue: Boolean);
+var J, Idx: Integer;
+begin
+  for J := 0 to High(ABlock.EntryDefs) do
+  begin
+    Idx := AVars.IndexOf(ABlock.EntryDefs[J]);
+    if Idx >= 0 then begin AMust[Idx] := AValue; AMay[Idx] := AValue; end;
+  end;
 end;
 
 { ----- TDefiniteAssignment ----- }
@@ -1325,12 +1372,8 @@ var
 begin
   SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
   for I := 0 to FVars.Count - 1 do begin Result.Must[I] := AIn.Must[I]; Result.May[I] := AIn.May[I]; end;
-  { synthetic entry defs (foreach iterator) }
-  for J := 0 to High(ABlock.EntryDefs) do
-  begin
-    Idx := FVars.IndexOf(ABlock.EntryDefs[J]);
-    if Idx >= 0 then begin Result.Must[Idx] := True; Result.May[Idx] := True; end;
-  end;
+  { synthetic entry defs (foreach iterator): assigned on entry to the body }
+  ApplyEntryDefs(ABlock, FVars, Result.Must, Result.May, True);
   Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
   try
     for I := 0 to ABlock.Items.Count - 1 do
@@ -1419,6 +1462,11 @@ var
 begin
   SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
   for I := 0 to FVars.Count - 1 do begin Result.Must[I] := AIn.Must[I]; Result.May[I] := AIn.May[I]; end;
+  { The foreach iterator is REBOUND at the top of the body, so it is not
+    dangling here whatever the back-edge carried: `for L in List do L.Free`
+    frees a different object each pass. False, where definite-assignment
+    writes True -- same fact, opposite polarity. }
+  ApplyEntryDefs(ABlock, FVars, Result.Must, Result.May, False);
   for I := 0 to ABlock.Items.Count - 1 do
   begin
     It := ABlock.Items[I];
@@ -1552,6 +1600,26 @@ begin
   end;
 end;
 
+{ The freed operand resolved STRICTLY: the expression must BE the routine
+  variable, not merely start with it. `X.Free` yields X; `X.Value.Free`,
+  `X[I].Free` and `X.Fields.Free` yield -1, because what those free is a
+  member or an element -- a different object on every iteration -- and
+  attributing them to X made the double-free rule report the canonical
+  `for Kv in Map do Kv.Value.Free` cleanup as a double free.
+
+  Deliberately NOT used by DetectFreedVar (the ownership/escape lattice behind
+  object-leak): there, crediting a member free to its base var only ever
+  SUPPRESSES a leak report, so the loose reading is the conservative one.
+  Here it fabricates findings, so the strict reading is correct. }
+function FreedOperandVar(const N: TTSNode; const ASrc: TBytes;
+  AVars: TRoutineVarTable): Integer;
+begin
+  Result := -1;
+  if N.IsNull then Exit;
+  if N.NodeType <> 'identifier' then Exit;
+  Result := AVars.IndexOf(LowerCase(NodeStr(N, ASrc)));
+end;
+
 function DetectFreedVar(const ANode: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Integer;
 var Inner, Ent, ArgsN: TTSNode; M: string;
 begin
@@ -1598,7 +1666,7 @@ begin
     if (M = 'free') or (M = 'disposeof') then
     begin
       AKind := fkRawFree; { raw .Free / .DisposeOf: object freed, pointer left dangling }
-      Exit(LeftmostBaseVar(Inner.ChildByField('lhs'), ASrc, AVars));
+      Exit(FreedOperandVar(Inner.ChildByField('lhs'), ASrc, AVars));
     end;
   end;
   if Inner.NodeType = 'exprCall' then
@@ -1610,7 +1678,7 @@ begin
       if (M = 'free') or (M = 'disposeof') then
       begin
         AKind := fkRawFree;
-        Exit(LeftmostBaseVar(Ent.ChildByField('lhs'), ASrc, AVars));
+        Exit(FreedOperandVar(Ent.ChildByField('lhs'), ASrc, AVars));
       end;
     end;
     if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and (NodeText(Ent, ASrc) = 'freeandnil') then
@@ -1619,7 +1687,7 @@ begin
       if (not ArgsN.IsNull) and (ArgsN.NamedChildCount > 0) then
       begin
         AKind := fkNiling; { FreeAndNil: object freed AND pointer nil-ed -> safe }
-        Exit(LeftmostBaseVar(ArgsN.NamedChild(0), ASrc, AVars));
+        Exit(FreedOperandVar(ArgsN.NamedChild(0), ASrc, AVars));
       end;
     end;
   end;

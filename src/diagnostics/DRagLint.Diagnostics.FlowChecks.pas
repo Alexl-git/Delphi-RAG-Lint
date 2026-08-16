@@ -37,9 +37,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructorTransfersOwnership, Copy, Default, DetectFreedVarKind, DRagLint.Analysis.Cfg.CfgFindProcs (+23 more)
+    /// Calls: ApplyEntryDefs, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructedTypeText, ConstructorTransfersOwnership, Copy, Default (+25 more)
     /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); Findings.ToArray
-    /// Complexity: 21 (cyclomatic, outer body), 644 lines (full implementation)
+    /// Complexity: 21 (cyclomatic, outer body), 659 lines (full implementation)
     /// Touches: file system
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
@@ -203,6 +203,37 @@ begin
      or SameText(Head, 'TGUID') or SameText(Head, 'TPoint') or SameText(Head, 'TRect') then
     Exit(True);
   Result:= (Length(Head) >= 2) and (Head[1] = 'I') and CharInSet(Head[2], ['A'..'Z']);
+end;
+
+{ The type a constructor expression names, bare: `TRegEx.Create(..)` -> TRegEx,
+  `System.RegularExpressions.TRegEx.Create(..)` -> TRegEx. Empty when ANode is
+  not one of the two constructor shapes ExprIsConstructor accepts.
+
+  This exists ONLY to give TypeIsRefCountedOrValue something to decide on for an
+  inline `var X := T.Create(..)`, which carries no declared type. It is not a
+  general type inference and must not be used as one: it reports what the source
+  WROTE at the call, which for a class-reference variable or a virtual
+  constructor is not the runtime type. That is safe here because the only
+  question asked of it is "is this a record/interface, which cannot leak" -- a
+  question about the named type itself. }
+function ConstructedTypeText(const ANode: TTSNode; const ASrc: TBytes): string;
+var Recv, Ent: TTSNode; P: Integer;
+begin
+  Result:= '';
+  if ANode.IsNull then Exit;
+  Recv:= Default(TTSNode);
+  if ANode.NodeType = 'exprDot' then
+    Recv:= ANode.ChildByField('lhs')
+  else if ANode.NodeType = 'exprCall' then
+  begin
+    Ent:= ANode.ChildByField('entity');
+    if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then Recv:= Ent.ChildByField('lhs');
+  end;
+  if Recv.IsNull then Exit;
+  Result:= Trim(NodeStr(Recv, ASrc));
+  { keep the last dotted segment -- the unit qualification is not the type }
+  P:= LastDelimiter('.', Result);
+  if P > 0 then Result:= Trim(Copy(Result, P + 1, MaxInt));
 end;
 
 function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;
@@ -823,6 +854,10 @@ var
     EscAna: IDataFlowAnalysis<TArray<Boolean>>;
     EIn2, EOut2: TArray<TArray<Boolean>>;
     CreateRow, CreateCol: TArray<Integer>;
+    { The type NAME the constructor names, for locals with no declared type
+      (`var Re := TRegEx.Create(..)`). TypeIsRefCountedOrValue decides from the
+      DECLARED type, which an inline var does not have. }
+    CreateType: TArray<string>;
     FreedAna: IDataFlowAnalysis<TFreedVal>;
     FIn, FOut: TArray<TFreedVal>;
     CurFMust, CurFMay: TArray<Boolean>;
@@ -844,11 +879,7 @@ var
         begin
           CurMust := Copy(AIn[B].Must); CurMay := Copy(AIn[B].May);
           { synthetic entry defs (foreach iterator) }
-          for J := 0 to High(Cfg.Blocks[B].EntryDefs) do
-          begin
-            Idx := Vars.IndexOf(Cfg.Blocks[B].EntryDefs[J]);
-            if Idx >= 0 then begin CurMust[Idx] := True; CurMay[Idx] := True; end;
-          end;
+          ApplyEntryDefs(Cfg.Blocks[B], Vars, CurMust, CurMay, True);
           for I := 0 to Cfg.Blocks[B].Items.Count - 1 do
           begin
             It := Cfg.Blocks[B].Items[I];
@@ -942,6 +973,11 @@ var
           for B := 0 to Cfg.BlockCount - 1 do
           begin
             CurFMust := Copy(FIn[B].Must); CurFMay := Copy(FIn[B].May);
+            { Mirror TFreedState.Transfer's EntryDefs kill. FIn[B] is the JOIN of
+              the predecessors, so it still carries the back-edge's dangling
+              state; the replay must rebind the foreach iterator before it walks
+              the items or `for L in List do L.Free` reports itself. }
+            ApplyEntryDefs(Cfg.Blocks[B], Vars, CurFMust, CurFMay, False);
             for I := 0 to Cfg.Blocks[B].Items.Count - 1 do
             begin
               It := Cfg.Blocks[B].Items[I];
@@ -1289,7 +1325,8 @@ var
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, EscAna, EIn2, EOut2) then
         begin
           SetLength(CreateRow, Vars.Count); SetLength(CreateCol, Vars.Count);
-          for I := 0 to Vars.Count - 1 do begin CreateRow[I] := 0; CreateCol[I] := 0; end;
+          SetLength(CreateType, Vars.Count);
+          for I := 0 to Vars.Count - 1 do begin CreateRow[I] := 0; CreateCol[I] := 0; CreateType[I] := ''; end;
           { record each local's constructor-assignment site }
           for B := 0 to Cfg.BlockCount - 1 do
             for J := 0 to Cfg.Blocks[B].Items.Count - 1 do
@@ -1306,6 +1343,7 @@ var
               begin
                 CreateRow[Tgt] := Integer(It.Node.StartPoint.Row) + 1;
                 CreateCol[Tgt] := Integer(It.Node.StartPoint.Column) + 1;
+                CreateType[Tgt] := ConstructedTypeText(It.Node.ChildByField('rhs'), PF.Src);
               end;
             end;
           { a created local still may-open at the routine exit -> possible leak }
@@ -1327,7 +1365,15 @@ var
             leak, because neither shape can leak by construction. }
           for I := 0 to Vars.Count - 1 do
             if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and EIn2[Cfg.ExitIdx][I]
-               and not TypeIsRefCountedOrValue(Vars.Get(I).TypeText, AStore)
+               { An inline `var X := T.Create(..)` has NO declared type, so the
+                 value/interface narrowing below had nothing to read and every
+                 such local was a leak candidate regardless of its kind. Fall
+                 back to the type the constructor names. (Latent until inline
+                 vars started registering as assignment targets at all -- see
+                 AssignmentTargetIndex's varAssignDef fix.) }
+               and not TypeIsRefCountedOrValue(
+                     if Trim(Vars.Get(I).TypeText) <> '' then Vars.Get(I).TypeText else CreateType[I],
+                     AStore)
                { the variable is handed to a `finally` -- see FreedInFinallyBlock:
                  what remains open at the exit is the try..except modelling edge,
                  not a missed Free. }

@@ -25,7 +25,7 @@ progress here, and worth trying first on anything below:
 
 | note | why it ranks here |
 |---|---|
-| `group-E-dataflow-rules-are-majority-false` | **PARTLY DONE.** `overwrite-before-read` 56 -> 32 (section 1 fixed). Sections on `double-free` (42) and the interface-release shape are untouched, and the note's method -- sample before believing a count -- is the right one. |
+| `group-E-dataflow-rules-are-majority-false` | **DONE 2026-08-16 -- retire it.** All three sections fixed: `overwrite-before-read` 56 -> 32, `used-before-assignment` closed to a path-sensitivity residue, `double-free` **42 -> 0**. The last one was THREE bugs, not one (member/element free credited to the base var; the for-in iterator not rebound; an inline `var X := ..` not counting as a definition at all -- the fourth "keywords are NAMED nodes" bug). Guard: `run_double_free_loops_and_members.ps1`, 7/7 with three positive controls. |
 | `remaining-raw-text-scans-read-comments-as-code` | The audit result for the nine-instance family. Three left: FormsMap launch/show detection (wrong CSV rows), TypeAt hover inference, the `todos` verb. Also records what was CLEARED so nobody re-audits. |
 | `audit-store-backed-fix-paths-for-stale-positions` | `doc-drift` and `missing-doc` resolve targets by (file, line) with NO verification; only the rename path was hardened. `tekReplaceInLine` clamps EndCol but not Col, so a stale column silently APPENDS. |
 | `bare-except-anchor-defeats-a-hand-written-marker` | A hand-written `dl:ok` at the obvious place never matches, then gets reported unused. Fixing the anchor invalidates every recorded `@hash` for the rule -- take that churn deliberately, once, and check sibling rules first. |
