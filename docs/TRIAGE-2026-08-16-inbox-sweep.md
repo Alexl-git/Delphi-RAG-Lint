@@ -204,6 +204,24 @@ than a verdict I cannot defend.
 | `field-name-prefix-fixable-flag-lies` | `rules --json` reports `"fixable": true`, which is half the claim. The other half -- that `--fix` then refuses -- was NOT exercised; the only live findings are 2 in DataCopy, and running `--fix` there would edit another repo mid-sweep. Untested. |
 | `deep-nesting-silent-on-trailing-else-call` | Built a 5-deep fixture ending in `if E then ... else Writeln(...)`; `deep-nesting` did not fire. **That proves nothing** -- the threshold is 5, so the fixture may simply be under it. Without a positive control (same fixture with the trailing else replaced by another nested `if`, which MUST fire) the silence is unattributable. Exactly the trap this document opens with. |
 
+## Round 3 -- the three that resisted round 1, settled with a proper fixture
+
+All three were recorded earlier as "explicitly NOT settled". One fixture
+(`scratchpad\sweep7\uThree.pas`) closed all three.
+
+| note | status | measurement |
+|---|---|---|
+| `create-inside-try-qualified-lhs-not-flagged` | **REFUTED -- retired** | Its claim is that a QUALIFIED lhs escapes the rule. `Self.FFoo := TStringList.Create;` as the first statement inside a `try..finally` **is** reported (`:25:5 [warning] create-inside-try`). Matches the note's own `Status: RESOLVED`; only the index entry was stale. |
+| `deep-nesting-silent-on-trailing-else-call` | **CONFIRMED** (round 1 was inconclusive) | Two routines at the same site. **Positive control**: 7 nested `if`s ending in a plain call -> fires, *"nests control structures 7 deep (max 5)"*. **Negative arm**: 6 nested `if`s whose innermost is `if ... then A else B` -> **silent**, though 6 also exceeds 5. Round 1 built only the negative arm and read its silence as evidence, which it was not. |
+| `field-name-prefix-fixable-flag-lies` | **CONFIRMED -- both halves now measured** | Catalog: `"id":"field-name-prefix" ... "fixable":true`. Autofix: `lint-all --rule field-name-prefix --fix --apply` prints **`autofix: no fixable findings (of 5 finding(s))`** and leaves the file byte-identical. Advertised fixable, refuses to fix. **Measured as a FAMILY, not an instance**: `const-casing` and `type-name-prefix` also declare `fixable:true` and also print `no fixable findings` while leaving the file byte-identical. So the defect is that the CATALOG advertises rule-level fixability which the FINDINGS never carry -- two different flags that nobody reconciles -- not a bug in one rule. Re-file under that heading. **Do not "fix" this by making naming autofix run**: `naming-autofix-corrupts-source-on-stale-index` is the reason that path is guarded, so the honest fix is to stop advertising what will not run. |
+
+## Round 3 (cont.)
+
+| note | status | measurement |
+|---|---|---|
+| `referenced-never-set-false-positive-on-record-factories` | **CONFIRMED, 3 of 3 false** | All three live findings are `FDeclared`/`FError`/`FActive` in `DRagLint.Project.OwnRoots.pas:42-44`, reported as "read but never written". They ARE written -- `:157 Result.FActive := ...`, `:182 Result.FError := ...`, `:194/:209 Result.FDeclared := ...` -- through `Result.<Field>` inside a record-returning factory, which is precisely the shape the note names. 100% false on the only live population. |
+| `inline-comment-rule-premise-is-false-for-yadf` | **MOOT -- close unless the owner wants the rule itself revisited** | The note argues the rule's premise is wrong for YADF's workflow. Current counts: **YADF 0**, DataCopy 1. It is costing YADF nothing, so there is no measurable case to answer. Keep only if the objection is to the rule's existence rather than its noise. |
+
 ## Round 2 -- settled by code inspection (no engine calls, ran during a battery)
 
 | note | status | evidence |
