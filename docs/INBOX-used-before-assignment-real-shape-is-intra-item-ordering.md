@@ -10,9 +10,16 @@
 >   `CollectAndOrLeftDefs` (`DRagLint.Diagnostics.FlowChecks.pas:622-660`). Even
 >   DataCopy's `uAlertGrouper.pas:384` case is silent now.
 >
+> **CORRECTION (same day, after reading all 39): they are NOT all one shape.**
+> An earlier banner here said they were; that was based on a sample of five.
+> The real split is **A=4 / B=21 / C=12 / D=2** -- see
+> `docs\PLAN-SESSION-23-IMPLEMENTATION.md` section 4 for the full table and the
+> per-site anchors. Crucially **12 of the 39 (shape C: arrays and records only
+> ever element- or field-written) can NEVER be reached by any predicate
+> correlation**, so the ceiling for that approach is 25, not 39.
+>
 > **What IS live: 39 findings on the self-index, all hedged `[info] ... may be
-> used`, and all the same previously undocumented shape -- BOOLEAN-FLAG-CORRELATED
-> GUARDS:**
+> used`. The largest group is BOOLEAN-FLAG-CORRELATED GUARDS:**
 >
 > ```pascal
 > if Profiled then TMark := TStopwatch.GetTimeStamp;
@@ -30,6 +37,16 @@
 > condition, with the flag not mutated between -- which is M-L effort and
 > genuinely risky (a reassignment between the two guards breaks it; comparing
 > condition TEXT is only a proxy).
+>
+> **RECOMMENDATION 2026-08-16: DO NOT IMPLEMENT.** 0 findings on all four
+> consumer projects; all info and correctly hedged; 14 of 39 unreachable by any
+> correlation check; and the highest-yield part needs an airtight flag-pairing
+> proof where ANY gap suppresses TRUE positives -- the worst failure direction
+> for this rule. If it is ever picked up, do shape B forms (i)+(iv) only.
+>
+> Separately worth a look and probably a REAL bug: the finding at
+> `Lint.ProjectRules.pas:1181` sits ON an inline `var` declaration -- a distinct
+> walker defect, cost S.
 >
 > **Accepting them is a legitimate outcome.** They are hedged info findings on a
 > correct and common idiom. Do NOT implement either of the two dead fixes above;
