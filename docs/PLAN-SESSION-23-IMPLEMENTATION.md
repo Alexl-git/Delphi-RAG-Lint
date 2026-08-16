@@ -8,12 +8,13 @@ start coding immediately rather than re-deriving.**
 
 | | |
 |---|---|
-| branch | `main`, HEAD `10902bd` |
-| unpushed | **83 commits, ON PURPOSE** -- release gate is the owner's to lift |
+| branch | `main`, HEAD **`f6d7c3f`** |
+| unpushed | **85 commits, ON PURPOSE** -- Group A is finished, so the gate is the OWNER'S to lift. Owner intends to publish soon after Group B and parts of C close, then check it in the IDE. |
 | working tree | clean |
-| battery | **302/302** green at `10902bd` |
+| battery | **303/303** green at `f6d7c3f` |
 | exe | `third_party\dll-win64\drag-lint.exe`, built 2026-08-16 13:55 |
 | INBOX | 13 open, 96 retired |
+| branches | Nothing of ours to merge -- all work went straight to `main`. NOTE: `salvage/lsp-codeaction-agent` carries 2 owner-authored commits from 2026-08-12 (LSP codeAction for `dl:ok` markers) never merged; left alone deliberately. |
 
 **Consumer source edits are NOW PERMITTED** (owner, end of session 22). The
 earlier "consumer files will wait" instruction is lifted. YADF / YADFOT /
@@ -51,7 +52,7 @@ Ordered by value per unit of risk. Items 1-3 are consumer-visible; 4-5 are engin
    hypothesis. Biggest consumer-visible win if it holds.
 3. **`converter-editor-phase-g` 2.11** (strong type aliases never indexed) --
    HIGH, and the same defect class as the already-fixed 2.1.
-4. **`used-before-assignment`** -- flag-correlated guards. Highest risk; a
+4. **`used-before-assignment`** -- **shape A is DONE** (same-predicate suppression shipped, 39 -> 35). Shapes B/C/D remain; a
    "do not implement" recommendation is a legitimate outcome.
 5. **Group B remainder** -- see below; already planned with anchors.
 
