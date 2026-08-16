@@ -285,6 +285,13 @@ type
     // Spring), set only when TargetSymbolId = 0. A ref never carries both: a
     // local edge always wins, and cross-DB resolution runs last.
     ExternalTarget      : string;
+    // v(2026-08-16): True when the receiver could NOT be derived from source
+    // matching the index -- the file was edited since it was indexed, or could
+    // not be read. It means "unknown", NEVER "no receiver", and the persistence
+    // step must leave the stored receiver_text alone rather than write ''.
+    // Defaults False so Default(TCallEdge) keeps the old meaning (known).
+    // See TCallResolver.LinesOf and INBOX-whole-db-resolve-degrades-a-stale-index.
+    ReceiverUnknown     : Boolean;
   end;
 
   /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see

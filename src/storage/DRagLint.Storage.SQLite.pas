@@ -8265,6 +8265,11 @@ var
   Ref       : TReference    ;
   Edge      : TCallEdge     ;
   KeepEdge  : Boolean       ;
+  SkippedStaleRcv: Integer  ; { refs whose receiver write was withheld as stale }
+  QStale    : TFDQuery      ; { distinct file ids in the resolve universe        }
+  StaleIds  : TList<Int64>  ; { of those, the ones no longer matching the index  }
+  StaleWhere: string        ; { 'refs.file_id NOT IN (...)', '' when none stale  }
+  StaleFileCount: Integer   ;
   DummyTok  : TFileTxToken  ;
   Written   : Int64         ;
   Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
@@ -8318,6 +8323,9 @@ begin
   UpdRcv    := TFDQuery.Create(nil);
   QIsRoutine:= TFDQuery.Create(nil);
   QTwin     := TFDQuery.Create(nil);
+  QStale    := TFDQuery.Create(nil);
+  StaleFileCount:= 0;
+  StaleWhere:= '';
   try
     Q.Connection:= FConn;
     { PREPARED once, executed per ref -- the same discipline UpsertCallEdge uses,
@@ -8389,6 +8397,62 @@ begin
     { The scoped pass narrows the SAME universe rather than defining its own:
       widen the kind test above and the scoped path follows automatically. }
     if Scoped then Q.SQL.Text:= Q.SQL.Text + ' AND (' + ScopeWhere + ')';
+
+    { ---- STALE-FILE PRESCAN (INBOX-whole-db-resolve-degrades-a-stale-index) ----
+
+      This pass re-derives every streamed ref from its source line ON DISK, at
+      the line/col recorded when that file was last INDEXED. For a file edited
+      since, those disagree: it reads an unrelated line at an unrelated column,
+      and then WRITES the result -- destroying both refs.receiver_text and the
+      call edge. Measured: `index <one file> --force-reparse` over a stale
+      DragLint-Cli destroyed 11,008 receivers and 464 call edges, silently,
+      while reporting success.
+
+      So identify those files FIRST, and exclude their refs from BOTH the delete
+      and the stream. Their existing rows -- computed against the source that
+      actually produced them -- are by definition the right ones and are left
+      untouched. The correct repair for a stale file is to REINDEX it, which
+      recreates its refs and resolves them properly.
+
+      The probe (TCallResolver.LinesOf) reads each file once and caches it, and
+      the stream below would have read exactly the same files, so this costs no
+      extra I/O -- it only moves the read earlier. }
+    StaleIds:= TList<Int64>.Create;
+    try
+      QStale.Connection:= FConn;
+      QStale.SQL.Text  := 'SELECT DISTINCT file_id FROM refs WHERE ' +
+        '(' + CallSiteRefKindSql('refs') + ' OR refs.kind = ''member-access'')';
+      if Scoped then QStale.SQL.Text:= QStale.SQL.Text + ' AND (' + ScopeWhere + ')';
+      QStale.Open;
+      while not QStale.Eof do
+      begin
+        var Fid: Int64:= QStale.FieldByName('file_id').AsLargeInt;
+        if (Fid > 0) and Resolver.FileIsStaleProbe(Fid) then StaleIds.Add(Fid);
+        QStale.Next;
+      end;
+      QStale.Close;
+
+      StaleWhere:= '';
+      if StaleIds.Count > 0 then
+      begin
+        var SB: TStringBuilder:= TStringBuilder.Create;
+        try
+          for var I:= 0 to StaleIds.Count - 1 do
+          begin
+            if I > 0 then SB.Append(',');
+            SB.Append(StaleIds[I]);
+          end;
+          StaleWhere:= 'refs.file_id NOT IN (' + SB.ToString + ')';
+        finally
+          SB.Free;
+        end;
+        Q.SQL.Text:= Q.SQL.Text + ' AND (' + StaleWhere + ')';
+      end;
+      StaleFileCount:= StaleIds.Count;
+    finally
+      StaleIds.Free;
+    end;
+
     FConn.StartTransaction;
     try
       { THE DELETE BELONGS IN THIS TRANSACTION, and it was outside it until
@@ -8410,11 +8474,20 @@ begin
         would leave the stale edge in place (UpsertCallEdge is keyed on ref_id,
         so it would overwrite; the DELETE is what covers a ref that now resolves
         to NOTHING and must end up with no row at all). }
+      { The delete must spare exactly what the stream skips, or the prescan above
+        protects the receiver and destroys the edge anyway -- which is half the
+        measured damage. When nothing is stale this is the original fast path,
+        bulk ClearCallEdges included. }
       if Scoped then
         FConn.ExecSQL('DELETE FROM call_edges WHERE ref_id IN ' +
-                      '(SELECT refs.id FROM refs WHERE ' + ScopeWhere + ')')
+                      '(SELECT refs.id FROM refs WHERE (' + ScopeWhere + ')' +
+                      IfThen(StaleWhere <> '', ' AND (' + StaleWhere + ')', '') + ')')
+      else if StaleWhere <> '' then
+        FConn.ExecSQL('DELETE FROM call_edges WHERE ref_id IN ' +
+                      '(SELECT refs.id FROM refs WHERE ' + StaleWhere + ')')
       else
         ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
+      SkippedStaleRcv:= 0;
       Q.Open;
       while not Q.Eof do
       begin
@@ -8445,6 +8518,15 @@ begin
           engine". A consumer that treats NULL as "bare" would silently restore
           the old fabrication on a stale DB -- reindex, do not reinterpret. }
         if Profiled then TMark:= TStopwatch.GetTimeStamp;
+        { v(2026-08-16): a ref whose source file has been edited since it was
+          indexed yields a receiver read off an unrelated line. Withhold the
+          write entirely rather than overwrite a good stored value with a guess
+          -- see TCallResolver.LinesOf and
+          INBOX-whole-db-resolve-degrades-a-stale-index. Note this SKIPS, it does
+          not write '': '' is a real value meaning "bare call", and NULL still
+          means "never resolved by a v20 engine". Neither may be forged here. }
+        if not Edge.ReceiverUnknown then
+        begin
         UpdRcv.ParamByName('r' ).AsString   := Edge.ReceiverText;
         { v21: NULL when there is no external answer, so "not resolved
           externally" stays distinguishable from "resolved to an empty name". }
@@ -8452,6 +8534,9 @@ begin
         else UpdRcv.ParamByName('x').Clear;
         UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
         UpdRcv.ExecSQL;
+        end
+        else
+          Inc(SkippedStaleRcv);
         if Profiled then Inc(AccRcv, TStopwatch.GetTimeStamp - TMark);
         if Edge.TargetSymbolId > 0 then
         begin
@@ -8509,6 +8594,15 @@ begin
     else
       ResolveLog(Format('calls      %d edge(s) from %d call-site ref(s), WHOLE DB  [%.1fs, clear %.1fs, maps %.1fs]',
         [Written, Streamed, ResolveSecs(T0), TClear, TMaps]));
+    { Make the staleness VISIBLE. Silence here is what let a stale index degrade
+      unnoticed: counts only went down and nothing errored. If this line ever
+      appears, the fix is to REINDEX the named tree, not to re-run the resolve. }
+    if StaleFileCount > 0 then
+      ResolveLog(Format('calls      %d file(s) WITHHELD -- their source no longer matches the index, so their call edges and receivers were left alone (reindex to refresh)',
+        [StaleFileCount]));
+    if SkippedStaleRcv > 0 then
+      ResolveLog(Format('calls      %d receiver write(s) additionally withheld (source became unreadable mid-pass)',
+        [SkippedStaleRcv]));
     if Profiled then
       ResolveLog(Format('calls      ... resolve %.1fs  receiver-update %.1fs  member-access guards %.1fs  edge-write %.1fs',
         [AccRes / TStopwatch.Frequency, AccRcv / TStopwatch.Frequency,
@@ -8518,6 +8612,7 @@ begin
     UpdRcv.Free;
     QIsRoutine.Free;
     QTwin.Free;
+    QStale.Free;
     Resolver.Free;
   end; // try
 end; // procedure

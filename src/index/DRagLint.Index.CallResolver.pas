@@ -19,6 +19,8 @@ uses
   System.SysUtils,
   System.Classes,
   System.IOUtils,
+  System.Hash,      { THashSHA2 -- the staleness probe in LinesOf }
+  System.DateUtils, { DateTimeToUnix -- same }
   System.Generics.Collections,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces;
@@ -65,6 +67,10 @@ type
     // Cache: source file id -> its lines (0-based array). A single whole-DB pass
     // touches many refs in the same file; read each file at most once.
     FLineCache  : TObjectDictionary<Int64, TStringList>;
+    // File ids whose ON-DISK content no longer matches what the index recorded
+    // (or which could not be read at all). Populated by LinesOf, one probe per
+    // file per run. See LinesOf for why this exists.
+    FStaleFiles : TDictionary<Int64, Boolean>;
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -176,6 +182,10 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LinesOf(AFileId: Int64): TStringList;
+    { True when AFileId's on-disk content no longer matches what the index
+      recorded, or it could not be read. Only meaningful AFTER LinesOf has been
+      called for that file -- the probe happens there, once per file per run. }
+    function FileIsStale(AFileId: Int64): Boolean;
     /// <summary>Find a direct child of AParentId whose Name matches AName (case-
     /// insensitively) and whose Kind is in AKinds. Default(TSymbol) (Id=0) when
     /// none.</summary>
@@ -367,6 +377,14 @@ type
     /// </remarks>
     function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
   public
+    { Probes AFileId (reading + caching it if not already read) and reports
+      whether its on-disk content still matches what the index recorded. Called
+      by ResolveCallTargets BEFORE it deletes anything, so a stale file's
+      existing call edges and receivers can be excluded from both the delete and
+      the resolve stream rather than rebuilt from source that no longer lines up.
+      See LinesOf and INBOX-whole-db-resolve-degrades-a-stale-index. }
+    function FileIsStaleProbe(AFileId: Int64): Boolean;
+
     /// <summary>Builds the whole-DB name/scope maps from AStore. Call once.</summary>
     /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
     /// <param name="AExtraStores">v21: other open indexes -- in practice the
@@ -993,12 +1011,14 @@ begin
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
+  FStaleFiles := TDictionary<Int64, Boolean>.Create;
   BuildMaps;
 end;
 
 destructor TCallResolver.Destroy;
 begin
   FLineCache .Free;
+  FStaleFiles.Free;
   FChildCache.Free;
   FFileScope .Free;
   FNameToRoutines.Free;
@@ -1104,7 +1124,9 @@ end;
 
 function TCallResolver.LinesOf(AFileId: Int64): TStringList;
 var
-  Path: string;
+  Path : string;
+  Bytes: TBytes;
+  Txt  : string;
 begin
   if AFileId <= 0 then Exit(nil);
   if FLineCache.TryGetValue(AFileId, Result) then Exit;
@@ -1112,15 +1134,61 @@ begin
   Path  := FStore.GetFilePath(AFileId);
   if Path <> '' then
     try
+      { STALENESS PROBE (INBOX-whole-db-resolve-degrades-a-stale-index).
+
+        This reads the file as it is on disk NOW, while Ref.StartLine /
+        Ref.StartCol are where the ref was when that file was last INDEXED. For
+        any file edited since it was indexed the two disagree, so the caller
+        reads an unrelated line at an unrelated column and derives a receiver
+        from it. The pass then WRITES that over the good stored value -- not a
+        failed refresh that leaves the old answer alone, but a successful write
+        of a wrong one. Measured: one `index <single file>` run over a stale
+        DragLint-Cli destroyed 11,008 receivers and 464 call edges.
+
+        Losing receiver_text silently restores the exact fabrication it was
+        added to prevent (a bare `Create` attributed to every constructor in the
+        index), and nothing errors -- counts only go down.
+
+        So: probe with the SAME inputs the indexer used to decide a file was up
+        to date (raw bytes -> ANSI string -> SHA2, plus the file mtime), and
+        record a mismatch. ResolveOne turns that into ReceiverUnknown, and the
+        persistence step then LEAVES the stored receiver alone instead of
+        overwriting it with a guess.
+
+        Deliberately NOT "skip the file": resolution still runs, because a
+        name-based rung can still be right. Only the receiver WRITE is withheld,
+        which is the part that destroys information. }
+      Bytes:= TFile.ReadAllBytes(Path);
       // ANSI: source files are strict 7-bit ASCII / CP125x, matching Doc.Facts.
-      Result.Text:= TFile.ReadAllText(Path, TEncoding.ANSI);
+      Txt  := TEncoding.ANSI.GetString(Bytes);
+      if not FStore.FileIsUpToDate(Path,
+               DateTimeToUnix(TFile.GetLastWriteTime(Path), False),
+               THashSHA2.GetHashString(Txt)) then
+        FStaleFiles.AddOrSetValue(AFileId, True);
+      Result.Text:= Txt;
     except
       // A missing / locked / unreadable source file is not fatal to the whole-DB
       // pass: leave the line list empty so this ref's receiver stays unresolved
       // (Target=0) rather than aborting resolution for every other ref.
+      //
+      // It IS however "unknown", not "no receiver" -- an unreadable file must
+      // not be allowed to blank every receiver in it, which is the same damage
+      // the staleness probe above exists to prevent.
       Result.Clear;
+      FStaleFiles.AddOrSetValue(AFileId, True);
     end;
   FLineCache.Add(AFileId, Result);
+end;
+
+function TCallResolver.FileIsStale(AFileId: Int64): Boolean;
+begin
+  Result:= FStaleFiles.ContainsKey(AFileId);
+end;
+
+function TCallResolver.FileIsStaleProbe(AFileId: Int64): Boolean;
+begin
+  LinesOf(AFileId); { performs the probe once, then caches both lines and verdict }
+  Result:= FileIsStale(AFileId);
 end;
 
 function TCallResolver.FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet): TSymbol;
@@ -1472,6 +1540,12 @@ begin
     earlier legitimately has '' (no name, or no readable source line). This is a
     pure record write; the value was already being computed and dropped. }
   Result.ReceiverText:= Rcv;
+  { A receiver derived from a line that no longer corresponds to this ref is a
+    GUESS, not a fact. Flag it so ResolveCallTargets withholds the write and the
+    stored value -- computed against the source that actually produced the ref --
+    survives. Resolution below still runs: a name-based rung can be right even
+    when the source line is unusable. }
+  Result.ReceiverUnknown:= FileIsStale(ACallRef.FileId);
 
   // 1b. B1: count the arguments at this site, from the same cached lines. Unlike
   // the receiver scan -- which reads LEFT and cannot leave the line -- an
