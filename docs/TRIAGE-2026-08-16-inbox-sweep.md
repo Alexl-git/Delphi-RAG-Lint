@@ -204,6 +204,25 @@ than a verdict I cannot defend.
 | `field-name-prefix-fixable-flag-lies` | `rules --json` reports `"fixable": true`, which is half the claim. The other half -- that `--fix` then refuses -- was NOT exercised; the only live findings are 2 in DataCopy, and running `--fix` there would edit another repo mid-sweep. Untested. |
 | `deep-nesting-silent-on-trailing-else-call` | Built a 5-deep fixture ending in `if E then ... else Writeln(...)`; `deep-nesting` did not fire. **That proves nothing** -- the threshold is 5, so the fixture may simply be under it. Without a positive control (same fixture with the trailing else replaced by another nested `if`, which MUST fire) the silence is unattributable. Exactly the trap this document opens with. |
 
+## FINAL PASS -- full reindex -> autodoc -> reindex -> lint, all four projects
+
+| project | start of session | now | errors | files scanned | autodoc |
+|---|---|---|---|---|---|
+| YADF | 14 | **6** | 0 | 9 (was 8) | converged, *nothing to document* |
+| YADFOT | 12 | **6** | 0 | 9 | converged, *nothing to document* |
+| YADFSetup | 15 | **9** | 0 | 10 (was 9) | converged, *nothing to document* |
+| DataCopy | 60 | **46** | 0 | 16 (was 15) | 2 edits applied (1 of 383 decls) |
+
+**Autodoc converged on all three YADF projects on the FIRST pass** -- no
+oscillation, which is what the doc-drift guard exists to catch.
+
+**DataCopy went 44 -> 46 and that is a GAIN, not a regression.** The scanned
+count rose 15 -> 16 because `.dpr` bodies are now linted, and the two new
+findings are `DataCopy.dpr:63` and `:64` -- locals `FHandle` and `FLastError`
+wearing the `F` field prefix in the program body. That code was **invisible to
+the linter until today**. A count going up because the tool stopped skipping a
+file is the outcome to want.
+
 ## Round 3 -- the three that resisted round 1, settled with a proper fixture
 
 All three were recorded earlier as "explicitly NOT settled". One fixture
