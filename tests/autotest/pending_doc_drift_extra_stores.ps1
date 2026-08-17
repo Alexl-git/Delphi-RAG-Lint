@@ -1,4 +1,37 @@
 <#
+  PENDING -- deliberately named `pending_*` so the battery's `run_*.ps1`
+  discovery does NOT pick it up. It is the fixture for work that is not
+  implemented (INBOX-buildfor-defaulted-args, the AExtraStores residue), and a
+  test for an unbuilt feature belongs outside the battery, not inside it as a
+  standing red.
+
+  STATUS 2026-08-17: written, and it does NOT yet demonstrate the defect.
+  Against the current build it reports:
+
+      1 document --db A --db B wrote the block naming B's caller      PASS
+      2 lint-all --db A --db B --fix KEPT the entry                   PASS
+      3 no ping-pong                                                  PASS
+      4 POSITIVE CONTROL: lint-all --db A alone DOES strip it         FAIL
+
+  Step 4 failing is the whole point of having it: with only dbA open the entry
+  is unaccountable and SHOULD be reported stale, and it is not. `lint-all --db A`
+  on the fixture emits only `empty-procedure-body` -- no facts-block-stale
+  finding at all. So either the fixture does not put the decl into doc-drift's
+  population (the generated block carries only <remarks>, no <summary> -- check
+  what DocumentedPublicDecls actually requires), or the drift signal is narrower
+  than the note assumes.
+
+  DO NOT rename this to run_* until step 4 goes RED for the right reason.
+  Until then steps 1-3 passing means nothing: they would pass on an engine that
+  never reports drift at all.
+
+  NEXT DIAGNOSTIC (unrun -- needs a quiet machine):
+      DRAGLINT_PROFILE=1 drag-lint lint-all --db <a.sqlite> --quiet
+  and read the DOC-DRIFT BREAKDOWN decl count. Zero documented decls means the
+  fixture, not the engine.
+
+  ---
+
   run_doc_drift_extra_stores.ps1 -- a cross-DB inbound fact must survive
   `lint-all --fix`.
 
