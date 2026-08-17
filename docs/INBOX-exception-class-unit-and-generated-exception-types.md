@@ -115,36 +115,33 @@ is not already taken**. That last clause is the whole difficulty.
    non-test code) is probably required. **Measure the distinct-message count on
    ORM3 before committing to this** -- if it is 400, the feature is wrong as stated.
 
-   > ### MEASURED 2026-08-17 (session 25). It is 42, not 400 -- the feature survives its own kill-criterion.
+   > ### This was RE-MEASURED 2026-08-17 (session 25) and the new number was WRONG. Retracted.
    >
-   > Taken from the ORM3 `lint-all` report, reading each finding's source line:
+   > That run reported "42 distinct messages, and 59 of 139 sites carry no string
+   > literal". **Do not use those figures.** They are not comparable to the 64
+   > above, and they are worse evidence:
    >
-   > | | count |
-   > |---|---|
-   > | `raise-bare-exception` findings | **139** |
-   > | of those, with a recoverable STRING LITERAL message | **80** |
-   > | **DISTINCT message texts** | **42** |
-   > | distinct messages raised from **2+ sites** | **12** |
+   > * **Different population.** Session 22 scanned the WHOLE `C:\Projects\DB\ORM3`
+   >   tree; the re-measure read one project's (`ORM3-Micronite2027`) `lint-all`
+   >   report -- its own roots only, 566 files.
+   > * **Different set.** `raise-bare-exception` findings (139) are not the same
+   >   thing as `raise Exception.Create` sites (98/89 live). The rule fires on
+   >   shapes the text scan never counted.
+   > * **Worse method, and it is the exact one this note already warns against.**
+   >   The re-measure recovered messages with a REGEX over the finding's line
+   >   plus two more. It recovered 80 of 139 -- and then the 59 it could not parse
+   >   were reported as "sites with no literal", i.e. a limitation of the
+   >   extractor was written up as a property of the code. Doubled-quote escapes
+   >   and multi-line raises are precisely what defeats a text scan here.
    >
-   > Most-repeated: `'This plan is set on the HUB screen'` (10 sites),
-   > `'Internal Error: Unknown control mode='` (8), `'Z1.9: Wrong Call'` (5),
-   > `'Statsman: Wrong Call'` (5).
-   >
-   > So a frequency floor of 2+ sites yields **12 classes**, and no floor at all
-   > yields 42. Ruling 5 is answered: scope is not the obstacle.
-   >
-   > **The other 59 findings are the finding that matters here.** They carry no
-   > string literal -- they are `Exception.Create(Format(...))`, a variable, or a
-   > concatenation. **Stage 3 (generate a class per message) cannot serve them at
-   > all**, which means the generated-class idea covers at best 80 of 139 sites
-   > even before deduplication. Stage 1 (report which existing class fits) does
-   > not care, because it matches on the RAISE SITE, not on the text. That is an
-   > argument for shipping stage 1 and being sceptical of stage 3, and it was not
-   > visible before counting.
+   > **The AST-based 64 stands.** Design question 5 stays ANSWERED by the session
+   > 22 measurement, and the "read the AST, not the text" method note above is now
+   > evidenced twice: once by the 98-vs-89 commented-out gap, and once by a
+   > re-measure that fell into it.
    >
    > Rulings 1-4 still need the owner -- above all what *"fits"* means in stage 1
    > (normalized message match, or class-name match?), since normalization is only
-   > spec'd for stage 3. The count no longer blocks that conversation.
+   > spec'd for stage 3. That, not the count, is what blocks this.
 
 ## Suggested staging
 

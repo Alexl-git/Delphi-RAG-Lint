@@ -131,11 +131,15 @@ failure this whole note thread records four times.
   correctness-sensitive, has an A/B hatch (`DRAGLINT_NO_SCOPED_RESOLVE`).
 * **The intermittent FK failure** in the fingerprint note -- one occurrence, not
   reproduced, keeps that note open.
-* **C3 `exception-class-unit`** -- measured on ORM3: 139 findings, 80 with a
-  literal message, **42 distinct texts** (not the feared 400), 12 raised from 2+
-  sites. So scope is not the obstacle. But **59 of 139 carry no literal at all**
-  (`Format(...)`, variables, concatenation), which stage 3 cannot serve -- ship
-  stage 1, be sceptical of stage 3. Four owner rulings still block it.
+* **C3 `exception-class-unit`** -- scope was ALREADY answered in session 22 by an
+  AST-based count: **64 distinct messages on ORM3**, not the feared 400. A
+  re-measure this session produced "42" and was **retracted**: different
+  population (one project's report vs the whole tree), different set
+  (`raise-bare-exception` findings vs `raise Exception.Create` sites), and a
+  regex extractor whose 59 failures were nearly written up as "sites with no
+  literal" -- a limitation of the tool reported as a property of the code. The
+  note already said "read the AST, not the text"; that warning is now evidenced
+  twice. **What blocks C3 is the four owner rulings, not the count.**
 * **D** -- the IDE checklist still needs the owner at a keyboard. The headless
   half is done: `pwsh -File tools\lsp-diag\bpl-inventory.ps1` (209 + 63 + 182
   registered packages, 151 + 26 + 132 MB on disk; 4 absent files are all
