@@ -2469,7 +2469,34 @@ begin
     else if AForceArg then Writeln('Force reparse: ON (--force-reparse; ignoring the up-to-date skip)')
     else Writeln(Format('Indexer changed since this DB was built (%s -> %s): re-parsing every file in scope.', [Prev, Cur]));
   AIndexer.SetForceReparse(Result);
-  { The stamp DELIBERATELY does not happen here -- see CommitIndexerFingerprint. }
+
+  { PER-FILE RESUME (INBOX-index-runs-are-not-resumable).
+
+    Every file this run commits is stamped with the current fingerprint --
+    unconditionally, including on an ordinary incremental run, because a stamp is
+    only useful to a LATER run and there is no way to know now which run will be
+    the one that gets killed.
+
+    Resuming, though, is permitted for exactly ONE of the three reasons a reparse
+    can be forced. The distinction is the whole correctness argument:
+      * the FINGERPRINT CHANGED -- resumable. A file stamped with the current
+        fingerprint was already re-parsed by this engine, by an earlier run that
+        did not finish, so skipping it is correct rather than merely cheap.
+      * --force-reparse -- NOT resumable. The flag's meaning is "ignore the
+        skip". Honouring a stamp would silently disobey the thing the caller
+        typed.
+      * --rebuild -- NOT resumable, and moot: the index is cleared before the
+        walk, so no stamp survives to match.
+    ARebuild and AForceArg are exactly what distinguishes them, and they are
+    already in hand here. Anywhere else this would have to be re-derived, which
+    is how the two would drift apart. }
+  AStore.SetIndexerFingerprint(Cur);
+  if Result and (not ARebuild) and (not AForceArg) then AIndexer.SetResumeFingerprint(Cur);
+  { The DB-LEVEL stamp DELIBERATELY does not happen here -- see
+    CommitIndexerFingerprint. Per-file stamps and the database-level one answer
+    different questions: the per-file stamps say what has been done, the
+    database-level one says the walk RAN TO COMPLETION. Only the second may be
+    written up front, and it is not. }
 end;
 
 { Stamps the current indexer fingerprint. Called ONLY once a walk has run to

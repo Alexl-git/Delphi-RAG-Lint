@@ -50,6 +50,21 @@ type
       FProfile        : TDefineProfile                     ; { PP-Task-9: active define profile when preprocessing }
       FPreprocessFellBack: Boolean                         ; { PP-Task-9: one-shot fallback-log latch }
       FForceReparse   : Boolean                            ; { INBOX 2.3: bypass the incremental skip for this whole run }
+      { PER-FILE RESUME (INBOX-index-runs-are-not-resumable). '' = off.
+
+        NOT a second name for FForceReparse, and the difference is load-bearing.
+        FForceReparse is set for THREE different reasons and only one of them may
+        resume:
+          * the indexer FINGERPRINT changed  -> resumable. A file already parsed
+            by THIS engine is genuinely up to date and re-parsing it is pure
+            waste. This is the case that costs hours.
+          * --force-reparse                  -> NOT resumable. The flag means
+            "ignore the skip"; honouring a stamp would silently disobey it.
+          * --rebuild                        -> NOT resumable, and moot: the
+            index is wiped first, so no stamp survives to match.
+        Only the caller can tell these apart, so it says so explicitly here
+        rather than this unit inferring it from FForceReparse. }
+      FResumeFingerprint: string                           ;
       { Walk progress (2026-08-16). A per-file line with no counter makes an
         hours-long library reindex indistinguishable from a hang, which is
         exactly the confusion that made the Win32 rebuild abort hard to diagnose.
@@ -386,6 +401,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetForceReparse(AValue: Boolean);
+      /// <remarks>
+      /// Implements: DRagLint.Core.Interfaces.IIndexer.SetResumeFingerprint
+      /// Writes: FResumeFingerprint
+      /// </remarks>
+      procedure SetResumeFingerprint(const AFingerprint: string);
       /// <param name="AFilter"><!-- drag-lint:auto type -->const TWalkFilter</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -490,6 +510,11 @@ end;
 procedure TIndexer.SetForceReparse(AValue: Boolean);
 begin
   FForceReparse:= AValue;
+end;
+
+procedure TIndexer.SetResumeFingerprint(const AFingerprint: string);
+begin
+  FResumeFingerprint:= AFingerprint;
 end;
 
 function TIndexer.IsUnderExcludeRoot(const APath: string): Boolean;
@@ -856,7 +881,16 @@ begin
   // the DB predated the parser that could extract it; `touch` was the only
   // known workaround. FForceReparse is set for the whole run when the caller
   // detects an indexer-fingerprint change (or passes --force-reparse).
-  if (not FForceReparse) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then
+  { PER-FILE RESUME. When the run was forced ONLY because the engine fingerprint
+    changed, a file already stamped with the CURRENT fingerprint has already been
+    re-parsed by this engine -- by an earlier, interrupted run -- so the ordinary
+    up-to-date test is trustworthy again for it. FResumeFingerprint is '' for
+    --force-reparse and --rebuild, which therefore skip nothing, and '' can never
+    equal a stored stamp because FileIndexedFingerprint returns '' for
+    "unknown". Both halves fail toward re-parsing. }
+  var MayResume: Boolean:= (FResumeFingerprint <> '') and
+                           SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
+  if ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then
   begin
     Inc(FSkippedUpToDate);
     Exit;

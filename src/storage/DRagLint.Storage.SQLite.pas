@@ -136,6 +136,13 @@ type
       FQDeleteFileUnitUses   : TFDQuery;
       FQGetFileUnitUses      : TFDQuery;
       FQFindUsersOfUnit      : TFDQuery;
+      { PER-FILE RESUME (INBOX-index-runs-are-not-resumable). The fingerprint the
+        CURRENT run parses with, and the statement that stamps it onto a file.
+        '' means "the caller does not participate" -- files then keep a NULL
+        stamp and are re-parsed next time, which is the safe direction.
+        Written only from CommitFileTx, inside the per-file transaction. }
+      FIndexerFingerprint    : string  ;
+      FQStampFileFingerprint : TFDQuery;
       { v(ADP3 T4f, register K34): FQResolveUnitUseTargets is GONE. It was built
         and Prepare'd here and freed in the destructor, and nothing ever called
         ExecSQL on it -- the work is done in Pascal by ResolveUnitUseTargets,
@@ -1085,6 +1092,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure CommitFileTx  (const AToken: TFileTxToken);
+      /// <remarks>
+      /// Implements: DRagLint.Core.Interfaces.ISymbolStore.SetIndexerFingerprint
+      /// </remarks>
+      procedure SetIndexerFingerprint(const AFingerprint: string);
+      /// <remarks>
+      /// Implements: DRagLint.Core.Interfaces.ISymbolStore.FileIndexedFingerprint
+      /// </remarks>
+      function FileIndexedFingerprint(const AFilePath: string): string;
       /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2916,6 +2931,28 @@ begin
   TryExec('ALTER TABLE symbol_facts ADD COLUMN ui_affinity TEXT'   );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN touches TEXT'       );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN wiring TEXT'        );
+  { PER-FILE RESUME (INBOX-index-runs-are-not-resumable). The indexer fingerprint
+    THIS file's rows were produced by -- the same string
+    DRagLint.CLI.IndexerFingerprint builds, e.g.
+    'v=1.3.0-alpha;schema=21;pp=1;plat=win64'. NULL = unknown, which every reader
+    must treat as "re-parse it".
+
+    WHY. The fingerprint was stored once for the WHOLE database, so an engine
+    change meant "re-parse every file in scope" and an interrupted run threw away
+    everything it had done: a 12.5-hour library walk that reached 4,748 of 6,978
+    files restarted from file 1. The information needed to resume was computed
+    and then discarded.
+
+    WRITTEN INSIDE THE PER-FILE TRANSACTION (CommitFileTx, just before the
+    Commit) and nowhere else. Stamping outside it would recreate, per file,
+    exactly the bug session 22 fixed at the database level: rows marked done that
+    were never parsed, so the next run skips them and the index looks complete
+    while holding stale content. Inside the transaction, a kill either commits
+    both the rows and the stamp or neither.
+
+    Additive; NULL on every pre-existing row, so nothing is re-parsed on account
+    of this column existing -- files gain a stamp as they are next indexed. }
+  TryExec('ALTER TABLE files ADD COLUMN indexed_at_fingerprint TEXT');
   { v20: the CALL-SITE RECEIVER, verbatim as written left of the dot -- '' for a
     bare or `inherited` call, 'Self', 'TJSONArray', the full dotted chain for a
     qualified call, or a cast expression. Additive column, same reason as every
@@ -3521,6 +3558,9 @@ begin
   FQInsertUnitUse.Params.ParamByName('ec' ).DataType:= ftInteger;
   FQInsertUnitUse.Prepare;
 
+  { PER-FILE RESUME. Prepared like every other per-file statement so the stamp
+    costs a bind, not a parse, on a walk of thousands of files. }
+  FQStampFileFingerprint:= NewQuery('UPDATE files SET indexed_at_fingerprint = :fp WHERE id = :fid');
   FQDeleteFileUnitUses:= NewQuery( 'DELETE FROM unit_uses WHERE file_id = :fid');
   FQDeleteFileUnitUses.Params.ParamByName('fid').DataType:= ftLargeint;
   FQDeleteFileUnitUses.Prepare;
@@ -5268,7 +5308,50 @@ end;
 
 procedure TSQLiteSymbolStore.CommitFileTx(const AToken: TFileTxToken);
 begin
+  { PER-FILE RESUME: stamp BEFORE the Commit, so the stamp and the rows it
+    describes land in ONE transaction. This ordering is the whole safety
+    property -- see the column's comment in Migrate. A kill between the UPDATE
+    and the Commit rolls back both.
+
+    Silent when SetIndexerFingerprint was never called ('' = a caller that does
+    not participate). Those files keep a NULL stamp and are simply re-parsed
+    next time, which is the safe direction. }
+  if FIndexerFingerprint <> '' then
+  begin
+    FQStampFileFingerprint.ParamByName('fp' ).AsString  := FIndexerFingerprint;
+    FQStampFileFingerprint.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    FQStampFileFingerprint.ExecSQL;
+  end;
   FConn.Commit;
+end;
+
+procedure TSQLiteSymbolStore.SetIndexerFingerprint(const AFingerprint: string);
+begin
+  FIndexerFingerprint:= AFingerprint;
+end;
+
+function TSQLiteSymbolStore.FileIndexedFingerprint(const AFilePath: string): string;
+var
+  Q: TFDQuery;
+begin
+  Result:= '';
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { Path matched the SAME way FileIsUpToDate matches it -- NOCASE on the
+      normalized path -- so the two cannot disagree about which row a file is. }
+    { Path matched EXACTLY as FileIsUpToDate matches it -- same canonical form,
+      same case-insensitive fallback for DBs written before B6 -- so the two
+      cannot disagree about which row a file is. The skip decision reads both;
+      if they resolved paths differently a file could be "up to date" and
+      "unstamped" at the same time and would re-parse forever. }
+    Q.SQL.Text:= 'SELECT indexed_at_fingerprint FROM files ' + 'WHERE (path = :p OR LOWER(path) = LOWER(:p)) LIMIT 1';
+    Q.ParamByName('p').AsString:= NormalizeStoredPath(AFilePath);
+    Q.Open;
+    if (not Q.IsEmpty) and (not Q.Fields[0].IsNull) then Result:= Q.Fields[0].AsString;
+  finally
+    Q.Free;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.RollbackFileTx(const AToken: TFileTxToken);

@@ -216,6 +216,37 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure CommitFileTx  (const AToken: TFileTxToken);
+    /// <summary>Sets the indexer fingerprint that CommitFileTx will stamp onto
+    /// every file it commits from now on. '' (the default) disables stamping
+    /// entirely.</summary>
+    /// <param name="AFingerprint">The engine identity string --
+    /// DRagLint.CLI.IndexerFingerprint's format, e.g.
+    /// 'v=1.3.0-alpha;schema=21;pp=1;plat=win64'. Pass '' to stop stamping.</param>
+    /// <remarks>Enables PER-FILE RESUME: an interrupted run leaves every file it
+    /// finished stamped with the current engine, so the next run re-parses only
+    /// the remainder instead of starting again. A 12.5-hour library walk that
+    /// reached 4,748 of 6,978 files previously restarted from file 1.
+    /// THE STAMP IS WRITTEN INSIDE THE PER-FILE TRANSACTION, which is the whole
+    /// safety property: a kill commits the rows and the stamp together or
+    /// neither. A caller that stamps outside that transaction recreates, per
+    /// file, the silent-staleness bug fixed at database level in session 22 --
+    /// rows marked done that were never parsed, skipped by the next run, with
+    /// the index looking complete.
+    /// Not stamping is always SAFE: a NULL stamp reads as "unknown" and the file
+    /// is re-parsed. Wrongly stamping is not.
+    /// Not thread-safe; call from the owning thread only.</remarks>
+    procedure SetIndexerFingerprint(const AFingerprint: string);
+    /// <summary>The indexer fingerprint this file's rows were produced by, or ''
+    /// when the file is absent from the index or was written before stamping
+    /// existed.</summary>
+    /// <param name="AFilePath">Any spelling of the path; matched exactly as
+    /// FileIsUpToDate matches it, so the two always agree about which row a
+    /// file is.</param>
+    /// <returns>The stored fingerprint, or '' for "unknown -- re-parse it".</returns>
+    /// <remarks>'' must never be read as "matches": that inverts the safe
+    /// default and would skip files no engine has ever parsed.
+    /// Not thread-safe; call from the owning thread only.</remarks>
+    function FileIndexedFingerprint(const AFilePath: string): string;
     /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -1980,6 +2011,25 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure SetForceReparse(AValue: Boolean);
+    /// <summary>Permits PER-FILE RESUME for this run: while AFingerprint is
+    /// non-empty, a file already stamped with it may still take the up-to-date
+    /// skip even though SetForceReparse(True) was called. '' (the default)
+    /// disables resuming.</summary>
+    /// <param name="AFingerprint">The engine identity this run parses with --
+    /// the same string handed to ISymbolStore.SetIndexerFingerprint.</param>
+    /// <remarks>SET IT ONLY WHEN THE RUN WAS FORCED BECAUSE THE INDEXER
+    /// FINGERPRINT CHANGED. SetForceReparse is called for three different
+    /// reasons and only that one may resume:
+    /// a fingerprint change is resumable, because a file already parsed by THIS
+    /// engine is genuinely current; --force-reparse is NOT, because the flag
+    /// means "ignore the skip" and honouring a stamp would silently disobey it;
+    /// --rebuild is NOT, and is moot anyway since the index is wiped first.
+    /// Only the caller can tell the three apart, which is why this is a separate
+    /// call rather than something the indexer infers.
+    /// Leaving it '' is always SAFE -- it costs a redundant re-parse. Setting it
+    /// when the run was forced for either other reason is not.
+    /// Not thread-safe; call from the owning thread only.</remarks>
+    procedure SetResumeFingerprint(const AFingerprint: string);
     /// <summary>Apply glob-based file/dir filtering to subsequent IndexFolder
     /// calls. Must be called before the first IndexFolder; has no effect on
     /// IndexFile. SqlOnlyMS defaults to True if never called.</summary>
