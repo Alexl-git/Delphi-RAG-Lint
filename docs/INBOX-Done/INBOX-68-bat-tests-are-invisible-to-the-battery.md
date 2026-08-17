@@ -1,3 +1,57 @@
+> # CLOSED 2026-08-17, the day it was filed. All 60 are now driven; 0 remain dark.
+>
+> ```
+> legacy .bat tests            : 60 (60 now driven by run_*.ps1)
+> ... still reached by NOTHING : 0
+> ```
+>
+> **The suite was not rotten. It had never been run.** Two independent causes:
+> the battery globs `run_*.ps1` so the `.bat` drivers were never enumerated, and
+> every fixture hard-coded the RETIRED Win32 exe, which still exists and reports
+> the SAME version string as the current Win64 build.
+>
+> | step | outcome |
+> |---|---|
+> | repoint all fixtures at `dll-win64`, overridably (`if not defined EXE`) | 15 FAIL -> 0 FAIL on the v021 chain (27 sections) |
+> | `run_doctests_v021.ps1` | 22 files driven |
+> | `run_legacy_cli_fixtures.ps1` | 38 more driven, incl. `run_phase1_e2e` |
+> | delete `run_v016`-`v020` (strict subsets of v021) and 3 dead `_t*` scaffolds | 68 -> 60 files |
+>
+> ## What it caught, which is the whole argument for having done it
+>
+> * **A GENUINE ENGINE REGRESSION.** `generate-docs` emitted no
+>   `<returns>`/`@returns` for ANY class function -- `SignatureHasReturn` tests
+>   for a leading `function` keyword an INDEXED signature does not carry, and the
+>   kind fallback never fires for a method. `Doc.Document` and `Doc.Drift` both
+>   already documented and worked around that exact trap; the stub generator was
+>   the one consumer that never did. Fixed (`8606b52`).
+> * **An obsolete assertion** demanding a rule fire that was deliberately
+>   narrowed and defaulted off for being over-eager. Removed the assertion, not
+>   the rule.
+> * **19 fixtures that had never executed once**, all from one broken template.
+>
+> ## Two corrections to what this note originally said
+>
+> 1. It said their status was UNKNOWN and warned against bulk-running them. The
+>    caution was right, the pessimism was not: run one at a time, 55 of 60 passed
+>    immediately.
+> 2. I later called the last 19 "genuinely IDE-bound, so quarantine-or-delete".
+>    **Wrong.** They compile against `designide` headlessly without trouble. They
+>    were never IDE-blocked -- they were broken scripts nobody could see fail.
+>    Testing the claim instead of acting on it is what caught that.
+>
+> ## The residue -- the part that outlives this note
+>
+> **A harness that DISCOVERS tests by filename pattern silently defines
+> "coverage" as "files matching the pattern".** Everything else becomes invisible
+> with no error raised anywhere. `run_battery.ps1` now prints the count of `.bat`
+> files it does not drive, computed from the runners' own contents so it cannot
+> drift. The same property bites elsewhere in this repo -- gitignored rule
+> directories, and `Grep` skipping hidden dirs -- and both already have memory
+> entries.
+>
+> ---
+>
 # INBOX -- 68 `.bat` tests under `tests\` are invisible to the battery, and 43 point at a retired exe
 
 **Found:** 2026-08-16 (session 24), while fixing `resolve-uses`. Its ONLY

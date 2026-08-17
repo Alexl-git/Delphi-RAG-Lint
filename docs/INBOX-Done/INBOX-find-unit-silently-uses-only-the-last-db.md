@@ -1,3 +1,22 @@
+> # CLOSED 2026-08-17. All three defects fixed and covered; the last loose end is discharged.
+>
+> | defect | state |
+> |---|---|
+> | `find-unit` read only the LAST `--db` | fixed `16456a2`, `run_find_unit_multidb.ps1` (RED 6/6) |
+> | `Build` invented a SECOND `uses` clause when the store did not index the file -- under `--apply`, code that does not compile | fixed `16456a2` |
+> | `resolve-uses` carried the same single-`--db` shape, and its empty already-imported set made the +1000 bonus apply to everything | fixed `c761b5f`, `run_resolve_uses_multidb.ps1` (RED 4/7) |
+> | **the `.bat` coverage gap that let (3) survive** | **closed** -- all 60 legacy `.bat` tests are now driven; see `INBOX-Done\INBOX-68-bat-tests-are-invisible-to-the-battery.md` |
+>
+> **The through-line, and the reason this note produced three fixes rather than
+> one:** `resolve-uses` DID have a test, and it passed -- because it put both
+> units in ONE database, the single configuration in which the bug cannot
+> appear. A test that exercises only the shape where the defect is impossible is
+> indistinguishable from no test at all, except that it also stops anyone
+> looking. Chasing why nobody had noticed is what uncovered the 68 invisible
+> `.bat` files, which in turn uncovered a live `generate-docs` regression.
+>
+> ---
+>
 # INBOX -- `find-unit` silently uses only the LAST `--db`, so its answer depends on flag order
 
 **Found** 2026-08-16 (session 24), while checking whether the VCL/FMX tie fixed in
