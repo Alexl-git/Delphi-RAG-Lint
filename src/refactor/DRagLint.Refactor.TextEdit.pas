@@ -617,6 +617,26 @@ begin
       { no uses clause in the file at all -> a fresh "uses Best;" block.
         Insert after the 'implementation' line if the file has one, else after
         'interface'. We locate the keyword by reading the file (cheap, single file). }
+
+      { ...BUT ONLY IF WE ACTUALLY KNOW THAT. An empty Uses_ has TWO causes and
+        they demand opposite actions:
+          (a) the file genuinely declares no uses clause  -> a fresh block is right;
+          (b) AUnitStore does not INDEX the file at all   -> we know nothing, and
+              a fresh block is a guess.
+        InFileId separates them, and until now nothing did. Measured: with a
+        library-only --db, `find-unit --name TEdit --in uMainZeissCopy.pas`
+        proposed `insert after line 2176: uses Vcl.StdCtrls;` -- line 2176 is
+        `implementation`, and that unit ALREADY has an implementation uses clause
+        at 2180-2200. Under --apply that writes a SECOND uses clause into the
+        section, which does not compile. The keyword scan below cannot catch it:
+        it looks for `implementation` and never asks whether a uses clause
+        follows.
+        Refusing here yields no edits, so the caller reports "No edit computed"
+        and exits 1 -- the same shape as the KeywordLine=0 refusal just below.
+        Pass a --db that indexes the target file (the PROJECT index) and the
+        HaveLast branch above does the right thing instead. }
+      if InFileId <= 0 then Exit;
+
       var KeywordLine: Integer:= 0;
       if TFile.Exists(AInFile) then
       begin

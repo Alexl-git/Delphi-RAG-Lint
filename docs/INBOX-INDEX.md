@@ -1,6 +1,15 @@
-# INBOX index -- 8 open notes (was 9; 13 that evening; 60 at the start of 2026-08-16)
+# INBOX index -- 9 open notes (8 carried + 1 filed and fixed the same session)
 
-> **Session 24 (2026-08-16, late). 9 -> 8 open, 104 retired.**
+> **Session 24 (2026-08-16, late). 9 -> 8 carried, 104 retired, 1 NEW filed.**
+>
+> **NEW: `find-unit-silently-uses-only-the-last-db`** -- found while checking
+> whether the VCL/FMX fix reached the other name-based verbs. It did not, but
+> two worse things were there: `find-unit` read only the LAST `--db` (so the
+> documented library-then-project order answered "Could not resolve" for every
+> RTL type), and beneath that, `Build` invented a fresh `uses X;` block whenever
+> the uses set was empty -- which under `--apply` writes a SECOND uses clause
+> into a unit that already has one. Both fixed; the note stays open for the
+> missing test and for `resolve-uses`, which has the same untouched shape.
 >
 > **Retired:** `converter-editor-phase-g-engine-findings` -- ALL of 2.1 through
 > 2.11 are now fixed and covered. The last one open was 2.5's product half, and
@@ -98,13 +107,14 @@ their fix was found only by measuring, not by reading the note:
 build.** A test asserting only "the false finding is gone" passes with the rule
 switched off.
 
-## Open -- all 8, current as of session 24
+## Open -- all 9, current as of session 24
 
 Re-verified by listing `docs\INBOX-*.md`, not by trusting this table. Every note
 retired above has been removed from it.
 
 | note | shape |
 |---|---|
+| `find-unit-silently-uses-only-the-last-db` | **FIXED the same session it was found; kept open for the two loose ends it names.** `find-unit` read only the LAST `--db`, so `--db <library> --db <project>` answered "Could not resolve" for every RTL/VCL type while the swapped order worked. Underneath it, a WORSE one: `Build` emitted a fresh `uses X;` block whenever the uses set was empty, conflating "the file has none" with "this store does not index the file" -- under `--apply` that writes a SECOND uses clause into a unit that already has one, which does not compile. Both fixed. Still open: **no test yet** (needs an `AlreadyUsed` positive control -- see the note), and **`resolve-uses` carries the same single-`--db` shape, unexamined**. |
 | `lint-all-project-wide-phase-dominates-runtime` | **THE BIGGEST REMAINING WIN.** `unresolved-name` is **269 s of ORM3's 530 s** run -- 51%. **Session 24 killed the premise: the bucket does NOT time one call.** `LeafNameIsUnambiguous` (a second store query) and the extra-store gate are inside the same window, so every external-vs-in-process comparison so far compared different things. Also dead: "the replay dropped the `NOT IN` predicate" (measured 0.73 ms WITH it vs 1.31 WITHOUT -- it *cuts* rows) and "different bound parameters" (all three real call shapes land within 0.13 ms). **SQLite serves every query in that window under 1 ms**, so the cost is not in SQLite at all. Next: split the timer into its parts AND count calls, then look at FireDAC marshalling -- the gate materialises up to 495 `TSymbol` rows to answer a boolean. |
 | `index-runs-are-not-resumable` | Group B 5b, and the plan's own HIGHEST-RISK item. Additive `files.indexed_at_fingerprint`; the stamp **must** sit inside the transaction `CommitFileTx` closes, or it recreates the silent-staleness bug fixed in session 22. Full design in `PLAN-SESSION-23-IMPLEMENTATION.md` section 5b. Not started. |
 | `rule-hardening-plan-2026-08-13` | **Essentially one item left.** Re-measured across all four consumer projects: items 1/3/5/7/8 now fire **ZERO** times; 2+6 are down to 0; item 4 DONE. Live: **item 9 `unused-public-symbol` (12)** -- 9 are YADF shared-unit hints of which 8 are alive in a sibling and `OptionsHelpText` is genuinely dead (x3), plus 3 in DataCopy. The fix is to consult the sibling DBs a unit's own `dl:shared` header NAMES, which needs `TProjectLintRules.Run` to take extra stores (it takes one `ISymbolStore` today). |

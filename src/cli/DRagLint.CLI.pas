@@ -9938,15 +9938,68 @@ end; // function
 // Exit 0 on success or already-used; 1 if unresolvable or no edit; 2 on usage error.
 function DoFindUnit(const AArgs: TArgs): Integer;
 var
-  Store: ISymbolStore; Edits: TArray<TTextEdit>; ResolvedUnit: string; Already: Boolean;
+  Edits: TArray<TTextEdit>; ResolvedUnit: string; Already: Boolean;
 begin
   if (AArgs.Name = '') or (AArgs.InFile = '') then
   begin Writeln('ERROR: find-unit needs --name <Symbol> --in <file>'); Exit(2); end;
-  if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'); Exit(2); end;
-  var RoOk: Boolean;
-  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
-  Edits:= TFindUnitRefactoring.Build(Store, AArgs.Name, AArgs.InFile, ResolvedUnit, Already);
+
+  { INBOX find-unit-silently-uses-only-the-last-db. This read AArgs.DbPath --
+    the LAST `--db` -- and opened exactly one store, while ParseArgs happily
+    accepted every earlier `--db` and appended it to DbPaths. So the answer
+    depended on the ORDER of flags a caller has every reason to think are
+    commutative, and the order the standing rule asks for was the broken one:
+
+      --db <library> --db <project>   -> Could not resolve a unit declaring "TEdit"
+      --db <project> --db <library>   -> uses Vcl.StdCtrls
+
+    That is worse than a wrong answer in one direction, because "Could not
+    resolve" is indistinguishable from "no such symbol" -- and `--apply` WRITES
+    a uses clause off this.
+
+    THE TWO STORES ARE DIFFERENT QUESTIONS, which is why one store could never
+    serve both: the declaring unit of `TEdit` is a LIBRARY fact, while the
+    `--in` file's id, its existing uses clause and the insertion point are
+    PROJECT facts, and file ids are per-DB. TFindUnitRefactoring already has the
+    two-store overload -- built for convert-apply, which hit exactly this -- so
+    this is wiring, not new mechanism.
+
+    Each is resolved INDEPENDENTLY and in scan order, so the project index
+    (promoted to the front by ResolveConsumerDbs) wins the name when it declares
+    it too, which is the right precedence: a project's own type beats a
+    same-named RTL one. }
+  var PathsToScan: TArray<string>:= ResolveConsumerDbs(AArgs);
+  var AnyDb: Boolean:= False;
+  var NameStore: ISymbolStore:= nil;
+  var UnitStore: ISymbolStore:= nil;
+  for var DbP in PathsToScan do
+  begin
+    if not TFile.Exists(DbP) then Continue;
+    AnyDb:= True;
+    var RoOk: Boolean;
+    var St: ISymbolStore:= OpenReadOnlyStore(DbP, RoOk);
+    if (not RoOk) or (St = nil) then Continue; { stale DB reported; scan the rest }
+    if UnitStore = nil then
+    begin
+      var Fid: Int64:= St.FindFileIdByPath(TPath.GetFullPath(AArgs.InFile));
+      if Fid <= 0 then Fid:= St.FindFileIdByPath(AArgs.InFile);
+      if Fid > 0 then UnitStore:= St;
+    end;
+    if (NameStore = nil) and (Length(St.FindSymbolsByExactName(AArgs.Name)) > 0) then NameStore:= St;
+    if (NameStore <> nil) and (UnitStore <> nil) then Break;
+  end;
+  if not AnyDb then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit(2);
+  end;
+  if NameStore = nil then
+  begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
+  { No index contains the target file -- exactly the single-store situation this
+    verb was in before, so hand the same store to both halves and let Build
+    report what it always did. }
+  if UnitStore = nil then UnitStore:= NameStore;
+  Edits:= TFindUnitRefactoring.Build(NameStore, UnitStore, AArgs.Name, AArgs.InFile, ResolvedUnit, Already);
   if Already then begin Writeln(Format('"%s" is already in the uses clause.', [ResolvedUnit])); Exit(0); end;
   if ResolvedUnit  = '' then begin Writeln(Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
   if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
