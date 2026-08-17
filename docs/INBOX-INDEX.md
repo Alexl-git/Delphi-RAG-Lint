@@ -1,6 +1,23 @@
-# INBOX index -- 9 open notes (8 carried + 1 filed and fixed the same session)
+# INBOX index -- 8 open notes
 
-> **Session 24 (2026-08-16, late). 9 -> 8 carried, 104 retired, 1 NEW filed.**
+> **Session 24 (2026-08-16 -> 08-17). 9 open -> 8; 105 retired; 2 NEW filed.**
+>
+> **Retired:** `converter-editor-phase-g-engine-findings` (VCL/FMX tie now
+> ordered by the framework the run's own project uses -- derived, no flag) and
+> `rule-hardening-plan-2026-08-13` (its last live row, `unused-public-symbol`,
+> shipped 12 -> 6). Of that note's ten rows, exactly ONE needed the fix it
+> described, five were stale and fired zero times, and one was fixed for a
+> completely different reason than the one written down.
+>
+> **Also shipped:** `lint-all` **572 s -> 320 s (-44%)**, report byte-identical;
+> **per-file index resume** (a killed 12.5-hour walk now continues instead of
+> restarting); `find-unit` and `resolve-uses` both fixed to read every `--db`;
+> an extra store's caller now gets its overload tag from THAT store.
+>
+> **NEW:** `find-unit-silently-uses-only-the-last-db` (all three of its defects
+> fixed the same session -- including one where `--apply` would write a SECOND
+> `uses` clause into a unit that already had one) and
+> `68-bat-tests-are-invisible-to-the-battery`.
 >
 > **NEW: `find-unit-silently-uses-only-the-last-db`** -- found while checking
 > whether the VCL/FMX fix reached the other name-based verbs. It did not, but
@@ -107,7 +124,7 @@ their fix was found only by measuring, not by reading the note:
 build.** A test asserting only "the false finding is gone" passes with the rule
 switched off.
 
-## Open -- all 9, current as of session 24
+## Open -- all 8, current as of session 24
 
 Re-verified by listing `docs\INBOX-*.md`, not by trusting this table. Every note
 retired above has been removed from it.
@@ -117,7 +134,6 @@ retired above has been removed from it.
 | `find-unit-silently-uses-only-the-last-db` | **ALL THREE DEFECTS FIXED AND COVERED; kept open for one loose end.** (a) `find-unit` read only the LAST `--db`, so `--db <library> --db <project>` answered "Could not resolve" for every RTL/VCL type. (b) Underneath it, worse: `Build` emitted a fresh `uses X;` block whenever the uses set was empty, conflating "the file has none" with "this store does not index the file" -- under `--apply` that writes a SECOND uses clause into a unit that already has one, which does not compile. (c) `resolve-uses` had the same single-`--db` shape, and there the empty already-imported set made the **+1000 "not already used"** bonus apply to everything, so a unit the caller ALREADY imports was offered as a fresh add. Two new suites, both RED-verified (6/6 and 4/7 asserts). **Loose end: the `tests\fixtures\T_*.bat` family is invisible to the battery** (it collects `run_*.ps1`) and points at the retired Win32 exe path -- `T_resolve_uses.bat` is why (c) survived. Anything covered only there is effectively uncovered. |
 | `lint-all-project-wide-phase-dominates-runtime` | **HEADLINE DISCHARGED: 572 s -> 320 s (-44%), report byte-identical.** It was never the SQL. `FindUnresolvedNameCallers` costs **2.41 s, not 269** -- its in-process 0.56 ms/call AGREES with the external replay, so **the ~80x gap never existed**; the timer enclosed something else. The cost was **`OverloadArityTag`, 255.48 s (10.52 ms x 24,286 calls)**, running `FindAllChildSymbols` per rendered caller row. Fixed with a memo keyed on **(store pointer, symbol id)** -- ids are per-DB. Four hypotheses (CTE, index, statistics, the `NOT IN` predicate) plus a shipped plan pin and ANALYZE were all aimed at the wrong statement, because no timer had a CALL COUNT beside it. **Now open, all smaller and independent:** `per-file scan` is the new dominant phase (141 s of 320, never profiled), `class-metrics` 56 s, `seealso` 17.6 s, `unused-unit-in-uses` ~17 s, and a separate CORRECTNESS bug -- `ToFactRef` in the extra-store loop hands `OverloadArityTag` an id from the WRONG DB. |
 | `index-runs-are-not-resumable` | **HEADLINE SHIPPED (session 24): per-file resume works.** `files.indexed_at_fingerprint`, stamped inside the transaction `CommitFileTx` closes. The 12.5-hour library walk that reached 4,748 of 6,978 files and restarted from file 1 now continues at 4,749. **The written plan was wrong twice:** it reused `ForceReparse` (which is set for THREE reasons -- only a fingerprint change may resume; `--force-reparse` must not, or the flag is silently disobeyed), and its fixture tested nothing (`index <one file>` also commits the DB-level fingerprint, so its step 3 was never a forced run and would have read "skipped 2"). **Open only for:** redirected output arriving in blocks, so a slow run and a hung run look identical -- and the note's stated cause ("stdout is block-buffered", blaming the engine) is UNVERIFIED; what was observed was PowerShell's `2>`. Measure which before changing either. |
-| `rule-hardening-plan-2026-08-13` | **Essentially one item left.** Re-measured across all four consumer projects: items 1/3/5/7/8 now fire **ZERO** times; 2+6 are down to 0; item 4 DONE. Live: **item 9 `unused-public-symbol` (12)** -- 9 are YADF shared-unit hints of which 8 are alive in a sibling and `OptionsHelpText` is genuinely dead (x3), plus 3 in DataCopy. The fix is to consult the sibling DBs a unit's own `dl:shared` header NAMES, which needs `TProjectLintRules.Run` to take extra stores (it takes one `ISymbolStore` today). |
 | `incremental-index-hangs-on-large-db` | The "hang" is the whole-DB resolve; scoped resolve fixes the body-edit shape but an ADDED type still falls back. NOTE: a session-23 suspicion that the incremental affected-set is O(corpus) was **refuted on real code** (748 affected refs, smaller than the changed file's own 1,988) -- do not carry that link forward. |
 | `buildfor-defaulted-args-diverge-between-entry-points` | STALE for the function it names. Remaining: `ABaseDir` / `AIncludeSince` / `AExtraStores` / `AComplexityMin` still defaulted on the repair path -- `AExtraStores` is the risky one (cross-DB fan-out), so use a cross-DB fixture. |
 | `exception-class-unit-and-generated-exception-types` | Feature request, not a defect. **MEASURED: 64 distinct messages on ORM3, not the 400 that would have killed it**, and normalization collapses 64 -> 63. Build Stage 1. |

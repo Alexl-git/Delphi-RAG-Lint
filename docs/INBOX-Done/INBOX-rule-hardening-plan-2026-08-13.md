@@ -1,3 +1,33 @@
+> # RETIRED 2026-08-17 (session 24). Every row is settled; the last one shipped today.
+>
+> **Item 9, `unused-public-symbol`, was the only live row left. It is done: 12 -> 6.**
+> The rule now CONSULTS the sibling projects a shared unit's own `dl:shared`
+> header names, instead of telling the reader to check them by hand. The 6
+> removed are all false; the 6 remaining are all genuine. Commit `fc2d613`,
+> covered by `tests\autotest\run_unused_public_shared_siblings.ps1`.
+>
+> **This note's own arithmetic was wrong and is corrected for the record.** It
+> said "9 are YADF shared-unit hints, of which **8** are alive in a sibling and
+> `OptionsHelpText` is genuinely dead (reported x3)" -- 8 + 3 does not fit in 9.
+> Measured per symbol against each sibling DB: **6 false, 3 genuine.** It also
+> left DataCopy's 3 unclassified; they are unreferenced in DataCopy,
+> DataCopyTests and SortTest alike, and `uFileUtils.pas` carries no `dl:shared`
+> header, so the rule was already right there and nothing needed fixing.
+>
+> **The pattern across this note's whole life is worth keeping.** Of ten rows,
+> ONE needed the fix it described (row 9, and even then with the wrong counts).
+> Five were STALE and fired zero times when re-measured. Row 2 was fixed for a
+> completely different reason than the one written down (a column-aligned
+> `Rows  .Free;` failing a literal text match, not the "guard is the next
+> statement" shape). Rows 1, 3 and 10 were already done or were true positives
+> all along.
+>
+> **Re-measure before coding is not advice here, it is the finding.** A backlog
+> note is a record of what someone believed on one day; the engine has moved
+> under every one of these.
+>
+> ---
+>
 > # RE-MEASURED 2026-08-16 (session 22): rows 1, 2, 3 and 10 are SETTLED. Kept open for 4-9.
 >
 > | row | plan said | measured today |
