@@ -1,3 +1,30 @@
+> # RETIRED 2026-08-16 (session 23) -- shape A shipped; B/C/D accepted, which is the owner-sanctioned outcome.
+>
+> Nothing here is unresolved any more; it is closed by DECISION, not by neglect,
+> and the decision is recorded so it is not re-litigated.
+>
+> * **Shape A (4 findings) is FIXED** -- same-predicate suppression in
+>   `FlowChecks.pas`, info arm only, self-index 39 -> 35. Test
+>   `run_flow_same_predicate_guard.ps1`.
+> * **Shapes B (21), C (12) and D (2) are ACCEPTED as hedged `info` findings.**
+>   Re-measured 2026-08-16: **0 findings on all four consumer projects**
+>   (DataCopy, YADF, YADFOT, YADFSetup), so this buys those projects nothing.
+> * **14 of the remaining 35 are unreachable by ANY predicate correlation**
+>   (shape C is arrays and records only ever element- or field-written), so the
+>   ceiling for that whole approach is 21, not 35.
+> * The highest-yield part, shape B, needs a flag-pairing proof in which **any
+>   gap SUPPRESSES TRUE POSITIVES** -- the worst failure direction for a rule
+>   about reading uninitialised memory.
+>
+> The one genuinely separate item in here -- the finding at
+> `Lint.ProjectRules.pas:1181` sitting ON an inline `var` declaration, which is
+> probably a real walker bug, cost S -- is NOT closed by this and should be filed
+> on its own if it is ever picked up. It is not a `used-before-assignment`
+> question.
+>
+> Kept in full below because the 4/21/12/2 split and the two DEAD stated causes
+> (the `out`-argument theory and the intra-item `and`/`or` theory, both
+> disproven) are exactly what a future session would otherwise re-derive.
 > # CURRENT STATE 2026-08-16 (session 23): shape A SHIPPED. B/C/D stay DO-NOT-IMPLEMENT.
 >
 > Shape A (assignment and read under a TEXTUALLY IDENTICAL bare-local predicate)

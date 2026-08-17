@@ -127,13 +127,80 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
    > Group A. It is not environment-blocked -- ORM3 completes in 12.2 min and the
    > profiler already emits everything needed -- it is simply not answerable from
    > a 12-second project.
+   >
+   > ### THE ORM3 RUN WAS DONE (2026-08-16, same session). It refutes the guess above.
+   >
+   > ```
+   >   per-file scan (565 files)         89.17 s
+   >   project-rules                     30.43 s
+   >   class-metrics                     55.38 s
+   >   doc-drift                        339.15 s     <-- 64% of the run
+   >   duplicate-code                     9.33 s
+   >   TOTAL                            529.71 s
+   > ```
+   >
+   > doc-drift dominance is CONFIRMED (64%, and the run is now 529.7 s rather than
+   > the 732.3 s recorded above -- other work has since sped it up). But the
+   > attribution I extrapolated from YADF was **wrong**:
+   >
+   > ```
+   >   DOC-DRIFT BREAKDOWN (4309 decl(s), 4309 with a live doc)
+   >     of which facts rebuild         308.52 s
+   >     unresolved-name   269.12 s   <-- 87% of the rebuild, 51% of the WHOLE RUN
+   >     harvest 6.53 | covered-by 3.57 | raises 2.27 | resolved-callers 2.14
+   >     wiring 4.20 | calls 0.99 | ancestry 0.38 | return-cases 0.03
+   > ```
+   >
+   > On YADF, `calls` was the largest sub-item (0.35 s of 1.04 s) and
+   > `unresolved-name` was 0.21 s, so I predicted `calls` would scale. **On ORM3
+   > `calls` is 0.99 s and `unresolved-name` is 269.12 s.** The two swap places
+   > entirely. This is the second time in one session that a YADF-sized
+   > measurement predicted the wrong thing about ORM3, and it is worth stating
+   > plainly: **YADF cannot attribute ORM3's doc-drift cost, not even in rank
+   > order.**
+   >
+   > It also scales worse than linearly: 53 declarations -> 0.21 s versus 4,309
+   > declarations -> 269.12 s, i.e. 81x the declarations for 1,280x the time.
+   >
+   > ### Where the cost is NOT
+   >
+   > `FindUnresolvedNameCallers` (`Storage.SQLite.pas:4071`) is called once per
+   > declaration. Its name lookup is **already indexed and already using the
+   > index** -- verified against the live ORM3 DB (533,244 refs rows):
+   >
+   > ```
+   > EXPLAIN QUERY PLAN ... WHERE r.name_text = 'Create' COLLATE NOCASE
+   >   SEARCH r USING INDEX idx_refs_name_nocase (name_text=?)
+   >   SEARCH s USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN
+   >   SEARCH f USING INTEGER PRIMARY KEY (rowid=?)
+   > ```
+   >
+   > **So item 3 below ("refs.name_text has no index") is STALE** -- the index
+   > `idx_refs_name_nocase` exists and is chosen. Do not start there.
+   >
+   > ### Where to look next
+   >
+   > What remains in that query, and runs per declaration, is the **uses-reach
+   > recursive CTE** (the transitive `unit_uses` closure that scopes callers to
+   > files which can SEE the target) plus the receiver-type subquery. Those are
+   > the only parts not covered by the index above, and a transitive closure
+   > recomputed 4,309 times is the shape that matches the super-linear growth.
+   >
+   > **Measure before optimising** -- that discipline has now corrected three
+   > guesses in this session. Time the query with and without the CTE on the live
+   > ORM3 DB before changing anything. If the CTE is the cost, the fix is to
+   > compute the reach set ONCE per run (or memoise per target file id) rather
+   > than per declaration; the file-id set is stable for the whole lint pass.
+   >
+   > Prize: ~269 s of a 530 s run, i.e. roughly halving `lint-all` on ORM3.
 2. **`unused-unit-in-uses` is still 17.4 s** -- the memo removed the repetition
    but the remaining cost is one `FindSymbolsByExactName` per DISTINCT name,
    each an indexed lookup returning every symbol with that name.
-3. **`refs.name_text` has no index.** `find-callers` is the index's headline
-   query and it is a full table scan on every call. The lint path no longer
-   cares, but every interactive caller still pays it. Adding the index is a
-   schema migration and was deliberately left out of this change.
+3. ~~**`refs.name_text` has no index.**~~ **STALE -- the index exists and is used.**
+   Verified 2026-08-16 against the live ORM3 DB: `idx_refs_name_nocase ON
+   refs(name_text COLLATE NOCASE)` is present, and `EXPLAIN QUERY PLAN` picks it
+   (`SEARCH r USING INDEX idx_refs_name_nocase`). It is created by `TryExec` in
+   `Migrate`, which runs on every open, so any DB self-heals. Nothing to do.
 4. The pre-existing quadratic `Findings := Findings + <rule results>`
    accumulation in `DoLintAll` was NOT touched. It never showed up: the
    ownership filter over all 54,245 raw findings costs 0.03 s.
