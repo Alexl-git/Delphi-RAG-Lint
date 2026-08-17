@@ -16,7 +16,7 @@ Work autonomously, in this order:
 | branch | `main`, HEAD **`eb663fe`** |
 | working tree | clean |
 | unpushed | **104 commits, ON PURPOSE.** Do not push. The owner lifts this gate. |
-| battery | 309 suites; a final run was in flight at handoff -- **RE-RUN IT and confirm green before trusting anything below** |
+| battery | **309/309 pass, 0 fail, 15.5 min** -- run at `eb663fe` with a clean tree, AFTER every change below. Confirmed, not assumed. |
 | INBOX | **9 open / 103 retired** (was 13 open at the start of this session) |
 | consumers | DataCopy **31** (from 43), YADF 4, YADFOT 4, YADFSetup 7 -- all 0 errors |
 
