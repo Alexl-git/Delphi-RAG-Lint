@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set HERE=%~dp0
-set EXE=%HERE%..\..\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
 set SRC=%HERE%UsageDemo.pas
 set DBD=%HERE%t44_deep.sqlite
 set DBS=%HERE%t44_shallow.sqlite

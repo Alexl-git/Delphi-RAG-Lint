@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set HERE=%~dp0
-set EXE=%HERE%..\..\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
 REM Use a COPY of Calls.pas so we don't corrupt the master fixture.
 REM The copy still says "unit Calls;" inside, so the index produces
 REM the qname Calls.TWidget.Compute - same as T35.

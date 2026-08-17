@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set EXE=%~dp0..\..\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%~dp0..\..\third_party\dll-win64\drag-lint.exe
 set DB=%~dp0..\t1.sqlite
 del /q "%DB%" 2>NUL
 "%EXE%" index "%~dp0Smoke.pas" --db "%DB%"

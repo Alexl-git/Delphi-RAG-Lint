@@ -9,7 +9,7 @@ var
 begin
   Client := TDragLintLspClient.Create;
   try
-    if not Client.Start(ExtractFilePath(ParamStr(0)) + '..\..\third_party\dll\drag-lint.exe') then
+    if not Client.Start(ExtractFilePath(ParamStr(0)) + '..\..\third_party\dll-win64\drag-lint.exe') then
     begin
       Writeln('FAIL: could not spawn drag-lint.exe');
       Halt(1);

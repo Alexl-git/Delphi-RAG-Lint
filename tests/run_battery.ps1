@@ -204,33 +204,45 @@ Write-Host ("  ... of which UNTRACKED in this tree              : {0}" -f $untra
 foreach ($u in $untrackedRunners) {
   Write-Host ("      {0}  -- exists only in THIS tree; a clean checkout does not enumerate it" -f (RelPath $u.FullName)) -ForegroundColor Yellow
 }
-# LEGACY .bat TESTS ARE NOT RUN, AND UNTIL NOW NOTHING SAID SO.
+# LEGACY .bat TESTS -- HOW MANY ARE REACHED, AND HOW MANY ARE STILL DARK.
 #
 # This battery discovers by FILENAME PATTERN, which silently defines "coverage"
-# as "files matching run_*.ps1". 68 .bat integration tests live under tests\ --
+# as "files matching run_*.ps1". 68 .bat integration tests lived under tests\ --
 # schema, MCP, LSP, hover, rename, refactor, lint rules, workspace config -- and
-# they are not skipped or reported, they are simply never seen. A reader
-# counting test files gets a number with no relation to what is verified.
+# none were skipped or reported; they were simply never seen.
 #
-# That is not theoretical. `resolve-uses` shipped a user-visible multi-DB defect
-# while carrying a test, T_resolve_uses.bat, that passes -- because it puts both
-# units in ONE database, the configuration in which the bug cannot appear. Its
-# existence is what made the verb look tested.
+# What that cost: `resolve-uses` shipped a user-visible multi-DB defect while
+# carrying a fixture here that PASSES, because it puts both units in ONE
+# database -- the configuration in which the bug cannot appear. And every
+# fixture hard-coded the RETIRED Win32 third_party\dll\drag-lint.exe, which
+# still exists and still reports the same version string as the current Win64
+# build, so a run against the dead binary was indistinguishable from a real one.
+# Run as they stood, 15 of 27 sections FAILED; repointed, all 27 PASS.
 #
-# 43 of them also invoke third_party\dll\drag-lint.exe, the RETIRED Win32 build,
-# which still exists and reports the same version string as the current Win64
-# one -- so a run against the stale binary is indistinguishable from a real one.
+# Now: tests\run_doctests_v021.ps1 (a real runner, enumerated above) drives
+# run_v021_doctests.bat and its 21 .bat fixtures. The v016-v020 drivers were
+# strict subsets and are deleted. The REMAINDER is what this line is for -- it
+# is not "some old files", it is the part of the suite still nobody can see.
 #
-# This prints a number and nothing else, deliberately. Their pass/fail status is
-# UNKNOWN and triaging them is its own job (see
-# docs\INBOX-68-bat-tests-are-invisible-to-the-battery.md); pointing them at the
-# current exe and running them here would convert an unknown into a pile of
-# unattributed red inside the gate everything else depends on.
-$legacyBat = @(Get-ChildItem -Path (Join-Path $repoRoot 'tests') -Filter '*.bat' -Recurse -File -ErrorAction SilentlyContinue)
-Write-Host ("  legacy .bat tests NOT run by this battery        : {0}" -f $legacyBat.Count) `
-           -ForegroundColor $(if ($legacyBat.Count -gt 0) { 'Yellow' } else { 'Gray' })
-if ($legacyBat.Count -gt 0) {
-  Write-Host '      status UNKNOWN -- see docs\INBOX-68-bat-tests-are-invisible-to-the-battery.md' -ForegroundColor DarkGray
+# The unreached ones are NOT run here on purpose: their pass/fail status is
+# unknown, and running them inside the gate everything else depends on would
+# convert that unknown into unattributed red. Triage is its own job -- see
+# docs\INBOX-68-bat-tests-are-invisible-to-the-battery.md.
+$legacyBat  = @(Get-ChildItem -Path (Join-Path $repoRoot 'tests') -Filter '*.bat' -Recurse -File -ErrorAction SilentlyContinue)
+$v021Driver = Join-Path $repoRoot 'tests\run_v021_doctests.bat'
+$reachedBat = @()
+if (Test-Path $v021Driver) {
+  $txt = Get-Content $v021Driver -Raw
+  $reachedBat = @([regex]::Matches($txt, 'fixtures\\([A-Za-z0-9_]+)\.bat') |
+                  ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+}
+$darkBat = $legacyBat.Count - $reachedBat.Count - $(if (Test-Path $v021Driver) { 1 } else { 0 })
+Write-Host ("  legacy .bat tests                                : {0} ({1} driven by run_doctests_v021.ps1)" -f `
+            $legacyBat.Count, ($reachedBat.Count + $(if (Test-Path $v021Driver) { 1 } else { 0 })))
+Write-Host ("  ... still reached by NOTHING (status unknown)    : {0}" -f $darkBat) `
+           -ForegroundColor $(if ($darkBat -gt 0) { 'Yellow' } else { 'Gray' })
+if ($darkBat -gt 0) {
+  Write-Host '      see docs\INBOX-68-bat-tests-are-invisible-to-the-battery.md' -ForegroundColor DarkGray
 }
 Write-Host ("  excluded by policy                               : {0}" -f $excluded.Count)
 foreach ($k in $DefaultExclusions.Keys) {

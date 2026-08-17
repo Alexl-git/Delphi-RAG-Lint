@@ -7,7 +7,7 @@ setlocal
 
 set HERE=%~dp0
 set ROOT=%HERE%..
-set EXE=%ROOT%\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%ROOT%\third_party\dll-win64\drag-lint.exe
 set SMOKE=%ROOT%\tests\fixtures\Smoke.pas
 set CALLS=%ROOT%\tests\fixtures\Calls.pas
 set KINDS=%ROOT%\tests\fixtures\Kinds.pas

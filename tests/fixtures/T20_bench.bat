@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set HERE=%~dp0
-set EXE=%HERE%..\..\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
 set DB=%HERE%t8.sqlite
 
 "%EXE%" bench-context --db "%DB%" --n 3 > "%HERE%t20_out.txt" 2>&1

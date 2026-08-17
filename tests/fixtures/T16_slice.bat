@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set HERE=%~dp0
-set EXE=%HERE%..\..\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
 set DB=%HERE%t8.sqlite
 "%EXE%" slice --qname Docs.TDocDemo --db "%DB%" > "%HERE%t16_out.txt"
 type "%HERE%t16_out.txt"

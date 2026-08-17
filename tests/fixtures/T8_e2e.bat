@@ -2,7 +2,7 @@
 setlocal
 set HERE=%~dp0
 set ROOT=%HERE%..\..
-set EXE=%ROOT%\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%ROOT%\third_party\dll-win64\drag-lint.exe
 set DB=%HERE%t8.sqlite
 del /q "%DB%" 2>NUL
 "%EXE%" index "%HERE%Docs.pas" --db "%DB%"

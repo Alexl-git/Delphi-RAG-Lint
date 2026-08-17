@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set HERE=%~dp0
-set EXE=%HERE%..\..\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
 copy /Y "%HERE%Calls.pas" "%HERE%CallsFmt.pas" >NUL
 "%EXE%" format "%HERE%CallsFmt.pas" > "%HERE%t42_out.txt" 2>&1
 type "%HERE%t42_out.txt"

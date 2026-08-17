@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set HERE=%~dp0
-set EXE=%HERE%..\..\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
 mkdir "%HERE%T60_ws" 2>NUL
 mkdir "%HERE%T60_ws\proj1" 2>NUL
 copy /Y "%HERE%Calls.pas" "%HERE%T60_ws\proj1\" >NUL

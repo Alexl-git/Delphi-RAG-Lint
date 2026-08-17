@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 set HERE=%~dp0
-set EXE=%HERE%..\..\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
 set ROOT=%TEMP%\dl_scantest
 set DB=%HERE%t43_scan.sqlite
 set DB2=%HERE%t43_excl.sqlite

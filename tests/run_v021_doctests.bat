@@ -92,7 +92,7 @@ call "%HERE%fixtures\T27_lsp_client.bat" || set FAILED=1
 echo.
 echo === Stop criteria: self-corpus doc coverage ===
 del /q "%HERE%draglint_self.sqlite" 2>NUL
-"%HERE%..\third_party\dll\drag-lint.exe" index "%HERE%..\src" --db "%HERE%draglint_self.sqlite" >NUL
+"%HERE%..\third_party\dll-win64\drag-lint.exe" index "%HERE%..\src" --db "%HERE%draglint_self.sqlite" >NUL
 python -c "import sqlite3,sys; print('symbol_docs with summary:', sqlite3.connect(sys.argv[1]).execute('SELECT COUNT(*) FROM symbol_docs WHERE summary IS NOT NULL').fetchone()[0])" "%HERE%draglint_self.sqlite"
 
 popd

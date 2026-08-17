@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set HERE=%~dp0
-set EXE=%HERE%..\..\third_party\dll\drag-lint.exe
+if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
 pushd "%HERE%..\.."
 type "%HERE%T11_mcp.json" | "%EXE%" serve > "%HERE%t11_out.txt"
 popd
