@@ -3478,9 +3478,28 @@ begin
     ' dfm_event, sql_reads, sql_writes, covered_by, mutates_params, ui_affinity, touches, wiring ' +
     'FROM symbol_facts WHERE symbol_id = :sid');
 
+  { 2026-08-17: this query used to implement exactly TWO tags -- 'deprecated' and
+    'since'. Every other tag name fell through every OR branch and returned 0
+    rows, SILENTLY, which reads as "no symbol carries that tag" rather than "this
+    tag is not supported". `--doc-tag param` on a database whose symbols visibly
+    carry <param> returned nothing while `--doc-contains` on the same text
+    returned 32 rows.
+    Now covers every tag-bearing column in symbol_docs. The JSON columns store
+    '[]' when the tag was present but empty, so an emptiness test has to exclude
+    it as well as '' and NULL -- otherwise every documented symbol matches
+    'exception'. The CLI rejects an unknown tag before reaching here, so a
+    fall-through to 0 rows now means genuinely no matches. }
   FQFindByDocTag:= NewQuery(
-    'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE (:tag = ''deprecated'' AND d.deprecated = 1) ' +
-    '   OR (:tag = ''since'' AND d.since_text IS NOT NULL)');
+    'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' +
+    'WHERE (:tag = ''deprecated'' AND d.deprecated = 1) ' +
+    '   OR (:tag = ''since''     AND COALESCE(d.since_text     , '''') <> '''') ' +
+    '   OR (:tag = ''summary''   AND COALESCE(d.summary        , '''') <> '''') ' +
+    '   OR (:tag = ''remarks''   AND COALESCE(d.remarks        , '''') <> '''') ' +
+    '   OR (:tag = ''returns''   AND COALESCE(d.returns_text   , '''') <> '''') ' +
+    '   OR (:tag = ''example''   AND COALESCE(d.example_text   , '''') <> '''') ' +
+    '   OR (:tag = ''param''     AND COALESCE(d.params_json    , '''') NOT IN ('''', ''[]'')) ' +
+    '   OR (:tag = ''exception'' AND COALESCE(d.exceptions_json, '''') NOT IN ('''', ''[]'')) ' +
+    '   OR (:tag = ''seealso''   AND COALESCE(d.seealso_json   , '''') NOT IN ('''', ''[]''))');
 
   FQFindUndocumented:= NewQuery(
     'SELECT s.* FROM symbols s ' + 'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE d.symbol_id IS NULL ' + '  AND (:kind = '''' OR s.kind = :kind) ' +
@@ -5068,8 +5087,34 @@ begin
       FtsTable := 'string_fts';
       MatchExpr:= QuotePhrase(AQuery); // default: exact phrase, in order
     end;
+    { 2026-08-17: owner_name used to come back EMPTY for every .pas literal, and
+      `encl` resolved to the UNIT -- so "which routine issues this string?" was
+      unanswerable and a caller had to re-derive routine boundaries by hand.
+
+      Why `encl` is the unit: sl.symbol_id is filled at index time by
+      FindContainingSymbol, which matches on start_line/end_line -- the
+      DECLARATION span. A literal inside a method BODY is not inside that
+      method's declaration span, so the only symbol whose span covers it is the
+      unit. Correcting the STORED value would mean re-indexing every database,
+      so it is resolved LIVE here instead: same answer, no re-parse, and it is
+      right immediately on databases that already exist.
+
+      The subquery is the FQFindEnclRoutine shape (impl BODY span, innermost
+      first via ORDER BY impl_start_line DESC, so a nested routine beats its
+      parent). `encl` deliberately still reports the unit, for compatibility
+      with existing consumers; the routine lands in owner_name, which was empty
+      for .pas anyway. DFM/SQL literals keep their own owner_name (a property or
+      exception name) -- NULLIF makes the stored value win when it is non-empty,
+      and their files hold no routines, so the subquery yields NULL for them. }
     Sql:=
-      'SELECT sl.text AS txt, sl.source AS src, sl.kind AS kind, sl.owner_name AS owner, ' +
+      'SELECT sl.text AS txt, sl.source AS src, sl.kind AS kind, ' +
+      '  COALESCE(NULLIF(sl.owner_name, ''''), ' +
+      '    (SELECT r.qualified_name FROM symbols r ' +
+      '      WHERE r.file_id = sl.file_id ' +
+      '        AND r.impl_start_line IS NOT NULL AND r.impl_start_line > 0 ' +
+      '        AND r.impl_start_line <= sl.start_line ' +
+      '        AND r.impl_end_line   >= sl.start_line ' +
+      '      ORDER BY r.impl_start_line DESC LIMIT 1)) AS owner, ' +
       '  sl.start_line AS sl_, sl.start_col AS sc_, sl.end_line AS el_, sl.end_col AS ec_, ' +
       '  f.path AS fpath, s.qualified_name AS encl ' +
       'FROM ' + FtsTable + ' ft ' +

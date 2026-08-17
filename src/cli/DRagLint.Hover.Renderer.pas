@@ -424,6 +424,29 @@ begin
   end; // try
 end; // function
 
+// 2026-08-17: param/exception descriptions are stored JSON-ESCAPED (ParamsToJson
+// and ExceptionsToJson both run the text through JsonEscape), but both renderers
+// pulled the value straight out with a regex and never reversed that. A
+// multi-line <param> therefore reached the hover card as a LITERAL backslash-n
+// rather than a line break -- visible in every tooltip carrying a wrapped
+// description. Reverses only what JsonEscape produces; \uXXXX is not emitted by
+// it, so it is deliberately not handled here rather than half-handled.
+function UnescapeJsonText(const AText: string): string;
+begin
+  Result:= AText;
+  if Result = '' then Exit;
+  if Pos('\', Result) = 0 then Exit;          // fast path: nothing escaped
+  Result:= StringReplace(Result, '\r\n', sLineBreak, [rfReplaceAll]);
+  Result:= StringReplace(Result, '\n'   , sLineBreak, [rfReplaceAll]);
+  Result:= StringReplace(Result, '\r'   , sLineBreak, [rfReplaceAll]);
+  Result:= StringReplace(Result, '\t'   , #9        , [rfReplaceAll]);
+  Result:= StringReplace(Result, '\"'   , '"'       , [rfReplaceAll]);
+  Result:= StringReplace(Result, '\/'   , '/'       , [rfReplaceAll]);
+  // Backslash LAST: doing it earlier would let an escaped backslash swallow the
+  // sequence that follows it.
+  Result:= StringReplace(Result, '\\'   , '\'       , [rfReplaceAll]);
+end;
+
 function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 var
   SB: TStringBuilder;
@@ -452,11 +475,33 @@ begin
         // can be satisfied and so a human has a slot to type into, not to put
         // `AValue -- ` in a tooltip. An empty description is not a description.
         if Trim(TDocRegions.StripForDisplay(M.Groups[2].Value)) <> '' then
-          SB.AppendLine('  ' + M.Groups[1].Value + ' -- ' + TDocRegions.StripForDisplay(M.Groups[2].Value));
+          SB.AppendLine('  ' + M.Groups[1].Value + ' -- ' + UnescapeJsonText(TDocRegions.StripForDisplay(M.Groups[2].Value)));
     end;
     // v(ADP3 T1): strip the ownership marker before a human sees it.
     var CleanReturns: string:= TDocRegions.StripForDisplay(ADoc.ReturnsText);
     if CleanReturns <> '' then SB.AppendLine('Returns: ' + CleanReturns);
+    // 2026-08-17: <exception cref> was parsed, stored and served, and then
+    // DROPPED HERE -- this renderer had no exception branch at all, so no symbol
+    // could ever show what it raises. "What does this raise?" is one of the
+    // questions a hover card most obviously ought to answer, and the project's
+    // own DocInsight standard mandates <exception cref> on the public surface.
+    // Shape is whatever ExceptionsToJson emits: a JSON array of objects each
+    // carrying a "type" and a "desc" key. (Written as line comments on purpose:
+    // a brace comment holding that literal JSON ends early at its own closing
+    // brace, which silently turns the rest into code -- it did exactly that here.)
+    // Placeholder-only descriptions are skipped for the same reason params are:
+    // the engine emits an auto <exception cref="Exception"> stub so doc-drift can
+    // be satisfied, and a stub is not a description.
+    if ADoc.ExceptionsJsonRaw <> '' then
+    begin
+      Re:= TRegEx.Create('"type":"([^"]+)","desc":"([^"]*)"');
+      for M in Re.Matches(ADoc.ExceptionsJsonRaw) do
+      begin
+        var ExcDesc: string:= Trim(UnescapeJsonText(TDocRegions.StripForDisplay(M.Groups[2].Value)));
+        if ExcDesc <> '' then SB.AppendLine('Raises ' + M.Groups[1].Value + ': ' + ExcDesc)
+        else SB.AppendLine('Raises ' + M.Groups[1].Value);
+      end;
+    end;
     // v(ADP3 T1) review fix (finding 1b): a Remarks facts block still carries
     // the raw AUTO_BEGIN/AUTO_END fence around its facts lines -- strip just
     // the fence markers, keep the facts text between them.
@@ -506,7 +551,7 @@ begin
       Re:= TRegEx.Create('"name":"([^"]+)","desc":"([^"]*)"');
       for M in Re.Matches(ADoc.ParamsJsonRaw) do
         // v(ADP3 T1): a managed <param> desc is just AUTO_MARK -- strip it.
-        SB.AppendLine('- `' + M.Groups[1].Value + '` ' + TDocRegions.StripForDisplay(M.Groups[2].Value));
+        SB.AppendLine('- `' + M.Groups[1].Value + '` ' + UnescapeJsonText(TDocRegions.StripForDisplay(M.Groups[2].Value)));
     end
     else
     begin
@@ -525,6 +570,25 @@ begin
     begin
       SB.AppendLine('');
       SB.AppendLine('**Returns:** ' + CleanReturns);
+    end;
+    // 2026-08-17: mirrors the plain renderer's new Raises section -- see the
+    // comment there. Both paths dropped <exception cref> entirely before this.
+    if ADoc.ExceptionsJsonRaw <> '' then
+    begin
+      Re:= TRegEx.Create('"type":"([^"]+)","desc":"([^"]*)"');
+      var WroteExcHdr: Boolean:= False;
+      for M in Re.Matches(ADoc.ExceptionsJsonRaw) do
+      begin
+        var ExcDesc: string:= Trim(UnescapeJsonText(TDocRegions.StripForDisplay(M.Groups[2].Value)));
+        if not WroteExcHdr then
+        begin
+          SB.AppendLine('');
+          SB.AppendLine('**Raises:**');
+          WroteExcHdr:= True;
+        end;
+        if ExcDesc <> '' then SB.AppendLine('- `' + M.Groups[1].Value + '` -- ' + ExcDesc)
+        else SB.AppendLine('- `' + M.Groups[1].Value + '`');
+      end;
     end;
     // Live-mined Result:=/Exit() return cases, shown even when the doc has a
     // hand-written <returns> (unifies the popup with the managed doc's

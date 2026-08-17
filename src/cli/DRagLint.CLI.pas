@@ -496,11 +496,21 @@ begin
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]');
   Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous)');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
+  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json]');
+  Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
+  Writeln('  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]');
+  Writeln('                               unit outline; backs the IDE Structure form.');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
-  Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]');
+  Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess]');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
+  Writeln('  drag-lint lint  --file <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--apply]   (AUTOFIX one file)');
+  Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes nothing.');
+  Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
+  Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
+  Writeln('                               "fixable": true are ever applied -- see `drag-lint rules --json`.');
+  Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch] [--layers <f.json>] [--json]');
@@ -509,6 +519,9 @@ begin
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
   Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
   Writeln('                               several projects, or when the DB spans more than the project you are reviewing.');
+  Writeln('                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.');
+  Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
+  Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
@@ -569,6 +582,11 @@ begin
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
   Writeln('  drag-lint refresh-findings --project <X.dproj> --db <db> [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build)');
+  Writeln('  drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--format json|text]');
+  Writeln('                               compile the UNSAVED editor buffer by overlaying it on the real unit.');
+  Writeln('                               Backs the IDE''s "Compile Buffer (unsaved)". Restores the original on exit.');
+  Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
+  Writeln('                               Safe to run any time: prints "nothing pending." when there is nothing to do.');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
   Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text]   (circular unit deps; --plan = followable refactoring playbook)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
@@ -3471,8 +3489,28 @@ begin
   if (AArgs.DocTag = '') and (AArgs.DocContains = '') and (not AArgs.NoDocs) then
   begin
     Writeln('Usage: drag-lint query find [--doc-tag X | --doc-contains Y | --no-docs] ' + '[--kind K] [--public] [--db <file.sqlite>]');
+    Writeln('  --doc-tag: summary|remarks|returns|param|exception|example|seealso|since|deprecated');
     Exit(2);
   end;
+
+  { An unknown --doc-tag used to fall through every branch of the store query and
+    return 0 rows, which is indistinguishable from "no symbol carries this tag"
+    -- the worst shape for a query flag, because the caller concludes a fact
+    about the codebase from what is really an unsupported argument. Reject it
+    loudly and name the valid set. }
+  if AArgs.DocTag <> '' then
+  begin
+    var TagOk: Boolean:= False;
+    for var T in ['summary', 'remarks', 'returns', 'param', 'exception', 'example', 'seealso', 'since', 'deprecated'] do
+      if SameText(T, AArgs.DocTag) then begin TagOk:= True; Break; end;
+    if not TagOk then
+    begin
+      Writeln('ERROR: unknown --doc-tag "', AArgs.DocTag, '".');
+      Writeln('Valid tags: summary, remarks, returns, param, exception, example, seealso, since, deprecated');
+      Exit(2);
+    end;
+  end;
+
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   var RoOk: Boolean;
@@ -8617,6 +8655,22 @@ begin
 
   UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
 
+  { 2026-08-17: this verb is documented read-only, and the open below asks for
+    read-only, but SQLite still CREATES the file when it does not exist -- so
+    running `schema` with no --db in an arbitrary directory left a 4096-byte
+    drag-lint.sqlite behind and printed "schema_version: 0" with exit 0. That
+    reads as "you have a valid, empty index" when the truth is "there is no
+    database here", and it silently litters. The read-only flag cannot express
+    "do not create"; only an existence check before the open can. }
+  if not TFile.Exists(DbPath) then
+  begin
+    Writeln(ErrOutput, 'ERROR: database not found: ', DbPath);
+    if Length(AArgs.DbPaths) = 0 then
+      Writeln(ErrOutput, '(no --db was given, so this defaulted to drag-lint.sqlite in the current directory)');
+    Writeln(ErrOutput, 'Run "drag-lint index <path> --db <file.sqlite>" first, or pass --db explicitly.');
+    Exit(2);
+  end;
+
   { READ-ONLY open: no Migrate call anywhere in this verb. Reads only. }
   Store:= TSQLiteSymbolStore.Create(DbPath, {AReadOnly=}True);
   try
@@ -12519,7 +12573,7 @@ begin
       Writeln(''                                                                     );
       Writeln('Generated by `drag-lint cycles --plan`. Recommendations are'          );
       Writeln('best-effort -- the index can miss references (e.g. `set` types) -- so');
-      Writeln('**build CLIENT + SERVER after each cycle** and re-run `drag-lint'     );
+      Writeln('**rebuild the project after each cycle** and re-run `drag-lint'      );
       Writeln('cycles` to confirm the group is gone. If a build breaks, revert and'  );
       Writeln('inspect by hand.'                                                     );
       Writeln(''                                                                     );
@@ -12749,7 +12803,7 @@ begin
           Writeln('3. In each consumer, replace the cycle-partner in the ' + '**interface** uses with the new contracts unit.');
           Writeln('4. Register the new unit in the .dpr/.dproj.');
         end;
-        Writeln('5. Build CLIENT + SERVER.');
+        Writeln('5. Rebuild the project (every project that compiles these units).');
         Writeln(Format('6. **Verify:** `drag-lint cycles --db <db>` -- cycle %d ' + 'should be gone.', [i + 1]));
         Writeln('');
       end; // for
