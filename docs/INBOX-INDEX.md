@@ -1,5 +1,21 @@
-# INBOX index -- 9 open notes (was 13; 23 that morning; 60 at the start of 2026-08-16)
+# INBOX index -- 8 open notes (was 9; 13 that evening; 60 at the start of 2026-08-16)
 
+> **Session 24 (2026-08-16, late). 9 -> 8 open, 104 retired.**
+>
+> **Retired:** `converter-editor-phase-g-engine-findings` -- ALL of 2.1 through
+> 2.11 are now fixed and covered. The last one open was 2.5's product half, and
+> it shipped as the owner's shape rather than the note's ask: `query --name`
+> orders a same-named VCL/FMX tie by the framework the run's own project writes
+> in its `uses` clauses, **with no `--framework` flag and no built-in
+> VCL-over-FMX default**. Project context is derived three ways, each *unique or
+> nothing* (`--project`, `--in`, the one non-library `--db`); a `library-*` index
+> is never the context, since it carries both frameworks by construction. It
+> REORDERS, never filters, so the editor's "2 classes carry that name" report
+> still works -- it just gets the right one first. Covered by
+> `run_query_framework_preference.ps1`, RED on 3 asserts against the unfixed
+> build; its first assert is the positive control (no context -> the tie is
+> reported exactly as before).
+>
 > **Session 23 (2026-08-16, evening). 13 -> 9 open, 103 retired.**
 >
 > **Retired:** `index-all-win32-library-rebuild-aborts` (not blocked -- the
@@ -82,17 +98,16 @@ their fix was found only by measuring, not by reading the note:
 build.** A test asserting only "the false finding is gone" passes with the rule
 switched off.
 
-## Open -- all 9, current as of session 23 close
+## Open -- all 8, current as of session 24
 
 Re-verified by listing `docs\INBOX-*.md`, not by trusting this table. Every note
 retired above has been removed from it.
 
 | note | shape |
 |---|---|
-| `lint-all-project-wide-phase-dominates-runtime` | **THE BIGGEST REMAINING WIN.** `unresolved-name` is **269 s of ORM3's 530 s** run -- 51%. NOT the CTE (~6 s) and NOT a missing name index (present and used). It is a query PLAN difference: identical SQL is ~0.74 ms/call through an external SQLite versus ~62 ms in-process. A `+` plan pin shipped and bought ~4% (noise); `sqlite_stat1` now exists, so the with-statistics number is the next measurement. If that fails too, log `sqlite3_libversion()` and EXPLAIN **through FConn**. |
+| `lint-all-project-wide-phase-dominates-runtime` | **THE BIGGEST REMAINING WIN.** `unresolved-name` is **269 s of ORM3's 530 s** run -- 51%. **Session 24 killed the premise: the bucket does NOT time one call.** `LeafNameIsUnambiguous` (a second store query) and the extra-store gate are inside the same window, so every external-vs-in-process comparison so far compared different things. Also dead: "the replay dropped the `NOT IN` predicate" (measured 0.73 ms WITH it vs 1.31 WITHOUT -- it *cuts* rows) and "different bound parameters" (all three real call shapes land within 0.13 ms). **SQLite serves every query in that window under 1 ms**, so the cost is not in SQLite at all. Next: split the timer into its parts AND count calls, then look at FireDAC marshalling -- the gate materialises up to 495 `TSymbol` rows to answer a boolean. |
 | `index-runs-are-not-resumable` | Group B 5b, and the plan's own HIGHEST-RISK item. Additive `files.indexed_at_fingerprint`; the stamp **must** sit inside the transaction `CommitFileTx` closes, or it recreates the silent-staleness bug fixed in session 22. Full design in `PLAN-SESSION-23-IMPLEMENTATION.md` section 5b. Not started. |
 | `rule-hardening-plan-2026-08-13` | **Essentially one item left.** Re-measured across all four consumer projects: items 1/3/5/7/8 now fire **ZERO** times; 2+6 are down to 0; item 4 DONE. Live: **item 9 `unused-public-symbol` (12)** -- 9 are YADF shared-unit hints of which 8 are alive in a sibling and `OptionsHelpText` is genuinely dead (x3), plus 3 in DataCopy. The fix is to consult the sibling DBs a unit's own `dl:shared` header NAMES, which needs `TProjectLintRules.Run` to take extra stores (it takes one `ISymbolStore` today). |
-| `converter-editor-phase-g-engine-findings` | 2.4-2.11 ALL closed. Open only for 2.5's product half -- and the owner has ANSWERED the shape: the tie is LIBRARY-ONLY (a project DB returns 0 rows for `TEdit`) and the framework is derivable from the project's own `uses` (DataCopy 25 `Vcl.*` / 0 `FMX.*`). So: derive context, do NOT add a `--framework` flag. Ordinary engine work, no ruling needed. |
 | `incremental-index-hangs-on-large-db` | The "hang" is the whole-DB resolve; scoped resolve fixes the body-edit shape but an ADDED type still falls back. NOTE: a session-23 suspicion that the incremental affected-set is O(corpus) was **refuted on real code** (748 affected refs, smaller than the changed file's own 1,988) -- do not carry that link forward. |
 | `buildfor-defaulted-args-diverge-between-entry-points` | STALE for the function it names. Remaining: `ABaseDir` / `AIncludeSince` / `AExtraStores` / `AComplexityMin` still defaulted on the repair path -- `AExtraStores` is the risky one (cross-DB fan-out), so use a cross-DB fixture. |
 | `exception-class-unit-and-generated-exception-types` | Feature request, not a defect. **MEASURED: 64 distinct messages on ORM3, not the 400 that would have killed it**, and normalization collapses 64 -> 63. Build Stage 1. |

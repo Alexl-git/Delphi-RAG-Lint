@@ -271,6 +271,86 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
    > layer (per-call `TFDQuery.Create`, parameter binding, or row marshalling) --
    > which the subagent measured as "a few ms/call at most", so that too would
    > need re-measuring rather than assuming.
+   >
+   > ### 2026-08-16 (session 24): the PREMISE was wrong. The bucket does not time one call.
+   >
+   > Before running the prescribed in-process experiment, I re-read the code that
+   > the bucket wraps. **`GBUnresolved` is not a timer around
+   > `FindUnresolvedNameCallers`.** The window is `TB0` (`Doc.Facts.pas:1813`) to
+   > `Inc(GBUnresolved, ...)` (`:1939`), and inside it are also:
+   >
+   > * **`LeafNameIsUnambiguous`** (`:1872`) -- the ambiguity gate, which calls
+   >   `AStore.FindSymbolsByExactName(<leaf>)`. Short-circuit `or`, so it runs
+   >   whenever the symbol has NO resolved caller, which on a large project is the
+   >   common case.
+   > * **`LeafNameNotAmbiguous`** (`:1904`) -- the same query again, once per extra
+   >   store.
+   > * `AddDistinct` over every returned row, twice.
+   >
+   > Every measurement above -- mine and the previous sessions' -- compared an
+   > external replay of `FindUnresolvedNameCallers` against a timer that was never
+   > only measuring it. **That alone could account for the ~80x**, and it must be
+   > ruled out before any more plan work.
+   >
+   > ### What was measured this session, externally, against the live ORM3 DB
+   >
+   > 155 real documented routine declarations, parameters taken from the DB rather
+   > than invented. Python's sqlite3 (3.50.4), read-only, `x4309` scaled to the
+   > declaration count:
+   >
+   > | shape | ms/call | x4309 |
+   > |---|---|---|
+   > | `Facts.pas:1875` -- scope=file, owner=set (the site everyone assumed) | 0.78 | 3.4 s |
+   > | `Facts.pas:1921` -- scope=0, owner=set (extra-store fan-out) | 0.89 | 3.8 s |
+   > | `SymbolFacts.pas:3035` -- scope=0, owner='' (**all defaults**) | 0.91 | 3.9 s |
+   > | `FindSymbolsByExactName` (the ambiguity gate's query) | 0.31 | 1.3 s |
+   >
+   > **Two more explanations are therefore DEAD:**
+   >
+   > * **"the replay dropped a predicate"** -- specifically
+   >   `AND r.id NOT IN (SELECT ref_id FROM call_edges)`, which looked like the
+   >   ideal suspect (an uncorrelated subquery SQLite materialises into an
+   >   ephemeral index once per execution, over 32,983 rows, 4,309 times).
+   >   Measured: **0.73 ms/call WITH it, 1.31 ms/call WITHOUT it** -- it is a
+   >   filter that makes the query *faster* by cutting rows, and the replay
+   >   plainly carried it. `NOT EXISTS` against `idx_call_edges_ref` is 0.99, i.e.
+   >   slightly worse. Do not rewrite it.
+   > * **"different bound parameters"** -- all three real call shapes were
+   >   replayed with their real arguments and land within 0.13 ms of each other.
+   >
+   > **SQLite serves every query in that window in under 1 ms.** So the 62 ms/call
+   > is not in SQLite at all: not the plan, not the CTE, not the statistics, not
+   > the predicate set, not the parameters. That is the conclusion the prescribed
+   > step 3 was designed to reach, reached from the outside for all four shapes.
+   >
+   > ### The concrete candidate the code review turned up
+   >
+   > `LeafNameIsUnambiguous` needs one boolean: "is there more than one call
+   > target with this leaf name, or any `local_var`/`param`/`field` sharing it?"
+   > It answers by calling `FindSymbolsByExactName`, i.e. `SELECT *`, and
+   > **materialising every row into a full `TSymbol`** -- then counting to 2 and
+   > throwing the rest away. Measured row counts in the sample: **495 rows for
+   > `Create`**, 146 for `Save`, 141 for `Initialize`; 3,341 rows over 155 calls.
+   >
+   > This is the SAME anti-pattern this note already records fixing twice
+   > (`unused-private-member` / `unused-public-symbol`: "MATERIALISING EVERY
+   > MATCHING ROW into a TReference just to compare a length with zero"). Cheap in
+   > SQLite, expensive in FireDAC, and invisible to an EXPLAIN QUERY PLAN.
+   >
+   > **NOT YET A MEASURED FIX -- state it as the hypothesis it is.** What is
+   > measured is the row volume and that SQLite is not the cost. What is NOT
+   > measured is FireDAC's per-row marshalling cost in this process, and a bounded
+   > `COUNT`+`EXISTS` reformulation measured only **1.0 s vs 1.3 s in SQLite**, so
+   > the entire win would have to come from rows never crossing the FireDAC
+   > boundary. Instrument first:
+   >
+   > 1. split the `GBUnresolved` window into its parts (gate / primary call /
+   >    extra stores / AddDistinct) -- one counter each, and a CALL COUNT
+   >    alongside each timer, since "once per declaration" has now been assumed
+   >    once and been wrong;
+   > 2. only then decide whether the gate, the query, or the marshalling owns it.
+   >
+   > Do NOT ship a `COUNT`-based gate on the strength of the paragraph above.
 2. **`unused-unit-in-uses` is still 17.4 s** -- the memo removed the repetition
    but the remaining cost is one `FindSymbolsByExactName` per DISTINCT name,
    each an indexed lookup returning every symbol with that name.
