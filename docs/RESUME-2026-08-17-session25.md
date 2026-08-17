@@ -4,6 +4,12 @@
 partial.** This file is the state snapshot; the plan carries the per-item outcome
 table at its head.
 
+## State
+
+`main` @ **`491f921`**, working tree **clean**, **128 unpushed ON PURPOSE**
+(the owner lifts that gate). Battery **320/320 pass, 0 fail, 19.0 min**
+(321 found, 1 excluded by the standing default exclusions).
+
 ## Headline
 
 **`lint-all` on ORM3: 332.12 s -> 276.62 s**, report byte-identical throughout
