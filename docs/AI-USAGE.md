@@ -121,7 +121,7 @@ in 2b.
 **Query / search (find symbols, callers, text)**
 | Verb | What it does |
 |------|--------------|
-| `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss, `--exact` suppresses the fallback so 0 rows means "no such symbol", `--case-sensitive` opts out of the NOCASE retry. Exit 0 = hits / 1 = zero hits / 2 = bad usage (no selector, unreadable `--db`) / 3 = fatal (unrecognised argument) |
+| `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss, `--exact` suppresses the fallback so 0 rows means "no such symbol", `--case-sensitive` opts out of the NOCASE retry. Exit 0 = hits / 1 = zero hits / 2 = bad usage (no selector, unreadable `--db`) / 3 = fatal (unrecognised argument). **A same-named VCL/FMX tie is ordered by the framework the run's own project uses** -- see below |
 | `query --text "<phrase>"` | full-text search over `.pas`/`.dfm`/`.sql` constants: messages, DFM captions, SQL exception text (`--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N`) |
 | `query find-callers --name X` | callers of a symbol (`--context N`; `--resolved` for precise call-edge callers). `--resolved` also reports routines **reached as a callback** -- handed somewhere by bare name, `@X`, or an event assignment -- marked `[callback]` rather than `[certain]`/`[ambiguous]`, because that is a reach, not a call. Without it a live predicate passed to e.g. `TDirectory.GetFiles` read as dead |
 | `query find` | doc-driven find (`--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public`) |
@@ -387,6 +387,36 @@ in 2b.
 |------|--------------|
 | `serve --db DB` | MCP stdio server (JSON-RPC 2.0) -- see section 3 |
 | `lsp --db DB` | LSP stdio server |
+
+### 2a-i. VCL vs FMX: a bare name that two frameworks both declare
+
+`TEdit`, `TButton`, `TLabel` and ~32 further names are declared **twice** in a
+library index -- once under `Vcl.*`, once under `FMX.*` -- and nothing in either
+row tells them apart. Alphabetical order used to hand every caller the FMX one.
+
+`query --name` now puts the framework **the run's own project actually uses**
+first, derived from that project's `uses` clauses. There is no `--framework`
+flag and no built-in VCL-over-FMX default: the preference is evidence or it is
+absent.
+
+A run names its project in one of three ways, each *unique or nothing* -- a
+guessed project would reorder on an unrelated project's evidence:
+
+| how | example |
+|---|---|
+| `--project <x.dproj>` | `query --name TEdit --project C:\Projects\DataCopy\DataCopy.dproj` |
+| `--in <file.pas>` | resolves to the one index containing that file |
+| one non-library `--db` | `query --name TEdit --db library-Win64.sqlite --db DataCopy.sqlite` |
+
+**With no project context the tie is reported exactly as before** -- and it is
+still reported *with* one: this **reorders, never filters**, so both rows come
+back and a consumer that wants to say "2 classes carry that name" still can.
+A project that writes both frameworks equally expresses no preference.
+
+Asking a **library** index alone can never resolve the tie, and that is not a
+gap: the library legitimately carries both frameworks because the IDE Library
+Path does. The project index cannot resolve it either -- it holds neither
+`TEdit`. The answer only exists when you put the two together.
 
 ### 2b. Advanced / diagnostic verbs
 

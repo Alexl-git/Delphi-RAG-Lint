@@ -1474,6 +1474,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
+      /// <returns><!-- drag-lint:auto -->Observed: ''; Spelt[Best].</returns>
+      /// <remarks>
+      /// Implements: DRagLint.Core.Interfaces.ISymbolStore.GuiFrameworkInUse
+      /// <seealso cref="DRagLint.Core.Model.IsGuiFrameworkPrefix"/>
+      /// </remarks>
+      function GuiFrameworkInUse: string;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// Calls: ChangeFileExt, Copy, DRagLint.Core.Model.IsGuiFrameworkPrefix, DRagLint.Core.Model.UnitFrameworkPrefix, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, ExtractFileExt, Format, LastDelimiter, LowerCase, Pos
@@ -7553,6 +7559,77 @@ begin
     Result:= List.ToArray;
   finally
     List.Free;
+  end; // try
+end; // function
+
+{ COUNTED, not inferred. The leading namespace segment of every unit_uses row is
+  grouped in SQL, the GUI ones are kept, and the most-used wins.
+
+  Which segments are GUI frameworks is NOT decided here -- IsGuiFrameworkPrefix
+  is the one place in src/ that names the pair, and this is a third caller of it
+  rather than a third copy of the literals.
+
+  The GROUP BY is on the RAW segment so the returned spelling is the source's
+  own; two spellings of one framework ('Vcl' and 'VCL') fold together on the
+  lowercased key, keeping whichever was seen first.
+
+  A TIE RETURNS ''. Measured on the real consumers there is no tie to speak of
+  (DataCopy 25 Vcl / 0 FMX, YADF 18 / 0), but a project that genuinely writes
+  both has no single framework to prefer, and answering anyway would reintroduce
+  the silent pick this whole mechanism exists to remove. }
+function TSQLiteSymbolStore.GuiFrameworkInUse: string;
+var
+  Q     : TFDQuery                    ;
+  Counts: TDictionary<string, Integer>;
+  Spelt : TDictionary<string, string> ;
+  Seg   : string                      ;
+  Key   : string                      ;
+  N     : Integer                     ;
+  Best  : string                      ;
+  BestN : Integer                     ;
+  Pair  : TPair<string, Integer>      ;
+begin
+  Result:= '';
+  Counts:= TDictionary<string, Integer>.Create;
+  Spelt := TDictionary<string, string >.Create;
+  Q     := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { INSTR > 1 drops both the undotted names (INSTR = 0) and the pathological
+      leading-dot one (INSTR = 1), either of which would otherwise contribute an
+      empty segment -- and '' is never a GUI framework, but SUBSTR with a
+      negative length is not worth relying on. }
+    Q.SQL.Text:= 'SELECT SUBSTR(unit_name, 1, INSTR(unit_name, ''.'') - 1) AS seg, ' + '       COUNT(*) AS n ' + 'FROM unit_uses WHERE INSTR(unit_name, ''.'') > 1 GROUP BY seg';
+    Q.Open;
+    try
+      var FSeg: TField:= Q.FieldByName('seg');
+      var FN  : TField:= Q.FieldByName('n'  );
+      while not Q.Eof do
+      begin
+        Seg:= FSeg.AsString;
+        if IsGuiFrameworkPrefix(Seg) then
+        begin
+          Key:= LowerCase(Seg);
+          N  := 0;
+          Counts.TryGetValue(Key, N);
+          Counts.AddOrSetValue(Key, N + FN.AsInteger);
+          if not Spelt.ContainsKey(Key) then Spelt.Add(Key, Seg);
+        end;
+        Q.Next;
+      end;
+    finally
+      Q.Close;
+    end; // try
+    Best := '';
+    BestN:= 0;
+    for Pair in Counts do
+      if Pair.Value > BestN then begin BestN:= Pair.Value; Best:= Pair.Key; end
+      else if Pair.Value = BestN then Best:= ''; { equal to the leader: no answer }
+    if Best <> '' then Result:= Spelt[Best];
+  finally
+    Q     .Free;
+    Spelt .Free;
+    Counts.Free;
   end; // try
 end; // function
 

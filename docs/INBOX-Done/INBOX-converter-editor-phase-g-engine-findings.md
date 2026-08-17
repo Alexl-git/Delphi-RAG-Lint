@@ -1,3 +1,55 @@
+> # 2026-08-16 (session 24): 2.5's product half SHIPPED. **THIS NOTE IS CLOSED.**
+>
+> Every finding 2.1 through 2.11 is now fixed and covered. The last one open was
+> 2.5's product half, and it shipped as the owner's shape, not the note's ask.
+>
+> **What it does.** `query --name` orders a same-named VCL/FMX tie by the
+> framework the run's own project writes in its `uses` clauses. No
+> `--framework` flag, no built-in VCL-over-FMX default -- the preference is
+> derived evidence or it is absent.
+>
+> **Three ways a run names its project**, each *unique or nothing*, because a
+> guessed project would reorder on an unrelated project's evidence:
+> `--project <x.dproj>` (via `ResolveProjectDb`, pdmUnique only) · `--in <file>`
+> (the one non-library index containing it) · the one non-library `--db`. The
+> manifest-wide default list (~28 project indexes) and a bare
+> `--db library-Win64.sqlite` therefore both resolve to NO context, which is
+> right. A `library-*` index is never the context: it carries both frameworks by
+> construction, so its own `uses` describe the RTL, not a consumer.
+>
+> **It REORDERS, it never FILTERS.** Both rows still come back, so the editor's
+> "2 classes carry that name; used FMX.Edit.TEdit" report still works -- it just
+> gets the right one first. And a project writing both frameworks equally
+> expresses no preference (a tie returns '' rather than picking).
+>
+> **Three ranks, not two.** A unit outside both GUI namespaces -- `System.*`,
+> `Winapi.*`, `Data.*`, the project's own units, an undotted legacy unit -- is
+> SHARED ground, not a competing answer, so it sits between the preferred and
+> the rejected framework rather than behind both.
+>
+> Which segments are GUI frameworks is still decided in exactly one place,
+> `DRagLint.Core.Model.IsGuiFrameworkPrefix`. This is a third caller of it, not
+> a third copy of the literals.
+>
+> **Where:** `ISymbolStore.GuiFrameworkInUse` (counted over `unit_uses`,
+> `DRagLint.Storage.SQLite.pas`) · `ResolveFrameworkContextDb` +
+> `PreferFrameworkFirst` (`DRagLint.CLI.pas`).
+>
+> **Covered by** `tests\autotest\run_query_framework_preference.ps1`, whose
+> first assert is the positive control the resume doc asked for: with no project
+> context the FMX row is STILL first and all rows are STILL returned. Run
+> against the unfixed build it goes RED on 3 asserts. The de-vacuator that
+> matters is the FMX-project case -- it passes vacuously on the unfixed engine
+> (FMX-first is the accident there), so the suite also asserts that the VCL and
+> FMX runs DISAGREE, which only reading the project can produce.
+>
+> The `--project` branch is verified live rather than in the fixture (an ad-hoc
+> index has no manifest entry to resolve through): against the shipped
+> `library-Win64.sqlite`, adding `--project C:\Projects\DataCopy\DataCopy.dproj`
+> flips `TEdit` from `FMX.Edit.TEdit` to `Vcl.StdCtrls.TEdit`.
+>
+> ---
+>
 > # 2026-08-16 (session 23): 2.4-2.11 ALL CLOSED. One owner question keeps the note open.
 >
 > Re-measured live against `library-Win64.sqlite`, not read off the note. Every

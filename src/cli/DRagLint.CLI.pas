@@ -645,6 +645,7 @@ end;
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
 function ResolveLibraryDb  (const AArgs: TArgs): string        ; forward;
+function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
 
 // v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
 // before CLI flags. Recognized keys:
@@ -3591,6 +3592,54 @@ begin
   if Length(AllMatches) > 0 then Result:= 0 else Result:= 1;
 end; // function
 
+{ INBOX converter-editor-phase-g 2.5, product half. Puts the rows declared by
+  AFramework's units first, when -- and only when -- the run's project told us
+  which framework that is (ResolveFrameworkContextDb; '' means it did not).
+
+  REORDERS, NEVER FILTERS. The tie stays visible: `--name TEdit` still returns
+  both TEdits and still lets a consumer report "2 classes carry that name". All
+  that changes is which one a caller taking the FIRST row gets -- and taking the
+  first row is what every consumer does, which is why an arbitrary
+  ORDER BY qualified_name handed VCL projects the FMX declaration.
+
+  Three ranks, and the middle one is the point: a unit outside both GUI
+  namespaces is SHARED ground -- System.*, Winapi.*, Data.*, the project's own
+  units, an undotted legacy unit -- not a competing answer, so it must not be
+  pushed behind the preferred framework, only ahead of the rejected one. The
+  three-way split comes straight from IsGuiFrameworkPrefix, which is the single
+  place that knows the pair.
+
+  STABLE within each rank, so the existing total ordering (and every test that
+  pins it) survives untouched wherever the framework does not discriminate. }
+procedure PreferFrameworkFirst(const AFramework: string; var ASymbols: TArray<TSymbol>; var APaths: TArray<string>);
+var
+  Rank    : Integer;
+  i       : Integer;
+  Seg     : string ;
+  R       : Integer;
+  OutSyms : TArray<TSymbol>;
+  OutPaths: TArray<string> ;
+  Lockstep: Boolean;
+begin
+  if (AFramework = '') or (Length(ASymbols) < 2) then Exit;
+  Lockstep:= Length(APaths) = Length(ASymbols);
+  SetLength(OutSyms , 0);
+  SetLength(OutPaths, 0);
+  for Rank:= 0 to 2 do
+    for i:= 0 to High(ASymbols) do
+    begin
+      Seg:= UnitFrameworkPrefix(DeclaringUnitOfQName(ASymbols[i].QualifiedName));
+      if      SameText(Seg, AFramework)  then R:= 0
+      else if IsGuiFrameworkPrefix(Seg)  then R:= 2
+      else                                    R:= 1;
+      if R <> Rank then Continue;
+      OutSyms:= OutSyms + [ASymbols[i]];
+      if Lockstep then OutPaths:= OutPaths + [APaths[i]];
+    end;
+  ASymbols:= OutSyms;
+  if Lockstep then APaths:= OutPaths;
+end; // procedure
+
 function DoQuery(const AArgs: TArgs): Integer;
 var
   Symbols       : TArray<TSymbol>                 ;
@@ -3992,6 +4041,22 @@ begin
       Exit(0);
     end;
   end; // if
+  { INBOX converter-editor-phase-g 2.5: prefer the framework this run's project
+    actually uses. Costs one small read-only open, and only when there is a tie
+    to break at all -- a single row cannot be ordered wrong. Both halves fail
+    SILENT to today's behaviour: no project context, or a project whose uses do
+    not name one framework, leaves the rows exactly as the SQL ordered them. }
+  if Length(AllSymbols) > 1 then
+  begin
+    var FwDb: string:= ResolveFrameworkContextDb(AArgs, PathsToScan);
+    if FwDb <> '' then
+    begin
+      var FwOk: Boolean;
+      var FwStore:= OpenReadOnlyStore(FwDb, FwOk);
+      if FwOk and (FwStore <> nil) then
+        PreferFrameworkFirst(FwStore.GuiFrameworkInUse, AllSymbols, AllPaths);
+    end;
+  end;
   PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths);
   if Length(AllSymbols) = 0 then Result:= 1
   else Result:= 0;
@@ -16244,6 +16309,96 @@ begin
   if TargetFile = '' then TargetFile:= AArgs.InFile;
   if TargetFile <> '' then
     Result:= OrderDbsByMembership(Result, ProjDb, TargetFile, DbContainsFile);
+end; // function
+
+{ INBOX converter-editor-phase-g 2.5, product half. The ONE project index whose
+  `uses` clauses may speak for this run -- '' when the run names no single
+  project, which is the common case and must stay the silent one.
+
+  Why this exists. `query --name TEdit` against library-Win64 returns two equally
+  type-like rows, FMX.Edit.TEdit and Vcl.StdCtrls.TEdit, and the FMX one wins on
+  `ORDER BY qualified_name` alone. Measured, the tie is LIBRARY-ONLY: the same
+  query against DataCopy.sqlite returns 0 rows, because a project index holds
+  only the project's own code and neither TEdit is in it. So the ambiguity
+  arises exactly when a consumer asks the library a bare-name question with no
+  project in hand -- and when it DOES have one, that project already states its
+  framework: DataCopy writes 25 `Vcl.*` uses and 0 `FMX.*`; YADF, 18 and 0.
+
+  Hence no --framework flag. The note asked for one; the owner's question
+  retired it. Context is DERIVED where it exists and ABSENT where it does not,
+  and there is no default to rule on.
+
+  Three ways a run can name one project, each of them "unique or nothing" --
+  a GUESSED project is worse than none, because it would silently reorder
+  results on the strength of an unrelated project's uses:
+
+    1. --project <x.dproj>, via the same ResolveProjectDb the IDE's Rebuild
+       Index and `resolve-dbs --project` use, and only on pdmUnique.
+    2. --in <file>, the unique NON-LIBRARY index that actually contains it.
+    3. otherwise the unique NON-LIBRARY entry in the scan set -- which is how
+       an explicit `--db <project> --db library-*` pair is understood, and
+       which correctly yields '' for the manifest-wide default list (~28
+       project indexes) and for a bare `--db library-Win64.sqlite`.
+
+  A library index is never the context even when it is the only one: it carries
+  both frameworks by construction, so its own uses describe the RTL, not a
+  consumer. Identified by the `library-` filename prefix, the same test
+  ResolveLibraryDb uses. }
+function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string;
+
+  function IsLibraryDb(const ADb: string): Boolean;
+  begin
+    Result:= StartsText('library-', ExtractFileName(ADb));
+  end;
+
+  { The unique member of APathsToScan that is not a library index and satisfies
+    AExtra; '' when none or several do. }
+  function TheOnlyProjectDb(const AFilePath: string): string;
+  var
+    D    : string ;
+    Found: string ;
+    Count: Integer;
+  begin
+    Found:= '';
+    Count:= 0;
+    for D in APathsToScan do
+    begin
+      if IsLibraryDb(D) then Continue;
+      if not TFile.Exists(D) then Continue;
+      if (AFilePath <> '') and not DbContainsFile(D, AFilePath) then Continue;
+      Inc(Count);
+      Found:= D;
+    end;
+    if Count = 1 then Result:= Found else Result:= '';
+  end;
+
+var
+  Manifest : TIndexManifest ;
+  ProjDb   : string         ;
+  Claimants: TArray<string> ;
+begin
+  Result:= '';
+
+  if AArgs.ProjectPath <> '' then
+  begin
+    try
+      Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+      if ResolveProjectDb(Manifest, AArgs.ProjectPath, ProjDb, Claimants) = pdmUnique then
+        if (ProjDb <> '') and TFile.Exists(ProjDb) then Exit(ProjDb);
+    except
+      { A manifest that will not load leaves the run with no project context,
+        which is the same answer as "no project named" and needs no report --
+        every caller of this function degrades to today's behaviour on ''. }
+    end;
+    { --project was given and did not resolve uniquely. Do NOT fall through to
+      the weaker rules: they would answer for a DIFFERENT project than the one
+      the caller named, which is worse than not answering. }
+    Exit('');
+  end;
+
+  if AArgs.InFile <> '' then Exit(TheOnlyProjectDb(AArgs.InFile));
+
+  Result:= TheOnlyProjectDb('');
 end; // function
 
 { The LIBRARY index for this run's platform, from the manifest; '' when the

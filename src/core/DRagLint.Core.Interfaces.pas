@@ -699,6 +699,22 @@ type
     /// </remarks>
     function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
     function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
+    /// <summary>The GUI framework this index's own code actually writes in its
+    /// `uses` clauses -- the leading namespace segment ('Vcl' or 'FMX', the
+    /// pair being DRagLint.Core.Model.IsGuiFrameworkPrefix's to name), or ''
+    /// when the index names neither or names both equally often.</summary>
+    /// <returns>The winning segment, spelled as the source spells it; '' for
+    /// "no answer", which callers must treat as "do not prefer either".</returns>
+    /// <remarks>Ask this of a PROJECT index only. A LIBRARY index carries both
+    /// frameworks by construction -- the IDE Library Path holds Vcl.* and FMX.*
+    /// alike -- so its answer describes the RTL rather than any consumer and
+    /// means nothing.
+    /// Counted over unit_uses, so it reports what the indexed code WRITES, not
+    /// what it links. A tie returns '': a project that genuinely uses both has
+    /// no single framework to prefer, and inventing one is precisely the silent
+    /// pick this exists to avoid.
+    /// Not thread-safe; call from the owning thread only.</remarks>
+    function GuiFrameworkInUse: string;
     /// <summary>Whole-DB post-index pass: RECOMPUTES unit_uses.target_file_id
     /// for every row, from the used unit's name and the set of indexed file
     /// names. Idempotent.</summary>
