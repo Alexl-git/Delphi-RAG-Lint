@@ -1,93 +1,110 @@
-# RESUME -- session 24 close (2026-08-16, late)
+# RESUME -- session 24 close (2026-08-16 -> 08-17)
 
 ## State
 
 | | |
 |---|---|
-| branch | `main`, HEAD **`d780a17`** |
+| branch | `main`, HEAD **`8376022`** |
 | working tree | clean |
-| unpushed | **110 commits, ON PURPOSE.** Do not push. The owner lifts this gate. |
-| battery | **311/311 pass, 0 fail, 15.5 min** -- run at `16456a2`+memo, AFTER every change below |
-| INBOX | **9 open / 104 retired** |
-| ORM3 `lint-all` | **320.02 s** (was 572.31 s), report byte-identical |
+| unpushed | **118 commits, ON PURPOSE.** Do not push. The owner lifts this gate. |
+| battery | **315/315 pass, 0 fail, 15.7 min** (316 runners now; the count rises with each new suite) |
+| INBOX | **8 open / 105 retired** |
+| ORM3 `lint-all` | **320 s** (was 572 s), report byte-identical |
+| `unused-public-symbol` | **6** across all four consumers (was 12); all 6 genuine |
 
-## What shipped, four commits
+## What shipped, ten commits
 
 | commit | what |
 |---|---|
 | `243e961` | VCL/FMX framework preference in `query --name`; closes `converter-editor-phase-g` |
 | `5a17029` | the measurement record that killed the `unresolved-name` premise |
 | `16456a2` | `find-unit`: read every `--db`; never invent a second `uses` clause |
-| `d780a17` | memoise `OverloadArityTag` -- **572 s -> 320 s** |
+| `d780a17` | **memoise `OverloadArityTag` -- 572 s -> 320 s (-44%)** |
+| `8605017` | an extra store's caller gets its overload tag from THAT store |
+| `c761b5f` | `resolve-uses`: read every `--db`; stop suggesting already-imported units |
+| `bd30afa` | **per-file index resume** -- a killed engine-change reindex continues |
+| `fc2d613` | `unused-public-symbol` consults the siblings a shared unit NAMES (12 -> 6) |
+| `8376022` | the battery now counts the 68 legacy `.bat` tests it does NOT run |
 
-Both new suites were run against the **UNFIXED** build and went RED
-(`run_query_framework_preference` 3 of 15 asserts; `run_find_unit_multidb` 6 of 6).
+Every new suite was run against the **UNFIXED** build and went RED. Five suites
+added; none of them was accepted on a green run alone.
 
 ---
 
-## 1. The thing worth reading before anything else
+## The two things worth reading before doing anything else
 
-`unresolved-name` was 269 s of a 530 s run and was read, for three sessions, as
+### 1. The profiler attributed a cost to the wrong thing for three sessions
+
+`unresolved-name` was 269 s of a 530 s run and was read as
 "`FindUnresolvedNameCallers`, once per declaration". **Both halves were wrong.**
+That query costs **2.41 s**, and its in-process 0.56 ms/call AGREES with the
+external replay -- so **the famous ~80x in-process gap never existed**. The timer
+simply enclosed more than its name said.
 
-Splitting the timer and adding a CALL COUNT to each part:
+Killed on the strength of that bad attribution: the uses-reach CTE, a missing
+name index, missing `sqlite_stat1`, and the `NOT IN (SELECT ref_id FROM
+call_edges)` predicate. A unary `+` plan pin and a bounded ANALYZE were
+**shipped** for it. All aimed at a statement costing two and a half seconds.
 
-```
-unresolved-name                    255.26 s
-  ambiguity-gate                     0.01 s (   49 call(s), 0.30 ms/call)
-  primary-query                      2.41 s ( 4293 call(s), 0.56 ms/call)
-  rest-of-window                   252.83 s
-overload-arity-tag                 255.48 s (24286 call(s), 10.52 ms/call)
-```
-
-That query costs **2.41 s**. Its in-process 0.56 ms/call **agrees** with the
-external replay's 0.78, so **the ~80x in-process gap never existed** -- the
-timer enclosed `LeafNameIsUnambiguous` and the `ToFactRef` loop as well, and the
-two measurements were never of the same thing.
-
-Killed on the strength of that bad attribution, across three sessions: the
-uses-reach CTE, a missing `refs.name_text` index, missing `sqlite_stat1`, and
-(this session) the `NOT IN (SELECT ref_id FROM call_edges)` predicate. A unary
-`+` plan pin and a bounded ANALYZE were **shipped** for it. All of it aimed at a
-statement costing two and a half seconds.
-
-**A timer with no CALL COUNT beside it is what hid this.** The counts are
+**What hid it was a timer with no CALL COUNT beside it.** The counts are
 permanent now. Do not remove them.
 
-The real cost was `OverloadArityTag` -- `FindAllChildSymbols` per rendered
-caller row, materialising every sibling of the parent class to count same-named
-ones. Memo keyed on **(store pointer, symbol id)**; ids are per-DB, so a bare id
-key returns one DB's answer for another DB's symbol.
+### 2. A backlog note is a record of what someone believed on one day
 
-## 2. Next, in the note's own ranking
+`rule-hardening-plan` had ten rows. Exactly ONE needed the fix it described --
+and even that one had the wrong counts ("8 alive + 3 dead" out of 9). Five rows
+were stale and fired zero times. One was fixed for a completely different reason
+than the one written down. The `index-runs-are-not-resumable` plan was wrong
+twice: it reused `ForceReparse` (which is set for three reasons, only one of
+which may resume) and its test fixture would have tested nothing.
 
-| item | shape |
+**Re-measure before coding is not advice in this repo. It is the finding.**
+
+---
+
+## Next, in the order the owner set
+
+### Carried backlog (remaining)
+
+| note | shape |
 |---|---|
-| **`per-file scan`** | The NEW dominant phase: **141 s of 320 (44%)**, purely because everything else shrank. **Never profiled.** Cheapest big win available. |
-| `class-metrics` | 56 s, never looked at. |
-| `seealso` | 17.6 s, the largest remaining doc-drift sub-item. |
-| **cross-DB `ToFactRef` bug** | **CORRECTNESS, not perf.** In the extra-store loop `ToFactRef` closes over the PRIMARY store while `RC.EnclosingSymbolId` came from the EXTRA store, so `OverloadArityTag` is handed an id from the wrong DB. Needs its own fix AND test. |
-| `resolve-uses` | Same single-`--db` shape `find-unit` had (`CLI.pas:3405`), unexamined. Its `AlreadyUsed` +1000 scoring term is inert whenever the `--in` file is not in the scanned store. |
-| `index-runs-are-not-resumable` | Group B 5b, still the plan's HIGHEST-RISK item, not started. The stamp must sit inside the transaction `CommitFileTx` closes. |
-| `rule-hardening-plan-2026-08-13` | One live item: `unused-public-symbol` (12). Needs `TProjectLintRules.Run` to accept extra stores. |
+| `68-bat-tests-are-invisible-to-the-battery` | **NEW, and the cheap half is done** -- the battery now prints the count. What remains is TRIAGE: convert what still describes current behaviour to `run_*.ps1`, DELETE what does not. Do NOT bulk-repoint them at the Win64 exe and run them; that turns an unknown into unattributed red inside the gate. |
+| `buildfor-defaulted-args-...` | `ABaseDir` / `AIncludeSince` / `AExtraStores` / `AComplexityMin` defaulted on the repair path. `AExtraStores` is the risky one -- use a cross-DB fixture. |
+| `exception-class-unit-...` | Feature. 64 distinct messages on ORM3 (not the 400 that would have killed it). Build Stage 1. |
+| `incremental-index-hangs-on-large-db` | The "hang" is the whole-DB resolve. A session-23 suspicion that the affected-set is O(corpus) was REFUTED on real code -- do not carry it forward. |
+| `ide-lsp-ram-and-shim-todo` | **Needs a live IDE. Cannot be done headless.** |
+| `yadf-share-review-marker-hash` | Owner request; 249 markers across three repos, so the cheap window has closed. |
+| `find-unit-silently-uses-only-the-last-db` | All three defects fixed and covered. Open only as the pointer to the `.bat` triage above. |
+| `index-runs-are-not-resumable` | Headline shipped. Open only for redirected output arriving in blocks -- **and its stated cause is UNVERIFIED**: the note blames the engine's stdout buffering; what was observed was PowerShell's `2>`. Measure which before changing either. |
 
-## 3. Traps this session paid for
+### Then the perf list (all of it newly visible because doc-drift shrank 328 -> 78 s)
 
-* **A `git add` with one stale pathspec aborts the WHOLE add** -- the first
-  commit landed with only a rename in it and had to be amended. Check
-  `git show --stat` after committing, not just the exit code.
-* **`git mv` stages the OLD blob** when the file had unstaged edits: the edit
-  must be `git add`ed separately or the banner silently does not ship.
-* **PowerShell buffers `2>` redirection** -- a long run's stderr file stays 0
-  bytes until the process exits. Not a hang.
-* **You cannot rebuild while a measurement run holds the exe** -- the staging
-  copy fails. Sequence long runs and builds; do not overlap them.
-* Standing, and all re-confirmed: kill orphaned `drag-lint` before diagnosing
-  anything DB-shaped; PowerShell has no heredoc (`git commit -F`); `.dpr` suites
-  compile the engine from source, so do not edit source during a battery.
+* **`per-file scan` is now the dominant phase: 141 s of 320 (44%). NEVER PROFILED.** Cheapest big win.
+* `class-metrics` 56 s -- never looked at.
+* `seealso` 17.6 s -- largest remaining doc-drift sub-item.
+* `unused-unit-in-uses` ~17 s.
 
-## 4. Outside this repo
+## Traps this session paid for
 
-Unchanged from session 23 -- `C:\Projects\DataCopy` and `C:\Projects\YADF`
-(Mercurial) still carry that session's uncommitted edits, and `Loader2019` still
-holds its verified `FreeAndNil` leak fix.
+* **`git add` aborts ENTIRELY on one stale pathspec** -- a commit landed with only
+  a rename in it. Check `git show --stat` after committing, not just the exit code.
+* **`git mv` stages the OLD blob** when the file has unstaged edits.
+* **`git stash push -- <path> --quiet` reads `--quiet` as a PATHSPEC**, so the
+  stash silently does not happen -- and the "unfixed" build still has the fix,
+  making a RED check pass and look like a vacuous guard. Caught only from the
+  error line.
+* **Stashing one file of a multi-file change breaks the build** (an interface
+  declaring a method with no implementation). For a RED check, disable the
+  DECISION surgically instead.
+* **PowerShell buffers `2>` to a file** -- a long run's stderr stays 0 bytes until
+  exit. Not a hang.
+* **You cannot rebuild while a measurement run holds the exe.** Sequence them.
+* Standing: kill orphaned `drag-lint` before diagnosing anything DB-shaped;
+  PowerShell has no heredoc (`git commit -F`); `.dpr` suites compile the engine
+  from source, so never edit source during a battery.
+
+## Outside this repo
+
+Unchanged: `C:\Projects\DataCopy` and `C:\Projects\YADF` (Mercurial) still carry
+session 23's uncommitted edits; `Loader2019` still holds its verified
+`FreeAndNil` leak fix.
