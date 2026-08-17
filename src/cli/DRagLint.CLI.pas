@@ -1538,6 +1538,30 @@ begin
   end;
 end;
 
+/// <summary>The platform token an index run PREPROCESSES against, resolved from
+/// a possibly-empty section/CLI token.</summary>
+/// <param name="APlatform">Raw token: a section's Platform (empty for
+/// folder/closure sections) or --platform. '' resolves to Win64.</param>
+/// <returns>A non-empty platform token; never ''.</returns>
+/// <remarks>
+/// ONE definition of the default, because two callers deriving it separately is
+/// precisely the defect this closes (INBOX-indexer-fingerprint-disagrees-between-
+/// entry-points). ResolveIndexProfile turned '' into Win64 privately, so a
+/// closure section PARSED as Win64 while the fingerprint recorded plat='' -- and
+/// the ad-hoc `index &lt;dir&gt; --db` path, which resolves a real token, recorded
+/// plat=win64 for the same database. Alternating the two entry points made
+/// Prev &lt;&gt; Cur every time and re-parsed every file in scope for no engine
+/// change, which silently disabled per-file resume on the manifest path -- the
+/// path the 12.5-hour library walk uses.
+///
+/// The fingerprint must describe what preprocessing ACTUALLY did, and what it
+/// did is resolve '' to Win64. Recording the unresolved token was the bug.
+/// </remarks>
+function EffectiveIndexPlatform(const APlatform: string): string;
+begin
+  if APlatform = '' then Result:= 'Win64' else Result:= APlatform;
+end;
+
 /// <summary>PP-Task-9: resolve the define profile the indexer preprocesses
 /// against. When a .dproj is given, derive the per-config profile from it
 /// (ProfileFromDproj: Base + selected-config DCC_Define, unioned with the
@@ -1554,8 +1578,7 @@ function ResolveIndexProfile(const ADproj, APlatform, AConfig: string): TDefineP
 var
   Plat: string;
 begin
-  Plat:= APlatform;
-  if Plat = '' then Plat:= 'Win64'; // library / no-project fallback (plan default)
+  Plat:= EffectiveIndexPlatform(APlatform); // library / no-project fallback (plan default)
   if ADproj <> '' then Result:= ProfileFromDproj(ADproj, Plat, AConfig)
   else Result:= Default(TDefineProfile);
   if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
@@ -2433,6 +2456,78 @@ end; // function ResolveIndexDb
 //
 // Deliberately NOT part of the sha basis: changing that would invalidate every
 // stored sha at once (see TIndexer's own note). This is a separate, per-DB key.
+{ SESSION 25 B2: ATTRIBUTION for the per-file scan, which is 144 s of ORM3's
+  332 s `lint-all` (43%) and has NEVER been broken down. Nothing is optimised
+  here -- this session's whole lesson is what happens when work is aimed at a
+  bucket whose name is the only thing known about it.
+
+  Two numbers per check, because they diagnose different defects: TIME, and the
+  number of FILES it ran on. And one number that is not per-check -- the cost of
+  the `Findings := Findings + <result>` accumulation itself, pooled.
+
+  That accumulation is the note's named suspect: ~20k appends (566 files x ~35
+  checks) each copying an array that grows to 54,245 records with string fields.
+  It has never actually been measured -- what WAS measured, and reported as
+  "never showed up", was the ownership FILTER over the finished array (0.03 s),
+  which is a different thing entirely. Timing it separately is the only way to
+  stop that confusion recurring.
+
+  The target is reached through a pointer set once before the loop, so the call
+  sites stay short enough to read as a list of checks rather than as
+  instrumentation. }
+type
+  { Two steps: Delphi will not parse `^TArray<T>` directly -- a pointer type
+    needs a named target, not an inline generic instantiation. }
+  TFindingArray = TArray<TLintFinding>;
+  PFindingArray = ^TFindingArray;
+const
+  SCAN_SLOTS = 31;
+  { Slots in execution order, named for the routine that owns each -- a hot slot
+    should name code to open, not a rule id that several checks can emit. }
+  SCAN_NAMES: array[0..SCAN_SLOTS - 1] of string = (
+    'Linter.LintFile (.scm)', 'UnusedLocals', 'SyntaxErrors', 'UnbalancedBeginEnd',
+    'RaiseInFinally', 'CodeAfterExit', 'ControlFlowInFinally', 'MissingInherited',
+    'RoutineMetrics', 'TypeAware', 'FireDacSqlMismatch', 'UnprotectedFree',
+    'UseAfterFree', 'UiThread', 'GlobalFormVars', 'MutableGlobalVars',
+    'SeparateQueryFromModifier', 'ShellExec', 'PathTraversal', 'LoopAtMostOnce',
+    'FormatCall', 'SwallowedExcept', 'DatasetOpen', 'CriticalSection',
+    'TooManyExitPoints', 'CyclomaticComplexity', 'CognitiveComplexity',
+    'VirtualInConstructor', 'FlowChecker.Check', 'NamingChecker.Check',
+    'DeadCodeChecker.Check');
+var
+  GScanT     : array[0..SCAN_SLOTS - 1] of Int64; { compute ticks per slot   }
+  GScanN     : array[0..SCAN_SLOTS - 1] of Int64; { files the slot ran on    }
+  GScanAppend: Int64;                             { pooled cost of the appends }
+  GScanPrev  : Int64;                             { start of the current slot  }
+  GScanTgt   : PFindingArray;
+
+{ Close the window that opened at GScanPrev, charge it to AIdx, and leave a new
+  window open. For the `for F in X do Findings := Findings + [F]` sites, whose
+  append cannot be separated without changing what they do. }
+procedure ScanMark(AIdx: Integer);
+begin
+  if GScanTgt = nil then Exit;
+  var N: Int64:= TStopwatch.GetTimeStamp;
+  Inc(GScanT[AIdx], N - GScanPrev);
+  Inc(GScanN[AIdx]);
+  GScanPrev:= N;
+end;
+
+{ Same, but performs the append itself so its cost lands in GScanAppend rather
+  than in the next check's window. AF is evaluated by the CALLER before this
+  runs, which is exactly why `now - GScanPrev` is the check's own time. }
+procedure ScanAdd(AIdx: Integer; const AF: TArray<TLintFinding>);
+begin
+  if GScanTgt = nil then Exit;
+  var N: Int64:= TStopwatch.GetTimeStamp;
+  Inc(GScanT[AIdx], N - GScanPrev);
+  Inc(GScanN[AIdx]);
+  GScanTgt^:= GScanTgt^ + AF;
+  var M: Int64:= TStopwatch.GetTimeStamp;
+  Inc(GScanAppend, M - N);
+  GScanPrev:= M;
+end;
+
 const INDEXER_FP_KEY = 'indexer_fingerprint';
 
 function IndexerFingerprint(const AStore: ISymbolStore; APreprocess: Boolean; const APlatform: string): string;
@@ -2442,8 +2537,19 @@ begin
   { IsSchemaCurrent yields the engine's expected schema without importing the
     schema unit here; the DB's own stored value is irrelevant to OUR identity. }
   AStore.IsSchemaCurrent(Found, Expected);
+  { NORMALISED, and this is the whole fix for the entry-point disagreement: the
+    token recorded is the EFFECTIVE preprocess platform, not whatever spelling
+    the caller happened to hold. Measured before choosing (2026-08-17, every DB
+    in `resolve-dbs`): 30 of 32 databases carried plat= and 2 carried plat=win64,
+    so normalising toward the resolved token leaves the two big ones -- the
+    6,993-file library-Win64 above all -- UNTOUCHED, and costs a one-time
+    re-parse of ~1,968 files spread over small project DBs, 1,077 of which are
+    on an older engine version and would re-parse on their next index anyway.
+    Normalising the other way (dropping the token) would have invalidated the
+    library index instead, i.e. the 12.5-hour walk. That is why the note said
+    measure first. }
   Result:= Format('v=%s;schema=%d;pp=%d;plat=%s',
-                  [VERSION, Expected, Ord(APreprocess), LowerCase(APlatform)]);
+                  [VERSION, Expected, Ord(APreprocess), LowerCase(EffectiveIndexPlatform(APlatform))]);
 end;
 
 // Decides whether this run re-parses everything, and records the current
@@ -10688,6 +10794,8 @@ begin
         { v12 (M1): the precise store-path string-equality built-in (in CheckTypeAware
           below) supersedes the broad .scm rule when a store is present -- drop the
           .scm findings so we don't double-report and so its type-blind FPs are gone. }
+        GScanTgt := @Findings;              { B2 attribution -- see ScanAdd }
+        GScanPrev:= TStopwatch.GetTimeStamp;
         var LintF:= Linter.LintFile(PasPath);
         if Store <> nil then
         begin
@@ -10696,45 +10804,51 @@ begin
             if not SameText(LF.RuleId, 'string-equality-comparison') then KeptSE:= KeptSE + [LF];
           LintF:= KeptSE;
         end;
-        Findings:= Findings + LintF;
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals        (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors        (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd  (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally      (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit       (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(PasPath);
+        ScanAdd( 0, LintF);
+        ScanAdd( 1, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals        (PasPath));
+        ScanAdd( 2, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors        (PasPath));
+        ScanAdd( 3, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd  (PasPath));
+        ScanAdd( 4, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally      (PasPath));
+        ScanAdd( 5, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit       (PasPath));
+        ScanAdd( 6, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally(PasPath));
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(PasPath) do Findings:= Findings + [F];
+        ScanMark(7);
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(
           PasPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG),
           Cfg.ThresholdFor('deep-nesting', 5)) do Findings:= Findings + [F];
+        ScanMark(8);
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath, Store, Store.FindFileIdByPath(PasPath)) do { v11 (M1): exact type resolution }
           Findings:= Findings + [F];
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch       (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree          (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree             (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread                 (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars           (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars        (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(PasPath); { v0.83: CQS (OFF) }
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec                (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal            (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce           (PasPath);
+        ScanMark(9);
+        ScanAdd(10, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch       (PasPath));
+        ScanAdd(11, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree          (PasPath));
+        ScanAdd(12, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree             (PasPath));
+        ScanAdd(13, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread                 (PasPath));
+        ScanAdd(14, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars           (PasPath));
+        ScanAdd(15, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars        (PasPath));
+        ScanAdd(16, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(PasPath)); { v0.83: CQS (OFF) }
+        ScanAdd(17, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec                (PasPath));
+        ScanAdd(18, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal            (PasPath));
+        ScanAdd(19, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce           (PasPath));
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall(PasPath) do Findings:= Findings + [F];
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath);
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath, Cfg.ThresholdFor('too-many-exit-points', 5));
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD));
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD));
-        Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath)); { v12 (M1): cross-unit }
-        Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore); { M2: flow checks, store-exact managed types, ownership via library store }
+        ScanMark(20);
+        ScanAdd(21, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath));
+        ScanAdd(22, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath));
+        ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
+        ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath, Cfg.ThresholdFor('too-many-exit-points', 5)));
+        ScanAdd(25, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD)));
+        ScanAdd(26, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD)));
+        ScanAdd(27, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath))); { v12 (M1): cross-unit }
+        ScanAdd(28, DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore)); { M2: flow checks, store-exact managed types, ownership via library store }
         { v0.68: naming-convention prefix rules (store-optional; enables exception-ancestry sub-check) }
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        ScanMark(29);
         { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set);
           v0.70-72: + redundant-parens/commented-out-code/function-result-ignored + #5/#6/#7 rules }
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
           PasPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
           Cfg.ThresholdFor('message-chain', 4)) do Findings:= Findings + [F];
+        ScanMark(30);
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));
       end; // try
@@ -10743,7 +10857,36 @@ begin
     end; // for
   finally
     Linter.Free;
+    GScanTgt:= nil; { the pointer must not outlive Findings' frame }
   end; // try
+  { SESSION 25 B2 attribution -- see ScanAdd. Slots are listed in execution
+    order and named for the routine that owns them, so a hot slot names the code
+    to open rather than a rule id that may come from several. }
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+  begin
+    var ScanTot: Int64:= 0;
+    for var K:= 0 to SCAN_SLOTS - 1 do Inc(ScanTot, GScanT[K]);
+    Writeln(ErrOutput, Format('  PER-FILE SCAN BREAKDOWN (%d file(s))', [Length(FilePaths)]));
+    { Sorted by cost: the whole point is to see the head of the distribution, and
+      31 rows in source order buries it. }
+    var Ord: TArray<Integer>:= nil;
+    for var K:= 0 to SCAN_SLOTS - 1 do Ord:= Ord + [K];
+    for var A:= 0 to High(Ord) do
+      for var B:= A + 1 to High(Ord) do
+        if GScanT[Ord[B]] > GScanT[Ord[A]] then
+        begin
+          var Tmp: Integer:= Ord[A]; Ord[A]:= Ord[B]; Ord[B]:= Tmp;
+        end;
+    for var K in Ord do
+      if GScanT[K] > 0 then
+        Writeln(ErrOutput, Format('    %-28s %8.2f s  (%d file(s), %.2f ms/file)',
+          [SCAN_NAMES[K], GScanT[K] / TStopwatch.Frequency, GScanN[K],
+           GScanT[K] * 1000 / (TStopwatch.Frequency * Max(1, GScanN[K]))]));
+    Writeln(ErrOutput, Format('    %-28s %8.2f s  <-- the quadratic accumulation, measured at last',
+      ['(Findings append)', GScanAppend / TStopwatch.Frequency]));
+    Writeln(ErrOutput, Format('    %-28s %8.2f s', ['(sum of the slots above)', (ScanTot + GScanAppend) / TStopwatch.Frequency]));
+    Flush(ErrOutput);
+  end;
 
   { Project-wide rules.
     The sibling resolver lets `unused-public-symbol` consult the projects a

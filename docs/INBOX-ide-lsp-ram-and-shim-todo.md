@@ -1,3 +1,32 @@
+> # 2026-08-17 (session 25): "IDE-BLOCKED" WAS ONLY HALF TRUE, and the headless half is now DONE.
+>
+> TODO 3 is marked "BLOCKED: needs a running IDE" for the whole item. Steps 3-4
+> of its own method are not: the package REGISTRY and the on-disk BPL sizes can
+> be read with the IDE closed.
+>
+> **`tools\lsp-diag\bpl-inventory.ps1`** does that -- it reads `Known Packages`,
+> `Known IDE Packages` and `Known Packages x64`, resolves `$(BDS)` /
+> `$(BDSBIN)` / `$(BDSCOMMONDIR)`, stats each BPL, and prints a ranked table plus
+> any registered package MISSING from disk (a registry entry the IDE will fail to
+> load). It reads three keys and stats files; it writes nothing.
+>
+> **What it deliberately does NOT claim.** File size is a PROXY for committed
+> memory, not a measurement of it, and the script says so in its own output: the
+> table is "a shortlist to measure in a live IDE, NOT a disable list". Real
+> `ModuleMemorySize` still needs step 4 with `bds.exe` running, which is in the
+> owner checklist (PLAN-SESSION-25 section D). Step 5 -- disable, then RE-MEASURE
+> -- is unchanged and must not be skipped: a package something silently depends
+> on fails when a FORM is opened, not at IDE start.
+>
+> **TODO 4's gate is also narrower than written.** "Blocked on 2b" applies to the
+> **64-bit-forwarding** variant, whose whole question is why the IDE fails with
+> the 64-bit server. A 32-bit-forwarding superset relay -- forward everything to
+> the real DelphiLSP, answer only what it does not implement -- reproduces no
+> such failure and is testable headlessly: DelphiLSP was already probed over raw
+> stdio with no IDE (§1.1), and drag-lint's own server speaks stdio with
+> Content-Length framing. NOT started here; recorded so the next session does not
+> re-derive the gate.
+>
 > # 2026-08-16 (session 22): §1.1's ask is DONE. TODOs 3 and 4 remain IDE-blocked.
 >
 > **Done:** §1.1 said the capability finding was *"worth folding into section 4.4

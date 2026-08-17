@@ -445,7 +445,29 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
    > doc-facts path writes to a store. A future caller that mutates a store
    > mid-run must clear the memo; the declaration says so.
    >
-   > ### What this item is now
+   > ### SESSION 25 TOTAL: 332.12 s -> 276.62 s, report byte-identical throughout
+
+Two memos, each chosen from a measurement rather than from a reading of the
+code, and each verified against the same stdout SHA256
+`1BA0CA2D1B2B23F2176320CD109989449BCE22FA3478BBBE772792E787A48A29`
+(2,161,951 bytes, 14,764 findings) that the pre-change run produced:
+
+| phase | before | after |
+|---|---|---|
+| per-file scan | 144.13 s | 145.86 s (untouched -- attributed only) |
+| class-metrics | 58.04 s | **19.24 s** |
+| doc-drift | 83.57 s | **66.06 s** |
+| of which `seealso` | 18.57 s | **2.29 s** |
+| project-rules | 29.73 s | 29.89 s |
+| **TOTAL** | **332.12 s** | **276.62 s** |
+
+Cumulatively with session 24's `OverloadArityTag` memo: **572 s -> 277 s**.
+
+`per-file scan` is now 53% of the run and is the only phase left that has not
+been optimised -- but it HAS now been attributed (item 5), which is the
+precondition this note has insisted on four times.
+
+### What this item is now
    >
    > The headline is discharged. What remains is smaller and each piece is
    > independent:
@@ -466,6 +488,135 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
    > actually enclosed. A timer with no CALL COUNT beside it hid it: "once per
    > declaration" was assumed for three sessions and the real figure was 24,286
    > calls through a different function.
+7. **`class-metrics` DONE (2026-08-17, session 25) -- instrumented first, and the
+   instrumentation picked the winner between two candidates.**
+
+   Two suspects had been proposed from reading the code: `ResolveTypeCategory`
+   called per type_use ref with no memo, and `ComputeLCOM4`/`ComputeMiddleMan`
+   re-parsing method bodies. Timers plus CALL COUNTS plus a DISTINCT-KEY count
+   settled it in one run:
+
+   ```
+     class-metrics             58.49 s   (680 classes)
+       ResolveTypeCategory     40.99 s   266,715 calls, 7,568 distinct (name,file) keys
+       ComputeAllFanIn         15.47 s   \  both CONTAIN ResolveTypeCategory,
+       ComputeCBO              11.15 s   /  so these rows are not disjoint
+       ComputeLCOM4             2.98 s   <- candidate 2...
+       ComputeMiddleMan         1.27 s   <- ...4.25 s combined. Not the problem.
+       GetTransitiveAncestors   1.92 s   (2,720 calls)
+   ```
+
+   97% of the calls re-asked a question already answered. Memo keyed
+   (lowercase name, file id) -- the same pair `ResolveTypeCategory` itself
+   tie-breaks on -- and deliberately **local to the call**, not a unit global,
+   because file ids are numbered per database and a process-lifetime memo would
+   answer one store's question with another's.
+
+   | | before | after |
+   |---|---|---|
+   | ResolveTypeCategory | 40.99 s | **1.78 s** |
+   | ComputeCBO | 11.15 s | **1.25 s** |
+   | ComputeAllFanIn | 15.47 s | **6.51 s** |
+   | **class-metrics phase** | **58.49 s** | **19.24 s** |
+
+   Same 266,715 calls; the misses are now 7,568. Underneath, each miss still runs
+   `FindSymbolsByExactName`, which materialises every symbol sharing the name --
+   the same anti-pattern this note records fixing four times now. The memo
+   removes the REPETITION, not the anti-pattern; a bounded store-side query is
+   still the better long-term shape.
+
+6. **`seealso` DONE (2026-08-17, session 25) -- and the planned fix would have
+   done nothing.**
+
+   The plan said to copy the `OverloadArityTag` memo, "keyed (store pointer,
+   symbol id)". **That key could never have hit.** `TDocFactsBuilder.Build` runs
+   ONCE PER DECLARATION, so a memo keyed on the declaration's own id has no
+   second lookup to serve. The `OverloadArityTag` memo works for the opposite
+   reason -- `ToFactRef` asks about the same enclosing routine 24,286 times.
+
+   Splitting the block first, with ROW counts and DISTINCT-KEY counts:
+
+   ```
+     seealso              18.57 s
+       callees             1.23 s (    146 edge rows,     58 distinct targets)
+       siblings           17.24 s (913,357 sibling rows,  322 distinct parents)
+       rest-of-window      0.09 s
+   ```
+
+   93% is the sibling half, and 913,357 rows from **322 distinct parents** names
+   the key: it is the PARENT id. Every method of a class was re-materialising
+   that class's entire child list, and ORM3's forms and data modules carry
+   hundreds of members each.
+
+   Cached as the FILTERED list -- (id, qualified name) for routine-kind children
+   -- not `TArray<TSymbol>`, which for 322 parents would have held ~900k records
+   with their strings. The parent's own kind test moved inside the memo too; the
+   per-declaration parts (exclude self, exclude anything already a callee) stayed
+   at the use site.
+
+   | | before | after |
+   |---|---|---|
+   | siblings | 17.24 s | **1.03 s** |
+   | rows materialised | 913,357 | **17,559** |
+   | seealso (whole block) | 18.57 s | **2.36 s** |
+   | doc-drift | 83.57 s | **69.09 s** |
+   | TOTAL | 332.12 s | **318.82 s** |
+
+   **Gate met and checked, not assumed:** stdout SHA256
+   `1BA0CA2D1B2B23F2176320CD109989449BCE22FA3478BBBE772792E787A48A29`,
+   2,161,951 bytes, 14,764 findings (32/2,156/12,173/403) -- byte-identical to
+   the run before the change.
+
+   **The transferable lesson is the distinct-key count.** A timer plus a call
+   count would have said "17 s, lots of rows" and left the plan's key looking
+   fine. It was the DISTINCT count -- 322 against 913,357 -- that named which id
+   repeats. Any future memo proposal in this codebase should carry one before it
+   is written.
+
+5. **`per-file scan` IS NOW ATTRIBUTED (2026-08-17, session 25). The named
+   suspect is refuted.**
+
+   It was 144-145 s of a 332 s run with no breakdown at all. Per-check timers
+   with per-check FILE COUNTS now account for **144.34 s of 145.37 s (99.3%)**:
+
+   ```
+     Linter.LintFile (.scm)          56.17 s  (566 files,  99.24 ms/file)   39%
+     FlowChecker.Check               46.49 s  (566 files,  82.13 ms/file)   32%
+     TypeAware                        9.75 s  (566 files,  17.23 ms/file)
+     DeadCodeChecker.Check            7.56 s  (566 files,  13.35 ms/file)
+     NamingChecker.Check              2.58 s | UnusedLocals  2.46 s
+     ...23 further checks, each under 2 s...
+     (Findings append)                0.00 s   <-- THE NAMED SUSPECT
+     (sum of the slots)             144.34 s   of the phase's 145.37 s
+   ```
+
+   **The quadratic `Findings := Findings + <result>` accumulation costs 0.00 s.**
+   ~20k appends over an array reaching 54,245 records, and it does not register.
+   That hypothesis is dead; do not revive it. (It was never measured before --
+   what had been measured, and reported as "never showed up", was the ownership
+   FILTER over the finished array, which is a different thing. Both are now
+   measured and both are ~0.)
+
+   **Two checks own 71% of the phase**, and that is where any future work goes:
+   `Linter.LintFile` (the 114-file `.scm` rule catalogue) and
+   `FlowChecker.Check`. Neither is "566 genuine file parses", which was the other
+   possibility this instrumentation was built to test.
+
+   **THE DOUBLE PARSE IS CONFIRMED -- structurally. Its cost is NOT.** The
+   built-in checks share one parse per file via `TAstParseCache`
+   (`ParseCache.pas`), but `TLinter` does not use that cache: `CheckFileImpl`
+   constructs its own `TTSParser` and parses the file itself
+   (`DRagLint.Lint.Linter.pas:681-684`). So every file is parsed twice per
+   `lint-all` -- once for the `.scm` catalogue, once for the AST checks.
+
+   Say exactly what that does and does not establish. **Established:** two parses
+   per file, by code inspection. **NOT established:** what fraction of the
+   56.17 s `.scm` slot is the parse rather than executing 114 tree-sitter
+   queries. Routing `TLinter` through `TAstParseCache` can save at most ONE parse
+   per file, and if queries dominate it saves almost nothing. Time the parse
+   alone before doing the work -- the entire history of this note is what happens
+   when a plausible mechanism is acted on before it is measured.
+
 2. **`unused-unit-in-uses` is still 17.4 s** -- the memo removed the repetition
    but the remaining cost is one `FindSymbolsByExactName` per DISTINCT name,
    each an indexed lookup returning every symbol with that name.
@@ -480,10 +631,35 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
 
 ## Reproducing
 
+**The `.\` IS LOAD-BEARING. Do not drop it.** This block used to read
+`drag-lint lint-all ...` after the `cd`, on the assumption that a bare name runs
+the exe in the current directory. On this machine it does not:
+`NoDefaultCurrentDirectoryInExePath=1` is set, so cmd skips the CWD and resolves
+the name from PATH -- to **`third_party\dll\drag-lint.exe`, the frozen Win32
+build of 2026-07-05**.
+
+That is not a missing-file error; it is a DIFFERENT ENGINE answering, and it
+answers plausibly. Measured 2026-08-17 by following this block verbatim:
+
+| | via PATH (frozen 2026-07-05 Win32) | `.\drag-lint.exe` (current build) |
+|---|---|---|
+| findings | 33,626 | 14,764 |
+| `large-magic-number` | 19,729 | 3,324 |
+| `used-unit-not-resolvable` | 2,704 | 21 |
+| ~20 `.scm` rules (`bare-except`, `public-field`, ...) | 0 | firing normally |
+| profile format | old -- no `overload-arity-tag`, no SPLIT lines | current |
+| `unresolved-name` / TOTAL | 271.66 s / 531.45 s | (post-memo figures) |
+
+Every one of those reads as a catastrophic regression in the current build, and
+none of it is real. An hour went into diffing rule histograms, hashing the rule
+catalogue, and inspecting the ORM3 index before `where drag-lint.exe` was run.
+**Check which binary answered before believing any before/after comparison** --
+the tell is the profile FORMAT, which changes whenever the profiler does.
+
 ```
 set DRAGLINT_PROFILE=1
 cd C:\Projects\Delphi-RAG-lint\third_party\dll-win64
-drag-lint lint-all --db C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite --quiet
+.\drag-lint.exe lint-all --db C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite --quiet
 ```
 
 Read **stderr**: the profile and the status lines are unbuffered there, whereas

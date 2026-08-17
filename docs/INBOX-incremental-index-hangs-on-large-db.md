@@ -26,6 +26,51 @@
 >
 > ---
 >
+> # THE DIAGNOSIS HALF IS FIXED 2026-08-17 (session 25). It was never a hang.
+>
+> The calls resolve now says WHICH shape it is about to run, and WHY, **before**
+> it runs -- on stderr, where the completion line already was:
+>
+> ```
+> resolve: calls      starting WHOLE-DB pass over all 6993 indexed file(s)
+> resolve: calls      ... whole database because this run rewrote more than one file
+>                         in three (84 changed, limit 27) -- above that share the
+>                         scoped pass costs more than it saves
+> resolve: calls      ... this is the expensive shape (~37 min on a 2 GB index) --
+>                         it is running, not hung
+> ```
+>
+> Previously the scoped/whole line printed only on COMPLETION, so a 37-minute
+> pass was indistinguishable from a wedged process for its whole duration. That
+> is precisely how this note came to be filed: the run was killed at 8 minutes
+> while working correctly.
+>
+> **The reason had to become a real value, not a guess.** `FScopeWhole` is
+> latched by THREE unrelated conditions -- the one-in-three scoping limit, a
+> prune/eviction FK cascade, and `--rebuild` -- and by the time the resolve runs
+> they are indistinguishable. So the reason is now recorded AT the latch
+> (`FScopeWholeWhy`), and `ScopedResolveIsSound` became a thin wrapper over
+> `ScopedResolveDeclineReason` so the decision and its explanation cannot drift.
+> The first version of the announce guessed, and named the wrong route for a
+> first-index run -- caught by the test, which asserts the SPECIFIC clause rather
+> than "some reason was printed".
+>
+> **Test:** `tests\autotest\run_index_calls_resolve_announce.ps1`. It checks both
+> branches (a first index announces WHOLE-DB; touching one file of six announces
+> SCOPED -- the positive control against a hard-wired string) and, critically,
+> that the "starting" line PRECEDES the finished line in the stream. A text match
+> alone would pass on the old behaviour, which printed after the fact. Verified
+> RED against the previous build.
+>
+> **The refuted O(corpus) affected-set claim stays refuted:** this is the GATE,
+> not the set.
+>
+> **STILL OPEN:** relaxing the gate for pure type ADDITIONS, so that adding new
+> units to a library index does not force the whole-database pass at all. That is
+> correctness-sensitive, has an equivalence hatch already
+> (`DRAGLINT_NO_SCOPED_RESOLVE`), is ~1 day, and was deliberately NOT bundled
+> with the announce.
+
 # INBOX: `index <folder> --db <large.sqlite>` never finishes (2026-08-05)
 
 Class: **wrong/performance** (not a stale index, not out-of-scope). Reproduced

@@ -1,5 +1,42 @@
-# INBOX index -- 8 open notes
+# INBOX index -- 7 open notes
 
+> **Session 25 (2026-08-17). 8 open -> 7; 108 retired. Plan A executed in full.**
+>
+> **Retired:** `index-runs-are-not-resumable` -- its last open item was
+> mis-attributed to the engine. **PowerShell holds native stderr until the
+> process exits**; the engine already flushes per file and per resolve line. The
+> fix was a harness rule, now in `tests\README.md`.
+>
+> **Fixed, each with a suite verified RED against the previous build:**
+> * **`indexer-fingerprint-disagrees-between-entry-points`** -- the two entry
+>   points recorded different platform tokens for one DB, which silently disabled
+>   per-file resume on the manifest path (the path the 12.5-hour library walk
+>   uses). Chosen on a census of every DB, not on taste: 30 carried `plat=`, 2
+>   carried `plat=win64` -- and one of those 2 is the 6,993-file library index,
+>   so normalising the other way would have invalidated exactly the walk this
+>   work exists to protect.
+> * **`incremental-index-hangs-on-large-db`** (diagnosis half) -- the calls
+>   resolve now announces WHOLE-DB **and its reason** before running, instead of
+>   after. It was never hanging; it was a documented 37-minute pass printing
+>   nothing.
+> * **`yadf-share-review-marker-hash`** -- vendored byte-identical into YADF with
+>   a drift test, zero re-stamps, `NormalizeLine` untouched.
+>
+> **`seealso` memo: the planned key would have hit ZERO times.** The plan said to
+> copy the `OverloadArityTag` memo, keyed on the symbol id. But `Build` runs once
+> per declaration, so that key can never repeat. Measuring the block first showed
+> the repetition is in what it LOOKS UP: 913,357 sibling rows materialised from
+> **322 distinct parents**. The key is the PARENT id. A distinct-key counter is
+> what made the difference visible, and it cost one instrumented run.
+>
+> **A trap that cost an hour, now written into two places.**
+> `NoDefaultCurrentDirectoryInExePath=1` is set on this machine, so
+> `cd third_party\dll-win64 && drag-lint lint-all ...` -- the "Reproducing" block
+> in the perf note, verbatim -- runs `third_party\dll\drag-lint.exe`, the frozen
+> **Win32 build of 2026-07-05**, off PATH. It answers plausibly: 33,626 findings
+> against the current build's 14,764, with ~20 `.scm` rules silently at zero. It
+> reads as a catastrophic regression and is none. Use `.\drag-lint.exe`.
+>
 > **Session 24 (2026-08-16 -> 08-17). 9 open -> 8; 107 retired; 2 filed AND closed, 1 filed and OPEN.**
 >
 > **Retired:** `converter-editor-phase-g-engine-findings` (2.1-2.11 all fixed;

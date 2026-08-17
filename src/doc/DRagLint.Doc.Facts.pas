@@ -596,9 +596,116 @@ var
     store mid-run, this memo must be cleared at that point. }
   GOverloadMemo: TDictionary<string, string>;
 
+  { SESSION 25 A1: the SEEALSO window split, and it exists to answer a question
+    the bucket name cannot -- WHICH of the block's two store loops owns its
+    17.57 s, and whether a memo would hit anything at all.
+
+    `seealso` is the largest remaining doc-drift sub-item and the plan proposed
+    the same run-level memo that took OverloadArityTag from 255 s to 8 s. But
+    that memo works because ToFactRef asks about the SAME symbol id 24,286
+    times, whereas Build is called ONCE PER DECLARATION -- so a memo keyed on
+    the declaration's own id would hit zero times. The repetition, if there is
+    any, has to be in what the block looks UP: callee target ids (shared by
+    every declaration that calls the same routine) and PARENT ids (shared by
+    every method of the same class).
+
+    Hence three counts per window, not one: ROWS (what was materialised),
+    DISTINCT KEYS (what a memo would have to store), and their ratio (the memo
+    hit rate, measured rather than assumed). A high row count with a low
+    distinct count is exactly the shape a memo fixes; equal counts mean it
+    would be pure overhead.
+
+    The two dictionaries are DIAGNOSTIC ONLY -- they are what decides the fix,
+    not part of it. }
+  GBSeeCallees, GBSeeSibs: Int64;
+  GCSeeDecl, GCSeeCalleeRows, GCSeeSibRows, GCSeeSibIter: Int64;
+  GSeeTargetSeen, GSeeParentSeen: TDictionary<string, Boolean>;
+
+  { MEASURED ON ORM3, and it refutes the fix that was planned for this block.
+
+      seealso                18.57 s
+        callees               1.23 s (    146 edge rows,     58 distinct targets)
+        siblings             17.24 s (913,357 sibling rows,  322 distinct parents)
+        rest-of-window        0.09 s
+
+    93% is the SIBLING half, and the shape is unmistakable: 913,357 TSymbol rows
+    materialised out of 322 DISTINCT PARENTS. Every method of a class asks for
+    that class's children again, and ORM3's forms and data modules carry hundreds
+    of members each.
+
+    THE PLANNED KEY WOULD HAVE HIT ZERO TIMES. The plan said to copy the
+    OverloadArityTag memo "keyed (store pointer, symbol id)". That memo works
+    because ToFactRef asks about the same symbol 24,286 times -- but Build is
+    called ONCE PER DECLARATION, so a memo keyed on the declaration's own id can
+    never hit. The repetition is in what the block LOOKS UP, not in what it is
+    called with, and only the distinct-key count made that visible. The key here
+    is therefore the PARENT id.
+
+    WHAT IS CACHED IS THE FILTERED LIST, NOT THE ROWS. Caching
+    TArray<TSymbol> for 322 parents would hold ~900k TSymbol records with their
+    strings; what this block actually needs is (id, qualified name) for the
+    ROUTINE-kind children, which is a fraction of that and is also the filtering
+    the loop would redo per declaration anyway.
+
+    Per-declaration state stays OUT of the memo: `Sib.Id <> ASym.Id` and the
+    CalleeSet exclusion differ for every declaration under the same parent, so
+    they are applied at the use site.
+
+    Never invalidated, for the same reason as GOverloadMemo: nothing in this path
+    writes to a store. }
+type
+  TSeeSibling = record
+    Id           : Int64 ;
+    QualifiedName: string;
+  end;
+var
+  GSiblingMemo: TDictionary<string, TArray<TSeeSibling>>;
+
 function BTick: Int64; inline;
 begin
   Result:= TStopwatch.GetTimeStamp;
+end;
+
+{ Run-level cache key for anything keyed on a STORE plus a per-DB id. The store
+  is part of the key because symbol ids are numbered per database: two stores in
+  one multi-DB run both number from 1, so a bare id would return one DB's answer
+  for another DB's symbol. The interface pointer identifies the instance, and
+  every store consulted during a run is held alive by its caller for the whole
+  run, so the pointer cannot be recycled underneath a memo. }
+function StoreKey(const AStore: ISymbolStore; AId: Int64): string; inline;
+begin
+  Result:= IntToStr(NativeInt(Pointer(AStore))) + ':' + IntToStr(AId);
+end;
+
+{ The ROUTINE-kind children of one container type, memoised per (store, parent
+  id). Empty when the parent is not a class/interface/record -- which is the same
+  answer the caller wants for "no siblings", so the two cases need not be
+  distinguished. See GSiblingMemo for the measurement that motivated this. }
+function MemoSiblingRoutines(const AStore: ISymbolStore; AParentId: Int64): TArray<TSeeSibling>;
+const
+  ROUTINE_KINDS = [skMethod, skProcedure, skFunction, skConstructor, skDestructor];
+begin
+  var Key: string:= StoreKey(AStore, AParentId);
+  if GSiblingMemo.TryGetValue(Key, Result) then Exit;
+  Result:= nil;
+  { Both store calls are inside the memo: the parent lookup that decides whether
+    this is a type at all, and the child materialisation. Before this, each was
+    repeated once per member of the same class. }
+  var Parent: TSymbol:= AStore.GetSymbolById(AParentId);
+  if Parent.Kind in [skClass, skInterface, skRecord] then
+  begin
+    var Sibs: TArray<TSymbol>:= AStore.FindAllChildSymbols(AParentId);
+    Inc(GCSeeSibRows, Length(Sibs)); { rows actually materialised, i.e. memo MISSES }
+    for var S in Sibs do
+      if (S.QualifiedName <> '') and (S.Kind in ROUTINE_KINDS) then
+      begin
+        var E: TSeeSibling;
+        E.Id           := S.Id;
+        E.QualifiedName:= S.QualifiedName;
+        Result:= Result + [E];
+      end;
+  end;
+  GSiblingMemo.AddOrSetValue(Key, Result);
 end;
 
 function DocFactsBuildProfile: string;
@@ -632,7 +739,12 @@ begin
                   '                                 extra-stores   %s (%d call(s), %s)'#13#10 +
                   '                                 rest-of-window %s'#13#10 +
                   '        overload-arity-tag %s (%d call(s), %s) -- inside ToFactRef,'#13#10 +
-                  '          so it is charged to BOTH resolved-callers and rest-of-window',
+                  '          so it is charged to BOTH resolved-callers and rest-of-window'#13#10 +
+                  '        seealso SPLIT -- %d declaration(s) entered the block'#13#10 +
+                  '                         callees  %s (%d edge row(s), %d distinct target(s), %s)'#13#10 +
+                  '                         siblings %s (%d row(s) MATERIALISED for %d distinct parent(s),'#13#10 +
+                  '                                       %d iterated, %s)'#13#10 +
+                  '                         rest-of-window %s',
     [S(GBHarvest), S(GBResolved), S(GBUnresolved), S(GBReturns), S(GBCalls), S(GBRaises),
      S(GBAncestry), S(GBSeeAlso), S(GBSince), S(GBSymFacts),
      S(GBCoveredBy), S(GBWiring), S(GBTotal - Parts), S(GBTotal),
@@ -640,7 +752,11 @@ begin
      S(GBUnresPrimary), GCUnresPrimary, Per(GBUnresPrimary, GCUnresPrimary),
      S(GBUnresExtra  ), GCUnresExtra  , Per(GBUnresExtra  , GCUnresExtra  ),
      S(GBUnresolved - GBUnresGate - GBUnresPrimary - GBUnresExtra),
-     S(GBOverloadTag), GCOverloadTag, Per(GBOverloadTag, GCOverloadTag)]);
+     S(GBOverloadTag), GCOverloadTag, Per(GBOverloadTag, GCOverloadTag),
+     GCSeeDecl,
+     S(GBSeeCallees), GCSeeCalleeRows, GSeeTargetSeen.Count, Per(GBSeeCallees, GCSeeCalleeRows),
+     S(GBSeeSibs   ), GCSeeSibRows   , GSeeParentSeen.Count, GCSeeSibIter, Per(GBSeeSibs, GCSeeSibIter),
+     S(GBSeeAlso - GBSeeCallees - GBSeeSibs)]);
 end;
 
 // PHASE C B2: '/N' when ASymbolId is one of several routines that share a name
@@ -669,7 +785,7 @@ begin
     once. }
   var TO0: Int64:= BTick;
   Inc(GCOverloadTag);
-  var MemoKey: string:= IntToStr(NativeInt(Pointer(AStore))) + ':' + IntToStr(ASymbolId);
+  var MemoKey: string:= StoreKey(AStore, ASymbolId);
   try
     if GOverloadMemo.TryGetValue(MemoKey, Result) then Exit;
     Sym:= AStore.GetSymbolById(ASymbolId);
@@ -2553,13 +2669,18 @@ begin
       end;
 
       // 1. Resolved callees (qualified, ground-truth via call_edges).
+      Inc(GCSeeDecl);
+      var TS0: Int64:= BTick;
       var SeeEdges: TArray<TCallEdge>:= AStore.GetCallEdgesFromSymbol(ASym.Id);
       for var SE in SeeEdges do
         if (SE.TargetSymbolId > 0) and (SE.TargetSymbolId <> ASym.Id) then
         begin
+          Inc(GCSeeCalleeRows);
+          GSeeTargetSeen.AddOrSetValue(StoreKey(AStore, SE.TargetSymbolId), True);
           var CalleeQName: string:= AStore.GetSymbolById(SE.TargetSymbolId).QualifiedName;
           if CalleeQName <> '' then CalleeSet.Add(CalleeQName);
         end;
+      Inc(GBSeeCallees, BTick - TS0);
 
       // 2. Sibling members of the same parent TYPE (excluding ASym itself).
       //
@@ -2575,22 +2696,26 @@ begin
       // routines are just a file listing.
       if ASym.ParentId > 0 then
       begin
-        var Parent: TSymbol:= AStore.GetSymbolById(ASym.ParentId);
-        if Parent.Kind in [skClass, skInterface, skRecord] then
-        begin
-          var Siblings: TArray<TSymbol>:= AStore.FindAllChildSymbols(ASym.ParentId);
-          for var Sib in Siblings do
-            { ROUTINE siblings only. A class's children include its FIELDS, and
-              the first run with <seealso> on by default emitted
-              `<seealso cref="...FEnabled"/>` and `...FExcludeAncestors` -- a
-              cross-reference to a private field is not somewhere a reader can
-              usefully be sent, and because the list is capped those entries
-              displaced real ones. "See also" means another CALLABLE. }
-            if (Sib.Id <> ASym.Id) and (Sib.QualifiedName <> '')
-               and (Sib.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor])
-               and (CalleeSet.IndexOf(Sib.QualifiedName) < 0) then
-              SiblingSet.Add(Sib.QualifiedName);
-        end;
+        GSeeParentSeen.AddOrSetValue(StoreKey(AStore, ASym.ParentId), True);
+        TS0:= BTick;
+        { ROUTINE siblings only. A class's children include its FIELDS, and the
+          first run with <seealso> on by default emitted
+          `<seealso cref="...FEnabled"/>` and `...FExcludeAncestors` -- a
+          cross-reference to a private field is not somewhere a reader can
+          usefully be sent, and because the list is capped those entries
+          displaced real ones. "See also" means another CALLABLE.
+
+          That filter, and the parent's own kind test, now live inside
+          MemoSiblingRoutines: they depend only on the PARENT, so they were being
+          recomputed once per member of the same class. What remains here is what
+          genuinely varies per declaration -- excluding the symbol itself, and
+          not repeating something already listed as a callee. }
+        var Siblings: TArray<TSeeSibling>:= MemoSiblingRoutines(AStore, ASym.ParentId);
+        Inc(GCSeeSibIter, Length(Siblings)); { rows ITERATED -- memo hits included }
+        for var Sib in Siblings do
+          if (Sib.Id <> ASym.Id) and (CalleeSet.IndexOf(Sib.QualifiedName) < 0) then
+            SiblingSet.Add(Sib.QualifiedName);
+        Inc(GBSeeSibs, BTick - TS0);
       end;
 
       // Callees first, then siblings; each category sorted, so the whole list is
@@ -2692,8 +2817,14 @@ end;
 
 initialization
   GOverloadMemo:= TDictionary<string, string>.Create;
+  GSeeTargetSeen:= TDictionary<string, Boolean>.Create;
+  GSeeParentSeen:= TDictionary<string, Boolean>.Create;
+  GSiblingMemo  := TDictionary<string, TArray<TSeeSibling>>.Create;
 
 finalization
+  GSiblingMemo  .Free;
+  GSeeParentSeen.Free;
+  GSeeTargetSeen.Free;
   GOverloadMemo.Free;
 
 end.

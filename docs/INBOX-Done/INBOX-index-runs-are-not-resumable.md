@@ -1,5 +1,39 @@
-> # THE HEADLINE IS DONE (2026-08-17, session 24): per-file resume SHIPPED.
-> # The note stays open for ONE companion issue -- see the end of this banner.
+> # CLOSED 2026-08-17 (session 25). Both halves are discharged.
+>
+> The headline (per-file resume) shipped in session 24. The one companion issue
+> that kept this open -- "output appears only in blocks when redirected" -- is
+> **not an engine defect and never was**, so there is nothing left here to fix.
+>
+> **The cause is PowerShell**, which holds a native process's stderr until that
+> process exits. The engine already flushes: stdout once per file
+> (`Indexer.pas`, guarded by `run_index_progress_flush.ps1`) and every `resolve:`
+> line (`ResolveLog`). Measured on one 52 s index, polled every second:
+>
+> ```
+> cmd.exe    > 2>   out.log 128 -> 765 -> 2230 bytes within 4 s; err.log grew from t=1 s
+> PowerShell > 2>   out.log 0 until an 8192-byte block
+>                   err.log 0 BYTES FOR THE ENTIRE RUN, 4462 at exit
+> ```
+>
+> So the fix belongs in the HARNESS, and it is now written down where a runner
+> will actually meet it: `tests\README.md`, "Gotchas a new runner should
+> respect" -- redirect long runs through `cmd.exe` or
+> `Start-Process -RedirectStandardError`.
+>
+> **What this cost, and why it is worth recording.** This mis-attribution is
+> half of why a healthy 37-minute whole-database calls resolve was filed as a
+> hang (`INBOX-incremental-index-hangs-on-large-db`): the run really did print
+> nothing, and the note blamed the engine's buffering rather than the shell's.
+> The other half -- that the pass announced itself only on completion -- is fixed
+> in that note's own item.
+>
+> `Flush(ErrOutput)` after the stderr counter remains available and unnecessary:
+> the RTL's 128-byte buffer already bounds that lag to 2-3 lines, and it would
+> not have changed the PowerShell measurement above by one byte.
+>
+> ---
+>
+> # (historical) THE HEADLINE IS DONE (2026-08-17, session 24): per-file resume SHIPPED.
 >
 > `files.indexed_at_fingerprint`, stamped **inside** the per-file transaction
 > `CommitFileTx` closes (before `FConn.Commit`), so a kill commits the rows and

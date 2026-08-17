@@ -110,6 +110,37 @@ are older batch harnesses, not part of the PowerShell battery.
 - **Bare `dcc64` runners must list the whole uses-closure in `-U`.** `src/core`'s
   `DRagLint.Core.Interfaces` uses `DRagLint.Preprocess.Types`, so `src/preprocess`
   is mandatory; omitting it is `F2613`, not a code defect.
+- **Never invoke the engine by BARE NAME. `cd <dir>` then `drag-lint ...` runs a
+  DIFFERENT BINARY.** `NoDefaultCurrentDirectoryInExePath=1` is set on this machine,
+  so cmd does not search the current directory; the bare name resolves off PATH to
+  `third_party\dll\drag-lint.exe` -- the frozen **Win32** build of 2026-07-05. It
+  starts, it lints, and it answers with two-month-old rules: measured 2026-08-17 on
+  ORM3 it reported **33,626 findings against the current build's 14,764**, with ~20
+  `.scm` rules silently at zero. Nothing errors. Use `.\drag-lint.exe` or an absolute
+  path; every suite here already takes `-Exe` and resolves it, which is why the
+  battery never saw this. PowerShell is not affected (it requires `.\` anyway) --
+  this bites `cmd /c` one-liners and anything copied out of a doc's "Reproducing"
+  block.
+- **For a LONG run, redirect through `cmd.exe` -- PowerShell holds native stderr
+  until the process exits.** This is a harness rule, not an engine defect, and it was
+  mis-attributed to the engine for two sessions
+  (`INBOX-index-runs-are-not-resumable`). The engine already flushes: stdout once per
+  file (`src/core/DRagLint.Core.Indexer.pas`, guarded by
+  `run_index_progress_flush.ps1`) and every `resolve:` line
+  (`DRagLint.Storage.SQLite.pas` `ResolveLog`). Measured on one 52 s index, sizes
+  polled every second:
+
+  ```
+  cmd.exe    > 2>   out.log 128 -> 765 -> 2230 bytes within 4 s; err.log grew from t=1 s
+  PowerShell > 2>   out.log 0 until an 8192-byte block
+                    err.log 0 BYTES FOR THE ENTIRE RUN, 4462 at exit
+  ```
+
+  So `drag-lint ... > out.txt 2> err.txt` typed at a **PowerShell** prompt makes a
+  healthy multi-hour index indistinguishable from a hung one -- which is how a
+  working whole-DB resolve came to be filed as a hang. Use
+  `cmd /c "... > out.txt 2> err.txt"` or `Start-Process -RedirectStandardError`, and
+  poll the file. Short suites are unaffected and need no change.
 - **Win64 is the target.** Per the v0.86 policy (user ruling 2026-07-05, see
   `src/delphi-plugin/DragLint.Plugin.ExeResolver.pas`), the IDE BPL is the only 32-bit
   artifact and every process the plugin spawns defaults to the Win64 CLI.

@@ -1,3 +1,31 @@
+> # SHIPPED 2026-08-17 (session 25) -- WITHOUT touching the normaliser.
+>
+> The note's pessimism was right about the cost of changing `NormalizeLine` and
+> wrong about the request being blocked by it. The owner asked for the hash
+> function; that needs no normaliser change at all.
+>
+> * **`C:\Projects\YADF\vendor\drag-lint\DRagLint.Lint.ReviewMarker.pas`** -- a
+>   byte-identical copy. Of the note's two options, the vendored copy was taken
+>   over the shared search path: a cross-repo unit path would put drag-lint's
+>   source tree inside YADF's build.
+> * **`README-MIRROR.md`** beside it carries the "this is a mirror" statement, so
+>   the unit itself stays byte-identical and the check can be a hash rather than
+>   a fuzzy diff. It also states the design rule in the place a YADF developer
+>   will actually read it: **VERIFY AND WARN, NEVER REWRITE**, and use
+>   `HashWindow` + `NormalizedIsLoneKeyword`, not `HashLine`.
+> * **`tests\autotest\run_reviewmarker_yadf_mirror.ps1`** compares the SHA256s.
+>   Negative control run: appending ONE byte to the mirror turns it red, and it
+>   was restored.
+>
+> **ZERO re-stamps, and `NormalizeLine` is untouched** -- so none of the 249
+> existing markers move. Nothing in YADF was edited; the vendored folder is new
+> and left untracked for the owner, whose working tree holds uncommitted edits.
+>
+> The suite SKIPS loudly when the YADF copy is absent (it is a separate repo that
+> need not exist on every machine). A skip is a fail-open, so it is paired with a
+> positive control on the side that is always present: if drag-lint's own copy
+> goes missing or turns into a stub, that is a FAILURE, not a skip.
+
 > # RE-COUNTED 2026-08-16 (session 22). The "change is nearly free" window has CLOSED.
 >
 > The note's own gate is *"Do not change the normaliser without counting first"*,

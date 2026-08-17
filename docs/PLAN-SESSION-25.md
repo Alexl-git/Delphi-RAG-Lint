@@ -1,5 +1,40 @@
 # Session 25 implementation plan
 
+> ## EXECUTED 2026-08-17. Section A complete, B complete, C partial.
+>
+> | item | outcome |
+> |---|---|
+> | **A1** `seealso` memo | **DONE** -- 18.57 s -> 2.36 s. The plan's KEY was wrong (see below); the measured key is the PARENT id. Report byte-identical. |
+> | **A2** fingerprint disagreement | **DONE** -- `EffectiveIndexPlatform`, chosen on a census of all 32 DBs. Suite RED-verified. |
+> | **A3** announce the whole-DB resolve | **DONE** -- announced BEFORE the pass, with the reason recorded at the latch. Suite RED-verified. |
+> | **A4** YADF review-marker | **DONE** -- byte-identical vendored copy + drift test + negative control. Zero re-stamps. |
+> | **A5** redirected output | **DONE** -- harness rule written into `tests\README.md`; the note is CLOSED. |
+> | **B1** `class-metrics` memo | **DONE** -- instrumented first: `ResolveTypeCategory` 40.99 s of 58.49 s, 266,715 calls / 7,568 distinct keys. Memo shipped. |
+> | **B2** per-file scan | **ATTRIBUTED, not optimised** -- 144.34 s of 145.37 s accounted. The named suspect (quadratic append) measures **0.00 s**. |
+> | **C1** `buildfor-defaulted-args` | NOT STARTED |
+> | **C2** IDE/LSP headless half | **PARTIAL** -- `tools\lsp-diag\bpl-inventory.ps1` ships the registry+size audit. |
+> | **C3** `exception-class-unit` | DEFERRED as planned (needs four owner rulings). |
+> | **D** owner checklist | unchanged, still needs a keyboard. |
+>
+> **The plan itself was wrong in one place, and it is the instructive one.** A1
+> said to key the memo on "(store pointer, symbol id)", copying the
+> `OverloadArityTag` fix. That memo could never have hit: `Build` runs ONCE per
+> declaration, so the declaration's own id never repeats. Measuring the block
+> first -- with DISTINCT-KEY counts, not just call counts -- showed the
+> repetition is in what it looks UP: 913,357 sibling rows from **322 distinct
+> parents**. Same lesson as the one this plan opens with, one level down: a
+> plausible fix aimed at an unverified attribution.
+>
+> **A trap worth more than any item here.** `NoDefaultCurrentDirectoryInExePath=1`
+> is set on this machine, so the perf note's own "Reproducing" block
+> (`cd dll-win64` then a BARE `drag-lint lint-all ...`) runs
+> `third_party\dll\drag-lint.exe` -- the frozen **Win32 build of 2026-07-05** --
+> off PATH. It reported **33,626 findings against the current build's 14,764**,
+> with ~20 `.scm` rules silently at zero, and read as a catastrophic regression
+> that did not exist. Use `.\drag-lint.exe`. Both the note and `tests\README.md`
+> now say so.
+
+
 Built from five parallel investigations (2026-08-17), each told to **re-measure
 rather than trust its note**. That instruction paid: **three** of the seven notes
 had materially wrong framing, one was assumed stale and is in fact live and

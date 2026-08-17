@@ -12,6 +12,7 @@ interface
 uses
   System.SysUtils
   , System.Classes
+  , System.Diagnostics { TStopwatch -- the phase-attribution counters below }
   , System.Generics.Collections
   , TreeSitter
   , TreeSitterLib
@@ -107,6 +108,35 @@ begin
   Result:= TEncoding.UTF8.GetString(Src, S, L);
 end;
 
+{ SESSION 25 B1: ATTRIBUTION ONLY -- no optimisation is made on the strength of
+  these numbers until they exist.
+
+  `class-metrics` is 56-58 s of ORM3's `lint-all` and has never been looked at.
+  Two candidates were proposed from reading the code, and reading the code is
+  exactly what has already been wrong four times on the neighbouring
+  `unresolved-name` bucket:
+
+    1. ResolveTypeCategory, called per type_use ref per class with no memo, and
+       running FindSymbolsByExactName underneath -- materialising every symbol
+       that shares the name. That anti-pattern has been fixed three times in
+       this codebase already.
+    2. ComputeLCOM4 / ComputeMiddleMan, which re-parse method bodies.
+
+  So: a timer AND A CALL COUNT for each, because "expensive per call" and
+  "called far more often than anyone thought" are different defects with
+  different fixes, and a bucket with no count cannot tell them apart. That
+  mistake cost three sessions.
+
+  GRtcSeen counts DISTINCT (lowercase name, file id) keys. It is not part of any
+  fix -- it measures what the proposed memo's hit rate WOULD be, before the memo
+  is written. Rows >> distinct keys means a memo pays; rows ~= distinct keys
+  means it is pure overhead and candidate 1 is dead. The file id is in the key
+  because it is the tie-break ResolveTypeCategory itself uses. }
+var
+  GBRtc, GBAnc, GBLcom, GBMm, GBCbo, GBRfc, GBFanInAll: Int64;
+  GCRtc, GCAnc, GCLcom, GCMm, GCCbo, GCRfc           : Int64;
+  GRtcSeen: TDictionary<string, Boolean>;
+
 { Split a heritage list ('TBar, IBaz') into trimmed names. }
 function SplitHeritage(const AHeritage: string): TArray<string>;
 var
@@ -129,6 +159,10 @@ var
   HasExtParent: TDictionary<Int64, Boolean>      ;
   NocCount    : TDictionary<Int64, Integer>      ;
   RefsCache   : TDictionary<Int64, TArray<TReference>>;
+  { MEASURED, then written -- see RTC. LOCAL to this call, not a unit global,
+    because the key carries a FILE ID and file ids are numbered per database: a
+    process-lifetime memo would answer one store's question with another's. }
+  RtcMemo     : TDictionary<string, TTypeCategory>;
   FanIn       : TDictionary<Int64, Integer>      ; { v0.81: target class id -> distinct inbound source count (Ca) }
   MemberToClass  : TDictionary<string, Int64>   ; { v0.82 feature-envy: LowerCase(method name) -> declaring class id }
   AmbiguousMember: TDictionary<string, Boolean> ; { v0.82 feature-envy: method names declared by >1 distinct class (excluded) }
@@ -164,6 +198,41 @@ var
     F.EndLine  := AInfo.DeclLine;
     F.EndCol   := AInfo.DeclCol + Length(AInfo.Name);
     Findings.Add(F);
+  end;
+
+  { The ONE place this phase asks the store to classify a type name. It had three
+    call sites; they are routed through here so the cost is measured once and, if
+    a memo turns out to be warranted, there is a single place to put it.
+    The distinct-key insert sits OUTSIDE the timed window on purpose -- it is
+    instrumentation and must not be charged to the thing it is measuring. }
+  function RTC(const AName: string; AFileId: Int64): TTypeCategory;
+  begin
+    Inc(GCRtc);
+    var Key: string:= LowerCase(AName) + '|' + IntToStr(AFileId);
+    GRtcSeen.AddOrSetValue(Key, True);
+    var T0: Int64:= TStopwatch.GetTimeStamp;
+    { MEMOISED on the measurement above, not on the code reading that proposed
+      it: 266,715 calls over 7,568 DISTINCT (name, file) keys -- 97% of the calls
+      re-ask a question already answered -- and this one routine was 40.99 s of
+      the phase's 58.49 s. The other candidate the plan named (ComputeLCOM4 +
+      ComputeMiddleMan re-parsing method bodies) measured 4.05 s combined and is
+      not worth touching.
+
+      The key is (LOWERCASE name, file id), matching what
+      ResolveTypeCategory itself does: Delphi identifiers are case-insensitive,
+      and the file id is its tie-break when several symbols share a name.
+
+      Underneath, each miss still runs FindSymbolsByExactName, which
+      materialises EVERY symbol sharing the name -- the same anti-pattern this
+      codebase has now fixed four times. The memo removes the repetition; it does
+      not fix that, and a bounded store-side query would still be the better
+      long-term shape. }
+    if not RtcMemo.TryGetValue(Key, Result) then
+    begin
+      Result:= AStore.ResolveTypeCategory(AName, AFileId);
+      RtcMemo.AddOrSetValue(Key, Result);
+    end;
+    Inc(GBRtc, TStopwatch.GetTimeStamp - T0);
   end;
 
   function GetRefs(AFileId: Int64): TArray<TReference>;
@@ -253,7 +322,7 @@ var
       Names:= SplitHeritage(Info.Heritage);
       for Nm in Names do
       begin
-        if AStore.ResolveTypeCategory(Nm, Info.FileId) <> tcClass then Continue;
+        if RTC(Nm, Info.FileId) <> tcClass then Continue;
         { first class-kind heritage entry is the parent }
         if ByName.TryGetValue(LowerCase(Nm), Lst) and (Lst.Count > 0) then
           ParentOf.AddOrSetValue(Info.Id, Lst[0])
@@ -350,7 +419,9 @@ var
     Exclude:= TDictionary<string, Boolean>.Create;
     try
       Exclude.AddOrSetValue(LowerCase(AInfo.Name), True);
+      Inc(GCAnc); var TAnc: Int64:= TStopwatch.GetTimeStamp;
       Anc:= AStore.GetTransitiveAncestors(AInfo.Id);
+      Inc(GBAnc, TStopwatch.GetTimeStamp - TAnc);
       for A in Anc do
         if A.Name <> '' then Exclude.AddOrSetValue(LowerCase(A.Name), True);
       Refs:= GetRefs(AInfo.FileId);
@@ -361,7 +432,7 @@ var
         if not (InDeclSpan(AInfo, R.StartLine) or EnclosedByOwnMethod(AInfo, R.EnclosingSymbolId)) then Continue;
         Nm:= LowerCase(R.NameText);
         if Exclude.ContainsKey(Nm) then Continue;
-        if AStore.ResolveTypeCategory(R.NameText, AInfo.FileId) = tcClass then
+        if RTC(R.NameText, AInfo.FileId) = tcClass then
           Coupled.AddOrSetValue(Nm, True);
       end;
       Result:= Coupled.Count;
@@ -403,7 +474,9 @@ var
       Exclude:= TDictionary<string, Boolean>.Create;
       try
         Exclude.AddOrSetValue(LowerCase(Src.Name), True);
+        Inc(GCAnc); var TAnc: Int64:= TStopwatch.GetTimeStamp;
         Anc:= AStore.GetTransitiveAncestors(Src.Id);
+        Inc(GBAnc, TStopwatch.GetTimeStamp - TAnc);
         for A in Anc do
           if A.Name <> '' then Exclude.AddOrSetValue(LowerCase(A.Name), True);
         Refs:= GetRefs(Src.FileId);
@@ -414,7 +487,7 @@ var
           if not (InDeclSpan(Src, R.StartLine) or EnclosedByOwnMethod(Src, R.EnclosingSymbolId)) then Continue;
           Nm:= LowerCase(R.NameText);
           if Exclude.ContainsKey(Nm) then Continue;
-          if AStore.ResolveTypeCategory(R.NameText, Src.FileId) = tcClass then
+          if RTC(R.NameText, Src.FileId) = tcClass then
             Coupled.AddOrSetValue(Nm, True);
         end;
         { each deduped coupled name contributes +1 to every class id it resolves to }
@@ -921,6 +994,7 @@ begin
   HasExtParent:= TDictionary<Int64, Boolean>.Create;
   NocCount    := TDictionary<Int64, Integer>.Create;
   RefsCache   := TDictionary<Int64, TArray<TReference>>.Create;
+  RtcMemo     := TDictionary<string, TTypeCategory>.Create;
   FanIn       := TDictionary<Int64, Integer>.Create;
   MemberToClass  := TDictionary<string, Int64>.Create;
   AmbiguousMember:= TDictionary<string, Boolean>.Create;
@@ -940,7 +1014,9 @@ begin
     BuildInventory;
     ResolveParents;
     ComputeNOC;
+    var TFI: Int64:= TStopwatch.GetTimeStamp;
     ComputeAllFanIn;
+    Inc(GBFanInAll, TStopwatch.GetTimeStamp - TFI);
     if WantRule('feature-envy') then BuildMemberMap;
 
     for CI in Inv.Values do
@@ -966,7 +1042,9 @@ begin
 
       if WantRule('high-response') then
       begin
+        Inc(GCRfc); var TR: Int64:= TStopwatch.GetTimeStamp;
         var Rfc: Integer:= ComputeRFC(CI);
+        Inc(GBRfc, TStopwatch.GetTimeStamp - TR);
         if Rfc > TRFC then
           Emit('high-response',
             Format('High RFC: %s has a response set of %d (>%d) -- many methods and calls to test/understand', [CI.Name, Rfc, TRFC]),
@@ -975,7 +1053,9 @@ begin
 
       if WantRule('high-coupling') then
       begin
+        Inc(GCCbo); var TC: Int64:= TStopwatch.GetTimeStamp;
         var Cbo: Integer:= ComputeCBO(CI);
+        Inc(GBCbo, TStopwatch.GetTimeStamp - TC);
         if Cbo > TCBO then
           Emit('high-coupling',
             Format('High CBO: %s is coupled to %d other classes (>%d) -- consider reducing dependencies', [CI.Name, Cbo, TCBO]),
@@ -984,7 +1064,9 @@ begin
 
       if WantRule('low-cohesion') then
       begin
+        Inc(GCLcom); var TL: Int64:= TStopwatch.GetTimeStamp;
         var Lc: Integer:= ComputeLCOM4(CI);
+        Inc(GBLcom, TStopwatch.GetTimeStamp - TL);
         if Lc > TLCOM then
           Emit('low-cohesion',
             Format('Low cohesion: %s has LCOM4=%d (>%d) -- the class may combine unrelated responsibilities; consider splitting', [CI.Name, Lc, TLCOM]),
@@ -993,7 +1075,9 @@ begin
 
       if WantRule('middle-man') then
       begin
+        Inc(GCMm); var TM: Int64:= TStopwatch.GetTimeStamp;
         var MM: TMiddleManResult:= ComputeMiddleMan(CI);
+        Inc(GBMm, TStopwatch.GetTimeStamp - TM);
         if (MM.Total >= MIDDLE_MAN_MIN_METHODS) and (MM.BestCount * 2 > MM.Total) then
           Emit('middle-man',
             Format('Middle man: %s forwards %d of %d methods to field ''%s'' -- consider removing the middle man (inline the delegate or expose it).', [CI.Name, MM.BestCount, MM.Total, MM.BestField]),
@@ -1043,6 +1127,24 @@ begin
         ComputeFeatureEnvy(CI, TFEnvy);
     end;
 
+    { SESSION 25 B1 attribution. Printed only under DRAGLINT_PROFILE, on stderr,
+      beside the phase total the CLI already prints -- so the parts and the whole
+      are read together and a large remainder is visible as a remainder. }
+    if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+    begin
+      Writeln(ErrOutput, Format('  CLASS-METRICS BREAKDOWN (%d class(es))', [Inv.Count]));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s), %d distinct (name,file) key(s))',
+        ['ResolveTypeCategory', GBRtc / TStopwatch.Frequency, GCRtc, GRtcSeen.Count]));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['GetTransitiveAncestors', GBAnc  / TStopwatch.Frequency, GCAnc ]));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeCBO'            , GBCbo  / TStopwatch.Frequency, GCCbo ]));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeRFC'            , GBRfc  / TStopwatch.Frequency, GCRfc ]));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeLCOM4'          , GBLcom / TStopwatch.Frequency, GCLcom]));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeMiddleMan'      , GBMm   / TStopwatch.Frequency, GCMm  ]));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s', ['ComputeAllFanIn', GBFanInAll / TStopwatch.Frequency]));
+      Writeln(ErrOutput, '    (ResolveTypeCategory is called from INSIDE ComputeCBO/ComputeAllFanIn,');
+      Writeln(ErrOutput, '     so its time is also counted in theirs -- the rows are not disjoint.)');
+      Flush(ErrOutput);
+    end;
     Result:= Findings.ToArray;
   finally
     for var L in ByName.Values do L.Free;
@@ -1052,6 +1154,7 @@ begin
     HasExtParent.Free;
     NocCount.Free;
     RefsCache.Free;
+    RtcMemo.Free;
     FanIn.Free;
     MemberToClass.Free;
     AmbiguousMember.Free;
@@ -1059,5 +1162,14 @@ begin
     TAstParseCache.Clear;
   end;
 end;
+
+initialization
+  { Instrumentation only (see the counters' own note). Created once for the
+    process; class-metrics runs once per lint-all, so there is nothing to reset
+    between phases. }
+  GRtcSeen:= TDictionary<string, Boolean>.Create;
+
+finalization
+  GRtcSeen.Free;
 
 end.

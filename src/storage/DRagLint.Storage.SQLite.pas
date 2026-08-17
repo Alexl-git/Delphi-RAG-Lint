@@ -205,6 +205,14 @@ type
       FScopeTypesBefore      : TDictionary<string, Boolean>;
       FScopeTypesAfter       : TDictionary<string, Boolean>;
       FScopeWhole            : Boolean;
+      { WHY the latch above was set, in operator-readable words, recorded AT the
+        latch. Three unrelated conditions set FScopeWhole -- the scoping limit, a
+        prune/eviction cascade, and --rebuild -- and by the time the calls
+        resolve reports "WHOLE DB" they are indistinguishable, so the reason had
+        to be guessed. It was: the first version of the announce named the
+        scoping limit for a first-index run, which is actually the same latch
+        reached by a different route. '' while unset. }
+      FScopeWholeWhy         : string;
       { Files this run may touch before scoping stops being worth it, read once
         from the corpus size on the first recorded write. -1 = not yet read. }
       FScopeMaxFiles         : Integer;
@@ -241,6 +249,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ScopedResolveIsSound: Boolean;
+      function ScopedResolveDeclineReason: string;
       /// <summary>Materializes the recorded scope into connection-local temp
       /// tables; returns the `refs` predicate that selects the affected rows.</summary>
       /// <returns><!-- drag-lint:auto type -->string</returns>
@@ -2505,6 +2514,7 @@ begin
   FScopeTypesBefore:= TDictionary<string, Boolean>.Create;
   FScopeTypesAfter := TDictionary<string, Boolean>.Create;
   FScopeWhole      := False;
+  FScopeWholeWhy   := '';
   FScopeMaxFiles   := -1;
   Connect(ADbPath, AReadOnly);
   { v0.86 Task 4: a read-only open still needs its SELECT queries built. In the
@@ -3915,11 +3925,33 @@ end;
   The default is the unscoped pass: an instance that recorded no writes cannot
   know what changed, so it must assume everything did. }
 function TSQLiteSymbolStore.ScopedResolveIsSound: Boolean;
+begin
+  Result:= ScopedResolveDeclineReason = '';
+end;
+
+{ WHY a scoped pass was declined, as one operator-readable clause -- '' when it
+  was not declined. ScopedResolveIsSound is now a thin wrapper over this, so
+  there is exactly ONE implementation of the rule and the reason cannot drift
+  from the decision it explains.
+
+  This exists because of INBOX-incremental-index-hangs-on-large-db, reproduced
+  2026-08-17: indexing 84 new files into a 2.3 GB library copy fell back to the
+  whole-database pass -- new units introduce new type names, so the type-equality
+  gate below declined -- and then ran CPU-bound with NO OUTPUT AT ALL. The
+  scoped/whole line prints only when the pass FINISHES, and this pass is
+  documented at 37 minutes on a 2 GB index, so it is indistinguishable from a
+  hang while it runs. It was killed at 8 minutes and filed as a hang. It was not
+  hanging; it was working, silently, on a cost nobody had been told about.
+
+  The fix is therefore DIAGNOSIS, not optimisation: say WHOLE DB and say why,
+  BEFORE the pass. Relaxing the gate for pure type ADDITIONS is a separate,
+  correctness-sensitive change with its own A/B hatch
+  (DRAGLINT_NO_SCOPED_RESOLVE) and must not be bundled with this. }
+function TSQLiteSymbolStore.ScopedResolveDeclineReason: string;
 var
   N     : string ;
   Total : Integer;
 begin
-  Result:= False;
   { ESCAPE HATCH. Two jobs. For an operator: if a cross-unit link is ever
     suspected of being stale, this restores the pre-scoping behaviour without a
     rebuild or a new binary, so "is the scoping wrong?" is one run away from an
@@ -3927,29 +3959,38 @@ begin
     test an A/B of ONE binary over one corpus -- the scoped and whole-database
     results have to be row-identical, and comparing two BUILDS would have left
     the compiler as an uncontrolled variable. }
-  if GetEnvironmentVariable('DRAGLINT_NO_SCOPED_RESOLVE') <> '' then Exit;
-  if FScopeWhole then Exit;
-  if FScopeFiles.Count = 0 then Exit;          { nothing recorded -- assume everything }
+  if GetEnvironmentVariable('DRAGLINT_NO_SCOPED_RESOLVE') <> '' then
+    Exit('DRAGLINT_NO_SCOPED_RESOLVE is set');
+  if FScopeWhole then
+    if FScopeWholeWhy <> '' then Exit(FScopeWholeWhy)
+    else Exit('the whole-database latch was set (clear/prune/eviction, or the changed-file share)');
+  if FScopeFiles.Count = 0 then
+    Exit('this run recorded no file writes, so it cannot know what changed');
   { The coverage limit is enforced during accumulation (NoteScopeRemoval latches
     FScopeWhole the moment it is crossed), so by here it can only be re-checked,
     not newly discovered. Kept as an assertion of the same rule at the point of
     use: if the latch is ever bypassed, this still declines rather than building
     a temp table the size of the index. }
   Total:= CountFiles;
-  if (Total > 0) and (FScopeFiles.Count * 3 >= Total) then Exit;
+  if (Total > 0) and (FScopeFiles.Count * 3 >= Total) then
+    Exit(Format('%d of %d indexed file(s) changed -- at or above the 1-in-3 scoping limit', [FScopeFiles.Count, Total]));
   { A DELTA NEEDS SOMETHING TO BE A DELTA AGAINST. A scoped pass UPDATES an
     existing edge set; if that set is missing, scoping it would re-resolve only
     the touched files and leave every other file's edges absent. Rebuild whole.
     DoIndex makes the same check before deciding to skip the pass entirely --
     this is the second half of the same rule, kept here so any future caller
     that reaches ResolveCallTargets by another route is covered too. }
-  if CallEdgesNeedRebuild then Exit;
+  if CallEdgesNeedRebuild then
+    Exit('the call-edge set is missing or incomplete, so there is no delta to update');
   { Type-name equality, both directions. Count equality alone would let one type
     be swapped for another. }
-  if FScopeTypesBefore.Count <> FScopeTypesAfter.Count then Exit;
+  if FScopeTypesBefore.Count <> FScopeTypesAfter.Count then
+    Exit(Format('this run changed the set of declared type names (%d before, %d after)',
+                [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
   for N in FScopeTypesBefore.Keys do
-    if not FScopeTypesAfter.ContainsKey(N) then Exit;
-  Result:= True;
+    if not FScopeTypesAfter.ContainsKey(N) then
+      Exit(Format('this run withdrew the declared type name %s', [N]));
+  Result:= '';
 end;
 
 { Puts FScopeFiles / FScopeNames into two connection-local temp tables and
@@ -4038,6 +4079,9 @@ begin
   if FScopeFiles.Count > FScopeMaxFiles then
   begin
     FScopeWhole:= True;
+    FScopeWholeWhy:= Format('this run rewrote more than one file in three (%d changed, limit %d) -- ' +
+                            'above that share the scoped pass costs more than it saves',
+                            [FScopeFiles.Count, FScopeMaxFiles]);
     FScopeFiles      .Clear;
     FScopeNames      .Clear;
     FScopeTypesBefore.Clear;
@@ -4781,6 +4825,8 @@ begin
     EvictOutOfScopeFiles -- reach the database only through here, which is why
     the latch lives at this one point rather than in each of them. }
   FScopeWhole:= True;
+  FScopeWholeWhy:= Format('%d file(s) were pruned or evicted, and the FK cascade took their edges ' +
+                          'outside the file transactions this run recorded', [AIds.Count]);
   FConn.StartTransaction;
   try
     for I:= 0 to AIds.Count - 1 do
@@ -4968,6 +5014,7 @@ begin
     describes the change. --rebuild always takes the whole-database pass, which
     is also what it wants -- every ref is new. }
   FScopeWhole:= True;
+  FScopeWholeWhy:= 'the index was cleared (--rebuild), so every ref is new';
   FConn.StartTransaction;
   try
     FConn.ExecSQL('DELETE FROM string_literals'); { fire the FTS5 sync triggers }
@@ -8554,7 +8601,32 @@ begin
     own line so an operator can see which shape ran. ScopedResolveIsSound carries
     the argument; AExtraStores forces the whole database because a library index
     consulted by ResolveExternally is outside everything this instance recorded. }
-  Scoped:= (Length(AExtraStores) = 0) and ScopedResolveIsSound;
+  { Order preserved from the boolean this replaced: the extra-store test came
+    first and short-circuited, so the scoping predicate's own queries (CountFiles,
+    CallEdgesNeedRebuild) are still not run when extra stores decide it. }
+  var DeclineWhy: string;
+  if Length(AExtraStores) > 0 then
+    DeclineWhy:= 'extra stores are attached, and a library index consulted by ResolveExternally is outside everything this instance recorded'
+  else
+    DeclineWhy:= ScopedResolveDeclineReason;
+  Scoped:= DeclineWhy = '';
+  { ANNOUNCED BEFORE THE PASS, NOT AFTER IT. The completion lines at the bottom
+    of this routine already say which shape ran -- but they print when it is
+    OVER, and the whole-database shape runs for ~37 minutes on a 2 GB index. A
+    run that prints nothing for half an hour is indistinguishable from a hang,
+    which is not a hypothetical: it was filed as one
+    (INBOX-incremental-index-hangs-on-large-db) and killed at 8 minutes while
+    working correctly. One line up front costs nothing and removes the whole
+    ambiguity -- and it names the REASON, so the operator can tell an ordinary
+    incremental fallback from a scoping bug. }
+  if Scoped then
+    ResolveLog(Format('calls      starting SCOPED pass over %d changed file(s)', [FScopeFiles.Count]))
+  else
+  begin
+    ResolveLog(Format('calls      starting WHOLE-DB pass over all %d indexed file(s)', [CountFiles]));
+    ResolveLog(Format('calls      ... whole database because %s', [DeclineWhy]));
+    ResolveLog('calls      ... this is the expensive shape (~37 min on a 2 GB index) -- it is running, not hung');
+  end;
   { Only the temp tables are built here. The DELETE they feed happens INSIDE the
     rebuild transaction below -- see the note there. MaterializeResolveScope
     writes nothing but connection-local temp tables, so it is safe outside. }

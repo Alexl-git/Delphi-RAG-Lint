@@ -115,6 +115,37 @@ is not already taken**. That last clause is the whole difficulty.
    non-test code) is probably required. **Measure the distinct-message count on
    ORM3 before committing to this** -- if it is 400, the feature is wrong as stated.
 
+   > ### MEASURED 2026-08-17 (session 25). It is 42, not 400 -- the feature survives its own kill-criterion.
+   >
+   > Taken from the ORM3 `lint-all` report, reading each finding's source line:
+   >
+   > | | count |
+   > |---|---|
+   > | `raise-bare-exception` findings | **139** |
+   > | of those, with a recoverable STRING LITERAL message | **80** |
+   > | **DISTINCT message texts** | **42** |
+   > | distinct messages raised from **2+ sites** | **12** |
+   >
+   > Most-repeated: `'This plan is set on the HUB screen'` (10 sites),
+   > `'Internal Error: Unknown control mode='` (8), `'Z1.9: Wrong Call'` (5),
+   > `'Statsman: Wrong Call'` (5).
+   >
+   > So a frequency floor of 2+ sites yields **12 classes**, and no floor at all
+   > yields 42. Ruling 5 is answered: scope is not the obstacle.
+   >
+   > **The other 59 findings are the finding that matters here.** They carry no
+   > string literal -- they are `Exception.Create(Format(...))`, a variable, or a
+   > concatenation. **Stage 3 (generate a class per message) cannot serve them at
+   > all**, which means the generated-class idea covers at best 80 of 139 sites
+   > even before deduplication. Stage 1 (report which existing class fits) does
+   > not care, because it matches on the RAISE SITE, not on the text. That is an
+   > argument for shipping stage 1 and being sceptical of stage 3, and it was not
+   > visible before counting.
+   >
+   > Rulings 1-4 still need the owner -- above all what *"fits"* means in stage 1
+   > (normalized message match, or class-name match?), since normalization is only
+   > spec'd for stage 3. The count no longer blocks that conversation.
+
 ## Suggested staging
 
 | Stage | What | Risk |

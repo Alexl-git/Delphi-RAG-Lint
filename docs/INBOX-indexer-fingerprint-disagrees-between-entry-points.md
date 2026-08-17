@@ -1,3 +1,47 @@
+> # FIXED 2026-08-17 (session 25). Option 1, chosen on a census rather than on taste.
+>
+> **The measurement the note demanded, run across every DB in `resolve-dbs`:**
+>
+> | spelling | DBs | notable |
+> |---|---|---|
+> | `...;plat=` | **30** | ORM3 CLIENT (707 files), the CLI self-index, YADF, DataCopy |
+> | `...;plat=win64` | **2** | **library-Win64 (6,993 files)** and Loader2025 (161) |
+>
+> That decides it, and it decides it the opposite way round from the intuition
+> that "fewer DBs change" means "normalise toward the majority". Dropping the
+> token (option 2) would have invalidated the **library index** -- the 6,993-file
+> walk that took 12.5 hours and is the entire reason this note exists. Option 1
+> leaves both big DBs untouched and costs a one-time re-parse of ~1,968 files
+> spread over small project DBs -- and 1,077 of those sit on engine v1.2.2-alpha,
+> so they re-parse on their next index regardless of this change.
+>
+> **The fix is one call, in one place.** `EffectiveIndexPlatform` ('' -> Win64)
+> now normalises inside `IndexerFingerprint`, so BOTH entry points record the
+> same token and any future call site inherits it.
+>
+> It is also more honest than either option as stated. `ResolveIndexProfile`
+> ALREADY resolved '' to Win64 privately (`CLI.pas:1558`) -- so a closure section
+> was PARSED as Win64 while recording `plat=`. The fingerprint was describing the
+> caller's spelling instead of what preprocessing actually did; that was the bug,
+> and the platform token now means what it says.
+>
+> **Test:** `tests\autotest\run_index_fingerprint_entry_points.ps1`, written to
+> the note's own warning -- it never compares fingerprint strings (which would
+> pass trivially if both were ''). It indexes a section by each entry point in
+> turn and asserts the other re-parses NOTHING. Verified RED against the previous
+> build (both directions re-parsed all 3 files, printing the disagreeing pair)
+> and GREEN after, with the "a real change IS still announced" positive control
+> passing in both.
+>
+> One assertion in the first draft was itself wrong and is worth recording: it
+> looked for `skipped N up-to-date` after the MANIFEST run. That path never
+> prints that summary -- it prints per-file progress -- so the assertion would
+> have failed forever against a correct engine. It now asserts that no file
+> emitted a `-> N symbols` line, which only a genuinely re-parsed file does.
+>
+> **The second finding below (the intermittent FK failure) is NOT fixed and keeps
+> this note open.**
+
 # INBOX -- the indexer fingerprint differs by ENTRY POINT, so alternating them forces a full re-parse
 
 **Found:** 2026-08-17 (session 24), while reindexing the CLI self-index after a
