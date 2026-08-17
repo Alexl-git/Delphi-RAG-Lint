@@ -1,16 +1,46 @@
 # RESUME -- session 24 close (2026-08-16 -> 08-17)
 
+> ## >>> NEXT SESSION: READ `docs/PLAN-SESSION-25.md` FIRST.
+> It is ordered, measured and implementation-ready, built from five parallel
+> investigations covering every open note. **This document is the state snapshot
+> behind that plan**, not the work list.
+>
+> **Start at A1** -- the `seealso` memo: the only perf item with a verified-tight
+> timer window, worth 17.6 s, and the exact shape the `OverloadArityTag` memo
+> just fixed for 255 s.
+>
+> **A2 repairs something this session broke.** The per-file index resume shipped
+> in `bd30afa` is SILENTLY DISABLED on the manifest path -- the path the
+> 12.5-hour library walk uses. See
+> `docs/INBOX-indexer-fingerprint-disagrees-between-entry-points.md`.
+
 ## State
 
 | | |
 |---|---|
-| branch | `main`, HEAD **`8376022`** |
+| branch | `main`, HEAD **`2386108`** |
 | working tree | clean |
-| unpushed | **118 commits, ON PURPOSE.** Do not push. The owner lifts this gate. |
-| battery | **315/315 pass, 0 fail, 15.7 min** (316 runners now; the count rises with each new suite) |
-| INBOX | **8 open / 105 retired** |
+| unpushed | **125 commits, ON PURPOSE.** Do not push. The owner lifts this gate. |
+| battery | **317/317 pass, 0 fail, 17.7 min** (318 runners) |
+| INBOX | **8 open / 107 retired** |
 | ORM3 `lint-all` | **320 s** (was 572 s), report byte-identical |
 | `unused-public-symbol` | **6** across all four consumers (was 12); all 6 genuine |
+| legacy `.bat` tests | **60 of 60 driven** (was 0); 0 dark |
+
+## Added after the sections below were first written
+
+* **All 60 legacy `.bat` tests revived.** Never rotten -- invisible to the
+  battery (it globs `run_*.ps1`) and pointed at the RETIRED Win32 exe, which
+  reports the SAME version string as the current build, so a run against the
+  corpse looked real. Repointed: **15 FAIL -> 0**. A further 19 had **never
+  executed once**, all from one broken template. Two new runners:
+  `run_doctests_v021.ps1`, `run_legacy_cli_fixtures.ps1`.
+* **That found a live engine regression:** `generate-docs` emitted no
+  `<returns>` for ANY class function (`8606b52`).
+* **Two notes retired** (`find-unit...`, `68-bat...`); **one new filed and still
+  OPEN** -- the entry-point fingerprint disagreement, plus an intermittent
+  `FOREIGN KEY constraint failed` on incremental reindex (not reproducible; DB
+  verified NOT corrupt at the moment of failure).
 
 ## What shipped, ten commits
 
