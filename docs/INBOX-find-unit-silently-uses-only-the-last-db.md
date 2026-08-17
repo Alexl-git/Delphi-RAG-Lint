@@ -158,11 +158,45 @@ Still open, and NOT fixed here: whether repeated `--db` should scan all
 (consistent with `query`, and what this now does) or be rejected. Silent
 last-wins is the one option that was never defensible.
 
-## Related, unexamined
+## `resolve-uses` -- SAME DEFECT, ALSO FIXED (2026-08-16)
 
-`resolve-uses` (`src\cli\DRagLint.CLI.pas:3405`) carries the same single-`--db`
-shape -- `TSQLiteSymbolStore.Create(AArgs.DbPath)`, one store, no
-`ResolveConsumerDbs`. It was not measured or touched. Its `UsedUnits` set has
-the identical hiding property described above (the `AlreadyUsed` +1000 scoring
-term at `:3472` is inert whenever the `--in` file is not in the store being
-scanned).
+`DoResolveUses` carried the identical shape --
+`TSQLiteSymbolStore.Create(AArgs.DbPath)`, one store, no `ResolveConsumerDbs` --
+in the verb `docs\AI-USAGE.md` names as THE way to ask "which unit do I add to
+my uses clause?".
+
+**And it mattered more here than the order-dependence alone suggests.** The
+already-imported set comes from the `--in` file's own uses rows, which exist
+only in the store that INDEXES that file. Ask a library-only index and
+`InFileId` is 0, the set stays EMPTY, and every candidate silently collects the
+"not already used" **+1000** bonus -- so a unit the caller ALREADY imports is
+ranked and offered as a fresh add. That reads as a plausible answer, not an
+error, which is how it survived.
+
+Why it survived a test, specifically: the only existing coverage was
+`tests\fixtures\T_resolve_uses.bat` -- a `.bat`, so **the battery never ran it**
+(the battery collects `run_*.ps1`), pointing at the retired Win32
+`third_party\dll\drag-lint.exe` path, and putting BOTH units in ONE db, which is
+exactly the configuration where the bug cannot appear.
+
+Fixed the same way as `find-unit`, with the two facts gathered from different
+places on purpose: declarations from every store (each symbol's path resolved
+through the store that OWNS it, since file ids are per-DB), and the
+already-imported set from whichever store contains `--in`. Also switched to
+`OpenReadOnlyStore` -- a read-only query verb should not `Migrate`, and
+migrating several indexes to answer one question would be worse.
+
+Covered by `tests\autotest\run_resolve_uses_multidb.ps1`, **RED on 4 asserts**
+against the unfixed build. Its positive control is `<already in uses>` across
+two databases, unsatisfiable by any single-store implementation. Note that on
+the unfixed build the two NEGATIVE assertions ("not suggested", "not told it
+already uses it") pass VACUOUSLY -- nothing is found at all -- which is exactly
+why each is paired with a positive one.
+
+**The old `.bat` fixture is left in place and still stale**, and counting it
+turned out to be worth doing: there are **68 `.bat` tests under `tests\`, none
+of which the battery runs**, and **43 of them point at the retired Win32
+`third_party\dll\drag-lint.exe`, which still exists and still runs**. Filed
+separately as `INBOX-68-bat-tests-are-invisible-to-the-battery.md`. Until that
+is dealt with, anything covered only by a `.bat` under `tests\` is effectively
+uncovered -- `resolve-uses` is the proof.

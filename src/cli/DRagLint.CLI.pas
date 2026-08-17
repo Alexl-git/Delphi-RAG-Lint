@@ -3402,33 +3402,86 @@ begin
     Writeln('  Finds which unit(s) define <Symbol> and ranks which to add to ' + 'your uses clause.'                       );
     Exit(2);
   end;
-  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
+  { INBOX find-unit-silently-uses-only-the-last-db, "Related, unexamined". This
+    carried the SAME defect `find-unit` did (16456a2): it opened `AArgs.DbPath`,
+    the LAST `--db`, while ParseArgs accepted every earlier one and appended it
+    to DbPaths. Every earlier `--db` was silently discarded, so the answer to
+    "which unit do I add to my uses clause?" -- which AI-USAGE names this verb as
+    THE way to ask -- depended on the order of flags a caller has every reason to
+    think are commutative.
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+    It matters here for a second reason `find-unit` did not have: THE
+    `AlreadyUsed` TERM WAS INERT ON THE CONFIGURATION PEOPLE USE. The
+    already-imported set is built from the `--in` file's own uses rows, which
+    only exist in the store that INDEXES that file. Ask a library-only index and
+    `InFileId` is 0, the set stays EMPTY, and every candidate silently collects
+    the "not already used" +1000 bonus -- so a unit the caller ALREADY imports is
+    ranked and suggested as a fresh add. The failure looks like a plausible
+    answer, not like an error.
 
-  Syms:= Store.FindSymbolsByExactName(AArgs.Name);
+    So the two facts are gathered from different places, deliberately: the
+    already-imported set from whichever store contains `--in`, and the
+    declarations from every store. `GetFilePath` must go against the store that
+    owns each symbol, because file ids are per-DB -- hence the parallel
+    SymPaths array rather than a single `Store`.
+
+    OpenReadOnlyStore rather than Create+Migrate, which is what the single-store
+    form did: a read-only query verb should not migrate, and migrating each of
+    several indexes to answer one question would be worse still. }
+  var PathsToScan: TArray<string>:= ResolveConsumerDbs(AArgs);
+  var AnyDb: Boolean:= False;
+  var SymPaths: TArray<string>:= nil;
+  Syms:= nil;
 
   UsedUnits:= TDictionary<string, Boolean>.Create;
   Map      := TDictionary<string, Integer>.Create;
   try
-    { units already imported by the caller (from the index, not re-parsed) }
-    if AArgs.InFile <> '' then
+    var UsesLoaded: Boolean:= False;
+    for var DbP in PathsToScan do
     begin
-      InFileId:= Store.FindFileIdByPath(TPath.GetFullPath(AArgs.InFile));
-      if InFileId <= 0 then InFileId:= Store.FindFileIdByPath(AArgs.InFile);
-      if InFileId > 0 then begin UU:= Store.GetUnitUsesForFile(InFileId); for U in UU do UsedUnits.AddOrSetValue(LowerCase(U.UnitName), True); end;
+      if not TFile.Exists(DbP) then Continue;
+      AnyDb:= True;
+      var RoOk: Boolean;
+      Store:= OpenReadOnlyStore(DbP, RoOk);
+      if (not RoOk) or (Store = nil) then Continue; { stale DB reported; scan the rest }
+      for S in Store.FindSymbolsByExactName(AArgs.Name) do
+      begin
+        Syms    := Syms     + [S];
+        SymPaths:= SymPaths + [Store.GetFilePath(S.FileId)];
+      end;
+      { units already imported by the caller (from the index, not re-parsed).
+        UsesLoaded, not `UsedUnits.Count = 0`: a file that genuinely imports
+        nothing is a real answer, and testing the count would keep re-asking
+        every later store for it. }
+      if (AArgs.InFile <> '') and not UsesLoaded then
+      begin
+        InFileId:= Store.FindFileIdByPath(TPath.GetFullPath(AArgs.InFile));
+        if InFileId <= 0 then InFileId:= Store.FindFileIdByPath(AArgs.InFile);
+        if InFileId > 0 then
+        begin
+          UU:= Store.GetUnitUsesForFile(InFileId);
+          for U in UU do UsedUnits.AddOrSetValue(LowerCase(U.UnitName), True);
+          UsesLoaded:= True;
+        end;
+      end;
+    end;
+    if not AnyDb then
+    begin
+      Writeln('ERROR: database not found: ', AArgs.DbPath);
+      Writeln('Run "drag-lint index <path>" first.');
+      Exit(2);
     end;
 
     SetLength(Hits, 0);
-    for S in Syms do
+    for var K:= 0 to High(Syms) do
     begin
+      S:= Syms[K];
       if (AArgs.Kind <> '') and not SameText(S.Kind.ToText, AArgs.Kind) then Continue;
       { Unit name = the .pas file's basename stem.  Delphi requires the unit
         name to equal the file name, and this is correct for DOTTED unit names
         (Blueprint4.Interfaces.pas -> "Blueprint4.Interfaces"), unlike taking
         the first segment of the qualified name. }
-      FilePath:= Store.GetFilePath(S.FileId);
+      FilePath:= SymPaths[K];
       UnitName:= ChangeFileExt(ExtractFileName(FilePath), '');
       if UnitName = '' then
       begin
