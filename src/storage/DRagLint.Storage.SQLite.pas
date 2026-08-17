@@ -2999,6 +2999,55 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_facts_symbol ON symbol_facts(symbol_id)'          );
   TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_docs_symbol  ON symbol_docs(symbol_id)'           );
 
+  { QUERY STATISTICS. Without sqlite_stat1 the planner has no selectivity data
+    and picks a join order from built-in heuristics -- which are version
+    dependent, and drag-lint loads sqlite3.dll DYNAMICALLY, so the engine
+    deciding this is whatever is on PATH rather than something this repo pins.
+
+    MEASURED 2026-08-16, and the reason this is here. doc-drift's
+    FindUnresolvedNameCallers cost 269 s of a 530 s lint-all on ORM3 -- 51% of
+    the entire run, ~62 ms per call. The IDENTICAL SQL replayed against the same
+    DB through an external SQLite measured ~0.74 ms per call: a consistent ~80x
+    gap that grows with row volume, which is a PLAN difference rather than
+    per-call overhead. The only plan reproducing the observed magnitude drives
+    `refs` by idx_refs_file over the reach set instead of by the name index
+    (121.5 s for the same workload). NO DB IN THIS TREE HAD sqlite_stat1 --
+    verified on both the ORM3 and DataCopy indexes.
+
+    analysis_limit=400 is SQLite's own recommended bounded ANALYZE: it samples
+    rather than scanning every index end to end, so this stays in the seconds
+    even on the 2.3 GB library index. Without the limit, ANALYZE on that DB is
+    itself a long operation and would trade one stall for another.
+
+    Guarded on absence, not run unconditionally: statistics only need
+    re-gathering when the shape of the data changes, and Migrate runs on EVERY
+    open. `PRAGMA optimize` after a large reindex is the natural place to refresh
+    them, which is a separate change.
+
+    TryExec throughout, so a READ-ONLY open simply fails these harmlessly rather
+    than turning a query into an error. }
+  begin
+    var StatQ: TFDQuery:= TFDQuery.Create(nil);
+    var HaveStats: Boolean:= False;
+    try
+      StatQ.Connection:= FConn;
+      StatQ.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE name = ''sqlite_stat1'' LIMIT 1';
+      try
+        StatQ.Open;
+        HaveStats:= not StatQ.IsEmpty;
+      except
+        HaveStats:= True; { cannot tell -> do not attempt a write }
+      end;
+    finally
+      StatQ.Free;
+    end;
+    if not HaveStats then
+    begin
+      TryExec('PRAGMA analysis_limit=400');
+      TryExec('ANALYZE');
+    end;
+  end;
+
   { STAMP THE VERSION LAST -- this is the real commit point of the migration.
     Everything above is idempotent (CREATE ... IF NOT EXISTS, plus TryExec'd
     ALTERs that swallow "duplicate column") and Migrate runs on EVERY open, so
@@ -4123,7 +4172,27 @@ begin
              '  SELECT :tf ' +
              '  UNION ' +
              '  SELECT u.file_id FROM unit_uses u JOIN reach ON u.target_file_id = reach.fid) ';
-    ScopeP:= '  AND r.file_id IN (SELECT fid FROM reach) ';
+    { The unary `+` is a PLAN PIN, not arithmetic. SQLite treats `+expr` as
+      semantically identical to `expr` but refuses to use an index on it, so
+      this term can no longer be chosen as the DRIVER for `refs`.
+
+      WHY IT IS NEEDED (measured 2026-08-16). On ORM3 this routine cost 269 s of
+      a 530 s lint-all -- 51% of the whole run -- at ~62 ms per call, while the
+      identical SQL replayed against the same DB through an external SQLite
+      measured ~0.74 ms per call. A consistent ~80x gap that grows with row
+      volume is a PLAN difference, not per-call overhead.
+
+      The only plan that reproduces the observed magnitude drives `refs` by
+      `idx_refs_file` over the reach set (measured 121.5 s for the same workload)
+      instead of by `idx_refs_name_nocase` on the name. Two things let a planner
+      make that choice: the DB carries NO `sqlite_stat1` (nothing has ever run
+      ANALYZE, so selectivity is guessed from heuristics), and the engine is a
+      DYNAMICALLY LOADED sqlite3.dll whose version is whatever is on PATH. Both
+      halves are now addressed -- see the ANALYZE in FinalizeIndex for the other.
+
+      The CTE itself was the original suspect and is NOT the cost: removing it
+      entirely saves ~6 s of the 269 s. Recorded so nobody re-optimises it. }
+    ScopeP:= '  AND +r.file_id IN (SELECT fid FROM reach) ';
   end
   else
   begin
@@ -5600,6 +5669,16 @@ begin
       R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
       if not Q.FieldByName('enclosing_symbol_id').IsNull then
         R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt; // v13
+      { v(2026-08-16): carry receiver_text. It was left empty here while the
+        column has existed since v20, and the omission is not cosmetic -- it is
+        what lets a caller distinguish `Self.Run` (a QUALIFIED call, receiver
+        'Self') from `Register(Pred)` (a bare pass, no receiver). find-callers
+        --resolved needs exactly that to report callback reaches without
+        mislabelling ordinary member calls. FindField, not FieldByName, so a
+        pre-v20 DB yields '' instead of raising. }
+      var RcvF: TField:= Q.FindField('receiver_text');
+      if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString
+      else R.ReceiverText:= '';
       R.ContextText:= ''; // v0.17: initialize context (unless set by FindCallersByNameWithContext)
       List.Add(R);
       Q.Next;

@@ -253,6 +253,15 @@ type
     // indexer (per-file attribution) and read back by the ref-reading store
     // methods (NULL -> 0). Distinct from SymbolId (the ref's target slot).
     EnclosingSymbolId: Int64;
+    // v(2026-08-16): the text before the dot at this ref's site -- 'Self' for
+    // `Self.Run`, 'B' for `B.Run`, '' for a bare `Run` or for a routine passed
+    // by name. The refs table has carried receiver_text since v20; TReference
+    // simply never surfaced it, and that gap is not cosmetic: it is the only
+    // thing distinguishing a QUALIFIED member access from a BARE pass, which is
+    // what find-callers --resolved needs to report a callback reach without
+    // mislabelling `Self.Run` as one. Populated by the ref-reading store
+    // methods; '' when the column is absent (pre-v20 DB) or NULL.
+    ReceiverText: string;
   end;
 
   /// <summary>v14 (D5): one resolved call-site edge, written by the

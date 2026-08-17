@@ -3713,9 +3713,29 @@ begin
               Break;
             end;
           if NameIsRoutine then
-            for var CbRef in Store.FindCallersByName(AArgs.Name) do
+          begin
+            { A CALL AT THE SAME SITE means the `read` is part of an ordinary
+              invocation, not a callback pass. `Self.Run` emits THREE refs at
+              one line -- 'call' (receiver Self), 'member-access' (receiver
+              Self), and a 'read' whose receiver is NULL -- so neither the kind
+              nor the receiver alone can tell it from `Register(Pred)`. The
+              position can: a genuine callback has no call of the SAME NAME at
+              its own line, because the call there is to the routine being
+              handed the reference.
+
+              Caught by run_find_callers_resolved.ps1, which asserts every row
+              is certain|ambiguous; a first attempt filtered on receiver_text
+              and let Self.Run through, because that ref's receiver is NULL. }
+            var CallSites: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+            try
+              var CbAllRefs:= Store.FindCallersByName(AArgs.Name);
+              for var PosRef in CbAllRefs do
+                if (PosRef.Kind = 'call') or (PosRef.Kind = 'member-access') then
+                  CallSites.AddOrSetValue(Format('%d:%d', [PosRef.FileId, PosRef.StartLine]), True);
+            for var CbRef in CbAllRefs do
             begin
               if CbRef.Kind <> 'read' then Continue;
+              if CallSites.ContainsKey(Format('%d:%d', [CbRef.FileId, CbRef.StartLine])) then Continue;
               var CbWhere: string:= Store.GetFilePath(CbRef.FileId);
               var CbWho  : string:= '';
               if CbRef.EnclosingSymbolId > 0 then
@@ -3736,6 +3756,10 @@ begin
                   [CbWho, ExtractFileName(CbWhere), CbRef.StartLine]));
               Inc(TotalCallers);
             end; // for CbRef
+            finally
+              CallSites.Free;
+            end; // try
+          end; // if NameIsRoutine
         end; // for DbPath
         if AArgs.AsJson then Writeln(JOut.Format(2))
         else if TotalCallers = 0 then Writeln('0 caller(s)');
