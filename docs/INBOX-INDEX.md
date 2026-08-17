@@ -93,9 +93,19 @@ launched unattended and harvested later) ·
 `index-runs-are-not-resumable` (**CORRECTNESS HALF FIXED 2026-08-16** -- the
 fingerprint was stamped BEFORE the walk, so a killed run silently kept stale
 parses; now committed only on completion. Per-file resume still open) ·
-`codelens-cache-has-no-eviction` (confirmed unbounded -- `Clear` and a per-file
-`Remove`, no size bound; lives in the IDE plugin BPL, which needs a build with
-the IDE closed).
+~~`codelens-cache-has-no-eviction`~~ **RETIRED 2026-08-16 (session 23)** -- capped
+at 32 with LRU eviction (`5f62f21`), 26-assertion console test, and BOTH
+design-time BPLs rebuilt with the IDE closed (`a9b587a`). In-IDE behaviour
+remains unverified; the binary is current.
+
+`callback-pass-is-a-ref-but-not-a-call-edge` **(NEW 2026-08-16)** -- a routine
+passed by bare name as a callback produces a `refs.kind='read'` row but NO
+`call_edges` row, so `find-callers --name` reports 1 caller and
+`find-callers --resolved` reports 0 for the same live predicate. `--resolved` is
+documented as the *precise* query, so a caller trusting it concludes a live
+callback is dead. **Needs an owner ruling** on whether `call_edges` may carry a
+non-call edge, or whether `--resolved` should union in the ref rows under a
+`[callback]` marker (probably the latter). Cost S.
 
 ## Open -- not defects, kept here deliberately
 
@@ -115,7 +125,10 @@ now ALL CLOSED (session 23)** -- 2.7 was disproved as stale by a new suite,
 2.8's exit-code contract was documented AND corrected (usage is 2 and fatal is 3,
 not the recorded "2 = usage" alone), the rest verified live. The note stays open
 for exactly one thing: 2.5's `--framework vcl|fmx` tie-break, which is an OWNER
-RULING, not engine debt)
+RULING, not engine debt -- **ANSWERED 2026-08-16: the tie is LIBRARY-ONLY (a
+project DB returns 0 rows for `TEdit`), and the framework is derivable from the
+project's own `uses` -- DataCopy 25 `Vcl.*` / 0 `FMX.*`. So the fix is to derive
+context, not to add a `--framework` flag and rule on a default**)
 · `ide-lsp-ram-and-shim-todo` (items 3-4 still blocked on the IDE being
 startable; §1.1's ask **folded into the union design 2026-08-16**, correcting a
 wrong premise there) · `yadf-share-review-marker-hash` (owner request for a

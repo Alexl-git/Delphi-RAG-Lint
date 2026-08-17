@@ -15,11 +15,35 @@
 > | 2.10 case-sensitive `--name` | FIXED. Exact-then-NOCASE retry with a `--case-sensitive` opt-out. |
 > | 2.11 strong type aliases | FIXED. Verified live: `TFileName` -> `System.SysUtils.TFileName : string`, `TCaption` -> `Vcl.Controls.TCaption : string`. Root cause was the 2.1 shape exactly -- the strong form carries TWO `type:` fields, the `(kType)` keyword first and the real target second, so reading the first via `ChildByField` found a keyword and bailed. Fix takes the LAST `type:` wrapper (`Parser.Delphi13.pas:943-977`), gated on `kType` so it can only ADD rows. Covered by `run_type_decl_shapes.ps1`. |
 >
-> **WHY THIS NOTE STAYS OPEN -- one owner ruling, not an engine defect.** 2.5's
-> product half asks for a `--framework vcl|fmx` hint so a same-named VCL and FMX
-> type do not tie. That is a small post-filter, but which framework wins by
-> default is a product decision. **Do not invent it silently.** Everything else
-> here is discharged.
+> **2.5's product half -- OWNER ANSWERED 2026-08-16, and a flag is the wrong shape.**
+>
+> The owner asked where the tie even comes from, library scan or project, and
+> pointed out that a project already knows its framework from its `uses` clauses.
+> Measured, that is exactly right:
+>
+> ```
+> query --name TEdit --db library-Win64.sqlite  -> 2 rows: FMX.Edit.TEdit, Vcl.StdCtrls.TEdit
+> query --name TEdit --db DataCopy.sqlite       -> 0 rows
+> ```
+>
+> **The tie is LIBRARY-ONLY.** A project DB holds only the project's own code, so
+> it never contains either `TEdit` and the ambiguity cannot arise there. It arises
+> when a tool asks the LIBRARY index for a bare class name with no project
+> context -- and the library index legitimately carries both frameworks because
+> the IDE Library Path does.
+>
+> And the context is derivable rather than declarable: DataCopy has **25 `Vcl.*`
+> references and 0 `FMX.*`**; YADF, **18 and 0**. A consumer that already knows
+> which project it is converting can filter on the frameworks that project's
+> units actually use, with no new flag and no default to rule on.
+>
+> So the remaining work is NOT "pick VCL or FMX by default". It is: when a project
+> context is available, derive the framework from `unit_uses` and prefer matching
+> declarations; when it is not, keep reporting the tie as today. That is an
+> ordinary engine change with no product ruling attached, and it supersedes the
+> `--framework vcl|fmx` flag this note asked for.
+>
+> Everything else in 2.4-2.11 is discharged.
 >
 > ---
 >

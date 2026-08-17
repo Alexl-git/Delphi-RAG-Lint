@@ -1,3 +1,26 @@
+> # CLOSED 2026-08-16 (session 23) -- bounded, tested, and BOTH BPLs rebuilt.
+>
+> `TDragLintCodeLensCache` is now capped at `CODELENS_MAX_FILES` (32) with
+> least-recently-used eviction, touched on BOTH paint (`GetForLine`) and
+> activation (`PopulateOnce`). Commit `5f62f21`.
+>
+> Two correctness details the bound exposed: `StoreForFile` must free the map it
+> replaces (or the overwrite leaks exactly what the cap bounds), and
+> `InvalidateFile` must drop the ORDER entry unconditionally (a stale one would
+> later be chosen as a victim, evict nothing, and let the cache grow past the cap).
+>
+> Test `tests\CodeLensCacheLruTests.dpr`, 26 assertions, run by
+> `tests\plugin\run_codelens_cache_lru.ps1`. Every eviction assertion is paired
+> with a retrievability assertion, because "FileCount <= MaxFiles" is satisfied by
+> a cache that stores nothing. The LRU-vs-FIFO pair was CONFIRMED RED: with
+> touch-on-read neutralised and rebuilt, exactly those two fail and the other 24
+> pass.
+>
+> **The "needs the IDE closed" blocker is discharged.** RAD Studio was confirmed
+> closed and BOTH design-time packages were rebuilt (`a9b587a`) -- 37.0 registers
+> a 32-bit and a 64-bit IDE separately (`Known Packages` / `Known Packages x64`),
+> and the Win32 copy had been stale since 2026-08-13 because `_bpl_build.bat`
+> only builds Win64. In-IDE BEHAVIOUR is still unverified; the binary is current.
 # INBOX -> drag-lint engine team: CodeLens cache has no eviction (32-bit IDE RAM)
 
 **From:** graph-viewer workstream
