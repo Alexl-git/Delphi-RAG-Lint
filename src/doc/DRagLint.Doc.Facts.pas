@@ -1778,7 +1778,21 @@ var
   // Map one resolved-caller row to a display ref. Display is the enclosing
   // routine's qualified name (or the same fallback the name-based path used when
   // the ref has no enclosing symbol); Location is already file-name-only.
-  function ToFactRef(const ARC: TResolvedCaller): TDocFactRef;
+  { AOwningStore is THE STORE ARC CAME FROM, and it is a parameter rather than a
+    closure over AStore because those are not always the same store.
+
+    ARC.EnclosingSymbolId is a per-DB key. This function used to read AStore --
+    the PRIMARY store -- unconditionally, including for rows produced by the
+    extra-store fan-out below, whose ids belong to an ExStore. Symbol ids are
+    numbered per database, so that id names a DIFFERENT symbol in the primary
+    store, and OverloadArityTag would happily answer about it: a cross-DB caller
+    could be rendered with an overload tag ('/3') computed from an unrelated
+    routine, or lose a tag it should have had.
+
+    Silent by construction -- the id is always valid in SOME store, so nothing
+    fails; the suffix is just wrong. Found 2026-08-16 while measuring
+    OverloadArityTag, which is what made the cross-store call visible at all. }
+  function ToFactRef(const AOwningStore: ISymbolStore; const ARC: TResolvedCaller): TDocFactRef;
   begin
     Result:= Default(TDocFactRef);
     Result.Display:= ARC.EnclosingQName;
@@ -1796,7 +1810,7 @@ var
     // that names only that name cannot say WHICH overload -- and on a delegating
     // pair (the shape B1 fixes) it reads as self-recursion.
     if Result.Display <> 'declaration' then
-      Result.Display:= Result.Display + OverloadArityTag(AStore, ARC.EnclosingSymbolId);
+      Result.Display:= Result.Display + OverloadArityTag(AOwningStore, ARC.EnclosingSymbolId);
     Result.Location  := ARC.Location;
     Result.Confidence:= ARC.Confidence;
   end;
@@ -1904,7 +1918,7 @@ begin
     ResCallers:= AStore.FindResolvedCallers(ASym.Id);
     for RC in ResCallers do
     begin
-      FR:= ToFactRef(RC);
+      FR:= ToFactRef(AStore, RC); { primary store's rows -> primary store's ids }
       AddDistinct(FR);
     end;
     Inc(GBResolved, BTick - TB0);
@@ -1990,7 +2004,7 @@ begin
       Inc(GCUnresPrimary);
       for RC in ResCallers do
       begin
-        FR:= ToFactRef(RC);
+        FR:= ToFactRef(AStore, RC); { primary store's rows -> primary store's ids }
         FR.Confidence:= 'unverified'; // enforce the '?' marker regardless of store value
         AddDistinct(FR);
       end;
@@ -2042,7 +2056,11 @@ begin
       Inc(GCUnresExtra);
       for RC in ResCallers do
       begin
-        FR:= ToFactRef(RC);
+        { THE FIX: ExStore, not AStore. These rows came from the extra store, so
+          their EnclosingSymbolId is only meaningful there -- handing the primary
+          store that id had OverloadArityTag answer about whichever unrelated
+          symbol happened to hold the same number. }
+        FR:= ToFactRef(ExStore, RC);
         FR.Confidence:= 'unverified';
         AddDistinct(FR);
       end;
