@@ -24,6 +24,54 @@ either already has in the AST or already has in the index.
 
 The table is ordered by findings-removed per unit of work.
 
+> # RE-MEASURED 2026-08-16 (session 23): FIVE of the ten items now fire ZERO times.
+>
+> Measured across ALL FOUR consumer projects (DataCopy + YADF + YADFOT +
+> YADFSetup) with the current engine, counting findings by rule id:
+>
+> | # | Rule | note said | measured 2026-08-16 | verdict |
+> |---|---|---|---|---|
+> | 1 | `sql-injection-concat` | 1+ | **0** | STALE |
+> | 2+6 | `object-leak` (A and B) | ~25 | **1** | all but one gone |
+> | 3 | `used-before-assignment` | 7 | **0** | STALE (already known) |
+> | 4 | `unused-parameter` | 7 | **1** | DONE this session; the 1 is a TRUE positive |
+> | 5 | `try-except-swallowed` | 38 | **0** | STALE -- the single largest item on the list |
+> | 7 | `length-zero-compare` | 1+ | **0** | STALE |
+> | 8 | `concat-in-loop` | 15+ | **0** | STALE |
+> | 9 | `unused-public-symbol` | 5+ | **12** | THE LIVE ONE -- see below |
+> | 10 | `field-name-prefix` | 6 | **2** | small, and they are TRUE positives |
+>
+> **This list is now essentially one item.** Items 1, 3, 5, 7 and 8 fire nothing
+> on any consumer project, so there is no false positive left to harden away;
+> whatever fixed them did so as a side effect of other work. They are recorded as
+> stale rather than deleted, because a rule at zero today can return.
+>
+> **Item 9 is the only substantial one, and it is already partly handled.** All
+> 12 break down as:
+> * **9 in the YADF family, every one on a SHARED unit**, and the message already
+>   says so: *"Its unit is shared with YADF, YADFOT, YADFSetup -- check there
+>   before treating it as dead."* Severity is already `hint`. Checked by hand:
+>   **8 of the 9 are alive in a sibling project** (`EmitTokens`, `EncodingOf`,
+>   `DetectSourceEncoding`, `RenderGroupTree`, `SaveOptionsToIni` all have real
+>   call sites in `YadfMain.pas` / `YADFOT.Wizard.pas` / `YADF.OptionsFrame.pas`),
+>   and **`OptionsHelpText` is genuinely dead everywhere** -- 2 textual hits, both
+>   in its own unit. It is reported once per project, so it accounts for 3 of
+>   the 9.
+> * **3 in DataCopy** (`uFileUtils.pas`: `IsValidFileNameChar`, `IsPathDirectory`,
+>   `GetSkinInfo`) with no shared-unit caveat -- possible dead public API.
+>
+> So the remaining engine work is narrow: for a unit whose `dl:shared` header
+> NAMES its sibling projects, consult those siblings' DBs before reporting. That
+> is a DECLARED relationship read out of the source, not a blind name match
+> across the manifest, so it does not violate the authoritative-set rule that
+> forbids passing unrelated project DBs. It would take the 9 down to 3, and those
+> 3 are a source decision (delete `OptionsHelpText` or mark it).
+>
+> **Item 10's two findings are not false positives**: DataCopy's
+> `uMainZeissCopy.pas:1398-1399` declare private fields `Logger` and `TRLogger`
+> without the `F` prefix, in a hand-written class. The fix is two renames in
+> consumer source, not a rule change.
+
 | # | Rule | Findings | Cause | Needs | Cost |
 |---|---|---|---|---|---|
 | 1 | `sql-injection-concat` | 1+ | English prose matched a SQL keyword | regex only | XS |

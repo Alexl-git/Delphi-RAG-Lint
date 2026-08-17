@@ -2306,6 +2306,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveTypeSymbolId(const AName: string; AFileId: Int64): Int64;
+      /// <summary>EVERY class/interface/record symbol id carrying AName, the
+      /// AFileId-scoped one first.</summary>
+      /// <param name="AName">Bare type name; matched case-insensitively.</param>
+      /// <param name="AFileId">File whose own definition should be tried first;
+      /// pass 0 for "no file context" (e.g. the library store).</param>
+      /// <returns>Candidate ids, possibly empty. Never nil-checks the caller.</returns>
+      /// <remarks>The plural counterpart to ResolveTypeSymbolId, for ancestry
+      /// questions where taking the FIRST name match lets an unrelated type decide
+      /// the answer -- a RECORD named TTimer shadowed Vcl.ExtCtrls.TTimer in the
+      /// Win32 library index and made every owned TTimer read as a leak. See the
+      /// implementation comment.</remarks>
+      function TypeCandidateIds(const AName: string; AFileId: Int64): TArray<Int64>;
       // v11 (M1): depth-capped alias-chasing core of ResolveTypeCategory.
       /// <summary><!-- drag-lint:auto -->v11 (M1): depth-capped alias-chasing core of
       /// ResolveTypeCategory.</summary>
@@ -8776,16 +8788,58 @@ begin
     end;
 end;
 
+{ EVERY type candidate for AName, file-scoped one first.
+
+  WHY THIS EXISTS RATHER THAN ResolveTypeSymbolId. That function answers "which
+  ONE symbol is this type name", and for an ancestry question that is the wrong
+  primitive: it takes the FIRST class/interface/record it meets, and a name
+  collision then decides the answer by index order.
+
+  Measured 2026-08-16. `library-Win32.sqlite` holds THREE TTimer symbols --
+  `DosCommand.TTimer` (a RECORD), `FMX.Types.TTimer`, `Vcl.ExtCtrls.TTimer` --
+  and the record sorts first. So IsDescendantOf('TTimer','TComponent') resolved
+  to the record, whose ancestor set is empty, and returned False. A record cannot
+  descend from anything, so the question was answered by a symbol that could
+  never have said yes.
+
+  The consumer symptom: `LTimer := TTimer.Create(LDlg)` in DataCopy was reported
+  as a possible object leak, even though the source says in as many words that
+  the timer is owned by the dialog. ConstructorTransfersOwnership was correct;
+  the ancestry lookup underneath it was not. Win64 was unaffected only because
+  DosCommand is a Win32-only library path, which is exactly the kind of accident
+  that makes a bug look platform-specific when it is not.
+
+  ANY candidate matching is the right answer here. With several distinct types
+  sharing a name and no way to tell which the call site meant, "some type called
+  TTimer is a TComponent" is the honest reading, and for a leak rule it is also
+  the conservative one -- a false suppression costs a missed leak report, a false
+  positive costs the rule its credibility on correct code. }
+function TSQLiteSymbolStore.TypeCandidateIds(const AName: string; AFileId: Int64): TArray<Int64>;
+var
+  Cands: TArray<TSymbol>;
+  S    : TSymbol        ;
+begin
+  Result:= nil;
+  Cands := FindSymbolsByExactName(AName);
+  { file-scoped candidate first -- it is the one the call site most likely meant }
+  if AFileId > 0 then
+    for S in Cands do
+      if (S.Kind in [skClass, skInterface, skRecord]) and (S.FileId = AFileId) then
+        Result:= Result + [S.Id];
+  for S in Cands do
+    if (S.Kind in [skClass, skInterface, skRecord]) and not ((AFileId > 0) and (S.FileId = AFileId)) then
+      Result:= Result + [S.Id];
+end;
+
 function TSQLiteSymbolStore.IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
 var
   StartId: Int64                ;
   A      : TTypeAncestor        ;
 begin
   Result := False;
-  StartId:= ResolveTypeSymbolId(AClassName, AFileId);
-  if StartId <= 0 then Exit;
-  for A in GetTransitiveAncestors(StartId) do
-    if SameText(A.Name, AAncestorName) then Exit(True);
+  for StartId in TypeCandidateIds(AClassName, AFileId) do
+    for A in GetTransitiveAncestors(StartId) do
+      if SameText(A.Name, AAncestorName) then Exit(True);
 end;
 
 function TSQLiteSymbolStore.ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
@@ -8794,10 +8848,9 @@ var
   A      : TTypeAncestor        ;
 begin
   Result := False;
-  StartId:= ResolveTypeSymbolId(AClassName, AFileId);
-  if StartId <= 0 then Exit;
-  for A in GetTransitiveAncestors(StartId) do
-    if SameText(A.Name, AInterfaceName) and SameText(A.Kind, 'interface') then Exit(True);
+  for StartId in TypeCandidateIds(AClassName, AFileId) do
+    for A in GetTransitiveAncestors(StartId) do
+      if SameText(A.Name, AInterfaceName) and SameText(A.Kind, 'interface') then Exit(True);
 end;
 
 function TSQLiteSymbolStore.FindDescendantNames(const AAncestorName: string): TArray<string>;
