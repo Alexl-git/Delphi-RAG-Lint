@@ -47,13 +47,29 @@
 >   stderr file that stayed at **0 bytes until the process exited**, so a slow
 >   run and a hung run were again indistinguishable from outside.
 >
->   **Do not carry the note's stated cause forward unverified.** It says
->   "stdout is block-buffered when redirected", i.e. blames the engine. What was
->   actually observed this session was PowerShell's `2>` file redirection
->   behaving that way, and those are different culprits with different fixes
->   (an explicit flush per file in the engine, versus how the harness redirects).
->   **Measure which before changing either** -- this note has already had one
->   stated mechanism turn out to be wrong, and the sibling perf note had four.
+>   **MEASURED 2026-08-17: the note's stated cause is WRONG. It is PowerShell,
+>   not the engine.**
+>
+>   The engine already flushes stdout once per file -- `Flush(Output)` at
+>   `src\core\DRagLint.Core.Indexer.pas:1176`, guarded by
+>   `tests\autotest\run_index_progress_flush.ps1`. The stderr counter
+>   (`Indexer.pas:614/620`) has no flush, but the RTL's 128-byte buffer bounds
+>   its lag to 2-3 lines.
+>
+>   Same 52 s index, both redirections, sizes polled every second:
+>
+>   ```
+>   cmd.exe    > 2>   out.log 128 -> 765 -> 2230 bytes within 4 s; err.log grew from t=1 s
+>   PowerShell > 2>   out.log 0 until an 8192-byte block
+>                     err.log 0 BYTES FOR THE WHOLE RUN, 4462 at exit
+>   ```
+>
+>   PowerShell holds all native stderr to process exit -- exactly the ORM3
+>   symptom. **The fix is in the HARNESS** (redirect long runs via `cmd.exe` or
+>   `Start-Process -RedirectStandardError`), not in the engine. An optional
+>   `Flush(ErrOutput)` after `:620` is secondary.
+>
+>   Once that is written down in the runner docs, **this note closes.**
 >
 > ---
 >

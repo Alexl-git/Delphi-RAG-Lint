@@ -1,9 +1,17 @@
 # Session 25 implementation plan
 
 Built from five parallel investigations (2026-08-17), each told to **re-measure
-rather than trust its note**. That instruction paid: two of the seven notes had
-materially wrong framing, and one of my own shipped features turned out to be
-silently disabled on the path it was built for.
+rather than trust its note**. That instruction paid: **three** of the seven notes
+had materially wrong framing, one was assumed stale and is in fact live and
+reproducible, and one of my own shipped features turned out to be silently
+disabled on the path it was built for.
+
+Corrected framings, so nobody re-derives them:
+* `buildfor-defaulted-args` -- checker and repairer AGREE; only `AExtraStores` is real.
+* `ide-lsp-ram-and-shim-todo` -- "IDE-blocked" is half true; two items are headless now.
+* `index-runs-are-not-resumable` -- the buffering cause is **PowerShell, not the engine**.
+* `incremental-index-hangs-on-large-db` -- **live, reproduced today**, and it is a
+  silent 37-minute whole-DB pass, not a hang.
 
 **Ordering principle:** verified-tight windows before big unattributed pools.
 This session lost three prior sessions to a timer that enclosed more than its
@@ -48,7 +56,35 @@ of one-time re-parse. Options are in the note; do not pick from the note alone.
 return `''`. Assert instead that indexing by each entry point in turn causes
 **no re-parse on the second run** (`skipped N up-to-date`, N = file count).
 
-### A3. YADF review-marker helper -- share it WITHOUT touching the normaliser (~2-3 h)
+### A3. Announce the WHOLE-DB calls resolve BEFORE it runs (~1 h)
+
+`INBOX-incremental-index-hangs-on-large-db.md` -- **still live, and REPRODUCED
+2026-08-17**, which contradicts any assumption that it had gone stale.
+
+Indexing 84 new files into a scratch copy of `library-Win64.sqlite` (2.3 GB): the
+walk completed, ancestry 16.7 s, helpers 12.9 s, then **CPU-bound for 450 s+ in
+the calls resolve** (9.9 s CPU per 10 s wall) and was killed at 8 minutes.
+
+**Mechanism, and it is not a hang.** New units introduce new type names, so
+`ScopedResolveIsSound` fails its type-equality gate
+(`Storage.SQLite.pas:3949-3951`) and the run silently falls back to a WHOLE-DB
+calls resolve over 3.4 M refs -- a cost the code itself documents as **"37
+MINUTES on a 2 GB index"** (`Storage.SQLite.pas:8712-8714`).
+
+The refuted O(corpus) affected-set claim **stays refuted**: this is the GATE, not
+the set. Do not resurrect it.
+
+**Smallest fix, and it is diagnosis rather than optimisation:** print
+"WHOLE DB + reason" on stderr **before** the pass. Today the scoped/whole line
+(`:8843` / `:8846`) prints only *after* it finishes, so a 37-minute pass is
+indistinguishable from a hang while it runs -- which is exactly how this note
+came to be filed. Positive control: the unfixed build lacks the announce line.
+
+Larger, separate, correctness-sensitive: relax the gate for pure type
+*additions*. The `DRAGLINT_NO_SCOPED_RESOLVE` A/B hatch (`:3930`) gives an
+equivalence test. ~1 day; do not bundle it with the announce.
+
+### A4. YADF review-marker helper -- share it WITHOUT touching the normaliser (~2-3 h)
 
 `INBOX-yadf-share-review-marker-hash.md`. The note's pessimism ("249 markers, the
 cheap window has closed") is right about changing the normaliser and wrong about
@@ -63,6 +99,37 @@ The unit is pure (`SysUtils` + `Hash` only, `:22-23`), so this is cheap. Risk is
 copy drift, caught by the identity test.
 
 ---
+
+### A5. Redirected output -- the cause is DETERMINED, and it is not the engine (~30 min)
+
+The residue of `INBOX-index-runs-are-not-resumable.md`. The note blamed the
+engine ("stdout is block-buffered when redirected"). **Measured, that is wrong.**
+
+The engine already flushes stdout once per file -- `Flush(Output)` at
+`src\core\DRagLint.Core.Indexer.pas:1176`, guarded by
+`tests\autotest\run_index_progress_flush.ps1`. The stderr counter
+(`Indexer.pas:614/620`) has no flush, but the RTL's 128-byte buffer bounds its
+lag to 2-3 lines.
+
+Experiment, same 52 s index, both redirections, sizes polled every second:
+
+```
+cmd.exe  > 2>   out.log 128 -> 765 -> 2230 bytes within 4 s; err.log grew from t=1 s
+PowerShell > 2> out.log 0 until an 8192-byte block
+                err.log 0 BYTES FOR THE ENTIRE RUN, 4462 at exit   <- the ORM3 symptom
+```
+
+**PowerShell holds all native stderr to process exit.** So the fix is in the
+HARNESS, not the engine: redirect long runs through `cmd.exe` or
+`Start-Process -RedirectStandardError`, and say so in the runner docs. This is
+already what this repo's own long runs do; the note simply mis-attributed it.
+
+Optional and secondary: `Flush(ErrOutput)` after `Indexer.pas:620`. Positive
+control -- a 2-file walk emitting under 128 stderr bytes, redirected via cmd and
+polled mid-run: unfixed shows 0 bytes, fixed shows the line.
+
+**Then close that note.** Its headline (per-file resume) shipped; this was the
+only thing keeping it open.
 
 ## B. Then -- larger, but instrument before optimising
 

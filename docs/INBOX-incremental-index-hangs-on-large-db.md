@@ -1,3 +1,31 @@
+> # STILL LIVE -- REPRODUCED 2026-08-17, and the mechanism is now known.
+>
+> Indexed 84 new files into a scratch copy of `library-Win64.sqlite` (2.3 GB).
+> The walk completed; ancestry 16.7 s; helpers 12.9 s; then **CPU-bound for
+> 450 s+ in the calls resolve** (9.9 s CPU per 10 s wall), killed at 8 minutes.
+>
+> **IT IS NOT A HANG -- it is a silent whole-DB pass.** New units introduce new
+> type names, so `ScopedResolveIsSound` fails its type-equality gate
+> (`src\storage\DRagLint.Storage.SQLite.pas:3949-3951`) and the run falls back to
+> resolving calls across the WHOLE database -- 3.4 M refs, a cost the code itself
+> documents as **"37 MINUTES on a 2 GB index"**
+> (`Storage.SQLite.pas:8712-8714`).
+>
+> **The refuted O(corpus) affected-set claim STAYS REFUTED.** This is the GATE,
+> not the set. Do not resurrect that line of enquiry.
+>
+> **Smallest fix is diagnosis, not optimisation:** announce "WHOLE DB + reason"
+> on stderr **before** the pass. Today the scoped/whole line (`:8843` / `:8846`)
+> prints only *after* it completes, which is precisely why a 37-minute pass looks
+> like a hang and why this note exists. ~1 h. Positive control: the unfixed build
+> lacks the announce line.
+>
+> Separate and correctness-sensitive (~1 day, do NOT bundle): relax the gate for
+> pure type ADDITIONS. The `DRAGLINT_NO_SCOPED_RESOLVE` A/B hatch (`:3930`)
+> provides the equivalence test.
+>
+> ---
+>
 # INBOX: `index <folder> --db <large.sqlite>` never finishes (2026-08-05)
 
 Class: **wrong/performance** (not a stale index, not out-of-scope). Reproduced
