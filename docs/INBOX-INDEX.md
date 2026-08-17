@@ -1,6 +1,6 @@
 # INBOX index -- 9 open notes (was 13; 23 that morning; 60 at the start of 2026-08-16)
 
-> **Session 23 (2026-08-16, evening). 13 -> 9 open, 101 retired.**
+> **Session 23 (2026-08-16, evening). 13 -> 9 open, 103 retired.**
 >
 > **Retired:** `index-all-win32-library-rebuild-aborts` (not blocked -- the
 > rebuild ALREADY succeeded 08-12 in one 2h10m pass; root cause found 07-29 as an
@@ -106,23 +106,23 @@ minutes, which also fits. Leftover #3 (`idx_refs_name_nocase`) is already done.
 
 `library-reindex-25x-slower-on-large-db` (FK indexes landed; **index-path size
 guard added 2026-08-16**; progress/ETA line still missing; the 25x itself stays a
-projection -- a small fixture cannot show a cost that is O(child-table rows)) ·
+projection -- a small fixture cannot show a cost that is O(child-table rows)) ?
 `incremental-index-hangs-on-large-db` (the "hang" is the whole-DB resolve;
 scoped resolve fixes the body-edit shape but an ADDED type still falls back to
 whole-DB. A synthetic 2M-symbol DB built by direct SQL insert would exercise it
 in minutes -- positive control: assert the calls line reports millions of refs
-streamed, else the pass streamed nothing and "fast" is vacuous) ·
+streamed, else the pass streamed nothing and "fast" is vacuous) ?
 `indexer-livelock-when-two-platforms-run-concurrently` (**the concurrency theory
 was REFUTED**; nothing concurrency-shaped needs fixing. `DRAGLINT_NO_SCOPED_RESOLVE`
 exists precisely to make the scoped/unscoped A/B a one-binary comparison, and no
 autotest uses it yet -- ~1h to turn two landed fixes from "believed" into
-"row-identical proven") · `index-all-win32-library-rebuild-aborts` (the
+"row-identical proven") ? `index-all-win32-library-rebuild-aborts` (the
 "crashed mid-DIAG-line" clue was a **128-byte stdout buffer artifact**; the
 per-file flush now preserves evidence, so the next failure is diagnosable. Can be
-launched unattended and harvested later) ·
+launched unattended and harvested later) ?
 `index-runs-are-not-resumable` (**CORRECTNESS HALF FIXED 2026-08-16** -- the
 fingerprint was stamped BEFORE the walk, so a killed run silently kept stale
-parses; now committed only on completion. Per-file resume still open) ·
+parses; now committed only on completion. Per-file resume still open) ?
 ~~`codelens-cache-has-no-eviction`~~ **RETIRED 2026-08-16 (session 23)** -- capped
 at 32 with LRU eviction (`5f62f21`), 26-assertion console test, and BOTH
 design-time BPLs rebuilt with the IDE closed (`a9b587a`). In-IDE behaviour
@@ -144,10 +144,10 @@ non-call edge, or whether `--resolved` should union in the ref rows under a
 mechanism was wrong: not override/interface/DFM-wired-from-the-store, but
 callback registration, caught same-file and SYNTACTICALLY because one real
 registration sits in an inactive `$IFDEF` the store cannot see. DataCopy 5 -> 1,
-own source 99 -> 75, the one true positive preserved) ·
+own source 99 -> 75, the one true positive preserved) ?
 `exception-class-unit-and-generated-exception-types` (feature request --
 **MEASURED 2026-08-16: 64 distinct messages on ORM3, not the 400 that would have
-killed it**, and normalization collapses 64 -> 63, so build Stage 1) ·
+killed it**, and normalization collapses 64 -> 63, so build Stage 1) ?
 `converter-editor-phase-g-engine-findings` (workstream status: *"NOT pushed, NOT
 merged, NOT deployed. Deliberate."* -- its one concrete engine ask, the
 `#mapping`/`#apply` rejection, is **FIXED 2026-08-16**; findings **2.4-2.11 are
@@ -159,8 +159,8 @@ RULING, not engine debt -- **ANSWERED 2026-08-16: the tie is LIBRARY-ONLY (a
 project DB returns 0 rows for `TEdit`), and the framework is derivable from the
 project's own `uses` -- DataCopy 25 `Vcl.*` / 0 `FMX.*`. So the fix is to derive
 context, not to add a `--framework` flag and rule on a default**)
-· `ide-lsp-ram-and-shim-todo` (items 3-4 still blocked on the IDE being
-startable; §1.1's ask **folded into the union design 2026-08-16**, correcting a
-wrong premise there) · `yadf-share-review-marker-hash` (owner request for a
+? `ide-lsp-ram-and-shim-todo` (items 3-4 still blocked on the IDE being
+startable; ?1.1's ask **folded into the union design 2026-08-16**, correcting a
+wrong premise there) ? `yadf-share-review-marker-hash` (owner request for a
 shared hashing helper -- **RE-COUNTED 2026-08-16: 249 markers across three
 repos**, so the "changing the normaliser is nearly free" window has closed).
