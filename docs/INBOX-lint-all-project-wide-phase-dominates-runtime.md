@@ -193,6 +193,52 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
    > than per declaration; the file-id set is stable for the whole lint pass.
    >
    > Prize: ~269 s of a 530 s run, i.e. roughly halving `lint-all` on ORM3.
+   >
+   > ### 2026-08-16, later: the CTE guess was WRONG TOO. It is the query PLAN.
+   >
+   > A dedicated investigation measured the CTE at **~6 s of the 269 s** -- removing
+   > it entirely changes nothing material. So do not memoise it; that was my third
+   > wrong guess in this session and it is recorded here so it is not tried again.
+   >
+   > **The decisive observation.** The IDENTICAL SQL replayed against the SAME DB
+   > through an external SQLite runs **~0.74 ms/call**, against **~62 ms/call**
+   > in-process. A consistent ~80x gap that scales with row volume is a PLAN
+   > difference, not per-call overhead. Replayed variants:
+   >
+   > | variant | ms/call | x4,309 |
+   > |---|---|---|
+   > | observed in-process (GBUnresolved) | 62.5 | 269.1 s |
+   > | full query, 200 real declarations | 0.74 | 3.2 s |
+   > | forced to drive `refs` by `idx_refs_file` over the reach set | 28.2 | **121.5 s** |
+   >
+   > Only that last plan reaches the observed magnitude. **Two things let a planner
+   > choose it, both verified:** no DB in this tree has `sqlite_stat1` (nothing has
+   > ever run ANALYZE, so selectivity is guessed), and drag-lint loads
+   > **sqlite3.dll dynamically**, so the engine deciding this is whatever is on
+   > PATH rather than a version this repo pins.
+   >
+   > ### What was shipped, and what it actually achieved -- SAY THE SECOND PART
+   >
+   > * a unary `+` **plan pin** on the reach predicate (`Storage.SQLite.pas`,
+   >   `ScopeP`). Semantically inert; SQLite will not use an index on `+expr`, so
+   >   that term can no longer be chosen as the driver.
+   > * a bounded **ANALYZE** (`analysis_limit=400`) in `Migrate`, guarded on
+   >   `sqlite_stat1` being absent.
+   >
+   > **Measured with the plan pin alone (stats still absent): 269.12 s -> 258.90 s,
+   > TOTAL 529.71 s -> 510.03 s. About 4%, i.e. within noise.** The pin is harmless
+   > but has NOT demonstrated a win.
+   >
+   > `sqlite_stat1` now EXISTS on the ORM3 DB (a completed reindex ran the
+   > ANALYZE), so the with-statistics measurement is the obvious next step and had
+   > not produced a clean number when this was written -- an orphaned reindex
+   > process held the DB and the profiling run died with "database is locked".
+   > **Re-run it before believing anything about ANALYZE.**
+   >
+   > If statistics do not fix it either, the remaining lever is the dynamically
+   > loaded engine: log `sqlite3_libversion()` and run `EXPLAIN QUERY PLAN` for
+   > this exact SQL **through FConn** rather than an external shell, which is the
+   > only way to see the plan the product actually gets.
 2. **`unused-unit-in-uses` is still 17.4 s** -- the memo removed the repetition
    but the remaining cost is one `FindSymbolsByExactName` per DISTINCT name,
    each an indexed lookup returning every symbol with that name.
