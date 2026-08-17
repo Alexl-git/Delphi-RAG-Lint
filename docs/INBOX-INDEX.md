@@ -82,85 +82,27 @@ their fix was found only by measuring, not by reading the note:
 build.** A test asserting only "the false finding is gone" passes with the rule
 switched off.
 
-## Open -- verifiable now
+## Open -- all 9, current as of session 23 close
 
-Group A is finished except for one item that is not an engineering decision.
+Re-verified by listing `docs\INBOX-*.md`, not by trusting this table. Every note
+retired above has been removed from it.
 
 | note | shape |
 |---|---|
-| `loader2019-formcreate-inifile-leak` | RE-MEASURED 2026-08-16: still fires against a fresh DB, unaffected by the object-leak fixes. **A correct finding about an EXTERNAL project** -- closing it means editing `C:\Projects\Loader2019`, which is the owner's call, not engine debt. |
-| `used-before-assignment-real-shape-is-intra-item-ordering` | NOT re-measured in session 22 -- said plainly rather than implied. `and`/`or` sequencing is modelled; the general position-ordered case is not. **Read `rule-hardening-plan` item 3 first**: it blames a different cause (an `out` arg counted as a READ, 7 findings, cost S). Measure which one is live before coding. |
-| `buildfor-defaulted-args-diverge-between-entry-points` | STALE for the function it names (the two caps are threaded now). `FixEditsForMissingDoc` fixed in session 22. Remaining: `ABaseDir` / `AIncludeSince` / `AExtraStores` / `AComplexityMin` still defaulted on the repair path -- `AExtraStores` is the risky one (cross-DB fan-out), so use a cross-DB fixture. |
+| `lint-all-project-wide-phase-dominates-runtime` | **THE BIGGEST REMAINING WIN.** `unresolved-name` is **269 s of ORM3's 530 s** run -- 51%. NOT the CTE (~6 s) and NOT a missing name index (present and used). It is a query PLAN difference: identical SQL is ~0.74 ms/call through an external SQLite versus ~62 ms in-process. A `+` plan pin shipped and bought ~4% (noise); `sqlite_stat1` now exists, so the with-statistics number is the next measurement. If that fails too, log `sqlite3_libversion()` and EXPLAIN **through FConn**. |
+| `index-runs-are-not-resumable` | Group B 5b, and the plan's own HIGHEST-RISK item. Additive `files.indexed_at_fingerprint`; the stamp **must** sit inside the transaction `CommitFileTx` closes, or it recreates the silent-staleness bug fixed in session 22. Full design in `PLAN-SESSION-23-IMPLEMENTATION.md` section 5b. Not started. |
+| `rule-hardening-plan-2026-08-13` | **Essentially one item left.** Re-measured across all four consumer projects: items 1/3/5/7/8 now fire **ZERO** times; 2+6 are down to 0; item 4 DONE. Live: **item 9 `unused-public-symbol` (12)** -- 9 are YADF shared-unit hints of which 8 are alive in a sibling and `OptionsHelpText` is genuinely dead (x3), plus 3 in DataCopy. The fix is to consult the sibling DBs a unit's own `dl:shared` header NAMES, which needs `TProjectLintRules.Run` to take extra stores (it takes one `ISymbolStore` today). |
+| `converter-editor-phase-g-engine-findings` | 2.4-2.11 ALL closed. Open only for 2.5's product half -- and the owner has ANSWERED the shape: the tie is LIBRARY-ONLY (a project DB returns 0 rows for `TEdit`) and the framework is derivable from the project's own `uses` (DataCopy 25 `Vcl.*` / 0 `FMX.*`). So: derive context, do NOT add a `--framework` flag. Ordinary engine work, no ruling needed. |
+| `incremental-index-hangs-on-large-db` | The "hang" is the whole-DB resolve; scoped resolve fixes the body-edit shape but an ADDED type still falls back. NOTE: a session-23 suspicion that the incremental affected-set is O(corpus) was **refuted on real code** (748 affected refs, smaller than the changed file's own 1,988) -- do not carry that link forward. |
+| `buildfor-defaulted-args-diverge-between-entry-points` | STALE for the function it names. Remaining: `ABaseDir` / `AIncludeSince` / `AExtraStores` / `AComplexityMin` still defaulted on the repair path -- `AExtraStores` is the risky one (cross-DB fan-out), so use a cross-DB fixture. |
+| `exception-class-unit-and-generated-exception-types` | Feature request, not a defect. **MEASURED: 64 distinct messages on ORM3, not the 400 that would have killed it**, and normalization collapses 64 -> 63. Build Stage 1. |
+| `ide-lsp-ram-and-shim-todo` | Items 3-4 need a live IDE. NOTE: the "needs the IDE closed" blocker is now DISCHARGED for BPL work -- both design-time packages were rebuilt in session 23, and 37.0 registers a 32-bit and a 64-bit IDE separately (`Known Packages` / `Known Packages x64`). |
+| `yadf-share-review-marker-hash` | Owner request for a shared hashing helper. **RE-COUNTED: 249 markers across three repos**, so the "changing the normaliser is nearly free" window has closed. |
 
-## Open -- NOT verifiable in a normal session
+## A note on the two labels this index used to carry
 
-These need a large corpus, an hours-long rebuild, or a live IDE. A Fable review
-in session 22 found the group is **less blocked than its label suggests**: three
-were already fixed in code, one had an INVERTED premise, and one does not belong
-here at all.
-
-**`lint-all-project-wide-phase-dominates-runtime` should move to Group A.** Its
-dominant phase (doc-drift, 454.9s of 732s) reproduces on YADF in 40-second runs,
-so it is profileable in a normal session; the full ORM3 confirmation is 12
-minutes, which also fits. Leftover #3 (`idx_refs_name_nocase`) is already done.
-
-`library-reindex-25x-slower-on-large-db` (FK indexes landed; **index-path size
-guard added 2026-08-16**; progress/ETA line still missing; the 25x itself stays a
-projection -- a small fixture cannot show a cost that is O(child-table rows)) ?
-`incremental-index-hangs-on-large-db` (the "hang" is the whole-DB resolve;
-scoped resolve fixes the body-edit shape but an ADDED type still falls back to
-whole-DB. A synthetic 2M-symbol DB built by direct SQL insert would exercise it
-in minutes -- positive control: assert the calls line reports millions of refs
-streamed, else the pass streamed nothing and "fast" is vacuous) ?
-`indexer-livelock-when-two-platforms-run-concurrently` (**the concurrency theory
-was REFUTED**; nothing concurrency-shaped needs fixing. `DRAGLINT_NO_SCOPED_RESOLVE`
-exists precisely to make the scoped/unscoped A/B a one-binary comparison, and no
-autotest uses it yet -- ~1h to turn two landed fixes from "believed" into
-"row-identical proven") ? `index-all-win32-library-rebuild-aborts` (the
-"crashed mid-DIAG-line" clue was a **128-byte stdout buffer artifact**; the
-per-file flush now preserves evidence, so the next failure is diagnosable. Can be
-launched unattended and harvested later) ?
-`index-runs-are-not-resumable` (**CORRECTNESS HALF FIXED 2026-08-16** -- the
-fingerprint was stamped BEFORE the walk, so a killed run silently kept stale
-parses; now committed only on completion. Per-file resume still open) ?
-~~`codelens-cache-has-no-eviction`~~ **RETIRED 2026-08-16 (session 23)** -- capped
-at 32 with LRU eviction (`5f62f21`), 26-assertion console test, and BOTH
-design-time BPLs rebuilt with the IDE closed (`a9b587a`). In-IDE behaviour
-remains unverified; the binary is current.
-
-`callback-pass-is-a-ref-but-not-a-call-edge` **(NEW 2026-08-16)** -- a routine
-passed by bare name as a callback produces a `refs.kind='read'` row but NO
-`call_edges` row, so `find-callers --name` reports 1 caller and
-`find-callers --resolved` reports 0 for the same live predicate. `--resolved` is
-documented as the *precise* query, so a caller trusting it concludes a live
-callback is dead. **Needs an owner ruling** on whether `call_edges` may carry a
-non-call edge, or whether `--resolved` should union in the ref rows under a
-`[callback]` marker (probably the latter). Cost S.
-
-## Open -- not defects, kept here deliberately
-
-`rule-hardening-plan-2026-08-13` (a plan answering an owner question -- **item 4
-`unused-parameter` CLOSED 2026-08-16 (session 23)**, and the note's own proposed
-mechanism was wrong: not override/interface/DFM-wired-from-the-store, but
-callback registration, caught same-file and SYNTACTICALLY because one real
-registration sits in an inactive `$IFDEF` the store cannot see. DataCopy 5 -> 1,
-own source 99 -> 75, the one true positive preserved) ?
-`exception-class-unit-and-generated-exception-types` (feature request --
-**MEASURED 2026-08-16: 64 distinct messages on ORM3, not the 400 that would have
-killed it**, and normalization collapses 64 -> 63, so build Stage 1) ?
-`converter-editor-phase-g-engine-findings` (workstream status: *"NOT pushed, NOT
-merged, NOT deployed. Deliberate."* -- its one concrete engine ask, the
-`#mapping`/`#apply` rejection, is **FIXED 2026-08-16**; findings **2.4-2.11 are
-now ALL CLOSED (session 23)** -- 2.7 was disproved as stale by a new suite,
-2.8's exit-code contract was documented AND corrected (usage is 2 and fatal is 3,
-not the recorded "2 = usage" alone), the rest verified live. The note stays open
-for exactly one thing: 2.5's `--framework vcl|fmx` tie-break, which is an OWNER
-RULING, not engine debt -- **ANSWERED 2026-08-16: the tie is LIBRARY-ONLY (a
-project DB returns 0 rows for `TEdit`), and the framework is derivable from the
-project's own `uses` -- DataCopy 25 `Vcl.*` / 0 `FMX.*`. So the fix is to derive
-context, not to add a `--framework` flag and rule on a default**)
-? `ide-lsp-ram-and-shim-todo` (items 3-4 still blocked on the IDE being
-startable; ?1.1's ask **folded into the union design 2026-08-16**, correcting a
-wrong premise there) ? `yadf-share-review-marker-hash` (owner request for a
-shared hashing helper -- **RE-COUNTED 2026-08-16: 249 markers across three
-repos**, so the "changing the normaliser is nearly free" window has closed).
+"Verifiable now" versus "not verifiable in a normal session" has been dropped.
+Session 23 found the second group was mostly mislabelled: the Win32 rebuild had
+already succeeded, the 25x slope IS reproducible on a 3 MB fixture, and the ORM3
+profile that "needs a long run" takes nine minutes. A label that discourages
+measurement is worse than no label.
