@@ -1,3 +1,62 @@
+> # THE HEADLINE IS DONE (2026-08-17, session 24): per-file resume SHIPPED.
+> # The note stays open for ONE companion issue -- see the end of this banner.
+>
+> `files.indexed_at_fingerprint`, stamped **inside** the per-file transaction
+> `CommitFileTx` closes (before `FConn.Commit`), so a kill commits the rows and
+> the stamp together or neither. A run forced by a fingerprint change now takes
+> the ordinary up-to-date skip for any file already stamped with the CURRENT
+> fingerprint. Additive column, no schema bump, NULL on every existing row --
+> so nothing re-parses on account of it existing, and files gain a stamp as they
+> are next indexed.
+>
+> **The written plan (`PLAN-SESSION-23-IMPLEMENTATION.md` section 5b) was wrong
+> in two places, and both would have shipped something broken.**
+>
+> 1. **It reused `ForceReparse`.** That flag is set for THREE reasons and only
+>    one may resume: a **fingerprint change** is resumable (a file parsed by
+>    THIS engine really is current); **`--force-reparse` is not**, because the
+>    flag means "ignore the skip" and honouring a stamp would silently disobey
+>    what the caller typed; **`--rebuild` is not**, and is moot since the index
+>    is wiped first. Only the caller can distinguish them, so
+>    `SetResumeFingerprint` is a separate call, `''` by default, set exclusively
+>    on that one branch.
+> 2. **Its test fixture tested nothing.** It proposed: index a folder, index ONE
+>    file with `--no-preprocess`, index the folder again, assert one file
+>    parsed. Measured, `index <one file>` **also** commits the database-level
+>    fingerprint. So by step three `Prev = Cur`, the run is not a
+>    fingerprint-change run at all, nothing is forced, and BOTH files take the
+>    plain incremental skip -- "skipped 2", with the positive control failing.
+>
+> `tests\autotest\run_index_resume_per_file.ps1` therefore builds the interrupted
+> state explicitly, rolling the database-level stamp back by SQL after the
+> single-file run. That is exactly what a kill leaves behind (per-file stamps
+> written, database-level stamp not -- which is what session 22's split
+> guarantees), and it is deterministic rather than racing a Ctrl-C.
+> **Said plainly: the real shape -- a process killed hours into a library walk --
+> is SIMULATED, not reproduced.** What is verified is the resume logic over the
+> exact database state such a kill produces.
+>
+> ## What keeps this note open
+>
+> Of the two "Companion issues" at the foot of the note:
+>
+> * **Progress `n/total` + ETA -- DONE** (session 23). Verified in this session's
+>   own fixture output: `[1/2] 50%  elapsed 0s  ~0s left`.
+> * **Output appearing only in blocks when redirected -- NOT done, and not
+>   diagnosed.** A 9-minute ORM3 profiling run this session wrote a redirected
+>   stderr file that stayed at **0 bytes until the process exited**, so a slow
+>   run and a hung run were again indistinguishable from outside.
+>
+>   **Do not carry the note's stated cause forward unverified.** It says
+>   "stdout is block-buffered when redirected", i.e. blames the engine. What was
+>   actually observed this session was PowerShell's `2>` file redirection
+>   behaving that way, and those are different culprits with different fixes
+>   (an explicit flush per file in the engine, versus how the harness redirects).
+>   **Measure which before changing either** -- this note has already had one
+>   stated mechanism turn out to be wrong, and the sibling perf note had four.
+>
+> ---
+>
 > # STILL OPEN, but the CORRECTNESS half is fixed (2026-08-16, session 22).
 >
 > Re-measurement found this note understated the problem: a killed run did not
