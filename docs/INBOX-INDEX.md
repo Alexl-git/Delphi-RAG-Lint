@@ -1,4 +1,34 @@
-# INBOX index -- 13 open notes (was 23 that morning; 60 at the start of 2026-08-16)
+# INBOX index -- 9 open notes (was 13; 23 that morning; 60 at the start of 2026-08-16)
+
+> **Session 23 (2026-08-16, evening). 13 -> 9 open, 101 retired.**
+>
+> **Retired:** `index-all-win32-library-rebuild-aborts` (not blocked -- the
+> rebuild ALREADY succeeded 08-12 in one 2h10m pass; root cause found 07-29 as an
+> EXTERNAL `Stop-Process` kill, evidenced by exit code exactly -1);
+> `library-reindex-25x-slower-on-large-db` (the slope IS reproducible on a ~3 MB
+> DB -- 1.3x -> 11.4x -- and the FK-index fix already shipped);
+> `callback-pass-is-a-ref-but-not-a-call-edge` (filed and fixed the same day);
+> `used-before-assignment-...` (closed by DECISION -- shape A shipped, B/C/D
+> accepted, 0 findings on all four consumer projects);
+> `stale-manifest-shadows-canonical-beside-debug-exe` (deleted; the debug build
+> now errors honestly instead of naming a DB that no longer exists). One further
+> note was filed AND refuted the same day and sits in `INBOX-Done` as a record of
+> the refutation, not a defect.
+>
+> **Engine fixes shipped, each RED-verified:** `unused-parameter` callback
+> suppression (syntactic, because one real registration lives in an inactive
+> `$IFDEF` no store can see); `find-callers --resolved` reporting callback
+> reaches as `[callback]`; **a RECORD deciding class ancestry** (three `TTimer`
+> in library-Win32, `DosCommand.TTimer` sorting first, which is what made an
+> owned `TTimer.Create(LDlg)` read as a leak); walk progress n/total+ETA;
+> CodeLens LRU cap. DataCopy **43 -> 31**; own source `unused-parameter`
+> **99 -> 75**.
+>
+> **The measurement discipline earned its keep three times.** The
+> `unused-parameter` note's prescribed store-backed fix could not have worked;
+> the `query` exit-code contract was misrecorded; and doc-drift's dominant
+> sub-item is `unresolved-name` (269 s), not `calls` (0.99 s) as a YADF-sized
+> profile predicted. Each is written into its own note.
 
 > **Session 22 (2026-08-16, later).** Two notes CLOSED and moved to
 > `INBOX-Done\` (88 retired): `exception-cref-transitive-raise` (one-hop callee
