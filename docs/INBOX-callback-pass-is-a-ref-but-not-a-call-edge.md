@@ -1,3 +1,35 @@
+> # FIXED 2026-08-16 (session 23), same day it was filed. Owner said "we need to fix this".
+>
+> `find-callers --resolved` now reports callback reaches, marked `[callback]`:
+>
+> ```
+> query find-callers --name isValidZeissFileName --resolved
+>     uMainZeissCopy.TfrmZeissCopy.FindFirstZeissFile  (uMainZeissCopy.pas:3303)  [callback]
+> ```
+>
+> **`call_edges` was deliberately NOT widened**, which was the open question below.
+> An edge there means a CALL, and `callgraph` / `impact` / `call-path` consume it
+> as control flow; a bare-name pass has no call site and no arguments, so
+> inventing an edge would make those verbs assert flow that does not exist at
+> that line. The reach is reported by `find-callers` only, under a marker that
+> cannot be read as a call. That is the third option this note recommended.
+>
+> Guarded by `tests\autotest\run_find_callers_callback_reach.ps1`. The control is
+> `D_Orphan`, called by nobody and passed to nobody: it must STILL report
+> `0 caller(s)` and exit 1. Without it, "the callback shows up now" would pass
+> against a change that reported every routine as reached -- the failure
+> direction that actually matters, since this query is what people use to decide
+> something is dead. RED verified: exactly the three callback assertions fail on
+> the pre-fix exe while both controls pass on either.
+>
+> Emitted only when the name denotes a ROUTINE (`skProcedure`/`skFunction`/
+> `skMethod`/`skConstructor`/`skDestructor`), so a `read` of a same-named
+> variable does not masquerade as a callback. It remains name-keyed, so a local
+> sharing a routine's name can still produce a spurious row -- the marker is what
+> keeps that honest.
+>
+> **The `TZEISSTransfer` half is also answered -- see the closing section.**
+
 # INBOX -- a routine passed as a CALLBACK is a ref but never a call edge, so `--resolved` calls it uncalled
 
 **Found 2026-08-16 (session 23)** while the owner challenged a claim I had
@@ -76,3 +108,33 @@ entirely in which semantics `call_edges` is allowed to carry.
 drag-lint query find-callers --name isValidZeissFileName --db C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite
 drag-lint query find-callers --name isValidZeissFileName --resolved --db ...
 ```
+
+## Closing section -- "why was the predicate dropped?" It never was.
+
+The owner asked whether `TZEISSTransfer.isValidZeissFileName` had been dropped
+and what replaced it. Traced through DataCopy's Mercurial history:
+
+* At **rev 7 (2025-03-31)**, **rev 14 (2026-02-19)** and **rev 17 (2026-08-03)**
+  the occurrences in `uZeissRoutines.pas` are the SAME three every time: the
+  class declaration, the definition, and one commented-out CodeSite line.
+  **There has never been a call site in that unit.** Nothing was removed.
+* The reason is visible in how the class actually enumerates. `TZEISSTransfer`
+  filters **by MASK**, not by predicate -- `TDirectory.GetFiles(pFromPath, pMask)`
+  at `uZeissRoutines.pas:1062` and `:1618`, plus `:584`, `:1370`, `:1670`. The
+  two-argument overload. So the predicate was carried along when the logic moved
+  out of the form into a service class, and the service class never needed it.
+
+**The owner's recollection is right about the OTHER copy.** `TfrmZeissCopy`'s
+version was used at three sites -- still visible in `BACKUP\uMainZeissCopy.pas.bck1`
+and `.bck2` at lines 809, 822 and 1337 -- and those were consolidated into ONE
+helper, `TfrmZeissCopy.FindFirstZeissFile` (`uMainZeissCopy.pas:3294`), which
+holds the single surviving predicate call at `:3303` and is itself called at
+`:3660`. So "it was used as a predicate in a couple of `TDirectory` calls" is an
+accurate memory of a real refactor -- of the form's copy, not the transfer
+class's.
+
+**Conclusion:** the surviving `unused-parameter` finding on
+`TZEISSTransfer.isValidZeissFileName` is a true positive, and the method is an
+unwired copy rather than something that lost its caller. Wiring it would mean
+switching that class's mask-based enumeration to the predicate overload; deleting
+it loses nothing. Still a source decision.

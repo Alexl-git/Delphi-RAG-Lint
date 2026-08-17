@@ -3684,6 +3684,58 @@ begin
               Inc(TotalCallers);
             end; // for RC
           end; // for T
+
+          { CALLBACK REACHES (2026-08-16). A routine handed somewhere BY NAME --
+            `Register(Pred)`, `@Handler`, `OnFoo := Handler` -- is reached from
+            that site, but it is not CALLED there, so the indexer records a
+            refs.kind='read' row and no call_edges row. Without this, --resolved
+            answered 0 for a live predicate while the plain name path answered 1,
+            and since --resolved is documented as the PRECISE query the honest
+            reading of that 0 was "dead code". Measured on DataCopy:
+            TfrmZeissCopy.isValidZeissFileName is passed to TDirectory.GetFiles
+            at uMainZeissCopy.pas:3303 and had zero resolved callers.
+
+            call_edges is deliberately NOT widened to carry these. An edge there
+            means a call, with a call site and arguments; inventing one would
+            make callgraph, impact and call-path assert control flow that does
+            not exist at that line. So the reach is reported HERE, and marked
+            [callback] so it can never be mistaken for a call.
+
+            Only when the name denotes a ROUTINE: a `read` of a variable that
+            merely shares a class's or field's name is not a callback. This is
+            still name-keyed, so a local variable sharing a routine's name can
+            produce a spurious row -- the marker is what keeps that honest. }
+          var NameIsRoutine: Boolean:= False;
+          for var T in Targets do
+            if T.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then
+            begin
+              NameIsRoutine:= True;
+              Break;
+            end;
+          if NameIsRoutine then
+            for var CbRef in Store.FindCallersByName(AArgs.Name) do
+            begin
+              if CbRef.Kind <> 'read' then Continue;
+              var CbWhere: string:= Store.GetFilePath(CbRef.FileId);
+              var CbWho  : string:= '';
+              if CbRef.EnclosingSymbolId > 0 then
+                CbWho:= Store.GetSymbolById(CbRef.EnclosingSymbolId).QualifiedName;
+              if CbWho = '' then CbWho:= '(unit level)';
+              if AArgs.AsJson then
+              begin
+                var JCb: TJSONObject:= TJSONObject.Create;
+                JCb.AddPair('caller_qname', CbWho);
+                JCb.AddPair('file'        , ExtractFileName(CbWhere));
+                JCb.AddPair('confidence'  , 'callback');
+                JCb.AddPair('target_qname', AArgs.Name);
+                JCb.AddPair('line', TJSONNumber.Create(CbRef.StartLine));
+                JOut.AddElement(JCb);
+              end
+              else
+                Writeln(Format('    %s  (%s:%d)  [callback]',
+                  [CbWho, ExtractFileName(CbWhere), CbRef.StartLine]));
+              Inc(TotalCallers);
+            end; // for CbRef
         end; // for DbPath
         if AArgs.AsJson then Writeln(JOut.Format(2))
         else if TotalCallers = 0 then Writeln('0 caller(s)');

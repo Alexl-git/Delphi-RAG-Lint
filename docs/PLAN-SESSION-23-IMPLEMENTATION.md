@@ -19,6 +19,41 @@ start coding immediately rather than re-deriving.**
 > | **5c** CodeLens LRU | DONE. Capped at 32, LRU (touch on paint AND activation). 26-assertion console test; the two LRU-vs-FIFO assertions CONFIRMED RED with touch neutralised. **In-IDE behaviour still unverified** -- the BPL needs a closed RAD Studio. |
 > | **5d** profile doc-drift | DONE, and **the premise was wrong.** doc-drift is **11% on YADF** (1.30s of 11.82s), not dominant; per-file scan is 81%. The phases scale on different quantities, so **YADF is not a proxy for ORM3** and this does NOT move to Group A. Transferable finding: the FACTS REBUILD is **80% of `TDocDrift.Analyze`**, `calls` its largest contributor -- a hypothesis needing a real ~12 min ORM3 profile. |
 >
+> ## 5e RE-EXAMINED 2026-08-16 -- two of the three "blocked" items are not blocked
+>
+> **Win32 library rebuild abort: RETIRED.** Not blocked, not unknown -- already
+> fixed and already rebuilt. `library-Win32.sqlite` is complete (7,427 files /
+> 2.24M symbols / 3.33M refs, schema v21, 2.14 GB), built in one 2h10m pass on
+> 2026-08-12. Root cause was found 2026-07-29 (K52): an EXTERNAL
+> `Stop-Process -Name drag-lint -Force` from the build-unblock loops, evidenced by
+> the exit code being exactly -1 (`Kill()`'s code; taskkill gives 1, an AV gives
+> 0xC0000005). The "crashed mid-DIAG-line" clue was a 128-byte `TTextBuf`
+> artifact, since fixed. **Do not launch the 11-hour harvest** -- that estimate
+> predates the 4.6x perf work.
+>
+> **Added-type resolve fallback: STILL BLOCKED, and now for a precise reason.**
+> The plan said the equivalence harness was its precondition, and session 22 built
+> one (`tests\autotest\run_scoped_resolve_equivalence.ps1`). But that harness only
+> exercises the case where the fallback does NOT fire -- a body-only edit with
+> types unchanged. A narrowing changes behaviour precisely in the added/withdrawn
+> TYPE case, which the harness never enters. **"The harness exists" is not "the
+> harness guards this."**
+>
+> Also established: a naive narrowing -- expand scope to files that textually
+> mention the changed type -- is UNSOUND at depth. `FFoo.Method` in unit B, where
+> `FFoo: TChanged` is a field declared in ancestor unit A, changes resolution
+> while B never names `TChanged`. Sound narrowing needs edge provenance (record
+> per edge which type names its resolution consulted). That is what "soundness
+> redesign" meant.
+>
+> Good news on the vacuity front: the 1/3 coverage limit is still in the code
+> (`Storage.SQLite.pas:3832`), but the harness no longer passes vacuously -- it
+> asserts run A logs `affected call-site ref(s)` and run B logs `WHOLE DB`, on a
+> 5-unit fixture with 1 edited, with nonzero edge/ref counts.
+>
+> Next step if picked up: `run_scoped_resolve_typechange_equivalence.ps1` with a
+> shadowing-type fixture, plus a falsifier fixture for the inherited-field chain.
+>
 > ## THE ONE THING LEFT: 5b, per-file resume
 >
 > Deliberately not started. It is the plan's own HIGHEST RISK item: an additive

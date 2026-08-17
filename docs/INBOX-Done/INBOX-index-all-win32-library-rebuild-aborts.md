@@ -1,3 +1,40 @@
+> # RETIRED 2026-08-16 (session 23) -- the rebuild ALREADY SUCCEEDED; this note is stale.
+>
+> The session-23 plan listed this under "genuinely blocked -- root cause unknown,
+> launch the rebuild unattended and harvest". Both halves are wrong.
+>
+> **The Win32 library index is complete and healthy.** Verified independently:
+> `C:\Projects\.drag-lint\library-Win32.sqlite`, schema v21, **7,427 files /
+> 2,243,080 symbols / 3,326,130 refs / 543,706 call edges**, 2.14 GB. Every file
+> carries a `parsed_at` inside 2026-08-12 14:34 -> 16:44 -- one from-scratch pass
+> that finished in **2h10m**. Not a fragment, not truncated. The Win64 sibling
+> (6,993 files) is comparable; Win32's higher file count is expected, since
+> Win32-only third-party sources are on that path. `SourceD3` rows: 0, so the
+> exclude held.
+>
+> **Root cause was found on 2026-07-29** and is recorded in
+> `INBOX-Done\INBOX-REPLY-index-win32-abort-2026-07-29.md` (registered K52): an
+> EXTERNAL `Stop-Process -Name drag-lint -Force` from the build-unblock loops,
+> i.e. `TerminateProcess(h, -1)`. The evidence is the exit code itself -- exactly
+> -1, which is what `Kill()` produces; `taskkill` gives 1 and an access violation
+> gives 0xC0000005 -- plus 0-byte stderr, no WER event, and build launchers
+> carrying that kill starting within 1 second of both scheduled-task deaths.
+>
+> The "crashed mid-DIAG-line" clue was disproved: all three surviving logs were
+> exact multiples of **128 bytes**, a `TTextBuf` boundary artifact, since fixed by
+> a per-file flush. The manifest/CWD theory was also disproved -- configs merge
+> rather than compete.
+>
+> Hypotheses refuted with evidence: pathological unit / parser crash (three
+> different stop points; the suspect directory indexes alone at exit 0), OOM
+> (Win64 exe, working set flat 175 -> 328 MB on a 36 GB box), disk or SQLite limit
+> (151 GB free, and a 2.3 GB DB has since been built), permissions (same paths
+> succeeded).
+>
+> **Do not launch an 11-hour harvest run.** That estimate predates the 4.6x perf
+> work in `a0a906e` / `043d402`; the real cost is ~2h10m. If a confirmation run is
+> ever wanted, the section is named `Library` and the rule is simply: never kill
+> drag-lint by image name while it is indexing.
 # INBOX (engine): `index --all --only Library --platform win32` aborts mid-run, exit -1
 
 - Date: 2026-07-27

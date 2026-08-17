@@ -123,7 +123,7 @@ in 2b.
 |------|--------------|
 | `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss, `--exact` suppresses the fallback so 0 rows means "no such symbol", `--case-sensitive` opts out of the NOCASE retry. Exit 0 = hits / 1 = zero hits / 2 = bad usage (no selector, unreadable `--db`) / 3 = fatal (unrecognised argument) |
 | `query --text "<phrase>"` | full-text search over `.pas`/`.dfm`/`.sql` constants: messages, DFM captions, SQL exception text (`--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N`) |
-| `query find-callers --name X` | callers of a symbol (`--context N`; `--resolved` for precise call-edge callers) |
+| `query find-callers --name X` | callers of a symbol (`--context N`; `--resolved` for precise call-edge callers). `--resolved` also reports routines **reached as a callback** -- handed somewhere by bare name, `@X`, or an event assignment -- marked `[callback]` rather than `[certain]`/`[ambiguous]`, because that is a reach, not a call. Without it a live predicate passed to e.g. `TDirectory.GetFiles` read as dead |
 | `query find` | doc-driven find (`--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public`) |
 | `query ancestors --name T` | transitive class/interface hierarchy (`--of <ancestor>`) |
 | `query typecat --name T` | resolve a type's category (float/string/class/interface/...) |
