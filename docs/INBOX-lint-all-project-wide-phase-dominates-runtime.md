@@ -235,10 +235,42 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
    > process held the DB and the profiling run died with "database is locked".
    > **Re-run it before believing anything about ANALYZE.**
    >
-   > If statistics do not fix it either, the remaining lever is the dynamically
-   > loaded engine: log `sqlite3_libversion()` and run `EXPLAIN QUERY PLAN` for
-   > this exact SQL **through FConn** rather than an external shell, which is the
-   > only way to see the plan the product actually gets.
+   > ### RESULT: statistics did NOT fix it either. Both levers together buy ~4%.
+   >
+   > | run | unresolved-name | TOTAL |
+   > |---|---|---|
+   > | baseline | 269.12 s | 529.71 s |
+   > | plan pin only (no `sqlite_stat1`) | 258.90 s | 510.03 s |
+   > | **plan pin + `sqlite_stat1` present** | **257.48 s** | 518.21 s |
+   >
+   > `sqlite_stat1` was confirmed present for the third run (a completed reindex
+   > ran the bounded ANALYZE). It moved `unresolved-name` by 1.4 s. **So the
+   > "missing statistics let the planner pick a bad join order" hypothesis is not
+   > supported by measurement**, and neither is the plan pin. Both are kept -- the
+   > `+` is inert and statistics are ordinary hygiene -- but NEITHER is a fix, and
+   > this note must not be read as though the problem were solved.
+   >
+   > ### What is still unexplained, and the ONE experiment that would settle it
+   >
+   > The ~80x in-process/external gap is measured and real, but every explanation
+   > tried for it has now failed. Before another fix is attempted, close the gap
+   > between the two measurements themselves -- they may simply not be comparing
+   > the same thing (different parameter values, a warm page cache on the replay
+   > side, or an extra predicate the replay dropped).
+   >
+   > **Do this first, in-process, and nothing else until it is done:**
+   > 1. log `sqlite3_libversion()` from the loaded DLL, so the engine is known
+   >    rather than assumed;
+   > 2. run `EXPLAIN QUERY PLAN` for the EXACT assembled SQL **through FConn**,
+   >    not an external shell -- this is the only way to see the plan the product
+   >    actually gets;
+   > 3. time ONE call in-process with the same bound parameters the replay used.
+   >
+   > If the in-process plan matches the external one and the timing still differs,
+   > the cost is not in the plan at all and the search should move to the FireDAC
+   > layer (per-call `TFDQuery.Create`, parameter binding, or row marshalling) --
+   > which the subagent measured as "a few ms/call at most", so that too would
+   > need re-measuring rather than assuming.
 2. **`unused-unit-in-uses` is still 17.4 s** -- the memo removed the repetition
    but the remaining cost is one `FindSymbolsByExactName` per DISTINCT name,
    each an indexed lookup returning every symbol with that name.
