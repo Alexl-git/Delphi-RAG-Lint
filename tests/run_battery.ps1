@@ -228,20 +228,30 @@ foreach ($u in $untrackedRunners) {
 # unknown, and running them inside the gate everything else depends on would
 # convert that unknown into unattributed red. Triage is its own job -- see
 # docs\INBOX-68-bat-tests-are-invisible-to-the-battery.md.
+# Counted from the two runners' own contents, so the number cannot drift from
+# what is actually driven: whichever fixtures they name are covered, and the
+# remainder is what nobody runs.
 $legacyBat  = @(Get-ChildItem -Path (Join-Path $repoRoot 'tests') -Filter '*.bat' -Recurse -File -ErrorAction SilentlyContinue)
+$covered    = New-Object System.Collections.Generic.HashSet[string]
 $v021Driver = Join-Path $repoRoot 'tests\run_v021_doctests.bat'
-$reachedBat = @()
 if (Test-Path $v021Driver) {
-  $txt = Get-Content $v021Driver -Raw
-  $reachedBat = @([regex]::Matches($txt, 'fixtures\\([A-Za-z0-9_]+)\.bat') |
-                  ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+  [void]$covered.Add('run_v021_doctests')
+  foreach ($m in [regex]::Matches((Get-Content $v021Driver -Raw), 'fixtures\\([A-Za-z0-9_]+)\.bat')) {
+    [void]$covered.Add($m.Groups[1].Value)
+  }
 }
-$darkBat = $legacyBat.Count - $reachedBat.Count - $(if (Test-Path $v021Driver) { 1 } else { 0 })
-Write-Host ("  legacy .bat tests                                : {0} ({1} driven by run_doctests_v021.ps1)" -f `
-            $legacyBat.Count, ($reachedBat.Count + $(if (Test-Path $v021Driver) { 1 } else { 0 })))
-Write-Host ("  ... still reached by NOTHING (status unknown)    : {0}" -f $darkBat) `
-           -ForegroundColor $(if ($darkBat -gt 0) { 'Yellow' } else { 'Gray' })
-if ($darkBat -gt 0) {
+$legacyRunner = Join-Path $repoRoot 'tests\run_legacy_cli_fixtures.ps1'
+if (Test-Path $legacyRunner) {
+  foreach ($m in [regex]::Matches((Get-Content $legacyRunner -Raw), "'(T[A-Za-z0-9_]+)'")) {
+    [void]$covered.Add($m.Groups[1].Value)
+  }
+}
+$darkNames = @($legacyBat | Where-Object { -not $covered.Contains([IO.Path]::GetFileNameWithoutExtension($_.Name)) })
+Write-Host ("  legacy .bat tests                                : {0} ({1} now driven by run_*.ps1)" -f `
+            $legacyBat.Count, ($legacyBat.Count - $darkNames.Count))
+Write-Host ("  ... still reached by NOTHING (status unknown)    : {0}" -f $darkNames.Count) `
+           -ForegroundColor $(if ($darkNames.Count -gt 0) { 'Yellow' } else { 'Gray' })
+if ($darkNames.Count -gt 0) {
   Write-Host '      see docs\INBOX-68-bat-tests-are-invisible-to-the-battery.md' -ForegroundColor DarkGray
 }
 Write-Host ("  excluded by policy                               : {0}" -f $excluded.Count)

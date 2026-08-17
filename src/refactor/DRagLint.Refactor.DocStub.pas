@@ -128,6 +128,24 @@ function ParseParamDecls(const AParamList: string): TArray<TParamDecl>;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SignatureHasReturn(const ASig: string): Boolean;
+/// <summary>True when ASig carries a RETURN TYPE, judged from the signature's
+/// SHAPE -- a ':' after the (balanced) parameter list -- rather than from a
+/// leading keyword.</summary>
+/// <param name="ASig">A signature in either spelling: the INDEXED form
+/// ('(A: Integer): Integer') or a full declaration line.</param>
+/// <returns>True when a return type follows the parameter list.</returns>
+/// <remarks>THIS IS THE TEST SignatureHasReturn CANNOT PERFORM, and the two are
+/// deliberately separate rather than merged. SignatureHasReturn asks a question
+/// about the DECLARATION TEXT ("does it begin with `function`"), which is
+/// exactly right where a caller holds a source line and is always False for an
+/// indexed signature, since the keyword is not stored. Merging them would make
+/// one name answer two different questions depending on what it was handed.
+/// Balanced scanning is load-bearing: a procedural-type parameter
+/// ('(ACallback: procedure(X: Integer))') contains an inner ')' whose naive
+/// match would expose that parameter's own colon and report a return type on a
+/// procedure. An unbalanced signature returns False rather than guessing.
+/// Pure.</remarks>
+function SignatureDeclaresReturn(const ASig: string): Boolean;
 /// <summary>True when ASig declares a CONSTRUCTOR -- i.e. its first word is
 /// `constructor`. The declaration TEXT is the only ground truth for this: the
 /// parser indexes a constructor as kind `method`, so TSymbol.Kind cannot
@@ -207,6 +225,57 @@ var
 begin
   Lower:= LowerCase(Trim(ASig));
   Result:= Lower.StartsWith('function') or Lower.StartsWith('constructor');
+end;
+
+{ True when ASig carries a RETURN TYPE, judged from the signature's own shape
+  rather than from a leading keyword.
+
+  This is the test SignatureHasReturn cannot perform. An INDEXED signature is
+  '(AValue: Integer): Integer' -- the `function` keyword is not part of it -- so
+  a keyword test is False for every indexed function, and the symbol kind does
+  not rescue it because a class function is indexed as skMethod.
+
+  HOW: skip the parameter list with a BALANCED paren scan, then ask whether a
+  ':' remains. Balanced, not "find the last ')'", because a parameter may itself
+  be a procedural type -- `(ACallback: procedure(X: Integer))` -- whose inner
+  ')' would otherwise end the scan early and expose the parameter's own colon,
+  reporting a return type on a procedure.
+
+  The four shapes it must separate, all real:
+    '(A: Integer): Integer'   -> True   (function with params)
+    ': Integer'               -> True   (parameterless function)
+    '(A: Integer)'            -> False  (procedure with params)
+    ''                        -> False  (parameterless procedure)
+  Trailing directives are harmless: '(A: Integer): Integer; static;' still has
+  its colon, and '(A: Integer); overload;' still has none. }
+function SignatureDeclaresReturn(const ASig: string): Boolean;
+var
+  S    : string ;
+  i    : Integer;
+  Depth: Integer;
+begin
+  S:= Trim(ASig);
+  if S = '' then Exit(False);
+  i:= 1;
+  { Walk the parameter list, if there is one, tracking nesting. }
+  if (Length(S) > 0) and (S[1] = '(') then
+  begin
+    Depth:= 0;
+    while i <= Length(S) do
+    begin
+      if      S[i] = '(' then Inc(Depth)
+      else if S[i] = ')' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then begin Inc(i); Break; end;
+      end;
+      Inc(i);
+    end;
+    { Unbalanced text (a truncated or malformed signature) is not evidence of a
+      return type -- say no rather than guess from the remainder. }
+    if Depth <> 0 then Exit(False);
+  end;
+  Result:= Pos(':', Copy(S, i, MaxInt)) > 0;
 end;
 
 function SignatureIsConstructor(const ASig: string): Boolean;
@@ -418,11 +487,31 @@ begin
   ParamList := ExtractParamList(Sig      );
   ParamNames:= ParseParamNames (ParamList);
 
-  // Determine whether a return value exists:
-  //   - From signature text when available.
-  //   - From symbol kind when no signature text could be found.
-  if Sig <> '' then HasReturn:= SignatureHasReturn(Sig)
-  else HasReturn:= Sym.Kind in [skFunction, skConstructor];
+  { Does this routine RETURN something?
+
+    BOTH of the tests that used to answer this are wrong for an INDEXED
+    signature, and between them they emitted no <returns> for any class
+    function. Found 2026-08-17 by T38_doc_stub, one of the legacy .bat tests
+    that had been invisible to the battery:
+
+      * SignatureHasReturn asks whether the text STARTS WITH 'function' /
+        'constructor'. The stored signature is '(AValue: Integer): Integer' --
+        the leading keyword is not part of it -- so it is False for every
+        indexed function.
+      * the kind fallback only ran when the signature was EMPTY, and would have
+        failed here anyway: a class function is indexed as skMethod, not
+        skFunction.
+
+    DRagLint.Doc.Document already names this exact trap at its own call site and
+    works around it by reading Facts.ReturnType first; DRagLint.Doc.Drift does
+    the same. This generator is the one consumer that never got the treatment,
+    so `generate-docs` silently dropped <returns> / @returns.
+
+    The return type is read from the SIGNATURE ITSELF here rather than by
+    building a full fact set: this is a stub generator, and TDocFactsBuilder.Build
+    is orders of magnitude more work than the answer is worth. }
+  HasReturn:= SignatureDeclaresReturn(Sig) or SignatureHasReturn(Sig)
+              or (Sym.Kind in [skFunction, skConstructor]);
 
   Sb:= TStringBuilder.Create;
   try
