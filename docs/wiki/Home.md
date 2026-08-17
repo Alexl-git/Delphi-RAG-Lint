@@ -15,7 +15,7 @@ schema version; the CLI surface is not yet frozen.
 
 | Page | For |
 |---|---|
-| **[Features](Features)** | Everything it does, grouped -- 173 lint rules, 22 with auto-fix |
+| **[Features](Features)** | Everything it does, grouped |
 | **[Installation](Installation)** | Getting the CLI, the IDE plugin, or the LSP running |
 | **[Maintenance](Maintenance)** | Indexes, the manifest, reindexing, and what to do when something looks wrong |
 | **[IDE Menu Reference](IDE-Menu-Reference)** | What every item in the `drag-lint` menu does |
