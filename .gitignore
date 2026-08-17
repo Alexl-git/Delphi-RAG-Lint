@@ -86,3 +86,37 @@ src/tools/convrules-editor/ConvRulesEditorStyles.res
 
 # Fatal breadcrumb written by the CLI catch-all (see DRagLint.CLI.Run).
 drag-lint-fatal.log
+
+# --- internal working notes: local only, never published ---
+docs/INBOX-*
+docs/INBOX-Done/*
+docs/OPEN-ITEMS.md
+docs/RESUME-*
+docs/PLAN-*
+docs/NEXT-SESSION-PLAN-*
+docs/QUESTIONS-*
+docs/TRIAGE-*
+docs/BACKLOG-*
+docs/TODO-URGENT-*
+docs/DESIGN-2026-*
+docs/FIX-2026-*
+docs/IDE-POLISH-*
+docs/marathon-*
+docs/test-findings-*
+docs/Z14SLCT-*
+docs/probe-*
+docs/superpowers/*
+docs/reviews/*
+.superpowers/*
+stats/*
+AGENT_USAGE_NOTES.md
+build-output.txt
+build_result.txt
+clean_rebuild_result.txt
+rebuild_result.txt
+test_reconcile.txt
+lint-report-*.txt
+FEATURES.txt
+Lint Features report.txt
+*stderrcap.txt
+
