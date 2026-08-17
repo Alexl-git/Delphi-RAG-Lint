@@ -10884,6 +10884,16 @@ begin
            GScanT[K] * 1000 / (TStopwatch.Frequency * Max(1, GScanN[K]))]));
     Writeln(ErrOutput, Format('    %-28s %8.2f s  <-- the quadratic accumulation, measured at last',
       ['(Findings append)', GScanAppend / TStopwatch.Frequency]));
+    { The .scm slot split into its two halves. Only the PARSE half could be
+      recovered by sharing TAstParseCache with the AST checks (TLinter builds its
+      own parser, so every file is parsed twice) -- the query half would remain
+      whatever it is. Printing both is what stops that being guessed. }
+    Writeln(ErrOutput, Format('      %-26s %8.2f s  (%d file(s), %.2f ms/file)',
+      ['of which read+parse', DRagLint.Lint.Linter.LinterParseTicks / TStopwatch.Frequency,
+       DRagLint.Lint.Linter.LinterParseCount,
+       DRagLint.Lint.Linter.LinterParseTicks * 1000 / (TStopwatch.Frequency * Max(1, DRagLint.Lint.Linter.LinterParseCount))]));
+    Writeln(ErrOutput, Format('      %-26s %8.2f s',
+      ['of which .scm queries', (GScanT[0] - DRagLint.Lint.Linter.LinterParseTicks) / TStopwatch.Frequency]));
     Writeln(ErrOutput, Format('    %-28s %8.2f s', ['(sum of the slots above)', (ScanTot + GScanAppend) / TStopwatch.Frequency]));
     Flush(ErrOutput);
   end;

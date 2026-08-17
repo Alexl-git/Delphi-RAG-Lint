@@ -14,6 +14,7 @@ uses
   , System.Classes
   , System.Diagnostics { TStopwatch -- the phase-attribution counters below }
   , System.Generics.Collections
+  , System.Generics.Defaults { TComparer -- the deterministic emit order below }
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Core.Model
@@ -1019,7 +1020,38 @@ begin
     Inc(GBFanInAll, TStopwatch.GetTimeStamp - TFI);
     if WantRule('feature-envy') then BuildMemberMap;
 
-    for CI in Inv.Values do
+    { DETERMINISTIC EMIT ORDER, and it is a correctness property of the REPORT
+      rather than a cosmetic one.
+
+      This loop used to walk Inv.Values directly. Inv is a
+      TDictionary<Int64, TClassInfo> keyed by SYMBOL ID, and dictionary
+      enumeration follows the hash layout -- so the order depends on the ids,
+      and a reindex reassigns ids. Measured 2026-08-17 on ORM3: reindexing the
+      SAME sources moved 61 findings (58 high-response, 2 low-cohesion, 1
+      too-many-children) to different positions. Same 14,764 findings, same
+      2,161,951 bytes, identical line multiset when sorted -- a different file.
+
+      Why that matters more than it looks: byte-identity of `lint-all` stdout is
+      this project's primary verification gate for every performance change. An
+      output order that moves when the index is rebuilt makes that gate valid
+      only WITHIN one index state, silently, and makes any report-to-report diff
+      across a reindex show churn that is not there.
+
+      Sorted by (path, decl line, decl col, name): the file and position a
+      reader is sent to, which is stable across reindexes because it comes from
+      the SOURCE, not from the index's internal numbering. }
+    var Ordered: TArray<TClassInfo>:= nil;
+    for var CIv in Inv.Values do Ordered:= Ordered + [CIv];
+    TArray.Sort<TClassInfo>(Ordered, TComparer<TClassInfo>.Construct(
+      function(const L, R: TClassInfo): Integer
+      begin
+        Result:= CompareText(L.Path, R.Path);
+        if Result = 0 then Result:= L.DeclLine - R.DeclLine;
+        if Result = 0 then Result:= L.DeclCol  - R.DeclCol ;
+        if Result = 0 then Result:= CompareText(L.Name, R.Name);
+      end));
+
+    for CI in Ordered do
     begin
       if WantRule('too-many-children') then
       begin

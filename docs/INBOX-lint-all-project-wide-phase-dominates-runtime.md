@@ -602,20 +602,30 @@ precondition this note has insisted on four times.
    `FlowChecker.Check`. Neither is "566 genuine file parses", which was the other
    possibility this instrumentation was built to test.
 
-   **THE DOUBLE PARSE IS CONFIRMED -- structurally. Its cost is NOT.** The
-   built-in checks share one parse per file via `TAstParseCache`
-   (`ParseCache.pas`), but `TLinter` does not use that cache: `CheckFileImpl`
-   constructs its own `TTSParser` and parses the file itself
-   (`DRagLint.Lint.Linter.pas:681-684`). So every file is parsed twice per
-   `lint-all` -- once for the `.scm` catalogue, once for the AST checks.
+   **THE DOUBLE PARSE IS REAL AND COSTS 1.38 s. DO NOT "FIX" IT.**
 
-   Say exactly what that does and does not establish. **Established:** two parses
-   per file, by code inspection. **NOT established:** what fraction of the
-   56.17 s `.scm` slot is the parse rather than executing 114 tree-sitter
-   queries. Routing `TLinter` through `TAstParseCache` can save at most ONE parse
-   per file, and if queries dominate it saves almost nothing. Time the parse
-   alone before doing the work -- the entire history of this note is what happens
-   when a plausible mechanism is acted on before it is measured.
+   `TLinter.CheckFileImpl` builds its own `TTSParser` rather than sharing
+   `TAstParseCache` with the AST checks (`DRagLint.Lint.Linter.pas:681`), so
+   every file IS parsed twice per `lint-all`. That much is structural fact, and
+   it reads like an obvious win. Measured (2026-08-17, same run, report
+   byte-identical):
+
+   ```
+     Linter.LintFile (.scm)     55.73 s  (566 files, 98.47 ms/file)
+       of which read+parse       1.38 s  (566 files,  2.44 ms/file)   <-- 2.5%
+       of which .scm queries    54.35 s                               <-- 97.5%
+   ```
+
+   Sharing the cache could recover **at most 1.38 s of a 271 s run** -- half a
+   percent. The cost is **executing the 114 tree-sitter queries**, not building
+   the tree.
+
+   This is the cleanest example in this note of why the discipline exists: a
+   genuine inefficiency, confirmed by reading the code, worth 0.5%. Every earlier
+   entry records the same shape with a worse ending. **The next person to look at
+   `.scm` cost should time individual RULES** -- 114 queries averaging ~0.17 ms
+   per file each is where the 54 s lives, and it is entirely possible that a
+   handful of rules own most of it.
 
 2. **`unused-unit-in-uses` is still 17.4 s** -- the memo removed the repetition
    but the remaining cost is one `FindSymbolsByExactName` per DISTINCT name,

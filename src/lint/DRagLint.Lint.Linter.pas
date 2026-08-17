@@ -145,7 +145,42 @@ type
       function DefaultDisabledRuleIds: TArray<string>                                          ;
   end;
 
+/// <summary>Ticks spent building the tree-sitter tree inside CheckFileImpl,
+/// across every LintFile call so far. Diagnostic only.</summary>
+/// <returns>Accumulated TStopwatch ticks; divide by TStopwatch.Frequency.</returns>
+/// <remarks>TLinter builds its OWN parser rather than sharing TAstParseCache
+/// with the AST checks, so every file is parsed twice per lint-all. This
+/// separates that parse from executing the .scm queries, because only the parse
+/// half could be recovered by sharing the cache -- and the split had never been
+/// measured. Not thread-safe; lint-all is single-threaded here.</remarks>
+function LinterParseTicks: Int64;
+/// <summary>Number of files parsed by CheckFileImpl so far. Diagnostic only.</summary>
+/// <returns>Call count, for the ms/file figure beside LinterParseTicks.</returns>
+function LinterParseCount: Int64;
+
 implementation
+
+uses
+  System.Diagnostics; { TStopwatch -- the parse-vs-query split below }
+
+{ SESSION 25 B2 follow-up, DIAGNOSTIC ONLY. `Linter.LintFile` is 56.17 s of
+  ORM3's 145.86 s per-file scan and this splits it into READ+PARSE versus
+  executing the 114 .scm queries. Read by LinterParseProfile, printed under
+  DRAGLINT_PROFILE beside the per-check breakdown. }
+var
+  GLintParseTicks: Int64;
+  GLintParseCount: Int64;
+
+{ Ticks and call count spent building the tree inside CheckFileImpl. }
+function LinterParseTicks: Int64;
+begin
+  Result:= GLintParseTicks;
+end;
+
+function LinterParseCount: Int64;
+begin
+  Result:= GLintParseCount;
+end;
 
 { The DFM grammar lives in tree-sitter-dfm.dll (already a runtime dependency of
   the exe via the indexer's TDFMParser). Re-declared here so the linter can parse
@@ -678,6 +713,18 @@ begin
       Parsing a .dfm with the Pascal grammar produced a spurious parser-error per
       set-literal/root object (see CollectDfmParseErrors). }
     IsDfm:= SameText(ExtractFileExt(AFilePath), '.dfm');
+    { SESSION 25 B2 follow-up: time the READ+PARSE alone, separately from
+      executing the rule queries.
+
+      Established by inspection: this routine builds its OWN TTSParser, so it
+      does not share TAstParseCache with the built-in AST checks -- every file
+      is parsed TWICE per lint-all. What that does NOT say is how much of the
+      56.17 s this slot costs is the parse rather than the 114 tree-sitter
+      queries, and routing this through the cache can only ever recover the
+      parse half. Measure before doing the work; this counter is that
+      measurement and nothing else. }
+    Inc(GLintParseCount);
+    var TP0: Int64:= TStopwatch.GetTimeStamp;
     Parser:= TTSParser.Create;
     if IsDfm then Parser.Language:= tree_sitter_dfm
     else Parser.Language:= FLanguage;
@@ -685,6 +732,7 @@ begin
       function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes var Remaining: Integer; begin Remaining:= Length(Source)
         - Integer(AByteIndex); if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end; SetLength(Result, Remaining); Move(Source[AByteIndex], Result[0],
           Remaining); ABytesRead:= Remaining; end, TTSInputEncoding.TSInputEncodingUTF8);
+    Inc(GLintParseTicks, TStopwatch.GetTimeStamp - TP0);
     if IsDfm then
       { DFM: the Pascal *.scm rules and the Pascal-specific walks key off node types
         that don't exist in the DFM grammar (and the queries are compiled against the

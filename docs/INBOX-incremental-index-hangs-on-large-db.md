@@ -70,6 +70,46 @@
 > correctness-sensitive, has an equivalence hatch already
 > (`DRAGLINT_NO_SCOPED_RESOLVE`), is ~1 day, and was deliberately NOT bundled
 > with the announce.
+>
+> ## The A/B harness for that work EXISTS and has a baseline (2026-08-17)
+>
+> `tools\perf\scoped-resolve-ab.ps1`. Copies the subject DB twice, puts an
+> IDENTICAL delta in both, indexes one normally and one with
+> `DRAGLINT_NO_SCOPED_RESOLVE=1`, then compares `call_edges` exactly --
+> a sorted digest of `(ref_id, target_symbol_id, confidence,
+> receiver_type_symbol_id)`. The receiver column is in the digest deliberately:
+> the scoped pass updates receivers too, so a check that ignored it could pass
+> while the two runs disagreed about precisely what scoping touches.
+>
+> **Baseline on ORM3-Micronite2027 (707 files, 12-file delta), current build:**
+>
+> ```
+>   A  call_edges=32983  digest=c13a7fcb0e291f94e74b   scoped,     46.7 s
+>   B  call_edges=32983  digest=c13a7fcb0e291f94e74b   whole DB,  195.5 s
+>   EQUIVALENT
+> ```
+>
+> So the scoped pass is **4.2x faster and produces byte-identical edges** on a
+> real corpus. That is the number the gate relaxation is chasing, and the harness
+> is what will prove the relaxed gate still lands on `EQUIVALENT`.
+>
+> **TWO WAYS THIS HARNESS GOES VACUOUS -- both hit on the first attempt, both now
+> guarded or fixed:**
+>
+> 1. **Deleting file rows to make a delta.** That makes the files NEW, so the run
+>    declares type names it never withdrew, the type-equality gate declines, and
+>    BOTH sides take the whole-database pass. The comparison then passes while
+>    proving nothing. The delta now blanks `files.sha256` instead, so the file is
+>    merely CHANGED and re-parsed from identical content -- the ordinary
+>    `--recompile` shape the scoped pass exists for.
+> 2. **A subject DB with a stale fingerprint.** Every file re-parses, the
+>    one-in-three limit is blown, and again both sides go whole-database. The
+>    script now asserts run A actually printed `starting SCOPED pass` and shouts
+>    `*** VACUOUS ***` with the reason if not.
+>
+> Both were caught only because the announce line shipped above says which shape
+> ran. Without it the harness would have reported `EQUIVALENT` twice over and
+> looked like a clean result.
 
 # INBOX: `index <folder> --db <large.sqlite>` never finishes (2026-08-05)
 
