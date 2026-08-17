@@ -1,3 +1,51 @@
+> # RETIRED 2026-08-16 (session 23) -- mechanism DEMONSTRATED, fix ALREADY SHIPPED.
+>
+> The session-23 plan filed this under "no small fixture can exhibit it; stays a
+> projection until a real large-DB run". **That is false, and it was measured.**
+>
+> ## The fix is already in the deployed exe
+>
+> `Storage.SQLite.pas:2986-2988` create the three missing child-table indexes
+> inside `Migrate`, which runs on EVERY open with no schema bump -- so any DB
+> lacking them self-heals the next time it is opened.
+>
+> ## The mechanism, confirmed in source
+>
+> `PRAGMA foreign_keys = ON` (`:2717`) plus `DELETE FROM files WHERE id = ?`
+> (`:4662`, same shape at `:3124` and `:4847`). The cascade deletes each file's
+> ~80 `symbols` rows, and each deleted symbol forces FK child lookups in
+> `call_edges(receiver_type_symbol_id)`, `symbol_facts(symbol_id)` and
+> `symbol_docs(symbol_id)` -- **unindexed, so a full table scan per deleted
+> symbol**, i.e. O(child-table rows).
+>
+> ## A ~3 MB fixture exhibits it. The slope is the proof, not the absolute time.
+>
+> Synthetic units, fresh temp DBs, nothing in the repo touched. Two arms, because
+> the exe self-heals: the "pre-fix" arm replays the exact production statements on
+> a copy with the three indexes dropped.
+>
+> | N files | call_edges | delete 1 file, NO indexes | delete 1 file, indexed | ratio |
+> |---|---|---|---|---|
+> | 10 | 800 | 27.9 ms | 21.6 ms | 1.3x |
+> | 50 | 4,000 | 65.0 ms | 23.8 ms | 2.7x |
+> | 200 | 16,000 | 205.5 ms | 30.3 ms | 6.8x |
+> | 400 | 32,000 | 421.5 ms | 36.9 ms | 11.4x |
+>
+> Pre-fix cost is cleanly linear in child-table rows (~12.6 ms per 1,000
+> `call_edges`); fixed cost is flat; the ratio grows without bound. **The N=50
+> ratio of 2.7x reproduces this note's own measured 2.7x exactly**, which is what
+> ties the small fixture to the original observation. Extrapolating the fit to the
+> library's 139k `call_edges` gives ~1.8 s/file for the cascade alone versus
+> ~40 ms fixed -- the same order as the reported 25x.
+>
+> The 25x itself was always a real measurement (150.4 files/min cold vs 5.9
+> files/min re-parse on the 2,027 MB DB); only its ATTRIBUTION to this mechanism
+> was projected. That attribution now has a slope behind it.
+>
+> **A NEW and larger problem surfaced while measuring this -- see
+> `INBOX-incremental-resolve-affected-set-is-o-corpus.md`.** With the FK fix in
+> place, the exe's incremental reindex of ONE touched file still grows linearly
+> with corpus size, and it now dominates.
 > # 2026-08-16 (session 22): the fix is in code; one of the two residuals is DONE.
 >
 > **Already landed (not this session):** the three FK-child indexes at
