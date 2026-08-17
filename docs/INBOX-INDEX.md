@@ -1,6 +1,6 @@
-# INBOX index -- 7 open notes
+# INBOX index -- 8 open notes
 
-> **Session 24 (2026-08-16 -> 08-17). 9 open -> 7; 107 retired; 2 filed AND closed.**
+> **Session 24 (2026-08-16 -> 08-17). 9 open -> 8; 107 retired; 2 filed AND closed, 1 filed and OPEN.**
 >
 > **Retired:** `converter-editor-phase-g-engine-findings` (2.1-2.11 all fixed;
 > the last, 2.5's product half, shipped as the owner's shape -- `query --name`
@@ -116,13 +116,14 @@ their fix was found only by measuring, not by reading the note:
 build.** A test asserting only "the false finding is gone" passes with the rule
 switched off.
 
-## Open -- all 7, current as of session 24
+## Open -- all 8, current as of session 24 close
 
 Re-verified by listing `docs\INBOX-*.md`, not by trusting this table. Every note
 retired above has been removed from it.
 
 | note | shape |
 |---|---|
+| `indexer-fingerprint-disagrees-between-entry-points` | **NEW 2026-08-17, and it silently disables the per-file resume shipped the same day.** `index --all --only <Section>` stamps `plat=` (`TPlanSection.Platform` is `'` for closure sections BY DESIGN, `Index.Plan.pas:50`); `index <dir> --db` stamps `plat=win64`. One DB, two spellings -> alternating entry points makes `Prev <> Cur` and re-parses everything. Worst on the manifest path, which is what the 12.5-hour library walk uses. Pre-existing; the new per-file stamps made it visible. **Decide by measurement** (count the spellings across every DB) -- normalising costs one full re-parse per DB. Same note records an INTERMITTENT `FOREIGN KEY constraint failed` on incremental reindex: not reproducible, DB verified NOT corrupt at the moment of failure, next steps written down. |
 | `lint-all-project-wide-phase-dominates-runtime` | **HEADLINE DISCHARGED: 572 s -> 320 s (-44%), report byte-identical.** It was never the SQL. `FindUnresolvedNameCallers` costs **2.41 s, not 269** -- its in-process 0.56 ms/call AGREES with the external replay, so **the ~80x gap never existed**; the timer enclosed something else. The cost was **`OverloadArityTag`, 255.48 s (10.52 ms x 24,286 calls)**, running `FindAllChildSymbols` per rendered caller row. Fixed with a memo keyed on **(store pointer, symbol id)** -- ids are per-DB. Four hypotheses (CTE, index, statistics, the `NOT IN` predicate) plus a shipped plan pin and ANALYZE were all aimed at the wrong statement, because no timer had a CALL COUNT beside it. **Now open, all smaller and independent:** `per-file scan` is the new dominant phase (141 s of 320, never profiled), `class-metrics` 56 s, `seealso` 17.6 s, `unused-unit-in-uses` ~17 s, and a separate CORRECTNESS bug -- `ToFactRef` in the extra-store loop hands `OverloadArityTag` an id from the WRONG DB. |
 | `index-runs-are-not-resumable` | **HEADLINE SHIPPED (session 24): per-file resume works.** `files.indexed_at_fingerprint`, stamped inside the transaction `CommitFileTx` closes. The 12.5-hour library walk that reached 4,748 of 6,978 files and restarted from file 1 now continues at 4,749. **The written plan was wrong twice:** it reused `ForceReparse` (which is set for THREE reasons -- only a fingerprint change may resume; `--force-reparse` must not, or the flag is silently disobeyed), and its fixture tested nothing (`index <one file>` also commits the DB-level fingerprint, so its step 3 was never a forced run and would have read "skipped 2"). **Open only for:** redirected output arriving in blocks, so a slow run and a hung run look identical -- and the note's stated cause ("stdout is block-buffered", blaming the engine) is UNVERIFIED; what was observed was PowerShell's `2>`. Measure which before changing either. |
 | `incremental-index-hangs-on-large-db` | The "hang" is the whole-DB resolve; scoped resolve fixes the body-edit shape but an ADDED type still falls back. NOTE: a session-23 suspicion that the incremental affected-set is O(corpus) was **refuted on real code** (748 affected refs, smaller than the changed file's own 1,988) -- do not carry that link forward. |
