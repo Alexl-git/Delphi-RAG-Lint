@@ -403,11 +403,16 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
    > **The memo key must include the STORE, not just the id.** Symbol ids are
    > per-DB, so a bare id key would collide across a multi-DB run.
    >
-   > Related and NOT fixed: in the extra-store loop, `ToFactRef` closes over the
-   > PRIMARY `AStore` while `RC.EnclosingSymbolId` came from the EXTRA store, so
-   > `OverloadArityTag` is already being handed an id from the wrong DB there.
-   > That is a pre-existing correctness bug, separate from the performance one,
-   > and it needs its own fix and its own test.
+   > Related and NOT fixed AT THE TIME OF WRITING: in the extra-store loop,
+   > `ToFactRef` closes over the PRIMARY `AStore` while `RC.EnclosingSymbolId`
+   > came from the EXTRA store, so `OverloadArityTag` is handed an id from the
+   > wrong DB. A pre-existing correctness bug, separate from the performance one.
+   >
+   > **FIXED later the same session (`8605017`).** `ToFactRef` now takes the
+   > owning store as a parameter and the extra-store loop passes `ExStore`
+   > (`Doc.Facts.pas:2179`). Left standing here with this note attached rather
+   > than deleted, because the paragraph above outlived the fix by two sessions
+   > and got quoted forward as a live defect.
    >
    > **THE GATE, and it is the same one this note used for the 2026-08-12 work:**
    > the report must stay byte-identical. Findings are the product; a 45% saving
@@ -477,8 +482,12 @@ precondition this note has insisted on four times.
    > * **`class-metrics` 56.10 s** -- second, also never looked at.
    > * **`seealso` 17.57 s** -- the largest remaining doc-drift sub-item.
    > * **`unused-unit-in-uses`** (item 2 below) still ~17 s.
-   > * The cross-DB `ToFactRef` id bug noted above is still open, and is a
-   >   CORRECTNESS issue rather than a performance one.
+   > * ~~The cross-DB `ToFactRef` id bug noted above is still open.~~
+   >   **FIXED the same session (`8605017`)** -- `Doc.Facts.pas:2179` passes
+   >   `ExStore`, not `AStore`. Corrected 2026-08-17: both this line and the
+   >   INBOX index row went on describing it as open for two sessions after it
+   >   was closed, and it was quoted to the owner as the one live correctness
+   >   defect. The stale claim, not the bug, was the thing still costing time.
    >
    > And the lesson worth keeping, because it cost three sessions: **the profiler
    > attributed a cost to the wrong thing, and every hypothesis built on that
