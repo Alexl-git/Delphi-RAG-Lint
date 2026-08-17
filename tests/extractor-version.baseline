@@ -1,0 +1,18 @@
+# Baseline for tests\autotest\run_extractor_version_guard.ps1
+#
+# <DRAGLINT_EXTRACTOR_VERSION>|<sha256 of the extraction surface>
+#
+# The extraction surface is src\parser, src\preprocess, src\index and
+# DRagLint.Core.Indexer.pas -- the code that decides WHAT gets extracted from a
+# byte sequence. Change any of it and the guard fails until
+# DRAGLINT_EXTRACTOR_VERSION is bumped, because every existing index would
+# otherwise keep its old parses silently.
+#
+# To update: bump the constant in src\core\DRagLint.Core.Model.pas, re-run the
+# guard, paste the line it prints below. Expect one full re-parse per index --
+# that is the point of the bump.
+#
+# If a change genuinely cannot affect extraction (a comment, a rename with no
+# behavioural effect), update the hash WITHOUT bumping the version and say why
+# here.
+1.4.0-alpha|079677c88767a90ce7afe8795ea70de63f05e81c65e6d8446c9e768dc2e5fe0d

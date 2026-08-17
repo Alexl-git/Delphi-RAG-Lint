@@ -16,6 +16,45 @@ const
   /// constant here reaches both with no new dependency and no cycle.</remarks>
   DRAGLINT_VERSION = '1.4.0-alpha';
 
+  /// <summary>The identity of what this build EXTRACTS from a byte sequence.
+  /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
+  /// Bump this ONLY when a re-parse is genuinely required.</summary>
+  /// <remarks>
+  /// WHY THIS IS SEPARATE FROM THE PRODUCT VERSION. The indexer fingerprint used
+  /// DRAGLINT_VERSION, so EVERY release re-parsed EVERY database whether or not
+  /// extraction had changed. Cutting v1.4.0-alpha -- two memos, an emit-order
+  /// sort and some instrumentation, nothing that changes what the parser sees --
+  /// forced a full re-parse of ~7,000 library files plus every project index.
+  /// That is hours of machine time bought for nothing, and it recurs on every
+  /// version bump.
+  ///
+  /// SEEDED TO '1.4.0-alpha' DELIBERATELY: it is the value DRAGLINT_VERSION had
+  /// when this constant was introduced, so the fingerprint STRING IS UNCHANGED
+  /// and no existing index is invalidated by the refactor itself. The very first
+  /// benefit lands on the next product bump, which will now cost nothing.
+  ///
+  /// BUMP IT WHEN, AND ONLY WHEN, A RE-PARSE IS REQUIRED:
+  ///   * the parser or grammar changes what it produces (tree-sitter version,
+  ///     src\parser)
+  ///   * an extractor emits new/different symbols, refs, uses or call edges
+  ///     (src\index, src\storage's write side)
+  ///   * the preprocessor changes which branches are parsed (src\preprocess)
+  ///   * a schema change alters stored parse content -- though `schema` is
+  ///     already its own component of the fingerprint
+  ///
+  /// DO NOT bump it for: performance work, lint rules, output formatting,
+  /// documentation, the IDE plugin, the LSP, or anything downstream of the
+  /// index. Those cannot make a stored parse wrong.
+  ///
+  /// THE FAILURE MODE THIS INTRODUCES, STATED PLAINLY: forgetting to bump it
+  /// after a real extractor change leaves SILENTLY STALE PARSES -- strictly
+  /// worse than a redundant re-parse, because the index then looks complete and
+  /// answers confidently with fewer results. `--force-reparse` is the manual
+  /// escape hatch. Guarded by tests\autotest\run_extractor_version_guard.ps1,
+  /// which fails when extractor sources change without this constant moving.
+  /// </remarks>
+  DRAGLINT_EXTRACTOR_VERSION = '1.4.0-alpha';
+
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>

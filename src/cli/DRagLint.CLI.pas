@@ -2536,6 +2536,15 @@ var
 begin
   { IsSchemaCurrent yields the engine's expected schema without importing the
     schema unit here; the DB's own stored value is irrelevant to OUR identity. }
+  { EXTRACTOR version, not the product version -- see DRAGLINT_EXTRACTOR_VERSION.
+    This string decides whether every stored parse is thrown away, so it must
+    name what this build EXTRACTS, not what the release is called. Using
+    DRAGLINT_VERSION here made every release re-parse every database: cutting
+    v1.4.0-alpha cost ~7,000 library files plus every project index for a
+    release that changed nothing the parser sees.
+
+    The two constants are equal at the moment of the split, so this refactor
+    leaves the fingerprint string byte-identical and invalidates nothing. }
   AStore.IsSchemaCurrent(Found, Expected);
   { NORMALISED, and this is the whole fix for the entry-point disagreement: the
     token recorded is the EFFECTIVE preprocess platform, not whatever spelling
@@ -2549,7 +2558,8 @@ begin
     library index instead, i.e. the 12.5-hour walk. That is why the note said
     measure first. }
   Result:= Format('v=%s;schema=%d;pp=%d;plat=%s',
-                  [VERSION, Expected, Ord(APreprocess), LowerCase(EffectiveIndexPlatform(APlatform))]);
+                  [DRAGLINT_EXTRACTOR_VERSION, Expected, Ord(APreprocess),
+                   LowerCase(EffectiveIndexPlatform(APlatform))]);
 end;
 
 // Decides whether this run re-parses everything, and records the current
