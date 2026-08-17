@@ -92,6 +92,12 @@ docs/INBOX-*
 docs/INBOX-Done/*
 docs/OPEN-ITEMS.md
 docs/RESUME-*
+docs/wiki-featuremap.tsv
+
+# MSBuild regenerates circular-demo's .res on every build even though the .dpr
+# has no {$R *.res}. Ignored so a rebuild of the sample project does not leave
+# an untracked artefact behind.
+circular-demo/*.res
 docs/PLAN-*
 docs/NEXT-SESSION-PLAN-*
 docs/QUESTIONS-*

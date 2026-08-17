@@ -16,6 +16,7 @@ schema version; the CLI surface is not yet frozen.
 | Page | For |
 |---|---|
 | **[Features](Features)** | Everything it does, grouped |
+| **[Feature Index](Feature-Index)** | Every feature as its own page, by the surface it is reached from |
 | **[Installation](Installation)** | Getting the CLI, the IDE plugin, or the LSP running |
 | **[Maintenance](Maintenance)** | Indexes, the manifest, reindexing, and what to do when something looks wrong |
 | **[IDE Menu Reference](IDE-Menu-Reference)** | What every item in the `drag-lint` menu does |

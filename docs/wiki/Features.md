@@ -7,6 +7,13 @@ Three surfaces expose these: the **CLI** (`drag-lint <verb>`), the **RAD Studio
 plugin** (see [IDE Menu Reference](IDE-Menu-Reference)), and the **language
 server** (`drag-lint lsp`).
 
+Inside the plugin, not everything lives on the main menu. **Auto-fix and
+"allow this finding" are reachable only by right-clicking a node in the
+Structure form** -- see [Fix it](Fix-it), [Fix all in unit](Fix-all-in-unit),
+[Fix all in project](Fix-all-in-project) and
+[Allow this message](Allow-this-message). There is also a Project Manager
+right-click item, [drag-lint: Project Rules...](drag-lint-Project-Rules).
+
 ---
 
 ## Indexing
@@ -28,7 +35,7 @@ The foundation. Everything below that says *(index)* reads what this produces.
 | Per-file resume -- an interrupted walk continues where it stopped | automatic |
 | Preprocessing -- per-config `{$IFDEF}` resolution before parsing | on by default; `--no-preprocess` |
 | Show which databases a target resolves to | `resolve-dbs` |
-| Schema inspection / migration | `schema`, `migrate-dbs` |
+| Schema inspection / migration | [`schema`](schema), [`migrate-dbs`](migrate-dbs) |
 
 ## Search and navigation *(index)*
 
@@ -36,17 +43,17 @@ The foundation. Everything below that says *(index)* reads what this produces.
 |---|---|
 | Find a symbol by name or qualified name | `query --name` / `--qname` |
 | **Text search over string literals** -- string constants, resourcestrings, DFM captions, SQL exception messages | `query --text "<phrase>"` |
-| Who calls this | `query find-callers` (`--resolved` for precise call edges) |
-| What does this call | `find-callees` |
-| Class / interface ancestry, transitively | `query ancestors` |
-| Resolve a type category (class, interface, float, string, ...) | `query typecat` |
+| Who calls this | [`query find-callers`](query-find-callers) (`--resolved` for precise call edges) |
+| What does this call | [`find-callees`](find-callees) |
+| Class / interface ancestry, transitively | [`query ancestors`](query-ancestors) |
+| Resolve a type category (class, interface, float, string, ...) | [`query typecat`](query-typecat) |
 | Type of the expression at a cursor position | `typeat <file>:<line>:<col>` |
 | Find by documentation state | `query find --doc-tag / --no-docs` |
-| Class helpers of a type | `helpers-of` |
+| Class helpers of a type | [`helpers-of`](helpers-of) |
 | Shortest call path between two symbols | `call-path --from --to` |
-| Symbol slice, class surface, context bundle | `slice`, `surface`, `context` |
+| Symbol slice, class surface, context bundle | `slice`, `surface`, [`context`](context) |
 | Hover card | `hover` |
-| Which unit declares this symbol (and add it to `uses`) | `find-unit` |
+| Which unit declares this symbol (and add it to `uses`) | [`find-unit`](find-unit) |
 
 ## Linting
 
@@ -83,10 +90,19 @@ Scopes:
 |---|---|
 | One file (no index needed) | `lint <path>` |
 | A whole project -- adds project-wide rules, class metrics, duplicate code, documentation drift | `lint-all` |
-| Project-wide rules only | `lint-project` |
+| Project-wide rules only | [`lint-project`](lint-project) |
 | Restrict the report to one project's compile closure | `lint-all --project <.dproj>` |
 | Machine-readable output | `--json`, and SARIF |
 | Apply the fixable subset | `lint-all --fix` |
+
+Formatting: drag-lint drives **YADF** (the Delphi formatter) for the current
+unit or the whole active project, straight from the IDE menu -- see
+[Format with YADF](Format-with-YADF) and
+[Format Whole Project with YADF](Format-Whole-Project-with-YADF).
+**Formatting does not invalidate suppressions.** A `dl:ok` hash is computed over
+a normalised line -- whitespace stripped, identifiers lowercased -- so
+reindenting and re-spacing cannot change it. Verified on a real file: 10 markers
+in, 10 markers out, whitespace the only difference.
 
 Suppression:
 
@@ -103,27 +119,27 @@ guesswork.
 
 | Feature | Command |
 |---|---|
-| Document one symbol, a unit, a project, or everything | `document --qname / --unit / --project`, `document-all` |
+| Document one symbol, a unit, a project, or everything | `document --qname / --unit / --project`, [`document-all`](document-all) |
 | Stubs only, or fully populated facts | `--stubs` |
 | Managed fact blocks -- callers, callees, used-in-units, raises, returns, wiring, see-also | automatic |
-| Detect documentation that no longer matches the code | `doc-drift`, and the `doc-drift` lint rule |
+| Detect documentation that no longer matches the code | [`doc-drift`](doc-drift), and the [`doc-drift`](doc-drift) lint rule |
 | Strip generated blocks | `document --unit --strip` |
 | Generate a doc comment for a symbol | `generate-docs` |
-| Shared-unit markers, so several projects can document one unit without fighting | `shared-unit` |
+| Shared-unit markers, so several projects can document one unit without fighting | [`shared-unit`](shared-unit) |
 
 ## Refactoring and code generation
 
 | Feature | Command |
 |---|---|
 | Rename a symbol or a parameter, index-wide | `rename` |
-| Extract a method | `extract-method` |
-| Safe delete (refuses when still referenced) | `safe-delete` |
+| Extract a method | [`extract-method`](extract-method) |
+| Safe delete (refuses when still referenced) | [`safe-delete`](safe-delete) |
 | Add the missing unit for an undeclared identifier | `find-unit --apply` |
 | Audit and fix `uses` clauses -- interface->implementation moves, unused units, **compiler-verified** | `uses-audit`, `uses-fix` |
 | Reconcile project members against disk | `reconcile-project` |
-| Generate an enum helper (`ToString`, parse, ...) | `create-enum-helper` |
+| Generate an enum helper (`ToString`, parse, ...) | [`create-enum-helper`](create-enum-helper) |
 | Generate a DUnitX / DUnit test stub | `generate-test` |
-| Record a reviewed finding | `allow` |
+| Record a reviewed finding | [`allow`](allow) |
 
 ## Component conversion
 
@@ -132,20 +148,20 @@ DevExpress `cx`/`dx`).
 
 | Feature | Command |
 |---|---|
-| Property/event assignability engine over the type tree | `proptree` |
-| Scaffold a conversion rule from a real from/to pair | `convert-scaffold` |
-| Validate a rulebook | `convert-validate` |
-| Apply rules to a unit and its DFM | `convert-apply` |
+| Property/event assignability engine over the type tree | [`proptree`](proptree) |
+| Scaffold a conversion rule from a real from/to pair | [`convert-scaffold`](convert-scaffold) |
+| Validate a rulebook | [`convert-validate`](convert-validate) |
+| Apply rules to a unit and its DFM | [`convert-apply`](convert-apply) |
 | Visual rulebook editor | `ConvRulesEditor.exe` |
 
 ## Graphs and reports
 
 | Feature | Command |
 |---|---|
-| Call graph, either direction, to a depth | `callgraph`, `reverse-calltree` |
-| Butterfly view (callers + callees of one symbol) | `butterfly` |
-| Dependency report | `deps-report`, `uses-report` |
-| Uses cycles | `cycles` |
+| Call graph, either direction, to a depth | [`callgraph`](callgraph), `reverse-calltree` |
+| Butterfly view (callers + callees of one symbol) | [`butterfly`](butterfly) |
+| Dependency report | [`deps-report`](deps-report), `uses-report` |
+| Uses cycles -- see the [worked example](Circular-Dependency-Report) (tool-generated report on a real 4-unit cycle) | `cycles` |
 | Impact / blast radius of a change | `impact` |
 | Dead code | `find-deadcode` |
 | Top symbols by fan-in | `top` |
@@ -159,43 +175,44 @@ DevExpress `cx`/`dx`).
 
 | Feature | Command |
 |---|---|
-| Compile a project or unit and fold the errors into findings | `compile-check`, `check-unit` |
-| Compile the **unsaved editor buffer** ("ghost check") | IDE menu |
+| Compile a project or unit and fold the errors into findings | [`compile-check`](compile-check), `check-unit` |
+| Compile the **unsaved editor buffer** ("ghost check") | [`ghost-check`](ghost-check); IDE: [Compile Buffer (unsaved)](Compile-Buffer-unsaved) |
+| Recover files left behind by an interrupted buffer-compile | [`ghost-recover`](ghost-recover) |
 | Refresh stored compiler findings across a project | `refresh-findings` |
 | Import an external build log | `import-log` |
-| Preprocessor profile for a project/config | `pp-profile`, `preprocess-file` |
+| Preprocessor profile for a project/config | [`pp-profile`](pp-profile), [`preprocess-file`](preprocess-file) |
 
 ## Database and Firebird
 
 | Feature | Command |
 |---|---|
 | Index `.sql` migration scripts, including `CREATE EXCEPTION` messages | `index` |
-| Snapshot a live Firebird schema into an index | `fb-snapshot` |
-| Link ORM classes to tables and fields to columns | `link-orm` |
+| Snapshot a live Firebird schema into an index | [`fb-snapshot`](fb-snapshot) |
+| Link ORM classes to tables and fields to columns | [`link-orm`](link-orm) |
 
 ## Editor integration
 
 | Feature | How |
 |---|---|
-| **RAD Studio plugin** -- ~50 menu items, hover, dockable panel and graph | `dclDragLintWizard.bpl`; see [IDE Menu Reference](IDE-Menu-Reference) |
+| **RAD Studio plugin** -- 72 entry points across four surfaces, hover, dockable panel and graph | `dclDragLintWizard.bpl`; see [IDE Menu Reference](IDE-Menu-Reference) |
 | **Language server** over stdio -- hover, go-to-definition, **find-references**, **workspace symbols**, completion, signature help | `drag-lint lsp` |
 | VS Code extension | `editors\vscode\drag-lint\` |
 | Neovim / Helix / any LSP client | point it at `drag-lint lsp` |
-| HTTP/MCP server for agents | `serve` |
+| HTTP/MCP server for agents | [`serve`](serve) |
 | Multi-project workspaces | `workspace add / index / status` |
 
 ## Maintenance and diagnostics
 
 | Feature | Command |
 |---|---|
-| Which databases cover what | `resolve-dbs`, `info` |
+| Which databases cover what | `resolve-dbs`, [`info`](info) |
 | Library path drift after a third-party update | `library-drift` |
 | Per-phase timing breakdown | `DRAGLINT_PROFILE=1` |
-| Ambiguous call diagnosis | `ambiguous-calls` |
-| Raw dumps for debugging | `dump-refs`, `dump-call-edges` |
-| Index schema report | `schema` |
+| Ambiguous call diagnosis | [`ambiguous-calls`](ambiguous-calls) |
+| Raw dumps for debugging | [`dump-refs`](dump-refs), [`dump-call-edges`](dump-call-edges) |
+| Index schema report | [`schema`](schema) |
 
 ---
 
-*Counts verified against v1.4.0-alpha. `drag-lint rules` is always the
+*Counts verified against v1.5.0-alpha. `drag-lint rules` is always the
 authority -- this page can lag the catalogue.*

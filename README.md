@@ -257,6 +257,38 @@ drag-lint uses-fix MyUnit.pas --project MyApp.dproj --db myapp.sqlite --apply   
 > `--apply` (revert from `.bak` if it fails). Reliable bulk cleanup needs
 > full-project-build verification, not per-unit compiles.
 
+### A cycle report, generated not written
+
+[`circular-demo/`](circular-demo/) is a small (4-unit) sample project with a
+genuine four-unit `uses` cycle that still compiles -- one of the four edges is
+an `implementation` uses rather than an `interface` uses, which is exactly
+what makes it legal Delphi. The full writeup is at
+[circular-demo/CYCLE-REPORT.md](circular-demo/CYCLE-REPORT.md).
+
+**This report is produced by drag-lint, not written by an AI.** It is the
+literal stdout of two commands, run against the indexed project:
+
+```
+drag-lint index  --project circular-demo\CircularDemo.dproj --db circular-demo\_D-RAG\CircularDemo.sqlite
+drag-lint cycles --db circular-demo\_D-RAG\CircularDemo.sqlite --edges --causes --plan --format text
+```
+
+An excerpt of the real output:
+
+```
+## Cycle 1: demologger <-> democonfig <-> demoaudit <-> demosession
+
+### Why it cycles
+- `demologger` interface uses `TDemoSession` (class) at `DemoLogger.pas:40`; declared in `DemoSession.pas:20`.
+- `democonfig` interface uses `TDemoLogLevel` (enum) at `DemoConfig.pas:23`; declared in `DemoLogger.pas:15`.
+- `demosession` interface uses `TDemoAuditKind` (enum) at `DemoSession.pas:35`; declared in `DemoAudit.pas:24`.
+
+### Recommended fix
+**Extract the shared contract** into a new leaf unit both can depend on (it must use NEITHER unit in this cycle).
+```
+
+Longer walkthrough: [wiki -- Circular Dependency Report](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report).
+
 ### Third-party dependency report
 
 See which external/library units the project leans on — RTL, DevExpress,
@@ -332,9 +364,9 @@ Add to your MCP config (e.g. `~/.claude/claude_desktop_config.json`):
 }
 ```
 
-14+ tools are then available to Claude: `find_symbol`, `find_callers`,
+15 tools are then available to Claude: `find_symbol`, `find_callers`,
 `get_symbol_doc`, `get_context_bundle`, `rename_symbol`, `run_compile_check`,
-and more (see [MCP tools](#mcp-tools-14) below).
+and more (see [MCP tools](#mcp-tools-15) below).
 
 ### RAD Studio 13 plugin
 
@@ -377,81 +409,210 @@ workspace symbols, so those two are drag-lint only.
 
 See **[docs/EDITORS.md](docs/EDITORS.md)**.
 
-### CLI (~25 commands)
+### CLI
 
-| Command | Description |
-|---------|-------------|
-| `index <path>` | Parse and index a Delphi project into SQLite |
-| `index --scan-libraries-win` | Index the IDE's Win32+Win64 Library + Browsing paths (from the registry) |
-| `index --scan-libraries-all` | Same, but every registered platform (adds Posix/iOS/Android/OSX source) |
-| `query --name <name>` | Find symbols by name (fuzzy) |
-| `query --text "<phrase>"` | Search indexed string content -- messages, captions, exception text (never identifiers). Flags: `--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N`, `--json`. SQL `CREATE EXCEPTION` messages are indexed from `MS*.sql` files only by default (`--no-sql-ms` to index every `.sql`). |
-| `surface --qname <qname>` | Show the full source surface of a symbol |
-| `slice --qname <qname>` | Extract the call-slice reachable from a symbol |
-| `impact --qname <qname>` | Show everything that would be affected by changing a symbol |
-| `wiring --qname <IIntf\|TForm>` | Spring4D DI wiring edges (impl class + lifetime + resolve-sites) and DFM event handlers (`--coverage` lists unresolved DI registrations) |
-| `hover --file <f> --line <n> --col <c>` | Hover info at a source position |
-| `rename --qname <q> --new-name <n>` | Preview or apply a symbol rename |
-| `generate-docs --qname <q>` | Generate an XML doc-comment stub |
-| `generate-test --qname <q>` | Generate a test-method stub |
-| `find-deadcode` | List symbols with no callers outside their own unit |
-| `compile-check <dproj>` | Run msbuild and store diagnostics in the DB |
-| `refresh-findings --project <dproj> --db <db>` | Recompile only stale units (save-time newer than last compile) and refresh stored compiler findings per file, so DCC hints stay current even for clean unchanged units; `--full` forces a full build. Spawned by the IDE on save/idle and by the "Full Compile Sweep" menu |
-| `check-unit <unit.pas>` | Compile one unit in project context (semantic errors; `--shadow` for unsaved buffers, `--resolve-uses` to suggest the missing unit) |
-| `cycles` | Circular unit dependencies (`--edges` shows edges + move/layering candidates) |
-| `uses-audit <unit.pas>` | Propose interface→implementation moves + unused units |
-| `uses-fix <unit.pas> --project <dproj>` | Compiler-verified uses cleanup (move/remove; dry-run by default, `--apply`) |
-| `find-unit --name <X> --in <file>` | Add the unit that declares `X` to `<file>`'s `uses` clause (`--apply` to write) |
-| `import-log <log>` | Import a saved msbuild log into the DB |
-| `format <file>` | Format a .pas file with the YADF formatter |
-| `check-ast <file>` | Run tree-sitter lint rules without compiling |
-| `lint <file>` | Run all built-in + external .scm rules |
-| `query find-callers --name <n>` | List every call-site for a symbol (with source context) |
-| `workspace index` | Index all projects in a workspace config |
-| `workspace status` | Show per-project file counts |
-| `workspace add <dproj>` | Add a project to the workspace config |
-| `context --task "verb qname"` | Emit a compact context bundle for AI prompts (e.g. `--task "modify Unit.TFoo.Bar"`) -- doc + surface + the target's body, ~10-60x leaner than the source |
-| `check-unit ... --shadow` | Compile an **unsaved** buffer (overlay) and report errors -- the CLI side of the IDE's ghost-compile |
-| `ghost-check <dproj> --overlays <manifest>` | Compile a project with one or more units' unsaved content overlaid (multi-unit), restoring every file byte-for-byte; powers the IDE's live ghost-compile |
-| `ghost-recover` | Restore any files left overlaid by a crash mid-ghost-check (`_D-RAG` journal) |
-| `bench-context <dir>` | Benchmark context bundle throughput |
-| `forms-csv --project <dproj> --db <db>` | Test-helper CSV: one row per form with the button/menu path from the main form (`Navigation`), the forms that open it (`Called From`), unit + line count (`--out <f.csv>`, `--root <TfrmMAIN>`) |
-| `butterfly --qname X [--depth N] [--format dot\|mermaid\|text\|json]` | Composes a symbol's callers (upward wing) + callees (downward wing) into one chart -- static-export counterpart to the in-IDE butterfly tab (`--output <f>`, default format `dot`) |
-| `proptree --qname X [--depth N] [--no-to-persistent] [--format text\|json]` | Recursive deep-property enumerator: flattened dotted paths of a class's own + inherited properties, recursing into class-typed types down to `TPersistent` (depth cap 6; JSON schema `proptree/1`). Foundation for component conversion -- see [docs/CONVERSION-RULES.md](docs/CONVERSION-RULES.md) |
-| `convert-scaffold --from F --to T [--out <f>]` | Auto-generate a VALID reFind-superset conversion-rules file from the real F/T property trees: concrete `#link` where one source matches by leaf-name+type, `???` for ambiguities, `DROPPED` notes for orphaned source props |
-| `convert-validate --rules <f> [--from F] [--to T] [--print-parsed]` | Parse + validate a reFind-superset conversion-rules DSL; checks `#link`/`#default` paths against the real property trees (exit 0 valid / 1 errors / 2 bad args) |
-| `convert-apply --unit F.pas --rules <f> --db <db> [--only Name1,Name2,...] [--apply] [--no-backup]` | Rewrites all 5 conversion surfaces for the `.dfm` component instances matching a `#convert` rule: `.pas` declaration retype, `.pas` uses-add, `.dfm` object-block re-emit, `.pas` property/event access-site rewrite, and runtime-creator retype + `{ TODO: verify creator }` marker. Dry-run (preview, no writes) by default; `--apply` writes for real with `.BCK<n>` backups + a `recovery.txt` unless `--no-backup` |
-| `lsp [--db <db>]` | Start the LSP server (stdio) |
-| `serve [--db <db>]` | Start the MCP server (stdio) |
-| `info [--json]` | Engine self-info: version, build date, tree-sitter versions, capabilities (FTS5, CLI verb count), exe path, platform -- read-only, no DB. What the IDE Help>About box calls |
-| `--version` | Print version |
-| `--help` | Print help |
+`drag-lint <verb> [flags]`. The complete, authoritative flag list for every
+verb is `drag-lint --help`; linked verbs below go to the matching wiki page
+for more detail and IDE-menu context. (Wiki links point at
+https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 
-### MCP tools (14+)
+#### Indexing
+
+| Command | What it does | Notable flags |
+|---|---|---|
+| `index <path>` | Index a folder tree (a Library-type scan) | `--db`, `--watch [--interval N]`, `--library-db <lib.sqlite>` (cross-DB resolution) |
+| `index --project <file.dproj>` | Index one project's **compile closure** -- members, transitively used project-local units, sibling `.dfm`, `{$I}` includes | `--dry-run`, `--watch` |
+| `index --scan-libraries-win` / `--scan-libraries-all` | Index the IDE's registered Library + Browsing paths (Win32+Win64, or every platform incl. Posix/iOS/Android/OSX) | `--dry-run` |
+| `index --all` | Index every section of the named-DB manifest (`drag-lint.json`) | `--only <Sec1,Sec2>`, `--platform win32\|win64`, `--jobs <n>`, `--dry-run [--json]` |
+| any `index` run | Mode is chosen per run, independent of scan type | `--recompile` (default, incremental) / `--rebuild` (from scratch), `--force-reparse`, `--no-prune` (dry look), `--prune` |
+| [`migrate-dbs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/migrate-dbs) | Move project indexes into each project's `_D-RAG` folder | `--apply` |
+| [`resolve-dbs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Show-Resolved-DBs-debug) | Show which DB(s) a project/file/platform resolves to | `--project <dproj>`, `--in <file>`, `--platform` |
+| [`library-drift`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Library-Drift-Check) | Registry library roots with source on disk but not yet in the index | `--platform` |
+| [`reconcile-project`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Reconcile-Project-Members-dpr-dproj) `<App.dpr\|.dproj>` | Sync a project's member list against disk; flag stale used units | `--apply`, `--db`, `--full` |
+
+#### Search and navigation
+
+| Command | What it does | Notable flags |
+|---|---|---|
+| `query --name <n>` / `--qname <q>` | Find symbols by name (fuzzy) or exact qualified name | `--json`, `--case-sensitive`, `--exact` |
+| `query --text "<phrase>"` | Search **string literals only** -- constants, resourcestrings, DFM captions, SQL exception text | `--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N` |
+| [`query find-callers`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-find-callers) `--name <n>` | Every call-site for a symbol, with source context | `--context N`, `--resolved` (precise call-edges) |
+| `query find` | Find symbols by documentation state | `--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public` |
+| [`query ancestors`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-ancestors) `--name <t>` | Transitive class/interface ancestry | `--of <ancestor>` |
+| [`query typecat`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-typecat) `--name <t>` | Resolve a type's category (class/interface/float/string/...) | |
+| `query hints` | List stored compiler hints/warnings | `--name <code>`, `--rule <severity>` |
+| [`usages`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/usages) `--name <n>` | Grouped usage report (backs the IDE Symbol Search dialog) | `--width narrow\|wide\|very-wide`, `--depth N` |
+| [`outline`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) `--file <f.pas>` | Unit outline (backs the IDE Structure form) | `--format text\|json` |
+| `hover --qname <q>` | Hover card for a symbol | `--format plain\|md\|json` |
+| `typeat <file>:<line>:<col>` | Resolve the type of the expression at a cursor position | `--format text\|json` |
+| [`find-unit`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-unit) `--name <X> --in <file>` | Find which unit declares `X`, to add to `uses` | `--apply` |
+| [`find-callees`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-callees) `--qname <X>` | Resolved outgoing calls of a routine | `--json` |
+| [`call-path`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/call-path) `--from <A> --to <B>` | Shortest resolved call path A -> B | `--max-depth N` |
+| [`ambiguous-calls`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ambiguous-calls) | Resolver-coverage diagnostic: unresolved/ambiguous call sites | `--qname`, `--file` |
+| [`helpers-of`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/helpers-of) `<T>` | Record/class helper edges targeting type `T` | `--json` |
+| `impact --qname <q>` | Blast radius: callers/units affected by a change, per depth level | `--depth N` |
+| `surface --qname <q>` | Public interface (declaration lines) of a class/record | `--include-impl`, `--all-visibility` |
+| `slice --qname <q>` | Minimal self-contained call-slice reachable from a symbol | |
+| [`context`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/context) `--task "verb qname"` | Compact context bundle for AI prompts -- doc + surface + body + callers, ~10-60x leaner than the source | `--max-callers N`, `--context N`, `--no-docs` |
+| [`bench-context`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/bench-context) | Benchmark context-bundle throughput | `--n N` |
+| `wiring --qname <IIntf\|TForm>` | Spring4D DI edges (impl + lifetime + resolve-sites) and DFM event handlers | `--coverage` (unresolved DI registrations) |
+
+#### Lint
+
+**173 rules across 16 categories -- 119 built-in + 54 external `.scm`, 149
+enabled by default, 22 with an auto-fix.**
+
+| Command | What it does | Notable flags |
+|---|---|---|
+| [`rules`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/rules) | List the rule catalog | `--json`, `--category <name>` |
+| `lint <path>` | Run built-in + external `.scm` rules on a file/folder (no index needed) | `--rule <id>`, `--disable id1,id2`, `--json` |
+| `lint --file <f> --fix [--fix-line <L> --fix-rule <id>] [--apply]` | **Autofix one file.** Without `--apply` it is a dry run: reports what it would change, writes nothing. `--fix-line`+`--fix-rule` narrow to one finding; omit both to apply every fixable finding. Only rules with `"fixable": true` are ever applied | This is what the Structure form's right-click **Fix it** / **Fix all in unit** run |
+| `lint --project <dproj>` | One project-scoped rule (e.g. `unit-not-in-dpr`) | `--rule` |
+| [`lint-project`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-project) `--db <db>` | Project-wide structural rules -- god-class, circular-uses, layering-violation, unused-public-symbol, and more | `--rule <id>`, `--layers <f.json>` |
+| `lint-all --db <db>` | Full project report: adds class metrics, duplicate code, documentation drift | `--project <.dproj>` (report only that project's compile closure), `--output <file>`, `--json`, `--lint-third-party` |
+| `lint-all --fix [--apply]` | **Autofix every fixable finding across the whole project.** Dry run without `--apply` -- this is what "Fix all in project" runs; it can rewrite many files at once | |
+| [`allow`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/allow) `<file>` | Record a `dl:ok` reviewed-finding marker (dry-run unless `--apply`) | `--fix-line`, `--fix-rule` |
+| [`shared-unit`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/shared-unit) `--in <file>` | Read/extend the `dl:shared` marker for units several projects document | `--add-project`, `--apply` |
+
+CI flags (apply to `lint` / `lint-all` / `check-ast`): `--format sarif` (SARIF
+2.1.0), `--fail-on <level>` (nonzero exit at error\|warning\|info), `--baseline
+<file>` / `--write-baseline <file>`, `--enable id1,id2`, `--profile <name>`.
+
+#### Docs
+
+| Command | What it does | Notable flags |
+|---|---|---|
+| `document --qname <q>` | Generate/repair a managed DocInsight comment for one symbol | `--apply`, `--json` |
+| `document --unit <f.pas>` | Document every public decl in a unit (facts-only by default; trivial accessors skipped) | `--apply`, `--stubs`, `--include-accessors` |
+| `document --project <p>` | Document every public decl the project owns (vendored roots skipped unless told otherwise) | `--stubs`, `--apply`, `--reindex`, `--document-third-party` |
+| [`document-all`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/document-all) | Document every public decl in every indexed unit (no project scope) | `--stubs`, `--apply` |
+| `document ... --strip` | Remove drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched) | works on `--qname` / `--unit` / `--project` / `document-all` |
+| [`doc-drift`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/doc-drift) `--qname <X>` | Deterministic doc-vs-code drift findings for one symbol | `--json` |
+| `generate-docs --qname <q>` | Generate an XML doc-comment stub | `--format xmldoc\|pasdoc` |
+| `generate-test --qname <q>` | Generate a DUnitX/DUnit test-method stub | `--framework dunitx\|dunit` |
+
+#### Refactor
+
+| Command | What it does | Notable flags |
+|---|---|---|
+| `rename --kind symbol --name <q> --to <new> --db <db>` | Cross-unit rename (declaration + every reference) | `--apply`, `--no-backup`, `--json` |
+| `rename --kind param --file <f> --line <L> --col <C> --to <new>` | Routine-local rename (parameter/variable) | `--apply` |
+| `find-unit --name <X> --in <file> --apply` | Add the declaring unit to `uses` | |
+| [`safe-delete`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/safe-delete) `--name <q> --db <db>` | Delete a symbol iff it has zero references | `--apply`, `--json` |
+| [`extract-method`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/extract-method) `--file <f> --from-line --to-line --name <n>` | Pull a statement run into a new method | `--apply` |
+| [`create-enum-helper`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/create-enum-helper) `--qname <TEnum>` | Generate a Byte-family record helper for an enum | `--methods <csv>`, `--tostring rtti\|case` |
+| `uses-audit <unit.pas> --db <db>` | Propose interface->implementation moves + unused units | `--format text\|json` |
+| `uses-fix <unit.pas> --project <dproj> --db <db>` | Compiler-verified `uses` cleanup | `--apply`, `--remove-unused` |
+| `format <file>` | Format a `.pas` file with the YADF formatter | `--yadf-path` |
+
+**Formatting is safe for your suppressions.** drag-lint drives **YADF** for the
+current unit or the whole active project straight from the IDE menu, and neither
+`// drag-lint:ignore` comments nor `// dl:ok <rule>@<hash>` reviewed markers are
+invalidated by it. A `dl:ok` hash is computed over a *normalised* line --
+comments and whitespace stripped, identifiers lowercased, string literals kept
+verbatim -- so reindenting and re-spacing cannot change it. Measured, not
+assumed: 10 markers in a real file survived a `drag-lint format` run with
+whitespace as the only difference, and one-line `try ... except end;` statements
+were not rewrapped. (Splitting or joining a line *would* re-hash a marker; that
+is the boundary of the guarantee.)
+| [`proptree`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/proptree) `--qname <T>` | Recursive deep-property enumerator (foundation for component conversion) | `--depth N`, `--refs-as-leaves`, `--format text\|json` |
+| [`convert-scaffold`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-scaffold) `--from F --to T` | Auto-draft a valid conversion-rules file from the real F/T property trees | `--out <f>`, `--surface dfm\|pas` |
+| [`convert-validate`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-validate) `--rules <f>` | Validate a conversion-rules file against the real property trees | `--print-parsed` |
+| [`convert-apply`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-apply) `--unit F.pas --rules <f> --db <db>` | Rewrite all 5 conversion surfaces (dry-run unless `--apply`) | `--only Name1,Name2`, `--no-backup` |
+
+#### Graphs
+
+| Command | What it does | Notable flags |
+|---|---|---|
+| `cycles --db <db>` | Circular unit dependencies -- see the [worked example](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report) below | `--edges`, `--causes` (blame the exact symbols), `--plan` (refactoring playbook), `--format json\|text` |
+| `top --db <db>` | Top symbols by fan-in | `--by fanin`, `--limit N` |
+| `graph --db <db>` | Export the symbol graph | `--format dot\|mermaid`, `--name <substr>`, `--output <f>` |
+| [`callgraph`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/callgraph) `--qname <X> --db <db>` | N-deep resolved call tree | `--direction callers\|callees`, `--depth N` |
+| `reverse-calltree --qname <X> --db <db>` | N-deep call tree, cycle-guarded | `--direction`, `--depth N`, `--format text\|json\|dot\|mermaid` |
+| [`butterfly`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/butterfly) `--qname <X> --db <db>` | Callers (upward wing) + callees (downward wing) composed into one chart | `--depth N`, `--format dot\|mermaid\|text\|json` |
+| `todos [<path>]` | Scan TODO/FIXME/HACK/XXX/REVIEW/NOTE comments | `--json` |
+| [`deps-report`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/deps-report) `--db <db>` | Third-party dependency rollup | `--edges`, `--format text\|json\|csv` |
+| `uses-report --output <f.csv>` | Uses graph as CSV | `--depth N`, `--include-external` |
+| `find-deadcode` | Symbols with no callers outside their own unit | `--kind`, `--include-private` |
+| `forms-csv --project <dproj> --db <db>` | Test-helper navigation CSV, one row per form | `--out <f.csv>`, `--root <TfrmMAIN>` |
+| `export enums --db <db>` | Export enums | `--format firebird-sql\|csv\|json\|delphi-const` |
+| `export obsidian --db <db> --output-dir <dir>` | Export the index into an Obsidian vault | `--open` |
+| [`diff`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/diff) `--db <old> --db <new>` | Diff two index snapshots | `--json` |
+
+#### Compiler
+
+| Command | What it does | Notable flags |
+|---|---|---|
+| `check-unit <unit.pas>` | Compile one unit in its project's context; real compiler errors | `--project`, `--platform`, `--shadow <dir>` (unsaved buffer), `--resolve-uses` |
+| `compile-check <target>` | Run msbuild/dcc and store diagnostics | `--db`, `--format json\|text` |
+| `refresh-findings --project <dproj> --db <db>` | Recompile only stale units and refresh stored findings | `--full` (force full build) |
+| [`ghost-check`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-check) `<dproj>` | Compile an **unsaved** editor buffer (single- or multi-unit overlay); restores files byte-for-byte | `--unit --buffer` or `--overlays <manifest>`, `--platform` |
+| [`ghost-recover`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-recover) `<dproj>` | Restore files left overlaid by an interrupted ghost-check | |
+| `import-log <logfile> --db <db>` | Parse a saved dcc/msbuild log into the DB | |
+| [`pp-profile`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/pp-profile) | Print the resolved `{$IFDEF}` define profile for a project | `--dproj`, `--platform`, `--config Release\|Debug` |
+| [`preprocess-file`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/preprocess-file) `--file <f>` | Print `{$IFDEF}`-resolved source to stdout (diagnostic) | `--define`, `--numeric K=V` |
+
+#### Database
+
+| Command | What it does |
+|---|---|
+| [`fb-snapshot`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/fb-snapshot) `--connection "..." --db <db>` | Snapshot a live Firebird schema into an index |
+| [`link-orm`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/link-orm) `--db <projDb> --db <sqlDb>` | Link ORM classes/fields to tables/columns |
+
+`index` also indexes `.sql` migration scripts, including `CREATE EXCEPTION`
+messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
+
+#### Servers
+
+| Command | What it does |
+|---|---|
+| [`serve --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/serve) | Start the **MCP** stdio server -- for AI agents (Claude, Cursor). Nothing in the IDE uses this. |
+| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. |
+
+#### Maintenance
+
+| Command | What it does | Notable flags |
+|---|---|---|
+| [`schema`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/schema) `--db <db>` | Self-documenting live index schema: tables, columns, row counts | `--format text\|json`, `--output <f>` |
+| [`info`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Engine self-info: version, build date, tree-sitter versions, capabilities | `--json` |
+| [`dump-refs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-refs) `<file> --db <db>` | Diagnostic: refs + enclosing-symbol attribution | |
+| [`dump-call-edges`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-call-edges) `--db <db>` | Diagnostic: resolved call edges | |
+| `check-ast <file>` | Run tree-sitter lint rules without compiling | `--format text\|json` |
+| [`purge-locals`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/purge-locals) `--db <db>` | Size escape hatch: drop local-var/param symbols + VACUUM (call graph unchanged; re-inflated on next index) | `--json` |
+| [`workspace index`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-index) / [`status`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-status) / [`add <dproj>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-add) | Multi-project workspace management | `--config <file>` |
+| `--version` / `--help` | Print version / usage | |
+
+### MCP tools (15)
+
+Verified against `src\mcp\DRagLint.MCP.Server.pas` (`HandleToolsList`) -- this
+is the complete set the server registers; it does not expose `import_log`,
+`format_file`, `workspace_status` or `workspace_index` as MCP tools (those are
+CLI-only verbs).
 
 | Tool | Description |
 |------|-------------|
-| `find_symbol` | Search the index by name |
-| `find_callers` | List all call-sites for a symbol |
-| `get_symbol_doc` | Retrieve the doc-comment for a symbol |
-| `get_context_bundle` | Compact context bundle for AI consumers |
-| `rename_symbol` | Preview or apply a symbol rename |
-| `run_compile_check` | Trigger msbuild and return diagnostics |
-| `import_log` | Import a saved build log |
-| `run_ast_checks` | Run AST lint rules on a file |
-| `format_file` | Format a source file with YADF |
-| `get_surface` | Full source surface of a symbol |
-| `get_impact` | Call-impact set for a symbol |
-| `get_wiring` | Spring4D DI edges + DFM event handlers for an interface or form |
-| `get_slice` | Reachable call-slice |
-| `workspace_status` | Workspace project/file summary |
-| `workspace_index` | Re-index all workspace projects |
+| `find_symbol` | Find symbols by exact name (fuzzy fallback) or by qualified name; returns file:line:col |
+| `find_callers` | Every reference site to a method/event-handler by name; `context` adds surrounding source lines |
+| `lint` | Run the linter (built-in + external `.scm` rules) on a file or folder |
+| `get_symbol_doc` | Structured DocInsight comment for a qualified symbol -- summary, params, returns, exceptions, since, deprecated, raw block |
+| `find_by_doc_tag` | Symbols tagged `deprecated`, or carrying a `since` annotation |
+| `find_undocumented` | Symbols with no doc comment; filter by `kind` / `public_only` |
+| `get_impact` | Transitive blast radius of a symbol: callers/units affected, per depth level |
+| `get_wiring` | Spring4D DI edges (interface -> impl class + lifetime + resolve-sites) plus DFM event handlers for a form |
+| `get_surface` | Public interface (declaration lines) of a class/record; `include_impl` / `all_visibility` widen it |
+| `get_slice` | Minimal self-contained source slice (header + class decl + method bodies) for a class |
+| `get_context_bundle` | Curated context bundle for a task on a symbol -- doc + surface + slice + callers + token estimate |
+| `get_type_at_position` | Resolve the identifier at file/line/col to a symbol |
+| `rename_symbol` | Preview (`dry_run`) or apply a cross-unit rename of a symbol |
+| `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
+| `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (130+ rules)
+### Lint rule pack (173 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`, 130+ and growing). The table below is a small sample of the
-built-in rules:
+external `.scm`). As of v1.5.0-alpha: **173 rules across 16 categories -- 119
+built-in and 54 external `.scm`, 149 enabled by default, and 22 with an
+auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |
 |---------|----------|-------------|
@@ -475,7 +636,15 @@ Drop custom `.scm` + `.json` pairs in the `rules/` directory; see
 
 ### RAD Studio plugin
 
-**`drag-lint` menu** (top-level on the main menu bar -- falls back under Tools -- with ~30 items organized into submenus): Hover at Cursor, Show Completion, 
+The plugin exposes **72 entry points across four surfaces**: 56 main-menu items,
+2 under `View > Tool Windows`, 13 on the Structure form's **right-click** menu,
+and 1 on the Project Manager's. Auto-fix (*Fix it* / *Fix all in unit* / *Fix all
+in project*) and *Allow this message* live **only** on that right-click menu.
+There are also 12 `Ctrl+Alt` shortcuts (`H` hover, `C` completion, `S` signature,
+`D` diagnostics, `R` rename, `M` extract-method, `I` inline info, `F` find usages,
+`T` symbol search, `U` quick-fix uses, `K` reverse call tree, `B` butterfly).
+
+**`drag-lint` menu** (top-level on the main menu bar -- falls back under Tools -- organized into submenus): Hover at Cursor, Show Completion, 
 Show Signature Help, Run Diagnostics, Rename Symbol, Compile & Diagnose, Import Build Log,
 Format with YADF, Show Structure, Run AST Checks, Find Usages, Symbol Search, dockable 
 panels (Structure / Usages / Graph), Generate Test Helper CSV..., 
@@ -637,11 +806,8 @@ the PowerShell battery.
 
 ## Version history
 
-See [CHANGELOG.md](CHANGELOG.md) for the detailed history (v0.16 through
-v0.44-alpha, 2026-05-28 → 2026-06-14). Development continues daily (currently
-**v0.46-alpha** on the `feat/*` branches): graph viewer on Win64 (UML / Code Flow
-/ Where-Used / editor-sync), out-of-process ghost-compile, and manifest-driven
-multi-DB resolution.
+See [CHANGELOG.md](CHANGELOG.md) for the detailed history. The current release is
+**v1.5.0-alpha**; development continues daily.
 
 ---
 

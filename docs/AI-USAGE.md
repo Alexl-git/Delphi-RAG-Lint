@@ -38,6 +38,12 @@ You can drive it two ways, both backed by the same engine:
      `--rebuild` (from scratch).
    - `--scan-libraries` to index the installed RTL/VCL/DevExpress/Spring4D.
    - `--watch [--interval N]` to keep it fresh as you edit.
+   - **On-disk convention:** a project's own DB lives at
+     `<project folder>\_D-RAG\<project file base name>.sqlite` -- a hidden
+     folder beside the `.dproj`, named after the project file (not the repo).
+     Only the per-platform library DBs stay in a shared folder. Never guess
+     the path -- `drag-lint resolve-dbs --project <x.dproj>` (or `--in
+     <x.pas>`) resolves it.
 3. Point every query at that `--db`. Re-run `index` after large code changes.
    With per-project DBs, a **cross-project** question (typically `find-callers`)
    needs **several `--db` flags** -- or omit `--db` and let the manifest
@@ -406,7 +412,7 @@ guessed project would reorder on an unrelated project's evidence:
 |---|---|
 | `--project <x.dproj>` | `query --name TEdit --project C:\Projects\DataCopy\DataCopy.dproj` |
 | `--in <file.pas>` | resolves to the one index containing that file |
-| one non-library `--db` | `query --name TEdit --db library-Win64.sqlite --db DataCopy.sqlite` |
+| one non-library `--db` | `query --name TEdit --db library-Win64.sqlite --db C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite` |
 
 **With no project context the tie is reported exactly as before** -- and it is
 still reported *with* one: this **reorders, never filters**, so both rows come

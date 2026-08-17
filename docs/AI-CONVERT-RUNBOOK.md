@@ -16,6 +16,9 @@ It is deterministic (no LLM). It does **not** do semantic fixes that need a huma
 (cross-type value conversion, split/merge, business logic). Your job is to drive
 it, read what it did and didn't do, and finish the human parts it flags.
 
+The conversion verbs (`convert-validate`, `convert-scaffold`, `convert-apply`) have
+**no IDE surface** -- they are CLI-only; there is no menu item or dialog for them.
+
 ---
 
 ## 0. The one hard prerequisite: BOTH types must be indexed
@@ -37,9 +40,13 @@ Three DBs matter (paths on this machine):
 
 | DB | What it holds | Path |
 |----|---------------|------|
-| App DB | your project's own source (forms, units) -- has the **instances** | `C:\Projects\.drag-lint\ORM3-Micronite2027.sqlite` (one DB per project) |
+| App DB | your project's own source (forms, units) -- has the **instances** | `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite` |
 | Library Win32 | 3rd-party libraries incl. **DevExpress `cx`** types | `C:\Projects\.drag-lint\library-Win32.sqlite` |
 | Library Win64 | 3rd-party libraries (fewer -- `cx` NOT present as of this writing) | `C:\Projects\.drag-lint\library-Win64.sqlite` |
+
+A project's App DB always lives at `<project folder>\_D-RAG\<project file base
+name>.sqlite`, a hidden folder beside the `.dproj` -- never guess it, ask
+`drag-lint resolve-dbs --project <x.dproj>` (or `--in <x.pas>`).
 
 You can pass **multiple** `--db`; each type is resolved against **all** of them,
 first-DB-that-resolves-wins (symbol ids are per-DB). **The From and To types may

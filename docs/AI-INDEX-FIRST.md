@@ -16,9 +16,10 @@ text-level matches, non-Delphi files, or code no index covers.
 
 - exe: `<path>\drag-lint.exe`
 - DBs (pass each with its own `--db`, repeatable): there is **one DB per
-  project**, named `<Repo>-<Project>.sqlite`, plus one **library** DB per
-  platform (`library-Win32.sqlite` / `library-Win64.sqlite`, shallow --
-  RTL/VCL/3rd-party).
+  project**, at `<project folder>\_D-RAG\<project file base name>.sqlite` (a
+  hidden folder beside the `.dproj`, named after the project file, not the
+  repo), plus one **library** DB per platform (`library-Win32.sqlite` /
+  `library-Win64.sqlite`, shallow -- RTL/VCL/3rd-party).
 - **Do not guess the path -- ask:** `drag-lint resolve-dbs --platform <p>` lists
   every configured DB; `... resolve-dbs --project <file.dproj>` or
   `... resolve-dbs --in <file.pas>` resolves the one covering a given target.
