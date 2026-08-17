@@ -5,30 +5,28 @@
   test for an unbuilt feature belongs outside the battery, not inside it as a
   standing red.
 
-  STATUS 2026-08-17: written, and it does NOT yet demonstrate the defect.
-  Against the current build it reports:
+  STATUS 2026-08-17: the FIXTURE was wrong, not the engine -- diagnosed, and the
+  missing step is now in the script below.
 
-      1 document --db A --db B wrote the block naming B's caller      PASS
-      2 lint-all --db A --db B --fix KEPT the entry                   PASS
-      3 no ping-pong                                                  PASS
-      4 POSITIVE CONTROL: lint-all --db A alone DOES strip it         FAIL
+  The first version ran `document --apply` and then `lint-all`, and step 4 (the
+  positive control) failed: no facts-block-stale finding appeared at all. That
+  briefly looked like evidence that the note's premise was dead. It was not.
 
-  Step 4 failing is the whole point of having it: with only dbA open the entry
-  is unaccountable and SHOULD be reported stale, and it is not. `lint-all --db A`
-  on the fixture emits only `empty-procedure-body` -- no facts-block-stale
-  finding at all. So either the fixture does not put the decl into doc-drift's
-  population (the generated block carries only <remarks>, no <summary> -- check
-  what DocumentedPublicDecls actually requires), or the drift signal is narrower
-  than the note assumes.
+  `RunDocDrift` builds its population from `DocumentedPublicDecls`, which reads
+  `AStore.ListDocumentedSymbols` -- i.e. from the INDEX. `document --apply`
+  writes the comment to the SOURCE FILE and does not touch the index, so until
+  the file is re-indexed the declaration is not "documented" as far as doc-drift
+  is concerned and is never examined. The engine was behaving correctly; the
+  fixture simply never presented it with a documented symbol.
 
-  DO NOT rename this to run_* until step 4 goes RED for the right reason.
-  Until then steps 1-3 passing means nothing: they would pass on an engine that
-  never reports drift at all.
+  **REINDEX AFTER EVERY --apply.** That is the load-bearing step, and it is easy
+  to leave out precisely because the source on disk looks right.
 
-  NEXT DIAGNOSTIC (unrun -- needs a quiet machine):
-      DRAGLINT_PROFILE=1 drag-lint lint-all --db <a.sqlite> --quiet
-  and read the DOC-DRIFT BREAKDOWN decl count. Zero documented decls means the
-  fixture, not the engine.
+  Still to confirm before this becomes a run_* suite: that step 4 now goes RED
+  for the RIGHT reason (single-store drift IS reported), and that step 2 then
+  fails against the current build -- which is what would prove the AExtraStores
+  ping-pong is real rather than assumed. Until both hold, steps 1-3 passing
+  means nothing: they would pass on an engine that never reports drift at all.
 
   ---
 
@@ -163,6 +161,15 @@ try {
   Check '1. document --db A --db B wrote a managed block naming B''s caller' `
         (BlockHasCaller) `
         $(($d1 -split "`n" | Select-Object -Last 2) -join ' / ')
+
+  # REINDEX -- LOAD-BEARING. doc-drift's population comes from
+  # ListDocumentedSymbols, i.e. from the INDEX. `document --apply` wrote the
+  # comment to the SOURCE only, so without this the declaration is not
+  # "documented" as far as the checker is concerned and no drift is ever
+  # reported -- which is exactly how the first draft of this fixture produced a
+  # silent false PASS on steps 2 and 3.
+  & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
+  & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
 
   # --- 2. THE BUG: lint-all --fix with the SAME two stores must not strip it --
   & $exePath lint-all --db $dbA --db $dbB --fix --quiet 2>&1 | Out-Null

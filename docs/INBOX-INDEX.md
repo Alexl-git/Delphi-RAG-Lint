@@ -1,5 +1,18 @@
 # INBOX index -- 7 open notes
 
+> **THE STANDING LIST NOW LIVES IN `docs\OPEN-ITEMS.md`.** That file answers
+> "what is left?" and is the one to re-read. This file is the narrative history:
+> what was retired, when, and why. Session 25 close: **7 open / 111 retired**.
+>
+> Retired 2026-08-17: `indexer-fingerprint-disagrees-between-entry-points`
+> (headline fixed and verified on a real database; its unrelated FK finding was
+> SPLIT into its own note rather than keeping a discharged note open) and
+> `yadf-share-review-marker-hash` (delivered: byte-identical vendored copy, drift
+> test, negative control, zero re-stamps).
+> Filed: `intermittent-fk-failure-on-incremental-reindex` (the split) and
+> `extraction-fingerprint-uses-the-product-version` (found while cutting
+> v1.4.0-alpha).
+
 > **Session 25 (2026-08-17). 8 open -> 7; 108 retired. Plan A executed in full.**
 >
 > **Retired:** `index-runs-are-not-resumable` -- its last open item was
