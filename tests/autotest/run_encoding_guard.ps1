@@ -208,9 +208,14 @@ if ($missingFixtures.Count -gt 0) {
 # One pass over the bytes per file: this has to stay fast enough that nobody is
 # tempted to skip it. Measured well under 10 s for the whole tree.
 $roots = [ordered]@{
+  # v1.5.0-alpha: circular-demo\ is a new top-level directory holding a small
+  # 4-unit sample project that ships in the repo (it demonstrates the cycle
+  # report). It is OUR source, not vendored, so it is SCANNED rather than
+  # excused -- the moment it appeared this guard went RED for an unaccounted
+  # directory, which is exactly the accounting assertion working as intended.
   '.ps1' = @('src', 'tests', 'build', 'stats', 'tools')
-  '.pas' = @('src', 'tests', 'build', 'tools')
-  '.dpr' = @('src', 'tests', 'build', 'tools')
+  '.pas' = @('src', 'tests', 'build', 'tools', 'circular-demo')
+  '.dpr' = @('src', 'tests', 'build', 'tools', 'circular-demo')
   '.dpk' = @('src', 'tests', 'build', 'tools')
   '.dfm' = @('src', 'tests', 'build', 'tools')
   '.inc' = @('src', 'tests', 'build', 'tools')
