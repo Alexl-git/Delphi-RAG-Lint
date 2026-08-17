@@ -28,6 +28,23 @@ uses
   ;
 
 type
+  /// <summary>Opens (or returns an already-open) read-only store for a SIBLING
+  /// PROJECT named by a shared unit's own `dl:shared` header.</summary>
+  /// <param name="AProjectName">The project name exactly as the header spells
+  /// it -- 'YADFOT', 'YADFSetup'. Matched case-insensitively against the index
+  /// manifest's section names.</param>
+  /// <returns>An open store, or nil when the name resolves to no configured
+  /// index or the index cannot be opened.</returns>
+  /// <remarks>LAZY on purpose. A run over a project with no shared units must
+  /// not open anything, and a box with ~30 configured indexes must not open
+  /// them all to answer a question about one routine. The rule calls this only
+  /// once it already has a finding whose unit declares siblings.
+  /// nil is a legitimate answer and must be read as "could not check", never as
+  /// "not referenced there" -- those lead to opposite conclusions and only one
+  /// of them is safe.
+  /// The caller owns the returned store's lifetime for the whole run.</remarks>
+  TSiblingStoreResolver = reference to function(const AProjectName: string): ISymbolStore;
+
   /// <summary>Index-wide lint rules (oversized classes; unused exported routines).</summary>
   /// <remarks>Stateless; reads the supplied open store. Never raises.</remarks>
   TProjectLintRules = class
@@ -50,7 +67,13 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function Run(const AStore: ISymbolStore; const ARuleId: string = ''): TArray<TLintFinding>;
+    /// <param name="ASiblingStore">Optional. When supplied, `unused-public-symbol`
+    /// CONSULTS the sibling projects a shared unit's own `dl:shared` header names
+    /// and suppresses the finding when the routine is referenced in one of them.
+    /// nil (the default) keeps the historic behaviour: report, and tell the
+    /// reader to check the siblings by hand.</param>
+    class function Run(const AStore: ISymbolStore; const ARuleId: string = '';
+                       const ASiblingStore: TSiblingStoreResolver = nil): TArray<TLintFinding>;
     /// <summary>Flags forbidden cross-layer 'uses' edges per a layer-config JSON file.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
     /// <param name="AConfigPath">Path to a layers JSON file (see remarks); missing/invalid -> no findings.</param>
@@ -673,7 +696,8 @@ begin
   end;
 end; // function
 
-class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>;
+class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
+  const ASiblingStore: TSiblingStoreResolver): TArray<TLintFinding>;
 var
   Findings      : TList<TLintFinding>         ;
   FileIds       : TArray<Int64>               ;
@@ -1012,9 +1036,58 @@ begin
                 var UProjs : TArray<string>  := nil;
                 if UPath <> '' then UProjs:= DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf(UPath);
                 if Length(UProjs) > 1 then
-                  Add('unused-public-symbol', 'hint',
-                    Format('Exported routine %s is not referenced within this project. Its unit is shared with %s -- check there before treating it as dead.',
-                           [Sym.Name, string.Join(', ', UProjs)]), Sym)
+                begin
+                  { NOW WE ACTUALLY GO AND LOOK. The message above has been telling
+                    the reader to check the siblings by hand since the caveat was
+                    added; with a resolver in hand the engine can answer it, and an
+                    answerable question should not be delegated to a human.
+
+                    THE RELATIONSHIP IS DECLARED, so consulting these DBs does not
+                    violate the authoritative-set rule (library + project, nothing
+                    else): the unit's OWN `dl:shared` header names exactly these
+                    projects. This is not a name-match fishing trip across every
+                    index on the box -- it is following a statement the source
+                    makes about itself.
+
+                    Measured on YADF 2026-08-17, and it is what validates the
+                    name-keyed predicate below: of the 9 findings, the 6 false ones
+                    each have >=1 caller ref in a named sibling, while the genuine
+                    one (OptionsHelpText) has 0 in all three. A declaration site
+                    does not count itself as a caller, which is why 0 means 0.
+
+                    THREE OUTCOMES, and the third is the one that is easy to get
+                    wrong: found alive -> suppress; checked everything and found
+                    nothing -> report, and say the siblings WERE checked, because
+                    the old wording ("check there before treating it as dead") is
+                    now stale advice; could not check some sibling -> report with
+                    the old wording, since an unopened index is not evidence of
+                    absence. }
+                  var LiveIn    : string  := '';
+                  var CheckedAll: Boolean := Assigned(ASiblingStore);
+                  if Assigned(ASiblingStore) then
+                    for var PN in UProjs do
+                    begin
+                      var Sib: ISymbolStore := ASiblingStore(PN);
+                      if Sib = nil then begin CheckedAll:= False; Continue; end;
+                      if Length(Sib.FindCallersByName(Sym.Name)) > 0 then
+                      begin
+                        LiveIn:= PN;
+                        Break;
+                      end;
+                    end;
+                  { LiveIn <> '' means a project that compiles this same unit
+                    references the routine: it is alive, and there is no finding
+                    to make. }
+                  if LiveIn = '' then
+                    if CheckedAll then
+                      Add('unused-public-symbol', 'hint',
+                        Format('Exported routine %s is not referenced in this project, nor in the project(s) its unit is shared with (%s).',
+                               [Sym.Name, string.Join(', ', UProjs)]), Sym)
+                    else
+                      Add('unused-public-symbol', 'hint',
+                        Format('Exported routine %s is not referenced within this project. Its unit is shared with %s -- check there before treating it as dead.',
+                               [Sym.Name, string.Join(', ', UProjs)]), Sym);
+                end
                 else
                   Add('unused-public-symbol', 'info',
                     Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);

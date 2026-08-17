@@ -646,6 +646,9 @@ procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32:
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
 function ResolveLibraryDb  (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
+function MakeSiblingStoreResolver(const AArgs: TArgs;
+  const AKeepAlive: TList<ISymbolStore>;
+  const AOwned: TObjectList<TObject>): DRagLint.Lint.ProjectRules.TSiblingStoreResolver; forward;
 
 // v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
 // before CLI flags. Recognized keys:
@@ -10742,9 +10745,20 @@ begin
     Linter.Free;
   end; // try
 
-  { Project-wide rules }
+  { Project-wide rules.
+    The sibling resolver lets `unused-public-symbol` consult the projects a
+    shared unit's own `dl:shared` header names instead of telling the reader to
+    do it by hand. Lazy -- a project with no shared units opens nothing. }
   Prof.Phase('project-rules');
-  Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, '');
+  var SibKeep : TList<ISymbolStore>:= TList<ISymbolStore>.Create;
+  var SibOwned: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
+  try
+    Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
+      Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned));
+  finally
+    SibKeep .Free;
+    SibOwned.Free;
+  end;
   { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
   Prof.Phase('class-metrics');
   Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, '');
@@ -10973,7 +10987,18 @@ begin
     catalogue's default_enabled=false does not reach DefDisabled on its own.
     See DoLint for the owner ruling this encodes. }
   if AArgs.Rule <> 'commented-out-code' then DefDisabled:= DefDisabled + ['commented-out-code'];
-  Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(Store, AArgs.Rule);
+  { Same sibling resolver as DoLintAll -- `lint-project --rule unused-public-symbol`
+    must answer the shared-unit question the same way the full run does, or the
+    two entry points disagree about whether a routine is dead. }
+  var SibKeep2 : TList<ISymbolStore>:= TList<ISymbolStore>.Create;
+  var SibOwned2: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
+  try
+    Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
+      Store, AArgs.Rule, MakeSiblingStoreResolver(AArgs, SibKeep2, SibOwned2));
+  finally
+    SibKeep2 .Free;
+    SibOwned2.Free;
+  end;
   { v0.51: interface reference cycles -- needs the AST of all project files (parsed here) }
   if (AArgs.Rule = '') or (AArgs.Rule = 'interface-reference-cycle') then
   begin
@@ -16532,6 +16557,97 @@ begin
   if AArgs.InFile <> '' then Exit(TheOnlyProjectDb(AArgs.InFile));
 
   Result:= TheOnlyProjectDb('');
+end; // function
+
+{ Maps a project NAME -- as a shared unit's own `dl:shared` header spells it --
+  to an open read-only store, for `unused-public-symbol`.
+
+  RESOLUTION IS BY MANIFEST SECTION NAME, and that works because the two
+  vocabularies are already the same one: `YADF.Options.pas` opens
+  `unit YADF.Options;   // dl:shared YADF, YADFOT, YADFSetup`, and the manifest
+  declares sections named exactly `YADF`, `YADFOT`, `YADFSetup`. Nothing is
+  guessed and nothing is matched by path shape.
+
+  LAZY AND CACHED. The plan is resolved once, on the first call, and each store
+  is opened at most once; a run whose project has no shared units never resolves
+  anything at all. That matters -- this box configures ~30 indexes and opening
+  them to answer a question about one routine would cost more than the rule
+  saves.
+
+  nil for an unknown name or an index that will not open. The rule treats nil as
+  "could not check" and still reports, which is the safe direction: an unopened
+  index is not evidence that a routine is unreferenced.
+
+  LIFETIME IS EXPLICIT because a closure does not provide one. The captured
+  dictionaries must outlive this function and die with the run, so they are
+  handed to AOwned rather than to a local try/finally -- freeing them here would
+  leave the closure holding dangling pointers, and not freeing them at all leaks
+  once per lint run. AKeepAlive holds the opened stores for the same reason.
+  Both are the caller's to free, after the rules have run. }
+function MakeSiblingStoreResolver(const AArgs: TArgs;
+  const AKeepAlive: TList<ISymbolStore>;
+  const AOwned: TObjectList<TObject>): DRagLint.Lint.ProjectRules.TSiblingStoreResolver;
+var
+  NameToDb: TDictionary<string, string>;
+  Opened  : TDictionary<string, ISymbolStore>;
+  Resolved: Boolean;
+begin
+  NameToDb:= TDictionary<string, string>      .Create;
+  Opened  := TDictionary<string, ISymbolStore>.Create;
+  AOwned.Add(NameToDb);
+  AOwned.Add(Opened  );
+  Resolved:= False;
+
+  Result:=
+    function(const AProjectName: string): ISymbolStore
+    var
+      DbPath: string;
+      St    : ISymbolStore;
+      RoOk  : Boolean;
+    begin
+      Result:= nil;
+      if AProjectName = '' then Exit;
+      if not Resolved then
+      begin
+        Resolved:= True; { one attempt, success or not -- a broken manifest must not be re-parsed per symbol }
+        try
+          { --config wins when given, exactly as DoResolveDbsList treats it.
+            Without this the resolver would silently read the MACHINE's manifest
+            while the rest of the run used the one the caller named -- and a
+            hermetic test could not point it anywhere. }
+          var Manifest: TIndexManifest;
+          if AArgs.WorkspaceConfig <> '' then
+            Manifest:= TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig),
+                                             ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
+          else
+            Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+          var Platform: string:= AArgs.CheckPlatform;
+          if Platform = '' then Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
+          if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
+          var Resolver: DRagLint.Project.Resolver.TProjectResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+          try
+            var Plan: TIndexPlan:= ResolvePlan(Manifest, [Platform], Resolver);
+            for var PS in Plan.Items do
+              if (PS.Name <> '') and (PS.DbPath <> '') then
+                NameToDb.AddOrSetValue(LowerCase(PS.Name), PS.DbPath);
+          finally
+            Resolver.Free;
+          end;
+        except
+          { A manifest that will not load leaves every name unresolvable, which
+            the rule reads as "could not check" and reports. Degrading, not
+            failing, is right: this is a lint run, not an index build. }
+        end;
+      end;
+      if Opened.TryGetValue(LowerCase(AProjectName), St) then Exit(St);
+      if not NameToDb.TryGetValue(LowerCase(AProjectName), DbPath) then Exit;
+      if not TFile.Exists(DbPath) then Exit;
+      St:= OpenReadOnlyStore(DbPath, RoOk);
+      if not RoOk then St:= nil;
+      Opened.AddOrSetValue(LowerCase(AProjectName), St);
+      if St <> nil then AKeepAlive.Add(St);
+      Result:= St;
+    end;
 end; // function
 
 { The LIBRARY index for this run's platform, from the manifest; '' when the
