@@ -204,6 +204,34 @@ Write-Host ("  ... of which UNTRACKED in this tree              : {0}" -f $untra
 foreach ($u in $untrackedRunners) {
   Write-Host ("      {0}  -- exists only in THIS tree; a clean checkout does not enumerate it" -f (RelPath $u.FullName)) -ForegroundColor Yellow
 }
+# LEGACY .bat TESTS ARE NOT RUN, AND UNTIL NOW NOTHING SAID SO.
+#
+# This battery discovers by FILENAME PATTERN, which silently defines "coverage"
+# as "files matching run_*.ps1". 68 .bat integration tests live under tests\ --
+# schema, MCP, LSP, hover, rename, refactor, lint rules, workspace config -- and
+# they are not skipped or reported, they are simply never seen. A reader
+# counting test files gets a number with no relation to what is verified.
+#
+# That is not theoretical. `resolve-uses` shipped a user-visible multi-DB defect
+# while carrying a test, T_resolve_uses.bat, that passes -- because it puts both
+# units in ONE database, the configuration in which the bug cannot appear. Its
+# existence is what made the verb look tested.
+#
+# 43 of them also invoke third_party\dll\drag-lint.exe, the RETIRED Win32 build,
+# which still exists and reports the same version string as the current Win64
+# one -- so a run against the stale binary is indistinguishable from a real one.
+#
+# This prints a number and nothing else, deliberately. Their pass/fail status is
+# UNKNOWN and triaging them is its own job (see
+# docs\INBOX-68-bat-tests-are-invisible-to-the-battery.md); pointing them at the
+# current exe and running them here would convert an unknown into a pile of
+# unattributed red inside the gate everything else depends on.
+$legacyBat = @(Get-ChildItem -Path (Join-Path $repoRoot 'tests') -Filter '*.bat' -Recurse -File -ErrorAction SilentlyContinue)
+Write-Host ("  legacy .bat tests NOT run by this battery        : {0}" -f $legacyBat.Count) `
+           -ForegroundColor $(if ($legacyBat.Count -gt 0) { 'Yellow' } else { 'Gray' })
+if ($legacyBat.Count -gt 0) {
+  Write-Host '      status UNKNOWN -- see docs\INBOX-68-bat-tests-are-invisible-to-the-battery.md' -ForegroundColor DarkGray
+}
 Write-Host ("  excluded by policy                               : {0}" -f $excluded.Count)
 foreach ($k in $DefaultExclusions.Keys) {
   Write-Host ("      {0}  -- {1}" -f $k, $DefaultExclusions[$k]) -ForegroundColor DarkGray
