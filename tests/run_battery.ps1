@@ -242,7 +242,11 @@ if (Test-Path $v021Driver) {
 }
 $legacyRunner = Join-Path $repoRoot 'tests\run_legacy_cli_fixtures.ps1'
 if (Test-Path $legacyRunner) {
-  foreach ($m in [regex]::Matches((Get-Content $legacyRunner -Raw), "'(T[A-Za-z0-9_]+)'")) {
+  # Both lists it drives: the T* fixtures under tests\fixtures\ and the
+  # root-level drivers (run_phase1_e2e). Matching only 'T...' would leave the
+  # latter counted as dark forever -- a banner that under-reports its own
+  # coverage trains readers to ignore it.
+  foreach ($m in [regex]::Matches((Get-Content $legacyRunner -Raw), "'((?:T|run_)[A-Za-z0-9_]+)'")) {
     [void]$covered.Add($m.Groups[1].Value)
   }
 }

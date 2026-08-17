@@ -3,7 +3,11 @@ setlocal
 set HERE=%~dp0
 set RSVARS=C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat
 set ROOT=%HERE%..\..
-set SRC=%ROOT%\src\delphi-plugin
+REM src\core joins the path because the plugin forms use DRagLint.Core.Model /
+REM DRagLint.Hover.Contrast, which live there rather than beside them. The
+REM dependency was added after this fixture was written and, the fixture being
+REM invisible to the battery, nothing ever reported the resulting F2613.
+set SRC=%ROOT%\src\delphi-plugin;%ROOT%\src\core
 set FIXTURES=%HERE:~0,-1%
 
 call "%RSVARS%" >NUL 2>&1

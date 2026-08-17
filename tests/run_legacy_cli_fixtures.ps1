@@ -64,12 +64,31 @@ function Check($n, $ok, $d = '') {
 # were emptied or renamed, and a zero-length run reports success -- the exact
 # failure mode that let this whole .bat suite rot unnoticed.
 $Fixtures = @(
-  'T31_hoverform', 'T35_rename_dry', 'T36_rename_apply', 'T37_mcp_rename',
-  'T38_doc_stub', 'T39_deadcode', 'T41_test_stub', 'T42_format', 'T42_outline',
+  # --- pure CLI ---------------------------------------------------------------
+  'T35_rename_dry', 'T36_rename_apply', 'T37_mcp_rename', 'T38_doc_stub',
+  'T39_deadcode', 'T41_test_stub', 'T42_format', 'T42_outline',
   'T43_scanfilter', 'T44_lint_pack', 'T44_usages', 'T53_parser_error',
   'T56_lint_rules_v032', 'T60_workspace_index', 'T61_hovertracker',
-  'T62_lint_rules_v035', 'T_resolve_uses'
+  'T62_lint_rules_v035', 'T_resolve_uses',
+  # --- COMPILE a .dpr with dcc64; eight of them link designide ----------------
+  # Every one of these was written from the same broken template and had NEVER
+  # run: 14 carried the nested `cmd /c "call ""..."""` that never reached the
+  # compiler, 15 carried the trailing-backslash-escapes-the-quote trap, and
+  # several had unit paths that went stale when a dependency moved to src\core
+  # or src\index. They were not IDE-blocked, as their subject matter suggested --
+  # they were simply never executed, so nothing reported any of it.
+  'T28_notifier', 'T29_settings', 'T30_keyboard', 'T31_hoverform',
+  'T32_completionform', 'T33_signatureform', 'T34_save_setting',
+  'T40_compile_parser', 'T43_refactorform', 'T47_regcolors', 'T48_diag_cache',
+  'T51_structure', 'T54_settings_scan_libraries', 'T55_codelens_cache',
+  'T57_usages_form', 'T58_symbolsearch_form', 'T59_workspace_config',
+  'T63_lint_config_roundtrip', 'T64_lint_options_compile', 'T65_profile_apply'
 )
+
+# Drivers that live in tests\ itself rather than tests\fixtures\. run_phase1_e2e
+# is a genuine end-to-end smoke test over index / query / find-callers / lint /
+# --dry-run / --version and was orphaned the same way everything else here was.
+$RootDrivers = @('run_phase1_e2e')
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $fixDir   = Join-Path $PSScriptRoot 'fixtures'
@@ -77,8 +96,9 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 $env:EXE = (Resolve-Path $Exe).Path   # every fixture defers to a pre-set EXE
 
 $ran = 0
-foreach ($name in $Fixtures) {
-  $bat = Join-Path $fixDir "$name.bat"
+foreach ($name in ($Fixtures + $RootDrivers)) {
+  $bat = if ($RootDrivers -contains $name) { Join-Path $PSScriptRoot "$name.bat" }
+         else                              { Join-Path $fixDir      "$name.bat" }
   if (-not (Test-Path $bat)) { Check $name $false 'fixture file missing'; continue }
   $lg = Join-Path $env:TEMP ("drag-lint-legacy-{0}-{1}.log" -f $name, $PID)
   $p  = Start-Process cmd.exe -ArgumentList '/c', $bat -WorkingDirectory $repoRoot `
@@ -98,8 +118,9 @@ foreach ($name in $Fixtures) {
 Remove-Item Env:\EXE -ErrorAction SilentlyContinue
 
 # POSITIVE CONTROL: an empty or truncated list would otherwise report a clean run.
-Check ("POSITIVE CONTROL: all {0} fixtures were attempted" -f $Fixtures.Count) `
-  ($ran -eq $Fixtures.Count) ("attempted={0} want={1}" -f $ran, $Fixtures.Count)
+$want = $Fixtures.Count + $RootDrivers.Count
+Check ("POSITIVE CONTROL: all {0} fixtures were attempted" -f $want) `
+  ($ran -eq $want) ("attempted={0} want={1}" -f $ran, $want)
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
