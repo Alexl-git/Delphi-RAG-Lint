@@ -351,6 +351,121 @@ Result: `unused-private-member` 447.8 -> **0.01 s**, `unused-public-symbol`
    > 2. only then decide whether the gate, the query, or the marshalling owns it.
    >
    > Do NOT ship a `COUNT`-based gate on the strength of the paragraph above.
+   >
+   > ### MEASURED, AND IT IS NONE OF THE ABOVE. `OverloadArityTag` is 45% of the run.
+   >
+   > The split timer was built and run on ORM3. It settles the whole thing:
+   >
+   > ```
+   >   unresolved-name                    255.26 s
+   >     ambiguity-gate                     0.01 s (   49 call(s), 0.30 ms/call)
+   >     primary-query                      2.41 s ( 4293 call(s), 0.56 ms/call)
+   >     extra-stores                       0.00 s (    0 call(s))
+   >     rest-of-window                   252.83 s
+   >   overload-arity-tag                 255.48 s (24286 call(s), 10.52 ms/call)
+   >   TOTAL                              572.31 s
+   > ```
+   >
+   > **`FindUnresolvedNameCallers` costs 2.41 s, not 269.** Its in-process
+   > 0.56 ms/call AGREES with the external replay's 0.78 ms/call. **The ~80x gap
+   > never existed.** Three sessions of plan work -- the CTE hypothesis, the
+   > missing-index hypothesis, the missing-statistics hypothesis, the unary `+`
+   > plan pin, the bounded ANALYZE -- were all aimed at a query that costs two and
+   > a half seconds. The timer was measuring something else the whole time. My own
+   > ambiguity-gate hypothesis, written directly above, is refuted too: 49 calls,
+   > 0.01 s.
+   >
+   > **The cost is `OverloadArityTag`** (`Doc.Facts.pas`), called from `ToFactRef`
+   > once per rendered caller row. It is charged to BOTH `resolved-callers` and
+   > `rest-of-window`, which is why its 255.48 s slightly exceeds the
+   > `unresolved-name` bucket that contains most of it.
+   >
+   > It is expensive per call *and* called often: **10.52 ms x 24,286**. Per call
+   > it makes two store calls, and the second is
+   > `FindAllChildSymbols(Sym.ParentId)` -- **materialising every sibling of the
+   > parent class into a full `TSymbol`** so it can count how many share the
+   > symbol's name. ORM3's forms and data modules have hundreds of members each,
+   > and this is redone for every caller row of every declaration.
+   >
+   > So the anti-pattern this note already records fixing twice
+   > (`unused-private-member` / `unused-public-symbol`: materialise every row to
+   > compare a count) was present a third time, one layer up, in the renderer --
+   > and it is the single largest cost in `lint-all`.
+   >
+   > ### What to do, and the gate on it
+   >
+   > The tag is a PURE FUNCTION of (store, symbol id), and caller rows repeat the
+   > same enclosing routines constantly -- 24,286 calls over far fewer distinct
+   > ids. A run-level memo is the smallest change with the largest constant
+   > factor. A store-side bounded `COUNT` would also help and is the better
+   > long-term shape, but it does not remove the repetition.
+   >
+   > **The memo key must include the STORE, not just the id.** Symbol ids are
+   > per-DB, so a bare id key would collide across a multi-DB run.
+   >
+   > Related and NOT fixed: in the extra-store loop, `ToFactRef` closes over the
+   > PRIMARY `AStore` while `RC.EnclosingSymbolId` came from the EXTRA store, so
+   > `OverloadArityTag` is already being handed an id from the wrong DB there.
+   > That is a pre-existing correctness bug, separate from the performance one,
+   > and it needs its own fix and its own test.
+   >
+   > **THE GATE, and it is the same one this note used for the 2026-08-12 work:**
+   > the report must stay byte-identical. Findings are the product; a 45% saving
+   > that changes one line of output is not a win, it is a regression with a
+   > stopwatch attached.
+   >
+   > `seealso` at **17.46 s** is now the second-largest doc-drift sub-item and has
+   > never been looked at.
+   >
+   > ### SHIPPED. 572 s -> 320 s, and the report is byte-identical.
+   >
+   > A run-level memo on `OverloadArityTag`, keyed on **(store pointer, symbol
+   > id)** -- ids are per-DB, so a bare id key would return one DB's answer for
+   > another DB's symbol in a multi-DB run. Same 24,286 calls; the second and
+   > later asks for an id now cost a dictionary probe instead of
+   > `GetSymbolById` + `FindAllChildSymbols`.
+   >
+   > | | before | after |
+   > |---|---|---|
+   > | overload-arity-tag | 255.48 s (10.52 ms/call) | **8.18 s (0.34 ms/call)** |
+   > | unresolved-name | 255.26 s | **10.19 s** |
+   > | resolved-callers | 5.42 s | 1.89 s |
+   > | doc-drift | 327.65 s | **78.44 s** |
+   > | **TOTAL** | **572.31 s** | **320.02 s** |
+   >
+   > **44% off the whole `lint-all`, 252 seconds.**
+   >
+   > **THE GATE WAS MET AND CHECKED, not assumed:** stdout is byte-identical --
+   > same SHA256, 2,161,951 bytes, the same 14,764 findings (32 error / 2,156
+   > warning / 12,173 info / 403 hint). The earlier instrumentation-only run
+   > matched the pre-instrumentation run byte-for-byte too, so the timers
+   > themselves changed nothing either.
+   >
+   > Not invalidated anywhere, and that is safe only because nothing in the
+   > doc-facts path writes to a store. A future caller that mutates a store
+   > mid-run must clear the memo; the declaration says so.
+   >
+   > ### What this item is now
+   >
+   > The headline is discharged. What remains is smaller and each piece is
+   > independent:
+   >
+   > * **`per-file scan` is now the dominant phase** at 141.26 s of 320.02 s
+   >   (44%), simply because everything around it shrank. Never profiled.
+   > * **`class-metrics` 56.10 s** -- second, also never looked at.
+   > * **`seealso` 17.57 s** -- the largest remaining doc-drift sub-item.
+   > * **`unused-unit-in-uses`** (item 2 below) still ~17 s.
+   > * The cross-DB `ToFactRef` id bug noted above is still open, and is a
+   >   CORRECTNESS issue rather than a performance one.
+   >
+   > And the lesson worth keeping, because it cost three sessions: **the profiler
+   > attributed a cost to the wrong thing, and every hypothesis built on that
+   > attribution was doomed regardless of how carefully it was tested.** Four
+   > explanations were measured and killed (CTE, missing index, missing
+   > statistics, the `NOT IN` predicate) before anyone checked what the timer
+   > actually enclosed. A timer with no CALL COUNT beside it hid it: "once per
+   > declaration" was assumed for three sessions and the real figure was 24,286
+   > calls through a different function.
 2. **`unused-unit-in-uses` is still 17.4 s** -- the memo removed the repetition
    but the remaining cost is one `FindSymbolsByExactName` per DISTINCT name,
    each an indexed lookup returning every symbol with that name.

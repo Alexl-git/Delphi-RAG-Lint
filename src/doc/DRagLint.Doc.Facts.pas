@@ -535,6 +535,66 @@ var
     stay near zero; they are here so the sum is provably complete rather than
     assumed complete. }
   GBSeeAlso, GBSince, GBSymFacts: Int64;
+  { SESSION 24: the unresolved-name bucket SPLIT, plus a CALL COUNT beside each
+    timer.
+
+    GBUnresolved is 269 s of ORM3's 530 s lint-all -- 51% of the run -- and every
+    investigation of it so far read that number as "FindUnresolvedNameCallers,
+    once per declaration". IT IS NOT. The window this bucket measures also
+    contains LeafNameIsUnambiguous (a SECOND store query, reached by
+    short-circuit whenever the symbol has no resolved caller) and the
+    extra-store LeafNameNotAmbiguous. So the external replays that measured
+    ~0.8 ms/call against an in-process ~62 ms/call were not comparing the same
+    work, and that discrepancy alone could account for the whole ~80x.
+
+    THE COUNTS ARE NOT DECORATION. "Once per declaration" was assumed, never
+    counted, and is the premise three failed explanations rested on; a rate is
+    only meaningful next to the number of calls that produced it. Externally
+    every query in this window serves in under 1 ms, so if a part shows a high
+    per-call figure the cost is not in SQLite and the search moves to FireDAC
+    marshalling -- and if instead the COUNT is the surprise, there was never an
+    80x per-call gap to explain.
+
+    GBUnresolved itself is unchanged and still spans the whole section, so
+    'unattributed' stays the honest remainder it was built to be. }
+  GBUnresGate, GBUnresPrimary, GBUnresExtra: Int64;
+  GCUnresGate, GCUnresPrimary, GCUnresExtra: Int64;
+  { MEASURED ON ORM3 with the split above, and it settles the whole question:
+      unresolved-name  257.01 s
+        ambiguity-gate    0.01 s (  49 calls, 0.30 ms/call)
+        primary-query     2.40 s (4293 calls, 0.56 ms/call)
+        rest-of-window  254.60 s   <-- 99.1%
+    FindUnresolvedNameCallers costs 2.4 s, not 269. Its 0.56 ms/call AGREES with
+    the external replay's 0.78, so the "~80x in-process gap" that three sessions
+    chased -- and that a plan pin and an ANALYZE were shipped for -- never
+    existed; the timer was simply measuring something else.
+
+    What is left is the loop that turns each returned row into a fact, and
+    ToFactRef calls OverloadArityTag PER ROW, which is TWO more store calls, one
+    of them FindAllChildSymbols materialising every sibling of the parent class
+    to count same-named ones. That is the obvious suspect and is therefore
+    exactly what must be measured rather than assumed -- the previous four
+    suspects were all obvious too. }
+  GBOverloadTag, GCOverloadTag: Int64;
+  { MEMO for OverloadArityTag, and the reason it exists is the measurement above:
+    255.48 s of a 572 s ORM3 lint-all, 10.52 ms x 24,286 calls.
+
+    The tag is a PURE FUNCTION of (store, symbol id) -- it reads the symbol and
+    its parent's children, neither of which changes while a run holds the store
+    open -- and caller rows repeat the same enclosing routines constantly, so
+    the same id is asked for over and over.
+
+    THE KEY INCLUDES THE STORE, NOT JUST THE ID. Symbol ids are per-DB: two
+    stores in one multi-DB run both number from 1, so a bare id key would return
+    one DB's answer for another DB's symbol. The store's interface pointer
+    identifies the instance, and every store consulted during a run is held
+    alive by the caller for the whole run, so the pointer cannot be recycled
+    underneath the memo.
+
+    Never invalidated, deliberately: nothing in the doc-facts path writes to a
+    store, and the process is short-lived. If a future caller ever mutates a
+    store mid-run, this memo must be cleared at that point. }
+  GOverloadMemo: TDictionary<string, string>;
 
 function BTick: Int64; inline;
 begin
@@ -545,6 +605,15 @@ function DocFactsBuildProfile: string;
   function S(ATicks: Int64): string;
   begin
     Result:= Format('%8.2f s', [ATicks / TStopwatch.Frequency]);
+  end;
+  { ms PER CALL. The whole point of the split: an external replay of every query
+    in this window serves in under 1 ms, so a per-call figure far above that says
+    the cost is not in SQLite -- while a surprising CALL COUNT would say there was
+    never a per-call gap to explain. '--' rather than a division by zero. }
+  function Per(ATicks, ACalls: Int64): string;
+  begin
+    if ACalls <= 0 then Exit('-- ms/call');
+    Result:= Format('%.2f ms/call', [ATicks * 1000 / (TStopwatch.Frequency * ACalls)]);
   end;
 begin
   // 'unattributed' is total minus the nine sections. It is printed rather than
@@ -557,10 +626,21 @@ begin
   Result:= Format('      harvest %s | resolved-callers %s | unresolved-name %s'#13#10 +
                   '      return-cases %s | calls %s | raises %s | ancestry %s'#13#10 +
                   '      seealso %s | since %s | symbol-facts %s'#13#10 +
-                  '      covered-by %s | wiring %s | unattributed %s | build total %s',
+                  '      covered-by %s | wiring %s | unattributed %s | build total %s'#13#10 +
+                  '        unresolved-name SPLIT -- ambiguity-gate %s (%d call(s), %s)'#13#10 +
+                  '                                 primary-query  %s (%d call(s), %s)'#13#10 +
+                  '                                 extra-stores   %s (%d call(s), %s)'#13#10 +
+                  '                                 rest-of-window %s'#13#10 +
+                  '        overload-arity-tag %s (%d call(s), %s) -- inside ToFactRef,'#13#10 +
+                  '          so it is charged to BOTH resolved-callers and rest-of-window',
     [S(GBHarvest), S(GBResolved), S(GBUnresolved), S(GBReturns), S(GBCalls), S(GBRaises),
      S(GBAncestry), S(GBSeeAlso), S(GBSince), S(GBSymFacts),
-     S(GBCoveredBy), S(GBWiring), S(GBTotal - Parts), S(GBTotal)]);
+     S(GBCoveredBy), S(GBWiring), S(GBTotal - Parts), S(GBTotal),
+     S(GBUnresGate   ), GCUnresGate   , Per(GBUnresGate   , GCUnresGate   ),
+     S(GBUnresPrimary), GCUnresPrimary, Per(GBUnresPrimary, GCUnresPrimary),
+     S(GBUnresExtra  ), GCUnresExtra  , Per(GBUnresExtra  , GCUnresExtra  ),
+     S(GBUnresolved - GBUnresGate - GBUnresPrimary - GBUnresExtra),
+     S(GBOverloadTag), GCOverloadTag, Per(GBOverloadTag, GCOverloadTag)]);
 end;
 
 // PHASE C B2: '/N' when ASymbolId is one of several routines that share a name
@@ -581,18 +661,36 @@ var
 begin
   Result:= '';
   if (AStore = nil) or (ASymbolId <= 0) then Exit;
-  Sym:= AStore.GetSymbolById(ASymbolId);
-  if (Sym.Id <= 0) or not (Sym.Kind in ROUTINE_KINDS) then Exit;
-  { Same container, same name -- the sibling test 'Overload k of n' already uses
-    (FindAllChildSymbols scopes to a class for methods and to the unit symbol for
-    free routines), so the two facts cannot disagree about what an overload is. }
-  Sibs:= AStore.FindAllChildSymbols(Sym.ParentId);
-  Same:= 0;
-  for var S in Sibs do
-    if (S.Kind in ROUTINE_KINDS) and SameText(S.Name, Sym.Name) then Inc(Same);
-  if Same <= 1 then Exit;
-  if not SignatureArityRange(Sym.Signature, Lo, Hi) then Exit;
-  Result:= '/' + IntToStr(Hi);
+  { Timed and COUNTED: called once per rendered caller row, from ToFactRef, in
+    both the resolved and the unresolved bucket. The early Exits are inside the
+    window on purpose -- a cheap call is still a call, and the count is what
+    distinguishes "expensive per call" from "called far more often than anyone
+    thought", which is the mistake this whole investigation has already made
+    once. }
+  var TO0: Int64:= BTick;
+  Inc(GCOverloadTag);
+  var MemoKey: string:= IntToStr(NativeInt(Pointer(AStore))) + ':' + IntToStr(ASymbolId);
+  try
+    if GOverloadMemo.TryGetValue(MemoKey, Result) then Exit;
+    Sym:= AStore.GetSymbolById(ASymbolId);
+    if (Sym.Id <= 0) or not (Sym.Kind in ROUTINE_KINDS) then Exit;
+    { Same container, same name -- the sibling test 'Overload k of n' already uses
+      (FindAllChildSymbols scopes to a class for methods and to the unit symbol for
+      free routines), so the two facts cannot disagree about what an overload is. }
+    Sibs:= AStore.FindAllChildSymbols(Sym.ParentId);
+    Same:= 0;
+    for var S in Sibs do
+      if (S.Kind in ROUTINE_KINDS) and SameText(S.Name, Sym.Name) then Inc(Same);
+    if Same <= 1 then Exit;
+    if not SignatureArityRange(Sym.Signature, Lo, Hi) then Exit;
+    Result:= '/' + IntToStr(Hi);
+  finally
+    { One exit point, so every path -- including the early "not a routine kind"
+      one, whose answer really is '' -- is memoised. Re-storing on a memo HIT
+      writes the same value back and is not worth a branch to avoid. }
+    GOverloadMemo.AddOrSetValue(MemoKey, Result);
+    Inc(GBOverloadTag, BTick - TO0);
+  end;
 end;
 
 function DocDisplayCount(ATotal: Integer): Integer;
@@ -1866,16 +1964,30 @@ begin
     // the marker was suppressed as uniform, and a wholly-guessed list rendered
     // exactly like a verified one. That is the combination this suppresses:
     // ambiguous name AND no resolved anchor.
+    { SPLIT FOR MEASUREMENT ONLY -- the SHORT-CIRCUIT IS PRESERVED EXACTLY. The
+      two cheap terms are evaluated first and the store query runs only if both
+      are false, which is what the single `or` chain did. Written this way
+      because a timer wrapped around the whole expression would have charged the
+      gate for declarations that never called it. }
     var NameUnambiguous: Boolean:=
       (not CanBeCallTarget(ASym.Kind))
-      or (Distinct.Count > 0)
-      or LeafNameIsUnambiguous(AStore, LastSeg(ASym.QualifiedName));
+      or (Distinct.Count > 0);
+    if not NameUnambiguous then
+    begin
+      var TG0: Int64:= BTick;
+      NameUnambiguous:= LeafNameIsUnambiguous(AStore, LastSeg(ASym.QualifiedName));
+      Inc(GBUnresGate, BTick - TG0);
+      Inc(GCUnresGate);
+    end;
     if NameUnambiguous then
     begin
+      var TP0: Int64:= BTick;
       ResCallers:= AStore.FindUnresolvedNameCallers(LastSeg(ASym.QualifiedName),
                                                    CanBeCallTarget(ASym.Kind),
                                                    ASym.FileId,
                                                    OwnerTypeLeaf(ASym.Kind, ASym.QualifiedName));
+      Inc(GBUnresPrimary, BTick - TP0);
+      Inc(GCUnresPrimary);
       for RC in ResCallers do
       begin
         FR:= ToFactRef(RC);
@@ -1892,6 +2004,11 @@ begin
     // cross-DB caller (e.g. a COMMON reference) surfaces. Every extra-store hit
     // is marked 'unverified' -- AddDistinct's Display|Location dedupe folds a
     // caller seen in both the primary and an extra store into one entry.
+    { Timed as a WHOLE LOOP -- it holds two store queries per store (the gate and
+      the fan-out) and a run may configure none at all, so a per-query split here
+      would report on a path that is often empty. GCUnresExtra counts the
+      fan-out calls that actually ran. }
+    var TE0: Int64:= BTick;
     for var ExStore in AExtraStores do
     begin
       if ExStore = nil then Continue;
@@ -1922,6 +2039,7 @@ begin
                                                     CanBeCallTarget(ASym.Kind),
                                                     0,
                                                     OwnerTypeLeaf(ASym.Kind, ASym.QualifiedName));
+      Inc(GCUnresExtra);
       for RC in ResCallers do
       begin
         FR:= ToFactRef(RC);
@@ -1929,6 +2047,7 @@ begin
         AddDistinct(FR);
       end;
     end;
+    Inc(GBUnresExtra, BTick - TE0);
 
     // v(ADP1 T1): CalledFrom's display cap is the CONFIG-DRIVEN AMaxCallers
     // (manifest docs.max_callers, default 5 -- see LoadDocMaxCallers), NOT the
@@ -2552,5 +2671,11 @@ begin
   Inc(GBWiring, BTick - TB0);
   Inc(GBTotal, BTick - TBAll);
 end;
+
+initialization
+  GOverloadMemo:= TDictionary<string, string>.Create;
+
+finalization
+  GOverloadMemo.Free;
 
 end.
