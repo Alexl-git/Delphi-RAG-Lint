@@ -1,3 +1,36 @@
+> # DONE 2026-08-16 (session 23) -- owner said delete it, and it is deleted.
+>
+> `src\cli\Win64\Debug\drag-lint.json` (2026-08-09) is gone. The debug build no
+> longer answers with paths from the deleted layout.
+>
+> **What it does now instead, stated honestly rather than sold as a clean win:**
+>
+> ```
+> debug exe    : ERROR: no manifest section includes C:\Projects\YADF\YADF.dproj
+>                -- there is no index that owns this project.
+> deployed exe : C:\Projects\YADF\_D-RAG\YADF.sqlite
+> ```
+>
+> The debug build now finds NO manifest at all. Beside-the-exe is empty, and the
+> walk up from the CWD reaches `C:\Projects\.drag-lint.json`, which carries only
+> the dead `scan` block and no `indexes` section. So it errors.
+>
+> **That is a strict improvement and still not ideal.** An explicit "there is no
+> index that owns this" is safe -- it cannot send a caller to a DB that no longer
+> exists, which is what the stale copy did. But the verb is now unusable from the
+> debug build, where it used to appear to work.
+>
+> Confirmed harmless for the battery: 75 of the suites default to the debug exe
+> and **none** of them auto-resolve a DB -- every one passes an explicit `--db`
+> or builds its own.
+>
+> **If the convenience is wanted back**, the fix is NOT to restore a copy beside
+> the exe (that recreates this bug the next time the layout moves). It is to make
+> the manifest search fall through to the canonical
+> `third_party\dll-win64\drag-lint.json` -- one known location, one copy. Left
+> undone deliberately: it changes manifest resolution for every consumer, which
+> deserves its own change rather than riding along with a file deletion.
+
 # INBOX -- a stale manifest beside the DEBUG exe shadows the canonical one
 
 **Found 2026-08-16 (session 23)**, while chasing what looked like a `resolve-dbs`
