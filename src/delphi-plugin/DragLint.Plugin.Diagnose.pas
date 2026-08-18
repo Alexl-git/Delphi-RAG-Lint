@@ -335,7 +335,11 @@ begin
   end;
   Slice:= Copy(Output, OpenP, CloseP - OpenP + 1);
   Val:= nil;
-  try Val:= TJSONObject.ParseJSONValue(Slice); except Val:= nil; end;
+  try
+    Val:= TJSONObject.ParseJSONValue(Slice);
+  except
+    on E: Exception do begin Val:= nil; DebugLog('diagnose: info JSON parse failed -- ' + E.Message); end;
+  end;
   if not (Val is TJSONObject) then
   begin
     Val.Free;
@@ -403,6 +407,7 @@ var
   Dbs    : TArray<string>    ;
   P      : string            ;
   Missing: Integer           ;
+  DbsErr : string            ;
 begin
   Result:= nil;
 
@@ -433,9 +438,24 @@ begin
   if FileExists(Exe) then Add(Result, Line('Engine exe', Exe, dsOk))
   else Add(Result, Line('Engine exe', 'NOT FOUND at ' + Exe, dsBad));
 
-  Dbs:= nil;
-  try Dbs:= ResolveActiveIndexDbs(LoadSettings); except Dbs:= nil; end;
-  if Length(Dbs) = 0 then
+  Dbs   := nil;
+  DbsErr:= '';
+  { Keep the REASON. An earlier version swallowed it and reported only "NONE",
+    which is the same fail-open shape this whole window exists to expose: a
+    resolver that raised and one that legitimately found nothing looked
+    identical, in the one place whose job is to tell them apart. }
+  try
+    Dbs:= ResolveActiveIndexDbs(LoadSettings);
+  except
+    on E: Exception do
+    begin
+      DbsErr:= E.ClassName + ': ' + E.Message;
+      DebugLog('diagnose: ResolveActiveIndexDbs raised -- ' + DbsErr);
+    end;
+  end;
+  if DbsErr <> '' then
+    Add(Result, Line('Resolved indexes', 'resolution FAILED -- ' + DbsErr, dsBad))
+  else if Length(Dbs) = 0 then
     Add(Result, Line('Resolved indexes', 'NONE -- symbol features cannot answer', dsBad))
   else
   begin
@@ -528,7 +548,15 @@ begin
     for months. Say which one it is, in words, every time. }
   LibWhy := '';
   LibPath:= '';
-  try LibPath:= GetPlatformAwareLibraryDbPathEx(Settings, LibWhy); except LibWhy:= 'resolution raised'; end;
+try
+    LibPath:= GetPlatformAwareLibraryDbPathEx(Settings, LibWhy);
+  except
+    on E: Exception do
+    begin
+      LibWhy:= 'resolution RAISED -- ' + E.ClassName + ': ' + E.Message;
+      DebugLog('diagnose: library resolution raised -- ' + LibWhy);
+    end;
+  end;
 
   if not TFile.Exists(LibPath) then Sev:= dsBad
   else if Pos('manifest ', LibWhy) = 1 then Sev:= dsOk
@@ -541,8 +569,16 @@ begin
   else
     Add(Result, Line('  chosen by', 'FALLBACK -- ' + LibWhy, dsBad));
 
-  Dbs:= nil;
-  try Dbs:= ResolveActiveIndexDbs(Settings); except Dbs:= nil; end;
+Dbs:= nil;
+  try
+    Dbs:= ResolveActiveIndexDbs(Settings);
+  except
+    on E: Exception do
+    begin
+      Add(Result, Line('Index', 'resolution FAILED -- ' + E.ClassName + ': ' + E.Message, dsBad));
+      DebugLog('diagnose: ResolveActiveIndexDbs raised (indexes) -- ' + E.Message);
+    end;
+  end;
   for P in Dbs do
   begin
     if SameText(P, LibPath) then Continue; { already reported above }
