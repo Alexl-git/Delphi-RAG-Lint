@@ -5189,13 +5189,31 @@ begin
     begin
       Result:= False;
       try Result:= RunGhostCheckAsync(False); except end;
-      { Task 6: ADD-alongside spawn on the SAME idle trigger (debounced by
-        GHOST_IDLE_MS in LiveDiagnostics.pas -- no new timer here) -- keeps
+      { Task 6: ADD-alongside spawn on the SAME idle trigger -- keeps
         compiler_findings fresh as the user edits, not just on save. Detached
         + fire-and-forget, so it cannot slow down or block the ghost-check
         above. '' guards inside SpawnRefreshFindings make this a silent no-op
-        when no project is open. }
-      try SpawnRefreshFindings(GetActiveProjectFile, ResolvePrimaryIndexDb, False); except end;
+        when no project is open.
+
+        2026-08-17 -- GATED ON Result, WHICH IT WAS NOT. RunGhostCheckAsync is
+        single-flight: when a check is already in flight it returns False and
+        does nothing. This spawn sat OUTSIDE that latch, so every idle tick
+        started a refresh-findings process even while the ghost check itself was
+        being skipped -- and refresh-findings RECOMPILES UNITS, so each one is
+        real CPU, not a cheap probe.
+
+        Measured from a live session: 32 spawns, ~20 of them inside 9 seconds
+        (roughly one per 250 ms, the tick interval). The LSP happened to start
+        into that load and its `initialize` took 101 s against a 45 s client
+        timeout, which surfaced to the user as "LSP initialize handshake
+        failed" -- a message about a handshake that had in fact succeeded.
+        The comment above used to claim this was "debounced by GHOST_IDLE_MS";
+        the debounce gates the TICK, not this call, so it never applied here.
+
+        Gating on Result means exactly one refresh per ghost check that
+        actually ran, which was the original intent. }
+      if Result then
+        try SpawnRefreshFindings(GetActiveProjectFile, ResolvePrimaryIndexDb, False); except end;
     end;
     { v0.47: best-effort crash recovery on startup -- if a project is already open,
     restore any file left overlaid by a crashed ghost-check (no prompt; only posts
