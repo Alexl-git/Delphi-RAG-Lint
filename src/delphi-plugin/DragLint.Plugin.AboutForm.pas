@@ -43,13 +43,21 @@ type
       FButtons  : TPanel    ;
       FStatusBar: TLabel    ;
       FNextTop  : Integer   ;
+      { Bottom-bar action wrappers: created once in BuildButtons, live as long as
+        the form. }
       FWrappers : TList     ;
+      { Fix-button invokers: recreated by every BuildContent, so they are freed
+        by ClearContent alongside the controls that point at them. Keeping these
+        in FWrappers would accumulate one dead object per row per refresh, and
+        the window refreshes after every applied fix. }
+      FRowObjs  : TList     ;
       procedure BuildContent;
       procedure ClearContent;
       procedure DoRefresh   (Sender: TObject);
       procedure DoDiagnose  (Sender: TObject);
       procedure DoCopyReport(Sender: TObject);
       procedure DoCloseClick(Sender: TObject);
+      procedure DoAfterFix  (Sender: TObject);
       procedure AddButton(const ACaption: string; AHandler: TNotifyEvent;
                           var ALeft: Integer; var ATop: Integer);
       procedure AddProcButton(const ACaption: string; AProc: Pointer;
@@ -79,6 +87,7 @@ uses
   , Vcl.Clipbrd
   , Vcl.Dialogs
   , DragLint.Plugin.Diagnose
+  , DragLint.Plugin.Theme
   , DragLint.Plugin.Editor
   ;
 
@@ -106,6 +115,17 @@ type
       FText: string;
     public
       constructor Create(const AText: string);
+      procedure Click(Sender: TObject);
+  end;
+
+  { Carries which configuration fix a "Fix" button applies, and who to tell when
+    it succeeds so the window can re-read itself. }
+  TDLFixInvoker = class
+    strict private
+      FFix     : TDiagFix     ;
+      FOnFixed : TNotifyEvent ;
+    public
+      constructor Create(AFix: TDiagFix; AOnFixed: TNotifyEvent);
       procedure Click(Sender: TObject);
   end;
 
@@ -143,6 +163,42 @@ begin
   Clipboard.AsText:= FText;
 end;
 
+constructor TDLFixInvoker.Create(AFix: TDiagFix; AOnFixed: TNotifyEvent);
+begin
+  inherited Create;
+  FFix    := AFix;
+  FOnFixed:= AOnFixed;
+end;
+
+procedure TDLFixInvoker.Click(Sender: TObject);
+var
+  Cur, Prop, Err: string;
+begin
+  if not DescribeDiagFix(FFix, Cur, Prop) then
+  begin
+    ShowMessage('drag-lint: nothing to change -- this setting is already correct.');
+    if Assigned(FOnFixed) then FOnFixed(Self);
+    Exit;
+  end;
+
+  { Show the exact before/after and require consent. This writes to the user's
+    registry; a "Fix" that silently rewrites a setting turns a visible warning
+    into an invisible change, which is a worse state than the warning. }
+  if MessageDlg(
+       'Change this drag-lint setting?' + sLineBreak + sLineBreak +
+       'From:' + sLineBreak + '    ' + Cur + sLineBreak + sLineBreak +
+       'To:'   + sLineBreak + '    ' + Prop + sLineBreak + sLineBreak +
+       'The change takes effect immediately for new lookups.',
+       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  if ApplyDiagFix(FFix, Err) then
+  begin
+    if Assigned(FOnFixed) then FOnFixed(Self);
+  end
+  else
+    ShowMessage('drag-lint: could not apply the fix -- ' + Err);
+end;
+
 { ---- a read-only viewer for the diagnose report ---- }
 
 { Shown modally so the report cannot be lost behind the IDE while the user is
@@ -165,6 +221,7 @@ begin
       Dlg.Height     := 660;
       Dlg.Position   := poScreenCenter;
       Dlg.BorderStyle:= bsSizeable;
+      ApplyIdeTheme(Dlg, TForm);
 
       Bar:= TPanel.Create(Dlg);
       Bar.Parent    := Dlg;
@@ -180,6 +237,8 @@ begin
       Memo.ReadOnly  := True;
       Memo.Font.Name := 'Consolas';
       Memo.Font.Size := 9;
+      Memo.Color     := ThemedColor(clWindow);
+      Memo.Font.Color:= ThemedColor(clWindowText);
       Memo.Text      := AText;
 
       BtnCp:= TButton.Create(Dlg);
@@ -224,6 +283,7 @@ begin
   Constraints.MinHeight:= 440;
 
   FWrappers:= TList.Create;
+  FRowObjs := TList.Create;
 
   FButtons:= TPanel.Create(Self);
   FButtons.Parent    := Self;
@@ -242,7 +302,13 @@ begin
   FScroll.Align      := alClient;
   FScroll.BorderStyle:= bsNone;
   FScroll.ParentColor:= False;
-  FScroll.Color      := clWindow;
+
+  { Theme the frame and children first, THEN paint the surfaces we own. A
+    TScrollBox given a hardcoded clWindow stays white under a dark IDE theme --
+    ApplyTheme does not reach a colour we set ourselves. }
+  ApplyIdeTheme(Self, TDragLintAboutForm);
+  FScroll.Color:= ThemedColor(clWindow);
+  Color        := ThemedColor(clBtnFace);
 
   BuildButtons;
   BuildContent;
@@ -252,6 +318,8 @@ destructor TDragLintAboutForm.Destroy;
 var
   I: Integer;
 begin
+  ClearContent;   { frees FRowObjs' contents }
+  if FRowObjs <> nil then FRowObjs.Free;
   if FWrappers <> nil then
   begin
     for I:= 0 to FWrappers.Count - 1 do
@@ -268,6 +336,13 @@ var
 begin
   for I:= FScroll.ControlCount - 1 downto 0 do
     FScroll.Controls[I].Free;
+  { Free the invokers the controls above pointed at, in this order: the buttons
+    are gone first, so nothing can fire a handler into a freed object. }
+  if FRowObjs <> nil then
+  begin
+    for I:= FRowObjs.Count - 1 downto 0 do TObject(FRowObjs[I]).Free;
+    FRowObjs.Clear;
+  end;
   FNextTop:= MARGIN;
 end;
 
@@ -296,7 +371,7 @@ procedure TDragLintAboutForm.BuildContent;
     Rule.Top      := FNextTop;
     Rule.Width    := 880;
     Rule.Height   := 1;
-    Rule.Pen.Color:= clSilver;
+    Rule.Pen.Color:= ThemedColor(clBtnShadow);
     Inc(FNextTop, 8);
 
     for L in ALines do
@@ -307,7 +382,7 @@ procedure TDragLintAboutForm.BuildContent;
       Cap.Top       := FNextTop;
       Cap.Width     := LABEL_W;
       Cap.Caption   := L.Caption;
-      Cap.Font.Color:= clGrayText;
+      Cap.Font.Color:= ThemedColor(clGrayText);
 
       Val:= TLabel.Create(Self);
       Val.Parent  := FScroll;
@@ -316,13 +391,36 @@ procedure TDragLintAboutForm.BuildContent;
       Val.Caption := L.Value;
       { The colour IS the message. A status screen that renders a broken
         component in the same ink as a healthy one is a screen nobody reads --
-        which is how a stale library index survived months of daily use. }
+        which is how a stale library index survived months of daily use.
+
+        Every colour goes through ThemedStatusColor, which lifts it to WCAG
+        4.5:1 against the ACTIVE theme background. Raw clRed and clGreen are
+        close to unreadable on a dark IDE theme, and the colour that carries the
+        meaning must not be the one you cannot read. }
       case L.Severity of
-        dsBad : begin Val.Font.Color:= clRed; Val.Font.Style:= [fsBold]; end;
-        dsWarn:       Val.Font.Color:= clMaroon;
-        dsOk  :       Val.Font.Color:= clGreen;
+        dsBad : begin Val.Font.Color:= ThemedStatusColor(clRed); Val.Font.Style:= [fsBold]; end;
+        dsWarn:       Val.Font.Color:= ThemedStatusColor(clMaroon);
+        dsOk  :       Val.Font.Color:= ThemedStatusColor(clGreen);
       else
-        Val.Font.Color:= clWindowText;
+        Val.Font.Color:= ThemedColor(clWindowText);
+      end;
+
+      { A finding we can correct gets a button beside it. Only settings with ONE
+        unambiguous correct value are offered -- see TDiagFix. }
+      if L.Fix <> dfNone then
+      begin
+        var FixBtn: TButton:= TButton.Create(Self);
+        FixBtn.Parent  := FScroll;
+        FixBtn.Caption := 'Fix';
+        FixBtn.Width   := 46;
+        FixBtn.Height  := ROW_H;
+        FixBtn.Top     := FNextTop - 2;
+        FixBtn.Left    := MARGIN + 8 + LABEL_W - 54;
+        FixBtn.Hint    := 'Correct this setting (shows the change before applying)';
+        FixBtn.ShowHint:= True;
+        var Inv: TDLFixInvoker:= TDLFixInvoker.Create(L.Fix, DoAfterFix);
+        FRowObjs.Add(Inv);
+        FixBtn.OnClick := Inv.Click;
       end;
 
       Inc(FNextTop, ROW_H);
@@ -351,13 +449,13 @@ begin
     if HasProblem(Conn) or HasProblem(Idx) then
     begin
       FStatusBar.Caption   := '  Problems detected -- the red lines above are the ones that matter.';
-      FStatusBar.Font.Color:= clRed;
+      FStatusBar.Font.Color:= ThemedStatusColor(clRed);
       FStatusBar.Font.Style:= [fsBold];
     end
     else
     begin
       FStatusBar.Caption   := '  All resolved components look healthy.';
-      FStatusBar.Font.Color:= clGreen;
+      FStatusBar.Font.Color:= ThemedStatusColor(clGreen);
       FStatusBar.Font.Style:= [];
     end;
   finally
@@ -457,13 +555,25 @@ begin
     Screen.Cursor:= crDefault;
   end;
   FStatusBar.Caption   := '  Diagnose report copied to the clipboard.';
-  FStatusBar.Font.Color:= clWindowText;
+  FStatusBar.Font.Color:= ThemedColor(clWindowText);
   FStatusBar.Font.Style:= [];
 end;
 
 procedure TDragLintAboutForm.DoCloseClick(Sender: TObject);
 begin
   Close;
+end;
+
+procedure TDragLintAboutForm.DoAfterFix(Sender: TObject);
+begin
+  { Re-read everything rather than just recolouring the one row: correcting
+    ExePath changes which manifest resolves, which can change the library index
+    reported two groups above. Showing a fixed setting beside the stale
+    consequence it caused would be its own small lie. }
+  BuildContent;
+  FStatusBar.Caption   := '  Setting updated -- the groups above have been re-read.';
+  FStatusBar.Font.Color:= ThemedStatusColor(clGreen);
+  FStatusBar.Font.Style:= [];
 end;
 
 procedure ShowAboutDialog;

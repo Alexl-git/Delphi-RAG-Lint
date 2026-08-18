@@ -230,6 +230,7 @@ uses
   , Vcl.Themes              // StyleServices / TStyleManager (themed bg for opted-out controls)
   , DRagLint.Hover.Contrast // EnsureReadable (T1)
   , DragLint.Plugin.Fonts   // GetIdeEditorFont (T5)
+  , DragLint.Plugin.Theme   // session 27: shared IDE theming (was duplicated here)
   ;
 
 var
@@ -321,59 +322,25 @@ end;
 
 { ---- IDE theme follow (v0.46) ---- }
 
-var
-  GHoverThemeRegistered: Boolean = False;
-
 procedure ApplyIdeTheme(AForm: TCustomForm);
-{ v0.46: make the popup follow the IDE's light/dark theme. ApplyTheme recolors
-  the form + its child controls to the active VCL style. Guarded end-to-end so a
-  missing service or an older IDE never breaks the popup -- it just stays on the
-  default light colours. RegisterFormClass (once) lets the theme engine recognise
-  our form class. }
-var
-  Theming: IOTAIDEThemingServices;
+{ v0.46 made the popup follow the IDE's light/dark theme. Session 27 moved the
+  implementation into DragLint.Plugin.Theme so the About window uses the SAME
+  code rather than a second copy -- see that unit's header for the
+  IOTAIDEThemingServices-vs-global-StyleServices trap this originally uncovered.
+  Kept as a local wrapper so the call sites below are unchanged. }
 begin
-  try
-    if not Supports(BorlandIDEServices, IOTAIDEThemingServices, Theming) then Exit;
-    if not Theming.IDEThemingEnabled then Exit;
-    if not GHoverThemeRegistered then
-    begin
-      Theming.RegisterFormClass(TDragLintHoverForm);
-      GHoverThemeRegistered:= True;
-    end;
-    Theming.ApplyTheme(AForm);
-  except
-    { theming is best-effort -- never let it break the hover }
-  end;
+  DragLint.Plugin.Theme.ApplyIdeTheme(AForm, TDragLintHoverForm);
 end;
 
 function ThemedColor(ASystemColor: TColor): TColor;
-{ v(theme fix v2): return the IDE's ACTIVE theme mapping of a system color (e.g.
-  clWindow / clWindowText). FBody (TRichEdit) and FCallers (TListView) set
-  StyleElements:=[] so our per-token syntax colors survive style-hooking -- but
-  that also opts them out of the themed BACKGROUND, so they would paint on a
-  hardcoded clWindow (white) even under a DARK IDE theme (ApplyTheme themes the
-  form frame, not these opted-out children, and Self.Color stays clWindow).
-  IMPORTANT: the RAD Studio IDE themes itself through IOTAIDEThemingServices, NOT
-  the process-global VCL TStyleManager -- so `TStyleManager.IsCustomStyleActive`
-  reads False and the global `StyleServices` is the light default even when the
-  IDE is dark (this is why the first attempt did nothing). Pull the IDE's OWN
-  active StyleServices (GetIDEStyleServices) and map through THAT. Falls back to
-  the raw system color when theming is disabled or the service is unavailable. }
-var
-  Theming: IOTAIDEThemingServices;
-  SS     : TCustomStyleServices  ;
+{ Shared with the About window -- see DragLint.Plugin.Theme.
+
+  Still needed here because FBody (TRichEdit) and FCallers (TListView) set
+  StyleElements:=[] so our per-token syntax colors survive style-hooking, which
+  also opts them out of the themed BACKGROUND: without this they paint on a
+  hardcoded clWindow (white) under a DARK IDE theme. }
 begin
-  Result:= ASystemColor;
-  try
-    if Supports(BorlandIDEServices, IOTAIDEThemingServices, Theming) and Theming.IDEThemingEnabled then
-    begin
-      SS:= Theming.StyleServices; { the IDE's active StyleServices, not the global one }
-      if (SS <> nil) and SS.Enabled then Result:= SS.GetSystemColor(ASystemColor);
-    end;
-  except
-    { defensive: never let theming break the popup }
-  end;
+  Result:= DragLint.Plugin.Theme.ThemedColor(ASystemColor);
 end;
 
 { ---- TDragLintHoverForm ---- }

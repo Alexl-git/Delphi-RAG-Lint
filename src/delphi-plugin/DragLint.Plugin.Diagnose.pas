@@ -32,6 +32,16 @@ type
   /// merely informational.</summary>
   TDiagSeverity = (dsOk, dsInfo, dsWarn, dsBad);
 
+  /// <summary>A configuration problem this plugin can correct by itself.</summary>
+  /// <remarks>Only settings with ONE unambiguous correct value belong here. A
+  /// "Fix" button that guesses is worse than no button: it turns a visible
+  /// warning into an invisible wrong setting.</remarks>
+  TDiagFix = (
+    dfNone,       { nothing to offer                                        }
+    dfExePath,    { Settings.ExePath -> the full path of the resolved engine }
+    dfDbTemplate  { DbPathTemplate   -> the current _D-RAG default           }
+  );
+
   /// <summary>One caption/value row of the diagnose report.</summary>
   /// <remarks>The About screen colours Value by Severity (dsBad = red); the
   /// text report renders the same rows with a leading marker, so both surfaces
@@ -40,9 +50,28 @@ type
     Caption : string       ;
     Value   : string       ;
     Severity: TDiagSeverity;
+    Fix     : TDiagFix     ;
   end;
 
   TDiagLines = TArray<TDiagLine>;
+
+/// <summary>Describes what a fix would change, WITHOUT changing it.</summary>
+/// <param name="AFix">The fix to describe.</param>
+/// <param name="ACurrent">Receives the current value.</param>
+/// <param name="AProposed">Receives the value that would be written.</param>
+/// <returns>True when the fix applies and the two values differ.</returns>
+/// <remarks>Separate from ApplyDiagFix so the confirmation prompt shows the
+/// exact before/after. Writing to a user's registry without showing what
+/// changes is not a fix, it is a surprise. Main thread only.</remarks>
+function DescribeDiagFix(AFix: TDiagFix; out ACurrent, AProposed: string): Boolean;
+
+/// <summary>Applies a fix by writing the corrected setting to the registry.</summary>
+/// <param name="AFix">The fix to apply.</param>
+/// <param name="AError">Receives the failure reason when the result is False.</param>
+/// <returns>True when the setting was written.</returns>
+/// <remarks>Caller is expected to have confirmed with the user first -- see
+/// DescribeDiagFix. Main thread only.</remarks>
+function ApplyDiagFix(AFix: TDiagFix; out AError: string): Boolean;
 
 /// <summary>Plugin, engine, tree-sitter and graph-viewer versions.</summary>
 /// <returns>Rows for the Versions group.</returns>
@@ -126,11 +155,80 @@ function GetProcessHandleCount(AProcess: THandle;
 
 { ---- small helpers ---- }
 
-function Line(const ACaption, AValue: string; ASeverity: TDiagSeverity = dsInfo): TDiagLine;
+function Line(const ACaption, AValue: string; ASeverity: TDiagSeverity = dsInfo;
+  AFix: TDiagFix = dfNone): TDiagLine;
 begin
   Result.Caption := ACaption;
   Result.Value   := AValue;
   Result.Severity:= ASeverity;
+  Result.Fix     := AFix;
+end;
+
+{ ---- self-correcting configuration ---- }
+
+function DescribeDiagFix(AFix: TDiagFix; out ACurrent, AProposed: string): Boolean;
+var
+  Settings: TDragLintSettings;
+begin
+  Result   := False;
+  ACurrent := '';
+  AProposed:= '';
+  Settings := LoadSettings;
+
+  case AFix of
+    dfExePath:
+      begin
+        ACurrent := Settings.ExePath;
+        { The engine we would actually run. DragLintExe already performs the
+          full resolution (Win64 sibling, then beside the BPL, then PATH), so
+          the proposal is not a guess -- it is the path in use right now. }
+        AProposed:= DragLintExe;
+        { Refuse to propose a path that is itself directory-less or absent:
+          replacing one unusable value with another is not a fix. }
+        if (AProposed = '') or (ExtractFilePath(AProposed) = '') then Exit;
+        if not FileExists(AProposed) then Exit;
+      end;
+    dfDbTemplate:
+      begin
+        ACurrent := Settings.DbPathTemplate;
+        AProposed:= DefaultSettings.DbPathTemplate;
+      end;
+  else
+    Exit;
+  end;
+
+  Result:= not SameText(Trim(ACurrent), Trim(AProposed));
+end;
+
+function ApplyDiagFix(AFix: TDiagFix; out AError: string): Boolean;
+var
+  Settings: TDragLintSettings;
+  Cur, Prop: string;
+begin
+  Result:= False;
+  AError:= '';
+  if not DescribeDiagFix(AFix, Cur, Prop) then
+  begin
+    AError:= 'nothing to change';
+    Exit;
+  end;
+  try
+    { Read-modify-write the WHOLE settings record: SaveSettings writes every
+      value, so building one from scratch here would silently reset unrelated
+      preferences. }
+    Settings:= LoadSettings;
+    case AFix of
+      dfExePath   : Settings.ExePath       := Prop;
+      dfDbTemplate: Settings.DbPathTemplate:= Prop;
+    else
+      AError:= 'unknown fix';
+      Exit;
+    end;
+    SaveSettings(Settings);
+    Result:= True;
+  except
+    on E: Exception do AError:= E.ClassName + ': ' + E.Message;
+  end;
 end;
 
 procedure Add(var ALines: TDiagLines; const ALine: TDiagLine);
@@ -471,24 +569,28 @@ begin
     directory. It still "works" for spawning, because PATH lookup covers that --
     which is why it survived so long. }
   if Settings.ExePath = '' then
-    Add(Result, Line('Settings.ExePath', '(empty) -- engine directory unknown', dsWarn))
+    Add(Result, Line('Settings.ExePath', '(empty) -- engine directory unknown', dsWarn, dfExePath))
   else if ExtractFilePath(Settings.ExePath) = '' then
     Add(Result, Line('Settings.ExePath', Settings.ExePath +
-      '   BARE NAME -- no directory, so manifest lookups beside the engine cannot resolve', dsWarn))
+      '   BARE NAME -- no directory, so manifest lookups beside the engine cannot resolve', dsWarn, dfExePath))
   else if FileExists(Settings.ExePath) then
     Add(Result, Line('Settings.ExePath', Settings.ExePath, dsOk))
   else
-    Add(Result, Line('Settings.ExePath', Settings.ExePath + '   (does not exist)', dsBad));
+    Add(Result, Line('Settings.ExePath', Settings.ExePath + '   (does not exist)', dsBad, dfExePath));
 
   { The current layout is <projdir>\_D-RAG\<projname>.sqlite. A template without
     <projname> predates that move and resolves to a file that no longer exists,
     so project-DB resolution quietly falls through to the manifest or the
     ancestor walk. }
   if Pos('<projname>', Settings.DbPathTemplate) = 0 then Sev:= dsWarn else Sev:= dsOk;
-  Add(Result, Line('DB path template', Settings.DbPathTemplate, Sev));
   if Sev = dsWarn then
+  begin
+    Add(Result, Line('DB path template', Settings.DbPathTemplate, Sev, dfDbTemplate));
     Add(Result, Line('  note',
       'pre-_D-RAG template: has no <projname>, so it cannot name a per-project index', dsWarn));
+  end
+  else
+    Add(Result, Line('DB path template', Settings.DbPathTemplate, Sev));
 
   if Settings.IncludeLibraryDb then
     Add(Result, Line('Include library DB', 'yes', dsOk))

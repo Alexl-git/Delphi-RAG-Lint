@@ -37,6 +37,46 @@ is now the first thing in the Indexes group.
 Values are coloured: **green** healthy, **amber** suspicious, **red** broken. A
 red line is the one to act on.
 
+### Colours follow the IDE theme
+
+The window registers with `IOTAIDEThemingServices` and repaints for the active
+light or dark theme, and every status colour is lifted to a **WCAG 4.5:1**
+contrast ratio against the themed background before it is used.
+
+That second part is not decoration. Plain `clRed` and `clGreen` fall close to
+unreadable on a dark background, and on a screen where the colour *is* the
+message, the colour carrying the warning must not be the one you cannot read.
+
+(The IDE themes itself through `IOTAIDEThemingServices`, **not** the global VCL
+`TStyleManager` -- `TStyleManager.IsCustomStyleActive` reads False and the global
+`StyleServices` stays light even while the IDE is visibly dark. Anything reading
+the global services instead of the IDE's own appears to do nothing.)
+
+### Fix buttons
+
+A finding the plugin can correct itself shows a **Fix** button beside it. Only
+settings with **one unambiguous correct value** get one -- a button that guesses
+would turn a visible warning into an invisible wrong setting.
+
+Two are offered today:
+
+| Warning | What Fix writes |
+|---|---|
+| `Settings.ExePath` is a bare name, empty, or missing | The engine path actually in use, resolved the same way every spawn resolves it |
+| `DB path template` has no `<projname>` | The current `<projdir>\_D-RAG\<projname>.sqlite` default |
+
+Fix always shows the exact **before and after** and asks for confirmation before
+writing, because it edits your registry settings. After a successful change the
+whole window re-reads itself -- correcting `ExePath` changes which manifest
+resolves, which can change the library index reported two groups above, and
+showing a corrected setting beside the stale consequence it caused would be its
+own small lie.
+
+**Worth doing on a default install.** `ExePath` defaults to the bare name
+`drag-lint.exe`. Spawning still works, because Windows resolves it through
+`PATH` -- but `ExtractFilePath` of it is empty, so anything needing the engine's
+*directory* silently fails. That is precisely the bug described above.
+
 ### Reading the library line
 
 The most important line in the window is the rule that chose the library index:
