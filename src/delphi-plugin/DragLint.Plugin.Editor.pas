@@ -19,6 +19,7 @@ uses
   , DragLint.Plugin.StructureForm
   , DragLint.Plugin.UsagesForm
   , DragLint.Plugin.SymbolSearchForm
+  , DragLint.Plugin.AboutForm
   ;
 
 const (* v0.40.1: hardcoded version; build stamp resolved at runtime from the
@@ -36,6 +37,14 @@ function PluginBuildTag: string;
   dwell-triggered textDocument/hover queries. Returns nil if startup or
   initialize failed. Called only from main thread. }
 function EnsureLspClient: TDragLintLspClient;
+
+/// <summary>The shared LSP client if one already exists, WITHOUT starting one.</summary>
+/// <returns>The live client, or nil when none has been created yet.</returns>
+/// <remarks>Exists for status/diagnostic readers. EnsureLspClient SPAWNS a server
+/// as a side effect, so a status panel calling it would create the very thing it
+/// was asked to report on -- and, before the 2026-08-17 spawn-storm fix, do it
+/// while the machine was already saturated. Main thread only.</remarks>
+function CurrentLspClient: TDragLintLspClient;
 
 { v0.40.3: dwell-fire helper used by HoverTracker. Queries LSP hover at
   the given URI/line/col and returns the extracted hover text, or '' on
@@ -134,6 +143,26 @@ procedure InvokeOpenLog       (Sender: TObject);
   runs drag-lint lint <tempfile> --json. Findings are merged into the
   diagnostic cache so inline markers update without saving the file. }
 procedure InvokeLintBuffer(Sender: TObject);
+
+{ 2026-08-17: promoted from implementation-only to the interface because the
+  About screen now hosts it as a button (menu restructure, session 27). }
+procedure InvokeCopyDiagnostics(Sender: TObject);
+
+/// <summary>Resolves the primary (project) index database for the active project.
+/// Returns the full path if available, or empty string if no project/index found.</summary>
+/// <remarks>Used by the About dialog to report which project index is active.</remarks>
+function ResolvePrimaryIndexDb: string;
+
+/// <summary>Resolves the library index (RTL/VCL/third-party) database for the
+/// active project's platform. Returns the full path if found, or empty string.</summary>
+/// <remarks>Used by the About dialog to report which library index is in use.</remarks>
+function DLLibraryDb: string;
+
+/// <summary>Shows the drag-lint About / status window: versions, connection
+/// health, process footprint, which indexes are actually in use, and the
+/// actions moved off the Diagnostics submenu.</summary>
+/// <remarks>Menu entry point. Safe to call with no project open.</remarks>
+procedure InvokeAbout(Sender: TObject);
 
 /// <summary>Saves all modified modules then shells out to drag-lint
 /// forms-csv for the active project and opens the resulting CSV in the
@@ -308,6 +337,11 @@ var
     same IDE-owned-menu caveat, tracked + freed the same way. }
   GGraphToolWinItem: TMenuItem = nil;
 
+function CurrentLspClient: TDragLintLspClient;
+begin
+  Result:= GLspClient;
+end;
+
 function EnsureLspClient: TDragLintLspClient;
 var
   ExePath: string;
@@ -473,14 +507,12 @@ end; // function
   helpers defined later in this unit. RunAndCaptureStdout is now declared in the
   interface (v0.88: exposed for the Structure form's AutoFix menu), so its
   implementation-section forward is no longer needed -- the interface decl serves
-  as the forward for ordering. }
+  as the forward for ordering. ResolvePrimaryIndexDb and DLLibraryDb are now also
+  in the interface (v1.1.0: exposed for the About dialog). }
 function IdentifierAtCursor: string; forward;
 { v0.64.1: forward so all heavy-command handlers above can call DLExe64
   before its implementation appears later in this unit. }
 function DLExe64: string; forward;
-{ Same reason: InvokeRename (and every other handler declared before the
-  implementation below) resolves its DB through ResolvePrimaryIndexDb. }
-function ResolvePrimaryIndexDb: string; forward;
 { Same reason: InvokeFormatProjectYadf opens its job report with DLOpenInEditor,
   and UnsavedProjectUnits reads editor buffers with ReadSourceEditorText; both
   implementations appear further down. }
@@ -1351,6 +1383,24 @@ begin
   finally
     Resp.Free;
   end; // try
+end; // procedure
+
+procedure InvokeAbout(Sender: TObject);
+begin
+  { Item 3 of session 27 plugin plan: show the About / status window --
+    Versions, Connections, Indexes in use, Configuration and Process, plus the
+    diagnostic actions moved off the main menu as buttons.
+
+    MODELESS on purpose: several of those buttons act on the IDE (compile the
+    buffer, recover files, import a build log), and a modal window would block
+    the very thing the user is trying to inspect while it runs. The window is a
+    singleton and rebuilds its content on each show. }
+  try
+    DragLint.Plugin.AboutForm.ShowAboutDialog;
+  except
+    on E: Exception do
+      ShowMessage('drag-lint About: ' + E.Message);
+  end;
 end; // procedure
 
 procedure InvokeDiagnostics(Sender: TObject);
@@ -3913,16 +3963,29 @@ begin
   ShowButterflyForQName(Q, Db);
 end;
 
-{ Resolve the library index beside the plugin (where RTL/VCL/DevExpress units are
-  indexed) -- needed to map an undeclared identifier to the unit that defines it. }
+{ Resolve the library index (where RTL/VCL/DevExpress units are indexed) --
+  needed to map an undeclared identifier to the unit that defines it.
+
+  2026-08-17: this WAS a hand-rolled probe beside the BPL -- library-Win32, then
+  library-Win64, then drag-lint-library. On the current layout the per-platform
+  indexes live under the manifest's outDir, NOT beside the BPL, so all three
+  rungs missed the live files and every caller landed on a 1.5 GB leftover from
+  before 2026-08-11 and answered from it silently.
+
+  That was a SECOND resolver: DbResolver.GetPlatformAwareLibraryDbPath already
+  reads the manifest outDir and picks the ACTIVE PROJECT's platform, and the
+  hover / Find Usages / LSP paths were already using it. Two resolvers for one
+  question is exactly the drift DbResolver's own header was written to end back
+  in v0.40.3, so this delegates rather than repeating the probe. The BPL-relative
+  candidates survive as GetLibraryDbPathEx's fallback, which is where they
+  belong. }
 function DLLibraryDb: string;
-var
-  Dir: string;
 begin
-  Dir:= ExtractFilePath(GetModuleName(HInstance));
-  Result:= Dir + 'library-Win32.sqlite';
-  if not FileExists(Result) then Result:= Dir + 'library-Win64.sqlite';
-  if not FileExists(Result) then Result:= Dir + 'drag-lint-library.sqlite';
+  try
+    Result:= GetPlatformAwareLibraryDbPath(LoadSettings);
+  except
+    Result:= '';
+  end;
 end;
 
 { Pull the unit name out of a diagnostic message like
@@ -5119,20 +5182,15 @@ begin
   AddWrappedItem(SubMaint, 'Show Resolved DBs (debug)...', InvokeResolveDbs    );
   AddWrappedItem(SubMaint, 'Library Drift Check...'      , InvokeLibraryDrift  );
 
-  { ---- Diagnostics & Tests (alpha) ---- }
+  { ---- Compile & Analysis (daily use) ---- }
   AddSeparator(RootMenu);
-  AddSectionHeader(RootMenu, 'Diagnostics && Tests');
-  AddWrappedItem(RootMenu, 'Run Diagnostics (didSave)'      , InvokeDiagnostics    );
-  AddWrappedItem(RootMenu, 'Run AST Checks'                 , InvokeRunAstChecks   );
-  AddWrappedItem(RootMenu, 'Lint Buffer (Unsaved)'          , InvokeLintBuffer     );
-  AddWrappedItem(RootMenu, 'Copy Diagnostics (Current File)', InvokeCopyDiagnostics);
+  AddSectionHeader(RootMenu, 'Compile && Analysis');
   AddWrappedItem(RootMenu, 'Compile && Diagnose'            , InvokeCompileDiagnose);
-  { Full Compile Sweep lives at the very TOP of the menu now (pinned); not repeated
-    here to avoid a duplicate entry. }
   AddWrappedItem(RootMenu, 'Compile Buffer (unsaved)'       , InvokeGhostCheck     );
-  AddWrappedItem(RootMenu, 'Recover Buffer-Compile Files'   , InvokeGhostRecover   );
-  AddWrappedItem(RootMenu, 'Import Build Log...'            , InvokeImportLog      );
-  AddWrappedItem(RootMenu, 'Open Plugin Log'                , InvokeOpenLog        );
+
+  { ---- About & Help ---- }
+  AddSeparator(RootMenu);
+  AddWrappedItem(RootMenu, 'About'                          , InvokeAbout          );
 
   { v0.42: also surface the dockable panel under View > Tool Windows. This item
     can NOT go through AddWrappedItem/GMenuItems: its Owner ends up being the
