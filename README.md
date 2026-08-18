@@ -416,6 +416,13 @@ verb is `drag-lint --help`; linked verbs below go to the matching wiki page
 for more detail and IDE-menu context. (Wiki links point at
 https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 
+> **Offline manual.** The whole wiki is also published as a single ordered
+> document -- **[docs/drag-lint-manual.pdf](docs/drag-lint-manual.pdf)** (~178
+> pages, bookmarked) and **[docs/drag-lint-manual.docx](docs/drag-lint-manual.docx)**.
+> Regenerate with `pwsh -File tools\build-manual.ps1`;
+> `tests\autotest\run_manual_freshness_guard.ps1` fails the battery if it falls
+> behind the wiki.
+
 #### Indexing
 
 | Command | What it does | Notable flags |
