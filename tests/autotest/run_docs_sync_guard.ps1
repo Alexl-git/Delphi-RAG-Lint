@@ -573,6 +573,136 @@ foreach ($k in $NegativeClaimExemptions.Keys) {
 Write-Host ("  [NOTE] {0} claim(s) skipped -- no token could be tied to the sentence:" -f $skipped.Count) -ForegroundColor DarkGray
 foreach ($x in $skipped) { Write-Host ("         {0}" -f $x) -ForegroundColor DarkGray }
 
+# ---------------------------------------------------------------------------
+# CHECK 5 -- documented menu items still exist in the menu registration
+#
+# Added session 27, after a menu restructure silently invalidated the feature
+# map, the menu reference and the user guide all at once. Checks 1-4 cover the
+# CLI surface; nothing covered the IDE surface, so "drag-lint > Run AST Checks"
+# could name a menu path that had not existed for a week and every check passed.
+#
+# Deliberately NARROW. It compares only the LEAF caption of each documented
+# "drag-lint > ..." path against the set of captions the registration actually
+# creates. It does NOT verify submenu nesting: captions are unique in practice,
+# and matching whole paths would need a parse of the menu tree that would break
+# on every cosmetic regrouping -- a guard that cries wolf gets weakened, and a
+# weakened guard is what produced the drift this exists to catch.
+# ---------------------------------------------------------------------------
+
+Write-Host ''
+Write-Host '-- check 5: documented menu paths vs the registration' -ForegroundColor Cyan
+
+$editorPas = Join-Path $Repo 'src\delphi-plugin\DragLint.Plugin.Editor.pas'
+$aboutForm = Join-Path $Repo 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas'
+$menuSrc   = ''
+foreach ($p in @($editorPas, $aboutForm)) {
+  if (Test-Path -LiteralPath $p) { $menuSrc += (Get-Content -LiteralPath $p -Raw) }
+}
+Check 'plugin menu sources located' ($menuSrc.Length -gt 0) `
+  "$([System.IO.Path]::GetFileName($editorPas)) + $([System.IO.Path]::GetFileName($aboutForm))"
+
+# Captions the plugin actually creates: menu items, section headers, and the
+# About window's buttons (the seven diagnostics actions live there now, so a doc
+# naming them is correct only if the button still exists).
+$liveCaptions = New-Object System.Collections.Generic.HashSet[string]
+foreach ($rx in @(
+    "AddWrappedItem\(\s*\w+\s*,\s*'([^']+)'",
+    "AddSectionHeader\(\s*\w+\s*,\s*'([^']+)'",
+    "Add(?:Proc)?Button\(\s*'([^']+)'",
+    "\.Caption\s*:=\s*'([^']+)'")) {
+  foreach ($m in [regex]::Matches($menuSrc, $rx)) {
+    # '&&' is the Delphi escape for a literal '&' in a caption; docs write one.
+    [void]$liveCaptions.Add($m.Groups[1].Value.Replace('&&', '&').Trim())
+  }
+}
+Check 'live menu captions harvested' ($liveCaptions.Count -ge 40) "$($liveCaptions.Count) caption(s)"
+
+# Documented paths: "drag-lint > A > B" in any tracked doc, plus the feature
+# map's MenuPath column.
+$menuDocs = @()
+foreach ($d in @('docs\wiki', 'docs')) {
+  $dir = Join-Path $Repo $d
+  if (Test-Path -LiteralPath $dir) {
+    $menuDocs += @(Get-ChildItem -LiteralPath $dir -Filter *.md -File -ErrorAction SilentlyContinue)
+  }
+}
+$fmPath = Join-Path $Repo 'docs\wiki-featuremap.tsv'
+if (Test-Path -LiteralPath $fmPath) { $menuDocs += @(Get-Item -LiteralPath $fmPath) }
+Check 'docs to scan for menu paths located' ($menuDocs.Count -gt 0) "$($menuDocs.Count) file(s)"
+
+# PLAN-*, INBOX-* and RESUME-* are gitignored working notes: they record what
+# the menu USED to be on purpose, and must not fail the battery.
+$menuDocs = @($menuDocs | Where-Object { $_.Name -notmatch '^(PLAN|INBOX|RESUME)-' })
+
+# Docs abbreviate captions on purpose -- "Call Graph" for "Call Graph
+# (Butterfly)...", "Compile Buffer" for "Compile Buffer (unsaved)". Comparing
+# raw strings flags all of those, and a guard that flags correct prose is one
+# that gets switched off. So: normalise both sides, then accept a doc leaf that
+# is a PREFIX of a real caption. That still catches a caption that no longer
+# exists at all, which is the failure this check is for.
+function Get-CaptionKey([string]$S) {
+  $s = $S.Replace('&&', '&')
+  $s = $s -replace '\.\.\.', ' '          # trailing ellipsis is decoration
+  $s = $s -replace '[`*"]', ' '
+  $s = $s -replace '\s+', ' '
+  return $s.Trim().Trim('.', ',', ';', ':', ')', '(').ToLowerInvariant()
+}
+
+$liveKeys = @($liveCaptions | ForEach-Object { Get-CaptionKey $_ } | Where-Object { $_ })
+
+$badPaths = New-Object System.Collections.Generic.List[string]
+$pathCount = 0
+foreach ($f in $menuDocs) {
+  $lineNo = 0
+  foreach ($line in (Get-Content -LiteralPath $f.FullName)) {
+    $lineNo++
+    # Require whitespace around the separator. Without it "Uses Audit --
+    # interface->impl moves" splits at the arrow in ordinary prose and the
+    # fragment "impl moves + unused" gets reported as a dead menu path.
+    # '*' terminates the capture: menu paths are usually written in bold, and
+    # without this the match runs on into the parenthetical that follows
+    # ("**drag-lint > drag-lint Options...** (or **Tools > Options > ...").
+    foreach ($m in [regex]::Matches($line, 'drag-lint\s+>\s+([^|*`\r\n]+)')) {
+      $segs = @($m.Groups[1].Value -split '\s+>\s+' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+      if ($segs.Count -eq 0) { continue }
+      # Prose commonly continues past the menu path ("... > Show Structure, then
+      # right-click"). Cut the leaf at the first sentence break.
+      $leaf = ($segs[-1] -split '(?:,|;|:|"|\.\s|\s--\s|\bthen\b|\band\b)')[0]
+      $key  = Get-CaptionKey $leaf
+      if (-not $key) { continue }
+      $pathCount++
+      # Prefix match in BOTH directions. Docs abbreviate ("Call Graph" for "Call
+      # Graph (Butterfly)..."), and prose runs on past the caption ("Open Plugin
+      # Log opens the..."). Either way the caption is present and correct; only a
+      # name that matches nothing in either direction is genuinely dead.
+      $hit = $false
+      foreach ($lk in $liveKeys) {
+        if ($lk -eq $key -or $lk.StartsWith($key) -or $key.StartsWith($lk)) { $hit = $true; break }
+      }
+      if (-not $hit) {
+        $badPaths.Add(("{0}:{1}: drag-lint > ... > '{2}'" -f $f.Name, $lineNo, $leaf.Trim()))
+      }
+    }
+  }
+}
+Check 'menu paths located in docs' ($pathCount -gt 0) "$pathCount reference(s)"
+Check 'every documented menu path names a caption that exists' ($badPaths.Count -eq 0) `
+  $(if ($badPaths.Count -gt 0) { "$($badPaths.Count) dead path(s)" } else { '0 dead path(s)' })
+foreach ($b in ($badPaths | Select-Object -First 25)) { Write-Host ("         {0}" -f $b) -ForegroundColor Yellow }
+if ($badPaths.Count -gt 0) {
+  Write-Host '        ^ the doc names a menu item the plugin no longer creates. Either the' -ForegroundColor Yellow
+  Write-Host '          item was renamed/moved and the doc was not updated, or the doc has a' -ForegroundColor Yellow
+  Write-Host '          typo. A menu path that leads nowhere is worse than no path at all.' -ForegroundColor Yellow
+}
+
+# POSITIVE CONTROL. Without this the check passes when the harvest silently
+# returns nothing -- the exact fail-open shape that let a scrub run zero times
+# while its whole suite stayed green.
+$ctlLive = $liveCaptions.Contains('About')
+$ctlDead = $liveCaptions.Contains('Zz Not A Real Menu Item')
+Check 'positive control: a real caption is recognised' $ctlLive "'About'"
+Check 'negative control: an invented caption is not' (-not $ctlDead) "'Zz Not A Real Menu Item'"
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'DOCS SYNC GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'DOCS SYNC GUARD: PASS' -ForegroundColor Green

@@ -194,7 +194,7 @@ DevExpress `cx`/`dx`).
 
 | Feature | How |
 |---|---|
-| **RAD Studio plugin** -- 72 entry points across four surfaces, hover, dockable panel and graph | `dclDragLintWizard.bpl`; see [IDE Menu Reference](IDE-Menu-Reference) |
+| **RAD Studio plugin** -- 66 entry points across four surfaces, hover, dockable panel and graph | `dclDragLintWizard.bpl`; see [IDE Menu Reference](IDE-Menu-Reference) |
 | **Language server** over stdio -- hover, go-to-definition, **find-references**, **workspace symbols**, completion, signature help | `drag-lint lsp` |
 | VS Code extension | `editors\vscode\drag-lint\` |
 | Neovim / Helix / any LSP client | point it at `drag-lint lsp` |

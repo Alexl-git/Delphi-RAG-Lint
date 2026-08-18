@@ -5,8 +5,9 @@ falls back to a submenu under *Tools* if the main menu is unavailable), plus two
 entries under *View > Tool Windows*.
 
 Every item spawns the `drag-lint.exe` CLI. If an item does nothing, start with
-**Open Plugin Log** at the bottom of the menu -- it records what was actually
-invoked.
+**About > Open Plugin Log** -- it records what was actually invoked. If the
+menu's own caption reads **`drag-lint (!)`**, the LSP server is down; open
+**About** and read the Connections group for the reason.
 
 Items marked **(index)** need a current index for the active project. If results
 look thin or stale, see [Maintenance](Maintenance).
@@ -106,22 +107,38 @@ Everything about what a unit depends on and what depends on it.
 
 ---
 
-## Diagnostics && Tests (alpha)
+## Compile && Analysis
 
-Below a separator, under a section header. These are development and
-troubleshooting aids rather than daily actions.
+Below a separator, under a section header. Daily actions, which is why they sit
+on the menu rather than behind the About window.
 
 | Item | What it does |
 |---|---|
-| **Run Diagnostics (didSave)** | Runs the diagnostics pass the editor integration fires on save. |
-| **Run AST Checks** | The built-in AST checks only, on the current file. |
-| **Lint Buffer (Unsaved)** | Lints the editor buffer, including unsaved edits. |
-| **Copy Diagnostics (Current File)** | Puts the current file's findings on the clipboard. |
 | **Compile && Diagnose** | Compiles, then reports diagnostics together with compiler output. |
 | **Compile Buffer (unsaved)** | Compiles the unsaved buffer -- the "ghost check", for errors that only exist in what you are typing. |
-| **Recover Buffer-Compile Files** | Recovers the temporary files a buffer compile leaves behind if it is interrupted. |
-| **Import Build Log...** | Loads an external build log so its errors become browsable findings. |
-| **Open Plugin Log** | The plugin's own log -- **start here when a menu item misbehaves.** |
+
+---
+
+## About
+
+| Item | What it does |
+|---|---|
+| **About** | Opens the [About and Status window](About-and-Status) -- versions, connection health, which indexes are actually in use, configuration warnings, process footprint, and the diagnostic actions listed below. |
+
+The seven items that used to sit under a *Diagnostics && Tests* section header
+are **no longer on the menu**. They are buttons on the About window, because
+each one is reached when something is already wrong -- which is exactly when the
+rest of that window's information is wanted too:
+
+| Moved action | Now at |
+|---|---|
+| **Run Diagnostics (didSave)** | *About > Run Diagnostics (didSave)* |
+| **Run AST Checks** | *About > Run AST Checks* |
+| **Lint Buffer (Unsaved)** | *About > Lint Buffer (Unsaved)* |
+| **Copy Diagnostics (Current File)** | *About > Copy Diagnostics (Current File)* |
+| **Recover Buffer-Compile Files** | *About > Recover Buffer-Compile Files* |
+| **Import Build Log...** | *About > Import Build Log...* |
+| **Open Plugin Log** | *About > Open Plugin Log* |
 
 ---
 

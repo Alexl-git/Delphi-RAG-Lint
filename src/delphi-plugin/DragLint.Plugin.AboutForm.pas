@@ -117,7 +117,7 @@ const
   LABEL_W   = 200;
   ROW_H     = 18;
   GROUP_GAP = 14;
-  BTN_W     = 200;
+  BTN_W     = 232;
   BTN_H     = 27;
   BTN_GAP   = 6;
 
@@ -161,7 +161,7 @@ begin
     Dlg:= TForm.CreateNew(nil);
     try
       Dlg.Caption    := ACaption;
-      Dlg.Width      := 940;
+      Dlg.Width      := 1000;
       Dlg.Height     := 660;
       Dlg.Position   := poScreenCenter;
       Dlg.BorderStyle:= bsSizeable;
@@ -216,7 +216,7 @@ begin
   { CreateNew, not Create: no .dfm exists for this form and none should. }
   inherited CreateNew(AOwner);
   Caption    := 'drag-lint -- About and Status';
-  Width      := 940;
+  Width      := 1000;
   Height     := 720;
   Position   := poScreenCenter;
   BorderStyle:= bsSizeable;
@@ -414,13 +414,18 @@ begin
   AddButton('Copy Report'           , DoCopyReport , L, T);
   AddButton('Refresh'               , DoRefresh    , L, T);
 
-  AddProcButton('Open Plugin Log'      , @InvokeOpenLog        , L, T);
-  AddProcButton('Run Diagnostics'      , @InvokeDiagnostics    , L, T);
-  AddProcButton('Run AST Checks'       , @InvokeRunAstChecks   , L, T);
-  AddProcButton('Lint Buffer (Unsaved)', @InvokeLintBuffer     , L, T);
-  AddProcButton('Copy Diagnostics'     , @InvokeCopyDiagnostics, L, T);
-  AddProcButton('Recover Buffer Files' , @InvokeGhostRecover   , L, T);
-  AddProcButton('Import Build Log...'  , @InvokeImportLog      , L, T);
+  { Captions match the MENU captions these actions had before the move, exactly.
+    Shortening them ("Run Diagnostics" for "Run Diagnostics (didSave)") broke
+    every doc that named the old path and made the action harder to recognise
+    for anyone who had used it for a year. The docs-sync guard's menu-path check
+    caught both renames. }
+  AddProcButton('Open Plugin Log'                , @InvokeOpenLog        , L, T);
+  AddProcButton('Run Diagnostics (didSave)'      , @InvokeDiagnostics    , L, T);
+  AddProcButton('Run AST Checks'                 , @InvokeRunAstChecks   , L, T);
+  AddProcButton('Lint Buffer (Unsaved)'          , @InvokeLintBuffer     , L, T);
+  AddProcButton('Copy Diagnostics (Current File)', @InvokeCopyDiagnostics, L, T);
+  AddProcButton('Recover Buffer-Compile Files'   , @InvokeGhostRecover   , L, T);
+  AddProcButton('Import Build Log...'            , @InvokeImportLog      , L, T);
 
   AddButton('Close', DoCloseClick, L, T);
 end;

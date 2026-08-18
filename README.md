@@ -636,7 +636,7 @@ Drop custom `.scm` + `.json` pairs in the `rules/` directory; see
 
 ### RAD Studio plugin
 
-The plugin exposes **72 entry points across four surfaces**: 56 main-menu items,
+The plugin exposes **66 entry points across four surfaces**: 50 main-menu items,
 2 under `View > Tool Windows`, 13 on the Structure form's **right-click** menu,
 and 1 on the Project Manager's. Auto-fix (*Fix it* / *Fix all in unit* / *Fix all
 in project*) and *Allow this message* live **only** on that right-click menu.

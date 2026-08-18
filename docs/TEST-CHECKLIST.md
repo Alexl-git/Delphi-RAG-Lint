@@ -7,7 +7,7 @@ For the full end-to-end pass see `TEST-PLAN-IDE-FULL.md`.
 
 ## C4. Dockable Panel -- tabs and navigation
 
-Tools > drag-lint > Dockable Panel (or dock it from a previous session).
+Tools > drag-lint > drag-lint Panel (dockable) (or dock it from a previous session).
 
 - [ ] B1. Click any form-unit result (from any tab) -> opens the .pas code editor, NOT the form designer.
 - [ ] B2. Blast Radius tab shows direct usages by category (Reads, Writes, Calls, etc.) and a unit-impact count roll-up; each row is clickable and jumps to source.

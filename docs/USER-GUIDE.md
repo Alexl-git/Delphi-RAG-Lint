@@ -86,9 +86,20 @@ file → gutter markers + squiggles + the Structure **Diagnostics** node.
 because the grammar still false-positives on valid code — real syntax errors
 come from the compiler / **Compile && Diagnose**.)
 
-### Diagnostics & Tests (bottom of the menu)
-Run Diagnostics, Run AST Checks, Lint Buffer, Compile && Diagnose, Import Build
-Log, Test Connection, Open Plugin Log.
+### Compile & Analysis (bottom of the menu)
+**Compile && Diagnose** and **Compile Buffer (unsaved)** -- the two daily
+actions.
+
+### About (bottom of the menu)
+Versions, connection health, **which indexes are actually in use**, configuration
+warnings and process footprint, plus a **Diagnose Current State** report you can
+copy into an issue. The diagnostic actions that used to sit under a
+*Diagnostics & Tests* header -- Run Diagnostics, Run AST Checks, Lint Buffer,
+Copy Diagnostics, Recover Buffer Files, Import Build Log, Open Plugin Log -- are
+now buttons here.
+
+If the menu caption reads **`drag-lint (!)`**, the LSP server is down; About's
+Connections group says why. There is no longer a modal dialog for this.
 
 ## The CLI
 

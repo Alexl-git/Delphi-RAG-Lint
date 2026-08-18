@@ -20,6 +20,7 @@ schema version; the CLI surface is not yet frozen.
 | **[Installation](Installation)** | Getting the CLI, the IDE plugin, or the LSP running |
 | **[Maintenance](Maintenance)** | Indexes, the manifest, reindexing, and what to do when something looks wrong |
 | **[IDE Menu Reference](IDE-Menu-Reference)** | What every item in the `drag-lint` menu does |
+| **[About and Status](About-and-Status)** | The plugin's status window -- versions, connection health, and **which indexes are actually in use** |
 
 ## The one-paragraph model
 
