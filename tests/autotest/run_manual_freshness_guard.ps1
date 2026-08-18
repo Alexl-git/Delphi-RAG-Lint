@@ -20,9 +20,21 @@
   than the newest page. Real drift is measured in hours or days, not minutes, so
   this loses nothing that matters.
 
-  A MISSING manual is a FAIL, not a skip: "the artifact is absent" is exactly the
-  state this is meant to catch, and treating absence as success is the fail-open
-  shape that lets a check pass while doing nothing.
+  ABSENT vs STALE -- this changed 2026-08-18 and the reason matters.
+
+  Originally a MISSING manual was a FAIL, because the artifact was TRACKED and
+  absence meant someone had deleted a deliverable. The owner then ruled it should
+  not be tracked: it is ~1.5 MB of binary per regeneration, and this guard demands
+  a regeneration on every wiki edit, so tracking it added that much to history
+  each time. It now ships on the GitHub release and is gitignored.
+
+  Once an artifact is built on demand, "absent" is the NORMAL state of a fresh
+  clone -- and a guard that fails on the normal state gets disabled, which would
+  cost the staleness check too. So absence is now a SKIP, stated out loud.
+
+  What is NOT weakened: a manual that EXISTS and is older than the wiki still
+  FAILS. That was always the real defect this guards -- a document that looks
+  current and is not. Absence at least cannot mislead anyone.
 #>
 [CmdletBinding()]
 param(
@@ -63,12 +75,15 @@ $newestTime = $newest.LastWriteTimeUtc
 
 Write-Host ("  [INFO] newest wiki page: {0} ({1:yyyy-MM-dd HH:mm:ss} UTC)" -f $newest.Name, $newestTime) -ForegroundColor DarkGray
 
+$anyPresent = $false
 foreach ($artifact in @($docx, $pdf)) {
   $name = [System.IO.Path]::GetFileName($artifact)
   if (-not (Test-Path -LiteralPath $artifact)) {
-    Check "$name exists" $false 'MISSING -- run: pwsh -File tools\build-manual.ps1'
+    { } | Out-Null
+    Write-Host ("  [SKIP] {0} not built -- generate with: pwsh -File tools\build-manual.ps1" -f $name) -ForegroundColor DarkGray
     continue
   }
+  $anyPresent = $true
   Check "$name exists" $true ''
   $t   = (Get-Item -LiteralPath $artifact).LastWriteTimeUtc
   $lag = ($newestTime - $t).TotalMinutes
@@ -85,9 +100,17 @@ foreach ($artifact in @($docx, $pdf)) {
   }
 }
 
+if (-not $anyPresent) {
+  Write-Host '  [NOTE] no manual on disk -- nothing to check for staleness. This is the' -ForegroundColor DarkGray
+  Write-Host '         normal state of a fresh clone: the manual is gitignored and built' -ForegroundColor DarkGray
+  Write-Host '         on demand. A manual that EXISTS and is stale still fails.' -ForegroundColor DarkGray
+}
+
 # POSITIVE CONTROL. Without it, a bug that left $newestTime unset (or the page
 # list empty) would sail through as "nothing is stale" while checking nothing --
 # the same fail-open shape that let a scrub run zero times with a green suite.
+# It runs whether or not an artifact is present, so the skip path above cannot
+# silently disable the whole check.
 $ctlFuture = $newestTime.AddYears(10)
 $ctlStale  = (($ctlFuture - $newestTime).TotalMinutes -gt $ToleranceMinutes)
 Check 'positive control: a page newer than the manual is detected as stale' $ctlStale '+10y probe'

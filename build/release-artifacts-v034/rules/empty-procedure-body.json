@@ -1,6 +1,0 @@
-{
-  "id": "empty-procedure-body",
-  "severity": "info",
-  "message": "Empty procedure/function body",
-  "warn_capture": "warn"
-}

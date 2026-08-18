@@ -1,6 +1,0 @@
-{
-  "id": "with-statement",
-  "severity": "info",
-  "message": "'with' statement makes symbol scope ambiguous",
-  "warn_capture": "warn"
-}

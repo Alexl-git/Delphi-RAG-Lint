@@ -126,3 +126,12 @@ FEATURES.txt
 Lint Features report.txt
 *stderrcap.txt
 
+# Generated manual (session 27). Built on demand by tools\build-manual.ps1 from
+# docs\wiki\*.md. NOT tracked: it is ~1.5 MB of binary per regeneration, and the
+# freshness guard requires regenerating on every wiki edit, so tracking it would
+# add that much to history each time. Ship it on the GitHub release instead.
+docs/drag-lint-manual.docx
+docs/drag-lint-manual.pdf
+
+# Old release staging dirs -- retrievable from backups / GitHub releases.
+build/release-artifacts*/
