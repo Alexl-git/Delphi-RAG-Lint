@@ -176,6 +176,7 @@ uses
   , System.Generics.Defaults
   , System.IOUtils
   , System.StrUtils
+  , System.DateUtils
   , System.UITypes
   , Vcl.Forms
   , Vcl.Controls
@@ -336,6 +337,42 @@ var
   { v0.43: the dedicated Graph dockable window's View > Tool Windows entry --
     same IDE-owned-menu caveat, tracked + freed the same way. }
   GGraphToolWinItem: TMenuItem = nil;
+  { Session 27: the plugin's root menu item, retained so its caption can carry a
+    live health indicator. TMenuItem.Caption is writable at runtime, costs
+    nothing, and is visible without opening anything -- which a modal that fires
+    once and is dismissed is not. }
+  GRootMenuItem: TMenuItem = nil;
+  { When the LSP is down, the earliest wall-clock time at which a reconnect may
+    be attempted. Retry is LAZY -- driven by the next call that wants the client,
+    not by a timer. A timer here would be a second uninvited source of process
+    spawns, and this plugin has already shipped one of those (the refresh-findings
+    storm fixed in db7bbe1). }
+  GLspRetryAfter: TDateTime = 0;
+
+const
+  { Long enough that a genuinely broken engine is not respawned in a loop, short
+    enough that a transient failure heals without restarting the IDE. }
+  LSP_RETRY_SECONDS = 30;
+
+{ Reflects LSP health in the root menu caption: 'drag-lint' when healthy,
+  'drag-lint (!)' when the server is down. Replaces the modal that used to be
+  the only signal -- and which asserted "handshake failed" for a handshake that
+  had actually succeeded. Safe to call at any time; no-op before the menu is
+  registered. }
+procedure UpdateLspStatusIndicator;
+var
+  Healthy: Boolean;
+begin
+  if GRootMenuItem = nil then Exit;
+  Healthy:= (GLspClient = nil) or
+            ((GLspClient.State = dlsConnected) and GLspClient.IsAlive);
+  try
+    if Healthy then GRootMenuItem.Caption:= 'drag-lint'
+    else GRootMenuItem.Caption:= 'drag-lint (!)';
+  except
+    { A caption update must never propagate; it is cosmetic. }
+  end;
+end;
 
 function CurrentLspClient: TDragLintLspClient;
 begin
@@ -348,6 +385,12 @@ var
   BplDir : string;
   LogPath: string;
 begin
+  { Session 27: a failed start no longer leaves the client nil forever, and no
+    longer raises a modal. It backs off for LSP_RETRY_SECONDS and retries on the
+    next call that needs the server, so a transient failure heals on its own. }
+  if (GLspClient = nil) and (GLspRetryAfter > 0) and (Now < GLspRetryAfter) then
+    Exit(nil);
+
   if GLspClient = nil then
   begin
     GLspClient:= TDragLintLspClient.Create;
@@ -390,25 +433,46 @@ begin
       SetLength(DbList, 0);
     end;
 
+    { Session 27: both failure paths below used to raise a MessageBox. They no
+      longer do.
+
+      The dismissed modal was the WORST available channel for this. It
+      interrupted whatever the user was doing, it appeared exactly once so the
+      information was gone the moment it was clicked away, and -- most damaging
+      -- it stated a conclusion it had not established. "LSP initialize
+      handshake failed" was printed for a handshake that succeeded 56 s after
+      the client stopped waiting, and that sentence sent a day of debugging at
+      the server when the real cause was this plugin's own spawn storm
+      saturating the machine.
+
+      What replaces it: the failure is logged, the root menu caption becomes
+      "drag-lint (!)" and stays that way while the condition holds, a retry is
+      scheduled, and the About window explains the detail on demand -- where
+      LastError is shown verbatim instead of being paraphrased into a claim. }
     if not GLspClient.Start(ExePath, DbList) then
     begin
-      ShowMessage(
-        PluginBuildTag + #13#10#13#10 + 'drag-lint: LSP server failed to start.'#13#10 + 'Ensure drag-lint.exe is on PATH or next to the BPL.'#13#10#13#10 +
-        'BPL dir:        ' + BplDir + #13#10 + 'Resolved exe:   ' + ExePath + #13#10 + Format('DBs:            %d resolved', [Length(DbList)]) + #13#10 +
-        'Debug log:      ' + LogPath);
+      DebugLog(Format('EnsureLspClient: START FAILED. exe=%s dbs=%d log=%s',
+                      [ExePath, Length(DbList), LogPath]));
       FreeAndNil(GLspClient);
+      GLspRetryAfter:= IncSecond(Now, LSP_RETRY_SECONDS);
+      UpdateLspStatusIndicator;
       Exit(nil);
     end;
 
     if not GLspClient.Initialize then
     begin
-      ShowMessage(
-        PluginBuildTag + #13#10#13#10 + 'drag-lint: LSP initialize handshake failed.'#13#10#13#10 + 'BPL dir:        ' + BplDir + #13#10 + 'Resolved exe:   ' + ExePath + #13#10 +
-        'Debug log:      ' + LogPath);
+      DebugLog(Format('EnsureLspClient: INITIALIZE did not answer in time. exe=%s log=%s',
+                      [ExePath, LogPath]));
       GLspClient.Stop;
       FreeAndNil(GLspClient);
+      GLspRetryAfter:= IncSecond(Now, LSP_RETRY_SECONDS);
+      UpdateLspStatusIndicator;
       Exit(nil);
     end;
+
+    { Healthy: clear the back-off and the indicator. }
+    GLspRetryAfter:= 0;
+    UpdateLspStatusIndicator;
   end; // if
   Result:= GLspClient;
 end; // function
@@ -5097,6 +5161,11 @@ begin
   if Services.MainMenu <> nil then Services.MainMenu.Items.Add(RootMenu)
   else Services.AddActionMenu('ToolsMenu', nil, RootMenu, True, True);
   GMenuItems.Add(RootMenu);
+  { Session 27: retained (NOT owned -- GMenuItems is still the sole owner) so
+    UpdateLspStatusIndicator can flag LSP trouble in the caption. Cleared in
+    UnregisterDragLintMenu before GMenuItems frees it, so the indicator can
+    never write through a dangling pointer during teardown. }
+  GRootMenuItem:= RootMenu;
 
   { Full Compile Sweep pinned at the very top -- the most-used action (recompile
     all units + refresh compiler_findings, then auto-refresh the open file). }
@@ -5339,6 +5408,18 @@ begin
         { Close the structure form and usages form if still open }
         HideDragLintStructure;
         HideFindUsages;
+
+        { Session 27: drop the status-indicator reference BEFORE anything can
+          free the menu item it points at. GMenuItems owns it; this is only a
+          borrowed pointer, and a stale one would let UpdateLspStatusIndicator
+          write a caption through freed memory during teardown. }
+        GRootMenuItem := nil;
+        GLspRetryAfter:= 0;
+
+        { Close the About window -- it holds no OTA references, but leaving a
+          form alive across a BPL unload is how the other teardown bugs here
+          started. }
+        try CloseAboutDialog; except end;
 
         { Stop LSP client first }
         if GLspClient <> nil then
