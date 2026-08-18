@@ -124,6 +124,35 @@ function ResolverDiagnostic(const ASettings: TDragLintSettings): string;
 /// Not thread-safe; call from the main thread only.</remarks>
 function GetPlatformAwareLibraryDbPath(const ASettings: TDragLintSettings): string;
 
+/// <summary>As <c>GetPlatformAwareLibraryDbPath</c>, but also reports WHICH rule
+/// produced the path -- a manifest hit, or the precise reason the manifest branch
+/// declined and the BPL-relative probe answered instead.</summary>
+/// <param name="ASettings">Plugin settings; ExePath locates drag-lint.json.</param>
+/// <param name="AReason">Receives a short one-line provenance string. Never empty.</param>
+/// <returns>Absolute path to the best available library DB; may not exist.</returns>
+/// <remarks>Exists because the plain function fell back through four separate
+/// exits without recording any of them, so an IDE resolving RTL/VCL against a
+/// months-old index looked exactly like one resolving correctly. That cost a day
+/// of misdirected debugging on 2026-08-17. Diagnostics render AReason verbatim.
+/// Not thread-safe; call from the main thread only.</remarks>
+function GetPlatformAwareLibraryDbPathEx(const ASettings: TDragLintSettings;
+  out AReason: string): string;
+
+/// <summary>The BPL-relative library probe (library-Win32, then library-Win64,
+/// then the legacy merged drag-lint-library), reporting which rung answered.</summary>
+/// <param name="AReason">Receives the rung that matched, or a not-found note.</param>
+/// <returns>First existing candidate, else the legacy path even though absent.</returns>
+/// <remarks>Not thread-safe; call from the main thread only.</remarks>
+function GetLibraryDbPathEx(out AReason: string): string;
+
+/// <summary>The active project's target platform via OTAPI (e.g. 'Win32').</summary>
+/// <returns>Platform name, or '' when not determinable (no project, non-IDE host).</returns>
+/// <remarks>Exposed 2026-08-17 for the diagnose report, which must show the
+/// platform the library index is being selected FOR. Deliberately shared rather
+/// than copied a third time -- Editor.pas already carries its own
+/// GetActiveProjectPlatform. Not thread-safe; call from the main thread only.</remarks>
+function GetActivePlatformForLibrary: string;
+
 implementation
 
 function ManifestPathBesideEngine: string;
@@ -341,12 +370,18 @@ begin
   end;
 end; // procedure
 
-function GetLibraryDbPath: string;
+function GetLibraryDbPathEx(out AReason: string): string;
 { v0.46: the v0.45 manifest renamed library DBs to library-<platform>.sqlite.
   Prefer a fresh per-platform DB deployed beside the BPL (Win32 is the manifest
   default platform, then Win64), but fall back to the legacy merged
   drag-lint-library.sqlite -- still a complete all-platform symbol set for
-  "which unit declares X" -- so existing installs keep working. }
+  "which unit declares X" -- so existing installs keep working.
+
+  2026-08-17: the legacy rung is the one that BIT. On this box neither
+  per-platform file was deployed beside the BPL, so every caller silently landed
+  on a 1.5 GB pre-2026-08-11 leftover and answered from it with full confidence.
+  The rung that matched is now reported, because "which library index am I
+  actually using" turned out to be the single question nobody could answer. }
 var
   Dir       : string               ;
   C         : string               ;
@@ -357,15 +392,28 @@ begin
   Candidates[1]:= Dir + 'library-Win64.sqlite';
   Candidates[2]:= Dir + 'drag-lint-library.sqlite';
   for C in Candidates do
-    if TFile.Exists(C) then Exit(C);
+    if TFile.Exists(C) then
+    begin
+      if SameText(ExtractFileName(C), 'drag-lint-library.sqlite') then
+        AReason:= 'BPL-relative LEGACY probe (drag-lint-library.sqlite) -- no per-platform index is deployed beside the BPL'
+      else
+        AReason:= 'BPL-relative probe: ' + ExtractFileName(C);
+      Exit(C);
+    end;
+  AReason:= 'NO library index found -- neither the manifest nor any BPL-relative candidate exists';
   Result:= Dir + 'drag-lint-library.sqlite'; { legacy default even if absent }
 end;
 
-/// <summary>Returns the active project's target platform via OTAPI.
-/// Returns '' if not determinable (non-IDE context).</summary>
-/// <remarks>Duplicates GetActiveProjectPlatform from Plugin.Editor to
-/// avoid a circular unit dependency (Editor already uses DbResolver).
-/// Not thread-safe; call from the main thread only.</remarks>
+function GetLibraryDbPath: string;
+var
+  Ignored: string;
+begin
+  Result:= GetLibraryDbPathEx(Ignored);
+end;
+
+{ Implementation of the interface-declared GetActivePlatformForLibrary. Still
+  duplicates Editor.GetActiveProjectPlatform, which cannot be reused here without
+  a circular unit dependency (Editor already uses DbResolver). }
 function GetActivePlatformForLibrary: string;
 var
   MS        : IOTAModuleServices;
@@ -394,30 +442,56 @@ end; // function
 /// where drag-lint.json is located.</param>
 /// <returns>Absolute path to the best available library DB.</returns>
 /// <remarks>Not thread-safe; call from the main thread only.</remarks>
-function GetPlatformAwareLibraryDbPath(
-  const ASettings: TDragLintSettings): string;
+function GetPlatformAwareLibraryDbPathEx(const ASettings: TDragLintSettings;
+  out AReason: string): string;
+{ 2026-08-17: this function used to `Exit` or fall through at FOUR points --
+  manifest absent, manifest unparseable, outDir missing, per-platform file
+  absent -- and recorded none of them. The result was an IDE quietly resolving
+  RTL/VCL against a stale index, indistinguishable from a healthy one. Every
+  decline now names itself in AReason, and the manifest beside the BPL is tried
+  as well as the one beside the engine: a normal install has TWO copies of
+  drag-lint.json and nothing keeps them in step, so probing only one turns an
+  ordinary desync into a silent downgrade. }
 var
-  EngineDir : string      ;
-  MPath     : string      ;
-  Content   : string      ;
-  OutDir    : string      ;
-  LibPlat   : string      ;
-  Db        : string      ;
-  RootVal   : TJSONValue  ;
-  IdxVal    : TJSONValue  ;
-  OutDirVal : TJSONValue  ;
+  MPath     : string        ;
+  Content   : string        ;
+  OutDir    : string        ;
+  LibPlat   : string        ;
+  Db        : string        ;
+  RootVal   : TJSONValue    ;
+  IdxVal    : TJSONValue    ;
+  OutDirVal : TJSONValue    ;
+  Manifests : TArray<string>;
+  Declined  : string        ;
+
+  procedure Decline(const AWhy: string);
+  begin
+    if Declined <> '' then Declined:= Declined + '; ';
+    Declined:= Declined + AWhy;
+  end;
+
 begin
-  try
-    // Locate the manifest beside the engine exe (from ExePath setting).
-    if ASettings.ExePath <> '' then
-      EngineDir:= ExtractFilePath(ASettings.ExePath)
-    else
-      EngineDir:= ExtractFilePath(GetModuleName(HInstance));
-    MPath:= TPath.Combine(EngineDir, 'drag-lint.json');
-    if TFile.Exists(MPath) then
-    begin
+  AReason := '';
+  Declined:= '';
+
+  { The engine's manifest first (it is the one that actually builds the indexes),
+    then the BPL's. Duplicates are harmless -- the loop stops at the first hit. }
+  Manifests:= nil;
+  if ASettings.ExePath <> '' then
+    Manifests:= Manifests + [TPath.Combine(ExtractFilePath(ASettings.ExePath), 'drag-lint.json')];
+  Manifests:= Manifests + [ManifestPathBesideEngine];
+
+  for MPath in Manifests do
+  begin
+    try
+      if not TFile.Exists(MPath) then
+      begin
+        Decline('no manifest at ' + MPath);
+        Continue;
+      end;
+
       Content:= TFile.ReadAllText(MPath);
-      OutDir:= '';
+      OutDir := '';
       RootVal:= TJSONObject.ParseJSONValue(Content);
       if RootVal is TJSONObject then
       try
@@ -432,18 +506,43 @@ begin
         RootVal.Free;
       end; // try
 
-      if OutDir <> '' then
+      if OutDir = '' then
       begin
-        LibPlat:= GetActivePlatformForLibrary;
-        if LibPlat = '' then LibPlat:= 'Win64';
-        Db:= TPath.Combine(OutDir, 'library-' + LibPlat + '.sqlite');
-        if TFile.Exists(Db) then Exit(Db);
-        // Platform DB missing -- fall through to legacy search.
+        Decline('manifest ' + MPath + ' has no indexes.outDir');
+        Continue;
       end;
-    end;
-  except
-  end;
-  Result:= GetLibraryDbPath; // fallback: BPL-relative Win32/Win64/legacy
+
+      LibPlat:= GetActivePlatformForLibrary;
+      if LibPlat = '' then
+      begin
+        LibPlat:= 'Win64';
+        Decline('active platform unknown, assumed Win64');
+      end;
+
+      Db:= TPath.Combine(OutDir, 'library-' + LibPlat + '.sqlite');
+      if TFile.Exists(Db) then
+      begin
+        AReason:= Format('manifest %s -> outDir %s, platform %s', [MPath, OutDir, LibPlat]);
+        DLT('dbresolve', 'library: ' + AReason + ' => ' + Db);
+        Exit(Db);
+      end;
+      Decline(Format('outDir %s has no library-%s.sqlite', [OutDir, LibPlat]));
+    except
+      on E: Exception do Decline(Format('%s reading %s: %s', [E.ClassName, MPath, E.Message]));
+    end; // try
+  end; // for
+
+  Result := GetLibraryDbPathEx(AReason);
+  AReason:= AReason + ' (manifest declined: ' + Declined + ')';
+  DLT('dbresolve', 'library FALLBACK: ' + AReason + ' => ' + Result);
+end; // function
+
+function GetPlatformAwareLibraryDbPath(
+  const ASettings: TDragLintSettings): string;
+var
+  Ignored: string;
+begin
+  Result:= GetPlatformAwareLibraryDbPathEx(ASettings, Ignored);
 end; // function
 
 function FindAncestorDb(const AStartDir: string; const ASettings: TDragLintSettings): string;

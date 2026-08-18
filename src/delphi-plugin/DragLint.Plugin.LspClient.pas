@@ -19,6 +19,20 @@ function GetPluginLogPath: string; // single source of truth (v0.40.1)
 type
   TLspNotificationHandler = reference to procedure(const AMethod: string; AParams: TJSONValue);
 
+  /// <summary>Lifecycle state of the LSP child process, for status display.</summary>
+  /// <remarks>Added 2026-08-17. The plugin previously had NO readable connection
+  /// state at all, so the only way it could report trouble was a modal dialog at
+  /// the moment of failure -- and that dialog said "handshake failed" for a
+  /// handshake that had actually succeeded 56 s after the client stopped
+  /// waiting. A readable state lets the UI show what is true continuously
+  /// instead of asserting something false once.</remarks>
+  TDragLintLspState = (
+    dlsDown,      { never started, or stopped                     }
+    dlsStarting,  { process spawned, initialize not yet answered  }
+    dlsConnected, { initialize succeeded; server is usable        }
+    dlsFailed     { spawn or initialize failed; see LastError     }
+  );
+
   TDragLintLspClient = class
     strict private
       FProcessHandle  : THandle                         ;
@@ -31,6 +45,9 @@ type
       FLock           : TCriticalSection                ;
       FNextId         : Integer                         ;
       FOnNotification : TLspNotificationHandler         ;
+      FState          : TDragLintLspState               ;
+      FLastError      : string                          ;
+      FStartedAt      : TDateTime                       ;
       procedure WriteFramedMessage(const AJson: string);
     private
       { Accessible to TLspReaderThread in same unit }
@@ -46,7 +63,26 @@ type
       function Initialize: Boolean                                                                        ;
       function Request(const AMethod: string; AParams: TJSONValue; ATimeoutMs: Integer = 5000): TJSONValue;
       procedure Notify(const AMethod: string; AParams: TJSONValue);
+
+      /// <summary>True while the spawned server process is still running.</summary>
+      /// <returns>False when never started, exited, or the handle is invalid.</returns>
+      /// <remarks>Probes the process handle with a zero timeout -- cheap, and
+      /// distinguishes "we think we are connected" from "the child actually
+      /// died", which FState alone cannot.</remarks>
+      function IsAlive: Boolean;
+
+      /// <summary>Human-readable one-word status for the About / status UI.</summary>
+      function StateText: string;
+
       property OnNotification: TLspNotificationHandler read FOnNotification write FOnNotification;
+      /// <summary>Current lifecycle state; never raises.</summary>
+      property State    : TDragLintLspState read FState    ;
+      /// <summary>Last spawn/initialize failure detail, or '' when healthy.</summary>
+      property LastError: string            read FLastError;
+      /// <summary>When the current server process was spawned (0 if never).</summary>
+      property StartedAt: TDateTime         read FStartedAt;
+      /// <summary>PID of the server process, or 0 when not running.</summary>
+      property ProcessId: DWORD             read FProcessId;
   end;
 
 implementation
@@ -228,6 +264,29 @@ begin
   FStdInWrite   := INVALID_HANDLE_VALUE;
   FStdOutRead   := INVALID_HANDLE_VALUE;
   FReaderThread:= nil;
+  FState    := dlsDown;
+  FLastError:= '';
+  FStartedAt:= 0;
+end;
+
+function TDragLintLspClient.IsAlive: Boolean;
+begin
+  Result:= False;
+  if FProcessHandle = 0 then Exit;
+  { WAIT_TIMEOUT means "still running"; WAIT_OBJECT_0 means it has exited. }
+  Result:= WaitForSingleObject(FProcessHandle, 0) = WAIT_TIMEOUT;
+end;
+
+function TDragLintLspClient.StateText: string;
+begin
+  case FState of
+    dlsStarting : Result:= 'starting';
+    dlsConnected: if IsAlive then Result:= 'connected'
+                  else Result:= 'DIED (process exited after a successful handshake)';
+    dlsFailed   : Result:= 'DOWN';
+  else
+    Result:= 'not started';
+  end;
 end;
 
 destructor TDragLintLspClient.Destroy;
@@ -258,8 +317,16 @@ var
   LastErr  : DWORD              ;
 begin
   Result:= False;
+  FState    := dlsStarting;
+  FLastError:= '';
+  FStartedAt:= Now;
   DebugLog('Start: ExePath=' + AExePath);
   DebugLog('Start: AExePath FileExists=' + BoolToStr(FileExists(AExePath), True));
+  if not FileExists(AExePath) then
+  begin
+    FState    := dlsFailed;
+    FLastError:= 'engine exe not found at ' + AExePath;
+  end;
 
   SA.nLength:= SizeOf(SA);
   SA.bInheritHandle:= True;
@@ -310,6 +377,8 @@ begin
   begin
     LastErr:= GetLastError;
     DebugLog('Start: CreateProcessW FAILED, GetLastError=' + IntToStr(LastErr));
+    FState    := dlsFailed;
+    FLastError:= Format('CreateProcessW failed (error %d) for %s', [LastErr, AExePath]);
     CloseHandle(hReadIn  );
     CloseHandle(hWriteIn );
     CloseHandle(hReadOut );
@@ -353,6 +422,7 @@ var
   ReaderHandle: THandle;
   WaitResult  : DWORD  ;
 begin
+  FState:= dlsDown;
   { Step 1: kill the child unconditionally first. Forces the write end
     of stdout closed, which makes the reader thread's ReadFile return. }
   if FProcessHandle <> 0 then
@@ -413,6 +483,9 @@ begin
     CloseHandle(FProcessHandle);
     FProcessHandle:= 0;
   end;
+  { Keep ProcessId honest -- a stale PID on a stopped client would send anyone
+    reading the diagnose report to a process that is no longer there. }
+  FProcessId:= 0;
 end; // procedure
 
 function TDragLintLspClient.Initialize: Boolean;
@@ -436,8 +509,19 @@ begin
     begin
       DebugLog('Initialize: response received OK');
       Resp.Free;
+      FState    := dlsConnected;
+      FLastError:= '';
     end
-    else DebugLog('Initialize: TIMEOUT or no response within 45s');
+    else
+    begin
+      DebugLog('Initialize: TIMEOUT or no response within 45s');
+      FState    := dlsFailed;
+      { Deliberately NOT phrased as "handshake failed". On 2026-08-17 the server
+        answered this exact request correctly at 101 s -- the client had simply
+        stopped waiting at 45 s, and the dialog that said "failed" sent a day of
+        debugging at the server. State the fact we actually have. }
+      FLastError:= 'no initialize response within 45s (the server may still be starting -- check CPU load)';
+    end;
   finally
     Params.Free;
   end;
