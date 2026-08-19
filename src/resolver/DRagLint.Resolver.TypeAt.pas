@@ -325,7 +325,61 @@ begin
   end;
 end;
 
-function FindTypeWithMembersAnywhere(const AStores: TArray<ISymbolStore>; const AName: string; out AStore: ISymbolStore): TSymbol;
+{ The declaring unit of a qualified symbol name: 'Vcl.ExtCtrls.TTimer' ->
+  'Vcl.ExtCtrls'. Empty when the name carries no unit prefix. }
+function UnitOfQName(const AQName: string): string;
+var
+  DotPos: Integer;
+begin
+  Result:= '';
+  DotPos:= LastDelimiter('.', AQName);
+  if DotPos > 1 then Result:= Copy(AQName, 1, DotPos - 1);
+end;
+
+{ Does AQName's declaring unit appear in AUsedUnits? }
+function DeclaredInAUsedUnit(const AQName: string; const AUsedUnits: TArray<string>): Boolean;
+var
+  U, Used: string;
+begin
+  Result:= False;
+  U:= UnitOfQName(AQName);
+  if U = '' then Exit;
+  for Used in AUsedUnits do
+    if SameText(Used, U) then Exit(True);
+end;
+
+{ The GUI framework a qualified name belongs to -- 'Vcl', 'FMX', or '' for
+  everything else. Only these two matter: they are the pair that declares the
+  same control names twice. }
+function GuiNamespaceOf(const AQName: string): string;
+var
+  DotPos: Integer;
+  Seg   : string ;
+begin
+  Result:= '';
+  DotPos:= Pos('.', AQName);
+  if DotPos <= 1 then Exit;
+  Seg:= Copy(AQName, 1, DotPos - 1);
+  if SameText(Seg, 'Vcl') or SameText(Seg, 'FMX') then Result:= Seg;
+end;
+
+{ A candidate from the framework the project does NOT use is not a worse
+  answer -- it is not an answer at all, because a Delphi project is VCL or FMX,
+  not both. AFramework is '' when the project genuinely does not say, and then
+  nothing is excluded. }
+function IsWrongFramework(const AQName, AFramework: string): Boolean;
+var
+  Ns: string;
+begin
+  Result:= False;
+  if AFramework = '' then Exit;
+  Ns:= GuiNamespaceOf(AQName);
+  Result:= (Ns <> '') and not SameText(Ns, AFramework);
+end;
+
+function FindTypeWithMembersAnywhere(const AStores: TArray<ISymbolStore>; const AName: string;
+  out AStore: ISymbolStore; const AUsedUnits: TArray<string> = nil;
+  const AFramework: string = ''): TSymbol;
 { Like FindTypeAnywhere, but does not settle for the FIRST symbol carrying the
   name -- it prefers one that actually has members.
 
@@ -342,11 +396,26 @@ function FindTypeWithMembersAnywhere(const AStores: TArray<ISymbolStore>; const 
   'TFoo = Other.TFoo' resolves to the real declaration rather than being
   discarded for having no children of its own.
 
-  LIMITATION, STATED PLAINLY: this is a heuristic, not Delphi scope resolution.
-  The correct answer is the candidate reachable through the current unit's uses
-  clause, which needs unit-scope tracking this resolver does not yet have. When
-  several candidates have members, the first store in priority order wins --
-  right for project-before-library, wrong for a genuine cross-unit name clash. }
+  v1.7: AUsedUnits NARROWS THE HEURISTIC WITH THE ONE FACT THAT DECIDES IT.
+
+  Reported 2026-08-19: hovering `FRetryTimer.Enabled` in a VCL unit answered
+  `FMX.Types.TTimer.Enabled`. Both frameworks declare TTimer, both have
+  members, and FMX sorts first -- so "the first candidate with members" picked
+  the framework the file does not use, and said so confidently. Following the
+  declaration was correct (`FRetryTimer: TTimer` reported VCL); only the member
+  lookup went wrong, which is the worst shape: the answer looks authoritative
+  and names a real type.
+
+  So when the caller can say which units the hovering FILE actually uses, a
+  candidate declared in one of them wins outright. That is not full Delphi
+  scope resolution -- it does not follow the uses graph transitively, and it
+  cannot rank two used units that both declare the name -- but it settles the
+  VCL/FMX case, which is the one that occurs, from a fact already in the index.
+
+  LIMITATION, STILL STATED PLAINLY: with no AUsedUnits, or when no candidate is
+  declared in a used unit, this falls back to the old rule -- the first
+  candidate with members, in store priority order. Right for
+  project-before-library, wrong for a genuine cross-unit name clash. }
 var
   I, J     : Integer      ;
   Cands    : TArray<TSymbol>;
@@ -356,11 +425,15 @@ var
   Target   : string       ;
   Alias    : TSymbol      ;
   AliasStore: ISymbolStore;
+  WithMembers     : TSymbol     ;
+  WithMembersStore: ISymbolStore;
 begin
-  FillChar(Result, SizeOf(Result), 0);
-  FillChar(Best  , SizeOf(Best  ), 0);
+  FillChar(Result     , SizeOf(Result     ), 0);
+  FillChar(Best       , SizeOf(Best       ), 0);
+  FillChar(WithMembers, SizeOf(WithMembers), 0);
   AStore:= nil;
   BestStore:= nil;
+  WithMembersStore:= nil;
   if AName = '' then Exit;
 
   for I:= 0 to High(AStores) do
@@ -371,6 +444,13 @@ begin
     begin
       Sym:= Cands[J];
       if not (Sym.Kind in [skClass, skRecord, skInterface, skTypeAlias]) then Continue;
+
+      { The project's framework excludes the other one OUTRIGHT. Delphi does not
+        mix VCL and FMX in one project, so an FMX.* candidate in a VCL project
+        is not a lower-ranked answer -- it is not a candidate. Dropping it here
+        also fixes the cases the uses-clause rule cannot see, where the type
+        arrives through a form or an ancestor rather than a direct `uses`. }
+      if IsWrongFramework(Sym.QualifiedName, AFramework) then Continue;
 
       { Follow an alias to its target once -- the alias itself has no members. }
       if (Sym.Kind = skTypeAlias) and (Sym.Signature <> '') then
@@ -397,14 +477,34 @@ begin
       if Best.Id <= 0 then begin Best:= Sym; BestStore:= AStores[I]; end;
       if Length(AStores[I].FindAllChildSymbols(Sym.Id)) > 0 then
       begin
-        AStore:= AStores[I];
-        Exit(Sym);
+        { Declared in a unit this file actually uses -> decided, stop looking. }
+        if DeclaredInAUsedUnit(Sym.QualifiedName, AUsedUnits) then
+        begin
+          AStore:= AStores[I];
+          Exit(Sym);
+        end;
+        { Otherwise remember the first with members and keep scanning, in case a
+          later candidate IS in a used unit. Without this second pass the
+          FMX/VCL case cannot be fixed at all: FMX is found first and would
+          return immediately. }
+        if WithMembers.Id <= 0 then
+        begin
+          WithMembers     := Sym;
+          WithMembersStore:= AStores[I];
+        end;
       end;
     end;
   end;
 
-  { Nothing had members -- return the first plausible candidate so callers can
-    still report the type name rather than nothing at all. }
+  { No candidate sat in a used unit. Fall back to the old rule -- first with
+    members -- then to any plausible candidate, so callers can still report the
+    type name rather than nothing at all. }
+  if WithMembers.Id > 0 then
+  begin
+    Result:= WithMembers;
+    AStore:= WithMembersStore;
+    Exit;
+  end;
   Result:= Best;
   AStore:= BestStore;
 end;
@@ -513,6 +613,8 @@ var
   ResolvedSym : TSymbol       ;
   Primary     : ISymbolStore  ;
   LhsStore    : ISymbolStore  ;
+  UsedUnits   : TArray<string>;
+  Framework   : string        ;
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.FileName        := AFile;
@@ -546,6 +648,30 @@ begin
   Result.Token:= ExtractTokenAt(LineText, ACol, PrecedingDot, LhsText);
 
   FileId:= Primary.FindFileIdByPath(AFile);
+
+  { v1.7: the units this file actually USES -- the fact that decides VCL vs FMX
+    when both declare the same type name. Read once here rather than per
+    candidate; empty when the file is not indexed, in which case the type
+    lookup falls back to its old behaviour. }
+  UsedUnits:= nil;
+  if FileId > 0 then
+    for var UU in Primary.GetUnitUsesForFile(FileId) do
+      if UU.UnitName <> '' then UsedUnits:= UsedUnits + [UU.UnitName];
+
+  { v1.7: the PROJECT's framework, asked of the project store only. A library
+    index carries Vcl.* and FMX.* alike by construction, so its answer describes
+    the RTL rather than any consumer -- GuiFrameworkInUse says so itself, and
+    returns '' on a tie rather than inventing a winner. Primary is the store
+    that owns the hovered file, which is the project index whenever the file is
+    indexed at all. }
+  Framework:= '';
+  if (Primary <> nil) and (FileId > 0) then
+    try
+      Framework:= Primary.GuiFrameworkInUse;
+    except
+      on E: Exception do Framework:= '';   { never let a preference query break hover }
+    end;
+
   if FileId > 0 then
   begin
     Result.Containing:= Primary.FindContainingSymbol(FileId, ALine);
@@ -577,7 +703,7 @@ begin
         every member lookup fall through to the owner-type floor and report
         "member may be inherited" for members that are right there on the real
         class. }
-      if VT <> '' then TS:= FindTypeWithMembersAnywhere(AStores, VT, LhsStore);
+      if VT <> '' then TS:= FindTypeWithMembersAnywhere(AStores, VT, LhsStore, UsedUnits, Framework);
       LhsSym:= TS;
     end;
     { v0.46: LHS not a global symbol -> infer it as a local var/param and
