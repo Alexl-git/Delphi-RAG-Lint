@@ -10,7 +10,7 @@ uses
   , System.Generics.Collections
   , System.SyncObjs
   , Winapi.Windows
-  , DragLint.Plugin.JobObject
+  , DRagLint.Core.JobObject
   ;
 
 procedure DebugLog(const AMsg: string); // appends to GetPluginLogPath

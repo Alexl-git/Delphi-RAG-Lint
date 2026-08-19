@@ -117,7 +117,7 @@
         </DCCReference>
         <DCCReference Include="DragLint.Plugin.Providers.pas"/>
         <DCCReference Include="DragLint.Plugin.LiveDiagnostics.pas"/>
-        <DCCReference Include="DragLint.Plugin.JobObject.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
         <DCCReference Include="DragLint.Plugin.JobQueue.pas"/>
         <DCCReference Include="DragLint.Plugin.StatusBar.pas"/>
         <DCCReference Include="DragLint.Plugin.GraphWindow.pas"/>

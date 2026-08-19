@@ -48,7 +48,7 @@ uses
   , { TEditState / TEditAction }
     ToolsAPI
   , DragLint.Plugin.DbResolver
-  , DragLint.Plugin.JobObject
+  , DRagLint.Core.JobObject
   , DragLint.Plugin.Settings
   ;
 

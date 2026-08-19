@@ -1,6 +1,10 @@
-unit DragLint.Plugin.JobObject;
+unit DRagLint.Core.JobObject;
 
 { v0.47: child-process lifecycle guard.
+  v1.7 Task 2: MOVED here from DragLint.Plugin.JobObject so the CLI can use it
+  too. It was never plugin-specific -- only its first caller was -- and the LSP
+  merge proxy needs exactly the same guarantee for the DelphiLSP child it
+  spawns. One copy, two callers; a forked second copy would drift.
 
   The plugin spawns two long-running helper processes -- the engine LSP server
   (drag-lint.exe lsp) and the standalone Graph viewer (drag_lint_graph.exe).
@@ -10,12 +14,18 @@ unit DragLint.Plugin.JobObject;
   index DB open, so a later reindex fails with "used by another process".
 
   This unit assigns every spawned child to a single Windows Job Object created
-  with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE. The BPL (in-process with the IDE)
-  holds the only handle to that job; when the IDE process dies for ANY reason --
-  clean exit, crash, or kill -- the OS closes the handle and force-terminates
-  every process still in the job. No cooperation from the children is required.
-  This is the primary guard; the children also carry a --parent-pid self-exit
-  watcher as belt-and-suspenders. }
+  with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE. The spawning process holds the only
+  handle to that job; when it dies for ANY reason -- clean exit, crash, or kill
+  -- the OS closes the handle and force-terminates every process still in the
+  job. No cooperation from the children is required, which is the entire point:
+  cleanup code cannot run in a process that was killed with TerminateProcess,
+  and that is precisely the case that orphans children. The children also carry
+  a --parent-pid self-exit watcher as belt-and-suspenders.
+
+  ASSIGN BEFORE THE CHILD RUNS. A child assigned after it has already started
+  may have spawned grandchildren of its own (DelphiLSP starts Agent0/Agent1),
+  and those are outside the job. Callers that care should create the child
+  suspended, assign, and only then resume. }
 
 interface
 
