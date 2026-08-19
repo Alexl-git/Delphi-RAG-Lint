@@ -71,7 +71,10 @@ var
   republishes its syntax/lint diagnostics. A hook avoids a SaveNotifier->Editor
   unit dependency (Editor already depends on SaveNotifier). }
 var
-  GAfterSaveDiagHook: procedure(const AFile: string) = nil;
+  { v1.7: returns True when the request was actually sent (the LSP was up).
+    The save path ignores it; the on-open path in EditViewNotifier uses it to
+    retry a file it asked about too early. }
+  GAfterSaveDiagHook: function(const AFile: string): Boolean = nil;
 
   { v0.47: set by Editor.RegisterDragLintMenu to Editor.TriggerCompileOnSave.
   Called from AfterSave (when AutoCompileOnSave is on) to kick off an

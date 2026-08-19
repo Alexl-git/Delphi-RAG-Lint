@@ -1680,9 +1680,23 @@ begin
     BodyCands:= BodyCands + [Trim(AModel.Params[I].Modifier + ' ' + AModel.Params[I].Name + ': ' + AModel.Params[I].TypeText) + '    '];
   for I:= 0 to High(AModel.Returns) do BodyCands:= BodyCands + ['    Result := ' + AModel.Returns[I]];
   for I:= 0 to High(AModel.Facts)   do BodyCands:= BodyCands + ['    ' + AModel.Facts[I]];
+  { THE LINE THAT WAS NEVER MEASURED (owner, 2026-08-19). The DIAGNOSTICS
+    section is drawn by the body -- see the Emit block above -- but its lines
+    were left out of BodyCands, so the widest text in the popup did not
+    contribute a single pixel to the width. A finding like
+    '[object-leak] Object "s" may be leaked: created but not freed or
+    transferred on some path.' is far longer than any signature, so the popup
+    came up too narrow, raised a horizontal scrollbar, and lost height to it.
+    Same two-space indent the renderer uses, so the measurement matches what is
+    actually drawn. }
+  for I:= 0 to High(AModel.Diagnostics) do BodyCands:= BodyCands + ['  ' + AModel.Diagnostics[I]];
   var Cands: TArray<string>:= [TitleCand] + BodyCands;
   { Bold: the signature header is drawn bold and is almost always the widest. }
-  W:= MeasureTextWidth(Cands, True) + 70;
+  { Owner's rule, 2026-08-19: measure every output line for its REAL length,
+    then add a scrollbar's width and a couple of pixels regardless. Paying for
+    a bar that turns out not to be needed costs a few pixels of air; not paying
+    for one that IS needed costs the bar, and then the second bar it provokes. }
+  W:= MeasureTextWidth(Cands, True) + 70 + GetSystemMetrics(SM_CXVSCROLL) + 2;
   if W < 480   then W:= 480;
   { #4: when the callers grid is shown, floor the width to fit ALL of its columns
     (+ a possible vertical scrollbar + borders) so there is NO horizontal
@@ -1729,7 +1743,9 @@ begin
   var VisualLines: Integer:= FBody.Perform(EM_GETLINECOUNT, 0, 0);
   if VisualLines < 1 then VisualLines:= FBody.Lines.Count;
   if VisualLines < 3 then VisualLines:= 3;
-  BodyH:= VisualLines * LineH + 12;   // a few px of bottom margin so the last line ("Used in/Called from") never triggers the vertical scrollbar
+  { Same rule vertically: the measured lines plus a horizontal bar's height and
+    a couple of pixels, so the last line is never the one pushed out of view. }
+  BodyH:= VisualLines * LineH + 12 + GetSystemMetrics(SM_CYHSCROLL) + 2;
 
   { THE VERTICAL SCROLLBAR BUG. FBody has WordWrap=False and ScrollBars=ssBoth, so
     a line wider than the client area raises a HORIZONTAL scrollbar -- which then

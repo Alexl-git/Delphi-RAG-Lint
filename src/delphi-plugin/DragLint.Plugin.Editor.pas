@@ -1743,7 +1743,7 @@ begin
   ShowMessage( 'drag-lint: diagnostics requested for'#13#10 + Uri + #13#10 + 'Results will appear in the Messages pane.');
 end; // procedure
 
-procedure TriggerDiagnosticsOnSave(const AFile: string);
+function TriggerDiagnosticsOnSave(const AFile: string): Boolean;
 { v0.42: hook installed into SaveNotifier.GAfterSaveDiagHook. Republishes
   diagnostics for a just-saved .pas by sending textDocument/didSave to the
   RUNNING LSP (the server replies with publishDiagnostics -> HandleNotification
@@ -1754,6 +1754,12 @@ var
   TextDoc: TJSONObject;
   Uri    : string     ;
 begin
+  { v1.7: the RESULT is what lets the on-open caller retry. At IDE startup the
+    first editor view is activated before the LSP child has finished starting,
+    so this returned silently and the file was never asked about again -- which
+    is precisely why the gutter stayed empty in a session with no saves. The
+    save path ignores the result, exactly as before. }
+  Result:= False;
   if GLspClient = nil then Exit;
   if (AFile = '') or not SameText(ExtractFileExt(AFile), '.pas') then Exit;
   Uri:= 'file:///' + StringReplace(AFile, '\', '/', [rfReplaceAll]);
@@ -1763,6 +1769,7 @@ begin
   Params .AddPair('textDocument', TextDoc);
   try
     GLspClient.Notify('textDocument/didSave', Params);
+    Result:= True;
   finally
     Params.Free;
   end;

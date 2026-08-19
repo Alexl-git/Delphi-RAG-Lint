@@ -38,7 +38,7 @@ var
     round-trip the save path uses. Assigned by Editor.RegisterDragLintMenu, in
     the same place and for the same reason as SaveNotifier.GAfterSaveDiagHook:
     this unit must not depend on Editor. }
-  GOnFileFirstSeenHook: procedure(const AFile: string) = nil;
+  GOnFileFirstSeenHook: function(const AFile: string): Boolean = nil;
 
 var { v0.46: published by PaintLine so the hover tracker can map a screen point to
     an editor row for gutter-glyph hover. The buffer row (1-based) at client-Y y
@@ -463,14 +463,21 @@ begin
       GDiagAskedFor.CaseSensitive:= False;
     end;
     if GDiagAskedFor.IndexOf(FilePath) < 0 then
-    begin
-      GDiagAskedFor.Add(FilePath);
       try
-        if LoadSettings.AutoDiagnosticsOnSave then GOnFileFirstSeenHook(FilePath);
+        { RECORD IT ONLY IF THE REQUEST WENT OUT. At IDE startup the first view
+          is activated before the LSP child has finished starting, so the hook
+          returns False -- and marking the file "asked" there would mean it was
+          never asked again, which is exactly how the gutter stayed empty for a
+          whole session. Leaving it unrecorded makes the next focus change
+          retry, and by then the LSP is up. }
+        if LoadSettings.AutoDiagnosticsOnSave then
+        begin
+          if GOnFileFirstSeenHook(FilePath) then GDiagAskedFor.Add(FilePath);
+        end
+        else GDiagAskedFor.Add(FilePath);   { switched off: do not keep asking }
       except
         { never let a diagnostics request break opening a file }
       end;
-    end;
   end;
 
   { v0.48: editor-sync -- let the graph viewer follow the active unit. Guarded;

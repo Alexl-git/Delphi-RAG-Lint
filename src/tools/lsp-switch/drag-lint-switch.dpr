@@ -64,6 +64,16 @@ var
     run, and a path that does not get run is not guarded. }
   GRegLspRoot: string = REG_LSP_ROOT;
 
+{ True only when we are about to touch the key RAD Studio itself owns. The
+  bds.exe refusal exists because the IDE flushes THAT key on exit and would undo
+  an external change; a scratch --reg-root is not flushed by anything, so
+  refusing there only made the guard depend on whether the owner had the IDE
+  open. }
+function IsLiveRegRoot: Boolean;
+begin
+  Result:= SameText(GRegLspRoot, REG_LSP_ROOT);
+end;
+
 { ---------------------------------------------------------------- process -- }
 
 function ProcessCount(const ANames: array of string; out ATotalBytes: UInt64): Integer;
@@ -402,8 +412,16 @@ begin
           end;
           { The IDE holds its settings in memory and flushes on exit, so an
             external delete during a live session is simply resurrected. Refuse
-            rather than appear to work. }
-          if ProcessCount(['bds.exe'], Bytes) > 0 then
+            rather than appear to work.
+
+            ONLY FOR THE LIVE KEY. RAD Studio flushes the key it owns; it has
+            never heard of a scratch --reg-root, and blocking there made
+            run_lsp_switch_guard.ps1 fail for the single reason that someone had
+            the IDE open -- which it did, in the battery of 2026-08-19. A test
+            whose result depends on whether the owner happens to be working is
+            not a test, and an intermittently red battery costs more than the
+            over-broad check ever bought. The real-use path is unchanged. }
+          if IsLiveRegRoot and (ProcessCount(['bds.exe'], Bytes) > 0) then
           begin
             Writeln('BLOCKED: bds.exe is running. Close RAD Studio first -- it rewrites these');
             Writeln('         settings on exit and would undo this change.');
@@ -440,7 +458,8 @@ begin
             Writeln('ERROR: --on is implemented for --delphi only');
             Halt(EXIT_FAILED);
           end;
-          if ProcessCount(['bds.exe'], Bytes) > 0 then
+          { Live key only -- see the note on the --off site above. }
+          if IsLiveRegRoot and (ProcessCount(['bds.exe'], Bytes) > 0) then
           begin
             Writeln('BLOCKED: bds.exe is running. Close RAD Studio first.');
             Halt(EXIT_BLOCKED);
