@@ -464,9 +464,13 @@ begin
   Caps.AddPair('tools', TJSONObject.Create);
   Res.AddPair('capabilities', Caps);
   Info:= TJSONObject.Create;
-  Info.AddPair('name'      , 'drag-lint'   );
-  Info.AddPair('version'   , '0.31.0-alpha');
-  Res .AddPair('serverInfo', Info          );
+  { NOT a literal, for the reason DRAGLINT_VERSION exists: an MCP client shows
+    serverInfo in its logs, and the hardcoded copy here had drifted about forty
+    releases behind the CLI banner. Core.Model's own doc-comment names the LSP
+    and the CLI as the consumers -- this server was simply missed. }
+  Info.AddPair('name'      , 'drag-lint'      );
+  Info.AddPair('version'   , DRAGLINT_VERSION );
+  Res .AddPair('serverInfo', Info             );
   SendResult(AId, Res);
 end;
 
@@ -1285,6 +1289,7 @@ var
   Id    : TJSONValue ;
   Params: TJSONObject;
   Parsed: TJSONValue ;
+  Uri   : string     ;
 begin
   while not Eof(Input) do
   begin
@@ -1312,9 +1317,26 @@ begin
       else if Method = 'tools/list' then HandleToolsList(Id)
       else if Method = 'tools/call' then HandleToolsCall(Id, Params)
       else if Method = 'ping' then SendResult(Id, TJSONObject.Create)
-      else if (Method = 'prompts/list') or (Method = 'resources/list') then
-        // We don't expose prompts or resources; return empty arrays.
-        SendResult(Id, TJSONObject.Create.AddPair( 'prompts', TJSONArray.Create))
+      // We expose no prompts and no resources -- but each method must answer
+      // with ITS OWN key. Sharing one branch made resources/list reply
+      // {"prompts":[]}: a SUCCESS carrying no `resources` member, which is
+      // harder on a client than a clean -32601, because it walks straight into
+      // result.resources.length. Guarded by run_mcp_protocol_guard.ps1.
+      else if Method = 'prompts/list' then
+        SendResult(Id, TJSONObject.Create.AddPair('prompts'  , TJSONArray.Create))
+      else if Method = 'resources/list' then
+        SendResult(Id, TJSONObject.Create.AddPair('resources', TJSONArray.Create))
+      else if Method = 'resources/templates/list' then
+        SendResult(Id, TJSONObject.Create.AddPair('resourceTemplates', TJSONArray.Create))
+      else if Method = 'resources/read' then
+      begin
+        // Every URI is unknown because we advertise none. -32002 is the MCP
+        // convention for that; -32601 would claim the METHOD is missing, which
+        // is a different and misleading thing to tell a client.
+        Uri:= '';
+        if (Params <> nil) and (Params.GetValue('uri') <> nil) then Uri:= Params.GetValue('uri').Value;
+        SendError(Id, -32002, 'resource not found: ' + Uri);
+      end
       else if Method <> '' then SendError(Id, -32601, 'method not found: ' + Method);
     finally
       Msg.Free;
