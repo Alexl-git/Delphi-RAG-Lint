@@ -393,6 +393,7 @@ in 2b.
 |------|--------------|
 | `serve --db DB` | MCP stdio server (JSON-RPC 2.0) -- see section 3 |
 | `lsp --db DB` | LSP stdio server |
+| `lsp --proxy [--delphi-lsp PATH]` | LSP relay: spawns RAD Studio's `bin64\DelphiLSP.exe` and forwards the protocol, so registering drag-lint as the IDE's Code Insight server keeps the compiler front end. Transparent today; merging comes later. |
 
 ### 2a-i. VCL vs FMX: a bare name that two frameworks both declare
 

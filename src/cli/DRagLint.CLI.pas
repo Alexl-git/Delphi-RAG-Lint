@@ -82,6 +82,7 @@ uses
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
+  , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP
   , Vcl.Graphics // v0.95 Task 1: clBlack/clRed for DoContrastSelfTest
   , DRagLint.Hover      .Renderer
   , DRagLint.Hover      .Returns
@@ -314,6 +315,12 @@ type
     // (lsp), it passes --parent-pid <IDE pid> so we self-exit if the IDE dies
     // (belt-and-suspenders alongside the BPL's kill-on-close job object).
     ParentPid: Cardinal; // --parent-pid <n>  (0 = not set)
+    // v1.7 Task 1: `lsp --proxy` runs the transparent relay in front of
+    // DelphiLSP instead of drag-lint's own LSP server. The two are mutually
+    // exclusive by construction -- the relay never opens a database, because
+    // in relay form it answers nothing itself.
+    LspProxy    : Boolean; // --proxy
+    LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
     // v0.47: ghost-check -- compile the project with one unit's content replaced
     // by an unsaved buffer, with a guaranteed restore. Track 3 sub-project B
     // Task 2: convert-apply's --unit (the .pas being converted) ALSO reuses
@@ -523,7 +530,9 @@ begin
   Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
   Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
-  Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server)');
+  Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>]');
+  Writeln('                               --proxy [--delphi-lsp <path>]: relay in front of RAD Studio''s DelphiLSP,');
+  Writeln('                               so registering drag-lint as the Code Insight server keeps the compiler front end.');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
@@ -1030,6 +1039,12 @@ begin
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); end
     else if (A = '--parent-pid') and (i < ParamCount) then begin Inc(i); Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0)); end
+    { v1.7 Task 1: LSP merge proxy. --delphi-lsp names the child to spawn and
+      exists chiefly so the guard can substitute a stub server; without it the
+      relay could only be tested against a real RAD Studio install, which is
+      the one environment where a failure costs the owner their working day. }
+    else if A = '--proxy' then Result.LspProxy:= True
+    else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
       vscode-languageclient appends a transport flag to argv from the client's
       `transport:` declaration (node/main.js: `args.push('--stdio')`), so the
@@ -18940,6 +18955,18 @@ begin
         Writes to ErrOutput only -- must NOT pollute the JSON-RPC stdout stream. }
       { Self-exit if the spawning IDE dies (no-op when --parent-pid absent). }
       StartParentExitWatch(Args.ParentPid);
+      { v1.7 Task 1: --proxy is the transparent relay in front of DelphiLSP.
+        It returns BEFORE any database is resolved or size-guarded, deliberately:
+        the relay answers nothing of its own, so opening indexes would buy
+        nothing and would add two failure modes (a locked DB, a slow open) to
+        the startup path of the IDE's only Code Insight provider. }
+      if Args.LspProxy then
+      begin
+        var ProxyOpt: DRagLint.LSP.Proxy.TLspProxyOptions;
+        ProxyOpt.DelphiLspExe:= Args.LspDelphiExe;
+        ProxyOpt.ChildArgs   := '';
+        Exit(DRagLint.LSP.Proxy.RunLspProxy(ProxyOpt));
+      end;
       var DbList: TArray<string>;
       DbList:= ResolveConsumerDbs(Args);
       var LspSGMB: Integer;

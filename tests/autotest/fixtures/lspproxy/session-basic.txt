@@ -1,0 +1,13 @@
+Content-Length: 187
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file:///c:/Projects/Delphi-RAG-lint/tests/autotest/fixtures/lspproxy","capabilities":{},"trace":"off"}}Content-Length: 52
+
+{"jsonrpc":"2.0","method":"initialized","params":{}}Content-Length: 529
+
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///C:/Projects/Delphi-RAG-lint/tests/autotest/fixtures/lspproxy/SessionProbeUnit.pas","languageId":"pascal","version":1,"text":"unit SessionProbeUnit;\r\n\r\ninterface\r\n\r\ntype\r\n  TProbe = class\r\n  public\r\n    procedure DoThing;\r\n    function  Value: Integer;\r\n  end;\r\n\r\nimplementation\r\n\r\nprocedure TProbe.DoThing;\r\nbegin\r\nend;\r\n\r\nfunction TProbe.Value: Integer;\r\nbegin\r\n  Result := 1;\r\nend;\r\n\r\nend."}}}Content-Length: 218
+
+{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///C:/Projects/Delphi-RAG-lint/tests/autotest/fixtures/lspproxy/SessionProbeUnit.pas"},"position":{"line":13,"character":16}}}Content-Length: 222
+
+{"jsonrpc":"2.0","id":3,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///C:/Projects/Delphi-RAG-lint/tests/autotest/fixtures/lspproxy/SessionProbeUnit.pas"},"position":{"line":18,"character":9}}}Content-Length: 58
+
+{"jsonrpc":"2.0","id":4,"method":"shutdown","params":null}

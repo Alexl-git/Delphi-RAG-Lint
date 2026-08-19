@@ -407,6 +407,16 @@ workspace symbols, so those two are drag-lint only.
   fully specified for contributors.
 * **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`.
 
+`drag-lint lsp --proxy` is a different shape of the same server: instead of
+answering alone, it spawns RAD Studio's own `bin64\DelphiLSP.exe` and relays
+the protocol between the IDE and it. The IDE's Code Insight manager is
+exclusive -- one server per language -- so registering drag-lint the plain way
+would trade the compiler front end (generics, `with`, inline vars, the unsaved
+buffer) for a symbol index. Proxying removes the either/or. Add
+`--delphi-lsp <path>` to override which server is spawned. Today the relay is
+transparent: byte-for-byte identical to talking to DelphiLSP directly, with
+merging of drag-lint's own answers still to come.
+
 See **[docs/EDITORS.md](docs/EDITORS.md)**.
 
 ### CLI
@@ -574,7 +584,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | Command | What it does |
 |---|---|
 | [`serve --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/serve) | Start the **MCP** stdio server -- for AI agents (Claude, Cursor). Nothing in the IDE uses this. |
-| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. |
+| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. Add `--proxy [--delphi-lsp <path>]` to relay in front of RAD Studio's DelphiLSP instead. |
 
 #### Maintenance
 
