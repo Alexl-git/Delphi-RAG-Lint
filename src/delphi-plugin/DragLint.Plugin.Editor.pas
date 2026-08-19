@@ -185,6 +185,7 @@ uses
   , Winapi.Windows
   , Winapi.ShellAPI
   , DragLint.Plugin.Keyboard
+  , DragLint.Plugin.CallerFilter   { v(hover-callers scope): pure caller-selection policy }
   , DragLint.Plugin.DiagnosticCache
   , DragLint.Plugin.EditViewNotifier
   , DragLint.Plugin.HoverTracker
@@ -520,6 +521,112 @@ begin
   Result.AddPair('position', Pos);
 end;
 
+{ Forward: SyncLiveBufferToLsp below needs the buffer reader, whose own forward
+  sits further down with the other late helpers. Declared here rather than moving
+  that block so the existing ordering comment down there stays true. }
+function ReadSourceEditorText(const ASrc: IOTASourceEditor): string; forward;
+
+function SyncLiveBufferToLsp(const AUri: string): Boolean;
+{ Push the IDE's in-memory buffer to the LSP as textDocument/didChange, so a
+  position request describes what the USER SEES rather than what was last saved.
+
+  WHY (2026-08-18). Every position request the plugin makes -- hover,
+  completion, signature help -- names a (line, character) in the EDITOR's
+  coordinate space, but the server resolved it by reading the file from DISK.
+  The two agree only until the first keystroke. Reported case: the user typed
+  `AExceptionInfo.Assign`, hovered `Assign`, and got nothing at all, because on
+  disk that line still ended one character after the dot. The server answered
+  `null` truthfully and instantly; the popup then had only the line's lint
+  finding left to show, which read as "drag-lint cannot explain Assign".
+
+  The corresponding server-side change is TLiveDocuments. THIS half is the one
+  that matters in the IDE: the server can only see a buffer that someone sends
+  it, so without this call the overlay stays permanently empty and the whole
+  fix is inert. That asymmetry is worth stating because it is invisible in
+  testing -- the LSP guards drive the protocol directly and pass either way.
+
+  Sends only when the buffer genuinely DIFFERS FROM DISK. A clean buffer equals
+  disk, so a notification would be pure cost on a path that already runs from a
+  200 ms dwell timer; and leaving the overlay unset keeps disk authoritative,
+  which is the correct answer in that case.
+
+  The dirty test is a BYTE DIFF, not an IOTAModule Modified flag -- that flag is
+  not exposed on this OTA interface version. Same technique and same reason as
+  UnsavedProjectUnits and CollectUnsavedOverlays further down this unit.
+
+  Returns True when a buffer was sent. Never raises: called from a VCL timer
+  inside the IDE, where an escaping exception surfaces as an IDE crash. }
+var
+  MS      : IOTAModuleServices;
+  Modu    : IOTAModule        ;
+  Src     : IOTASourceEditor  ;
+  FE      : Integer           ;
+  Client  : TDragLintLspClient;
+  Params  : TJSONObject       ;
+  TextDoc : TJSONObject       ;
+  Changes : TJSONArray        ;
+  ChangeOb: TJSONObject       ;
+  FilePath: string            ;
+  BufText : string            ;
+  BufBytes : TBytes           ;
+  DiskBytes: TBytes           ;
+begin
+  Result:= False;
+  try
+    if AUri = '' then Exit;
+    { The plugin builds URIs as 'file:///' + path with forward slashes; undo
+      exactly that, rather than pulling in a general URI decoder for a string
+      we produced ourselves eight lines up. }
+    FilePath:= AUri;
+    if Copy(FilePath, 1, 8) = 'file:///' then Delete(FilePath, 1, 8);
+    FilePath:= StringReplace(FilePath, '/', '\', [rfReplaceAll]);
+    if FilePath = '' then Exit;
+
+    if not Supports(BorlandIDEServices, IOTAModuleServices, MS) then Exit;
+    Modu:= MS.FindModule(FilePath);
+    if Modu = nil then Exit;
+
+    Src:= nil;
+    for FE:= 0 to Modu.GetModuleFileCount - 1 do
+      if Supports(Modu.GetModuleFileEditor(FE), IOTASourceEditor, Src) then Break;
+    if Src = nil then Exit;
+
+    BufText:= ReadSourceEditorText(Src);
+    if BufText = '' then Exit;          { unreadable buffer -- treat as clean }
+
+    { Nothing typed since the last save -> disk is already correct, so say
+      nothing and let the server keep reading the file. }
+    BufBytes:= TEncoding.ANSI.GetBytes(BufText);
+    try DiskBytes:= TFile.ReadAllBytes(FilePath); except SetLength(DiskBytes, 0); end;
+    if (Length(BufBytes) = Length(DiskBytes)) and
+       ((Length(BufBytes) = 0) or CompareMem(@BufBytes[0], @DiskBytes[0], Length(BufBytes))) then Exit;
+
+    Client:= EnsureLspClient;
+    if Client = nil then Exit;
+
+    Params := TJSONObject.Create;
+    try
+      TextDoc:= TJSONObject.Create;
+      TextDoc.AddPair('uri'    , AUri                  );
+      TextDoc.AddPair('version', TJSONNumber.Create(0) );
+      Params .AddPair('textDocument', TextDoc);
+      { Full sync: ONE change carrying the whole buffer and NO 'range'. The
+        server rejects a ranged change outright rather than misapplying it. }
+      ChangeOb:= TJSONObject.Create;
+      ChangeOb.AddPair('text', BufText);
+      Changes := TJSONArray.Create;
+      Changes.AddElement(ChangeOb);
+      Params .AddPair('contentChanges', Changes);
+      Client.Notify('textDocument/didChange', Params);
+      Result:= True;
+    finally
+      Params.Free;
+    end;
+  except
+    Result:= False;
+  end; // try
+end; // function
+
 { ---- menu action procedures ---- }
 
 function QueryHoverText(const AUri: string; ALine, ACol: Integer; ATimeoutMs: Integer): string;
@@ -543,6 +650,10 @@ begin
   try
     Client:= EnsureLspClient;
     if Client = nil then Exit;
+    { v(live-buffer): the position below is the EDITOR's; make the server's copy
+      of the document match it before asking. Without this the server answers
+      about the last SAVED text and returns null for anything just typed. }
+    SyncLiveBufferToLsp(AUri);
     Params:= MakeTextDocumentPositionParams(AUri, ALine, ACol);
     try
       Resp:= Client.Request('textDocument/hover', Params, ATimeoutMs);
@@ -581,7 +692,9 @@ function DLExe64: string; forward;
   and UnsavedProjectUnits reads editor buffers with ReadSourceEditorText; both
   implementations appear further down. }
 procedure DLOpenInEditor(const AFilePath: string); forward;
-function ReadSourceEditorText(const ASrc: IOTASourceEditor): string; forward;
+{ ReadSourceEditorText's forward moved UP to just above SyncLiveBufferToLsp,
+  which needs it earlier than this block. Delphi rejects a repeated forward, so
+  it is declared once, there. }
 
 function SliceJsonBracket(const AText: string; AOpen, AClose: Char): string;
 // v0.94.1: extract the first balanced AOpen..AClose region from AText, ignoring
@@ -747,19 +860,75 @@ begin
     JV.Free;
   end; // try
 
-  // Keep only rows whose source line is qualified by the target's own class
-  // (e.g. "TGroup.Create"), de-duplicated by (file,line). Fall back to the
-  // unfiltered rows if that finds nothing (free function / instance-var calls).
-  SetLength(Filtered, 0);
-  for i:= 0 to High(Raw) do
-    if (Pos(ClassQual, Raw[i].CodeText) > 0) and not AlreadyHave(Filtered, Raw[i]) then
-    begin SetLength(Filtered, Length(Filtered) + 1); Filtered[High(Filtered)]:= Raw[i]; end;
-  if Length(Filtered) = 0 then
-    for i:= 0 to High(Raw) do
-      if not AlreadyHave(Filtered, Raw[i]) then
-      begin SetLength(Filtered, Length(Filtered) + 1); Filtered[High(Filtered)]:= Raw[i]; end;
+  { v(hover-callers scope): ask for the RESOLVED edges too. `--resolved` keys
+    each edge by target_qname -- an exact symbol identity rather than a name
+    match -- which is the only way to tell "nothing calls TFoo.Create" apart
+    from "the text filter could not see the call". The old code could not, and
+    on an empty filter published every same-named row: hovering
+    TEurekaExceptionInfo.Create listed 55 callers of TTimer, TStringList and
+    friends. Policy and its rationale live in DragLint.Plugin.CallerFilter,
+    which is pure and guarded by run_hover_callers_scope_guard.ps1. }
+  var ResolvedRows: TDLCallerRows;
+  SetLength(ResolvedRows, 0);
+  var RCmd: string:= Format('"%s" query find-callers --name "%s"%s --resolved --json', [AExe, BareName, DbArgs]);
+  var ROut: string:= '';
+  if (RunAndCaptureStdout(RCmd, ROut, 8000) = 0) and (Trim(ROut) <> '') then
+  begin
+    ROut:= SliceJsonBracket(ROut, '[', ']');
+    if ROut <> '' then
+    begin
+      var RJV: TJSONValue:= nil;
+      try RJV:= TJSONObject.ParseJSONValue(ROut); except RJV:= nil; end;
+      if (RJV <> nil) and (RJV is TJSONArray) then
+      try
+        var RArr: TJSONArray:= RJV as TJSONArray;
+        for i:= 0 to RArr.Count - 1 do
+          if RArr.Items[i] is TJSONObject then
+          begin
+            var RO: TJSONObject:= RArr.Items[i] as TJSONObject;
+            var RRow: TDLCallerRow;
+            RRow.FilePath   := RO.GetValue<string> ('file'        , '');
+            RRow.Line       := RO.GetValue<Integer>('line'        , 0 );
+            RRow.CodeText   := '';
+            RRow.TargetQName:= RO.GetValue<string> ('target_qname', '');
+            if RRow.TargetQName <> '' then
+            begin
+              SetLength(ResolvedRows, Length(ResolvedRows) + 1);
+              ResolvedRows[High(ResolvedRows)]:= RRow;
+            end;
+          end;
+      finally
+        RJV.Free;
+      end
+      else if RJV <> nil then RJV.Free;
+    end;
+  end;
 
-  if Length(Filtered) > 200 then SetLength(Filtered, 200);
+  { Hand both row sets to the pure policy. }
+  var NameRows: TDLCallerRows;
+  SetLength(NameRows, Length(Raw));
+  for i:= 0 to High(Raw) do
+  begin
+    NameRows[i].FilePath   := Raw[i].FilePath;
+    NameRows[i].Line       := Raw[i].Line    ;
+    NameRows[i].CodeText   := Raw[i].CodeText;
+    NameRows[i].TargetQName:= ''             ;
+  end;
+
+  var Src: TDLCallerSource;
+  var Picked: TDLCallerRows:= SelectCallers(ResolvedRows, NameRows, AQName, ClassQual, Src);
+  DLT('hover', Format('callers qname="%s" resolved=%d name=%d -> %d (source=%d)',
+    [AQName, Length(ResolvedRows), Length(NameRows), Length(Picked), Ord(Src)]));
+
+  SetLength(Filtered, 0);
+  for i:= 0 to High(Picked) do
+  begin
+    Info.FilePath:= Picked[i].FilePath;
+    Info.Line    := Picked[i].Line    ;
+    Info.CodeText:= Picked[i].CodeText;
+    if not AlreadyHave(Filtered, Info) then
+    begin SetLength(Filtered, Length(Filtered) + 1); Filtered[High(Filtered)]:= Info; end;
+  end;
   Result:= Filtered;
 end; // function
 
@@ -1289,6 +1458,72 @@ begin
   end; // try
 end; // procedure
 
+{ Insert a chosen completion item at the caret, replacing the identifier prefix
+  already typed.
+
+  WHY THIS IS A NAMED PROCEDURE AND NOT THE ONE-LINE LAMBDA IT REPLACED.
+  The previous callback was:
+
+      EW := EV.Buffer.CreateUndoableWriter;
+      EW.Insert(PAnsiChar(AnsiString(ATxt)));
+
+  An IOTAEditWriter starts at buffer offset ZERO, and nothing here moved it, so
+  every accepted completion was written to the TOP OF THE FILE. It raised no
+  error: the list closed, nothing appeared at the cursor, and the unit silently
+  grew a run of concatenated member names in front of the `unit` keyword. It
+  went unnoticed because completion returned an empty list for every variable
+  (see the resolver fix), so this callback had never once executed in a real
+  edit. Confirmed on 2026-08-18 against a live file whose line 1 had become
+  'FLogBuilderFLogBuilder...FInfounit EExtraExceptionInfo;'.
+
+  IOTAEditPosition is caret-relative, so there are no absolute offsets to get
+  wrong -- BackspaceDelete removes what was typed, InsertText puts the choice in
+  its place and advances the caret. Deleting the prefix is what stops 'Thing' +
+  'ThingMethod' from becoming 'ThingThingMethod'; after a bare '.' the prefix is
+  empty and the delete is skipped, so one path serves both cases. }
+procedure InsertCompletionAtCursor(const AText: string);
+var
+  ESS      : IOTAEditorServices;
+  EV       : IOTAEditView      ;
+  EP       : IOTAEditPosition  ;
+  Col      : Integer           ;
+  Before   : string            ;
+  PrefixLen: Integer           ;
+begin
+  if AText = '' then Exit;
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EV:= ESS.TopView;
+  if EV = nil then Exit;
+  EP:= EV.Position;
+  if EP = nil then Exit;
+
+  Col:= EP.Column;
+
+  { Read the line up to the caret to measure what has already been typed.
+    Save/Restore because Read ADVANCES the position. }
+  Before:= '';
+  if Col > 1 then
+  begin
+    EP.Save;
+    try
+      EP.MoveBOL;
+      Before:= EP.Read(Col - 1);
+    finally
+      EP.Restore;
+    end;
+  end;
+
+  PrefixLen:= 0;
+  while (PrefixLen < Length(Before)) and
+        CharInSet(Before[Length(Before) - PrefixLen], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do
+    Inc(PrefixLen);
+
+  if PrefixLen > 0 then EP.BackspaceDelete(PrefixLen);
+  EP.InsertText(AText);
+  EV.Paint;
+  DLT('completion', Format('inserted "%s" (replaced %d typed char(s))', [AText, PrefixLen]));
+end; // procedure
+
 { v0.46: ASilent = auto-trigger (typed '.') -- suppress every dialog and only
   pop the list when there are items, with a short timeout so a slow/stuck engine
   never blocks typing. ASilent = False = manual invoke (menu/shortcut), keeps the
@@ -1314,6 +1549,10 @@ begin
   Client:= EnsureLspClient;
   if Client = nil then Exit;
 
+  { v(live-buffer): completion is the path that needs this MOST -- the dot that
+    triggers it has by definition just been typed, so on the disk copy it does
+    not exist yet and the request comes back empty. }
+  SyncLiveBufferToLsp(Uri);
   Params:= MakeTextDocumentPositionParams(Uri, Line, Col);
   try
     Resp:= Client.Request('textDocument/completion', Params, (if ASilent then 1200 else 5000));
@@ -1358,8 +1597,10 @@ begin
     GetCursorPos(P);
     ShowDragLintCompletion(
       Items, P.X, P.Y + 20,
-      procedure(const ATxt: string) var ESS: IOTAEditorServices; EV: IOTAEditView; EW: IOTAEditWriter; begin if not Supports(BorlandIDEServices, IOTAEditorServices,
-          ESS) then Exit; EV:= ESS.TopView; if EV = nil then Exit; EW:= EV.Buffer.CreateUndoableWriter; EW.Insert(PAnsiChar(AnsiString(ATxt))); end
+      procedure(const ATxt: string)
+      begin
+        InsertCompletionAtCursor(ATxt);
+      end
     );
   finally
     Resp.Free;

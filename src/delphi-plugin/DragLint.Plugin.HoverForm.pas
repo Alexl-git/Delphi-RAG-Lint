@@ -75,13 +75,20 @@ type
       Writes / SQL / Handles / Owns returned / Covered by) from `hover --json`'s
       new "facts" array. Rendered as a FACTS section by RenderModel. }
     Facts        : TArray<string>            ;
+    { v(hover-both): lint / compiler findings that apply to the hovered LINE.
+      Kept on the MODEL rather than passed alongside it because the structured
+      and string popups were two exclusive branches, and the structured one
+      simply dropped the diagnostic: hovering a symbol on a line that had a
+      finding showed either the signature or the finding, never both. The user
+      asked for both, and the signature is the half that must never be lost. }
+    Diagnostics  : TArray<string>            ;
   end;
 
   /// <summary>Logical syntax roles the hover body colors. Each maps to a real
   /// IDE editor color (Tools > Options > Editor) when available, falling back
   /// to the fixed CL_* palette otherwise; every color still passes through the
   /// WCAG contrast guard against the actual popup background.</summary>
-  TDLSynRole = (srKeyword, srType, srName, srParam, srOperator, srLiteralNum, srLiteralStr, srMuted, srSection);
+  TDLSynRole = (srKeyword, srType, srName, srParam, srOperator, srLiteralNum, srLiteralStr, srMuted, srSection, srError);
 
   TDragLintHoverForm = class(TForm)
     private
@@ -252,6 +259,11 @@ const
   { v0.94.1: section headers (PARAMETERS / RETURNS / USED IN) -- a strong blue,
     distinct from the softer keyword blue. #1560D6 -> BGR $00D66015. }
   CL_SECTION = TColor($00D66015); // #1560D6
+  { v(hover-both): diagnostic text. A deep red rather than pure #FF0000 so it
+    survives the contrast guard on a light background without vibrating, and
+    stays legible when that guard lightens it for a dark one.
+    #C42B1C -> BGR $001C2BC4. }
+  CL_ERROR   = TColor($001C2BC4); // #C42B1C
 
   { Delphi reserved words we color as keywords in the one-line signature. Lower-
     case; the tokenizer compares case-insensitively. Kept tight to what appears
@@ -984,6 +996,16 @@ begin
         Result:= CL_SECTION;
         Exit;
       end;
+    srError     :
+      begin
+        { Diagnostic text. Fixed, like srType and srSection: the IDE exposes no
+          syntax kind for "a finding", and reading one of the code kinds here
+          would tint warnings with whatever colour the user gave, say, comments
+          -- on a dark theme that is frequently a low-contrast grey, which is
+          the one thing a warning must not be. }
+        Result:= CL_ERROR;
+        Exit;
+      end;
   else
     begin Code:= atIdentifier; Fallback:= CL_NAME; end;
   end;
@@ -1209,6 +1231,23 @@ begin
       begin
         Emit(sLineBreak + '  ', GetSyntaxColor(srMuted), False);
         Emit(AModel.Facts[FI], GetSyntaxColor(srMuted), False);
+      end;
+    end;
+
+    { (3.6) DIAGNOSTICS -- findings reported on the hovered LINE.
+      Placed AFTER the symbol's description on purpose: the reported complaint
+      was that a lint message REPLACED the explanation of the symbol, so the
+      explanation leads and the finding follows it. Drawn in the error colour so
+      it still reads as a warning rather than as more prose. Omitted entirely
+      when the line is clean, which is the common case. }
+    if Length(AModel.Diagnostics) > 0 then
+    begin
+      SectionBreak;
+      Emit('DIAGNOSTICS', GetSyntaxColor(srSection), True);
+      for var DI: Integer:= 0 to High(AModel.Diagnostics) do
+      begin
+        Emit(sLineBreak + '  ', GetSyntaxColor(srMuted), False);
+        Emit(AModel.Diagnostics[DI], GetSyntaxColor(srError), False);
       end;
     end;
 

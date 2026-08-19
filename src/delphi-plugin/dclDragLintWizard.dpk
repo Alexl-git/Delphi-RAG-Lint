@@ -41,6 +41,7 @@ contains
   DragLint.Plugin.ProjectNotifier in 'DragLint.Plugin.ProjectNotifier.pas',
   DragLint.Plugin.Settings in 'DragLint.Plugin.Settings.pas',
   DragLint.Plugin.Keyboard in 'DragLint.Plugin.Keyboard.pas',
+  DragLint.Plugin.CallerFilter in 'DragLint.Plugin.CallerFilter.pas',
   DragLint.Plugin.HoverForm in 'DragLint.Plugin.HoverForm.pas',
   DragLint.Plugin.CompletionForm in 'DragLint.Plugin.CompletionForm.pas',
   DragLint.Plugin.SignatureForm in 'DragLint.Plugin.SignatureForm.pas',

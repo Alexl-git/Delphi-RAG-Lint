@@ -381,8 +381,9 @@ begin
       MOUSE hover shows the colored signature + Parameters + Returns. Mine the
       qname from the RAW LSP markdown (LspText, before StripFirstHeaderLine) and
       fetch `hover --json`. We try this EVEN when a diagnostic is present -- the
-      structured view is the priority; a diagnostic on the same line is rare and
-      the user can use the menu Hover for the full diag text. On any miss (no
+      structured view is the priority, and since v(hover-both) the diagnostic is
+      no longer sacrificed for it: it is copied onto Model.Diagnostics and drawn
+      as its own section, so the popup shows the symbol AND the finding. On any miss (no
       qname / json fetch fails) we fall back to the legacy string popup so the
       user always sees something. Callers skipped here (light for the 200ms
       timer). Detailed logging tells a live smoke exactly why a fallback fired. }
@@ -397,6 +398,22 @@ begin
 
     if GotModel then
     begin
+      { v(hover-both): carry the line's findings INTO the structured popup.
+        Until now this branch dropped DiagText on the floor -- the comment above
+        called a diagnostic on the hovered line "rare" and pointed the user at
+        the menu Hover for it. It is not rare (a lint finding and the symbol it
+        is about are on the same line by construction), and the effect was that
+        the two useful facts were mutually exclusive: signature OR finding,
+        decided by which code path happened to run. Show both. }
+      SetLength(Model.Diagnostics, 0);
+      for var MDI:= 0 to High(Diags) do
+      begin
+        var MMsg: string:= Diags[MDI].Message;
+        if Diags[MDI].Code <> '' then MMsg:= '[' + Diags[MDI].Code + '] ' + MMsg;
+        if System.Pos('add unit ', LowerCase(Diags[MDI].Message)) > 0 then MMsg:= MMsg + '   <-- click to add';
+        SetLength(Model.Diagnostics, Length(Model.Diagnostics) + 1);
+        Model.Diagnostics[High(Model.Diagnostics)]:= MMsg;
+      end;
       { v0.42: dwell popups dismiss against the original mouse point (Pos). }
       ShowDragLintHover(Model, ModelCallers, Pos.X, Pos.Y + 20, True, Pos.X, Pos.Y);
     end

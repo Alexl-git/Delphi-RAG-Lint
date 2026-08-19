@@ -34,6 +34,17 @@ type
     IndexDbs        : TArray<string>;
     AutoDiscoverDbs : Boolean       ; { default True - find sibling .sqlite by walking project root }
     IncludeLibraryDb: Boolean       ; { default True - merge exe-relative drag-lint-library.sqlite }
+    { v1.7: serve KAI's "local model" completion endpoint from inside the IDE.
+      OFF BY DEFAULT AND OFF MEANS OFF: nothing binds, no port is opened, no
+      thread starts. The owner asked for exactly that -- an unchecked box must
+      not leave a listening socket behind.
+      WHY IN-PROCESS. KAI drives llm-ls, which POSTs a fill-in-the-middle prompt
+      and carries NO file path; llm-ls also truncates to the context window, so
+      even the `unit X;` header is usually gone. A separate process therefore
+      cannot know what it is completing IN. Hosting the endpoint here does,
+      because the OTA answers it directly (TopView.Buffer.FileName + CursorPos). }
+    EnableGhostText: Boolean; { default False -- opt-in; see above }
+    GhostTextPort  : Integer; { default 8765; loopback only }
   end; // record
 
 function LoadSettings: TDragLintSettings;
@@ -87,6 +98,11 @@ begin
   SetLength(Result.IndexDbs, 0);
   Result.AutoDiscoverDbs := True;
   Result.IncludeLibraryDb:= True;
+  { OFF by default, deliberately. This one opens a listening socket, and a
+    feature that starts listening because you installed an update is not a
+    feature the user chose. }
+  Result.EnableGhostText := False;
+  Result.GhostTextPort   := 8765;
 end; // function
 
 function LoadSettings: TDragLintSettings;
@@ -144,6 +160,15 @@ begin
       end;
       if Reg.ValueExists('AutoDiscoverDbs' ) then Result.AutoDiscoverDbs := Reg.ReadInteger('AutoDiscoverDbs' ) <> 0;
       if Reg.ValueExists('IncludeLibraryDb') then Result.IncludeLibraryDb:= Reg.ReadInteger('IncludeLibraryDb') <> 0;
+      if Reg.ValueExists('EnableGhostText' ) then Result.EnableGhostText := Reg.ReadInteger('EnableGhostText' ) <> 0;
+      { A port of 0 (or junk) would bind an arbitrary OS-assigned port that the
+        KAI dialog could never be pointed at. Fall back to the default rather
+        than listening somewhere nobody can reach. }
+      if Reg.ValueExists('GhostTextPort') then
+      begin
+        Result.GhostTextPort:= Reg.ReadInteger('GhostTextPort');
+        if (Result.GhostTextPort < 1024) or (Result.GhostTextPort > 65535) then Result.GhostTextPort:= 8765;
+      end;
     finally
       Reg.CloseKey;
     end; // try
@@ -194,6 +219,8 @@ begin
       Reg.WriteString('IndexDbs', Joined);
       Reg.WriteInteger('AutoDiscoverDbs' , Ord(ASettings.AutoDiscoverDbs ));
       Reg.WriteInteger('IncludeLibraryDb', Ord(ASettings.IncludeLibraryDb));
+      Reg.WriteInteger('EnableGhostText' , Ord(ASettings.EnableGhostText ));
+      Reg.WriteInteger('GhostTextPort'   ,     ASettings.GhostTextPort    );
     finally
       Reg.CloseKey;
     end; // try
