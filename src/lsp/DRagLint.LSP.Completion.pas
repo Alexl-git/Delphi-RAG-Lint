@@ -105,7 +105,15 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function BuildCompletionItems(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer): TJSONArray ;
+      class function BuildCompletionItems(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer): TJSONArray ; overload;
+
+      /// <summary>Completion items at a position, resolved against EVERY open index.</summary>
+      /// <param name="AStores">All open databases, the file's own project index
+      /// first. Single-store completion silently returned nothing whenever the
+      /// declaring type lived in another database -- a project-local variable of
+      /// an RTL/VCL/third-party class, which is most variables in practice.</param>
+      /// <remarks>Prefer this overload. The single-store one delegates here.</remarks>
+      class function BuildCompletionItems(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer): TJSONArray ; overload;
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
@@ -202,6 +210,7 @@ implementation
 
 uses
   DRagLint.Doc.Regions
+  , DRagLint.Core.LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
   ;
 
 { TLspCompletion }
@@ -279,6 +288,41 @@ begin
   Result.AddPair('kind', TJSONNumber.Create(MapSymbolKindToLspKind(ASym.Kind)));
   if ASym.Signature <> '' then DetailStr:= ASym.Signature
   else DetailStr:= ASym.QualifiedName;
+  { Lead with the qualifiers that decide whether the symbol can be used HERE,
+    and only those. Asked for after a protected field was offered, selected, and
+    then rejected by the compiler with E2362: the popup described the symbol
+    fully EXCEPT for the one property that determined whether it was usable.
+
+    Two independent axes, both already in the store, so neither needs an
+    extractor change or a DRAGLINT_EXTRACTOR_VERSION bump:
+      visibility     -- Modifiers ('private' / 'protected'); public and
+                        published carry nothing, since they constrain nothing.
+      property access -- PropAccess ('ro' / 'wo'); 'rw' and '' say nothing
+                        useful and are deliberately silent, per the request.
+    A marker appears precisely when it is the thing worth knowing, so an
+    ordinary public read/write property stays as clean as it was before. }
+  var Quals: string:= '';
+
+  if ASym.Modifiers <> '' then
+  begin
+    var VisWord: string:= LowerCase(Trim(ASym.Modifiers));
+    if (Pos('private', VisWord) > 0) or (Pos('protected', VisWord) > 0) then Quals:= VisWord;
+  end;
+
+  if ASym.Kind = skProperty then
+  begin
+    var Acc: string:= LowerCase(Trim(ASym.PropAccess));
+    var AccWord: string:= '';
+    if      Acc = 'ro' then AccWord:= 'read-only'
+    else if Acc = 'wo' then AccWord:= 'write-only';
+    { 'rw' and '' fall through silently. '' is a bare redeclaration
+      (`property Color;`) whose accessors are inherited -- reporting it as
+      anything would be a guess. }
+    if AccWord <> '' then
+      if Quals = '' then Quals:= AccWord else Quals:= Quals + ', ' + AccWord;
+  end;
+
+  if Quals <> '' then DetailStr:= '[' + Quals + '] ' + DetailStr;
   Result.AddPair('detail', DetailStr);
   Result.AddPair('insertText', ASym.Name);
   Result.AddPair('sortText', '0_' + ASym.Name);
@@ -303,7 +347,74 @@ begin
   end;
 end; // function
 
+function EnclosingTypeDescendsFrom(const AStores: TArray<ISymbolStore>; const AFile: string;
+  ALine: Integer; const ATypeName: string): Boolean;
+{ True when the cursor sits inside a type that IS, or descends from, ATypeName.
+
+  This is what makes `protected` legal at the completion site. Delphi's actual
+  rule has three tiers: everything is reachable from code in the SAME UNIT as
+  the declaring type; protected is additionally reachable from a DESCENDANT;
+  otherwise only public/published. Offering protected everywhere put
+  TEurekaExceptionInfo's protected FInfo/FLogBuilder into a completion list
+  inside a plain procedure in an unrelated unit, where selecting it produces
+  code that does not compile.
+
+  Ancestry is matched BY NAME, not by symbol id, on purpose: ids are per
+  database, and the interesting case is precisely the cross-database one -- the
+  edited class lives in the project index while its ancestor lives in the
+  platform library index, so an id comparison could never succeed. }
+var
+  I, J  : Integer            ;
+  St    : ISymbolStore       ;
+  FileId: Int64              ;
+  Sym   : TSymbol            ;
+  Owner : TSymbol            ;
+  Anc   : TArray<TTypeAncestor>;
+  Guard : Integer            ;
+begin
+  Result:= False;
+  if ATypeName = '' then Exit;
+  for I:= 0 to High(AStores) do
+  begin
+    St:= AStores[I];
+    if St = nil then Continue;
+    FileId:= St.FindFileIdByPath(AFile);
+    if FileId <= 0 then Continue;          // not the store that owns this file
+
+    Sym:= St.FindEnclosingRoutineByImpl(FileId, ALine);
+    if Sym.Id <= 0 then Sym:= St.FindContainingSymbol(FileId, ALine);
+    if Sym.Id <= 0 then Exit;
+
+    { Walk up to the owning type. A free procedure never reaches one, which is
+      the case that started this: the completion site was a standalone
+      procedure, so nothing protected is legal there. }
+    Owner:= Sym;
+    Guard:= 0;
+    while (Owner.Id > 0) and not (Owner.Kind in [skClass, skRecord, skInterface]) and (Guard < 16) do
+    begin
+      if Owner.ParentId <= 0 then Break;
+      Owner:= St.GetSymbolById(Owner.ParentId);
+      Inc(Guard);
+    end;
+    if (Owner.Id <= 0) or not (Owner.Kind in [skClass, skRecord, skInterface]) then Exit;
+
+    if SameText(Owner.Name, ATypeName) then Exit(True);
+    Anc:= St.GetTransitiveAncestors(Owner.Id);
+    for J:= 0 to High(Anc) do
+      if SameText(Anc[J].Name, ATypeName) then Exit(True);
+    Exit;   // the owning store answered; no other store can improve on it
+  end;
+end;
+
 class function TLspCompletion.BuildCompletionItems(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer): TJSONArray;
+begin
+  { Legacy single-store entry point. Kept so existing callers compile, but it is
+    the SHAPE that caused the cross-database miss -- new callers should pass
+    every open store. }
+  Result:= BuildCompletionItems(TArray<ISymbolStore>.Create(AStore), AFile, ALine, ACol);
+end; // function
+
+class function TLspCompletion.BuildCompletionItems(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer): TJSONArray;
 var
   Lines     : TArray<string> ;
   LineText  : string         ;
@@ -313,24 +424,62 @@ var
   LhsEnd    : Integer        ;
   LhsStr    : string         ;
   PrefixStr : string         ;
-  TypeResult: TTypeAtResult  ;
   Children  : TArray<TSymbol>;
   Matches   : TArray<TSymbol>;
   Sym       : TSymbol        ;
+  ScopeSym  : TSymbol        ;
+  ScopeStore: ISymbolStore   ;
+  SIdx      : Integer        ;
+  Emitted   : Integer        ;
+  SameUnit  : Boolean        ;
+  AllowProt : Boolean        ;
+  Vis       : string         ;
 begin
   Result:= TJSONArray.Create;
-  if not TFile.Exists(AFile) then Exit;
-  Lines:= TFile.ReadAllLines(AFile, TEncoding.ANSI);
+  if Length(AStores) = 0 then Exit;
+  { v(live-buffer): the caret describes the client's BUFFER. Reading disk here
+    made completion blind to anything typed since the last save -- including the
+    dot that triggered the request. }
+  if not TLiveDocuments.Readable(AFile) then Exit;
+  Lines:= TLiveDocuments.ReadLines(AFile);
   if (ALine < 1) or (ALine > Length(Lines)) then Exit;
   LineText:= Lines[ALine - 1];
 
-  // SubLine is the text from col 1 up to ACol.
-  if ACol < 1 then Exit
-  else if ACol > Length(LineText) then SubLine:= LineText
-  else SubLine:= Copy(LineText, 1, ACol);
+  { SubLine is the text STRICTLY BEFORE the caret.
 
-  // Walk left from end of SubLine skipping whitespace.
+    ACol is 1-based and derived from the LSP 0-based `character`, which is the
+    offset the caret sits AT -- so the character at ACol is the one to the RIGHT
+    of the caret and must not be included. Copying through ACol included it, and
+    every test written for this passed anyway because each fixture put the dot
+    at END OF LINE, where there is no character to the right and the off-by-one
+    cannot show. Real code has something after the caret: for
+    `var S:= AExceptionInfo.;` the extra character is the ';', the dot test saw
+    a semicolon, and completion returned an empty list in 22 ms -- fast, silent,
+    and wrong. }
+  if ACol < 2 then Exit
+  else if ACol - 1 >= Length(LineText) then SubLine:= LineText
+  else SubLine:= Copy(LineText, 1, ACol - 1);
+
+  { Take the identifier being typed FIRST, then look at what precedes it.
+
+    THE BUG THIS SHAPE FIXES. The old code checked only whether the character
+    immediately left of the caret was a dot. That is true for `Foo.` and false
+    the moment a single letter is typed, so `Foo.FI` fell through to the
+    identifier branch -- a GLOBAL prefix search across every store, with no type
+    scoping and no visibility filter at all. The member list therefore appeared
+    correct on '.' and was silently replaced by unrelated same-prefix symbols on
+    the next keystroke: that is how a protected FInfo, and a FBackupIgnored
+    belonging to a different class entirely, were still offered and selected
+    after the visibility work.
+
+    Measuring the prefix first makes both cases the same case: PrefixStr is ''
+    for `Foo.` and 'FI' for `Foo.FI`, and in both the character before it is the
+    dot that makes this member completion. }
   I:= Length(SubLine);
+  while (I >= 1) and CharInSet(SubLine[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Dec(I);
+  PrefixStr:= Copy(SubLine, I + 1, Length(SubLine) - I);
+
+  // Skip whitespace to the left of the typed prefix.
   while (I >= 1) and CharInSet(SubLine[I], [' ', #9]) do Dec(I);
 
   IsDot:= (I >= 1) and (SubLine[I] = '.');
@@ -348,25 +497,78 @@ begin
 
     if LhsStr = '' then Exit;
 
-    // Resolve the LHS to find the declared type.
-    TypeResult:= TTypeAtResolver.Resolve(AStore, AFile, ALine, LhsEnd);
-    if TypeResult.HasResolved and (TypeResult.Resolved.Kind in [skClass, skRecord, skInterface]) then
+    { Resolve the LHS to the TYPE whose members belong here.
+
+      This used to call Resolve and then test Resolved.Kind for a class kind.
+      Resolved is the symbol AT THE CURSOR, so for `SomeVar.` it is the VARIABLE
+      (skLocalVar/skParam/skField) and that test was false every time -- member
+      completion returned an empty list for anything but a literal type name.
+      ResolveMemberScope performs the follow-the-declared-type cascade instead,
+      and searches every open store, because the class is very often indexed in
+      a different database than the variable that has one. }
+    ScopeSym:= TTypeAtResolver.ResolveMemberScope(AStores, AFile, ALine, LhsEnd, ScopeStore);
+    if (ScopeSym.Id > 0) and (ScopeStore <> nil) then
     begin
-      Children:= AStore.FindAllChildSymbols(TypeResult.Resolved.Id);
-      for Sym in Children do Result.AddElement(MakeCompletionItem(Sym, AStore));
+      { CollectMembers, not FindAllChildSymbols: inherited members are members
+        too, and offering only the leaf class's own declarations is a subtler
+        version of the same emptiness. }
+      Children:= TTypeAtResolver.CollectMembers(ScopeStore, ScopeSym.Id);
+
+      { Offer only what the caller could legally touch, following Delphi's three
+        tiers rather than approximating them:
+          same unit as the declaring type -> everything, including private
+          inside a descendant type        -> public/published + protected
+          anywhere else                   -> public/published only
+        The store records visibility in Modifiers (NOT the virtual/abstract
+        directive -- that is TSymbol.IsVirtual), so this needs no extractor
+        change and no DRAGLINT_EXTRACTOR_VERSION bump.
+        An earlier cut filtered private but kept protected unconditionally, on
+        the theory that protected is reachable from a descendant. It is -- but
+        only IN one. In a standalone procedure in an unrelated unit that put
+        protected backing fields in the list, and picking one produced code that
+        does not compile. }
+      SameUnit:= SameText(ScopeStore.GetFilePath(ScopeSym.FileId), AFile);
+      AllowProt:= SameUnit or EnclosingTypeDescendsFrom(AStores, AFile, ALine, ScopeSym.Name);
+      for Sym in Children do
+      begin
+        { Narrow by what has been typed since the dot. Filtering here rather
+          than leaving it to the client keeps the contract honest: what the
+          server offers is what is actually legal AND actually matches. }
+        if (PrefixStr <> '') and not StartsText(PrefixStr, Sym.Name) then Continue;
+        Vis:= LowerCase(Sym.Modifiers);
+        if not SameUnit then
+        begin
+          if Pos('private', Vis) > 0 then Continue;
+          if (Pos('protected', Vis) > 0) and not AllowProt then Continue;
+        end;
+        Result.AddElement(MakeCompletionItem(Sym, ScopeStore));
+      end;
     end;
   end // if
   else
   begin
-    // Identifier completion: walk left while identifier chars to get prefix.
-    I:= Length(SubLine);
-    while (I >= 1) and CharInSet(SubLine[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Dec(I);
-    PrefixStr:= Copy(SubLine, I + 1, Length(SubLine) - I);
-
+    { Bare identifier completion -- no dot anywhere to the left, so this really
+      is an unqualified name and a global search is the right answer.
+      PrefixStr was already measured above; recomputing it here is what let the
+      two branches drift apart in the first place. }
     if PrefixStr = '' then Exit;
 
-    Matches:= AStore.FindSymbolsByPrefix(PrefixStr, 50);
-    for Sym in Matches do Result.AddElement(MakeCompletionItem(Sym, AStore));
+    { Every store, not just the first: the same cross-database blindness applies
+      to plain identifier completion. The 50-item cap is per store so one large
+      library index cannot crowd out the project's own symbols, which are the
+      ones the user is most likely to want. }
+    Emitted:= 0;
+    for SIdx:= 0 to High(AStores) do
+    begin
+      if AStores[SIdx] = nil then Continue;
+      Matches:= AStores[SIdx].FindSymbolsByPrefix(PrefixStr, 50);
+      for Sym in Matches do
+      begin
+        Result.AddElement(MakeCompletionItem(Sym, AStores[SIdx]));
+        Inc(Emitted);
+        if Emitted >= 200 then Exit;   // hard ceiling: this is on the typing path
+      end;
+    end;
   end;
 end; // function
 
@@ -401,12 +603,12 @@ var
   NName        : string         ;
 begin
   Result:= nil;
-  if not TFile.Exists(AFile) then
+  if not TLiveDocuments.Readable(AFile) then
   begin
     Result:= EmptySigHelp;
     Exit;
   end;
-  Lines:= TFile.ReadAllLines(AFile, TEncoding.ANSI);
+  Lines:= TLiveDocuments.ReadLines(AFile);
   if (ALine < 1) or (ALine > Length(Lines)) then
   begin
     Result:= EmptySigHelp;

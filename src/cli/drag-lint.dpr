@@ -90,6 +90,7 @@ uses
   DRagLint.FormsMap in '..\forms\DRagLint.FormsMap.pas',
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
   DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',
+  DRagLint.Core.LiveDocs in '..\core\DRagLint.Core.LiveDocs.pas',
   DRagLint.LSP.Completion in '..\lsp\DRagLint.LSP.Completion.pas',
   DRagLint.Hover.Renderer in 'DRagLint.Hover.Renderer.pas',
   DRagLint.Hover.Contrast in '..\core\DRagLint.Hover.Contrast.pas',

@@ -132,12 +132,42 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function RenderJson(const AResult: TTypeAtResult)                                                        : string       ;
+
+      /// <summary>The TYPE whose members belong after a '.' at this position.</summary>
+      /// <param name="AStores">Every open index, in priority order (the file's own
+      /// project index first). The declaring type is frequently in a DIFFERENT
+      /// database from the variable -- a project-local var of an RTL/VCL class is
+      /// the common case -- so this must be the full set, never one store.</param>
+      /// <param name="ALhsEndCol">1-based column of the LAST character of the LHS
+      /// expression, i.e. the character immediately before the dot.</param>
+      /// <param name="AStore">out: the store the returned type came from. Symbol
+      /// ids are per-database, so every follow-up child/ancestor lookup MUST use
+      /// this store and not AStores[0].</param>
+      /// <returns>The class/record/interface to list members of, or a zeroed
+      /// symbol (Id = 0) when the LHS type could not be established.</returns>
+      /// <remarks>Split out of Resolve so completion stops at the TYPE instead of
+      /// continuing to a named member. Resolve answers "what is the symbol at this
+      /// position" -- for `AExceptionInfo.` that is the PARAMETER (skParam), which
+      /// is why a caller testing Resolved.Kind for a class kind always got nothing.
+      /// The cascade here is the one Resolve already applies internally: direct
+      /// type, else the declared type from Signature, else source-scan inference
+      /// for a local, else generic-base unwrap.</remarks>
+      class function ResolveMemberScope(const AStores: TArray<ISymbolStore>; const AFile: string;
+        ALine, ALhsEndCol: Integer; out AStore: ISymbolStore): TSymbol;
+
+      /// <summary>Every member of a type that a completion list should offer:
+      /// its own children plus those of each transitive ancestor.</summary>
+      /// <param name="AStore">The store the type came from; ids are per-database.</param>
+      /// <returns>Members, nearest declaration first, de-duplicated by name so an
+      /// override is offered once rather than once per level of the hierarchy.</returns>
+      class function CollectMembers(const AStore: ISymbolStore; ATypeId: Int64): TArray<TSymbol>;
   end;
 
 implementation
 
 uses
   DRagLint.Doc.Regions
+  , DRagLint.Core.LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
   ;
 
 class function TTypeAtResolver.ExtractTokenAt(const ALine: string; ACol: Integer; out APrecedingDot: Boolean; out ALhs: string): string;
@@ -295,6 +325,90 @@ begin
   end;
 end;
 
+function FindTypeWithMembersAnywhere(const AStores: TArray<ISymbolStore>; const AName: string; out AStore: ISymbolStore): TSymbol;
+{ Like FindTypeAnywhere, but does not settle for the FIRST symbol carrying the
+  name -- it prefers one that actually has members.
+
+  WHY THIS EXISTS. A type name is rarely unique across a large index. The case
+  that exposed it: 'TEurekaExceptionInfo' matches THIRTEEN symbols in the
+  library index -- EAppCGI, EAppDataSnap, EAppISAPI, EDialogCGI ... all
+  member-less re-declarations -- plus two aliases, plus the one real class,
+  EException.TEurekaExceptionInfo, which is the only one with members. Taking
+  the first match returned a member-less shell, so member completion produced
+  an EMPTY list while looking, from the outside, exactly like "the type could
+  not be resolved".
+
+  An alias is followed once to its target before being judged, so
+  'TFoo = Other.TFoo' resolves to the real declaration rather than being
+  discarded for having no children of its own.
+
+  LIMITATION, STATED PLAINLY: this is a heuristic, not Delphi scope resolution.
+  The correct answer is the candidate reachable through the current unit's uses
+  clause, which needs unit-scope tracking this resolver does not yet have. When
+  several candidates have members, the first store in priority order wins --
+  right for project-before-library, wrong for a genuine cross-unit name clash. }
+var
+  I, J     : Integer      ;
+  Cands    : TArray<TSymbol>;
+  Sym      : TSymbol      ;
+  Best     : TSymbol      ;
+  BestStore: ISymbolStore ;
+  Target   : string       ;
+  Alias    : TSymbol      ;
+  AliasStore: ISymbolStore;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  FillChar(Best  , SizeOf(Best  ), 0);
+  AStore:= nil;
+  BestStore:= nil;
+  if AName = '' then Exit;
+
+  for I:= 0 to High(AStores) do
+  begin
+    if AStores[I] = nil then Continue;
+    Cands:= AStores[I].FindSymbolsByExactName(AName);
+    for J:= 0 to High(Cands) do
+    begin
+      Sym:= Cands[J];
+      if not (Sym.Kind in [skClass, skRecord, skInterface, skTypeAlias]) then Continue;
+
+      { Follow an alias to its target once -- the alias itself has no members. }
+      if (Sym.Kind = skTypeAlias) and (Sym.Signature <> '') then
+      begin
+        Target:= TypeIdentOfSignature(Sym.Signature);
+        { Strip a unit qualifier: 'EException.TEurekaExceptionInfo' -> the last
+          dotted part is the type name the flat lookup indexes. }
+        if Target <> '' then
+        begin
+          var DotPos: Integer:= LastDelimiter('.', Target);
+          if DotPos > 0 then Target:= Copy(Target, DotPos + 1, MaxInt);
+        end;
+        if (Target <> '') and not SameText(Target, AName) then
+        begin
+          Alias:= FindTypeAnywhere(AStores, Target, AliasStore);
+          if (Alias.Id > 0) and (AliasStore <> nil) and (Length(AliasStore.FindAllChildSymbols(Alias.Id)) > 0) then
+          begin
+            AStore:= AliasStore;
+            Exit(Alias);
+          end;
+        end;
+      end;
+
+      if Best.Id <= 0 then begin Best:= Sym; BestStore:= AStores[I]; end;
+      if Length(AStores[I].FindAllChildSymbols(Sym.Id)) > 0 then
+      begin
+        AStore:= AStores[I];
+        Exit(Sym);
+      end;
+    end;
+  end;
+
+  { Nothing had members -- return the first plausible candidate so callers can
+    still report the type name rather than nothing at all. }
+  Result:= Best;
+  AStore:= BestStore;
+end;
+
 function ResolveMemberOnType(const AStore: ISymbolStore; ATypeId: Int64; const AMember: string): TSymbol;
 { The member AMember on the type ATypeId: a direct child first, then each
   transitive ancestor (same store -- ids are per-DB). Id=0 if not found. }
@@ -414,12 +528,15 @@ begin
   for var si:= 0 to High(AStores) do
     if AStores[si].FindFileIdByPath(AFile) > 0 then begin Primary:= AStores[si]; Break; end;
 
-  if not TFile.Exists(AFile) then
+  { v(live-buffer): resolve against the client's buffer when it has one. The
+    declaration this scans for (`var Foo: TBar;`) is frequently typed in the
+    same edit as the member access being resolved. }
+  if not TLiveDocuments.Readable(AFile) then
   begin
     Result.Note:= 'File not found.';
     Exit;
   end;
-  Lines:= TFile.ReadAllLines(AFile, TEncoding.ANSI);
+  Lines:= TLiveDocuments.ReadLines(AFile);
   if (ALine < 1) or (ALine > Length(Lines)) then
   begin
     Result.Note:= 'Line out of range.';
@@ -454,7 +571,13 @@ begin
       var VT: string:= TypeIdentOfSignature(LhsSym.Signature);
       var TS: TSymbol;
       FillChar(TS, SizeOf(TS), 0);
-      if VT <> '' then TS:= FindTypeAnywhere(AStores, VT, LhsStore);
+      { ...WithMembers: a bare first-match lookup lands on whichever
+        same-named symbol the index happens to return first, and for a widely
+        re-declared name that is usually a member-less shell -- which then makes
+        every member lookup fall through to the owner-type floor and report
+        "member may be inherited" for members that are right there on the real
+        class. }
+      if VT <> '' then TS:= FindTypeWithMembersAnywhere(AStores, VT, LhsStore);
       LhsSym:= TS;
     end;
     { v0.46: LHS not a global symbol -> infer it as a local var/param and
@@ -581,6 +704,122 @@ begin
     Result.Doc:= DocStore.GetSymbolDoc(Result.Resolved.Id);
     Result.HasDoc:= Result.Doc.HasContent;
   end;
+end; // function
+
+class function TTypeAtResolver.ResolveMemberScope(const AStores: TArray<ISymbolStore>; const AFile: string;
+  ALine, ALhsEndCol: Integer; out AStore: ISymbolStore): TSymbol;
+var
+  Res     : TTypeAtResult ;
+  Lines   : TArray<string>;
+  VT      : string        ;
+  LhsTok  : string        ;
+  Dot     : Boolean       ;
+  Ignored : string        ;
+  GBase   : string        ;
+  GArity  : Integer       ;
+  GenStore: ISymbolStore  ;
+  BaseSym : TSymbol       ;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  AStore:= nil;
+  if Length(AStores) = 0 then Exit;
+
+  Res:= Resolve(AStores, AFile, ALine, ALhsEndCol);
+
+  { 1. The LHS already IS a type -- `TFoo.`. }
+  if Res.HasResolved and (Res.Resolved.Kind in [skClass, skRecord, skInterface, skTypeAlias]) then
+  begin
+    Result:= Res.Resolved;
+    if (Res.ResolvedStoreIndex >= 0) and (Res.ResolvedStoreIndex <= High(AStores)) then
+      AStore:= AStores[Res.ResolvedStoreIndex]
+    else
+      AStore:= AStores[0];
+  end
+  { 2. The LHS is a VALUE -- param, local, field, var. THIS is the step that was
+       missing: Resolved.Kind is skParam/skLocalVar/skField here and never a class
+       kind, while the declared type name sits in Signature. }
+  else if Res.HasResolved then
+  begin
+    VT:= TypeIdentOfSignature(Res.Resolved.Signature);
+    if VT <> '' then Result:= FindTypeWithMembersAnywhere(AStores, VT, AStore);
+  end;
+
+  { 3. Nothing indexed under that name -- infer the declaration by scanning the
+       source above the cursor, the same fallback Resolve uses for locals. }
+  if (Result.Id <= 0) and TLiveDocuments.Readable(AFile) then
+  begin
+    Lines:= TLiveDocuments.ReadLines(AFile);
+    if (ALine >= 1) and (ALine <= Length(Lines)) then
+    begin
+      LhsTok:= ExtractTokenAt(Lines[ALine - 1], ALhsEndCol, Dot, Ignored);
+      if LhsTok <> '' then
+      begin
+        VT:= InferLocalVarType(Lines, ALine - 1, LhsTok);
+        if VT <> '' then Result:= FindTypeWithMembersAnywhere(AStores, VT, AStore);
+      end;
+    end;
+  end;
+
+  { 4. An alias to a generic instantiation (TThingList = TMyList<TThing>) has no
+       members of its own -- unwrap to the generic base, which usually lives in a
+       different index than the alias. }
+  if (Result.Id > 0) and (Result.Kind = skTypeAlias) and ParseGenericBase(Result.Signature, GBase, GArity) then
+  begin
+    BaseSym:= FindGenericBaseAnywhere(AStores, GBase, GArity, GenStore);
+    if BaseSym.Id > 0 then
+    begin
+      Result:= BaseSym;
+      AStore:= GenStore;
+    end;
+  end;
+
+  if Result.Id <= 0 then AStore:= nil;
+end; // function
+
+class function TTypeAtResolver.CollectMembers(const AStore: ISymbolStore; ATypeId: Int64): TArray<TSymbol>;
+var
+  Anc  : TArray<TTypeAncestor>;
+  Kids : TArray<TSymbol>      ;
+  I, J : Integer              ;
+  Count: Integer              ;
+
+  procedure AddUnique(const ASym: TSymbol);
+  var
+    K  : Integer;   { LOCAL on purpose -- sharing the outer J would corrupt the
+                      ancestor loop that calls this. }
+    Dup: Boolean;
+  begin
+    { Linear scan rather than a dictionary: a type's member list is tens of
+      entries, and this avoids pulling Generics.Collections into the resolver. }
+    if ASym.Name = '' then Exit;
+    Dup:= False;
+    for K:= 0 to Count - 1 do
+      if SameText(Result[K].Name, ASym.Name) then begin Dup:= True; Break; end;
+    if Dup then Exit;
+    if Count = Length(Result) then SetLength(Result, (Count + 1) * 2);
+    Result[Count]:= ASym;
+    Inc(Count);
+  end;
+
+begin
+  SetLength(Result, 0);
+  Count:= 0;
+  if (AStore = nil) or (ATypeId <= 0) then Exit;
+
+  { Own members first, so an override shadows the ancestor's declaration -- the
+    nearest one is the one the editor should describe. }
+  Kids:= AStore.FindAllChildSymbols(ATypeId);
+  for I:= 0 to High(Kids) do AddUnique(Kids[I]);
+
+  Anc:= AStore.GetTransitiveAncestors(ATypeId);
+  for I:= 0 to High(Anc) do
+  begin
+    if Anc[I].SymbolId <= 0 then Continue;   // unresolved ancestor edge (unindexed alias)
+    Kids:= AStore.FindAllChildSymbols(Anc[I].SymbolId);
+    for J:= 0 to High(Kids) do AddUnique(Kids[J]);
+  end;
+
+  SetLength(Result, Count);
 end; // function
 
 class function TTypeAtResolver.RenderText( const AResult: TTypeAtResult): string;

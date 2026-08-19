@@ -21,6 +21,7 @@ uses
   , DRagLint.Resolver.TypeAt
   , DRagLint.Lint    .Linter
   , DRagLint.LSP     .Completion
+  , DRagLint.Core    .LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
   , DRagLint.Doc     .Facts     { v(ADP2 T9): TDocFactsBuilder.Build -- hover's Phase-2 facts }
   , DRagLint.Doc     .Regions   { v(ADP2 T9): TDocRegions.FormatPhase2FactLines -- the shared formatter }
   , DRagLint.Index   .Manifest  { v(ADP2 T9): LoadDocComplexityMin -- same threshold `document` uses }
@@ -32,10 +33,18 @@ type
   // symbol index: initialize, shutdown, workspace/symbol,
   // textDocument/definition, textDocument/references.
   //
-  // v0.6 deliberately does NOT implement textDocument/didChange - files are
-  // indexed via `drag-lint index` ahead of time. Editing a file in-place
-  // and getting fresh results requires a re-run of `index` (which is
-  // sub-second per file thanks to v0.4 incremental).
+  // v0.6 did NOT implement textDocument/didChange - files are indexed via
+  // `drag-lint index` ahead of time, and a re-index is sub-second per file.
+  //
+  // v(live-buffer) REVISITED, and the distinction the original note missed:
+  // that argument is about the INDEX, but didChange is about the CURSOR. A
+  // client's position describes its BUFFER, and the buffer diverges from disk
+  // on the first keystroke. Without an overlay every position lookup read
+  // disk, so a symbol the user could see on screen resolved to '' and hover
+  // returned null -- reported 2026-08-18 for `AExceptionInfo.Assign`, typed
+  // but unsaved. didChange is now accepted (full sync) and stored in
+  // TLiveDocuments; SYMBOL RESOLUTION still comes from the index, so the
+  // original reasoning is intact -- only the text under the caret is live.
   TLSPServer = class
     strict private
       FStore       : ISymbolStore        ; { v0.40.3: FStores[0]; kept for legacy single-store callers }
@@ -288,6 +297,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDidOpenOrSave(const AParams: TJSONObject);
+      /// <summary>Stores the client's live buffer text (full sync) so position
+      /// lookups see unsaved edits. See TLiveDocuments for why.</summary>
+      procedure HandleDidChange(const AParams: TJSONObject);
+      /// <summary>Drops the live buffer, making disk authoritative again.</summary>
+      procedure HandleDidClose(const AParams: TJSONObject);
       /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
       /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
       /// <remarks>
@@ -739,6 +753,13 @@ begin
     Caps.AddPair('referencesProvider'     , TJSONBool.Create(True));
     Caps.AddPair('workspaceSymbolProvider', TJSONBool.Create(True));
     Caps.AddPair('hoverProvider'          , TJSONBool.Create(True));
+    { v(live-buffer): TextDocumentSyncKind.Full = 1. Advertising this is not
+      cosmetic -- a conforming client sends NOTHING until the server asks, so
+      without this pair the didChange handler below can never fire and every
+      position lookup silently stays on disk. Full rather than Incremental (2)
+      because a Delphi source unit is small enough that resending it costs less
+      than the range arithmetic costs in correctness risk. }
+    Caps.AddPair('textDocumentSync'       , TJSONNumber.Create(1) );
     // v0.20: completion provider
     CompProvider          := TJSONObject.Create;
     TriggerCharsCompletion:= TJSONArray .Create;
@@ -829,11 +850,16 @@ var
   Node  : TTSNode  ;
 begin
   Result:= '';
-  if not TFile.Exists(APath) then Exit;
+  if not TLiveDocuments.Readable(APath) then Exit;
   // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 before the
   // parse/slice pipeline (both assume UTF-8); a valid CP1252 file (SOFTWID
   // class) errored here otherwise.
-  Source:= EnsureUtf8Bytes(TFile.ReadAllBytes(APath));
+  // v(live-buffer): overlay bytes are produced as UTF-8 already, so they skip
+  // the transcode -- running EnsureUtf8Bytes over them would re-sniff a BOM
+  // that the editor's buffer does not carry.
+  var FromOverlay: Boolean;
+  Source:= TLiveDocuments.ReadBytes(APath, FromOverlay);
+  if not FromOverlay then Source:= EnsureUtf8Bytes(Source);
   Parser:= nil;
   Tree  := nil;
   try
@@ -1205,6 +1231,34 @@ end; // begin
 // a drift channel; there is now one, and this unit reads it through its
 // existing DRagLint.Core.Model dependency.
 
+function QualifiedKindText(const ASym: TSymbol): string;
+{ The symbol's kind, prefixed by the qualifiers that decide whether it can be
+  used at a given call site -- visibility, and for properties the accessor
+  shape. 'field' -> 'protected field'; 'property' -> 'read-only property'.
+
+  Deliberately silent for public/published and for read/write: those constrain
+  nothing, so a marker there would be noise that devalues the marker elsewhere.
+  Both facts are already stored (Modifiers, PropAccess), so this costs no
+  extractor change and no DRAGLINT_EXTRACTOR_VERSION bump. }
+var
+  Vis: string;
+  Acc: string;
+begin
+  Result:= ASym.Kind.ToText;
+
+  if ASym.Kind = skProperty then
+  begin
+    Acc:= LowerCase(Trim(ASym.PropAccess));
+    if      Acc = 'ro' then Result:= 'read-only '  + Result
+    else if Acc = 'wo' then Result:= 'write-only ' + Result;
+    { 'rw' and '' (a bare redeclaration inheriting its accessors) say nothing. }
+  end;
+
+  Vis:= LowerCase(Trim(ASym.Modifiers));
+  if      Pos('private'  , Vis) > 0 then Result:= 'private '   + Result
+  else if Pos('protected', Vis) > 0 then Result:= 'protected ' + Result;
+end;
+
 procedure TLSPServer.HandleHover(const AId: TJSONValue; const AParams: TJSONObject);
 var
   Reply   : TJSONObject    ;
@@ -1358,9 +1412,9 @@ begin
     if (Sel.ImplStartLine > 0) and (Sel.ImplEndLine >= Sel.ImplStartLine) then
     begin
       var HovPath: string:= HitStore.GetFilePath(Sel.FileId);
-      if (HovPath <> '') and TFile.Exists(HovPath) then
+      if (HovPath <> '') and TLiveDocuments.Readable(HovPath) then
       begin
-        var HovAll: TArray<string>:= TFile.ReadAllLines(HovPath, TEncoding.ANSI);
+        var HovAll: TArray<string>:= TLiveDocuments.ReadLines(HovPath);
         var HLo: Integer:= Sel.ImplStartLine - 1;
         var HHi: Integer:= Sel.ImplEndLine - 1;
         if HLo < 0 then HLo:= 0;
@@ -1473,7 +1527,16 @@ begin
           as the IDE does. }
         Filtered:= DedupAndPreferSource(Filtered);
 
-        Sb.AppendLine(Format('**%s** `%s`', [Ident, Filtered[0].Kind.ToText]));
+        { Qualify the kind with what constrains USE, so the one-line popup header
+          the plugin builds from this ("<kind> <name> - <unit>.pas (<line>)")
+          says 'protected field' rather than just 'field'. Requested after a
+          protected field was accepted from the completion list and then
+          rejected by the compiler with E2362: every other fact about the symbol
+          was on screen except the one that mattered.
+          Only constraining qualifiers appear -- public/published and read/write
+          add nothing and stay silent, so ordinary members read exactly as
+          before and the marker keeps its signal. }
+        Sb.AppendLine(Format('**%s** `%s`', [Ident, QualifiedKindText(Filtered[0])]));
         Sb.AppendLine('');
         { v0.42: render each candidate (every overload) as a Code-Insight-style
           declaration. Signature now carries the full param list + return type,
@@ -1538,7 +1601,7 @@ begin
   try
     Reply.AddPair('jsonrpc', '2.0');
     if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
-    if (FStore = nil) or (AParams = nil) then
+    if (Length(FStores) = 0) or (AParams = nil) then
     begin
       WrapObj:= TJSONObject.Create;
       WrapObj.AddPair('isIncomplete', TJSONBool.Create(False));
@@ -1563,7 +1626,11 @@ begin
     // LSP positions are 0-based; completion builder uses 1-based.
     Line:= StrToIntDef(Position.GetValue('line'     ).Value, 0) + 1;
     Col := StrToIntDef(Position.GetValue('character').Value, 0) + 1;
-    Items:= TLspCompletion.BuildCompletionItems(FStore, Path, Line, Col);
+    { FStores, not FStore. FStore is documented above as "kept for legacy
+      single-store callers" and this was one of them: the declaring type of a
+      local/param is routinely in a different --db than the file being edited,
+      so a single-store lookup returned an empty item list. }
+    Items:= TLspCompletion.BuildCompletionItems(FStores, Path, Line, Col);
     WrapObj:= TJSONObject.Create;
     WrapObj.AddPair('isIncomplete', TJSONBool.Create(False));
     WrapObj.AddPair('items' , Items  );
@@ -1631,6 +1698,16 @@ begin
   if TextDoc = nil then Exit;
   Uri:= TextDoc.GetValue('uri').Value;
   Path:= FileFromUri(Uri);
+  { v(live-buffer): didOpen carries the buffer's text, and didSave may. Seed the
+    overlay from it so the very first hover in a session is buffer-accurate
+    without waiting for an edit. On didSave WITHOUT text the buffer now equals
+    disk, so the stale overlay must go -- keeping it would pin the pre-save text
+    and re-create the same blindness in the opposite direction. }
+  var OpenText: TJSONValue:= TextDoc.GetValue('text');
+  if (OpenText <> nil) and not (OpenText is TJSONNull) then
+    TLiveDocuments.SetText(Path, OpenText.Value)
+  else
+    TLiveDocuments.Remove(Path);
   // v0.26: pass FStore so compiler_findings are merged into publishDiagnostics.
   Diags:= TLspCompletion.BuildDiagnostics(EnsureLinter, Path, FStore);
   Notif:= TJSONObject.Create;
@@ -1645,6 +1722,56 @@ begin
   finally
     Notif.Free;
   end;
+end; // procedure
+
+procedure TLSPServer.HandleDidChange(const AParams: TJSONObject);
+{ Full-sync document update. The server advertises TextDocumentSyncKind.Full,
+  so a conforming client sends ONE contentChange holding the whole buffer and
+  no `range`. A client that ignores that and sends incremental ranges would
+  hand us a fragment; applying it as the whole document would be far worse
+  than staying on disk, so a change carrying a `range` is REJECTED rather than
+  stored, and the overlay is dropped so reads fall back to disk. That is the
+  conservative direction: stale-but-coherent beats confidently-wrong. }
+var
+  TextDoc: TJSONObject;
+  Changes: TJSONArray ;
+  Path   : string     ;
+begin
+  if AParams = nil then Exit;
+  TextDoc:= AParams.GetValue('textDocument') as TJSONObject;
+  if TextDoc = nil then Exit;
+  Path:= FileFromUri(TextDoc.GetValue('uri').Value);
+  if Path = '' then Exit;
+
+  Changes:= AParams.GetValue('contentChanges') as TJSONArray;
+  if (Changes = nil) or (Changes.Count = 0) then Exit;
+
+  { Take the LAST change: a client batching several full-text updates into one
+    notification means the final one is the current buffer. }
+  var Last: TJSONValue:= Changes.Items[Changes.Count - 1];
+  if not (Last is TJSONObject) then Exit;
+
+  if TJSONObject(Last).GetValue('range') <> nil then
+  begin
+    TLiveDocuments.Remove(Path);
+    Exit;
+  end;
+
+  var TextVal: TJSONValue:= TJSONObject(Last).GetValue('text');
+  if (TextVal = nil) or (TextVal is TJSONNull) then Exit;
+  TLiveDocuments.SetText(Path, TextVal.Value);
+end; // procedure
+
+procedure TLSPServer.HandleDidClose(const AParams: TJSONObject);
+{ The buffer is gone, so disk is authoritative again. Not dropping it here is
+  a slow leak that also serves the CLOSED file's last-typed text forever. }
+var
+  TextDoc: TJSONObject;
+begin
+  if AParams = nil then Exit;
+  TextDoc:= AParams.GetValue('textDocument') as TJSONObject;
+  if TextDoc = nil then Exit;
+  TLiveDocuments.Remove(FileFromUri(TextDoc.GetValue('uri').Value));
 end; // procedure
 
 procedure TLSPServer.Run;
@@ -1680,6 +1807,8 @@ begin
       else if Method = 'textDocument/signatureHelp' then HandleSignatureHelp(Id, Params)
       else if Method = 'textDocument/didOpen' then HandleDidOpenOrSave(Params)
       else if Method = 'textDocument/didSave' then HandleDidOpenOrSave(Params)
+      else if Method = 'textDocument/didChange' then HandleDidChange(Params)
+      else if Method = 'textDocument/didClose' then HandleDidClose(Params)
       else if (Id <> nil) and (Method <> '') then SendError(Id, -32601, 'method not found: ' + Method);
     finally
       Msg.Free;
