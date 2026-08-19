@@ -35,6 +35,7 @@ uses
   , Winapi.RichEdit
   , ToolsAPI
   , ToolsAPI.Editor
+  , DragLint.Plugin.SyntaxColors  { the palette, shared with the completion popup }
   ;
 
 type
@@ -88,7 +89,9 @@ type
   /// IDE editor color (Tools > Options > Editor) when available, falling back
   /// to the fixed CL_* palette otherwise; every color still passes through the
   /// WCAG contrast guard against the actual popup background.</summary>
-  TDLSynRole = (srKeyword, srType, srName, srParam, srOperator, srLiteralNum, srLiteralStr, srMuted, srSection, srError);
+  { MOVED to DragLint.Plugin.SyntaxColors so the completion popup can render in
+    the same palette. Aliased here so existing references keep compiling. }
+  TDLSynRole = DragLint.Plugin.SyntaxColors.TDLSynRole;
 
   TDragLintHoverForm = class(TForm)
     private
@@ -248,22 +251,9 @@ const
     editor colors are unavailable. Every value is still run through the contrast
     guard against the actual background before it is emitted. TColor is BGR, so
     these bytes are the reverse of the #RRGGBB the comments name. }
-  CL_KEYWORD = TColor($00D0570B); // #0B57D0 blue
-  CL_TYPE    = TColor($003C7A21); // #217A3C green
-  CL_NAME    = TColor($00DB561A); // #1A56DB
-  CL_PARAM   = TColor($00C1426F); // #6F42C1
-  CL_OP      = TColor($00333333);
-  CL_LITNUM  = TColor($001515A3); // #A31515
-  CL_LITSTR  = TColor($001515A3);
-  CL_MUT     = TColor($008A8A8A);
-  { v0.94.1: section headers (PARAMETERS / RETURNS / USED IN) -- a strong blue,
-    distinct from the softer keyword blue. #1560D6 -> BGR $00D66015. }
-  CL_SECTION = TColor($00D66015); // #1560D6
-  { v(hover-both): diagnostic text. A deep red rather than pure #FF0000 so it
-    survives the contrast guard on a light background without vibrating, and
-    stays legible when that guard lightens it for a dark one.
-    #C42B1C -> BGR $001C2BC4. }
-  CL_ERROR   = TColor($001C2BC4); // #C42B1C
+  { The CL_* fallback palette MOVED to DragLint.Plugin.SyntaxColors -- two
+    copies of one palette is a drift channel, and the completion popup needed
+    the same values. }
 
   { Delphi reserved words we color as keywords in the one-line signature. Lower-
     case; the tokenizer compares case-insensitively. Kept tight to what appears
@@ -962,62 +952,11 @@ begin
 end;
 
 function TDragLintHoverForm.GetSyntaxColor(ARole: TDLSynRole): TColor;
-{ Real-color-with-fallback. When the IDE editor-color interface resolved for
-  this render (FSynOpts, cached once per RenderModel) is available, return the
-  user's configured GetFontColor for the mapped TOTASyntaxCode; on nil options,
-  a clNone/clDefault result, or any exception, return the fixed CL_* fallback.
-  Resolving happens ONCE per render (in RenderModel), never per token here. }
-var
-  Code    : TOTASyntaxCode;
-  Fallback: TColor         ;
-  C       : TColor         ;
+{ Delegates to the shared palette. FSynOpts is resolved once per RenderModel;
+  passing it in keeps the "resolve once, never per token" rule visible at the
+  call site rather than buried in a field read. }
 begin
-  case ARole of
-    srKeyword   : begin Code:= atReservedWord; Fallback:= CL_KEYWORD; end;
-    srType      :
-      begin
-        { v0.94.1: types always render in the fixed Help-Insight green (like the
-          srSection blue). The IDE's atIdentifier color (dark/grey on most themes)
-          made types indistinguishable from names; a fixed green reads as "this is
-          a type" at a glance, matching the user's requested look. }
-        Result:= CL_TYPE;
-        Exit;
-      end;
-    srName      : begin Code:= atIdentifier  ; Fallback:= CL_NAME   ; end;
-    srParam     : begin Code:= atIdentifier  ; Fallback:= CL_PARAM  ; end;
-    srOperator  : begin Code:= atSymbol      ; Fallback:= CL_OP     ; end;
-    srLiteralNum: begin Code:= atNumber      ; Fallback:= CL_LITNUM ; end;
-    srLiteralStr: begin Code:= atString      ; Fallback:= CL_LITSTR ; end;
-    srMuted     : begin Code:= atComment     ; Fallback:= CL_MUT    ; end;
-    srSection   :
-      begin
-        { Section headers (PARAMETERS/RETURNS/USED IN) always use the fixed
-          strong blue -- the IDE has no "section header" syntax kind to read. }
-        Result:= CL_SECTION;
-        Exit;
-      end;
-    srError     :
-      begin
-        { Diagnostic text. Fixed, like srType and srSection: the IDE exposes no
-          syntax kind for "a finding", and reading one of the code kinds here
-          would tint warnings with whatever colour the user gave, say, comments
-          -- on a dark theme that is frequently a low-contrast grey, which is
-          the one thing a warning must not be. }
-        Result:= CL_ERROR;
-        Exit;
-      end;
-  else
-    begin Code:= atIdentifier; Fallback:= CL_NAME; end;
-  end;
-
-  Result:= Fallback;
-  if FSynOpts = nil then Exit;
-  try
-    C:= FSynOpts.GetFontColor(Code);
-    if (C <> clNone) and (C <> clDefault) then Result:= C;
-  except
-    Result:= Fallback; // any ToolsAPI surprise -> fixed fallback
-  end;
+  Result:= SyntaxColorFor(FSynOpts, ARole);
 end;
 
 procedure TDragLintHoverForm.EmitSignatureHeader(const ASignature, AUnitFile: string; ADefLine: Integer);

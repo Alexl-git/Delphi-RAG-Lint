@@ -401,6 +401,14 @@ answered from the index across every project in your manifest at once -- no
 compiler and no project open. DelphiLSP implements neither find-references nor
 workspace symbols, so those two are drag-lint only.
 
+It also answers one vendor-prefixed extension, `draglint/hoverBundle`: given a
+document position it returns the hover markdown, the structured hover model
+(the shape `hover --format json` emits) and the caller rows, in a single reply.
+The RAD Studio plugin uses it so a tooltip costs one warm request instead of a
+hover round trip plus three `drag-lint.exe` spawns that each re-opened indexes
+the server already had open. Any other client can ignore it; a server that
+predates it answers the standard `-32601`.
+
 * **VS Code** -- extension included (`editors/vscode/drag-lint/`).
 * **Zed** -- tree-sitter highlighting ships today; the language-server
   registration needs a small Rust/WASM extension that is **not yet built** and is

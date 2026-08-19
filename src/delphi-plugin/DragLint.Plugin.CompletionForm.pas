@@ -17,18 +17,40 @@ uses
   , Vcl.Graphics
   , Winapi.Windows
   , Winapi.Messages
+  , ToolsAPI
+  , ToolsAPI.Editor               { INTACodeEditorOptions -- the theme handle }
+  , DragLint.Plugin.SyntaxColors  { the SAME palette the hover popup renders in }
+  , DragLint.Plugin.CompletionText { kind word + signature split, pure and guarded }
+  , DRagLint.Hover.Contrast       { EnsureReadable -- keep every run legible }
   ;
 
 type
   TCompletionInsertCallback = reference to procedure(const AInsertText: string);
 
+  /// <summary>One completion row, kept as PARTS rather than a flat string so
+  /// each part can be drawn in its own colour.</summary>
+  /// <remarks>The old code concatenated glyph + label + detail into a single
+  /// listbox string, which is why the popup could not be themed: by draw time
+  /// there was nothing left to tell a type from a name.</remarks>
+  TDLCompletionRow = record
+    KindWord : string;   { 'procedure', 'function', 'property', ... }
+    Name     : string;
+    Params   : string;   { '(const S: string)' -- empty when the symbol takes none }
+    ReturnTyp: string;   { 'Integer' -- empty for procedures and non-routines }
+    Quals    : string;   { '[protected]', '[read-only]' -- already bracketed }
+  end;
+
   TDragLintCompletionForm = class(TForm)
     private
       FListBox    : TListBox                 ;
       FInsertTexts: TArray<string>           ;
+      FRows       : TArray<TDLCompletionRow> ;
+      FSynOpts    : INTACodeEditorOptions    ;
       FOnInsert   : TCompletionInsertCallback;
       procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
       procedure ListBoxDblClick(Sender: TObject);
+      procedure ListBoxDrawItem(AControl: TWinControl; AIndex: Integer;
+                                ARect: TRect; AState: TOwnerDrawState);
       procedure DoInsertSelected;
     protected
       procedure DoClose(var Action: TCloseAction); override;
@@ -42,25 +64,20 @@ procedure ShowDragLintCompletion(AItems: TJSONArray; AScreenX, AScreenY: Integer
 
 implementation
 
-{ ---- kind glyph helper ---- }
+{ ---- text helpers ----
+  KindWord and SplitSignature MOVED to DragLint.Plugin.CompletionText, which is
+  pure and therefore testable from a console harness; this unit is not. Local
+  aliases keep the call sites below reading the same. }
 
-function KindGlyph(AKind: Integer): Char;
+function KindWord(AKind: Integer): string;
 begin
-  case AKind of
-    2 : Result:= 'M';
-    3 : Result:= 'f';
-    4 : Result:= 'C';
-    5 : Result:= 'F';
-    6 : Result:= 'v';
-    7 : Result:= 'T';
-    8 : Result:= 'I';
-    9 : Result:= 'U';
-    10: Result:= 'p';
-    13: Result:= 'e';
-    22: Result:= 'R';
-    else Result:= '.';
-  end;
-end; // function
+  Result:= CompletionKindWord(AKind);
+end;
+
+procedure SplitSignature(const ASignature: string; out AParams, AReturn: string);
+begin
+  SplitCompletionSignature(ASignature, AParams, AReturn);
+end;
 
 { ---- TDragLintCompletionForm ---- }
 
@@ -85,7 +102,73 @@ begin
   FListBox.Font.Size:= 9;
   FListBox.TabStop   := False;
   FListBox.OnDblClick:= ListBoxDblClick;
+  { Owner-drawn so each part of a row can carry its own colour. lbOwnerDrawFixed
+    (not Variable) because every row is one line of the same height -- the
+    listbox never has to ask for a per-item height. }
+  FListBox.Style      := lbOwnerDrawFixed;
+  FListBox.ItemHeight := 18;
+  FListBox.OnDrawItem := ListBoxDrawItem;
 end; // constructor
+
+procedure TDragLintCompletionForm.ListBoxDrawItem(AControl: TWinControl; AIndex: Integer;
+  ARect: TRect; AState: TOwnerDrawState);
+{ Draws one row as coloured runs: kind, name, parameters, return type.
+
+  Every colour goes through EnsureReadable against the row's ACTUAL background
+  before it is drawn, so the selected row (system highlight, often dark) does
+  not swallow a dark-blue keyword -- the same guard the hover popup applies. }
+var
+  Cnv : TCanvas;
+  Row : TDLCompletionRow;
+  X   : Integer;
+  Bg  : TColor ;
+
+  procedure Run(const AText: string; ARole: TDLSynRole; ABold: Boolean = False);
+  begin
+    if AText = '' then Exit;
+    Cnv.Font.Color:= EnsureReadable(SyntaxColorFor(FSynOpts, ARole), Bg);
+    if ABold then Cnv.Font.Style:= [fsBold] else Cnv.Font.Style:= [];
+    Cnv.TextOut(X, ARect.Top + 1, AText);
+    Inc(X, Cnv.TextWidth(AText));
+  end;
+
+begin
+  if not (AControl is TListBox) then Exit;
+  Cnv:= (AControl as TListBox).Canvas;
+
+  if odSelected in AState then Bg:= clHighlight else Bg:= clWindow;
+  Cnv.Brush.Color:= Bg;
+  Cnv.FillRect(ARect);
+
+  if (AIndex < 0) or (AIndex > High(FRows)) then Exit;
+  Row:= FRows[AIndex];
+
+  X:= ARect.Left + 4;
+  Cnv.Brush.Style:= bsClear;
+  try
+    { kind first, muted -- it classifies the row and must not out-shout the name }
+    if Row.KindWord <> '' then
+    begin
+      Run(Row.KindWord, srKeyword);
+      Run(' ', srMuted);
+    end;
+    Run(Row.Name, srName, True);
+    Run(Row.Params, srParam);
+    if Row.ReturnTyp <> '' then
+    begin
+      Run(': ', srOperator);
+      Run(Row.ReturnTyp, srType);
+    end;
+    if Row.Quals <> '' then
+    begin
+      Run(' ', srMuted);
+      Run(Row.Quals, srMuted);
+    end;
+  finally
+    Cnv.Brush.Style:= bsSolid;
+    Cnv.Font.Style := [];
+  end;
+end; // procedure
 
 procedure TDragLintCompletionForm.DoClose(var Action: TCloseAction);
 begin
@@ -165,6 +248,10 @@ begin
     Count:= 0;
     if AItems <> nil then Count:= AItems.Count;
     SetLength(FInsertTexts, Count);
+    SetLength(FRows       , Count);
+    { Resolve the IDE colour interface ONCE per show, not per row and never per
+      run -- the draw handler is called for every visible row on every repaint. }
+    FSynOpts:= AcquireEditorColors;
     MaxW:= 0;
 
     for i:= 0 to Count - 1 do
@@ -186,11 +273,40 @@ begin
       if InsertStr = '' then InsertStr:= LabelStr;
       FInsertTexts[i]:= InsertStr;
 
-      if Length(DetailStr) > MAX_DETAIL then DetailStr:= Copy(DetailStr, 1, MAX_DETAIL) + '...';
+      { The engine prefixes qualifiers that decide USABILITY -- '[protected]',
+        '[read-only]' -- onto detail. Peel them off so they can be drawn muted
+        instead of being mistaken for part of the signature. }
+      FRows[i].Quals:= '';
+      DetailStr:= Trim(DetailStr);
+      if (DetailStr <> '') and (DetailStr[Low(string)] = '[') then
+      begin
+        var RB: Integer:= Pos(']', DetailStr);
+        if RB > 0 then
+        begin
+          FRows[i].Quals:= Copy(DetailStr, Low(string), RB);
+          DetailStr:= Trim(Copy(DetailStr, RB + 1, MaxInt));
+        end;
+      end;
 
-      DisplayStr:= KindGlyph(KindInt) + ' ' + LabelStr;
-      if DetailStr <> '' then DisplayStr:= DisplayStr + ' - ' + DetailStr;
+      { A qualified name is not a signature -- the engine falls back to it when
+        the symbol has none, and rendering it as a return type would read as
+        "Foo: Unit.Bar.Foo". Only a real signature is split. }
+      if SameText(DetailStr, LabelStr) or (Pos('.' + LabelStr, DetailStr) > 0) then
+        DetailStr:= '';
 
+      FRows[i].KindWord:= KindWord(KindInt);
+      FRows[i].Name    := LabelStr;
+      SplitSignature(DetailStr, FRows[i].Params, FRows[i].ReturnTyp);
+
+      if Length(FRows[i].Params) > MAX_DETAIL then
+        FRows[i].Params:= Copy(FRows[i].Params, Low(string), MAX_DETAIL) + '...)';
+
+      DisplayStr:= FRows[i].KindWord + ' ' + FRows[i].Name + FRows[i].Params;
+      if FRows[i].ReturnTyp <> '' then DisplayStr:= DisplayStr + ': ' + FRows[i].ReturnTyp;
+      if FRows[i].Quals     <> '' then DisplayStr:= DisplayStr + ' ' + FRows[i].Quals;
+
+      { The listbox still needs an item per row (owner-draw paints over it, but
+        the count and selection come from Items). }
       FListBox.Items.Add(DisplayStr);
       if Length(DisplayStr) > MaxW then MaxW:= Length(DisplayStr);
     end; // for

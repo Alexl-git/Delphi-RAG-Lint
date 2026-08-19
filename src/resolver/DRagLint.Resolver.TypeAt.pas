@@ -348,6 +348,59 @@ begin
     if SameText(Used, U) then Exit(True);
 end;
 
+{ Is AQName declared UNDER one of AUsedUnits, at any nesting depth?
+
+  DeclaredInAUsedUnit above compares against UnitOfQName, which strips to the
+  LAST dot. That is right for a TYPE ('Vcl.ExtCtrls.TTimer' -> 'Vcl.ExtCtrls')
+  and WRONG for a MEMBER: 'Vcl.Forms.TCustomForm.WindowState' yields
+  'Vcl.Forms.TCustomForm', which matches no used unit and would reject the very
+  candidate the file can see. A prefix test handles both shapes. }
+function DeclaredUnderAUsedUnit(const AQName: string; const AUsedUnits: TArray<string>): Boolean;
+var
+  Used: string;
+begin
+  Result:= False;
+  if AQName = '' then Exit;
+  for Used in AUsedUnits do
+    if (Used <> '') and StartsText(Used + '.', AQName) then Exit(True);
+end;
+
+{ Like FindTypeAnywhere, but PREFERS a candidate the hovering file can actually
+  see -- one declared under a unit in its own uses clause.
+
+  WHY (owner, live IDE, 2026-08-19). `if (WindowState = wsMinimized)` inside a
+  TfrmZeissCopy method resolved to `Abcutil.TabcLauncher.WindowState :
+  TabcShowWindowStyle`. Abcutil appears ZERO times in that file. The correct
+  answer, Vcl.Forms.TCustomForm.WindowState, was in the same index -- the flat
+  first-hit lookup simply reached the other one first.
+
+  The enclosing class's ancestry would be the more precise scope, but it is not
+  available here: TfrmZeissCopy descends from TdxRibbonForm, whose declaration
+  lives in the LIBRARY index while the class lives in the PROJECT index, and
+  ancestor links are resolved per-database at index time -- so the walk reports
+  it unresolved and stops. The uses clause is a fact the file carries itself and
+  needs no cross-database resolution.
+
+  NARROWS, NEVER BLANKS: with no used-unit candidate the original lookup runs
+  unchanged, so a symbol that only exists in an unused unit still resolves. That
+  is the difference between a filter and a fail-closed rule, and it is guarded. }
+function FindTypeAnywherePreferringUses(const AStores: TArray<ISymbolStore>; const AName: string;
+  out AStore: ISymbolStore; const AUsedUnits: TArray<string>): TSymbol;
+var
+  I  : Integer;
+  Sym: TSymbol;
+begin
+  if Length(AUsedUnits) > 0 then
+    for I:= 0 to High(AStores) do
+      for Sym in AStores[I].FindSymbolsByExactName(AName) do
+        if DeclaredUnderAUsedUnit(Sym.QualifiedName, AUsedUnits) then
+        begin
+          AStore:= AStores[I];
+          Exit(Sym);
+        end;
+  Result:= FindTypeAnywhere(AStores, AName, AStore);
+end;
+
 { The GUI framework a qualified name belongs to -- 'Vcl', 'FMX', or '' for
   everything else. Only these two matter: they are the pair that declares the
   same control names twice. }
@@ -792,8 +845,13 @@ begin
 
     if not Result.HasResolved then
     begin
+      { v(bare-ident uses scope): PREFER a candidate declared under a unit this
+        file actually uses. Until now this was a flat first-hit lookup over the
+        whole index, which answered `WindowState` with Abcutil.TabcLauncher --
+        a unit the file does not reference at all. UsedUnits was already
+        computed above and was being applied only on the member-access branch. }
       var BareStore: ISymbolStore;
-      ResolvedSym:= FindTypeAnywhere(AStores, Result.Token, BareStore);
+      ResolvedSym:= FindTypeAnywherePreferringUses(AStores, Result.Token, BareStore, UsedUnits);
       if ResolvedSym.Id > 0 then
       begin
         Result.Resolved          := ResolvedSym;

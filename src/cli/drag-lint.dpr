@@ -76,6 +76,8 @@ uses
   DRagLint.Sql.OrmLinker in '..\sql\DRagLint.Sql.OrmLinker.pas',
   DRagLint.Parser.DocComments in '..\parser\DRagLint.Parser.DocComments.pas',
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',
+  DRagLint.Query.Callers in '..\query\DRagLint.Query.Callers.pas',
+  DRagLint.Query.HoverModel in '..\query\DRagLint.Query.HoverModel.pas',
   DRagLint.Lint.Config in '..\lint\DRagLint.Lint.Config.pas',
   DRagLint.Lint.RuleCatalog in '..\lint\DRagLint.Lint.RuleCatalog.pas',
   DRagLint.Lint.Baseline in '..\lint\DRagLint.Lint.Baseline.pas',

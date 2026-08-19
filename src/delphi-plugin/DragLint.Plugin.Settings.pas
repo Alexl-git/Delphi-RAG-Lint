@@ -43,7 +43,7 @@ type
       even the `unit X;` header is usually gone. A separate process therefore
       cannot know what it is completing IN. Hosting the endpoint here does,
       because the OTA answers it directly (TopView.Buffer.FileName + CursorPos). }
-    EnableGhostText: Boolean; { default False -- opt-in; see above }
+    EnableGhostText: Boolean; { default True since 2026-08-19 -- see LoadDefaults }
     GhostTextPort  : Integer; { default 8765; loopback only }
   end; // record
 
@@ -98,10 +98,19 @@ begin
   SetLength(Result.IndexDbs, 0);
   Result.AutoDiscoverDbs := True;
   Result.IncludeLibraryDb:= True;
-  { OFF by default, deliberately. This one opens a listening socket, and a
-    feature that starts listening because you installed an update is not a
-    feature the user chose. }
-  Result.EnableGhostText := False;
+  { ON by default since 2026-08-19, at the owner's request, and the reasoning
+    that put it off is worth keeping visible: it opens a listening socket, and a
+    feature that starts listening because you installed an update is not one the
+    user chose.
+
+    What changed is that NOT listening is not neutral here. KAI is already
+    configured to POST to this port, so with nothing bound the IDE raises
+      -32603 ... error trying to connect ... (os error 10061)
+    on every keystroke it tries to complete. Binding the port and answering an
+    EMPTY completion is the quieter and more honest of the two: an empty
+    completion is a correct answer, where a plausible invented one could not be
+    told from a real suggestion. Loopback only, and Stop() runs on unload. }
+  Result.EnableGhostText := True;
   Result.GhostTextPort   := 8765;
 end; // function
 

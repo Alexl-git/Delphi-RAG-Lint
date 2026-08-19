@@ -65,6 +65,23 @@ function StripFirstHeaderLine(const AMarkdown: string): string;
   (caller shows the string popup) on any miss. }
 function TryBuildHoverModel(const ARawMarkdown: string; out AModel: TDragLintHoverModel; out ACallers: TArray<TDragLintCallerInfo>): Boolean;
 
+/// <summary>Fetches hover markdown, the structured model and the CALLED FROM
+/// rows in ONE request to the already-running LSP server.</summary>
+/// <param name="AUri">Document uri of the hovered file.</param>
+/// <param name="ALine">0-based line, as the LSP counts them.</param>
+/// <param name="ACol">0-based character offset.</param>
+/// <param name="AMarkdown">Receives the raw hover markdown.</param>
+/// <param name="AQName">Receives the qualified name the SERVER resolved.</param>
+/// <param name="AModel">Receives the structured model; empty for an intrinsic.</param>
+/// <param name="ACallers">Receives the rows the caller policy selected.</param>
+/// <returns>False when the bundle is unavailable, in which case the caller must
+/// use the legacy markdown fetch plus TryBuildHoverModel. Never raises.</returns>
+/// <remarks>Replaces four engine round trips with one. See the implementation's
+/// block comment for the measurements that motivated it.</remarks>
+function FetchHoverBundle(const AUri: string; ALine, ACol: Integer;
+  out AMarkdown, AQName: string; out AModel: TDragLintHoverModel;
+  out ACallers: TArray<TDragLintCallerInfo>): Boolean;
+
 /// <summary>Spawns ACmdLine via CreateProcessW with merged stdout+stderr
 /// capture and blocks until the child exits (or ATimeoutMs elapses).</summary>
 /// <param name="ACmdLine">Full command line (exe path already quoted by the caller).</param>
@@ -78,6 +95,7 @@ function RunAndCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeo
 
 procedure RegisterDragLintMenu;
 procedure UnregisterDragLintMenu;
+
 
 { Invoke* procedures are also called by the keyboard binding unit }
 procedure InvokeHover     (Sender: TObject);
@@ -185,7 +203,9 @@ uses
   , Winapi.Windows
   , Winapi.ShellAPI
   , DragLint.Plugin.Keyboard
-  , DragLint.Plugin.CallerFilter   { v(hover-callers scope): pure caller-selection policy }
+  , DragLint.Plugin.CallerFilter   { v(hover-callers scope): pure caret-selection policy }
+  , DragLint.Plugin.StatusLine     { SetEditorStatus -- the editor status-bar note }
+  , DragLint.Plugin.HoverSignature { v(property type): pure header-signature composer }
   , DRagLint.Core.GhostText        { v1.7 B3: the completion endpoint KAI calls }
   , DragLint.Plugin.DiagnosticCache
   , DragLint.Plugin.EditViewNotifier
@@ -1129,43 +1149,28 @@ end; // function
 
 function BuildHoverSignature(const AModel: TDragLintHoverModel): string;
 { v0.95 (Task 8): the `hover --json` payload carries the parts (qname, params,
-  return_type) but NOT a flat signature string, while the form's RenderModel /
-  EmitSignatureHeader render AModel.Signature. Reconstruct a one-line display
-  signature "qname(mod name: type; ...): rettype" from the parts so the header
-  is never blank. Procedures (empty ReturnType) omit the ": rettype" tail. }
+  return_type) and the form's RenderModel / EmitSignatureHeader render
+  AModel.Signature, so a one-line display signature is reconstructed from them.
+
+  v(property type, 2026-08-19): the COMPOSITION moved to
+  DragLint.Plugin.HoverSignature, which is pure and therefore testable from a
+  console harness -- this unit pulls in ToolsAPI and cannot be. That move is
+  what let the reported defect ("properties don't report type") be pinned by
+  run_hover_signature_guard.ps1 against both the new and old composers. This
+  function is now only the adapter between the VCL model record and that unit. }
 var
-  SB: TStringBuilder     ;
-  i : Integer            ;
-  P : TDragLintHoverParam;
+  Params: TDLSigParams;
+  i     : Integer     ;
 begin
-  SB:= TStringBuilder.Create;
-  try
-    { FB #3: lead with the friendly kind qualifier (function/local var/property/
-      ...) so the header reads e.g. "function Unit.Foo(...)". EmitSignatureHeader
-      colors the keyword automatically. Omitted when the CLI supplied no kind. }
-    if AModel.Kind <> '' then SB.Append(AModel.Kind).Append(' ');
-    SB.Append(AModel.QualifiedName);
-    if Length(AModel.Params) > 0 then
-    begin
-      SB.Append('(');
-      for i:= 0 to High(AModel.Params) do
-      begin
-        P:= AModel.Params[i];
-        if i > 0 then SB.Append('; ');
-        if P.Modifier <> '' then SB.Append(P.Modifier).Append(' ');
-        SB.Append(P.Name);
-        if P.TypeText <> '' then SB.Append(': ').Append(P.TypeText);
-      end;
-      SB.Append(')');
-    end;
-    if AModel.ReturnType <> '' then SB.Append(': ').Append(AModel.ReturnType);
-    { v(enum-value): show the ordinal like the IDE ("... ptObject = 128"). The
-      CLI puts the value in the raw signature for enum-value symbols. }
-    if (AModel.Kind = 'enum value') and (AModel.RawSignature <> '') then SB.Append(' = ').Append(AModel.RawSignature);
-    Result:= SB.ToString;
-  finally
-    SB.Free;
+  SetLength(Params, Length(AModel.Params));
+  for i:= 0 to High(AModel.Params) do
+  begin
+    Params[i].Modifier:= AModel.Params[i].Modifier;
+    Params[i].Name    := AModel.Params[i].Name    ;
+    Params[i].TypeText:= AModel.Params[i].TypeText;
   end;
+  Result:= ComposeHoverSignature(AModel.Kind, AModel.QualifiedName, Params,
+                                 AModel.ReturnType, AModel.RawSignature);
 end; // function
 
 /// <summary>Runs `"&lt;exe&gt;" hover --qname "&lt;qname&gt;" &lt;--db ...&gt; --format json`,
@@ -1185,21 +1190,113 @@ end; // function
 /// <remarks>Mirrors FetchHoverCallers' spawn+parse plumbing; guarded end to end
 /// so a hover can never surface an exception. Main thread only (spawns a child
 /// synchronously with a short timeout).</remarks>
+function ParseHoverModelJson(const AObj: TJSONObject; out AModel: TDragLintHoverModel): Boolean;
+/// <summary>Fills a hover model from the `hover --format json` object shape.</summary>
+/// <param name="AObj">A parsed hover-json object; may be nil.</param>
+/// <param name="AModel">Receives the model; zeroed when False is returned.</param>
+/// <returns>True when AObj was non-nil and read.</returns>
+/// <remarks>Extracted so the SPAWNED `hover --json` path and the LSP
+/// `draglint/hoverBundle` path cannot parse the same shape differently. The
+/// engine builds both from one assembly (DRagLint.Query.HoverModel); this is
+/// the matching single reader on the plugin side.</remarks>
+var
+  i       : Integer            ;
+  JParams : TJSONArray         ;
+  JReturns: TJSONArray         ;
+  JFacts  : TJSONArray         ;
+  PItem   : TJSONObject        ;
+  Param   : TDragLintHoverParam;
+  RetStr  : string             ;
+  JObj    : TJSONObject        ;
+begin
+  Result:= False;
+  AModel:= Default(TDragLintHoverModel);
+  if AObj = nil then Exit;
+  JObj:= AObj;
+  AModel.QualifiedName:= JObj.GetValue<string> ('qname'      , '');
+  AModel.Kind         := JObj.GetValue<string> ('kind'       , '');   // FB #3
+  AModel.RawSignature := JObj.GetValue<string> ('signature'  , '');   // enum-value ordinal etc.
+  AModel.UnitFile     := JObj.GetValue<string> ('unit'       , '');
+  AModel.DefLine      := JObj.GetValue<Integer>('def_line'   , 0 );
+  AModel.ReturnType   := JObj.GetValue<string> ('return_type', '');
+  AModel.ReturnsMore  := JObj.GetValue<Integer>('returns_more', 0);
+
+  { params: array of param objects (modifier, name, type). }
+  SetLength(AModel.Params, 0);
+  if JObj.TryGetValue<TJSONArray>('params', JParams) then
+  begin
+    SetLength(AModel.Params, JParams.Count);
+    for i:= 0 to JParams.Count - 1 do
+    begin
+      Param.Modifier:= '';
+      Param.Name    := '';
+      Param.TypeText:= '';
+      if JParams.Items[i] is TJSONObject then
+      begin
+        PItem:= JParams.Items[i] as TJSONObject;
+        Param.Modifier:= PItem.GetValue<string>('modifier', '');
+        Param.Name    := PItem.GetValue<string>('name'    , '');
+        Param.TypeText:= PItem.GetValue<string>('type'    , '');
+      end;
+      AModel.Params[i]:= Param;
+    end;
+  end;
+
+  { returns: array of expression strings. }
+  SetLength(AModel.Returns, 0);
+  if JObj.TryGetValue<TJSONArray>('returns', JReturns) then
+  begin
+    SetLength(AModel.Returns, JReturns.Count);
+    for i:= 0 to JReturns.Count - 1 do
+    begin
+      RetStr:= '';
+      if JReturns.Items[i] is TJSONString then RetStr:= (JReturns.Items[i] as TJSONString).Value
+      else RetStr:= JReturns.Items[i].Value;
+      AModel.Returns[i]:= RetStr;
+    end;
+  end;
+
+  { FB3: returns_lines -- parallel array of absolute source lines (0 = unknown),
+    so the popup can jump to each return value's line. Zipped by index with
+    Returns; entries beyond its length default to 0. }
+  SetLength(AModel.ReturnLines, Length(AModel.Returns));
+  var JReturnLines: TJSONArray;
+  if JObj.TryGetValue<TJSONArray>('returns_lines', JReturnLines) then
+    for i:= 0 to High(AModel.Returns) do
+      if i < JReturnLines.Count then
+        AModel.ReturnLines[i]:= StrToIntDef(JReturnLines.Items[i].Value, 0);
+
+  { v(hover facts fix): the Phase-2 analysis fact lines (Complexity / Reads /
+    Writes / SQL / Handles / Owns returned / Covered by) -- one string each,
+    rendered as a FACTS section by RenderModel. Absent/empty on symbols with no
+    facts (or an older exe whose json omits the key), which just hides the
+    section. }
+  SetLength(AModel.Facts, 0);
+  if JObj.TryGetValue<TJSONArray>('facts', JFacts) then
+  begin
+    SetLength(AModel.Facts, JFacts.Count);
+    for i:= 0 to JFacts.Count - 1 do
+    begin
+      if JFacts.Items[i] is TJSONString then AModel.Facts[i]:= (JFacts.Items[i] as TJSONString).Value
+      else AModel.Facts[i]:= JFacts.Items[i].Value;
+    end;
+  end;
+
+  { The json omits a flat signature; RenderModel/EmitSignatureHeader render
+    AModel.Signature, so build it from the parts (else the header is blank). }
+  AModel.Signature:= BuildHoverSignature(AModel);
+  Result:= True;
+end; // function
+
 function FetchHoverModel(const AExe, AQName: string; const ADbList: TArray<string>; out AModel: TDragLintHoverModel): Boolean;
 var
-  CmdLine : string           ;
-  Output  : string           ;
-  DbArgs  : string           ;
-  ExitCode: Integer          ;
-  i       : Integer          ;
-  JV      : TJSONValue       ;
-  JObj    : TJSONObject      ;
-  JParams : TJSONArray       ;
-  JReturns: TJSONArray       ;
-  JFacts  : TJSONArray       ;
-  PItem   : TJSONObject      ;
-  Param   : TDragLintHoverParam;
-  RetStr  : string           ;
+  CmdLine : string     ;
+  Output  : string     ;
+  DbArgs  : string     ;
+  ExitCode: Integer    ;
+  i       : Integer    ;
+  JV      : TJSONValue ;
+  JObj    : TJSONObject;
 begin
   Result:= False;
   { Zero the out-param so a False return leaves a clean, empty model. }
@@ -1237,82 +1334,212 @@ begin
   end;
 
   try
+    { Field-by-field reading lives in ParseHoverModelJson, shared with the LSP
+      bundle path -- two readers of one shape is a drift channel. }
     JObj:= JV as TJSONObject;
-    AModel.QualifiedName:= JObj.GetValue<string> ('qname'      , '');
-    AModel.Kind         := JObj.GetValue<string> ('kind'       , '');   // FB #3
-    AModel.RawSignature := JObj.GetValue<string> ('signature'  , '');   // enum-value ordinal etc.
-    AModel.UnitFile     := JObj.GetValue<string> ('unit'       , '');
-    AModel.DefLine      := JObj.GetValue<Integer>('def_line'   , 0 );
-    AModel.ReturnType   := JObj.GetValue<string> ('return_type', '');
-    AModel.ReturnsMore  := JObj.GetValue<Integer>('returns_more', 0);
-
-    { params: array of param objects (modifier, name, type). }
-    SetLength(AModel.Params, 0);
-    if JObj.TryGetValue<TJSONArray>('params', JParams) then
-    begin
-      SetLength(AModel.Params, JParams.Count);
-      for i:= 0 to JParams.Count - 1 do
-      begin
-        Param.Modifier:= '';
-        Param.Name    := '';
-        Param.TypeText:= '';
-        if JParams.Items[i] is TJSONObject then
-        begin
-          PItem:= JParams.Items[i] as TJSONObject;
-          Param.Modifier:= PItem.GetValue<string>('modifier', '');
-          Param.Name    := PItem.GetValue<string>('name'    , '');
-          Param.TypeText:= PItem.GetValue<string>('type'    , '');
-        end;
-        AModel.Params[i]:= Param;
-      end;
-    end;
-
-    { returns: array of expression strings. }
-    SetLength(AModel.Returns, 0);
-    if JObj.TryGetValue<TJSONArray>('returns', JReturns) then
-    begin
-      SetLength(AModel.Returns, JReturns.Count);
-      for i:= 0 to JReturns.Count - 1 do
-      begin
-        RetStr:= '';
-        if JReturns.Items[i] is TJSONString then RetStr:= (JReturns.Items[i] as TJSONString).Value
-        else RetStr:= JReturns.Items[i].Value;
-        AModel.Returns[i]:= RetStr;
-      end;
-    end;
-
-    { FB3: returns_lines -- parallel array of absolute source lines (0 = unknown),
-      so the popup can jump to each return value's line. Zipped by index with
-      Returns; entries beyond its length default to 0. }
-    SetLength(AModel.ReturnLines, Length(AModel.Returns));
-    var JReturnLines: TJSONArray;
-    if JObj.TryGetValue<TJSONArray>('returns_lines', JReturnLines) then
-      for i:= 0 to High(AModel.Returns) do
-        if i < JReturnLines.Count then
-          AModel.ReturnLines[i]:= StrToIntDef(JReturnLines.Items[i].Value, 0);
-
-    { v(hover facts fix): the Phase-2 analysis fact lines (Complexity / Reads /
-      Writes / SQL / Handles / Owns returned / Covered by) -- one string each,
-      rendered as a FACTS section by RenderModel. Absent/empty on symbols with no
-      facts (or an older exe whose json omits the key), which just hides the
-      section. }
-    SetLength(AModel.Facts, 0);
-    if JObj.TryGetValue<TJSONArray>('facts', JFacts) then
-    begin
-      SetLength(AModel.Facts, JFacts.Count);
-      for i:= 0 to JFacts.Count - 1 do
-      begin
-        if JFacts.Items[i] is TJSONString then AModel.Facts[i]:= (JFacts.Items[i] as TJSONString).Value
-        else AModel.Facts[i]:= JFacts.Items[i].Value;
-      end;
-    end;
-
-    { The json omits a flat signature; RenderModel/EmitSignatureHeader render
-      AModel.Signature, so build it from the parts (else the header is blank). }
-    AModel.Signature:= BuildHoverSignature(AModel);
+    if not ParseHoverModelJson(JObj, AModel) then Exit;
     Result:= True;
   finally
     JV.Free;
+  end; // try
+end; // function
+
+{ ---- the ONE-REQUEST hover path -------------------------------------------
+
+  WHY IT EXISTS. Composing a hover used to cost FOUR engine round trips: the
+  LSP `textDocument/hover`, then THREE synchronous drag-lint.exe spawns --
+  `hover --json`, `find-callers --context 1` and `find-callers --resolved`.
+  Measured in the live IDE on 2026-08-19: ~480 ms for the LSP hover, 470 ms and
+  780 ms for the two caller spawns, and the `hover --json` spawn on top of that,
+  which was the only one handed the UNFILTERED database list and therefore
+  cold-opened the ~1.4 GB library index every time a tooltip appeared.
+
+  The LSP child is started with exactly those databases and holds them open.
+  `draglint/hoverBundle` asks it for all of it at once.
+
+  FALLBACK. An engine older than the method answers JSON-RPC -32601 IMMEDIATELY
+  -- not silence, so there is no timeout to wait out. FBundleUnsupported latches
+  that for the session so the wasted round trip is paid once rather than once
+  per hover, and every caller falls back to the four-call path unchanged. }
+
+var
+  { Session latch: set when the running engine answered "method not found".
+    Deliberately NOT cleared on LSP restart -- a restart respawns the SAME exe. }
+  FBundleUnsupported: Boolean = False;
+
+/// <summary>Fetches hover markdown, the structured model and the CALLED FROM
+/// rows in ONE request to the already-running LSP server.</summary>
+/// <param name="AUri">Document uri of the hovered file.</param>
+/// <param name="ALine">0-based line, as the LSP counts them.</param>
+/// <param name="ACol">0-based character offset.</param>
+/// <param name="AMarkdown">Receives the raw hover markdown.</param>
+/// <param name="AQName">Receives the qualified name the SERVER resolved --
+/// authoritative, where the legacy path had to mine it out of the markdown.</param>
+/// <param name="AModel">Receives the structured model; empty for an intrinsic.</param>
+/// <param name="ACallers">Receives the rows the caller policy selected.</param>
+/// <returns>False when the bundle is unavailable for any reason, in which case
+/// the caller must use the legacy spawn path. Never raises.</returns>
+/// <remarks>Main thread, synchronous, short timeout. Row SELECTION stays in
+/// DragLint.Plugin.CallerFilter -- the server returns both row sets unfiltered
+/// and this applies the same pure, guarded policy the spawn path applies.</remarks>
+function FetchHoverBundle(const AUri: string; ALine, ACol: Integer;
+  out AMarkdown, AQName: string; out AModel: TDragLintHoverModel;
+  out ACallers: TArray<TDragLintCallerInfo>): Boolean;
+var
+  Client   : TDragLintLspClient;
+  Params   : TJSONObject       ;
+  Resp     : TJSONValue        ;
+  ResultVal: TJSONValue        ;
+  RObj     : TJSONObject       ;
+  ErrVal   : TJSONValue        ;
+  JArr     : TJSONArray        ;
+  i        : Integer           ;
+begin
+  Result:= False;
+  AMarkdown:= '';
+  AQName   := '';
+  AModel:= Default(TDragLintHoverModel);
+  SetLength(ACallers, 0);
+  if FBundleUnsupported then Exit;
+
+  try
+    Client:= EnsureLspClient;
+    if Client = nil then Exit;
+    { The position names a spot in the EDITOR's buffer, which diverges from disk
+      on the first keystroke -- sync before asking, exactly as hover does. }
+    SyncLiveBufferToLsp(AUri);
+    Params:= MakeTextDocumentPositionParams(AUri, ALine, ACol);
+    try
+      Resp:= Client.Request('draglint/hoverBundle', Params, 5000);
+    finally
+      Params.Free;
+    end;
+    if Resp = nil then Exit;
+
+    try
+      if not (Resp is TJSONObject) then Exit;
+
+      { -32601 from an older engine: latch, and never ask again this session. }
+      if (Resp as TJSONObject).TryGetValue<TJSONValue>('error', ErrVal) and (ErrVal <> nil) then
+      begin
+        FBundleUnsupported:= True;
+        DLT('hover', 'hoverBundle unsupported by this engine -- using spawns for the rest of the session');
+        Exit;
+      end;
+
+      if not (Resp as TJSONObject).TryGetValue<TJSONValue>('result', ResultVal) then Exit;
+      if not (ResultVal is TJSONObject) then Exit;
+      RObj:= ResultVal as TJSONObject;
+
+      AMarkdown:= RObj.GetValue<string>('markdown', '');
+      AQName   := RObj.GetValue<string>('qname'   , '');
+      if AMarkdown = '' then Exit;
+
+      { An intrinsic returns markdown with model:null -- a legitimate answer, not
+        a failure, so succeed with an empty model and let the caller show the
+        string popup. Verified against the server 2026-08-19: hovering
+        SetLength yields markdown, model null, both caller arrays empty.
+
+        Read via GetValue + an `is` test rather than TryGetValue<TJSONObject>:
+        whether the generic form returns False or RAISES on a JSON null is a
+        detail of the RTL's cast, and getting it wrong would send every
+        Length()/SetLength() hover down the exception path -- logging
+        "hoverBundle raised" and silently undoing the speedup on some of the
+        most-hovered symbols in any unit. An `is` test cannot be wrong. }
+      var MVal: TJSONValue:= RObj.GetValue('model');
+      if (MVal <> nil) and (MVal is TJSONObject) then
+        ParseHoverModelJson(MVal as TJSONObject, AModel);
+
+      { Both row sets, handed to the SAME pure policy the spawn path uses. }
+      var ResolvedRows: TDLCallerRows;
+      var NameRows    : TDLCallerRows;
+      SetLength(ResolvedRows, 0);
+      SetLength(NameRows    , 0);
+
+      if RObj.TryGetValue<TJSONArray>('resolvedCallers', JArr) then
+        for i:= 0 to JArr.Count - 1 do
+          if JArr.Items[i] is TJSONObject then
+          begin
+            var RO: TJSONObject:= JArr.Items[i] as TJSONObject;
+            var RRow: TDLCallerRow;
+            RRow.FilePath   := RO.GetValue<string> ('file'        , '');
+            RRow.Line       := RO.GetValue<Integer>('line'        , 0 );
+            RRow.CodeText   := '';
+            RRow.TargetQName:= RO.GetValue<string> ('target_qname', '');
+            if RRow.TargetQName <> '' then
+            begin
+              SetLength(ResolvedRows, Length(ResolvedRows) + 1);
+              ResolvedRows[High(ResolvedRows)]:= RRow;
+            end;
+          end;
+
+      if RObj.TryGetValue<TJSONArray>('nameCallers', JArr) then
+        for i:= 0 to JArr.Count - 1 do
+          if JArr.Items[i] is TJSONObject then
+          begin
+            var NObj: TJSONObject:= JArr.Items[i] as TJSONObject;
+            var NRow: TDLCallerRow;
+            NRow.FilePath   := NObj.GetValue<string> ('file', '');
+            NRow.Line       := NObj.GetValue<Integer>('line', 0 );
+            NRow.CodeText   := NObj.GetValue<string> ('code', '');
+            NRow.TargetQName:= '';
+            if NRow.FilePath <> '' then
+            begin
+              SetLength(NameRows, Length(NameRows) + 1);
+              NameRows[High(NameRows)]:= NRow;
+            end;
+          end;
+
+      { ClassQual: the class segment of the resolved qname -- what the policy
+        uses to drop same-named Creates belonging to other classes. }
+      var ClassQual: string:= AQName;
+      var DotP: Integer:= LastDelimiter('.', AQName);
+      if DotP > 1 then
+      begin
+        var Head: string:= Copy(AQName, 1, DotP - 1);
+        var Dot2: Integer:= LastDelimiter('.', Head);
+        if Dot2 > 0 then ClassQual:= Copy(AQName, Dot2 + 1, MaxInt);
+      end;
+
+      var Src   : TDLCallerSource;
+      var Picked: TDLCallerRows:= SelectCallers(ResolvedRows, NameRows, AQName, ClassQual, Src);
+      DLT('hover', Format('bundle qname="%s" resolved=%d name=%d -> %d (source=%d)',
+        [AQName, Length(ResolvedRows), Length(NameRows), Length(Picked), Ord(Src)]));
+
+      { De-duplicate by (file,line): a call site emits two refs (call + member). }
+      SetLength(ACallers, 0);
+      for i:= 0 to High(Picked) do
+      begin
+        var Info: TDragLintCallerInfo;
+        Info.FilePath:= Picked[i].FilePath;
+        Info.Line    := Picked[i].Line    ;
+        Info.CodeText:= Picked[i].CodeText;
+        var Dup: Boolean:= False;
+        for var k:= 0 to High(ACallers) do
+          if (ACallers[k].Line = Info.Line) and SameText(ACallers[k].FilePath, Info.FilePath) then
+          begin
+            Dup:= True;
+            Break;
+          end;
+        if not Dup then
+        begin
+          SetLength(ACallers, Length(ACallers) + 1);
+          ACallers[High(ACallers)]:= Info;
+        end;
+      end;
+
+      Result:= True;
+    finally
+      Resp.Free;
+    end; // try
+  except
+    { Fires from the dwell timer; an exception here would break the IDE. Report
+      failure so the legacy path still produces a popup. }
+    on E: Exception do
+    begin
+      DLT('hover', 'hoverBundle raised: ' + E.Message);
+      Result:= False;
+    end;
   end; // try
 end; // function
 
@@ -1376,6 +1603,44 @@ begin
   Client:= EnsureLspClient;
   if Client = nil then Exit;
 
+  { Tell the user we started BEFORE the request goes out -- that is the whole
+    point of the note; announcing after the answer arrives would be useless. }
+  SetEditorStatus('drag-lint: hover ' + IdentifierAtCursor);
+
+  { v(hover bundle): ONE request for everything the popup needs. The block below
+    -- a hover round trip plus three drag-lint.exe spawns -- is kept verbatim as
+    the fallback for an engine that predates the method. }
+  var BMd, BQName: string;
+  var BModel  : TDragLintHoverModel        ;
+  var BCallers: TArray<TDragLintCallerInfo>;
+  if FetchHoverBundle(Uri, Line, Col, BMd, BQName, BModel, BCallers) then
+  begin
+    CloseDragLintHover;
+    GetCursorPos(P);
+    { The clipboard copy is part of the contract: a popup too transient to
+      screenshot can still be pasted back into a bug report. }
+    try
+      Vcl.Clipbrd.Clipboard.AsText:= BMd;
+    except
+      { clipboard update failure -- silently ignore }
+    end;
+    SetEditorStatus('');   { the popup is the answer; the note has done its job }
+    if BModel.QualifiedName <> '' then
+    begin
+      DLT('hover', Format('bundle structured qname="%s" params=%d returns=%d callers=%d',
+        [BModel.QualifiedName, Length(BModel.Params), Length(BModel.Returns), Length(BCallers)]));
+      ShowDragLintHover(BModel, BCallers, P.X, P.Y + 20);
+    end
+    else
+    begin
+      { An intrinsic: markdown but no indexed symbol. Same string popup the
+        legacy path would show, built from the same markdown. }
+      DLT('hover', Format('bundle string-fallback qname="%s"', [BQName]));
+      ShowDragLintHover(ExtractHoverHeader(BMd), StripFirstHeaderLine(BMd), BCallers, P.X, P.Y + 20);
+    end;
+    Exit;
+  end;
+
   Params:= MakeTextDocumentPositionParams(Uri, Line, Col);
   try
     Resp:= Client.Request('textDocument/hover', Params, 5000);
@@ -1437,6 +1702,7 @@ begin
     DLT('hover', Format('sym="%s" dbs=%d callers=%d hdr="%s" bodyLen=%d', [SymName, Length(DbList), Length(Callers), Header, Length(HoverText)]));
 
     { v0.40.6: menu invocation is explicit -- replace any current popup. }
+    SetEditorStatus('');   { cleared on the fallback path too, or it strands }
     CloseDragLintHover;
     GetCursorPos(P);
 
@@ -2353,7 +2619,22 @@ begin
       that recompiled clean and reported nothing is not in ByFile and keeps its
       prior overlay until the DB-backed LSP path or the next sweep refreshes it. }
     if APushOverlay then
+    begin
+      { A build that reported ZERO errors proves no unit has a compile error --
+        the one fact the per-file loop below cannot deliver, because
+        SetCompilerFindings is only called for files that PRODUCED findings. A
+        file that was broken, then fixed, then recompiled clean is simply absent
+        from ByFile and would keep its stale error for the rest of the session.
+        Reported 2026-08-19: a mistyped uses entry left "Unit
+        'System.Actitimerons' not found. [F2613]" in the list long after the name
+        was corrected back to System.Actions.
+
+        Errors only. An incremental build says nothing about units it skipped as
+        up to date, so dropping their warnings would erase findings that nothing
+        has disproved -- which is what the per-file comment below protects. }
+      if nErr = 0 then Cache.DropCompilerErrors;
       for Pair in ByFile do Cache.SetCompilerFindings(Pair.Key, Pair.Value.ToArray);
+    end;
     Result:= True;
   finally
     for L in ByFile.Values do L.Free;
@@ -3846,6 +4127,8 @@ end;
   carries its own correct x64 tree-sitter DLLs. v0.86: delegates to the shared
   resolver (single Win64-first policy for every spawn site); kept as a distinct
   function name so callers don't churn. }
+
+
 function DLExe64: string;
 begin
   Result:= DragLintExe;

@@ -45,6 +45,25 @@ type
       /// <summary>Clears the entire compiler-findings overlay (every file). Call
       /// before pushing a fresh compile so resolved errors disappear. Thread-safe.</summary>
       procedure ClearAllCompilerFindings;
+      /// <summary>Drops every ERROR-severity compiler finding, for every file,
+      /// keeping warnings and hints.</summary>
+      /// <returns>How many findings were dropped.</returns>
+      /// <remarks>
+      /// <para>Called when a build completes reporting ZERO errors. That is
+      /// proof no unit has a compile error, which is exactly the fact the
+      /// overlay cannot otherwise learn: SetCompilerFindings is only called for
+      /// files that PRODUCED findings, so a file that was broken, then fixed,
+      /// then recompiled CLEAN is absent from the output and keeps its stale
+      /// error for the rest of the session.</para>
+      /// <para>Reported 2026-08-19: a mistyped unit name in a uses clause left
+      /// "Unit 'System.Actitimerons' not found. [F2613]" in the list after the
+      /// name had been corrected back to System.Actions.</para>
+      /// <para>Warnings and hints are deliberately KEPT. An incremental build
+      /// skips units that are up to date and says nothing about them, so
+      /// clearing those would erase real findings that nothing has disproved.
+      /// A zero-error build disproves errors and nothing else.</para>
+      /// </remarks>
+      function DropCompilerErrors: Integer;
       /// <summary>All diagnostics for AFilePath: live-lint findings UNION the
       /// compiler-findings overlay. Thread-safe.</summary>
       function GetForFile(const AFilePath: string): TArray<TDragLintDiagnostic>                ;
@@ -173,6 +192,37 @@ begin
   finally
     FLock.Leave;
   end;
+end;
+
+function TDragLintDiagnosticCache.DropCompilerErrors: Integer;
+var
+  Keys: TArray<string>;
+  Key : string        ;
+  Arr : TArray<TDragLintDiagnostic>;
+  Kept: TArray<TDragLintDiagnostic>;
+  D   : TDragLintDiagnostic        ;
+begin
+  Result:= 0;
+  FLock.Enter;
+  try
+    { Snapshot the keys: the loop reassigns and removes entries, and mutating a
+      TDictionary while enumerating it invalidates the enumerator. }
+    Keys:= FCompilerByFile.Keys.ToArray;
+    for Key in Keys do
+    begin
+      if not FCompilerByFile.TryGetValue(Key, Arr) then Continue;
+      SetLength(Kept, 0);
+      for D in Arr do
+        if D.Severity = dlsError then Inc(Result)
+        else Kept:= Kept + [D];
+      if Length(Kept) = Length(Arr) then Continue;   { nothing dropped for this file }
+      if Length(Kept) = 0 then FCompilerByFile.Remove(Key)
+      else FCompilerByFile.AddOrSetValue(Key, Kept);
+    end;
+  finally
+    FLock.Leave;
+  end;
+  if Result > 0 then DLT('cache', Format('DropCompilerErrors -> %d dropped (build reported 0 errors)', [Result]));
 end;
 
 function TDragLintDiagnosticCache.GetForFile( const AFilePath: string): TArray<TDragLintDiagnostic>;

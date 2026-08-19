@@ -45,6 +45,7 @@ uses
   , DragLint.Plugin.LspClient
   , DragLint.Plugin.EditViewNotifier
   , DragLint.Plugin.Editor
+  , DragLint.Plugin.StatusLine   { SetEditorStatus -- the 'thinking' note }
   ;
 
 function IdeIsForeground: Boolean;
@@ -99,6 +100,14 @@ type
       FHintShown         : Boolean;
       FLastLspKey        : string ; { v0.40.3: dedupes textDocument/hover firings per stable caret }
       FLastLspText       : string ; { v0.40.3: cached symbol info for the last stable caret }
+      { v(hover bundle): the model + callers that came back with FLastLspText in
+        the SAME request. Cached alongside it, keyed by FLastLspKey, so a dwell
+        that re-shows a cached caret does no engine work at all. FLastBundleOk
+        False means the bundle was unavailable and the legacy per-part path must
+        run -- it is NOT the same as "this symbol has no callers". }
+      FLastBundleOk      : Boolean;
+      FLastBundleModel   : TDragLintHoverModel        ;
+      FLastBundleCallers : TArray<TDragLintCallerInfo>;
       FLastShownKey      : string ; { v0.42: caret key we already popped; don't re-show it }
       FLastForegroundFail: Boolean; { v0.40.8b: log the bail-out only once per transition }
       procedure OnTick(Sender: TObject);
@@ -347,7 +356,24 @@ begin
     if LspKey <> FLastLspKey then
     begin
       Uri:= 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
-      FLastLspText:= QueryHoverText(Uri, CaretRow, CaretCol, 500);
+      { Announce BEFORE the request. Only this branch does engine work -- a
+        cached caret re-show is instant and needs no note. Asked for
+        2026-08-19 so a slow hover reads as THINKING rather than absent. }
+      SetEditorStatus('drag-lint: hover');
+      { v(hover bundle): ONE request for markdown + model + callers. This used to
+        be a hover round trip here and three drag-lint.exe spawns later on, all
+        on the main thread while a tooltip was trying to appear. On any miss --
+        an engine that predates the method, a timeout -- fall back to the old
+        markdown-only fetch and let the legacy path rebuild the rest. }
+      var BQName: string;
+      FLastBundleOk:= FetchHoverBundle(Uri, CaretRow, CaretCol,
+        FLastLspText, BQName, FLastBundleModel, FLastBundleCallers);
+      if not FLastBundleOk then
+      begin
+        FLastLspText:= QueryHoverText(Uri, CaretRow, CaretCol, 500);
+        FLastBundleModel:= Default(TDragLintHoverModel);
+        SetLength(FLastBundleCallers, 0);
+      end;
       FLastLspKey:= LspKey;
     end;
     LspText:= FLastLspText;
@@ -391,11 +417,20 @@ begin
     var ModelCallers: TArray<TDragLintCallerInfo>;
     SetLength(ModelCallers, 0);
     var GotModel: Boolean:= False;
-    if LspText <> '' then
+    if FLastBundleOk then
+    begin
+      { Already in hand from the one request above -- no spawn, no second
+        resolution of the same cursor. }
+      Model       := FLastBundleModel  ;
+      ModelCallers:= FLastBundleCallers;
+      GotModel    := Model.QualifiedName <> '';
+    end
+    else if LspText <> '' then
     begin
       GotModel:= TryBuildHoverModel(LspText, Model, ModelCallers);
     end;
 
+    SetEditorStatus('');   { the popup below IS the answer }
     if GotModel then
     begin
       { v(hover-both): carry the line's findings INTO the structured popup.

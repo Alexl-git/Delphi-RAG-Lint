@@ -141,6 +141,8 @@ uses
   , DRagLint.Convert   .DfmReemit
   , DRagLint.Convert   .Apply
   , DRagLint.Convert   .Backup
+  , DRagLint.Query     .Callers    { v(hover bundle): shared with the LSP -- find-callers renders from it }
+  , DRagLint.Query     .HoverModel { v(hover bundle): shared with the LSP -- hover --format json builds from it }
   ;
 
 type
@@ -3950,6 +3952,14 @@ begin
     // to -- this is what fixes the name-collision noise the plain path has.
     if AArgs.Resolved then
     begin
+      { v(hover bundle): the computation -- resolved call edges plus the
+        callback-reach rules -- MOVED to DRagLint.Query.Callers so the LSP's
+        `draglint/hoverBundle` answers from the same code instead of the IDE
+        having to spawn this exe. Only the RENDERING lives here now, and it is
+        unchanged: per-target headers in the text form, callbacks without one,
+        and a JSON key order of caller_qname,file,confidence,target_qname[,line]
+        with the line pair OMITTED when the enclosing symbol is unknown.
+        Pinned by run_query_callers_shared_guard.ps1. }
       var TotalCallers:= 0;
       var JOut: TJSONArray:= nil;
       if AArgs.AsJson then JOut:= TJSONArray.Create;
@@ -3959,108 +3969,35 @@ begin
           var RoOk: Boolean;
           Store:= OpenReadOnlyStore(DbPath, RoOk);
           if not RoOk then Continue; { stale DB reported; skip, scan the rest }
-          var Targets:= Store.FindSymbolsByExactName(AArgs.Name);
-          for var T in Targets do
+
+          for var Row in ResolvedCallersForName(Store, AArgs.Name) do
           begin
-            var RCallers:= Store.FindResolvedCallers(T.Id);
-            if Length(RCallers) = 0 then Continue;
-            if not AArgs.AsJson then Writeln(Format('  %s:', [T.QualifiedName]));
-            for var RC in RCallers do
+            if AArgs.AsJson then
             begin
-              if AArgs.AsJson then
-              begin
-                var JObj:= TJSONObject.Create;
-                JObj.AddPair('caller_qname', RC.EnclosingQName);
-                JObj.AddPair('file'        , RC.Location      );
-                JObj.AddPair('confidence'  , RC.Confidence    );
-                JObj.AddPair('target_qname', T.QualifiedName  );
-                // Location is file-name-only (idempotency design, Task 7); the
-                // line number is sourced from the caller SYMBOL's own start
-                // line (routine-granular, not the exact call-site line).
-                if RC.EnclosingSymbolId > 0 then
-                  JObj.AddPair('line', TJSONNumber.Create(Store.GetSymbolById(RC.EnclosingSymbolId).StartLine));
-                JOut.AddElement(JObj);
-              end
-              else Writeln(Format('    %s  (%s)  [%s]', [RC.EnclosingQName, RC.Location, RC.Confidence]));
-              Inc(TotalCallers);
-            end; // for RC
-          end; // for T
-
-          { CALLBACK REACHES (2026-08-16). A routine handed somewhere BY NAME --
-            `Register(Pred)`, `@Handler`, `OnFoo := Handler` -- is reached from
-            that site, but it is not CALLED there, so the indexer records a
-            refs.kind='read' row and no call_edges row. Without this, --resolved
-            answered 0 for a live predicate while the plain name path answered 1,
-            and since --resolved is documented as the PRECISE query the honest
-            reading of that 0 was "dead code". Measured on DataCopy:
-            TfrmZeissCopy.isValidZeissFileName is passed to TDirectory.GetFiles
-            at uMainZeissCopy.pas:3303 and had zero resolved callers.
-
-            call_edges is deliberately NOT widened to carry these. An edge there
-            means a call, with a call site and arguments; inventing one would
-            make callgraph, impact and call-path assert control flow that does
-            not exist at that line. So the reach is reported HERE, and marked
-            [callback] so it can never be mistaken for a call.
-
-            Only when the name denotes a ROUTINE: a `read` of a variable that
-            merely shares a class's or field's name is not a callback. This is
-            still name-keyed, so a local variable sharing a routine's name can
-            produce a spurious row -- the marker is what keeps that honest. }
-          var NameIsRoutine: Boolean:= False;
-          for var T in Targets do
-            if T.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then
+              var JObj:= TJSONObject.Create;
+              JObj.AddPair('caller_qname', Row.CallerQName);
+              JObj.AddPair('file'        , Row.FilePath   );
+              JObj.AddPair('confidence'  , Row.Confidence );
+              JObj.AddPair('target_qname', Row.TargetQName);
+              if Row.HasLine then JObj.AddPair('line', TJSONNumber.Create(Row.Line));
+              JOut.AddElement(JObj);
+            end
+            else if Row.Confidence = 'callback' then
+              { A callback reach is reported WITHOUT a target header and WITH its
+                call-site line -- it is a reach, not a call, and the shape is
+                what keeps the two from being confused. }
+              Writeln(Format('    %s  (%s:%d)  [callback]',
+                [Row.CallerQName, Row.FilePath, Row.Line]))
+            else
             begin
-              NameIsRoutine:= True;
-              Break;
+              { Header per TARGET, not per distinct name -- two OVERLOADS share
+                one qualified name and each gets its own header, exactly as the
+                inline version printed it. }
+              if Row.FirstOfTarget then Writeln(Format('  %s:', [Row.TargetQName]));
+              Writeln(Format('    %s  (%s)  [%s]', [Row.CallerQName, Row.FilePath, Row.Confidence]));
             end;
-          if NameIsRoutine then
-          begin
-            { A CALL AT THE SAME SITE means the `read` is part of an ordinary
-              invocation, not a callback pass. `Self.Run` emits THREE refs at
-              one line -- 'call' (receiver Self), 'member-access' (receiver
-              Self), and a 'read' whose receiver is NULL -- so neither the kind
-              nor the receiver alone can tell it from `Register(Pred)`. The
-              position can: a genuine callback has no call of the SAME NAME at
-              its own line, because the call there is to the routine being
-              handed the reference.
-
-              Caught by run_find_callers_resolved.ps1, which asserts every row
-              is certain|ambiguous; a first attempt filtered on receiver_text
-              and let Self.Run through, because that ref's receiver is NULL. }
-            var CallSites: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
-            try
-              var CbAllRefs:= Store.FindCallersByName(AArgs.Name);
-              for var PosRef in CbAllRefs do
-                if (PosRef.Kind = 'call') or (PosRef.Kind = 'member-access') then
-                  CallSites.AddOrSetValue(Format('%d:%d', [PosRef.FileId, PosRef.StartLine]), True);
-            for var CbRef in CbAllRefs do
-            begin
-              if CbRef.Kind <> 'read' then Continue;
-              if CallSites.ContainsKey(Format('%d:%d', [CbRef.FileId, CbRef.StartLine])) then Continue;
-              var CbWhere: string:= Store.GetFilePath(CbRef.FileId);
-              var CbWho  : string:= '';
-              if CbRef.EnclosingSymbolId > 0 then
-                CbWho:= Store.GetSymbolById(CbRef.EnclosingSymbolId).QualifiedName;
-              if CbWho = '' then CbWho:= '(unit level)';
-              if AArgs.AsJson then
-              begin
-                var JCb: TJSONObject:= TJSONObject.Create;
-                JCb.AddPair('caller_qname', CbWho);
-                JCb.AddPair('file'        , ExtractFileName(CbWhere));
-                JCb.AddPair('confidence'  , 'callback');
-                JCb.AddPair('target_qname', AArgs.Name);
-                JCb.AddPair('line', TJSONNumber.Create(CbRef.StartLine));
-                JOut.AddElement(JCb);
-              end
-              else
-                Writeln(Format('    %s  (%s:%d)  [callback]',
-                  [CbWho, ExtractFileName(CbWhere), CbRef.StartLine]));
-              Inc(TotalCallers);
-            end; // for CbRef
-            finally
-              CallSites.Free;
-            end; // try
-          end; // if NameIsRoutine
+            Inc(TotalCallers);
+          end; // for Row
         end; // for DbPath
         if AArgs.AsJson then Writeln(JOut.Format(2))
         else if TotalCallers = 0 then Writeln('0 caller(s)');
@@ -5479,49 +5416,17 @@ begin
     qualified name + an IDE-style Parameters block parsed from the signature,
     which is exactly what the LSP hover does. }
 
-  // v0.95: mine Result:= / Exit() RHS from the routine body span (if any).
-  var Rhs: TArray<string>;
-  SetLength(Rhs, 0);
-  var RhsLines: TArray<Integer>;   // FB3: absolute 1-based source line of each mined return (for click-to-navigate)
-  SetLength(RhsLines, 0);
-  if (Syms[0].ImplStartLine > 0) and (Syms[0].ImplEndLine >= Syms[0].ImplStartLine) then
-  begin
-    var Path: string:= Store.GetFilePath(Syms[0].FileId);
-    if (Path <> '') and TFile.Exists(Path) then
-    begin
-      var AllLines: TArray<string>:= TFile.ReadAllLines(Path, TEncoding.ANSI);
-      var Lo: Integer:= Syms[0].ImplStartLine - 1; // 1-based -> 0-based
-      var Hi: Integer:= Syms[0].ImplEndLine   - 1;
-      if Lo < 0 then Lo:= 0;
-      if Hi > High(AllLines) then Hi:= High(AllLines);
-      var Body: TArray<string>;
-      if Hi < Lo then
-        SetLength(Body, 0)   // stale/invalid span -> no returns, no crash
-      else
-      begin
-        SetLength(Body, Hi - Lo + 1);
-        for var k:= Lo to Hi do Body[k - Lo]:= AllLines[k];
-      end;
-      { FB3: mine WITH first-seen line offsets so the popup can jump to each
-        return's source line. Body[0] is source line ImplStartLine, so the
-        absolute 1-based line is ImplStartLine + offset. Rhs (strings) is still
-        used by the markdown path below. }
-      var Mined: TArray<TReturnMined>:= MineReturnExpressionsEx(Body, Syms[0].QualifiedName);
-      SetLength(Rhs, Length(Mined));
-      SetLength(RhsLines, Length(Mined));
-      for var mi:= 0 to High(Mined) do
-      begin
-        Rhs[mi]     := Mined[mi].Expr;
-        RhsLines[mi]:= Syms[0].ImplStartLine + Mined[mi].LineOffset;
-      end;
-    end;
-  end;
-
-  var UnitFile: string:= ExtractFileName(Store.GetFilePath(Syms[0].FileId));
-  var Model: THoverModel:= BuildHoverModel(Syms[0], Doc, UnitFile, Rhs, RhsLines);
-
+  { v(hover bundle): the assembly -- mine the Result:=/Exit() returns with their
+    source lines, resolve the unit file, build the model, attach the Phase-2
+    facts -- MOVED to DRagLint.Query.HoverModel so the LSP's `draglint/hoverBundle`
+    answers from the same code. It used to live here, which is why the IDE had
+    to SPAWN this exe to get a model at all. }
   Fmt:= LowerCase(AArgs.Format);
   if Fmt = '' then Fmt:= 'plain';
+
+  var Asm_ : THoverAssembly:= AssembleHover(Store, Syms[0], (Fmt = 'json') or (Fmt = 'md'));
+  var Rhs  : TArray<string>:= Asm_.ReturnRhs;
+  var Model: THoverModel   := Asm_.Model    ;
 
   // v(ADP2 T9 + hover facts fix): thread the SAME Phase-2 analysis facts
   // `document` renders into BOTH the hover markdown AND the structured json --
@@ -5535,10 +5440,8 @@ begin
   // only for the two formats that render facts (plain skips the covered-by BFS).
   if (Fmt = 'json') or (Fmt = 'md') then
   begin
-    var Facts: TDocFacts:= TDocFactsBuilder.Build(Store, Syms[0]);
-    var FactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(Facts, LoadDocComplexityMin);
-    if Fmt = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model, FactLines))
-    else Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, FactLines));
+    if Fmt = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model, Asm_.FactLines))
+    else Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, Asm_.FactLines));
   end
   else Write(RenderHoverPlain(Syms[0], Doc));
   Result:= 0;

@@ -25,9 +25,42 @@ uses
   , DRagLint.Doc     .Facts     { v(ADP2 T9): TDocFactsBuilder.Build -- hover's Phase-2 facts }
   , DRagLint.Doc     .Regions   { v(ADP2 T9): TDocRegions.FormatPhase2FactLines -- the shared formatter }
   , DRagLint.Index   .Manifest  { v(ADP2 T9): LoadDocComplexityMin -- same threshold `document` uses }
+  , DRagLint.Query   .Callers   { v(hover bundle): the shared caller queries the CLI also renders from }
+  , DRagLint.Query   .HoverModel{ v(hover bundle): the shared model assembly `hover --format json` uses }
   ;
 
 type
+  /// <summary>Everything resolving a hover position produces, so that
+  /// `textDocument/hover` and `draglint/hoverBundle` answer from ONE
+  /// resolution instead of two that can disagree.</summary>
+  /// <remarks>
+  /// <para>MdValue is always set when the computation succeeded. The remaining
+  /// fields are meaningful only WHILE HasSymbol is True: a compiler intrinsic
+  /// renders real markdown but has no indexed symbol behind it, and a bundle
+  /// built from Sel in that state would describe symbol id 0.</para>
+  /// <para>Store is the store the symbol was found in -- not necessarily
+  /// FStores[0], because the type-at resolver may cross into a library index
+  /// for an inherited or generic member. Caller queries must run against THIS
+  /// store, or they answer about a different symbol that shares the name.</para>
+  /// </remarks>
+  THoverComputation = record
+    MdValue  : string      ;
+    HasSymbol: Boolean     ;
+    Sel      : TSymbol     ;
+    Store    : ISymbolStore;
+    /// <summary>Set when the cursor was on a compiler intrinsic. There is no
+    /// indexed symbol behind one, so HasSymbol stays False -- but the name and
+    /// signature ARE known, and a client that got only markdown had nothing to
+    /// render but plain text.</summary>
+    /// <remarks>Reported from the live IDE 2026-08-19: hovering Length showed
+    /// uncoloured text while every other symbol showed a coloured signature,
+    /// because the popup's structured renderer needs a MODEL and intrinsics
+    /// were the one case that never produced one.</remarks>
+    IsIntrinsic  : Boolean;
+    IntrinsicName: string ;
+    IntrinsicSig : string ;
+  end;
+
   // Language Server Protocol over stdio with Content-Length framing.
   // Implements the subset that's actually useful when backed by a static
   // symbol index: initialize, shutdown, workspace/symbol,
@@ -49,6 +82,14 @@ type
     strict private
       FStore       : ISymbolStore        ; { v0.40.3: FStores[0]; kept for legacy single-store callers }
       FStores      : TArray<ISymbolStore>; { v0.40.3: every --db opened, queried + merged across all }
+      /// <summary>The path each FStores entry was opened from, same order and
+      /// length.</summary>
+      /// <remarks>Kept only so caller queries can tell a platform LIBRARY index
+      /// from a project one -- scanning the library by name is what made
+      /// find-callers take ~20 s, and callers of project code are not in it.
+      /// ISymbolStore does not expose its own path, and widening that interface
+      /// for one caller-scoping rule would be the larger change.</remarks>
+      FStorePaths  : TArray<string>      ;
       FStdIn       : THandleStream       ;
       FLinter      : TLinter             ;
       FInitialized : Boolean             ;
@@ -250,6 +291,28 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleHover          (const AId: TJSONValue; const AParams: TJSONObject);
+      /// <summary>Resolves a hover position to markdown plus the indexed symbol
+      /// behind it, without writing a reply.</summary>
+      /// <param name="AParams">The request's params; a textDocument/position pair.</param>
+      /// <param name="AOut">Receives the computation; only valid when True is
+      /// returned. See THoverComputation for which fields HasSymbol gates.</param>
+      /// <returns>True when the position produced hover content. False for every
+      /// case that historically answered a null result -- no stores, malformed
+      /// params, no identifier under the cursor, or no symbol matching it.</returns>
+      /// <remarks>Extracted verbatim from HandleHover so the bundle cannot
+      /// resolve a different symbol than the plain hover does for the same
+      /// position. Every former `result: null` exit became `Exit(False)`; no
+      /// resolution rule changed.</remarks>
+      function  ComputeHover         (const AParams: TJSONObject; out AOut: THoverComputation): Boolean;
+      /// <summary>Answers `draglint/hoverBundle`: hover markdown, the structured
+      /// hover model, and both caller row sets, in ONE reply.</summary>
+      /// <param name="AId">The request id; the reply is addressed to it.</param>
+      /// <param name="AParams">A textDocument/position pair, as for hover.</param>
+      /// <remarks>Exists because the IDE popup previously cost four engine round
+      /// trips -- this request plus three drag-lint.exe spawns that re-opened,
+      /// from cold, the very indexes this server already holds open. Opens no
+      /// database of its own.</remarks>
+      procedure HandleHoverBundle    (const AId: TJSONValue; const AParams: TJSONObject);
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
@@ -497,7 +560,8 @@ begin
   inherited Create;
   FStdIn:= THandleStream.Create(GetStdHandle(STD_INPUT_HANDLE));
   FLinter:= nil;
-  SetLength(FStores, 0);
+  SetLength(FStores    , 0);
+  SetLength(FStorePaths, 0);
   for I:= 0 to High(ADbPaths) do
   begin
     Path:= ADbPaths[I];
@@ -515,6 +579,10 @@ begin
       S.Migrate;
       SetLength(FStores, Length(FStores) + 1);
       FStores[High(FStores)]:= S;
+      { Kept in lockstep with FStores -- appended only on the success path, so
+        a db that failed to open never shifts the two out of alignment. }
+      SetLength(FStorePaths, Length(FStores));
+      FStorePaths[High(FStorePaths)]:= Path;
     except
       on E: Exception do Writeln(ErrOutput, 'drag-lint LSP: could not open ', Path, ': ', E.Message);
     end;
@@ -1259,11 +1327,8 @@ begin
   else if Pos('protected', Vis) > 0 then Result:= 'protected ' + Result;
 end;
 
-procedure TLSPServer.HandleHover(const AId: TJSONValue; const AParams: TJSONObject);
+function TLSPServer.ComputeHover(const AParams: TJSONObject; out AOut: THoverComputation): Boolean;
 var
-  Reply   : TJSONObject    ;
-  HoverObj: TJSONObject    ;
-  Contents: TJSONObject    ;
   TextDoc : TJSONObject    ;
   Position: TJSONObject    ;
   Uri     : string         ;
@@ -1279,306 +1344,526 @@ var
   OwnerFloorType: TSymbol  ;   // when set, the resolver found the LHS type but not the member -> render an honest inherited-member note
   HaveOwnerFloor: Boolean  ;
 begin
+  Result:= False;
+  AOut  := Default(THoverComputation);
+  { Zeroed together: OwnerFloorType is only ever READ under HaveOwnerFloor, but
+    nothing in the type system says so, and an uninitialised TSymbol read on a
+    path someone adds later would carry a garbage Id straight into a store
+    lookup. Cheap to make that impossible. }
   HaveOwnerFloor:= False;
-  Reply:= TJSONObject.Create;
-  try
-    Reply.AddPair('jsonrpc', '2.0');
-    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
-    if (Length(FStores) = 0) or (AParams = nil) then
+  OwnerFloorType:= Default(TSymbol);
+  if (Length(FStores) = 0) or (AParams = nil) then
+  begin
+    Exit;
+  end;
+  TextDoc := AParams.GetValue('textDocument') as TJSONObject;
+  Position:= AParams.GetValue('position'    ) as TJSONObject;
+  if (TextDoc = nil) or (Position = nil) then
+  begin
+    Exit;
+  end;
+  Uri:= TextDoc.GetValue('uri').Value;
+  Path:= FileFromUri(Uri);
+  Line:= StrToIntDef(Position.GetValue('line'     ).Value, 0);
+  Col := StrToIntDef(Position.GetValue('character').Value, 0);
+  Ident:= IdentifierAtPosition(Path, Line, Col);
+  if Ident = '' then
+  begin
+    Exit;
+  end;
+  { v0.46: a compiler intrinsic has no real indexed symbol -- show it as a
+    built-in with its System-unit signature (like the IDE) instead of falling
+    through to a wrong library match. The "- `System.X` - line 1" row keeps the
+    clickable shape the popup parses (opens System.pas if on the source path). }
+  if IsCompilerIntrinsic(Ident) then
+  begin
+    MdValue:= Format(
+      '**%s** `intrinsic`'#10#10 + '- `System.%s` - line 1'#10 + '    %s'#10#10 + '_Delphi compiler built-in (System unit)._', [Ident, Ident, IntrinsicSignature(Ident)]);
+    { Real markdown, but NO indexed symbol behind it -- HasSymbol stays False
+      so a bundle built from this never describes symbol id 0. The name and
+      signature are carried separately so a client can still render a structured
+      view; see THoverComputation.IsIntrinsic. }
+    AOut.MdValue     := MdValue;
+    AOut.IsIntrinsic := True   ;
+    AOut.IntrinsicName:= Ident ;
+    AOut.IntrinsicSig := IntrinsicSignature(Ident);
+    Exit(True);
+  end;
+  { v0.40.3: hover returns the FIRST hit across stores in declared order
+    (project DB before library DB, per CLI arg ordering). For multi-hit
+    cases the user can use Find Usages to see all stores' results. }
+  Symbols:= nil;
+  var HitStore: ISymbolStore:= nil;
+  for var StIdx:= 0 to High(FStores) do
+  begin
+    Symbols:= FStores[StIdx].FindSymbolsByExactName(Ident);
+    if Length(Symbols) > 0 then
     begin
-      Reply.AddPair('result', TJSONNull.Create);
-      SendMessage(Reply);
-      Exit;
+      HitStore:= FStores[StIdx];
+      Break;
     end;
-    TextDoc := AParams.GetValue('textDocument') as TJSONObject;
-    Position:= AParams.GetValue('position'    ) as TJSONObject;
-    if (TextDoc = nil) or (Position = nil) then
-    begin
-      Reply.AddPair('result', TJSONNull.Create);
-      SendMessage(Reply);
-      Exit;
-    end;
-    Uri:= TextDoc.GetValue('uri').Value;
-    Path:= FileFromUri(Uri);
-    Line:= StrToIntDef(Position.GetValue('line'     ).Value, 0);
-    Col := StrToIntDef(Position.GetValue('character').Value, 0);
-    Ident:= IdentifierAtPosition(Path, Line, Col);
-    if Ident = '' then
-    begin
-      Reply.AddPair('result', TJSONNull.Create);
-      SendMessage(Reply);
-      Exit;
-    end;
-    { v0.46: a compiler intrinsic has no real indexed symbol -- show it as a
-      built-in with its System-unit signature (like the IDE) instead of falling
-      through to a wrong library match. The "- `System.X` - line 1" row keeps the
-      clickable shape the popup parses (opens System.pas if on the source path). }
-    if IsCompilerIntrinsic(Ident) then
-    begin
-      MdValue:= Format(
-        '**%s** `intrinsic`'#10#10 + '- `System.%s` - line 1'#10 + '    %s'#10#10 + '_Delphi compiler built-in (System unit)._', [Ident, Ident, IntrinsicSignature(Ident)]);
-      HoverObj:= TJSONObject.Create;
-      Contents:= TJSONObject.Create;
-      Contents.AddPair('kind'    , 'markdown');
-      Contents.AddPair('value'   , MdValue   );
-      HoverObj.AddPair('contents', Contents  );
-      Reply   .AddPair('result'  , HoverObj  );
-      SendMessage(Reply);
-      Exit;
-    end;
-    { v0.40.3: hover returns the FIRST hit across stores in declared order
-      (project DB before library DB, per CLI arg ordering). For multi-hit
-      cases the user can use Find Usages to see all stores' results. }
-    Symbols:= nil;
-    var HitStore: ISymbolStore:= nil;
-    for var StIdx:= 0 to High(FStores) do
-    begin
-      Symbols:= FStores[StIdx].FindSymbolsByExactName(Ident);
-      if Length(Symbols) > 0 then
+  end;
+  if (Length(Symbols) = 0) or (HitStore = nil) then
+  begin
+    Exit;
+  end;
+  // Overload disambiguation: FindSymbolsByExactName returns ALL same-named
+  // symbols; pick the one whose declaration line or implementation span (in
+  // THIS file) contains the cursor, so hovering the 2nd overload shows the 2nd
+  // -- not always [0].
+  var Chosen: Integer:= 0;
+  var FoundDeclImpl: Boolean:= False;
+  if Length(Symbols) > 1 then
+  begin
+    var CurLine1: Integer:= Line + 1;
+    for var si:= 0 to High(Symbols) do
+      if SameText(HitStore.GetFilePath(Symbols[si].FileId), Path)
+        and ((Symbols[si].StartLine = CurLine1)
+             or ((Symbols[si].ImplStartLine > 0) and (CurLine1 >= Symbols[si].ImplStartLine) and (CurLine1 <= Symbols[si].ImplEndLine))) then
       begin
-        HitStore:= FStores[StIdx];
-        Break;
+        Chosen:= si; FoundDeclImpl:= True; Break;
       end;
-    end;
-    if (Length(Symbols) = 0) or (HitStore = nil) then
-    begin
-      Reply.AddPair('result', TJSONNull.Create);
-      SendMessage(Reply);
-      Exit;
-    end;
-    // Overload disambiguation: FindSymbolsByExactName returns ALL same-named
-    // symbols; pick the one whose declaration line or implementation span (in
-    // THIS file) contains the cursor, so hovering the 2nd overload shows the 2nd
-    // -- not always [0].
-    var Chosen: Integer:= 0;
-    var FoundDeclImpl: Boolean:= False;
-    if Length(Symbols) > 1 then
-    begin
-      var CurLine1: Integer:= Line + 1;
-      for var si:= 0 to High(Symbols) do
-        if SameText(HitStore.GetFilePath(Symbols[si].FileId), Path)
-          and ((Symbols[si].StartLine = CurLine1)
-               or ((Symbols[si].ImplStartLine > 0) and (CurLine1 >= Symbols[si].ImplStartLine) and (CurLine1 <= Symbols[si].ImplEndLine))) then
-        begin
-          Chosen:= si; FoundDeclImpl:= True; Break;
-        end;
-    end;
-    var Sel: TSymbol:= Symbols[Chosen];
+  end;
+  var Sel: TSymbol:= Symbols[Chosen];
 
-    { v(hover call-site fix): the loop above only matches when the cursor sits ON a
-      candidate's own DECLARATION or IMPLEMENTATION. At a CALL SITE like
-      `TGroup.Create(...)` nothing matches, so Sel stayed Symbols[0] = an ARBITRARY
-      same-named symbol -- and because FindSymbolsByExactName stops at the FIRST
-      store holding the name, that can be a library hit that merely sorts first
-      alphabetically (e.g. Abccompf.*.Create). Resolve the symbol ACTUALLY
-      referenced at the cursor: anchor to the store that OWNS the hovered file, and
-      follow the qualifier (`TGroup.` -> the Create member of TGroup) via
-      TTypeAtResolver. Only override when it lands on the SAME identifier we hovered
-      (not the owner-type fallback it returns for inherited members), so
-      `TGroup.Create` shows TGroup.Create instead of some unrelated Create. Refresh
-      HitStore/Symbols to the home store so the no-doc branch below stays consistent. }
-    { The multi-store resolver anchors to the store owning the hovered file
-      internally and resolves cross-DB (a generic/inherited member can live in a
-      library index). The guard is only `not FoundDeclImpl` -- even a SINGLE
-      same-named symbol may be the wrong one (an unrelated project `Count` vs the
-      real TList<T>.Count), so let the resolver override whenever the cursor is not
-      on a decl/impl. Override only when it lands on the SAME identifier hovered;
-      on the owner-type floor (member not found on the type or any base) render an
-      honest note instead of the arbitrary Symbols[0]. }
-    if not FoundDeclImpl then
+  { v(hover call-site fix): the loop above only matches when the cursor sits ON a
+    candidate's own DECLARATION or IMPLEMENTATION. At a CALL SITE like
+    `TGroup.Create(...)` nothing matches, so Sel stayed Symbols[0] = an ARBITRARY
+    same-named symbol -- and because FindSymbolsByExactName stops at the FIRST
+    store holding the name, that can be a library hit that merely sorts first
+    alphabetically (e.g. Abccompf.*.Create). Resolve the symbol ACTUALLY
+    referenced at the cursor: anchor to the store that OWNS the hovered file, and
+    follow the qualifier (`TGroup.` -> the Create member of TGroup) via
+    TTypeAtResolver. Only override when it lands on the SAME identifier we hovered
+    (not the owner-type fallback it returns for inherited members), so
+    `TGroup.Create` shows TGroup.Create instead of some unrelated Create. Refresh
+    HitStore/Symbols to the home store so the no-doc branch below stays consistent. }
+  { The multi-store resolver anchors to the store owning the hovered file
+    internally and resolves cross-DB (a generic/inherited member can live in a
+    library index). The guard is only `not FoundDeclImpl` -- even a SINGLE
+    same-named symbol may be the wrong one (an unrelated project `Count` vs the
+    real TList<T>.Count), so let the resolver override whenever the cursor is not
+    on a decl/impl. Override only when it lands on the SAME identifier hovered;
+    on the owner-type floor (member not found on the type or any base) render an
+    honest note instead of the arbitrary Symbols[0]. }
+  if not FoundDeclImpl then
+  begin
+    var TAR:= TTypeAtResolver.Resolve(FStores, Path, Line + 1, Col + 1);
+    if TAR.HasResolved and (TAR.Resolved.Id > 0) and SameText(TAR.Resolved.Name, Ident) then
     begin
-      var TAR:= TTypeAtResolver.Resolve(FStores, Path, Line + 1, Col + 1);
-      if TAR.HasResolved and (TAR.Resolved.Id > 0) and SameText(TAR.Resolved.Name, Ident) then
+      Sel:= TAR.Resolved;
+      if (TAR.ResolvedStoreIndex >= 0) and (TAR.ResolvedStoreIndex <= High(FStores)) then
       begin
-        Sel:= TAR.Resolved;
-        if (TAR.ResolvedStoreIndex >= 0) and (TAR.ResolvedStoreIndex <= High(FStores)) then
-        begin
-          HitStore:= FStores[TAR.ResolvedStoreIndex];
-          Symbols := HitStore.FindSymbolsByExactName(Ident);
-        end;
-      end
-      else if TAR.HasResolved and TAR.OwnerTypeFallback and (TAR.Resolved.Id > 0) then
-      begin
-        OwnerFloorType:= TAR.Resolved;
-        HaveOwnerFloor:= True;
+        HitStore:= FStores[TAR.ResolvedStoreIndex];
+        Symbols := HitStore.FindSymbolsByExactName(Ident);
       end;
-    end;
-
-    // Live-mine the CHOSEN overload's Result:=/Exit() return cases for the popup,
-    // so the hover shows the actual returned values (unifies the popup with the
-    // managed doc's 'Returns:' fact line). Empty for a procedure / no body.
-    var HovRhs: TArray<string>;
-    SetLength(HovRhs, 0);
-    if (Sel.ImplStartLine > 0) and (Sel.ImplEndLine >= Sel.ImplStartLine) then
-    begin
-      var HovPath: string:= HitStore.GetFilePath(Sel.FileId);
-      if (HovPath <> '') and TLiveDocuments.Readable(HovPath) then
-      begin
-        var HovAll: TArray<string>:= TLiveDocuments.ReadLines(HovPath);
-        var HLo: Integer:= Sel.ImplStartLine - 1;
-        var HHi: Integer:= Sel.ImplEndLine - 1;
-        if HLo < 0 then HLo:= 0;
-        if HHi > High(HovAll) then HHi:= High(HovAll);
-        if HHi >= HLo then
-        begin
-          var HBody: TArray<string>;
-          SetLength(HBody, HHi - HLo + 1);
-          for var hk:= HLo to HHi do HBody[hk - HLo]:= HovAll[hk];
-          HovRhs:= MineReturnExpressions(HBody, Sel.QualifiedName);
-        end;
-      end;
-    end;
-
-    // Honest owner-type floor: the resolver found the LHS type but the member is
-    // not on it or any base (incl. cross-DB generic bases). Show "Type.Member --
-    // inherited member; owner type QName" rather than the arbitrary Symbols[0].
-    if HaveOwnerFloor then
-      MdValue:= Format('**%s.%s**'#10#10 + '_inherited member; owner type_ `%s`', [OwnerFloorType.Name, Ident, OwnerFloorType.QualifiedName])
-    else
-    begin
-    // v0.16: try to enrich the hover with doc-comment content.
-    // GetSymbolDoc returns a zeroed TParsedDoc with HasContent=False when
-    // no row exists; in that case fall back to the legacy signature listing.
-    Doc:= HitStore.GetSymbolDoc(Sel.Id);
-    if Doc.HasContent then
-    begin
-      // v(ADP2 T9): thread the SAME Phase-2 analysis facts `document` and
-      // the CLI's `hover` render into the IDE's hover popup -- via
-      // TDocFactsBuilder.Build (the identical facts assembly `document`
-      // uses) and TDocRegions.FormatPhase2FactLines (the SHARED formatter
-      // every surface calls), so this popup can never show different facts
-      // than the managed doc block for the same symbol (the doc/hover
-      // consistency lock). LoadDocComplexityMin loads the SAME
-      // docs.complexity_min threshold `document` uses. AIncludeSeeAlso/
-      // AIncludeSince stay False (no --seealso/--since opt-in here),
-      // mirroring a default `document` run.
-      var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel);
-      var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
-      MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines);
     end
-    else
+    else if TAR.HasResolved and TAR.OwnerTypeFallback and (TAR.Resolved.Id > 0) then
     begin
-      Sb:= TStringBuilder.Create;
-      try
-        { v0.40.8f: try to resolve the actual type at cursor first. If we
-          can, narrow the candidate list to symbols on THAT type (else a
-          common member like DataBinding lists every class that has one). }
-        var TAResult:= TTypeAtResolver.Resolve( FStores, Path, Line + 1, Col + 1);
+      OwnerFloorType:= TAR.Resolved;
+      HaveOwnerFloor:= True;
+    end;
+  end;
 
-        var Filtered: TArray<TSymbol>;
-        SetLength(Filtered, 0);
-        var ResolvedQName: string:= '';
-        if TAResult.HasResolved then ResolvedQName:= TAResult.Resolved.QualifiedName;
+  // Live-mine the CHOSEN overload's Result:=/Exit() return cases for the popup,
+  // so the hover shows the actual returned values (unifies the popup with the
+  // managed doc's 'Returns:' fact line). Empty for a procedure / no body.
+  var HovRhs: TArray<string>;
+  SetLength(HovRhs, 0);
+  if (Sel.ImplStartLine > 0) and (Sel.ImplEndLine >= Sel.ImplStartLine) then
+  begin
+    var HovPath: string:= HitStore.GetFilePath(Sel.FileId);
+    if (HovPath <> '') and TLiveDocuments.Readable(HovPath) then
+    begin
+      var HovAll: TArray<string>:= TLiveDocuments.ReadLines(HovPath);
+      var HLo: Integer:= Sel.ImplStartLine - 1;
+      var HHi: Integer:= Sel.ImplEndLine - 1;
+      if HLo < 0 then HLo:= 0;
+      if HHi > High(HovAll) then HHi:= High(HovAll);
+      if HHi >= HLo then
+      begin
+        var HBody: TArray<string>;
+        SetLength(HBody, HHi - HLo + 1);
+        for var hk:= HLo to HHi do HBody[hk - HLo]:= HovAll[hk];
+        HovRhs:= MineReturnExpressions(HBody, Sel.QualifiedName);
+      end;
+    end;
+  end;
 
-        if ResolvedQName <> '' then
+  // Honest owner-type floor: the resolver found the LHS type but the member is
+  // not on it or any base (incl. cross-DB generic bases). Show "Type.Member --
+  // inherited member; owner type QName" rather than the arbitrary Symbols[0].
+  if HaveOwnerFloor then
+    MdValue:= Format('**%s.%s**'#10#10 + '_inherited member; owner type_ `%s`', [OwnerFloorType.Name, Ident, OwnerFloorType.QualifiedName])
+  else
+  begin
+  // v0.16: try to enrich the hover with doc-comment content.
+  // GetSymbolDoc returns a zeroed TParsedDoc with HasContent=False when
+  // no row exists; in that case fall back to the legacy signature listing.
+  Doc:= HitStore.GetSymbolDoc(Sel.Id);
+  if Doc.HasContent then
+  begin
+    // v(ADP2 T9): thread the SAME Phase-2 analysis facts `document` and
+    // the CLI's `hover` render into the IDE's hover popup -- via
+    // TDocFactsBuilder.Build (the identical facts assembly `document`
+    // uses) and TDocRegions.FormatPhase2FactLines (the SHARED formatter
+    // every surface calls), so this popup can never show different facts
+    // than the managed doc block for the same symbol (the doc/hover
+    // consistency lock). LoadDocComplexityMin loads the SAME
+    // docs.complexity_min threshold `document` uses. AIncludeSeeAlso/
+    // AIncludeSince stay False (no --seealso/--since opt-in here),
+    // mirroring a default `document` run.
+    var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel);
+    var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
+    MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines);
+  end
+  else
+  begin
+    Sb:= TStringBuilder.Create;
+    try
+      { v0.40.8f: try to resolve the actual type at cursor first. If we
+        can, narrow the candidate list to symbols on THAT type (else a
+        common member like DataBinding lists every class that has one). }
+      var TAResult:= TTypeAtResolver.Resolve( FStores, Path, Line + 1, Col + 1);
+
+      var Filtered: TArray<TSymbol>;
+      SetLength(Filtered, 0);
+      var ResolvedQName: string:= '';
+      if TAResult.HasResolved then ResolvedQName:= TAResult.Resolved.QualifiedName;
+
+      if ResolvedQName <> '' then
+      begin
+        { Keep only candidates whose QualifiedName matches the resolved
+          symbol exactly, or whose QualifiedName begins with the resolved
+          qname plus '.' (member access on a record/interface). }
+        for Sym in Symbols do
         begin
-          { Keep only candidates whose QualifiedName matches the resolved
-            symbol exactly, or whose QualifiedName begins with the resolved
-            qname plus '.' (member access on a record/interface). }
-          for Sym in Symbols do
+          if (Sym.QualifiedName = ResolvedQName) or (Pos(ResolvedQName + '.', Sym.QualifiedName) = 1) then
           begin
-            if (Sym.QualifiedName = ResolvedQName) or (Pos(ResolvedQName + '.', Sym.QualifiedName) = 1) then
+            SetLength(Filtered, Length(Filtered) + 1);
+            Filtered[High(Filtered)]:= Sym;
+          end;
+        end;
+      end;
+
+      { v0.46: owner-type / unit fallback. When the exact-type filter found
+        nothing because the member is INHERITED (resolved to the owner type,
+        not the member itself), narrow by the resolved type's UNIT prefix.
+        Turns ~50 same-named properties across unrelated types into the few
+        in the right library unit (e.g. AButton: TdxBarButton -> only dxBar). }
+      if (Length(Filtered) = 0) and (ResolvedQName <> '') then
+      begin
+        var DotP: Integer:= Pos('.', ResolvedQName);
+        if DotP > 1 then
+        begin
+          var UnitPfx: string:= Copy(ResolvedQName, 1, DotP); { incl. '.' }
+          for Sym in Symbols do
+            if Pos(UnitPfx, Sym.QualifiedName) = 1 then
             begin
               SetLength(Filtered, Length(Filtered) + 1);
               Filtered[High(Filtered)]:= Sym;
             end;
-          end;
         end;
+      end;
 
-        { v0.46: owner-type / unit fallback. When the exact-type filter found
-          nothing because the member is INHERITED (resolved to the owner type,
-          not the member itself), narrow by the resolved type's UNIT prefix.
-          Turns ~50 same-named properties across unrelated types into the few
-          in the right library unit (e.g. AButton: TdxBarButton -> only dxBar). }
-        if (Length(Filtered) = 0) and (ResolvedQName <> '') then
+      { Fallback: if filtering yielded nothing (no LHS info, or qname
+        mismatch across stores), keep the original list capped at 50 so
+        mega-common members like DataBinding don't blow up the popup. }
+      if Length(Filtered) = 0 then
+      begin
+        if Length(Symbols) <= 50 then Filtered:= Symbols
+        else
         begin
-          var DotP: Integer:= Pos('.', ResolvedQName);
-          if DotP > 1 then
-          begin
-            var UnitPfx: string:= Copy(ResolvedQName, 1, DotP); { incl. '.' }
-            for Sym in Symbols do
-              if Pos(UnitPfx, Sym.QualifiedName) = 1 then
-              begin
-                SetLength(Filtered, Length(Filtered) + 1);
-                Filtered[High(Filtered)]:= Sym;
-              end;
-          end;
+          SetLength(Filtered, 50);
+          for var I:= 0 to 49 do Filtered[I]:= Symbols[I];
         end;
+      end;
 
-        { Fallback: if filtering yielded nothing (no LHS info, or qname
-          mismatch across stores), keep the original list capped at 50 so
-          mega-common members like DataBinding don't blow up the popup. }
-        if Length(Filtered) = 0 then
+      { v0.46 hover polish: de-duplicate candidates and prefer the source
+        declaration over a generated DFM component (see DedupAndPreferSource),
+        so a published field shows once with its real declared type instead of
+        a phantom "2 overloads" (field + DFM object, possibly doubled by a
+        stale index). The mislabeled "_Resolved type: <qname>_" line is gone --
+        the indented declaration line below already shows "name: Type" exactly
+        as the IDE does. }
+      Filtered:= DedupAndPreferSource(Filtered);
+
+      { Qualify the kind with what constrains USE, so the one-line popup header
+        the plugin builds from this ("<kind> <name> - <unit>.pas (<line>)")
+        says 'protected field' rather than just 'field'. Requested after a
+        protected field was accepted from the completion list and then
+        rejected by the compiler with E2362: every other fact about the symbol
+        was on screen except the one that mattered.
+        Only constraining qualifiers appear -- public/published and read/write
+        add nothing and stay silent, so ordinary members read exactly as
+        before and the marker keeps its signal. }
+      Sb.AppendLine(Format('**%s** `%s`', [Ident, QualifiedKindText(Filtered[0])]));
+      Sb.AppendLine('');
+      { v0.42: render each candidate (every overload) as a Code-Insight-style
+        declaration. Signature now carries the full param list + return type,
+        e.g. '(const A: Integer): Boolean'. The "- `qname` - line N" shape is
+        preserved exactly so the popup's single-click navigation still parses
+        the qname + line; the declaration line is shown indented underneath. }
+      if Length(Filtered) > 1 then Sb.AppendLine(Format('_%d overloads:_', [Length(Filtered)]));
+      for Sym in Filtered do
+      begin
+        Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName, Sym.StartLine]));
+        Sb.AppendLine('    ' + DeclLineFor(Sym));
+        { v0.43: break the signature into an IDE-style Parameters block
+          (name + type per line, + Returns). Only for a focused candidate
+          set so a 50-hit common member doesn't explode the popup. }
+        if Length(Filtered) <= 5 then
         begin
-          if Length(Symbols) <= 50 then Filtered:= Symbols
-          else
+          var ParamBlock: string:= DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown(Sym.Signature);
+          if ParamBlock <> '' then
           begin
-            SetLength(Filtered, 50);
-            for var I:= 0 to 49 do Filtered[I]:= Symbols[I];
+            Sb.AppendLine(''        );
+            Sb.Append    (ParamBlock);
           end;
         end;
+      end;
+      { Partial-list note: only when the original hit set actually exceeded the
+        50-candidate cap (the DataBinding case), NOT when dedup/prefer-source
+        shrank the list -- otherwise a field+DFM pair would read "showing 1 of 2". }
+      if (Length(Symbols) > 50) and (ResolvedQName = '') then
+        Sb.AppendLine(Format(#10'_(showing %d of %d -- use Find Usages for full list)_', [Length(Filtered), Length(Symbols)]));
 
-        { v0.46 hover polish: de-duplicate candidates and prefer the source
-          declaration over a generated DFM component (see DedupAndPreferSource),
-          so a published field shows once with its real declared type instead of
-          a phantom "2 overloads" (field + DFM object, possibly doubled by a
-          stale index). The mislabeled "_Resolved type: <qname>_" line is gone --
-          the indented declaration line below already shows "name: Type" exactly
-          as the IDE does. }
-        Filtered:= DedupAndPreferSource(Filtered);
+      MdValue:= Sb.ToString;
+    finally
+      Sb.Free;
+    end; // try
+  end; // else Doc.HasContent
+  end; // else HaveOwnerFloor
+  AOut.MdValue:= MdValue;
+  { On the owner-type floor the markdown deliberately names the OWNER TYPE,
+    because the member was not found on it or any base. Report that same type
+    as the bundle's subject; reporting Sel there would hand back an arbitrary
+    same-named symbol -- the shape that put an FMX type in a VCL project. }
+  if HaveOwnerFloor then AOut.Sel:= OwnerFloorType
+  else                   AOut.Sel:= Sel;
+  AOut.Store    := HitStore;
+  AOut.HasSymbol:= True    ;
+  Result:= True;
+end; // function
 
-        { Qualify the kind with what constrains USE, so the one-line popup header
-          the plugin builds from this ("<kind> <name> - <unit>.pas (<line>)")
-          says 'protected field' rather than just 'field'. Requested after a
-          protected field was accepted from the completion list and then
-          rejected by the compiler with E2362: every other fact about the symbol
-          was on screen except the one that mattered.
-          Only constraining qualifiers appear -- public/published and read/write
-          add nothing and stay silent, so ordinary members read exactly as
-          before and the marker keeps its signal. }
-        Sb.AppendLine(Format('**%s** `%s`', [Ident, QualifiedKindText(Filtered[0])]));
-        Sb.AppendLine('');
-        { v0.42: render each candidate (every overload) as a Code-Insight-style
-          declaration. Signature now carries the full param list + return type,
-          e.g. '(const A: Integer): Boolean'. The "- `qname` - line N" shape is
-          preserved exactly so the popup's single-click navigation still parses
-          the qname + line; the declaration line is shown indented underneath. }
-        if Length(Filtered) > 1 then Sb.AppendLine(Format('_%d overloads:_', [Length(Filtered)]));
-        for Sym in Filtered do
-        begin
-          Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName, Sym.StartLine]));
-          Sb.AppendLine('    ' + DeclLineFor(Sym));
-          { v0.43: break the signature into an IDE-style Parameters block
-            (name + type per line, + Returns). Only for a focused candidate
-            set so a 50-hit common member doesn't explode the popup. }
-          if Length(Filtered) <= 5 then
+procedure TLSPServer.HandleHover(const AId: TJSONValue; const AParams: TJSONObject);
+{ A thin envelope over ComputeHover. Every rule about WHICH symbol a position
+  means now lives in one place, so `draglint/hoverBundle` cannot describe a
+  different symbol than this reply does for the same cursor. }
+var
+  Reply   : TJSONObject     ;
+  HoverObj: TJSONObject     ;
+  Contents: TJSONObject     ;
+  Comp    : THoverComputation;
+begin
+  Reply:= TJSONObject.Create;
+  try
+    Reply.AddPair('jsonrpc', '2.0');
+    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
+    if not ComputeHover(AParams, Comp) then
+      Reply.AddPair('result', TJSONNull.Create)
+    else
+    begin
+      HoverObj:= TJSONObject.Create;
+      Contents:= TJSONObject.Create;
+      Contents.AddPair('kind'    , 'markdown' );
+      Contents.AddPair('value'   , Comp.MdValue);
+      HoverObj.AddPair('contents', Contents   );
+      Reply   .AddPair('result'  , HoverObj   );
+    end;
+    SendMessage(Reply);
+  finally
+    Reply.Free;
+  end; // try
+end; // procedure
+
+procedure TLSPServer.HandleHoverBundle(const AId: TJSONValue; const AParams: TJSONObject);
+{ ONE reply carrying everything the IDE popup used to gather in four round
+  trips. See THoverComputation and the unit header of DRagLint.Query.Callers
+  for why this exists.
+
+  Every store consulted here is already open on FStores. Nothing in this handler
+  opens a database, which is the whole point -- the spawns it replaces each
+  cold-opened the ~1.4 GB library index to answer one tooltip. }
+var
+  Reply    : TJSONObject     ;
+  Res      : TJSONObject     ;
+  Comp     : THoverComputation;
+  FactLines: TArray<string>  ;
+begin
+  Reply:= TJSONObject.Create;
+  try
+    Reply.AddPair('jsonrpc', '2.0');
+    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
+
+    if not ComputeHover(AParams, Comp) then
+    begin
+      Reply.AddPair('result', TJSONNull.Create);
+      SendMessage(Reply);
+      Exit;
+    end;
+
+    Res:= TJSONObject.Create;
+    Res.AddPair('markdown', Comp.MdValue);
+
+    if not Comp.HasSymbol then
+    begin
+      { A COMPILER INTRINSIC. No indexed symbol, so there are no callers and no
+        doc facts -- but the name and signature are known, and handing back only
+        markdown left the popup with nothing to render but flat text. Synthesise
+        a model from what IS known so an intrinsic gets the same coloured
+        signature every other symbol gets. Empty arrays rather than omitted
+        keys, so a client can tell "nothing to show" from "field missing". }
+      Res.AddPair('qname', 'System.' + Comp.IntrinsicName);
+      if Comp.IsIntrinsic then
+      begin
+        { IntrinsicSignature returns the WHOLE declaration
+          ("function System.Length(const S): Integer"), where an indexed symbol
+          carries only the "(params): ret" tail. Normalise to the tail so the
+          model's parameter parser sees the same shape it sees everywhere else
+          and the header does not read "System.Length: function System.Length...".
+          No parenthesis (an intrinsic taking none) leaves it empty, which just
+          renders the name. }
+        var SigTail: string:= Comp.IntrinsicSig;
+        var ParenAt: Integer:= Pos('(', SigTail);
+        if ParenAt > 0 then SigTail:= Copy(SigTail, ParenAt, MaxInt)
+        else                SigTail:= '';
+
+        var Syn: TSymbol:= Default(TSymbol);
+        Syn.Name         := Comp.IntrinsicName;
+        Syn.QualifiedName:= 'System.' + Comp.IntrinsicName;
+        Syn.Signature    := SigTail;
+        Syn.StartLine    := 1;
+        { Kind deliberately NOT skFunction: the popup labels the header from it,
+          and calling a compiler built-in a function would claim an indexed
+          declaration that does not exist. RenderHoverJson emits the kind text,
+          which the plugin shows verbatim. }
+        var SynFacts: TArray<string>;
+        SetLength(SynFacts, 0);
+        var SynModel: THoverModel:= BuildHoverModel(Syn, Default(TParsedDoc), 'System.pas', nil, nil);
+        SynModel.Kind:= 'intrinsic';
+        var SynJson : string    := DRagLint.Hover.Renderer.RenderHoverJson(SynModel, SynFacts);
+        var SynVal  : TJSONValue:= nil;
+        try
+          SynVal:= TJSONObject.ParseJSONValue(SynJson);
+        except
+          on E: Exception do
           begin
-            var ParamBlock: string:= DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown(Sym.Signature);
-            if ParamBlock <> '' then
-            begin
-              Sb.AppendLine(''        );
-              Sb.Append    (ParamBlock);
-            end;
+            Writeln(ErrOutput, 'drag-lint LSP: intrinsic model JSON did not parse for ',
+                    Comp.IntrinsicName, ': ', E.Message);
+            SynVal:= nil;
           end;
         end;
-        { Partial-list note: only when the original hit set actually exceeded the
-          50-candidate cap (the DataBinding case), NOT when dedup/prefer-source
-          shrank the list -- otherwise a field+DFM pair would read "showing 1 of 2". }
-        if (Length(Symbols) > 50) and (ResolvedQName = '') then
-          Sb.AppendLine(Format(#10'_(showing %d of %d -- use Find Usages for full list)_', [Length(Filtered), Length(Symbols)]));
+        if SynVal <> nil then Res.AddPair('model', SynVal)
+        else                  Res.AddPair('model', TJSONNull.Create);
+      end
+      else
+        Res.AddPair('model', TJSONNull.Create);
+      Res.AddPair('nameCallers'    , TJSONArray.Create );
+      Res.AddPair('resolvedCallers', TJSONArray.Create );
+      Reply.AddPair('result', Res);
+      SendMessage(Reply);
+      Exit;
+    end;
 
-        MdValue:= Sb.ToString;
-      finally
-        Sb.Free;
-      end; // try
-    end; // else Doc.HasContent
-    end; // else HaveOwnerFloor
-    HoverObj:= TJSONObject.Create;
-    Contents:= TJSONObject.Create;
-    Contents.AddPair('kind'    , 'markdown');
-    Contents.AddPair('value'   , MdValue   );
-    HoverObj.AddPair('contents', Contents  );
-    Reply   .AddPair('result'  , HoverObj  );
+    Res.AddPair('qname', Comp.Sel.QualifiedName);
+
+    { The model, assembled by the same shared code `hover --format json` calls,
+      then re-parsed into the reply. Re-parsing costs a few microseconds and
+      buys the guarantee that the two surfaces cannot format differently. }
+    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel);
+    FactLines:= Asm_.FactLines;
+    var ModelJson: string:= DRagLint.Hover.Renderer.RenderHoverJson(Asm_.Model, FactLines);
+    var ModelVal : TJSONValue := nil;
+    try
+      ModelVal:= TJSONObject.ParseJSONValue(ModelJson);
+    except
+      { Our OWN renderer produced this string, so a parse failure is a defect in
+        the renderer, not bad input. Report it on stderr -- the plugin captures
+        that -- rather than swallowing it: a null model would otherwise look
+        exactly like "this symbol has nothing to show". }
+      on E: Exception do
+      begin
+        Writeln(ErrOutput, 'drag-lint LSP: hover model JSON did not parse for ',
+                Comp.Sel.QualifiedName, ': ', E.Message);
+        ModelVal:= nil;
+      end;
+    end;
+    if ModelVal <> nil then Res.AddPair('model', ModelVal)
+    else                    Res.AddPair('model', TJSONNull.Create);
+
+    { CALLER SCOPING. Library stores are dropped from the caller search: callers
+      of project code live in the project, and scanning the library index by
+      name is what made this query take ~20 s. They are kept only when dropping
+      them would leave nothing to search -- a hover on a purely library symbol.
+      This rule used to live in the plugin, which had to guess from file names;
+      here the store list itself is the answer. }
+    var Search: TArray<ISymbolStore>;
+    SetLength(Search, 0);
+    for var i:= 0 to High(FStores) do
+    begin
+      var IsLib: Boolean:= (i <= High(FStorePaths))
+        and (Pos('library-', LowerCase(ExtractFileName(FStorePaths[i]))) > 0);
+      if not IsLib then
+      begin
+        SetLength(Search, Length(Search) + 1);
+        Search[High(Search)]:= FStores[i];
+      end;
+    end;
+    if Length(Search) = 0 then Search:= FStores;
+
+    { A PARAMETER or LOCAL cannot be referenced outside the routine that
+      declares it, so every row must come from that routine's own body -- and
+      from the store that owns it, since symbol ids are per-database.
+
+      Reported 2026-08-19: hovering `btn` in TTransferLogger.Create listed two
+      usages, the second being TErrorLogger.Create's own `btn`. The symbol
+      resolved correctly; the usage list was gathered by BARE NAME across the
+      whole index, so a different symbol that merely shares a name came back as
+      a usage of this one. }
+    var LocalScoped: Boolean:= Comp.Sel.Kind in [skParam, skLocalVar];
+    if LocalScoped and (Comp.Store <> nil) then
+    begin
+      SetLength(Search, 1);
+      Search[0]:= Comp.Store;
+    end;
+
+    var BareName: string:= Comp.Sel.Name;
+
+    var JResolved: TJSONArray:= TJSONArray.Create;
+    { A parameter is not CALLED, so resolved call edges say nothing about one --
+      every row they could return would be about a same-named routine. }
+    if not LocalScoped then
+    for var i:= 0 to High(Search) do
+      for var R in ResolvedCallersForName(Search[i], BareName) do
+      begin
+        var O: TJSONObject:= TJSONObject.Create;
+        O.AddPair('caller_qname', R.CallerQName);
+        O.AddPair('file'        , R.FilePath   );
+        O.AddPair('confidence'  , R.Confidence );
+        O.AddPair('target_qname', R.TargetQName);
+        if R.HasLine then O.AddPair('line', TJSONNumber.Create(R.Line));
+        JResolved.AddElement(O);
+      end;
+    Res.AddPair('resolvedCallers', JResolved);
+
+    var JName: TJSONArray:= TJSONArray.Create;
+    for var i:= 0 to High(Search) do
+      for var R in NameCallersForName(Search[i], BareName, 1) do
+      begin
+        { For a param/local, keep only references inside the DECLARING routine.
+          ParentId is that routine; a reference enclosed by anything else is a
+          different symbol wearing the same name. }
+        if LocalScoped and (R.EnclosingSymbolId <> Comp.Sel.ParentId) then Continue;
+        var O: TJSONObject:= TJSONObject.Create;
+        O.AddPair('file', R.FilePath);
+        O.AddPair('line', TJSONNumber.Create(R.Line));
+        O.AddPair('code', R.CodeText);
+        JName.AddElement(O);
+      end;
+    Res.AddPair('nameCallers', JName);
+
+    Reply.AddPair('result', Res);
     SendMessage(Reply);
   finally
     Reply.Free;
@@ -1658,16 +1943,12 @@ begin
     if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
     if (FStore = nil) or (AParams = nil) then
     begin
-      Reply.AddPair('result', TJSONNull.Create);
-      SendMessage(Reply);
       Exit;
     end;
     TextDoc := AParams.GetValue('textDocument') as TJSONObject;
     Position:= AParams.GetValue('position'    ) as TJSONObject;
     if (TextDoc = nil) or (Position = nil) then
     begin
-      Reply.AddPair('result', TJSONNull.Create);
-      SendMessage(Reply);
       Exit;
     end;
     Uri:= TextDoc.GetValue('uri').Value;
@@ -1803,6 +2084,11 @@ begin
       else if Method = 'textDocument/definition' then HandleDefinition(Id, Params)
       else if Method = 'textDocument/references' then HandleReferences(Id, Params)
       else if Method = 'textDocument/hover' then HandleHover(Id, Params)
+      { Custom, hence the vendor prefix: one reply carrying hover markdown, the
+        structured model and both caller row sets. An engine that predates it
+        answers -32601 through the catch-all below, immediately, so a client can
+        detect absence in one round trip instead of waiting for a timeout. }
+      else if Method = 'draglint/hoverBundle' then HandleHoverBundle(Id, Params)
       else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)
       else if Method = 'textDocument/signatureHelp' then HandleSignatureHelp(Id, Params)
       else if Method = 'textDocument/didOpen' then HandleDidOpenOrSave(Params)
