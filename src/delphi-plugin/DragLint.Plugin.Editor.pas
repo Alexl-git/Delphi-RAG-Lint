@@ -5589,6 +5589,10 @@ begin
   { v0.42: auto-publish diagnostics on save (syntax errors + lint -> markers +
     the Structure 'Diagnostics' node). The hook is no-op until the LSP is up. }
   DragLint.Plugin.SaveNotifier.GAfterSaveDiagHook:= TriggerDiagnosticsOnSave;
+  { v1.7: same request, different trigger -- the first time a .pas is activated.
+    Without it a file that is only read never gets gutter marks at all, because
+    diagnostics were published on save and on nothing else. }
+  DragLint.Plugin.EditViewNotifier.GOnFileFirstSeenHook:= TriggerDiagnosticsOnSave;
   { v0.47: out-of-process compile-on-save -> surfaces compiler errors in the pane. }
   DragLint.Plugin.SaveNotifier.GAfterSaveCompileHook:= TriggerCompileOnSave;
   { Batch E Task 3: butterfly Call Graph tab double-click nav -- DockForm cannot

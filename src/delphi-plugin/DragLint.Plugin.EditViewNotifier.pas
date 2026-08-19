@@ -23,6 +23,23 @@ procedure InvokeInlineInfo;
   has no window): repaints via the edit window's FORM handle + RDW_ALLCHILDREN. }
 procedure ForceGutterRepaint;
 
+var
+  { v1.7: gutter marks used to appear ONLY after a save.
+
+    Diagnostics were published in response to textDocument/didSave and nothing
+    else, so opening a file and reading it produced no marks at all -- reported
+    as "our gutter marks disappeared again" when in fact they had never been
+    drawn that session. Confirmed from the plugin log: a session with 0 saves
+    had 0 publishDiagnostics and 0 marks, while the previous session's single
+    didSave was followed within a second by a publishDiagnostics.
+
+    Reading code is the common case; saving is not. This hook lets the FIRST
+    activation of each file ask for diagnostics too, over the same LSP
+    round-trip the save path uses. Assigned by Editor.RegisterDragLintMenu, in
+    the same place and for the same reason as SaveNotifier.GAfterSaveDiagHook:
+    this unit must not depend on Editor. }
+  GOnFileFirstSeenHook: procedure(const AFile: string) = nil;
+
 var { v0.46: published by PaintLine so the hover tracker can map a screen point to
     an editor row for gutter-glyph hover. The buffer row (1-based) at client-Y y
     is  GGutterAnchorLine + floor((y - GGutterAnchorTopY) / GGutterLineHeight).
@@ -96,6 +113,12 @@ type
 var
   GViewRegistrations: TList<TViewRegistration> = nil;
   GViewRegLock      : TObject                  = nil                 ;
+  { Files already asked about this session. Keyed per FILE, not per view: the
+    IDE fires EditorViewActivated on every focus change, and asking the engine
+    again on each of them would put an LSP round-trip behind every Alt-Tab.
+    Once per file is enough -- saving still refreshes, which is what keeps the
+    marks honest after an edit. }
+  GDiagAskedFor     : TStringList               = nil;
 
 procedure UnregisterAllViewNotifiers;
 var
@@ -423,6 +446,32 @@ begin
   if EditView.Buffer = nil then Exit;
   FilePath:= EditView.Buffer.FileName;
   if FilePath = '' then Exit;
+
+  { v1.7: ask for diagnostics the FIRST time this file is activated, so a file
+    that is only READ still gets its gutter marks. See GOnFileFirstSeenHook.
+    Gated on the same preference as the save path -- one "run diagnostics
+    automatically" switch, not two. Failure is silent by design: the hook skips
+    when the LSP is not up, exactly as TriggerDiagnosticsOnSave does, so
+    opening a file is never blocked by a slow engine. }
+  if Assigned(GOnFileFirstSeenHook) and SameText(ExtractFileExt(FilePath), '.pas') then
+  begin
+    if GDiagAskedFor = nil then
+    begin
+      GDiagAskedFor:= TStringList.Create;
+      GDiagAskedFor.Sorted    := True;
+      GDiagAskedFor.Duplicates:= dupIgnore;
+      GDiagAskedFor.CaseSensitive:= False;
+    end;
+    if GDiagAskedFor.IndexOf(FilePath) < 0 then
+    begin
+      GDiagAskedFor.Add(FilePath);
+      try
+        if LoadSettings.AutoDiagnosticsOnSave then GOnFileFirstSeenHook(FilePath);
+      except
+        { never let a diagnostics request break opening a file }
+      end;
+    end;
+  end;
 
   { v0.48: editor-sync -- let the graph viewer follow the active unit. Guarded;
     no-op unless the graph window is open + embedded. Pascal source units only. }

@@ -1523,13 +1523,17 @@ begin
     secondary screen was clamped against the wrong rectangle. }
   MonR:= Screen.MonitorFromPoint(Point(X, Y), mdNearest).WorkareaRect;
   begin
-    { Width was never clamped -- only nudged left -- so a popup wider than the
-      work area ran off the right edge (X hit MonR.Left and W stayed oversized).
-      Clamp it the same way H is clamped below; the body then wraps to fit. }
-    if W > MonR.Right - MonR.Left then W:= MonR.Right - MonR.Left;
-    if X + W > MonR.Right then X:= MonR.Right - W;
-    if X < MonR.Left then X:= MonR.Left;
+    { HEIGHT FIRST, because whether a VERTICAL SCROLLBAR appears is decided
+      here, and that decision changes the width we need.
 
+      THE SHRINKING-POPUP LOOP (owner, 2026-08-19). When the content is taller
+      than the work area H is clamped and the body raises a vertical scrollbar.
+      That bar eats SM_CXVSCROLL pixels of the body's WIDTH, which pushes more
+      lines past the right edge, which raises the HORIZONTAL bar, which eats
+      SM_CYHSCROLL of the height -- so the window that was already too small to
+      hold the text ends up holding even less of it. Each bar makes the other
+      more likely. The sizing above measured the text but never paid for the
+      furniture its own clamp was about to add. }
     AvailH:= MonR.Bottom - Y;            { space below the anchor }
     if H > AvailH then
     begin
@@ -1541,8 +1545,23 @@ begin
           the popup exactly fills the work area height (scrollbar takes over). }
         Y:= MonR.Top;
         H:= MonR.Bottom - MonR.Top;
+        { The clamp above IS the decision to scroll. Buy back the width that
+          bar will take, so the text keeps the same usable columns it had
+          before the popup got tall. FBody has WordWrap=False, so a wider
+          window does not change the wrapped line count and cannot invalidate
+          the height just computed -- it only stops the horizontal bar being
+          raised for lines that would otherwise have fitted. }
+        Inc(W, GetSystemMetrics(SM_CXVSCROLL));
       end;
     end;
+
+    { Width LAST, so the widening above is still subject to the screen. Width
+      was once never clamped -- only nudged left -- so a popup wider than the
+      work area ran off the right edge (X hit MonR.Left and W stayed
+      oversized). }
+    if W > MonR.Right - MonR.Left then W:= MonR.Right - MonR.Left;
+    if X + W > MonR.Right then X:= MonR.Right - W;
+    if X < MonR.Left then X:= MonR.Left;
   end;
   Width := W;
   Height:= H;
