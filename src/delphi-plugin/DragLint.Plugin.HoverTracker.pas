@@ -45,7 +45,7 @@ uses
   , DragLint.Plugin.LspClient
   , DragLint.Plugin.EditViewNotifier
   , DragLint.Plugin.Editor
-  , DragLint.Plugin.StatusLine   { SetEditorStatus -- the 'thinking' note }
+  , DragLint.Plugin.StatusBar    { SetDragLintNote -- the 'thinking' note }
   ;
 
 function IdeIsForeground: Boolean;
@@ -359,7 +359,7 @@ begin
       { Announce BEFORE the request. Only this branch does engine work -- a
         cached caret re-show is instant and needs no note. Asked for
         2026-08-19 so a slow hover reads as THINKING rather than absent. }
-      SetEditorStatus('drag-lint: hover');
+      SetDragLintNote('drag-lint: hover');
       { v(hover bundle): ONE request for markdown + model + callers. This used to
         be a hover round trip here and three drag-lint.exe spawns later on, all
         on the main thread while a tooltip was trying to appear. On any miss --
@@ -430,7 +430,7 @@ begin
       GotModel:= TryBuildHoverModel(LspText, Model, ModelCallers);
     end;
 
-    SetEditorStatus('');   { the popup below IS the answer }
+    SetDragLintNote('');   { the popup below IS the answer }
     if GotModel then
     begin
       { v(hover-both): carry the line's findings INTO the structured popup.

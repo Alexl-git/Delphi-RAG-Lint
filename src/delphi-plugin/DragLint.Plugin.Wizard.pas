@@ -39,6 +39,7 @@ uses
   , DragLint.Plugin.DockForm
   , DragLint.Plugin.GraphWindow
   , DragLint.Plugin.About
+  , DragLint.Plugin.Settings      { MigrateGhostTextDefault -- see Register }
   ;
 
 {$R 'DragLintSplash.res'}
@@ -97,6 +98,10 @@ end;
 
 procedure Register;
 begin
+  { FIRST, before anything reads settings: an installation that stored
+    EnableGhostText=0 under the old default would otherwise never see the new
+    one, and KAI would keep failing to reach an unbound port. Runs once. }
+  try MigrateGhostTextDefault; except end;
   RegisterPackageWizard(TDragLintWizard.Create);
   try RegisterDragLintAbout; except end;
   RegisterDragLintMenu;

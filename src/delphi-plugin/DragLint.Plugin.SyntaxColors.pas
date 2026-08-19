@@ -30,7 +30,7 @@ type
   /// <summary>What a token MEANS, which is what decides its colour -- as
   /// opposed to what it looks like.</summary>
   TDLSynRole = (srKeyword, srType, srName, srParam, srOperator, srLiteralNum,
-                srLiteralStr, srMuted, srSection, srError);
+                srLiteralStr, srMuted, srSection, srError, srKind);
 
 const
   { Fixed fallback palette (light-theme base), used when the IDE editor colours
@@ -51,6 +51,13 @@ const
     contrast guard on a light background without vibrating, and stays legible
     when that guard lightens it for a dark one. }
   CL_ERROR   = TColor($001C2BC4); // #C42B1C
+  { The KIND word ('function', 'property', ...). Gold, and a ROLE rather than a
+    literal at one call site, so the hover popup can adopt the same word in the
+    same colour without a second decision being made somewhere else -- which is
+    the reason this whole unit exists. It was drawn with srKeyword, i.e. the
+    same blue as a reserved word, which made "function" look like part of the
+    signature instead of a label ON it. }
+  CL_KIND    = TColor($000B86B8); // #B8860B gold
 
 /// <summary>The IDE's editor-colour interface, or nil.</summary>
 /// <returns>The interface, or nil when it cannot be obtained.</returns>
@@ -64,10 +71,12 @@ function AcquireEditorColors: INTACodeEditorOptions;
 /// fixed fallback.</param>
 /// <param name="ARole">What the token means.</param>
 /// <returns>A concrete TColor, never clNone or clDefault.</returns>
-/// <remarks>srType and srSection deliberately IGNORE the IDE and return fixed
-/// colours. The IDE's atIdentifier is dark or grey on most themes, which made
-/// types indistinguishable from plain names; a fixed green reads as "this is a
-/// type" at a glance. The IDE has no "section header" syntax kind at all.</remarks>
+/// <remarks>srType, srSection and srKind deliberately IGNORE the IDE and return
+/// fixed colours. The IDE's atIdentifier is dark or grey on most themes, which
+/// made types indistinguishable from plain names; a fixed green reads as "this
+/// is a type" at a glance. The IDE has no "section header" or "kind label"
+/// syntax kind at all -- they describe a symbol rather than appearing in
+/// source, so there is nothing for the editor's palette to map them to.</remarks>
 function SyntaxColorFor(const AOpts: INTACodeEditorOptions; ARole: TDLSynRole): TColor;
 
 implementation
@@ -104,6 +113,7 @@ begin
     srMuted     : begin Code:= atComment     ; Fallback:= CL_MUT    ; end;
     srSection   : Exit(CL_SECTION);  { the IDE has no such syntax kind }
     srError     : Exit(CL_ERROR  );
+    srKind      : Exit(CL_KIND   );  { a LABEL, not a token -- no IDE equivalent }
   else
     begin Code:= atIdentifier; Fallback:= CL_NAME; end;
   end;

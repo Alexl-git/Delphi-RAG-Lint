@@ -51,7 +51,25 @@ type
     FirstOfTarget: Boolean;
     /// <summary>The call site's own source line, already trimmed. Filled by
     /// NameCallersForName only; always empty for resolved rows.</summary>
+    /// <remarks>A resolved row's text is NOT filled here on purpose: this
+    /// function answers from the index alone, and the text a reader wants is
+    /// the one in the editor's UNSAVED buffer. Only the LSP has that, so it
+    /// renders the line itself from FullPath + CallSiteLine.</remarks>
     CodeText   : string ;
+    /// <summary>FilePath, fully qualified. Filled for resolved and callback
+    /// rows, where FilePath is filename-only by contract.</summary>
+    /// <remarks>Equal to FilePath for name-matched rows, which already carry
+    /// the full path.</remarks>
+    FullPath   : string ;
+    /// <summary>The line of the CALL ITSELF, as opposed to Line, which for a
+    /// resolved row is the caller ROUTINE's start line.</summary>
+    /// <remarks>Both are wanted and neither substitutes for the other. Line is
+    /// routine-granular and is what the CLI has always printed -- changing it
+    /// would move every golden. CallSiteLine is what a reader means by "called
+    /// from": the exact statement. The index has carried it all along in
+    /// TResolvedCaller.CallSiteLine and this layer was dropping it. 0 when
+    /// unknown.</remarks>
+    CallSiteLine: Integer;
     /// <summary>Id of the symbol whose body contains this reference; 0 at unit
     /// level. Filled by NameCallersForName only.</summary>
     /// <remarks>The scoping key for a PARAMETER or LOCAL, which cannot be
@@ -159,10 +177,12 @@ begin
       Row:= Default(TQueryCallerRow);
       Row.FirstOfTarget:= First;
       First:= False;
-      Row.CallerQName:= RC.EnclosingQName;
-      Row.FilePath   := RC.Location      ;  { file name only, by contract }
-      Row.Confidence := RC.Confidence    ;
-      Row.TargetQName:= T.QualifiedName  ;
+      Row.CallerQName := RC.EnclosingQName;
+      Row.FilePath    := RC.Location      ;  { file name only, by contract }
+      Row.FullPath    := RC.FullPath      ;  { ...and the openable one beside it }
+      Row.CallSiteLine:= RC.CallSiteLine  ;
+      Row.Confidence  := RC.Confidence    ;
+      Row.TargetQName := T.QualifiedName  ;
       { The line is the caller SYMBOL's own start line (routine-granular, not
         the exact call-site line) -- unchanged from the CLI, whose JSON omits
         the pair entirely when the enclosing symbol is unknown. }
@@ -206,10 +226,12 @@ begin
       if CbWho = '' then CbWho:= '(unit level)';
 
       Row:= Default(TQueryCallerRow);
-      Row.CallerQName:= CbWho                    ;
-      Row.FilePath   := ExtractFileName(CbWhere) ;
-      Row.Line       := CbRef.StartLine          ;
-      Row.HasLine    := True                     ;
+      Row.CallerQName := CbWho                    ;
+      Row.FilePath    := ExtractFileName(CbWhere) ;
+      Row.FullPath    := CbWhere                  ;
+      Row.Line        := CbRef.StartLine          ;
+      Row.CallSiteLine:= CbRef.StartLine          ;
+      Row.HasLine     := True                     ;
       Row.Confidence := 'callback'               ;
       Row.TargetQName:= AName                    ;
       SetLength(Result, Length(Result) + 1);
@@ -237,7 +259,9 @@ begin
     Row:= Default(TQueryCallerRow);
     Row.CallerQName:= '';
     Row.FilePath   := AStore.GetFilePath(Refs[i].FileId);
+    Row.FullPath   := Row.FilePath;
     Row.Line       := Refs[i].StartLine;
+    Row.CallSiteLine:= Refs[i].StartLine;
     Row.HasLine    := Refs[i].StartLine > 0;
     Row.Confidence := '';
     Row.TargetQName:= '';

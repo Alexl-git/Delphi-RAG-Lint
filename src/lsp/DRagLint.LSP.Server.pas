@@ -6,6 +6,7 @@ uses
   System.SysUtils
   , System.Classes
   , System.IOUtils
+  , System.Generics.Collections  { v(P7): the per-file source cache in HandleHoverBundle }
   , System.JSON
   , System.NetEncoding
   , Winapi.Windows
@@ -1830,22 +1831,72 @@ begin
 
     var BareName: string:= Comp.Sel.Name;
 
-    var JResolved: TJSONArray:= TJSONArray.Create;
-    { A parameter is not CALLED, so resolved call edges say nothing about one --
-      every row they could return would be about a same-named routine. }
-    if not LocalScoped then
-    for var i:= 0 to High(Search) do
-      for var R in ResolvedCallersForName(Search[i], BareName) do
-      begin
-        var O: TJSONObject:= TJSONObject.Create;
-        O.AddPair('caller_qname', R.CallerQName);
-        O.AddPair('file'        , R.FilePath   );
-        O.AddPair('confidence'  , R.Confidence );
-        O.AddPair('target_qname', R.TargetQName);
-        if R.HasLine then O.AddPair('line', TJSONNumber.Create(R.Line));
-        JResolved.AddElement(O);
-      end;
-    Res.AddPair('resolvedCallers', JResolved);
+    { A RESOLVED row is rendered here, not in the query layer, because the text
+      a reader wants is the one in the editor's UNSAVED buffer and only this
+      process holds it. Cached per file: a widely-called routine yields many
+      rows and they cluster in a handful of files, so re-reading per row would
+      turn one tooltip into dozens of file reads.
+
+      Reported from the live IDE 2026-08-19: "CALLED FROM shows line numbers but
+      no code". Resolved rows were emitted without a `code` key at all, so
+      whenever SelectCallers chose the resolved set the popup's grid rendered
+      bare line numbers. }
+    var SrcCache: TDictionary<string, TArray<string>>:= TDictionary<string, TArray<string>>.Create;
+    try
+      var JResolved: TJSONArray:= TJSONArray.Create;
+      { A parameter is not CALLED, so resolved call edges say nothing about one --
+        every row they could return would be about a same-named routine. }
+      if not LocalScoped then
+      for var i:= 0 to High(Search) do
+        for var R in ResolvedCallersForName(Search[i], BareName) do
+        begin
+          var O: TJSONObject:= TJSONObject.Create;
+          O.AddPair('caller_qname', R.CallerQName);
+          { The OPENABLE path. R.FilePath is filename-only for resolved rows by
+            the CLI's cross-machine contract; the popup navigates to what it is
+            given, so handing it a bare name is a dead link. }
+          var RowPath: string:= R.FullPath;
+          if RowPath = '' then RowPath:= R.FilePath;
+          O.AddPair('file'        , RowPath      );
+          O.AddPair('confidence'  , R.Confidence );
+          O.AddPair('target_qname', R.TargetQName);
+
+          { The CALL SITE, not the caller routine's header. R.Line is
+            routine-granular -- correct for the CLI, and it makes a hover say
+            "called from line 1200" for a call on line 1247. The exact line was
+            in the index all along. }
+          var RowLine: Integer:= 0;
+          if      R.CallSiteLine > 0 then RowLine:= R.CallSiteLine
+          else if R.HasLine          then RowLine:= R.Line;
+          if RowLine > 0 then O.AddPair('line', TJSONNumber.Create(RowLine));
+
+          if (RowLine > 0) and (RowPath <> '') then
+          begin
+            var SrcLines: TArray<string>;
+            if not SrcCache.TryGetValue(RowPath, SrcLines) then
+            begin
+              SetLength(SrcLines, 0);
+              { Readable() covers the overlay too, so an unsaved buffer renders. }
+              if TLiveDocuments.Readable(RowPath) then
+                try
+                  SrcLines:= TLiveDocuments.ReadLines(RowPath);
+                except
+                  { A caller row is worth showing without its text; it is not
+                    worth failing the whole tooltip for. }
+                  on E: Exception do SetLength(SrcLines, 0);
+                end;
+              SrcCache.AddOrSetValue(RowPath, SrcLines);
+            end;
+            if (RowLine <= Length(SrcLines)) then
+              O.AddPair('code', Trim(SrcLines[RowLine - 1]));
+          end;
+
+          JResolved.AddElement(O);
+        end;
+      Res.AddPair('resolvedCallers', JResolved);
+    finally
+      SrcCache.Free;
+    end; // try
 
     var JName: TJSONArray:= TJSONArray.Create;
     for var i:= 0 to High(Search) do

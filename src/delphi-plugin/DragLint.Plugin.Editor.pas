@@ -204,7 +204,7 @@ uses
   , Winapi.ShellAPI
   , DragLint.Plugin.Keyboard
   , DragLint.Plugin.CallerFilter   { v(hover-callers scope): pure caret-selection policy }
-  , DragLint.Plugin.StatusLine     { SetEditorStatus -- the editor status-bar note }
+  , DragLint.Plugin.StatusBar      { SetDragLintNote -- the ONE drag-lint status strip }
   , DragLint.Plugin.HoverSignature { v(property type): pure header-signature composer }
   , DRagLint.Core.GhostText        { v1.7 B3: the completion endpoint KAI calls }
   , DragLint.Plugin.DiagnosticCache
@@ -1464,7 +1464,13 @@ begin
             var RRow: TDLCallerRow;
             RRow.FilePath   := RO.GetValue<string> ('file'        , '');
             RRow.Line       := RO.GetValue<Integer>('line'        , 0 );
-            RRow.CodeText   := '';
+            { v(P7): the BUNDLE carries a resolved row's source line; the spawn
+              path above cannot, because `find-callers --resolved --json` is the
+              cross-machine CLI contract and deliberately emits neither the full
+              path nor the text. Reported from the live IDE 2026-08-19: CALLED
+              FROM rendered bare line numbers whenever SelectCallers chose the
+              resolved set. }
+            RRow.CodeText   := RO.GetValue<string> ('code'        , '');
             RRow.TargetQName:= RO.GetValue<string> ('target_qname', '');
             if RRow.TargetQName <> '' then
             begin
@@ -1605,7 +1611,7 @@ begin
 
   { Tell the user we started BEFORE the request goes out -- that is the whole
     point of the note; announcing after the answer arrives would be useless. }
-  SetEditorStatus('drag-lint: hover ' + IdentifierAtCursor);
+  SetDragLintNote('drag-lint: hover ' + IdentifierAtCursor);
 
   { v(hover bundle): ONE request for everything the popup needs. The block below
     -- a hover round trip plus three drag-lint.exe spawns -- is kept verbatim as
@@ -1624,7 +1630,7 @@ begin
     except
       { clipboard update failure -- silently ignore }
     end;
-    SetEditorStatus('');   { the popup is the answer; the note has done its job }
+    SetDragLintNote('');   { the popup is the answer; the note has done its job }
     if BModel.QualifiedName <> '' then
     begin
       DLT('hover', Format('bundle structured qname="%s" params=%d returns=%d callers=%d',
@@ -1702,7 +1708,7 @@ begin
     DLT('hover', Format('sym="%s" dbs=%d callers=%d hdr="%s" bodyLen=%d', [SymName, Length(DbList), Length(Callers), Header, Length(HoverText)]));
 
     { v0.40.6: menu invocation is explicit -- replace any current popup. }
-    SetEditorStatus('');   { cleared on the fallback path too, or it strands }
+    SetDragLintNote('');   { cleared on the fallback path too, or it strands }
     CloseDragLintHover;
     GetCursorPos(P);
 

@@ -4166,7 +4166,8 @@ begin
       else R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
       if Q.FieldByName('encl_qname').IsNull then R.EnclosingQName:= ''
       else R.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
-      R.Location  := ExtractFileName(Q.FieldByName('file_path').AsString);
+      R.FullPath  := Q.FieldByName('file_path').AsString;
+      R.Location  := ExtractFileName(R.FullPath);
       if Q.FieldByName('start_line').IsNull then R.CallSiteLine := 0
       else R.CallSiteLine := Q.FieldByName('start_line').AsInteger;
       R.Confidence:= Q.FieldByName('confidence').AsString;
@@ -4394,7 +4395,8 @@ begin
       else R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
       if Q.FieldByName('encl_qname').IsNull then R.EnclosingQName:= ''
       else R.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
-      R.Location  := ExtractFileName(Q.FieldByName('file_path').AsString);
+      R.FullPath  := Q.FieldByName('file_path').AsString;
+      R.Location  := ExtractFileName(R.FullPath);
       R.Confidence:= 'unverified';
       List.Add(R);
       Q.Next;
@@ -4707,7 +4709,8 @@ begin
       else R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
       if Q.FieldByName('encl_qname').IsNull then R.EnclosingQName:= ''
       else R.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
-      R.Location  := ExtractFileName(Q.FieldByName('file_path').AsString);
+      R.FullPath  := Q.FieldByName('file_path').AsString;
+      R.Location  := ExtractFileName(R.FullPath);
       R.Confidence:= Q.FieldByName('conf').AsString;
       List.Add(R);
       Q.Next;

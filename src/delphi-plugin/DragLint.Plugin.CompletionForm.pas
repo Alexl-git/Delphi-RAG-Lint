@@ -20,6 +20,7 @@ uses
   , ToolsAPI
   , ToolsAPI.Editor               { INTACodeEditorOptions -- the theme handle }
   , DragLint.Plugin.SyntaxColors  { the SAME palette the hover popup renders in }
+  , DragLint.Plugin.Theme          { ThemedColor -- the IDE's theme, not Windows' }
   , DragLint.Plugin.CompletionText { kind word + signature split, pure and guarded }
   , DRagLint.Hover.Contrast       { EnsureReadable -- keep every run legible }
   ;
@@ -88,7 +89,13 @@ begin
   Caption    := '';
   BorderStyle:= bsNone;
   FormStyle  := fsStayOnTop;
-  Color      := clWindow;
+  { The IDE themes itself through IOTAIDEThemingServices, NOT the process-global
+    VCL TStyleManager -- so a bare clWindow is the WINDOWS system colour and
+    stays white while the IDE is visibly dark. Reported 2026-08-19: "the
+    completion popup is light while the IDE is dark". DragLint.Plugin.Theme is
+    where that was already worked out for the hover popup; going through it
+    rather than re-deriving an answer here is the point of it being shared. }
+  Color      := ThemedColor(clWindow);
   KeyPreview := True;
   Position   := poDesigned;
 
@@ -98,6 +105,7 @@ begin
   FListBox.Parent     := Self;
   FListBox.Align      := alClient;
   FListBox.BorderStyle:= bsNone;
+  FListBox.Color      := ThemedColor(clWindow);
   FListBox.Font.Name:= 'Consolas';
   FListBox.Font.Size:= 9;
   FListBox.TabStop   := False;
@@ -136,7 +144,11 @@ begin
   if not (AControl is TListBox) then Exit;
   Cnv:= (AControl as TListBox).Canvas;
 
-  if odSelected in AState then Bg:= clHighlight else Bg:= clWindow;
+  { Both through the IDE's theme. Bg is also what every run's contrast is
+    measured against, so getting it wrong does not merely paint the wrong
+    background -- it makes EnsureReadable correct each foreground against a
+    colour that is not on screen. }
+  if odSelected in AState then Bg:= ThemedColor(clHighlight) else Bg:= ThemedColor(clWindow);
   Cnv.Brush.Color:= Bg;
   Cnv.FillRect(ARect);
 
@@ -146,10 +158,12 @@ begin
   X:= ARect.Left + 4;
   Cnv.Brush.Style:= bsClear;
   try
-    { kind first, muted -- it classifies the row and must not out-shout the name }
+    { kind first -- it classifies the row and must not out-shout the name. Gold
+      (srKind) rather than srKeyword: in reserved-word blue it read as part of
+      the signature rather than a label on it. }
     if Row.KindWord <> '' then
     begin
-      Run(Row.KindWord, srKeyword);
+      Run(Row.KindWord, srKind);
       Run(' ', srMuted);
     end;
     Run(Row.Name, srName, True);
@@ -288,11 +302,18 @@ begin
         end;
       end;
 
-      { A qualified name is not a signature -- the engine falls back to it when
-        the symbol has none, and rendering it as a return type would read as
-        "Foo: Unit.Bar.Foo". Only a real signature is split. }
-      if SameText(DetailStr, LabelStr) or (Pos('.' + LabelStr, DetailStr) > 0) then
-        DetailStr:= '';
+      { The engine no longer sends a qualified name here -- MakeCompletionItem
+        used to fall back to one when a symbol had no signature, and it is now
+        simply empty. The scrub that lived here matched
+        `Pos('.' + LabelStr, DetailStr) > 0`, which ALSO blanked a genuine
+        signature containing '.' + the member's name (a parameter typed
+        `TRec.Value` on a member called `Value`) -- so it is deleted rather than
+        kept as belt-and-braces. Guarded engine-side by
+        run_completion_detail_type_guard.ps1.
+
+        Only `detail = label` is still worth defending against, because it costs
+        nothing and an empty type slot is the correct rendering either way. }
+      if SameText(DetailStr, LabelStr) then DetailStr:= '';
 
       FRows[i].KindWord:= KindWord(KindInt);
       FRows[i].Name    := LabelStr;

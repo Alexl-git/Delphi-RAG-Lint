@@ -47,6 +47,26 @@ type
     GhostTextPort  : Integer; { default 8765; loopback only }
   end; // record
 
+/// <summary>Applies the 2026-08-19 EnableGhostText default to an installation
+/// that already stored the old one, exactly once.</summary>
+/// <remarks>A CHANGED DEFAULT DOES NOT REACH AN EXISTING USER. DefaultSettings
+/// was flipped to True on 2026-08-19, and nothing happened: LoadSettings reads
+/// the registry over the top, and
+/// HKCU\Software\drag-lint\DelphiPlugin\EnableGhostText was already 0 from
+/// the era when the feature shipped off. So the port stayed unbound and KAI
+/// kept raising `os error 10061` on every keystroke -- the exact symptom the
+/// new default was chosen to end.
+///
+/// Once, and once only: a marker value records that the migration ran, so a
+/// user who deliberately turns ghost text OFF afterwards keeps it off. Writing
+/// the default unconditionally on each load would make the setting impossible
+/// to change, which is a worse bug than the one being fixed.
+///
+/// Call from Register, BEFORE anything reads settings. Guarded -- a registry
+/// failure leaves the stored value alone rather than raising into the
+/// IDE's package load.</remarks>
+procedure MigrateGhostTextDefault;
+
 function LoadSettings: TDragLintSettings;
 procedure SaveSettings(const ASettings: TDragLintSettings);
 function DefaultSettings: TDragLintSettings                      ;
@@ -185,6 +205,41 @@ begin
     Reg.Free;
   end; // try
 end; // function
+
+procedure MigrateGhostTextDefault;
+const
+  MIGRATED_VALUE = 'GhostTextDefaultMigrated';
+var
+  Reg: TRegistry;
+begin
+  Reg:= TRegistry.Create(KEY_READ or KEY_WRITE);
+  try
+    try
+      Reg.RootKey:= HKEY_CURRENT_USER;
+      { Create the key if it is absent: a fresh install has no stored 0 to
+        override, but stamping the marker there too means this never runs again
+        and the code path stays a one-shot everywhere. }
+      if not Reg.OpenKey(REG_KEY, True) then Exit;
+      try
+        if Reg.ValueExists(MIGRATED_VALUE) then Exit;   { already done }
+        { Only a stored OFF is rewritten. An absent value already picks up the
+          new default through DefaultSettings, and a stored 1 needs nothing. }
+        if Reg.ValueExists('EnableGhostText') and (Reg.ReadInteger('EnableGhostText') = 0) then
+          Reg.WriteInteger('EnableGhostText', 1);
+        Reg.WriteInteger(MIGRATED_VALUE, 1);
+      finally
+        Reg.CloseKey;
+      end; // try
+    except
+      { Best effort. A machine where this cannot be written is one where ghost
+        text stays off -- which is the state it was already in. }
+    end; // try
+  finally
+    { The Exits above are why this is a try/finally and not a trailing Free:
+      both of them leave the procedure, and neither is an error path. }
+    Reg.Free;
+  end; // try
+end; // procedure
 
 procedure SaveSettings(const ASettings: TDragLintSettings);
 var

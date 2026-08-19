@@ -260,6 +260,52 @@ $cliKey = ($cliRes | ForEach-Object { "$($_.caller_qname)|$($_.confidence)|$($_.
 $bunKey = ($bunRes | ForEach-Object { "$($_.caller_qname)|$($_.confidence)|$($_.target_qname)" } | Sort-Object) -join ';'
 Check 'resolvedCallers rows match the CLI row-for-row' ($cliKey -ceq $bunKey) "cli='$cliKey' bundle='$bunKey'"
 
+# ---- P7: a RESOLVED row must carry its source line, same as a name row ----
+# Reported from the live IDE 2026-08-19, hovering the routine name at
+# uMainZeissCopy.pas:4106: "CALLED FROM shows line numbers but no code". When
+# SelectCallers picks the RESOLVED set, every row was emitted without a `code`
+# key by construction, so the popup's grid rendered bare line numbers.
+#
+# The assertion is SELF-VALIDATING rather than a golden: it reads each row's OWN
+# file at its OWN line and demands the text match. A weaker "code is non-empty"
+# check would pass against a build that filled every row from the HOVERED file,
+# or off by a line -- and that is the failure that would actually ship, because
+# a plausible wrong line reads exactly like a right one.
+$bad = @()
+foreach ($r in $bunRes) {
+  if (-not $r.line) { $bad += "row $($r.caller_qname) has no line at all"; continue }
+  $rf = [string]$r.file
+  if (-not (Test-Path $rf)) { $bad += "row $($r.caller_qname) names a missing file '$rf'"; continue }
+  $rl = [System.IO.File]::ReadAllLines($rf)
+  $want = ''
+  if ($r.line -ge 1 -and $r.line -le $rl.Count) { $want = $rl[$r.line - 1].Trim() }
+  if ([string]::IsNullOrWhiteSpace([string]$r.code)) {
+    $bad += "row $($r.caller_qname) code is EMPTY (line $($r.line) reads '$want')"
+  } elseif (([string]$r.code) -cne $want) {
+    $bad += "row $($r.caller_qname) code='$($r.code)' but $($r.line) reads '$want'"
+  }
+}
+Check 'every resolvedCallers row carries the text at its OWN file:line' ($bad.Count -eq 0) ($bad -join ' | ')
+# Positive control: the above is vacuous if there are no rows to check.
+Check 'CONTROL: there WERE resolved rows to check' ($bunRes.Count -gt 0) "count=$($bunRes.Count)"
+
+# Which line a resolved row points AT is a deliberate choice, so pin it. The
+# index carries two: the caller ROUTINE's start line (what the CLI prints, and
+# what this row used to carry) and the CALL SITE's own line. "Called from" means
+# the statement, not the routine header -- and the difference is invisible to
+# the check above, which would pass just as happily on 'procedure C_Driver;'.
+$drv = @($bunRes | Where-Object { $_.caller_qname -match 'C_Driver' })
+Check 'a resolved row points at the CALL, not the caller routine header' `
+  ($drv.Count -gt 0 -and ([string]$drv[0].code) -match 'ApplyDelta') `
+  "code='$(if ($drv.Count) { $drv[0].code } else { '<no C_Driver row>' })'"
+
+# The row must be OPENABLE. FilePath is filename-only for resolved rows by the
+# CLI's cross-machine contract; the popup navigates to whatever it is handed, so
+# a bare name there is a dead link -- which is how this defect first showed up.
+Check 'a resolved row names a full, openable path' `
+  ($drv.Count -gt 0 -and [System.IO.Path]::IsPathRooted([string]$drv[0].file)) `
+  "file='$(if ($drv.Count) { $drv[0].file } else { '' })'"
+
 # ---- R4: nameCallers carry the call site's own source line ----------------
 $bunName = @($bundle.nameCallers)
 Check 'nameCallers is non-empty for a called method' ($bunName.Count -gt 0) "count=$($bunName.Count)"

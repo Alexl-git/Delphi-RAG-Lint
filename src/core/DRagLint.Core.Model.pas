@@ -373,6 +373,14 @@ type
     EnclosingSymbolId: Int64 ;
     EnclosingQName   : string;
     Location         : string; // filename only (unchanged; existing consumers rely on this)
+    /// <summary>The same file, fully qualified.</summary>
+    /// <remarks>Location is deliberately filename-only and must stay that way --
+    /// the CLI's JSON is compared across machines, and an absolute path there
+    /// would make every golden machine-specific. But a filename cannot be
+    /// OPENED, and the hover popup both navigates to these rows and (since
+    /// 2026-08-19) renders the source line at them, so the full path has to
+    /// travel alongside rather than replace it.</remarks>
+    FullPath         : string;
     /// <summary>1-based line of the call site in the caller's file; 0 when unknown.
     /// Added for reverse-calltree; other consumers may ignore it.</summary>
     CallSiteLine     : Integer;

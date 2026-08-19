@@ -45,7 +45,6 @@ contains
   DragLint.Plugin.HoverSignature in 'DragLint.Plugin.HoverSignature.pas',
   DragLint.Plugin.SyntaxColors in 'DragLint.Plugin.SyntaxColors.pas',
   DragLint.Plugin.CompletionText in 'DragLint.Plugin.CompletionText.pas',
-  DragLint.Plugin.StatusLine in 'DragLint.Plugin.StatusLine.pas',
   DragLint.Plugin.HoverForm in 'DragLint.Plugin.HoverForm.pas',
   DragLint.Plugin.CompletionForm in 'DragLint.Plugin.CompletionForm.pas',
   DragLint.Plugin.SignatureForm in 'DragLint.Plugin.SignatureForm.pas',

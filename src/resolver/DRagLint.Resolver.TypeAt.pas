@@ -383,13 +383,36 @@ end;
 
   NARROWS, NEVER BLANKS: with no used-unit candidate the original lookup runs
   unchanged, so a symbol that only exists in an unused unit still resolves. That
-  is the difference between a filter and a fail-closed rule, and it is guarded. }
+  is the difference between a filter and a fail-closed rule, and it is guarded.
+
+  AOwnUnit IS NOT OPTIONAL POLISH -- it stops this function INVERTING Delphi
+  scope. AUsedUnits is the file's uses clause, and a unit does not use itself,
+  so "prefer a used unit" on its own ranks EVERY OTHER unit above the file's own
+  declarations. Field names collide across units constantly (FList,
+  FConnection, FSharedFieldX), so without the own-unit pass the fix for one
+  wrong answer buys a different wrong answer. Own unit first, used units second,
+  flat lookup last -- which is the order Delphi itself resolves in.
+
+  STILL NOT FULL SCOPE RESOLUTION: two used units declaring the same name are
+  separated only by store order, and the uses graph is not followed
+  transitively. It settles the cases that occur, from facts already indexed. }
 function FindTypeAnywherePreferringUses(const AStores: TArray<ISymbolStore>; const AName: string;
-  out AStore: ISymbolStore; const AUsedUnits: TArray<string>): TSymbol;
+  out AStore: ISymbolStore; const AUsedUnits: TArray<string>; const AOwnUnit: string = ''): TSymbol;
 var
   I  : Integer;
   Sym: TSymbol;
 begin
+  { StartsText directly rather than DeclaredUnderAUsedUnit(..., [AOwnUnit]):
+    this runs per candidate on every hover, and the helper would allocate a
+    one-element dynamic array each time to express the same test. }
+  if AOwnUnit <> '' then
+    for I:= 0 to High(AStores) do
+      for Sym in AStores[I].FindSymbolsByExactName(AName) do
+        if StartsText(AOwnUnit + '.', Sym.QualifiedName) then
+        begin
+          AStore:= AStores[I];
+          Exit(Sym);
+        end;
   if Length(AUsedUnits) > 0 then
     for I:= 0 to High(AStores) do
       for Sym in AStores[I].FindSymbolsByExactName(AName) do
@@ -667,6 +690,7 @@ var
   Primary     : ISymbolStore  ;
   LhsStore    : ISymbolStore  ;
   UsedUnits   : TArray<string>;
+  OwnUnit     : string        ;
   Framework   : string        ;
 begin
   FillChar(Result, SizeOf(Result), 0);
@@ -711,6 +735,13 @@ begin
     for var UU in Primary.GetUnitUsesForFile(FileId) do
       if UU.UnitName <> '' then UsedUnits:= UsedUnits + [UU.UnitName];
 
+  { The hovering file's OWN unit -- the one scope AUsedUnits can never contain,
+    because a unit does not use itself. Taken from the file name rather than the
+    index so it is available even for a file no DB covers; Delphi requires the
+    two to match, and a dotted unit name is the file's base name verbatim
+    (System.IOUtils.pas -> System.IOUtils). }
+  OwnUnit:= TPath.GetFileNameWithoutExtension(AFile);
+
   { v1.7: the PROJECT's framework, asked of the project store only. A library
     index carries Vcl.* and FMX.* alike by construction, so its answer describes
     the RTL rather than any consumer -- GuiFrameworkInUse says so itself, and
@@ -739,7 +770,14 @@ begin
 
   if PrecedingDot and (LhsText <> '') then
   begin
-    LhsSym:= FindTypeAnywhere(AStores, LhsText, LhsStore);
+    { v(dotted-lhs uses scope): the LHS gets the SAME scoping the bare-identifier
+      branch got on 2026-08-19. Reported: `TPath.GetDirectoryName(Fnm)` hovered
+      TPath as System.IOUtils.TPath and GetDirectoryName as FMX.Objects.TPath --
+      two hovers on ONE expression disagreeing, because only one of them was
+      scoped. A flat first-hit lookup lands on the wrong same-named type, the
+      member is then not found on it, and the owner-type floor reports that
+      wrong type with full confidence. }
+    LhsSym:= FindTypeAnywherePreferringUses(AStores, LhsText, LhsStore, UsedUnits, OwnUnit);
     { The member-access LHS is a VALUE (local/param/field/var), not a type: e.g.
       `ATokens.Count` where ATokens: TThingList. Replace the value symbol with its
       declared TYPE (from its signature) so the member lookup runs against the type.
@@ -851,7 +889,7 @@ begin
         a unit the file does not reference at all. UsedUnits was already
         computed above and was being applied only on the member-access branch. }
       var BareStore: ISymbolStore;
-      ResolvedSym:= FindTypeAnywherePreferringUses(AStores, Result.Token, BareStore, UsedUnits);
+      ResolvedSym:= FindTypeAnywherePreferringUses(AStores, Result.Token, BareStore, UsedUnits, OwnUnit);
       if ResolvedSym.Id > 0 then
       begin
         Result.Resolved          := ResolvedSym;

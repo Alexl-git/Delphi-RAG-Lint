@@ -286,8 +286,17 @@ begin
   Result:= TJSONObject.Create;
   Result.AddPair('label', ASym.Name);
   Result.AddPair('kind', TJSONNumber.Create(MapSymbolKindToLspKind(ASym.Kind)));
-  if ASym.Signature <> '' then DetailStr:= ASym.Signature
-  else DetailStr:= ASym.QualifiedName;
+  { `detail` is the TYPE slot. The IDE popup splits it into parameters and a
+    return type and draws the return type green after a colon, so a symbol with
+    no signature must contribute NOTHING here -- not its own qualified name,
+    which used to be the fallback and rendered as `DoIt: uDetail.TThing.DoIt`.
+
+    The plugin has been scrubbing that client-side with a
+    `Pos('.' + label, detail) > 0` heuristic, which hid the symptom and would
+    also blank a GENUINE signature containing '.' + the member's name (a
+    parameter typed `TRec.Value` on a member called `Value`). Deciding it here,
+    where the fact is known, removes both. }
+  DetailStr:= ASym.Signature;
   { Lead with the qualifiers that decide whether the symbol can be used HERE,
     and only those. Asked for after a protected field was offered, selected, and
     then rejected by the compiler with E2362: the popup described the symbol
