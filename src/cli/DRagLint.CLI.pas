@@ -17014,6 +17014,77 @@ begin
       if ResolveProjectDb(Manifest, AArgs.ProjectPath, ActiveDb, ActClaimants) <> pdmUnique then ActiveDb:= '';
     Paths:= OrderDbsByMembership(Paths, ActiveDb, AArgs.InFile, DbContainsFile);
 
+    { v1.7 B2: MEMBERSHIP FIRST, folders only as a fallback.
+
+      ResolveReadDbs answers from the manifest: the active project's DB, plus
+      the section whose ROOTS contain the file's folder. That is empty for any
+      member unit living outside its .dproj's own folder -- which is most of
+      this repo, whose project file sits in src\cli and pulls in src\lsp,
+      src\core, src\resolver and a dozen more. So `resolve-dbs --in
+      src\lsp\DRagLint.LSP.Server.pas` printed NOTHING while the very DB it
+      should have named answered `query --name HandleHover` about that file.
+
+      Silent, and worse than an error: CLAUDE.md tells every session to resolve
+      DB paths with this command rather than guess them, so an empty answer
+      reads as "no index covers this file" and sends the reader to Grep -- the
+      exact fallback the index exists to remove.
+
+      The reverse mapping is therefore taken from the files table, which is the
+      authority on membership, by probing every DB the platform resolves to.
+      Two DBs legitimately holding the same file (ORM3's shared COMMON\ units)
+      both get listed, because both genuinely contain it.
+
+      HOLDERS LEAD, THEY DO NOT REPLACE. The obvious form of this fix returns
+      the holders alone, and the INBOX note proposed exactly that -- but
+      run_project_db_resolve.ps1 already contracts that this resolution is a
+      PERMUTATION of the candidates, never a shorter list, precisely so that
+      browsing library and third-party source keeps working when membership is
+      unknown. Dropping candidates would trade one silent miss for another. So
+      the holders are moved to the FRONT and the manifest's own candidates
+      follow. A caller reading Result[0] now gets an index that can answer; a
+      caller reading the whole list loses nothing it used to be offered. }
+    var MemberDbs: TArray<string>:= nil;
+    var ProbePlatform: string:= AArgs.CheckPlatform;
+    if ProbePlatform = '' then ProbePlatform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
+    if ProbePlatform = '' then ProbePlatform:= Manifest.Settings.DefaultPlatform;
+    try
+      var MemResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+      try
+        for var Cand: string in TDbSelect.Resolve(Manifest, ProbePlatform, MemResolver, True) do
+          if DbContainsFile(Cand, AArgs.InFile) then
+          begin
+            SetLength(MemberDbs, Length(MemberDbs) + 1);
+            MemberDbs[High(MemberDbs)]:= Cand;
+          end;
+      finally
+        MemResolver.Free;
+      end;
+    except
+      on E: Exception do
+      begin
+        { A probe failure must not turn a working folder answer into no answer. }
+        MemberDbs:= nil;
+        Writeln(ErrOutput, Format('NOTE: membership probe failed (%s: %s); falling back to folder resolution.',
+                                  [E.ClassName, E.Message]));
+      end;
+    end;
+    if Length(MemberDbs) > 0 then
+    begin
+      var Merged: TArray<string>:= OrderDbsByMembership(MemberDbs, ActiveDb, AArgs.InFile, DbContainsFile);
+      for var Prev: string in Paths do
+      begin
+        var Already: Boolean:= False;
+        for var Have: string in Merged do
+          if SameText(Have, Prev) then begin Already:= True; Break; end;
+        if not Already then
+        begin
+          SetLength(Merged, Length(Merged) + 1);
+          Merged[High(Merged)]:= Prev;
+        end;
+      end;
+      Paths:= Merged;
+    end;
+
     if AArgs.AsJson then
     begin
       J:= TJSONArray.Create;
