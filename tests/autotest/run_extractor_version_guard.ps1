@@ -96,13 +96,66 @@ if (-not (Test-Path $baseline)) {
     Write-Host '   update the baseline to:' -ForegroundColor Yellow
     Write-Host "   $current"
   } else {
-    Check 'extraction changed but DRAGLINT_EXTRACTOR_VERSION did NOT' $false `
-          "still '$version' -- bump it, or every existing index keeps STALE parses silently"
-    Write-Host ''
-    Write-Host '   Bump DRAGLINT_EXTRACTOR_VERSION in src\core\DRagLint.Core.Model.pas,' -ForegroundColor Yellow
-    Write-Host '   then re-run and update tests\extractor-version.baseline.' -ForegroundColor Yellow
-    Write-Host '   If your change genuinely cannot affect extraction, say so in the' -ForegroundColor Yellow
-    Write-Host '   baseline file and update the hash without bumping.' -ForegroundColor Yellow
+    # ---- DEFER-UNTIL: a dated, hash-pinned postponement --------------------
+    # The owner sometimes needs an extractor fix TODAY without paying for the
+    # full re-parse today (2026-08-19: constructors/destructors). Simply not
+    # bumping is the failure this guard exists to prevent, so the postponement
+    # is made explicit instead of silent:
+    #
+    #   DEFER-UNTIL|<yyyy-MM-dd>|<hash>|<reason>
+    #
+    # It is PINNED TO THIS EXACT HASH, so any further extractor change makes it
+    # stop applying and the guard fails again immediately -- a deferral can
+    # never come to cover a change nobody reviewed. And it EXPIRES on its own
+    # date, so forgetting is not an option the mechanism allows.
+    #
+    # This is not a way to get green. It is louder than a bump, not quieter:
+    # every run prints what is stale and when the debt falls due.
+    $defer = Get-Content $baseline | Where-Object { $_ -match '^\s*DEFER-UNTIL\|' } | Select-Object -First 1
+    $deferOk = $false
+    if ($defer) {
+      $parts = ($defer.Trim() -split '\|', 4)
+      $dDate = $null
+      $dHash = if ($parts.Count -ge 3) { $parts[2].Trim() } else { '' }
+      $dWhy  = if ($parts.Count -ge 4) { $parts[3].Trim() } else { '(no reason given)' }
+      # ParseExact in a try, not TryParseExact: the [ref] out-parameter overload
+      # is a reliable way to lose an afternoon in PowerShell, and this needs no
+      # speed.
+      $parsed = $false
+      try {
+        $dDate  = [datetime]::ParseExact($parts[1].Trim(), 'yyyy-MM-dd',
+                    [System.Globalization.CultureInfo]::InvariantCulture)
+        $parsed = $true
+      } catch { $parsed = $false }
+      if (-not $parsed) {
+        Check 'DEFER-UNTIL date is a valid yyyy-MM-dd' $false $parts[1]
+      } elseif ($dHash -ne $hash) {
+        Check 'DEFER-UNTIL covers the CURRENT extraction surface' $false `
+              'the surface changed again since the deferral was recorded -- bump, or re-record it deliberately'
+      } elseif ((Get-Date).Date -gt $dDate.Date) {
+        Check "DEFER-UNTIL $($parts[1].Trim()) has EXPIRED" $false `
+              "the bump is now overdue -- $dWhy"
+      } else {
+        $deferOk = $true
+        Check "extraction changed; bump DEFERRED until $($parts[1].Trim())" $true $dWhy
+        Write-Host ''
+        Write-Host "   STALE ON PURPOSE: every existing index still holds the OLD parses." -ForegroundColor Yellow
+        Write-Host "   Rebuild an index to pick up the change, or bump on $($parts[1].Trim())." -ForegroundColor Yellow
+        Write-Host "   This runner goes RED by itself the day after that date." -ForegroundColor Yellow
+      }
+    }
+
+    if (-not $deferOk) {
+      Check 'extraction changed but DRAGLINT_EXTRACTOR_VERSION did NOT' $false `
+            "still '$version' -- bump it, or every existing index keeps STALE parses silently"
+      Write-Host ''
+      Write-Host '   Bump DRAGLINT_EXTRACTOR_VERSION in src\core\DRagLint.Core.Model.pas,' -ForegroundColor Yellow
+      Write-Host '   then re-run and update tests\extractor-version.baseline.' -ForegroundColor Yellow
+      Write-Host '   If your change genuinely cannot affect extraction, say so in the' -ForegroundColor Yellow
+      Write-Host '   baseline file and update the hash without bumping.' -ForegroundColor Yellow
+      Write-Host '   To postpone a bump deliberately, add a dated DEFER-UNTIL line' -ForegroundColor Yellow
+      Write-Host '   to the baseline -- see the comments there.' -ForegroundColor Yellow
+    }
   }
 }
 

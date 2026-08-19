@@ -15,4 +15,13 @@
 # If a change genuinely cannot affect extraction (a comment, a rename with no
 # behavioural effect), update the hash WITHOUT bumping the version and say why
 # here.
+#
+# DEFER-UNTIL|<yyyy-MM-dd>|<hash>|<reason>
+#   Postpones a bump that IS genuinely needed, deliberately and visibly. It is
+#   pinned to one hash, so any further extractor change stops it applying and
+#   the guard fails again at once; and it expires on its date, so the debt
+#   cannot be forgotten. It is louder than a bump, not quieter -- every run
+#   prints what is stale and when it falls due. Use it only when the owner has
+#   asked for the fix now and the re-parse later.
 1.4.0-alpha|079677c88767a90ce7afe8795ea70de63f05e81c65e6d8446c9e768dc2e5fe0d
+DEFER-UNTIL|2026-08-21|b6feb19c18b3c93d6d3cee62e84062a721a0852b78aa1ce34c50ce6f1dda8338|constructors/destructors inside a class were extracted as skMethod; owner asked for the fix on 2026-08-19 and the full re-parse on 2026-08-21 so today's work is not blocked. Until an index is rebuilt it still reports `method`.

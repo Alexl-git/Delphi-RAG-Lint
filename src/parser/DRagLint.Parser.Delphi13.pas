@@ -1340,19 +1340,30 @@ begin
   // Strip qualified prefix if present (e.g. 'TFoo.DoBar' -> 'DoBar') - happens in
   // free implementations. For interface/class declarations the name is bare.
   if Pos('.', MethName) > 0 then MethName:= Copy(MethName, LastDelimiter('.', MethName) + 1, MaxInt);
-  if AAsMethod then Kind:= skMethod
-  else
+  { v1.7: A CLASS MEMBER'S KIND WAS ALWAYS skMethod. The kConstructor /
+    kDestructor token was inspected only for FREE routines, so every
+    constructor and destructor declared inside a class -- which is to say
+    essentially all of them -- was stored as a plain method.
+
+    Measured on library-Win64 before the fix: of 18,630 symbols named `Create`,
+    18,616 said `method` and 2 said `constructor`, and those 2 were unit-level.
+    `destructor` did not occur at all. The IDE's own Help Insight calls these
+    constructors and colours them as keywords; hover said `method` in plain
+    text, and it was faithfully rendering a wrong stored fact.
+
+    CLASS PROCEDURES AND FUNCTIONS DELIBERATELY STAY skMethod. Rules, queries
+    and the structure view across the product test class members for skMethod;
+    splitting those into skProcedure/skFunction is a far wider change with no
+    reported symptom behind it. Only the two genuinely missing kinds are added. }
+  Kind:= skProcedure;
+  if ANode.ChildCount > 0 then
   begin
-    // Determine procedure vs function by inspecting the first token child
-    Kind:= skProcedure;
-    if ANode.ChildCount > 0 then
-    begin
-      FirstTok:= ANode.Child(0);
-      if FirstTok.NodeType      = 'kFunction' then Kind:= skFunction
-      else if FirstTok.NodeType = 'kConstructor' then Kind:= skConstructor
-      else if FirstTok.NodeType = 'kDestructor' then Kind:= skDestructor;
-    end;
+    FirstTok:= ANode.Child(0);
+    if FirstTok.NodeType      = 'kFunction'    then Kind:= skFunction
+    else if FirstTok.NodeType = 'kConstructor' then Kind:= skConstructor
+    else if FirstTok.NodeType = 'kDestructor'  then Kind:= skDestructor;
   end;
+  if AAsMethod and not (Kind in [skConstructor, skDestructor]) then Kind:= skMethod;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + MethName
   else QName:= MethName;
   { Methods carry their class visibility (UML glyphs); free procs do not. }
