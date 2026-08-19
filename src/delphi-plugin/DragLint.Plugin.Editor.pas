@@ -186,6 +186,7 @@ uses
   , Winapi.ShellAPI
   , DragLint.Plugin.Keyboard
   , DragLint.Plugin.CallerFilter   { v(hover-callers scope): pure caller-selection policy }
+  , DRagLint.Core.GhostText        { v1.7 B3: the completion endpoint KAI calls }
   , DragLint.Plugin.DiagnosticCache
   , DragLint.Plugin.EditViewNotifier
   , DragLint.Plugin.HoverTracker
@@ -329,6 +330,9 @@ end; // procedure
 
 var
   GLspClient: TDragLintLspClient              = nil             ;
+  { v1.7 B3: the ghost-text completion endpoint KAI calls. nil whenever the
+    setting is off, which is the default -- see StartGhostTextServer. }
+  GGhostText: TGhostTextServer                = nil             ;
   GMenuItems: TObjectList<TMenuItem>          = nil         ;
   GWrappers : TObjectList<TMenuActionWrapper> = nil;
   { v0.42: the View > Tool Windows entry lives under the IDE's menu (its Owner
@@ -5379,6 +5383,48 @@ begin
   JobQueue.Enqueue(LJob);
 end;
 
+{ v1.7 B3: bring up the ghost-text endpoint KAI is already configured to call.
+
+  The IDE has been logging `os error 10061` against
+  http://127.0.0.1:8765/api/generate on every keystroke KAI tries to complete:
+  the settings for this existed, and nothing ever listened. This is the
+  listener.
+
+  WHAT IT ANSWERS, AND WHY THAT IS DELIBERATELY LITTLE. drag-lint has no
+  language model. The provider below returns an EMPTY completion for every
+  request, which is a well-formed answer that silences the error without
+  inventing code. Serving plausible-looking invented text would be far worse
+  than serving nothing: the client cannot tell it from a real suggestion.
+
+  WHAT IS NOT WIRED YET, and why not. An index-derived completion needs the
+  file and cursor the request is about, and llm-ls sends NEITHER -- only the
+  OTA knows. Reaching the OTA from the server's accept thread means marshalling
+  to the main thread, and then a blocking engine round-trip would sit on the
+  IDE's main thread on every keystroke. That is a design that has to be
+  measured in a running IDE before it is inflicted on one, so it is left to the
+  session that has the IDE. Until then the honest answer is the empty one.
+
+  Failure here is never fatal: StartWhen returns nil if the port is taken, and
+  a completion provider that cannot start must not take the IDE down with it. }
+procedure StartGhostTextServer;
+var
+  S: TDragLintSettings;
+begin
+  if GGhostText <> nil then Exit;
+  S:= LoadSettings;
+  GGhostText:= TGhostTextServer.StartWhen(
+    S.EnableGhostText, S.GhostTextPort,
+    function(const APrompt, ASuffix: string): string
+    begin
+      { The default, and for now the only, answer. See the note above. }
+      Result:= '';
+    end);
+  if GGhostText <> nil then
+    DLT('ghosttext', Format('listening on 127.0.0.1:%d', [GGhostText.Port]))
+  else if S.EnableGhostText then
+    DLT('ghosttext', Format('ENABLED but could not bind 127.0.0.1:%d -- is something else on it?', [S.GhostTextPort]));
+end;
+
 procedure RegisterDragLintMenu;
 var
   Services: INTAServices;
@@ -5387,6 +5433,7 @@ begin
   if not Supports(BorlandIDEServices, INTAServices, Services) then Exit;
 
   AutoPullStagedExe;
+  StartGhostTextServer;
 
   GMenuItems:= TObjectList<TMenuItem         >.Create(True);
   GWrappers := TObjectList<TMenuActionWrapper>.Create(True);
@@ -5661,6 +5708,15 @@ begin
           form alive across a BPL unload is how the other teardown bugs here
           started. }
         try CloseAboutDialog; except end;
+
+        { v1.7 B3: close the ghost-text socket BEFORE anything else is torn
+          down. It owns a thread blocked in accept, and a BPL unloaded with a
+          live thread in its code segment is a crash, not a leak. }
+        if GGhostText <> nil then
+        begin
+          try GGhostText.Stop; except end;
+          FreeAndNil(GGhostText);
+        end;
 
         { Stop LSP client first }
         if GLspClient <> nil then
