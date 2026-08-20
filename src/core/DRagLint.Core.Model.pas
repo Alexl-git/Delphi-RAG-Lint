@@ -53,7 +53,7 @@ const
   /// escape hatch. Guarded by tests\autotest\run_extractor_version_guard.ps1,
   /// which fails when extractor sources change without this constant moving.
   /// </remarks>
-  DRAGLINT_EXTRACTOR_VERSION = '1.4.0-alpha';
+  DRAGLINT_EXTRACTOR_VERSION = '1.6.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

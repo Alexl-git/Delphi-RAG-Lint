@@ -39,7 +39,11 @@ var
 begin
   SplitCompletionSignature(ASignature, P, R);
   Result:= Trim(CompletionKindWord(AKind) + ' ' + AName + P);
-  if R <> '' then Result:= Result + ': ' + R;
+  { Separator ASKED FOR, not hardcoded -- this must mirror what
+    TDragLintCompletionForm actually does or the harness green-lights a row the
+    IDE never draws. It used to hardcode ': ', which was right until a const
+    could arrive carrying only its value. }
+  if R <> '' then Result:= Result + CompletionTypeSeparator(R) + R;
 end;
 
 { How it read before: "<glyph> <name> - <whole signature>". }
@@ -76,6 +80,22 @@ begin
 
   { UNBALANCED: shown verbatim rather than guessed at. }
   Emit('BROKEN', 3, 'Odd', '(const S: string');
+
+  { CONSTS (2026-08-19). The extractor now sends a const's type AND its value,
+    because 10% of consts in a measured 801 have no inferable type and the value
+    is the only thing that can be said about them. Two shapes reach here:
+
+      typed    'Integer = 100'  -- starts with a type, so it keeps its colon
+      untyped  '= MaxItems * 2' -- starts with '=', so the colon must go
+
+    The second is the whole reason CompletionTypeSeparator exists: rendered with
+    the old fixed ': ' it read `const Derived: = MaxItems * 2`. }
+  Emit('CONSTTYPED', 21, 'MaxItems', 'Integer = 100');
+  Emit('CONSTVALUE', 21, 'Derived' , '= MaxItems * 2');
+
+  { A const whose DECLARED type is an array -- the type text contains no '='
+    until the value, and must not be mistaken for one. }
+  Emit('CONSTARRAY', 21, 'Names', 'array[0..1] of string = (''a'', ''b'')');
 
   Writeln('DONE');
 end.

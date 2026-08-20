@@ -44,6 +44,17 @@ function CompletionKindWord(AKind: Integer): string;
 /// rather than guessed at.</remarks>
 procedure SplitCompletionSignature(const ASignature: string; out AParams, AReturn: string);
 
+/// <summary>What separates a row's name from its type slot: ': ', or a plain
+/// space when the slot is a VALUE rather than a type.</summary>
+/// <param name="AReturn">The return-type half from
+/// <see cref="SplitCompletionSignature"/>.</param>
+/// <returns>': ' normally; ' ' when AReturn already opens with '='.</returns>
+/// <remarks>Added with const signatures (2026-08-19). A const whose type could
+/// not be inferred carries only its value -- '= MaxItems * 2' -- and the fixed
+/// ': ' rendered that as `const Derived: = MaxItems * 2`. The colon belongs to
+/// a type, so it is dropped exactly when there is no type to introduce.</remarks>
+function CompletionTypeSeparator(const AReturn: string): string;
+
 implementation
 
 function CompletionKindWord(AKind: Integer): string;
@@ -112,6 +123,16 @@ begin
   AReturn:= Trim(Copy(Sig, CloseAt + 1, MaxInt));
   if (AReturn <> '') and (AReturn[Low(string)] = ':') then
     AReturn:= Trim(Copy(AReturn, Low(string) + 1, MaxInt));
+end;
+
+function CompletionTypeSeparator(const AReturn: string): string;
+begin
+  { The whole test is "does this slot hold a type or a value". Only a const
+    whose type could not be inferred reaches here with a leading '=' -- every
+    typed const carries `Integer = 100`, which starts with the type and keeps
+    its colon. }
+  if (AReturn <> '') and (AReturn[Low(string)] = '=') then Result:= ' '
+  else Result:= ': ';
 end;
 
 end.

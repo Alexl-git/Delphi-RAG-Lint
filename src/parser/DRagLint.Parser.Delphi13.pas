@@ -1192,6 +1192,101 @@ begin
   Result:= Trim(Result);
 end; // function
 
+{ v(2026-08-19): a const's TYPE and VALUE, for the slot the completion popup and
+  the hover both read out of Signature. Until now a declConst emitted NOTHING
+  there -- measured empty for all 106 consts in this repo's own index -- so the
+  popup described `const MaxItems` with no hint of what it is or what it holds.
+
+  WHY BOTH, rather than one or the other. Measured over 801 consts (drag-lint's
+  own src, ORM3 CLIENT/COMMON, YADF) before choosing:
+
+    typed           `Ratio: Double = 1.5`     24%   declared type, exact
+    untyped literal `= 100` / `= 'abc'`       66%   type follows the literal
+    untyped expr    `= A * 2` / `= Foo(x)`    10%   not inferable here
+
+  Emitting only the type would leave that last 10% blank -- which is the very
+  state being fixed. Emitting only the value would throw away the 24% that
+  DECLARE a type. Carrying both costs nothing and is the only option with no
+  blind spot: when the type is unknown the row still renders
+  `const Derived = MaxItems * 2`, which is what the source says.
+
+  THE ONE GENEROUS CALL, stated rather than buried: a single-character string
+  constant is reported `string`, though Delphi will also take it where a Char is
+  wanted. That is tolerable here precisely BECAUSE the value travels with it --
+  a reader sees `string = ','` and can tell. It would not have been tolerable if
+  the type were reported alone.
+
+  Deliberately NOT evaluated: an expression is never folded to a value. Folding
+  `MaxItems * 2` to `200` would make the index assert something the source does
+  not say, and the constant it depends on can change in another file. }
+function ConstSignatureOf(const ANode: TTSNode; const ASource: TBytes): string;
+const
+  { A value is a popup slot, not a source listing. A 200-entry array initializer
+    would push the type off the row it belongs to. }
+  MAX_VALUE_TEXT = 60;
+var
+  DeclType: string ;
+  DefNode : TTSNode;
+  ValNode : TTSNode;
+  ValText : string ;
+  Inferred: string ;
+  i       : Integer;
+begin
+  Result  := '';
+  DeclType:= TypeTextOf(ANode, ASource); { '' for an untyped const }
+
+  { defaultValue is a grammar FIELD: `defaultValue: (defaultValue (kEq) <expr>)`.
+    kEq is a NAMED node in this grammar -- four separate bugs in this file came
+    from assuming keyword tokens are anonymous -- so the value is the first
+    named child that is not it, not simply child 0. }
+  ValNode:= Default(TTSNode);
+  DefNode:= ANode.ChildByField('defaultValue');
+  if not DefNode.IsNull then
+    for i:= 0 to DefNode.NamedChildCount - 1 do
+      if DefNode.NamedChild(i).NodeType <> 'kEq' then
+      begin
+        ValNode:= DefNode.NamedChild(i);
+        Break;
+      end;
+
+  if not ValNode.IsNull then
+  begin
+    ValText:= CollapseWs(NodeText(ValNode, ASource));
+    if Length(ValText) > MAX_VALUE_TEXT then ValText:= Copy(ValText, 1, MAX_VALUE_TEXT) + '...';
+
+    { Infer only from a literal, where the node type IS the answer. Anything
+      built out of an expression (exprBinary, exprCall, a bare identifier) is
+      left untyped on purpose. }
+    Inferred:= '';
+    if ValNode.NodeType = 'literalNumber' then
+    begin
+      { A hex literal is an integer even though it can contain 'E'; test for the
+        '$' prefix FIRST or $1E5 reads as an exponent and types as Extended. }
+      if (ValText <> '') and (ValText[Low(string)] = '$') then Inferred:= 'Integer'
+      else if (Pos('.', ValText) > 0) or (Pos('e', LowerCase(ValText)) > 0) then Inferred:= 'Extended'
+      else Inferred:= 'Integer';
+    end
+    else if ValNode.NodeType = 'literalString' then Inferred:= 'string'
+    else if (ValNode.NodeType = 'kTrue') or (ValNode.NodeType = 'kFalse') then Inferred:= 'Boolean'
+    else if ValNode.NodeType = 'kNil' then Inferred:= 'Pointer';
+  end
+  else
+  begin
+    ValText := '';
+    Inferred:= '';
+  end;
+
+  { The DECLARED type always wins over the inferred one -- it is the source's
+    own word, and for `Scaled: Double = 2.5` the literal would have said
+    Extended, which is a different type. }
+  if DeclType <> '' then Result:= DeclType
+  else Result:= Inferred;
+
+  if ValText <> '' then
+    if Result <> '' then Result:= Result + ' = ' + ValText
+    else Result:= '= ' + ValText;
+end; // function
+
 // v0.42: full Pascal signature for a declProc node = the parameter list
 // (declArgs, including its parentheses) plus the return type, so hover and
 // completion can show "(const A: Integer; B: string): Boolean" rather than
@@ -1774,7 +1869,7 @@ begin
         var KQName: string;
         if AParentQualifiedName <> '' then KQName:= AParentQualifiedName + '.' + KName
         else KQName:= KName;
-        AState.Emit(skConstDecl, KName, KQName, AParentSymbolIdx, ANode);
+        AState.Emit(skConstDecl, KName, KQName, AParentSymbolIdx, ANode, ConstSignatureOf(ANode, AState.Source));
       end;
     end;
     // Walk children so a typed const's type emits a type_use ref.

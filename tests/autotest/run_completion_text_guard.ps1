@@ -103,6 +103,20 @@ Check 'CONTROL: an unbalanced signature is shown verbatim' ($kv['BROKEN.NEW'] -m
   "got '$($kv['BROKEN.NEW'])'"
 
 Write-Host ''
+Write-Host 'CONSTS: the colon belongs to a type, not to a value' -ForegroundColor Cyan
+Check 'CONST: a typed const keeps its colon' `
+  ($kv['CONSTTYPED.NEW'] -eq 'const MaxItems: Integer = 100') "got '$($kv['CONSTTYPED.NEW'])'"
+Check 'CONST: a const with no inferable type drops the colon' `
+  ($kv['CONSTVALUE.NEW'] -eq 'const Derived = MaxItems * 2') "got '$($kv['CONSTVALUE.NEW'])'"
+# The discriminator. Without CompletionTypeSeparator this row reads
+# 'const Derived: = MaxItems * 2' -- so assert the stray colon is ABSENT, not
+# merely that the text looks plausible.
+Check 'CONST: no stray colon before an "=" value' `
+  ($kv['CONSTVALUE.NEW'] -notmatch ':\s*=') "got '$($kv['CONSTVALUE.NEW'])'"
+Check 'CONST: a declared array type keeps its colon' `
+  ($kv['CONSTARRAY.NEW'] -eq "const Names: array[0..1] of string = ('a', 'b')") "got '$($kv['CONSTARRAY.NEW'])'"
+
+Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0

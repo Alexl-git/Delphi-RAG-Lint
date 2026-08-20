@@ -323,7 +323,11 @@ begin
         FRows[i].Params:= Copy(FRows[i].Params, Low(string), MAX_DETAIL) + '...)';
 
       DisplayStr:= FRows[i].KindWord + ' ' + FRows[i].Name + FRows[i].Params;
-      if FRows[i].ReturnTyp <> '' then DisplayStr:= DisplayStr + ': ' + FRows[i].ReturnTyp;
+      { The separator is asked for rather than fixed at ': ' because a const
+        whose type could not be inferred carries only its VALUE ('= A * 2'),
+        and a colon in front of that reads as `const Derived: = A * 2`. }
+      if FRows[i].ReturnTyp <> '' then
+        DisplayStr:= DisplayStr + CompletionTypeSeparator(FRows[i].ReturnTyp) + FRows[i].ReturnTyp;
       if FRows[i].Quals     <> '' then DisplayStr:= DisplayStr + ' ' + FRows[i].Quals;
 
       { The listbox still needs an item per row (owner-draw paints over it, but

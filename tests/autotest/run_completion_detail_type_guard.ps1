@@ -31,10 +31,14 @@
   the need to guess at it. So this guard asserts the ENGINE's output, where the
   fact is decided, not the popup's, where it is patched over.
 
-  NOT COVERED, DELIBERATELY: a `const` carries no type in the index at all
-  (measured -- signature is empty for all 106 consts in this repo's own DB).
-  Filling it is an EXTRACTOR change and would force a DRAGLINT_EXTRACTOR_VERSION
-  bump, re-parsing every database. That is a separate, costed decision.
+  NOT COVERED HERE, AND NO LONGER OPEN: a `const` carried no type in the index
+  at all (measured -- signature was empty for all 106 consts in this repo's own
+  DB). That was left out because filling it is an EXTRACTOR change and forces a
+  DRAGLINT_EXTRACTOR_VERSION bump, re-parsing every database -- a separate,
+  costed decision. It was taken on 2026-08-19: the parser now emits a const's
+  type and value, DRAGLINT_EXTRACTOR_VERSION moved 1.4.0-alpha -> 1.6.0-alpha,
+  and run_const_and_type_detail_guard.ps1 owns those assertions. This file
+  keeps the member-shape half; do not duplicate the const half into it.
 #>
 [CmdletBinding()]
 param(

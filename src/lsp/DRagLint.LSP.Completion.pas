@@ -277,6 +277,51 @@ begin
   else Result:= 3; // default Information
 end;
 
+{ v(2026-08-19): the member names of an enum TYPE, for its completion detail.
+  An enum's values are already indexed as child symbols (the parser parents each
+  declEnumValue to the enum), so this reads what is there rather than adding a
+  column -- see the note in MakeCompletionItem for why that distinction decided
+  where the change went.
+
+  The store call is why this is guarded to skEnum alone: a completion answer can
+  carry hundreds of items and none of the others need a second query. Enum types
+  are a thin slice of any prefix result, so the cost is bounded by how many the
+  user could have been offered, not by the result size. }
+function EnumMembersPreview(const ASym: TSymbol; const AStore: ISymbolStore): string;
+const
+  { A preview, not an enumeration. A 40-value enum would push everything else
+    off the row; the declaration is one Ctrl-click away. }
+  MAX_MEMBERS = 6;
+var
+  Kids : TArray<TSymbol>;
+  Parts: TStringList    ;
+  i    : Integer        ;
+  Shown: Integer        ;
+begin
+  Result:= '';
+  if not Assigned(AStore) then Exit;
+  Kids:= AStore.FindAllChildSymbols(ASym.Id);
+  if Length(Kids) = 0 then Exit;
+  Parts:= TStringList.Create;
+  try
+    Shown:= 0;
+    for i:= 0 to High(Kids) do
+    begin
+      if Kids[i].Kind <> skEnumValue then Continue;
+      if Shown >= MAX_MEMBERS then
+      begin
+        Parts.Add('...');
+        Break;
+      end;
+      Parts.Add(Kids[i].Name);
+      Inc(Shown);
+    end;
+    if Shown > 0 then Result:= String.Join(', ', Parts.ToStringArray);
+  finally
+    Parts.Free;
+  end;
+end;
+
 class function TLspCompletion.MakeCompletionItem(const ASym: TSymbol; const AStore: ISymbolStore): TJSONObject;
 var
   Doc      : TParsedDoc;
@@ -297,6 +342,41 @@ begin
     parameter typed `TRec.Value` on a member called `Value`). Deciding it here,
     where the fact is known, removes both. }
   DetailStr:= ASym.Signature;
+
+  { v(2026-08-19): a TYPE had nothing in this slot either -- a class, record,
+    interface or enum reached the popup as a bare name. Same owner ask as the
+    const work ("show the type of the result"), but NOT the same kind of change,
+    and the difference is worth stating because it decided where the code went:
+
+      a const's type/value existed NOWHERE in the store, so the parser had to
+      emit it and DRAGLINT_EXTRACTOR_VERSION had to move -- hours of re-parse;
+
+      a type's ancestors have been in `heritage` since v11, and an enum's
+      members are already child symbols. Both are already inside the TSymbol
+      this function is handed. Filling `signature` for them in the extractor
+      would have duplicated indexed data and charged a SECOND full re-parse to
+      say something the index already knew.
+
+    So this is a rendering decision made where the facts arrive, exactly as the
+    visibility and property-access markers below are. Nothing is INVENTED: a
+    bare `TBase = class` declares no ancestor and stays blank rather than
+    claiming TObject, because the popup draws this slot after a colon and an
+    invented value would be indistinguishable from an indexed one. }
+  if DetailStr = '' then
+    case ASym.Kind of
+      skClass, skRecord, skInterface:
+        { A helper's Heritage is its TARGET, not an ancestor (Emit sets
+          IsHelper=True for declHelper). Rendering it bare would read as
+          `class TColorHelper: TColor`, i.e. as if it descended from TColor. }
+        if ASym.IsHelper then
+        begin
+          if ASym.Heritage <> '' then DetailStr:= 'helper for ' + ASym.Heritage;
+        end
+        else DetailStr:= ASym.Heritage;
+      skEnum:
+        DetailStr:= EnumMembersPreview(ASym, AStore);
+    end;
+
   { Lead with the qualifiers that decide whether the symbol can be used HERE,
     and only those. Asked for after a protected field was offered, selected, and
     then rejected by the compiler with E2362: the popup described the symbol
