@@ -635,7 +635,7 @@ CLI-only verbs).
 ### Lint rule pack (173 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.5.0-alpha: **173 rules across 16 categories -- 119
+external `.scm`). As of v1.7.0-alpha: **173 rules across 16 categories -- 119
 built-in and 54 external `.scm`, 149 enabled by default, and 22 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
@@ -832,7 +832,7 @@ the PowerShell battery.
 ## Version history
 
 See [CHANGELOG.md](CHANGELOG.md) for the detailed history. The current release is
-**v1.5.0-alpha**; development continues daily.
+**v1.7.0-alpha**; development continues daily.
 
 ---
 

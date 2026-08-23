@@ -3,6 +3,121 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.7.0-alpha -- 2026-08-23
+
+**The release where the IDE became the product surface.** v1.5.0-alpha and
+v1.6.0-alpha were bumped in code but never described here, so this entry covers
+everything since v1.4.0-alpha -- 32 commits. The centre of gravity moved from the
+CLI to the live IDE: a warm LSP behind the plugin, a hover popup and a completion
+popup that theme themselves, and a relay that lets Code Insight and drag-lint
+coexist.
+
+**No schema change.** `SCHEMA_VERSION` is 21 before and after.
+**173 rules across 16 categories**, 22 auto-fixable, 149 on by default.
+
+> ### THE v1.4.0 RE-PARSE WARNING NO LONGER APPLIES -- read this instead.
+> v1.4.0-alpha warned that "a release bump invalidates every stored parse whether
+> or not extraction changed". That was true then and is **not** true now:
+> `DRAGLINT_EXTRACTOR_VERSION` was split out of the indexer fingerprint, and this
+> release is the proof -- the product version moved 1.6.0 -> 1.7.0 and the
+> extraction surface hash did not change, so **v1.7.0 by itself costs nothing**.
+>
+> **One re-parse IS owed, for a different reason.**
+> `DRAGLINT_EXTRACTOR_VERSION` moved 1.4.0-alpha -> 1.6.0-alpha because consts
+> now carry a type and a value, which is a genuine change to what is extracted.
+> Every index re-parses once on its first run under this build. That is the cost
+> the split exists to make *legible*: it is charged for the const work, not for
+> the version number. `tools\reindex-all.ps1` runs the libraries and the project
+> sections in parallel, and per-file resume means an interrupted walk continues
+> rather than restarting.
+
+### Indexing and extraction
+
+* **A const now carries its type AND its value.** `signature` was empty for every
+  const in every index, so the completion popup and the hover described
+  `const MaxItems` with no hint of what it is or holds. The format was chosen by
+  measuring 801 consts across three real corpora: 24% declare a type, 66% are a
+  bare literal whose type follows from the literal, and 10% are an expression
+  that cannot be typed without evaluating it. Type alone would have left that
+  last 10% blank -- the defect being fixed -- so both are carried, and an
+  expression is never folded to a value (`VERSION = DRAGLINT_VERSION` stays
+  untyped rather than asserting something the source does not say).
+* **A class, record, interface or enum describes itself in the popup** -- its
+  ancestors, or its first members for an enum. Done in the LSP rather than the
+  extractor, because `heritage` has been indexed since v11 and enum members are
+  already child symbols: writing them into `signature` would have charged a
+  second full re-parse to restate what the index already knew. Nothing is
+  invented -- a bare `TBase = class` declares no ancestor and stays blank.
+* **The extraction identity is separate from the product version.** Previously
+  the indexer fingerprint embedded `DRAGLINT_VERSION`, so every release re-parsed
+  every database whether or not the parser had changed -- hours of machine time
+  bought for nothing, recurring on every bump. `DRAGLINT_EXTRACTOR_VERSION` now
+  carries that identity alone, guarded by
+  `tests\autotest\run_extractor_version_guard.ps1`, which fails when extractor
+  sources move without it.
+* **A constructor inside a class is a constructor, not a method.** Every class
+  member was extracted as `skMethod`, so a constructor hovered and completed as
+  `method`.
+* **Member lookups stopped being answered from the wrong GUI framework.**
+  `TPath.GetDirectoryName` resolved into FMX in a VCL project. Resolution now
+  ranks the file's own unit first, its used units second, and a flat lookup last.
+* **`resolve-dbs --in` resolves by index membership**, not by the project file's
+  folder -- a project whose `.dproj` sits in a subdirectory of the code it owns
+  was resolved to the wrong database.
+
+### The IDE plugin
+
+* **An About/status window, a diagnose report, and a restructured menu.**
+* **Continuous LSP status** in place of a modal that asserted a failure.
+* **The hover and completion popups follow the IDE theme.** The IDE themes itself
+  through `IOTAIDEThemingServices`, not the process-global VCL `TStyleManager`,
+  so a bare `clWindow` stayed white while the IDE was visibly dark.
+* **Completion rows read as Delphi.** The kind is spelled out, parameters stay
+  attached to the name, and the declared type follows a colon -- `function
+  Split(const S: string; ASep: Char): TArray<string>`, not `f Split - ...`. A
+  symbol with no signature contributes nothing rather than its own qualified
+  name.
+* **Gutter marks appear on file open**, including the first run before the LSP is
+  up, and the refresh-findings spawn storm on every idle tick is gone.
+* **The library index is resolved from the manifest**, and a failed resolve says
+  why instead of failing silently.
+
+### LSP
+
+* **`drag-lint lsp --proxy` -- a relay in front of DelphiLSP**, so Code Insight
+  and drag-lint can both answer. `drag-lint-switch` is the rollback lever.
+* **Cursor positions read the client's live buffer, not the disk.** An index
+  being fresh is not the same as the CURSOR being fresh: a position names a spot
+  in the editor's buffer, so a `didChange` the server ignored made every request
+  during typing silently answer about stale text.
+* **The whole hover popup is served over the warm LSP**, instead of spawning the
+  engine twice per hover against a multi-gigabyte library index.
+* **The completion endpoint is served**, rather than accepted and dropped.
+
+### Documentation and guards
+
+* **A per-feature wiki (125 pages)**, a rewritten README CLI/MCP reference, and
+  the whole manual generated as a single Word + PDF with a freshness guard.
+* **A docs-sync guard that fails the battery on drift.** It was written after one
+  afternoon found four shipping verbs missing from `--help`, the entire autofix
+  flag set undocumented, and README claiming "130+ rules" against a real 173.
+* **The CLI surface that was hidden is now documented**, along with four defects
+  found while documenting it.
+* The battery is **347 runners**.
+
+### Fixes
+
+* `pchar-arithmetic` no longer fires on ALL-CAPS constants.
+* `generate-test` no longer treats a unit-name segment as the enclosing class.
+* The MCP server answers each list method with its own key, and no longer reports
+  itself as v0.31.
+
+### Housekeeping
+
+* The kill-on-close job object moved out of the plugin into core.
+* 2.2 GB of dead build artifacts and the tracked manual were dropped from the
+  repository.
+
 ## v1.4.0-alpha -- 2026-08-17
 
 A performance and correctness release. **`lint-all` on a 566-file project goes

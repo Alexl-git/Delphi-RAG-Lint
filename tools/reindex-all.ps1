@@ -2,9 +2,20 @@
   reindex-all.ps1 -- rebuild every index, with the two library platforms in
   parallel.
 
-  WHY THIS EXISTS: a release bump changes DRAGLINT_VERSION, which is part of the
-  indexer fingerprint, so EVERY database re-parses in full on its first run under
-  the new build. That is the state after v1.4.0-alpha.
+  WHY THIS EXISTS: every database re-parses in full on its first run under a
+  build whose EXTRACTION identity changed.
+
+  THAT IS NO LONGER THE PRODUCT VERSION -- corrected 2026-08-23. The old wording
+  here ("a release bump changes DRAGLINT_VERSION, which is part of the indexer
+  fingerprint") is now wrong in a way that matters: it would have you run this
+  after ANY release. The fingerprint carries DRAGLINT_EXTRACTOR_VERSION, which
+  moves only when extraction genuinely changes. v1.7.0-alpha is the proof -- the
+  product version moved 1.6.0 -> 1.7.0 and the extraction-surface hash did not,
+  so that bump alone cost nothing.
+
+  RUN THIS WHEN DRAGLINT_EXTRACTOR_VERSION MOVES, not when DRAGLINT_VERSION does.
+  It last moved 1.4.0-alpha -> 1.6.0-alpha (consts now carry a type and a value),
+  which is the re-parse this run is paying for.
 
   WHAT IT RUNS -- three concurrent processes:
 
