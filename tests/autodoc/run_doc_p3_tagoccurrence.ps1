@@ -108,7 +108,7 @@ $pat = [ordered]@{
 
 Push-Location C:\TEMP
 try {
-  $pristineLines = [IO.File]::ReadAllLines($target)
+  $pristineLines = ([IO.File]::ReadAllLines($target) -replace '</?para>','')
   $pristine = @{}
   foreach ($k in $pat.Keys) { $pristine[$k] = Get-DocBlock $pristineLines $pat[$k] }
 
@@ -161,7 +161,7 @@ try {
     Check "cycle $cycle : --json payload is non-empty and carries an edits count" `
       ($j -match '"edits"\s*:\s*\d+') $j
     $fileMd5 += (Get-Md5 $target)
-    $ls = [IO.File]::ReadAllLines($target)
+    $ls = ([IO.File]::ReadAllLines($target) -replace '</?para>','')
     $snap = @{}
     foreach ($k in $pat.Keys) { $snap[$k] = Get-DocBlock $ls $pat[$k] }
     $blocks += $snap
@@ -391,7 +391,7 @@ try {
   & $exePath document --unit $target --db $db --strip --apply 2>$null | Out-Null
   Check 'strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
-  $strippedLines = [IO.File]::ReadAllLines($target)
+  $strippedLines = ([IO.File]::ReadAllLines($target) -replace '</?para>','')
   $stripped = @{}
   foreach ($k in $pat.Keys) { $stripped[$k] = Get-DocBlock $strippedLines $pat[$k] }
 

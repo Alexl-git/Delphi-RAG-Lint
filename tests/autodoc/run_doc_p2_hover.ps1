@@ -76,7 +76,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
   $blockLines = @()
   $j = $idx - 1
   while ($j -ge 0 -and $lines[$j].TrimStart() -match '^///') { $blockLines = ,($lines[$j]) + $blockLines; $j-- }
-  return ($blockLines -join "`n")
+  return (($blockLines -join "`n") -replace '</?para>', '')
 }
 
 # Extracts the "$label: <rest of that physical line>" text from $text, NOT
@@ -236,7 +236,7 @@ try {
   # The doc side: the Mutates line out of the emitted block, /// stripped.
   $docMut = ''
   foreach ($l in [IO.File]::ReadAllLines($p3src)) {
-    $t = ($l -replace '^\s*///\s?','').Trim()
+    $t = ($l -replace '^\s*///\s?','' -replace '</?para>','').Trim()
     if ($t -match '^Mutates: (.*)$') { $docMut = $Matches[1].Trim(); break }
   }
   # The hover side: the same line out of the markdown render, bolding stripped.

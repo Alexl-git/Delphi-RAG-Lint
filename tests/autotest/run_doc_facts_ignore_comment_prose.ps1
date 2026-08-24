@@ -111,7 +111,7 @@ Push-Location $WorkDir
 try { & $Exe document --qname uProse2.Worker --db $db --apply --no-backup 2>&1 | Out-Null }
 finally { Pop-Location }
 
-$text = Get-Content $file -Raw
+$text = ((Get-Content $file -Raw) -replace '</?para>','')
 $callsLine = ($text -split "`r?`n" | Where-Object { $_ -match '///\s*Calls:' } | Select-Object -First 1)
 if (-not $callsLine) { $callsLine = '' }
 

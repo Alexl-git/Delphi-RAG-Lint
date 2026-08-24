@@ -44,7 +44,7 @@ function DocXmlWellFormed([string]$path) {
   $inBlock = $false
   foreach ($ln in $lines) {
     if ($ln -match '^\s*///') {
-      $stripped = $ln -replace '^\s*///\s?',''
+      $stripped = $ln -replace '^\s*///\s?','' -replace '</?para>',''
       if (-not $inBlock) { [void]$sb.Append('<doc>'); $inBlock = $true }
       [void]$sb.AppendLine($stripped)
     } else {

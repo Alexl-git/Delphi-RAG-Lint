@@ -53,7 +53,7 @@ function Get-BlockAbove([string[]]$lines, [string]$declPattern) {
 # The text after "<label>: " on its own fact line, or '' when the label is absent.
 function Get-FactLine([string]$block, [string]$label) {
   foreach ($l in ($block -split "`n")) {
-    $t = ($l -replace '^\s*///\s?','').Trim()
+    $t = ($l -replace '^\s*///\s?','' -replace '</?para>','').Trim()
     if ($t -match "^$label`: (.*)$") { return $Matches[1].Trim() }
   }
   return ''
@@ -63,7 +63,7 @@ function Get-FactLine([string]$block, [string]$label) {
 # WHOLE line: 'Pure' must never be matched inside another line's prose.
 function Test-HasPure([string]$block) {
   foreach ($l in ($block -split "`n")) {
-    if ((($l -replace '^\s*///\s?','').Trim()) -eq 'Pure') { return $true }
+    if ((($l -replace '^\s*///\s?','' -replace '</?para>','').Trim()) -eq 'Pure') { return $true }
   }
   return $false
 }

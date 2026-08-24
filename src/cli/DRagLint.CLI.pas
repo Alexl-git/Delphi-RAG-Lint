@@ -115,6 +115,7 @@ uses
   , DRagLint.Diagnostics.FlowChecks
   , DRagLint.Workspace  .Config
   , DRagLint.Index      .Manifest
+  , DRagLint.Index      .ManifestWrite
   , DRagLint.Index      .Glob
   , DRagLint.Index      .IgnoreFiles
   , DRagLint.Index      .Closure
@@ -634,6 +635,7 @@ begin
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
+  Writeln('  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');
   Writeln('                               exits 2 and names the sections when none or SEVERAL claim the project,');
@@ -16864,6 +16866,98 @@ end; // function
 /// the IDE plugin's Rebuild Index action uses, which is what makes that
 /// resolution testable outside the IDE.
 /// Not thread-safe; call from the main thread only.</remarks>
+
+{ v(2026-08-24): the missing half of "index a new project".
+
+  Opening a brand-new project and asking the IDE to reindex it produced a dead
+  end -- "no index section owns this project ... Add a section for this project
+  to the manifest". That refusal is CORRECT (rebuilding a neighbouring index
+  would clear another project's source), but there was no way to act on it: the
+  engine had no manifest writer at all, so the message named a manual JSON edit
+  as the only route.
+
+  Reports rather than writes unless --apply is given. Registration edits config
+  the whole machine reads, and a dry run that prints the exact section and every
+  file it would touch is cheap. }
+function DoRegisterProject(const AArgs: TArgs): Integer;
+var
+  Proj: string;
+  Name: string;
+  Res : TRegisterResult;
+begin
+  Proj:= AArgs.Path;
+  if Proj = '' then
+  begin
+    Writeln(ErrOutput, 'usage: drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]');
+    Exit(2);
+  end;
+
+  Name:= AArgs.Name;   { --name <Section>; blank derives it from the project file }
+  Res := RegisterProjectSection(ExtractFilePath(ParamStr(0)), Proj, Name, AArgs.Apply);
+
+  if AArgs.AsJson then
+  begin
+    var O: TJSONObject:= TJSONObject.Create;
+    try
+      var OutcomeText: string;
+      case Res.Outcome of
+        roAdded       : if AArgs.Apply then OutcomeText:= 'added' else OutcomeText:= 'would-add';
+        roAlreadyOwned: OutcomeText:= 'already-registered';
+        roAmbiguous   : OutcomeText:= 'ambiguous';
+        roNoManifest  : OutcomeText:= 'no-manifest';
+      else               OutcomeText:= 'failed';
+      end;
+      O.AddPair('outcome', OutcomeText);
+      O.AddPair('section', Res.Section);
+      O.AddPair('message', Res.Message);
+      var Arr: TJSONArray:= TJSONArray.Create;
+      for var W: string in Res.Written do Arr.Add(W);
+      O.AddPair('manifests', Arr);
+      var Cl: TJSONArray:= TJSONArray.Create;
+      for var C: string in Res.Claimants do Cl.Add(C);
+      O.AddPair('claimants', Cl);
+      Writeln(O.Format(2));
+    finally
+      O.Free;
+    end;
+  end
+  else
+  begin
+    case Res.Outcome of
+      roAdded:
+        begin
+          if AArgs.Apply then Writeln('registered section "', Res.Section, '"')
+          else Writeln('WOULD register section "', Res.Section, '"  (dry run -- pass --apply to write)');
+          for var W: string in Res.Written do Writeln('  manifest: ', W);
+          Writeln;
+          Writeln(Res.Json);
+          if AArgs.Apply then
+          begin
+            Writeln;
+            Writeln('Next: drag-lint index --all --only ', Res.Section);
+          end;
+        end;
+      roAlreadyOwned:
+        begin
+          Writeln('already registered -- nothing to do.');
+          for var C: string in Res.Claimants do Writeln('  section: ', C);
+        end;
+      roAmbiguous:
+        begin
+          Writeln(ErrOutput, 'REFUSED: ', Res.Message);
+          for var C: string in Res.Claimants do Writeln(ErrOutput, '  section: ', C);
+          Exit(1);
+        end;
+    else
+      begin
+        Writeln(ErrOutput, 'FAILED: ', Res.Message);
+        Exit(1);
+      end;
+    end;
+  end;
+  Result:= 0;
+end;
+
 function DoResolveDbsList(const AArgs: TArgs): Integer;
 var
   Manifest  : TIndexManifest                            ;
@@ -18917,6 +19011,7 @@ begin
     else if Args.Command = 'reconcile-project' then Result:= DoReconcileProject(Args)
     else if Args.Command = 'library-drift'     then Result:= DoLibraryDrift    (Args)
     else if Args.Command = 'migrate-dbs'       then Result:= DoMigrateDbs      (Args)
+    else if Args.Command = 'register-project' then Result:= DoRegisterProject(Args)
     else if Args.Command = 'resolve-dbs' then
       // v0.45 Task 10: print the consumer DB list (same as query/lsp/serve use).
       Result:= DoResolveDbsList(Args)

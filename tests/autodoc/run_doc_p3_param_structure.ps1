@@ -62,7 +62,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declRx) {
     if ($lines[$i] -notmatch '^\s*///') { break }
     $acc.Insert(0, $lines[$i].Trim())
   }
-  return [string]::Join("`n", $acc.ToArray())
+  return ([string]::Join("`n", $acc.ToArray()) -replace '</?para>', '')
 }
 
 # The body of <param name="$name"> in $block with the provenance marker
@@ -70,7 +70,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declRx) {
 # distinct from '' , which means the tag is present and empty. That distinction
 # is the entire point of ruling D-3, so the helper must not blur it.
 function Get-ParamBody([string]$block, [string]$name) {
-  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' }) -join ' '
+  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' -replace '</?para>','' }) -join ' '
   $m = [regex]::Match($flat, '<param\s+name="' + [regex]::Escape($name) + '">([\s\S]*?)</param>')
   if (-not $m.Success) { return $null }
   $b = $m.Groups[1].Value -replace '<!--\s*drag-lint:auto[^>]*-->',''

@@ -108,7 +108,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
   $blockLines = @()
   $j = $idx - 1
   while ($j -ge 0 -and $lines[$j].TrimStart() -match '^///') { $blockLines = ,($lines[$j]) + $blockLines; $j-- }
-  return ($blockLines -join "`n")
+  return (($blockLines -join "`n") -replace '</?para>', '')
 }
 
 # 1-based line number of the FIRST line matching $pattern, or 0.

@@ -296,7 +296,7 @@ Copy-Item $fx $tgt -Force
 
 & $exePath index $sc --db $db 2>$null | Out-Null
 
-$pre = [IO.File]::ReadAllLines($tgt)   # PRE-APPLY source: what the miner sees.
+$pre = ([IO.File]::ReadAllLines($tgt) -replace '</?para>','')   # PRE-APPLY source: what the miner sees.
 
 # ===========================================================================
 # PRECONDITIONS -- derived from the INDEX + the pre-apply source, never from
@@ -451,8 +451,8 @@ $md5Cycle1 = Get-FileMd5 $tgt
 # Reindex so the declaration lines below describe the file the apply just wrote.
 & $exePath index $sc --db $db 2>$null | Out-Null
 
-$text  = [IO.File]::ReadAllText($tgt)
-$lines = [IO.File]::ReadAllLines($tgt)
+$text  = ([IO.File]::ReadAllText($tgt) -replace '</?para>','')
+$lines = ([IO.File]::ReadAllLines($tgt) -replace '</?para>','')
 
 $names  = @('PlainSum','DoubleIt','ConcatPath','PrevIdx','Accum','DefaultCfg',
             'NestedCallRhs','MultiLineRhs','OneLiner','AnonHost','LocalHost','InlineProcVar',
@@ -744,7 +744,7 @@ $tgt2 = Join-Path $sc2 'returns.pas'
 $db2  = Join-Path $sc2 'r.sqlite'
 Copy-Item $fx $tgt2 -Force
 & $exePath index $sc2 --db $db2 2>$null | Out-Null
-$src2 = [IO.File]::ReadAllLines($tgt2)
+$src2 = ([IO.File]::ReadAllLines($tgt2) -replace '</?para>','')
 
 $lagPy = Join-Path $sc2 'lagspan.py'
 @'
@@ -851,7 +851,7 @@ $tgt3 = Join-Path $sc3 'returns.pas'
 $db3  = Join-Path $sc3 'r.sqlite'
 Copy-Item $fx $tgt3 -Force
 & $exePath index $sc3 --db $db3 2>$null | Out-Null
-$src3 = [IO.File]::ReadAllLines($tgt3)
+$src3 = ([IO.File]::ReadAllLines($tgt3) -replace '</?para>','')
 
 $fgnPy = Join-Path $sc3 'foreignspan.py'
 @'
@@ -912,7 +912,7 @@ Check 'FOREIGN: ForeignB hovers NOTHING AT ALL over a span that heads another ro
 # and a fix that silenced one surface only would be a defect. Asserted on the
 # rendered <returns>, which is the text a human actually reads.
 & $exePath document --unit $tgt3 --db $db3 --apply 2>$null | Out-Null
-$lines3 = [IO.File]::ReadAllLines($tgt3)
+$lines3 = ([IO.File]::ReadAllLines($tgt3) -replace '</?para>','')
 $bad3   = @($lines3 | Where-Object { $_ -match '^\s*///' -and $_ -match 'Observed:' -and $_ -match 'A \* 7' })
 Check 'FOREIGN: exactly ONE ///-prefixed "Observed:" line in the file names "A * 7" -- ForeignA''s own, and no other' `
   ($bad3.Count -eq 1) ($bad3 -join ' | ')
@@ -955,7 +955,7 @@ $tgt4 = Join-Path $sc4 'returns.pas'
 $db4  = Join-Path $sc4 'r.sqlite'
 Copy-Item $fx $tgt4 -Force
 & $exePath index $sc4 --db $db4 2>$null | Out-Null
-$src4 = [IO.File]::ReadAllLines($tgt4)
+$src4 = ([IO.File]::ReadAllLines($tgt4) -replace '</?para>','')
 
 # Keyed on QUALIFIED name, not on `name`: both rows are called `Same`, so the
 # scenario-3 script would move BOTH and the doctored span would no longer be
@@ -1022,7 +1022,7 @@ Check 'SAME-NAME: TBeta.Same hovers its OWN value "A * 22" or NOTHING AT ALL -- 
 
 # The autodoc surface must agree, on the text a human reads.
 & $exePath document --unit $tgt4 --db $db4 --apply 2>$null | Out-Null
-$lines4 = [IO.File]::ReadAllLines($tgt4)
+$lines4 = ([IO.File]::ReadAllLines($tgt4) -replace '</?para>','')
 $bad4   = @($lines4 | Where-Object { $_ -match '^\s*///' -and $_ -match 'Observed:' -and $_ -match 'A \* 11' })
 Check 'SAME-NAME: exactly ONE ///-prefixed "Observed:" line in the file names "A * 11" -- TAlpha.Same''s own, and no other' `
   ($bad4.Count -eq 1) ($bad4 -join ' | ')

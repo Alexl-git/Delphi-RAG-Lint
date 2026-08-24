@@ -86,7 +86,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
   $blockLines = @()
   $j = $idx - 1
   while ($j -ge 0 -and $lines[$j].TrimStart() -match '^///') { $blockLines = ,($lines[$j]) + $blockLines; $j-- }
-  return ($blockLines -join "`n")
+  return (($blockLines -join "`n") -replace '</?para>', '')
 }
 
 # Extracts the 'SQL: ...' line's raw value (everything after 'SQL: ' to end

@@ -110,7 +110,7 @@ function Get-DocBlockAtLine([string[]]$lines, [int]$declLine1) {
 # The text content of the <summary>, marker stripped, or '' when the tag is
 # absent. Spans lines: EmitTagged re-prefixes continuation lines with ///.
 function Get-Summary([string]$block) {
-  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' }) -join ' '
+  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' -replace '</?para>','' }) -join ' '
   $m = [regex]::Match($flat, '<summary>(?:<!-- drag-lint:auto -->)?\s*(.*?)\s*</summary>')
   if ($m.Success) { return ($m.Groups[1].Value -replace '\s+',' ').Trim() } else { return '' }
 }
@@ -118,7 +118,7 @@ function Get-Summary([string]$block) {
 # How many times $needle occurs in $block, compared on whitespace-collapsed
 # text so a wrapped re-emission still counts as the same phrase.
 function Count-Phrase([string]$block, [string]$needle) {
-  $flat = (($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' }) -join ' ') -replace '\s+',' '
+  $flat = (($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' -replace '</?para>','' }) -join ' ') -replace '\s+',' '
   return ([regex]::Matches($flat, [regex]::Escape($needle))).Count
 }
 

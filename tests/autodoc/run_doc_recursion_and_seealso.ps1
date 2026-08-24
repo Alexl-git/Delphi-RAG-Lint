@@ -113,7 +113,7 @@ end.
 
 function Get-Block([string]$qname, [string[]]$extraArgs) {
   $argv = @('document','--qname',$qname,'--db',$db) + $extraArgs
-  return ((& $exePath @argv 2>$null) -join "`n")
+  return (((& $exePath @argv 2>$null) -join "`n") -replace '</?para>','')
 }
 
 Push-Location C:\TEMP

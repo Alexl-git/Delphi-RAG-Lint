@@ -44,7 +44,7 @@ Push-Location C:\TEMP
 try {
   & $exePath index $scratch --db $db 2>$null | Out-Null
 
-  $out = & $exePath document --qname cap_target.Target --db $db 2>$null | Out-String
+  $out = (& $exePath document --qname cap_target.Target --db $db 2>$null | Out-String) -replace '</?para>',''
   # Grab the single "Called from:" line.
   $line = ($out -split "`r?`n" | Where-Object { $_ -match 'Called from:' } | Select-Object -First 1)
   Check 'preview: a "Called from:" line is present' ($null -ne $line -and $line -ne '')

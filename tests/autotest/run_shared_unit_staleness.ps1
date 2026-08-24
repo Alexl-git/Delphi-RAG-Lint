@@ -225,7 +225,7 @@ function DocApply([string]$Db, [string]$Unit) {
   & $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db --apply --no-backup 2>$null
 }
 function DocEditCount([string]$Db, [string]$Unit) {
-  $o = (& $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db 2>$null) -join "`n"
+  $o = ((& $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db 2>$null) -join "`n") -replace '</?para>',''
   if ($o -match 'decl\(s\)[^,]*,\s*(\d+)\s*edit\(s\)') { return [int]$Matches[1] }
   return 0
 }
@@ -234,8 +234,11 @@ function DriftCount([string]$Db, [string]$Unit) {
   ($o | Select-String 'doc-drift' | Where-Object { $_.Line -match "\\$Unit\.pas:" }).Count
 }
 function BlockLine([string]$Unit, [string]$Label) {
-  $m = Select-String -Path (Join-Path $shDir "$Unit.pas") -Pattern "///\s*$Label" | Select-Object -First 1
-  if ($m) { return $m.Line.Trim() } else { return '' }
+  # P8 wraps each managed fact in <para>...</para>, so the label no longer
+  # follows /// directly. The wrapper is tolerated in the pattern and removed
+  # from the returned line, leaving every caller-list assertion below unchanged.
+  $m = Select-String -Path (Join-Path $shDir "$Unit.pas") -Pattern "///\s*(<para>)?\s*$Label" | Select-Object -First 1
+  if ($m) { return ($m.Line -replace '</?para>','').Trim() } else { return '' }
 }
 
 Reindex $dbA @($shDir, $aDir)
@@ -286,7 +289,7 @@ Check 'an UNMARKED shared unit keeps old behaviour' ((DriftCount $dbB 'Plain') -
 # proves nothing -- JoinRefs emits the marker only on a MIXED list -- so this is
 # sound in one direction only, which is why the other two conditions carry it.)
 $qPath = Join-Path $shDir 'MarkQ.pas'
-$qText = [System.IO.File]::ReadAllText($qPath)
+$qText = ([System.IO.File]::ReadAllText($qPath) -replace '</?para>','')
 $qText = $qText -replace '(?m)(///\s*Called from:.*?)(\r?\n)', '$1, Ghost.Caller (Ghost.pas) ?$2'
 [System.IO.File]::WriteAllText($qPath, $qText, [System.Text.Encoding]::ASCII)
 Reindex $dbA @($shDir)
@@ -296,7 +299,7 @@ Check 'a ? entry is still drift' ((DriftCount $dbA 'MarkQ') -gt 0) `
 # An entry naming a unit that IS in this closure cannot be excused by "another
 # project can see it" -- this project can see it, and it is gone.
 $dPath = Join-Path $shDir 'MarkDel.pas'
-$dText = [System.IO.File]::ReadAllText($dPath)
+$dText = ([System.IO.File]::ReadAllText($dPath) -replace '</?para>','')
 $dText = $dText -replace '(?m)(///\s*Called from:.*?)(\r?\n)', '$1, AOnly.NoSuchProc (AOnly.pas)$2'
 [System.IO.File]::WriteAllText($dPath, $dText, [System.Text.Encoding]::ASCII)
 Reindex $dbA @($shDir)
@@ -305,7 +308,7 @@ Check 'an in-closure deletion is still drift' ((DriftCount $dbA 'MarkDel') -gt 0
 # Intrinsic facts keep byte-compare semantics: nothing about sharing makes a
 # wrong Calls:/Pure line acceptable.
 $iPath = Join-Path $shDir 'MarkInt.pas'
-$iText = [System.IO.File]::ReadAllText($iPath)
+$iText = ([System.IO.File]::ReadAllText($iPath) -replace '</?para>','')
 $iText = $iText -replace '(?m)(///\s*Called from:.*?\r?\n)', "`$1/// Calls: NoSuchCallee`r`n"
 [System.IO.File]::WriteAllText($iPath, $iText, [System.Text.Encoding]::ASCII)
 Reindex $dbA @($shDir)
@@ -371,7 +374,7 @@ Check 'Used in units: is not truncated on a marked unit' (-not ($ut -match '\(\+
 # it. Without the guard B forgives every entry here -- they all name AOnly,
 # outside B's closure -- and reports no drift on a line it cannot reason about.
 $tPath = Join-Path $shDir 'MarkTrunc.pas'
-$tText = [System.IO.File]::ReadAllText($tPath)
+$tText = ([System.IO.File]::ReadAllText($tPath) -replace '</?para>','')
 $tText = $tText -replace '(?m)(///\s*Called from:.*?)(\r?\n)', '$1 (+3 more)$2'
 [System.IO.File]::WriteAllText($tPath, $tText, [System.Text.Encoding]::ASCII)
 Reindex $dbA @($shDir)
@@ -400,7 +403,7 @@ Check 'a truncated STORED line is still not forgiven' ((DriftCount $dbB 'MarkTru
 #     /// <!-- drag-lint:auto END -->
 # -- a duplicated entry, a marker inside a fact line, and a doubled terminator.
 $tokPath = Join-Path $shDir 'Marked.pas'
-$tokText = [System.IO.File]::ReadAllText($tokPath)
+$tokText = ([System.IO.File]::ReadAllText($tokPath) -replace '</?para>','')
 Check 'no marker text leaked into a fact line' (-not ($tokText -match '(?m)^\s*///\s*(Called from|Used by|Used in units):.*drag-lint:auto')) `
   'the stored-side parse must stop at AUTO_END, not at the next label'
 Check 'exactly one END marker in the block' (([regex]::Matches($tokText, [regex]::Escape('drag-lint:auto END'))).Count -eq 1) `

@@ -86,7 +86,7 @@ function Get-DocBlockAbove([string[]]$Lines, [string]$Pattern) {
     if ($Lines[$i] -notmatch '^\s*///') { break }
     $blockLines.Insert(0, $Lines[$i])
   }
-  return [string]::Join("`n", $blockLines.ToArray())
+  return ([string]::Join("`n", $blockLines.ToArray()) -replace '</?para>', '')
 }
 
 Write-Host 'Scenario 1: self-only class -- no external refs anywhere' -ForegroundColor Cyan

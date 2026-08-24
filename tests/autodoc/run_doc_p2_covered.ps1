@@ -73,7 +73,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
   $blockLines = @()
   $j = $idx - 1
   while ($j -ge 0 -and $lines[$j].TrimStart() -match '^///') { $blockLines = ,($lines[$j]) + $blockLines; $j-- }
-  return ($blockLines -join "`n")
+  return (($blockLines -join "`n") -replace '</?para>', '')
 }
 
 # Extracts the segment after "<label>: " to end-of-line (the 'Covered by:'

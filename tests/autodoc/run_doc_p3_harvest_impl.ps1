@@ -66,7 +66,7 @@ function Get-DocBlockAtLine([string[]]$lines, [int]$declLine1) {
 }
 
 function Get-Summary([string]$block) {
-  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' }) -join ' '
+  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' -replace '</?para>','' }) -join ' '
   $m = [regex]::Match($flat, '<summary>(?:<!-- drag-lint:auto -->)?\s*(.*?)\s*</summary>')
   if ($m.Success) { return ($m.Groups[1].Value -replace '\s+',' ').Trim() } else { return '' }
 }
@@ -78,7 +78,7 @@ function Get-Summary([string]$block) {
 # symbol whose summary was never touched. First draft of this suite did exactly
 # that and flagged two false failures.
 function Test-SummaryMarked([string]$block) {
-  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' }) -join ' '
+  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' -replace '</?para>','' }) -join ' '
   return [regex]::IsMatch($flat, '<summary>\s*<!-- drag-lint:auto -->')
 }
 

@@ -180,6 +180,7 @@
         <DCCReference Include="..\output\DRagLint.Output.ExitCode.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.ManifestWrite.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Glob.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.IgnoreFiles.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Closure.pas"/>

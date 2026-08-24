@@ -79,7 +79,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declRx) {
     if ($lines[$i] -notmatch '^\s*///') { break }
     $acc.Insert(0, $lines[$i].Trim())
   }
-  return [string]::Join("`n", $acc.ToArray())
+  return ([string]::Join("`n", $acc.ToArray()) -replace '</?para>', '')
 }
 
 # True when $block opens a <remarks> while one is already open -- the exact
@@ -172,7 +172,7 @@ Check 'ATTRIBUTION: Ping''s block carries Ping''s facts, not Create''s' `
 # unrelated tags, but they must agree about the content they mined.
 function Get-FactLines([string]$block) {
   return (($block -split "`n" | Where-Object { $_ -match 'Called from:|Calls:|Pure' } |
-           ForEach-Object { ($_ -replace '^\s*///\s?','').Trim() }) -join ' ; ')
+           ForEach-Object { ($_ -replace '^\s*///\s?','' -replace '</?para>','').Trim() }) -join ' ; ')
 }
 Check 'the --qname pair mined the same facts as the single --unit pass (Create)' `
   ((Get-FactLines $blkCreate) -eq (Get-FactLines $ctlCreate)) `

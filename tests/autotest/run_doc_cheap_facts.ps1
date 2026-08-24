@@ -202,7 +202,7 @@ function Get-DocBlockAbove([string[]]$Lines, [string]$Pattern, [int]$Occurrence 
     if ($Lines[$i] -notmatch '^\s*///') { break }
     $blockLines.Insert(0, $Lines[$i])
   }
-  return [string]::Join("`n", $blockLines.ToArray())
+  return ([string]::Join("`n", $blockLines.ToArray()) -replace '</?para>', '')
 }
 
 Write-Host 'TBase.DoPaint: abstract marker + Overridden by (both descendants)' -ForegroundColor Cyan

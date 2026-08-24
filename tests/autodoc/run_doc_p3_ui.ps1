@@ -54,7 +54,7 @@ function Get-BlockAbove([string[]]$lines, [string]$declPattern) {
 # The 'UI thread only ...' line out of a block, /// stripped, or '' when absent.
 function Get-UiLine([string]$block) {
   foreach ($l in ($block -split "`n")) {
-    $t = ($l -replace '^\s*///\s?','')
+    $t = ($l -replace '^\s*///\s?','' -replace '</?para>','')
     if ($t -match '^\s*(UI thread only.*)$') { return $Matches[1].Trim() }
   }
   return ''

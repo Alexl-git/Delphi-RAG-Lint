@@ -30,4 +30,18 @@
 #   was postponing rides the same re-parse, so the debt is settled two days
 #   early rather than expiring. The owner's library rebuild planned for
 #   2026-08-21 now covers both.
-1.6.0-alpha|289795586e4ad56fc33d1c20c95a86a1fc811aa07d56c05181906ebe42e906ef
+# 2026-08-24: hash updated WITHOUT a version bump, per the rule above.
+#   src\index\DRagLint.Index.ManifestWrite.pas was added -- a manifest WRITER
+#   for the new `register-project` verb. It lives under src\index because that
+#   is where DRagLint.Index.Manifest (its read half) lives, so it falls inside
+#   the hashed surface, and the guard correctly noticed.
+#
+#   It CANNOT affect extraction: it appends a section to drag-lint.json and is
+#   never called during a walk. Nothing it does changes what the parser sees in
+#   a byte sequence, so no stored parse becomes stale. Bumping would have cost
+#   a ~5-hour re-parse of every index on the box to say nothing new.
+#
+#   The judgement being made explicitly, because the failure mode of getting
+#   this wrong is SILENT: if a future edit to this file ever influenced what is
+#   indexed, the version MUST move.
+1.6.0-alpha|052f041289b66f4e03a1ddba30bb44815635513bef1688b984ee4b6bb05e3a6c

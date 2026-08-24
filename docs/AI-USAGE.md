@@ -379,6 +379,7 @@ in 2b.
 |------|--------------|
 | `index <path>` | build/refresh an index; a `.dpr`/`.dproj` target = project (compile-closure) scan, a folder = library scan. `--recompile` (default) / `--rebuild`; also `--project`, `--scan-libraries`, `--watch`, `--deep` |
 | `index --all` | build every DB in the manifest (`--only`, `--platform`, `--jobs`, `--dry-run`) |
+| `register-project` | add a NEW project to the manifest as its own section, so `index --all` and the IDE's reindex can see it. Dry-run by default; `--apply` writes. Refuses when a section already claims the project |
 | `resolve-dbs` | print the consumer DB list a query/lsp/serve would use (`--platform`), or resolve the single DB covering one target (`--project <x.dproj>`, `--in <x.pas>`) |
 | `reconcile-project <App.dproj>` | sync project member list; flag stale used units (`--apply`) |
 | `library-drift` | registry roots missing from the library index (exit 2 = drift) |

@@ -117,7 +117,7 @@ function Get-WideLines([string[]]$lines, [int]$max) {
     # assertions 1 and 3 would contradict each other.
     if ($l -match 'An author wrote this on one very long line') { continue }
     if ($l.Length -le $max) { continue }
-    $content = ($l -replace '^\s*///\s?', '').Trim()
+    $content = ($l -replace '^\s*///\s?', '' -replace '</?para>','').Trim()
     # strip the marker before judging breakability -- it is one glued token
     $content = $content -replace '<!--\s*drag-lint:auto\s*-->', ''
     if ($content.Trim() -match '\s') { $bad += $l }   # had a break opportunity and did not use it
@@ -147,7 +147,7 @@ try {
   # Flatten the whole doc region back to one line and confirm the banner's word
   # sequence survived intact. A wrap that drops or reorders a word passes a pure
   # width check.
-  $flat = (($lines | Where-Object { $_ -match '^\s*///' }) -replace '^\s*///\s?', '') -join ' '
+  $flat = (($lines | Where-Object { $_ -match '^\s*///' }) -replace '^\s*///\s?', '' -replace '</?para>','') -join ' '
   $flat = $flat -replace '<!--[^>]*-->', ' ' -replace '\s+', ' '
   Check 'every harvested word survives the wrap' ($flat -match ([regex]::Escape($banner))) `
     'the banner must still read as one uninterrupted word sequence'

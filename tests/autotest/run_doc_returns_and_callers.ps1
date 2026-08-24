@@ -131,7 +131,7 @@ try {
 } finally {
   Pop-Location
 }
-$text = Get-Content $file -Raw
+$text = ((Get-Content $file -Raw) -replace '</?para>','')
 
 Write-Host 'Returns: max_return_cases=6 enumerates the mined cases' -ForegroundColor Cyan
 $returnsLines = @([regex]::Matches($text, '<returns>.*?</returns>') | ForEach-Object { $_.Value })

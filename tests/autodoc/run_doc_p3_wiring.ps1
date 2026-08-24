@@ -53,7 +53,7 @@ function Get-BlockAbove([string[]]$lines, [string]$declPattern) {
 
 function Get-FactLine([string]$block, [string]$label) {
   foreach ($l in ($block -split "`n")) {
-    $t = ($l -replace '^\s*///\s?','').Trim()
+    $t = ($l -replace '^\s*///\s?','' -replace '</?para>','').Trim()
     if ($t -match "^$label`: (.*)$") { return $Matches[1].Trim() }
   }
   return ''

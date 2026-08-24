@@ -5437,6 +5437,39 @@ begin
   ShowMessage('drag-lint: exported Obsidian notes to'#13#10 + Dir);
 end;
 
+
+{ v(2026-08-24): calls the engine's `register-project --apply` so a brand-new
+  project can be given its own index section without a hand edit of
+  drag-lint.json.
+
+  The WRITE lives in the engine, not here, on purpose. The engine already owns
+  every rule about what a section looks like and which manifest copies exist
+  (there are two -- one beside the engine, one beside this BPL -- and writing
+  only one would leave the IDE and the CLI disagreeing about which projects
+  exist). Duplicating that here would be a second definition of the same
+  decision, which is the mistake this codebase has already paid for in the hover
+  and completion describers.
+
+  Returns True only when the engine reports success; the caller re-asks the
+  resolver rather than trusting that. }
+function RegisterProjectInManifest(const AProjectFile: string): Boolean;
+var
+  Cmd : string ;
+  Out_: string ;
+  Code: Integer;
+begin
+  Result:= False;
+  Cmd:= Format('"%s" register-project "%s" --apply', [DLExe64, AProjectFile]);
+  DLT('menu', 'register-project: ' + Cmd);
+  Code:= RunAndCaptureStdout(Cmd, Out_, 60000);
+  if Code <> 0 then
+  begin
+    ShowMessage('drag-lint could not register this project:'#13#10#13#10 + Trim(Out_));
+    Exit;
+  end;
+  Result:= True;
+end;
+
 procedure InvokeReindexProject(Sender: TObject);
 var
   Cmd    : string;
@@ -5486,17 +5519,39 @@ begin
       end;
     else
       begin
-        ShowMessage(Format(
-          'drag-lint: no index section owns this project, so there is nothing to'#13#10 +
-          'rebuild.'#13#10#13#10 +
-          'Project: %s'#13#10 +
-          'Manifest: %s'#13#10#13#10 +
-          'Nothing was changed -- deliberately: rebuilding a nearby index instead'#13#10 +
-          'would clear source that belongs to a different project. Add a section'#13#10 +
-          'for this project to the manifest (or check the manifest parses), then'#13#10 +
-          'run this again.',
-          [Proj, ManifestPathBesideEngine]));
-        Exit;
+        { v(2026-08-24): this used to END here, telling the user to go and edit
+          drag-lint.json by hand -- which was the only option, because the
+          engine had no manifest writer at all. Reported by the owner on a
+          brand-new project: "we need a way to create a new index for a new
+          project".
+
+          The REFUSAL above is unchanged and still right; what changed is that
+          the dialog is no longer a dead end. Registering is offered, not done
+          silently: it edits config the whole machine reads, so it stays an
+          explicit yes. }
+        if MessageDlg(Format(
+             'drag-lint: no index section owns this project yet, so there is'#13#10 +
+             'nothing to rebuild.'#13#10#13#10 +
+             'Project: %s'#13#10 +
+             'Manifest: %s'#13#10#13#10 +
+             'Register it now as its own index section, then build it?'#13#10#13#10 +
+             'Nothing has been changed yet. Rebuilding a nearby index instead'#13#10 +
+             'would clear source belonging to a different project, which is why'#13#10 +
+             'this asks rather than guessing.',
+             [Proj, ManifestPathBesideEngine]),
+           mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+        if not RegisterProjectInManifest(Proj) then Exit;
+
+        { Ask the SAME resolver again rather than assuming the write landed --
+          it is the resolver's answer, not the exit code, that decides whether
+          there is now exactly one unambiguous write target. }
+        if ManifestDbForProject(Proj, Db, Claimants) <> pdmUnique then
+        begin
+          ShowMessage('drag-lint: the project was registered, but no single index'#13#10 +
+                      'owns it yet. Nothing was rebuilt. Check drag-lint.json.');
+          Exit;
+        end;
       end;
   end; // case
 

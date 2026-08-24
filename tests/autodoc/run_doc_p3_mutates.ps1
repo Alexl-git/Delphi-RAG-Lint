@@ -69,7 +69,7 @@ function Get-Block([string]$db, [string]$path, [string]$name) {
 # The 'Mutates: ...' line out of a doc block, /// stripped, or '' when absent.
 function Get-MutatesLine([string]$block) {
   foreach ($l in ($block -split "`n")) {
-    $t = ($l -replace '^\s*///\s?','')
+    $t = ($l -replace '^\s*///\s?','' -replace '</?para>','')
     if ($t -match '^\s*Mutates:\s*(.*)$') { return $Matches[1].Trim() }
   }
   return ''

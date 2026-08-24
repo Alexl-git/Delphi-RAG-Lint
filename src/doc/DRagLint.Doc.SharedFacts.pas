@@ -444,7 +444,14 @@ var
   Stop  : Integer;
 begin
   AInbound := TFactMap.Create;
-  Text     := CollapseWs(ABlock);
+  { v(P8, 2026-08-24): the <para> wrapper is PRESENTATION and must not reach the
+    parse. Labels are located by position, not by line anchor, so a wrapped
+    block still finds 'Called from:' -- but the fact's VALUE then carries a
+    trailing '</para>' and the next one's leading '<para>'. The merged render
+    differs from the stored text on every run, and `document` edits the same
+    unit forever. Caught by run_shared_unit_staleness's idempotency check, which
+    is the only assertion in the battery that exercises this merge path. }
+  Text     := CollapseWs(ABlock.Replace('<para>', '').Replace('</para>', ''));
   Sb       := TStringBuilder.Create;
   try
     Pos1:= 1;
@@ -614,6 +621,7 @@ var
   Lab, SC   : string;
   Preserved : TArray<string>;
   Prefix    : string;
+  Suffix    : string;   { the fact line's closing </para>, if P8 wrapped it }
   Changed   : Boolean;
   BeginAt   : Integer;
 
@@ -711,11 +719,28 @@ begin
           Body  := Trim(Copy(Line, P + Length(Lab), MaxInt));
           Prefix:= Copy(Line, 1, P + Length(Lab) - 1);
 
+          { v(P8, 2026-08-24): everything after the label is treated as the entry
+            list, so a wrapped line handed '</para>' to SplitEntries as part of
+            the last entry -- and the rebuilt line put the merged-in entry AFTER
+            the closing tag:
+
+              /// <para>Called from: A.CallFromA (A.pas)</para>, B.CallFromB (B.pas)
+
+            which differs from the stored text on every run, so `document` edited
+            the same unit forever. The closing tag is held aside and restored
+            after the join; a line without one yields '' and is unaffected. }
+          Suffix:= '';
+          if EndsText('</para>', Body) then
+          begin
+            Suffix:= '</para>';
+            Body  := TrimRight(Copy(Body, 1, Length(Body) - Length(Suffix)));
+          end;
+
           { Never merge across a truncated window, in either direction. }
           if IsTruncated(Body) or IsTruncated(SC) then Break;
 
           Preserved:= ForgivenOf(SC, SplitEntries(Body));
-          Lines[I] := Prefix + ' ' + SortedJoin(SplitEntries(Body), Preserved);
+          Lines[I] := Prefix + ' ' + SortedJoin(SplitEntries(Body), Preserved) + Suffix;
           if Lines[I] <> Line then Changed:= True;
           Break;
         end;

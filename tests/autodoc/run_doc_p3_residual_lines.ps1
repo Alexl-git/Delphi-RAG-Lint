@@ -239,11 +239,16 @@ Check 'CONTROL FullyModeledControl: each modeled tag appears EXACTLY once (nothi
    (([regex]::Matches(($b -join "`n"), '<param ')).Count -eq 1) -and `
    (([regex]::Matches(($b -join "`n"), '<returns>')).Count -eq 1)) ($b -join ' | ')
 Check 'CONTROL FullyModeledControl: exactly the pristine tag lines plus ONE facts <remarks> block' `
-  ((@($b | Where-Object { $_ -notmatch '<remarks>|</remarks>|drag-lint:auto|Called from:|Returns:|Used in units:|Calls:|^\s*///\s*Pure\s*$' })).Count -eq $pristine['FullyModeledControl'].Count) ($b -join ' | ')
+  ((@($b | Where-Object { $_ -notmatch '<remarks>|</remarks>|drag-lint:auto|Called from:|Returns:|Used in units:|Calls:|^\s*///\s*(<para>)?Pure(</para>)?\s*$' })).Count -eq $pristine['FullyModeledControl'].Count) ($b -join ' | ')
 # ^ v(ADP3 T13): 'Pure' joins the engine-generated lines this mask subtracts.
 #   Anchored on the WHOLE line so the word can never be masked out of an
 #   author's prose -- the point of this check is that NOTHING of the author's is
 #   added to or lost from the pristine tag lines.
+#   v(P8, 2026-08-24): the optional <para> wrapper is part of the anchor rather
+#   than a reason to drop it. Stripping <para> from the whole block instead --
+#   the blunt fix -- would have broken L1b two checks below, which asserts a
+#   HAND-WRITTEN <para> line survives verbatim: the scrub would have deleted
+#   the very thing that assertion exists to see.
 
 Write-Host ''
 Write-Host '--- IMPORTANT 1: the accounted-span mask must agree with the MODEL -------------'

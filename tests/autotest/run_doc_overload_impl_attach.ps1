@@ -184,7 +184,7 @@ function Get-DocBlockAbove([string[]]$Lines, [string]$Pattern, [int]$Occurrence 
     if ($Lines[$i] -notmatch '^\s*///') { break }
     $blockLines.Insert(0, $Lines[$i])
   }
-  return [string]::Join("`n", $blockLines.ToArray())
+  return ([string]::Join("`n", $blockLines.ToArray()) -replace '</?para>', '')
 }
 
 $intBlock = Get-DocBlockAbove $lines '^\s*function Combine\(A, B: Integer\): Integer; overload;\s*$' 1

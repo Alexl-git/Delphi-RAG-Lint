@@ -84,7 +84,7 @@ function Get-DocBlockAbove([string[]]$lines, [int]$declIdx) {
   $blockLines = @()
   while ($j -ge 0 -and $lines[$j].TrimStart() -match '^///') { $blockLines = ,($lines[$j]) + $blockLines; $j-- }
   if ($blockLines.Count -eq 0) { return $null }
-  return ($blockLines -join "`n")
+  return (($blockLines -join "`n") -replace '</?para>', '')
 }
 
 Push-Location C:\TEMP

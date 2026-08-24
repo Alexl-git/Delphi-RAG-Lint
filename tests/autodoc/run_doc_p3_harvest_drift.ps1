@@ -85,7 +85,7 @@ function Get-Block([string]$db, [string]$path, [string]$name) {
 # The text content of the <summary>, marker stripped, or '' when the tag is
 # absent. Spans lines: EmitTagged re-prefixes continuation lines with ///.
 function Get-Summary([string]$block) {
-  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' }) -join ' '
+  $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' -replace '</?para>','' }) -join ' '
   $m = [regex]::Match($flat, '<summary>(?:<!-- drag-lint:auto -->)?\s*(.*?)\s*</summary>')
   if ($m.Success) { return ($m.Groups[1].Value -replace '\s+',' ').Trim() } else { return '' }
 }

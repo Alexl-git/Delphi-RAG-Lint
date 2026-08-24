@@ -259,7 +259,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
     if ($lines[$i] -notmatch '^\s*///') { break }
     $blockLines.Insert(0, $lines[$i])
   }
-  return [string]::Join("`n", $blockLines.ToArray())
+  return ([string]::Join("`n", $blockLines.ToArray()) -replace '</?para>', '')
 }
 
 Push-Location C:\TEMP

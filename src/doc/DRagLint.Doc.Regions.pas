@@ -2137,7 +2137,28 @@ var
   // even though the body is currently a passthrough.
   procedure AppendFact(const AText: string);
   begin
-    Sb.AppendLine(APrefix + AText);
+    { v(P8, 2026-08-24): each fact is its own <para>.
+
+      WHY, and how it was decided rather than assumed. Help Insight renders
+      <remarks> as flowed prose, so consecutive /// lines ran together into
+      one paragraph: `Calls: X Reads: FY Transaction: none` on a single
+      line. Embarcadero's own RTL uses <para>, which was suggestive but not
+      proof, and this rewrites the managed block in EVERY documented unit --
+      too expensive to get wrong on a guess. So it was TESTED in a live IDE
+      (2026-08-24) with two methods side by side, one wrapped and one not:
+      the wrapped one broke onto three lines, the bare one did not.
+
+      THIS PROCEDURE IS THE ONLY PLACE IT BELONGS. The plan named
+      FormatPhase2FactLines instead -- twice -- and that is WRONG: that
+      function is shared with the hover JSON and the CLI markdown, neither of
+      which is XML, so <para> there would leak tags into two surfaces that
+      render them literally. Nine prose facts that had been calling
+      Sb.AppendLine directly were routed through here first, so the wrapper
+      reaches all of them.
+
+      NOT WRAPPED, DELIBERATELY: <since> and <seealso>. They are real
+      elements, not prose, and still call Sb.AppendLine. }
+    Sb.AppendLine(APrefix + '<para>' + AText + '</para>');
   end;
 begin
   Sb:= TStringBuilder.Create;
@@ -2201,9 +2222,9 @@ begin
     if AFacts.Deprecated then
     begin
       if AFacts.DeprecatedMsg <> '' then
-        Sb.AppendLine(APrefix + 'Deprecated: ' + EscXml(AFacts.DeprecatedMsg))
+        AppendFact('Deprecated: ' + EscXml(AFacts.DeprecatedMsg))
       else
-        Sb.AppendLine(APrefix + 'Deprecated.');
+        AppendFact('Deprecated.');
     end;
     // v(ADP1 T3): cheap fact group -- each line omit-when-empty, same discipline
     // as the sections above. Overrides/Implements are plain qualified names
@@ -2217,17 +2238,17 @@ begin
     // enforced is virtual-vs-Overrides: an override suppresses the virtual
     // marker, emitting Overrides instead (see TDocFacts.IsVirtual).
     if AFacts.Overrides <> '' then
-      Sb.AppendLine(APrefix + 'Overrides: ' + EscXml(AFacts.Overrides));
+      AppendFact('Overrides: ' + EscXml(AFacts.Overrides));
     if Length(AFacts.OverriddenBy) > 0 then
       AppendFact('Overridden by: ' + JoinEsc(AFacts.OverriddenBy) + MoreSuffix(Length(AFacts.OverriddenBy), AFacts.OverriddenByTotal));
     if AFacts.Implements <> '' then
-      Sb.AppendLine(APrefix + 'Implements: ' + EscXml(AFacts.Implements));
+      AppendFact('Implements: ' + EscXml(AFacts.Implements));
     if AFacts.OverloadCount > 1 then
-      Sb.AppendLine(APrefix + Format('Overload %d of %d', [AFacts.OverloadOrdinal, AFacts.OverloadCount]));
+      AppendFact(Format('Overload %d of %d', [AFacts.OverloadOrdinal, AFacts.OverloadCount]));
     if AFacts.IsAbstract then
-      Sb.AppendLine(APrefix + 'abstract');
+      AppendFact('abstract');
     if AFacts.IsVirtual then
-      Sb.AppendLine(APrefix + 'virtual');
+      AppendFact('virtual');
     // v(2026-08-10, owner ruling): the `constructor` marker -- a bare one-word
     // line, the same shape and the same neighbourhood as abstract/virtual, and
     // kind-selected off AFacts.SymbolKind rather than off any directive probe.
@@ -2251,7 +2272,7 @@ begin
     // previously had NO managed block at all (no callers, nothing else to say)
     // now gains one carrying just this line.
     if AFacts.IsConstructor then
-      Sb.AppendLine(APrefix + 'constructor');
+      AppendFact('constructor');
     // v(ADP2 T9): the six Phase-2 fact lines (Complexity / Reads-Writes
     // fields / Owns returned / Handles / SQL tables touched / Covered by)
     // are rendered by the SHARED FormatPhase2FactLines helper -- the SAME
@@ -2266,7 +2287,7 @@ begin
     // AHasOtherContent: Sb already holds every Phase-1 line for this symbol, so
     // its emptiness IS the test for 'this block would not exist but for Pure'.
     for var P2Line in FormatPhase2FactLines(AFacts, AComplexityMin, Sb.Length > 0) do
-      Sb.AppendLine(APrefix + P2Line);
+      AppendFact(P2Line);
     // v(ADF T5): OPT-IN git <since> line. AFacts.Since is '' unless the caller
     // built the facts with --since (TDocFactsBuilder.Build's AIncludeSince) AND
     // git confidently attributed the declaration line, so this renders NOTHING by
