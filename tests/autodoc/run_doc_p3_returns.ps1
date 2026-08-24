@@ -268,9 +268,17 @@ function Get-HoverReturns([string]$db, [string]$qname) {
 }
 
 # The 'Observed: ...' payload of the <returns> tag inside a doc block, or ''.
+# (?s) because the managed <returns> can now WRAP: leading with the declared
+# type (2026-08-24) pushes a long Observed list past DOC_WRAP_COLS, so the tag
+# spans two /// lines and a single-line '.' never reaches </returns>.
 function Get-Observed([string]$block) {
-  $m = [regex]::Match($block, '<returns>(?:<!--[^>]*-->)?\s*Observed:\s*(.*?)\.?</returns>')
-  if ($m.Success) { return $m.Groups[1].Value } else { return '' }
+  $m = [regex]::Match($block, '(?s)<returns>(?:<!--[^>]*-->)?[^<]*?Observed:\s*(.*?)\.?</returns>')
+  # A WRAPPED tag carries a '/// ' continuation inside the value; rejoin it so
+  # the caller sees the logical text it asserts about, not the line breaks.
+  if ($m.Success) {
+    $v = $m.Groups[1].Value -replace '\s*///\s?', ' '
+    return ($v -replace '\s{2,}', ' ').Trim()
+  } else { return '' }
 }
 
 # The payload of the managed remarks block's 'Calls:' line, or '' when the block

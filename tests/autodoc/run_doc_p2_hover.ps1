@@ -172,8 +172,10 @@ try {
   # Positive checks: this must be a REAL assertion against real hover output
   # on a symbol with an engine-emitted marked tag -- not just an absence
   # check -- so also confirm the CLEANED (marker-stripped) content is there.
-  Check 'T1: hover plain shows the cleaned Returns line' ($echoPlain -match 'Returns: Observed: AValue\.') $echoPlain
-  Check 'T1: hover md shows the cleaned Returns line'    ($echoMd    -match '\*\*Returns:\*\* Observed: AValue\.') $echoMd
+  Check 'T1: hover plain shows the cleaned Returns line' ($echoPlain -match 'Returns: (?:[^
+]*-- )?Observed: AValue\.') $echoPlain
+  Check 'T1: hover md shows the cleaned Returns line'    ($echoMd    -match '\*\*Returns:\*\* (?:[^
+]*-- )?Observed: AValue\.') $echoMd
   Check 'T1: hover json summary is empty after stripping (was ONLY the marker)' ($echoJson -match '"summary":""') $echoJson
   # v(ADP3 T3) update: AValue has no hand-written description, so Echo's
   # generated comment carries NO <param name="AValue"> tag at all anymore

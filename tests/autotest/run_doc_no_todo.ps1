@@ -138,7 +138,7 @@ Check 'v(PHASE A3): exactly ONE <param name="AWidth"> tag, carrying its TYPE' `
 $returnsLinesA = @([regex]::Matches($textA, '<returns>.*?</returns>') | ForEach-Object { $_.Value })
 Check 'exactly one <returns> tag' ($returnsLinesA.Count -eq 1) "count=$($returnsLinesA.Count)"
 Check '<returns> carries the marker then the mined Observed fact, no TODO prefix' `
-  ($returnsLinesA.Count -gt 0 -and $returnsLinesA[0] -eq '<returns><!-- drag-lint:auto -->Observed: rlines &lt;&gt; 0.</returns>') $returnsLinesA
+  ($returnsLinesA.Count -gt 0 -and $returnsLinesA[0] -eq '<returns><!-- drag-lint:auto -->Boolean -- Observed: rlines &lt;&gt; 0.</returns>') $returnsLinesA
 
 Check 'managed facts fence present' ($textA.Contains('<!-- drag-lint:auto BEGIN -->') -and $textA.Contains('<!-- drag-lint:auto END -->'))
 Check 'facts: Called from: uNoTodo.UseGrab present' ($textA -match 'Called from:.*uNoTodo\.UseGrab')
@@ -223,7 +223,7 @@ Check 'T3: legacy cleanup -- <summary> self-heals to NO tag at all (nothing to s
   ($summaryLinesC.Count -eq 0) $summaryLinesC
 $returnsLinesC = @([regex]::Matches($textC, '<returns>.*?</returns>') | ForEach-Object { $_.Value })
 Check 'legacy cleanup: <returns> regenerated to marker + fresh Observed (stale text dropped)' `
-  ($returnsLinesC.Count -gt 0 -and $returnsLinesC[0] -eq '<returns><!-- drag-lint:auto -->Observed: rlines &lt;&gt; 0.</returns>') $returnsLinesC
+  ($returnsLinesC.Count -gt 0 -and $returnsLinesC[0] -eq '<returns><!-- drag-lint:auto -->Boolean -- Observed: rlines &lt;&gt; 0.</returns>') $returnsLinesC
 Check 'legacy cleanup: facts fence refreshed with real Called from:' `
   ($textC -match 'Called from:.*uNoTodo\.UseGrab')
 

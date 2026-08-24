@@ -309,7 +309,7 @@ Check 'MARKED MarkedReturnsTail: EXACTLY ONE <returns> element (no duplicate bes
 Check 'MARKED MarkedReturnsTail: the stale marked text is GONE (the engine still regenerates it)' `
   (-not (($b -join "`n") -match 'STALE cases')) ($b -join ' | ')
 Check 'MARKED MarkedReturnsTail: the regenerated <returns> carries the freshly mined case' `
-  ((($b -join "`n") -match [regex]::Escape('<returns><!-- drag-lint:auto -->Observed: 42.</returns>'))) ($b -join ' | ')
+  ((($b -join "`n") -match [regex]::Escape('<returns><!-- drag-lint:auto -->Integer -- Observed: 42.</returns>'))) ($b -join ' | ')
 Check 'MARKED MarkedReturnsTail: PINNED FALLBACK -- the hand tail is NOT preserved (pre-T3f behaviour; see the task report)' `
   (-not (($b -join "`n") -match 'hand tail')) ($b -join ' | ')
 Check 'MARKED MarkedReturnsTail: the hand-written <summary> is untouched' `

@@ -139,7 +139,7 @@ Check 'exactly one <returns> tag' ($returnsLines.Count -eq 1) "count=$($returnsL
 $returnsTag = if ($returnsLines.Count -gt 0) { $returnsLines[0] } else { '' }
 # v(ADP3 T1) late churn: see this file's header for why the marker is expected here.
 Check 'returns carries Observed: (mining is ON, not a bare empty tag) with no TODO text' `
-  ($returnsTag -match '^<returns><!-- drag-lint:auto -->Observed:') $returnsTag
+  ($returnsTag -match '^<returns><!-- drag-lint:auto -->(?:[^<]*-- )?Observed:') $returnsTag
 Check 'returns lists False'                       ($returnsTag -match 'Observed: False') $returnsTag
 Check 'returns lists escaped rlines &lt;&gt; 0'    ($returnsTag -match 'rlines &lt;&gt; 0') $returnsTag
 Check 'returns has NO raw unescaped < or >'        (-not ($returnsTag -match 'rlines <> 0')) $returnsTag

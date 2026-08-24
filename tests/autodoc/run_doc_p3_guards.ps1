@@ -185,7 +185,7 @@ try {
   Check 'T3f minor 3: the INNOCENT <value> line survives another line''s abort' `
     ($null -ne $blastAfter -and $blastAfter.Contains("<value>Innocent unmodeled tag; must survive another line's abort.</value>"))
   Check 'T3f minor 3: the engine still regenerated the marked <returns> from the mined case (the span was NOT retracted)' `
-    ($null -ne $blastAfter -and $blastAfter -match [regex]::Escape('<returns><!-- drag-lint:auto -->Observed: 42.</returns>'))
+    ($null -ne $blastAfter -and $blastAfter -match [regex]::Escape('<returns><!-- drag-lint:auto -->Integer -- Observed: 42.</returns>'))
   Check 'T3f minor 3: exactly ONE <returns> -- the blocked line did not duplicate the tag' `
     ($null -ne $blastAfter -and (([regex]::Matches($blastAfter, '<returns>')).Count -eq 1))
   # DISCLOSED, DELIBERATE non-improvement: the offending line's OWN tail is

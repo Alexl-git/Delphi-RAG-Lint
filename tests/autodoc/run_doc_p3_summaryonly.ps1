@@ -98,7 +98,7 @@ try {
     (($lines | Where-Object { $_.Trim() -eq '/// <summary></summary>' }).Count -eq 0)
 
   Check '3. managed <returns> present with the mined Observed case' `
-    ($block -match [regex]::Escape('<returns><!-- drag-lint:auto -->') + 'Observed:\s*AValue\.')
+    ($block -match [regex]::Escape('<returns><!-- drag-lint:auto -->') + '(?:[^<]*-- )?Observed:\s*AValue\.')
   Check '3. facts block present with Called from:' `
     ($block -match '<!-- drag-lint:auto BEGIN -->' -and $block -match 'Called from:.*summaryonly\.UseEcho3')
 

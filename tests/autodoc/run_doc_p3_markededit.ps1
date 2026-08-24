@@ -114,7 +114,7 @@ try {
     (($lines | Where-Object { $_.Trim() -eq '/// <param name="AValue">Also typed after the marker.</param>' }).Count -eq 1)
 
   Check '3. Foo <returns> is REGENERATED to the mined Observed case, marked' `
-    ($null -ne $fooBlock -and $fooBlock -match [regex]::Escape('<returns>' + $MARK) + 'Observed:\s*AValue\.')
+    ($null -ne $fooBlock -and $fooBlock -match [regex]::Escape('<returns>' + $MARK) + '(?:[^<]*-- )?Observed:\s*AValue\.')
   Check "3. Foo's typed returns sentence does NOT survive (deliberate, plan-sanctioned loss)" `
     (-not ($lines -join "`n").Contains('Also typed here after the marker.'))
   Check '3. no separate Returns: fact line for Foo (mined content is IN the regenerated tag, not duplicated)' `

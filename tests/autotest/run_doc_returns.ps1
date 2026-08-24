@@ -143,7 +143,7 @@ Check 'exactly one <returns> tag in the file (Grab only; DoNothing has none)' `
   ($returnsLinesA.Count -eq 1) "count=$($returnsLinesA.Count)"
 # v(ADP3 T1) late churn: the returns tag now carries the '<!-- drag-lint:auto -->'
 # provenance marker immediately after the opening tag (see this file's header).
-Check 'Grab <returns> carries Observed: (no TODO placeholder)' ($returnsLinesA[0] -match '^<returns><!-- drag-lint:auto -->Observed:') $returnsLinesA[0]
+Check 'Grab <returns> carries Observed: (no TODO placeholder)' ($returnsLinesA[0] -match '^<returns><!-- drag-lint:auto -->(?:[^<]*-- )?Observed:') $returnsLinesA[0]
 Check 'Grab <returns> lists False'       ($returnsLinesA[0] -match 'Observed: False') $returnsLinesA[0]
 Check 'Grab <returns> lists escaped rlines &lt;&gt; 0' ($returnsLinesA[0] -match 'rlines &lt;&gt; 0') $returnsLinesA[0]
 Check 'Grab <returns> does NOT contain a raw unescaped < or >' `

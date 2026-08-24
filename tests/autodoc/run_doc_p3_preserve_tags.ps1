@@ -950,7 +950,7 @@ try {
   Check 'N2 (T3h): "nested returns text" appears exactly ONCE after 3 cycles -- never lifted out as a standalone sibling' `
     (([regex]::Matches($depRetBlock1, [regex]::Escape('nested returns text'))).Count -eq 1) $depRetBlock1
   Check 'N2 (T3h): the standalone <returns> is the ENGINE''s, marked and refilled from the mined case' `
-    ($depRetBlock1 -match [regex]::Escape('<returns><!-- drag-lint:auto -->Observed: 1.</returns>')) $depRetBlock1
+    ($depRetBlock1 -match [regex]::Escape('<returns><!-- drag-lint:auto -->Integer -- Observed: 1.</returns>')) $depRetBlock1
 
   Test-ThreeCycleNesting 'preserve_tags.ExampleWithNestedRemarks' '^procedure ExampleWithNestedRemarks;' `
     '<example>ex <remarks>nested remarks</remarks> tail</example>' `

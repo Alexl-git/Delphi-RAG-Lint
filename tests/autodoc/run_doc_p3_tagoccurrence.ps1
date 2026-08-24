@@ -203,7 +203,7 @@ try {
     ((Count-Of $after.NestedReturnsInDeprecated 'nested returns text') -eq 1) `
     $after.NestedReturnsInDeprecated
   Check 'A3: the standalone <returns> is the ENGINE''s, marked, refilled from the mined case' `
-    ($after.NestedReturnsInDeprecated -match [regex]::Escape('<returns><!-- drag-lint:auto -->Observed: 1.</returns>')) `
+    ($after.NestedReturnsInDeprecated -match [regex]::Escape('<returns><!-- drag-lint:auto -->Integer -- Observed: 1.</returns>')) `
     $after.NestedReturnsInDeprecated
   # The mined case goes into the TAG (engine-owned <returns>), never ALSO into
   # a managed 'Returns:' fact line -- "never both" is MergeComment's own rule,

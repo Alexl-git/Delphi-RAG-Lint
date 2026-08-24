@@ -2515,13 +2515,35 @@ var
   // whose return type the index could not recover still emits nothing rather
   // than an empty tag -- absence over a blank row.
   function EmitEngineReturns(const AF: TDocFacts): string;
-  var Obs: string;
+  var Obs, Ty: string;
   begin
     Obs:= Trim(ObservedSuffix(AF.ReturnCases));
+    Ty := Trim(AF.ReturnType);
+
+    { v(2026-08-24, owner): the type travels WITH the observed values.
+
+      This used to be an either/or -- mined cases won and the declared type
+      was dropped -- so the moment the miner found anything, the reader was
+      told what came out and never what shape it is. Backwards for the common
+      case: a function with several return sites is precisely the one whose
+      type you most want stated.
+
+      THE TYPE LEADS because it is the CERTAIN fact -- it is declared in the
+      source. The observed list is mined from `Result :=` sites: a sample, not
+      a proof, since a site the miner cannot see is simply absent from it and
+      the list can be capped. Ordering says which is which without a sentence
+      explaining it.
+
+      The MARKER stays AUTO_MARK whenever a description is emitted. AUTO_TYPE
+      is reserved for the bare-type case, and drift/idempotency both key off
+      which marker is present -- swapping them would make every existing
+      documented unit read as hand-written. }
+    if (Obs <> '') and (Ty <> '') then
+      Exit(EmitTagged('<returns>' + AUTO_MARK, EscXml(Ty) + ' -- ' + Obs, '</returns>'));
     if Obs <> '' then
       Exit(EmitTagged('<returns>' + AUTO_MARK, Obs, '</returns>'));
-    if Trim(AF.ReturnType) <> '' then
-      Exit(EmitTagged('<returns>' + AUTO_TYPE, EscXml(Trim(AF.ReturnType)), '</returns>'));
+    if Ty <> '' then
+      Exit(EmitTagged('<returns>' + AUTO_TYPE, EscXml(Ty), '</returns>'));
     Result:= '';
   end;
   // The STRUCTURAL <exception cref> for one mined raise class, on exactly the

@@ -84,7 +84,7 @@ end.
   $afterFirst = [IO.File]::ReadAllBytes($targetA)
   $textFirst  = [IO.File]::ReadAllText($targetA)
   Check 'A: fresh <returns> carries the two-space mined case, marked' `
-    ($textFirst -match [regex]::Escape('<returns>' + $MARK) + 'Observed:\s*AValue {2}\+ {2}1\.') $textFirst
+    ($textFirst -match [regex]::Escape('<returns>' + $MARK) + '(?:[^<]*-- )?Observed:\s*AValue {2}\+ {2}1\.') $textFirst
 
   & $exePath index $scratchA --db $dbA 2>$null | Out-Null
   $reApplyJsonA = (& $exePath document --qname ws.Add1 --db $dbA --apply --json 2>$null) -join "`n"
@@ -130,7 +130,7 @@ end.
   Check 'B: apply #1 exits 0' ($LASTEXITCODE -eq 0)
   $textBefore = [IO.File]::ReadAllText($targetB)
   Check 'B: fresh <returns> carries ONE mined case (AValue only)' `
-    ($textBefore -match [regex]::Escape('<returns>' + $MARK) + 'Observed:\s*AValue\.</returns>') $textBefore
+    ($textBefore -match [regex]::Escape('<returns>' + $MARK) + '(?:[^<]*-- )?Observed:\s*AValue\.</returns>') $textBefore
 
   # Simulate real code drift: a second Result:= site appears.
   $drifted = (Get-Content -Raw $targetB) -replace `
@@ -145,7 +145,7 @@ end.
     ($driftApplyJson -match '"action":"extended"') $driftApplyJson
   $textAfterDrift = [IO.File]::ReadAllText($targetB)
   Check 'B: <returns> REFRESHED to carry BOTH mined cases (AValue; 0), marker intact' `
-    ($textAfterDrift -match [regex]::Escape('<returns>' + $MARK) + 'Observed:\s*AValue;\s*0\.</returns>') $textAfterDrift
+    ($textAfterDrift -match [regex]::Escape('<returns>' + $MARK) + '(?:[^<]*-- )?Observed:\s*AValue;\s*0\.</returns>') $textAfterDrift
 
   # Idempotent at the NEW fixed point too.
   $afterDriftBytes = [IO.File]::ReadAllBytes($targetB)

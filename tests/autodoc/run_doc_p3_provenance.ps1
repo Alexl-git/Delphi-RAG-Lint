@@ -156,7 +156,8 @@ try {
   # absence check -- the cleaned Returns text is present, AND (1b) the
   # facts-FENCE is gone while the facts TEXT it wrapped survived.
   Check 'T1 review fix: context markdown shows the cleaned Returns line' `
-    ($ctxMarked -match '\*\*Returns:\*\* Observed: Length\(AText\)\.') $ctxMarked
+    ($ctxMarked -match '\*\*Returns:\*\* (?:[^
+]*-- )?Observed: Length\(AText\)\.') $ctxMarked
   Check 'T1 review fix (1b): context markdown Remarks keeps the facts TEXT with the fence markers stripped' `
     ($ctxMarked -match '\*\*Remarks:\*\* Calls: provenance\.Touch') $ctxMarked
 
