@@ -250,6 +250,19 @@ type
       /// </remarks>
       function ScopedResolveIsSound: Boolean;
       function ScopedResolveDeclineReason: string;
+      /// <summary>Reads DRAGLINT_SCOPED_RESOLVE_ADDITIONS once, lowercased:
+      /// '' = off (today's type-equality gate), 'permissive' = additions allowed
+      /// with the widening DISABLED (a test instrument, known unsound), anything
+      /// else = additions allowed and widened.</summary>
+      /// <returns>The lowercased hatch value, or '' when unset.</returns>
+      function AdditionsHatch: string;
+      /// <summary>Adds to the scoped NAME set every member name reachable through
+      /// a type name this run newly declared, including its bound ancestors'.</summary>
+      /// <remarks>What makes a pure type ADDITION safe to scope. Must run before
+      /// MaterializeResolveScope. No-op when this run added no type names, which
+      /// is every run under the default gate. See point 4a above
+      /// ScopedResolveIsSound.</remarks>
+      procedure WidenScopeThroughAddedTypes;
       /// <summary>Materializes the recorded scope into connection-local temp
       /// tables; returns the `refs` predicate that selects the affected rows.</summary>
       /// <returns><!-- drag-lint:auto type -->string</returns>
@@ -3937,6 +3950,33 @@ end;
      precisely the case where the indirect channel provably cannot fire. A run
      that introduces or withdraws a type name falls back to the whole database.
 
+     4a. PURE ADDITIONS, under DRAGLINT_SCOPED_RESOLVE_ADDITIONS.
+     Re-read point 4: it names TWO ways a name can change what it denotes -- a
+     new declaration of that name, or an old one withdrawn. A run that only ADDS
+     type names cannot do the second, so the withdrawal test stays fatal and the
+     count test is what gets dropped.
+
+     THE FIRST WAY IS REAL, AND SO IS A SECOND ONE THE NOTE DID NOT NAME. Merely
+     opening the gate is UNSOUND, and this was demonstrated rather than argued:
+     with the gate open and nothing else changed, a scoped pass drops
+     `X.Ping -> uBase.TBase.Ping` (confidence `certain`) when TNew = class(TBase)
+     is added and both the caller and TBase are untouched. TNew declares no
+     members, so 'ping' never enters FScopeNames; the caller is not in
+     FScopeFiles; nothing in the scoped set names that ref. The fixture is
+     tests\autotest\pending_scoped_resolve_additions.ps1.
+
+     Note what that says about corpus evidence: the same relaxation reported
+     EQUIVALENT over a 12-file addition to ORM3 (707 files, 4x faster), because
+     that corpus does not happen to contain the shape. An A/B agreeing is not the
+     same as a channel being closed.
+
+     SO THE FIX IS A WIDER SCOPE, NOT A NARROWER GATE:
+     WidenScopeThroughAddedTypes adds the member names reachable through each
+     added type name -- its own and its bound ancestors' -- to FScopeNames before
+     the pass runs. That closes both this channel and the redeclaration one,
+     because its anchor matches every declaration of the name rather than only
+     the new one.
+
   5. ANYTHING THAT DELETES ROWS OUTSIDE OpenFileTx -- ClearAllFiles, a prune, an
      eviction -- sets FScopeWhole and ends the discussion. Those paths remove
      symbols without ever passing their names through here.
@@ -3966,10 +4006,18 @@ end;
   BEFORE the pass. Relaxing the gate for pure type ADDITIONS is a separate,
   correctness-sensitive change with its own A/B hatch
   (DRAGLINT_NO_SCOPED_RESOLVE) and must not be bundled with this. }
+{ One reader for the additions hatch, so the gate and the widening cannot end up
+  disagreeing about what it said. }
+function TSQLiteSymbolStore.AdditionsHatch: string;
+begin
+  Result:= LowerCase(GetEnvironmentVariable('DRAGLINT_SCOPED_RESOLVE_ADDITIONS'));
+end;
+
 function TSQLiteSymbolStore.ScopedResolveDeclineReason: string;
 var
-  N     : string ;
-  Total : Integer;
+  N             : string ;
+  Total         : Integer;
+  AllowAdditions: Boolean;
 begin
   { ESCAPE HATCH. Two jobs. For an operator: if a cross-unit link is ever
     suspected of being stale, this restores the pre-scoping behaviour without a
@@ -4002,15 +4050,120 @@ begin
   if CallEdgesNeedRebuild then
     Exit('the call-edge set is missing or incomplete, so there is no delta to update');
   { Type-name equality, both directions. Count equality alone would let one type
-    be swapped for another. }
-  if FScopeTypesBefore.Count <> FScopeTypesAfter.Count then
+    be swapped for another.
+
+    ADDITIONS HATCH -- see point 4a above. With it set, the count test is dropped
+    and additions are judged one by one instead; the WITHDRAWAL test below is
+    untouched either way, because a withdrawal is fatal in both modes. Off, the
+    two tests together still mean set equality and the addition loop has no work,
+    so the default path is byte-identical to what it was. }
+  AllowAdditions:= AdditionsHatch <> '';
+  if (not AllowAdditions) and (FScopeTypesBefore.Count <> FScopeTypesAfter.Count) then
     Exit(Format('this run changed the set of declared type names (%d before, %d after)',
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
   for N in FScopeTypesBefore.Keys do
     if not FScopeTypesAfter.ContainsKey(N) then
       Exit(Format('this run withdrew the declared type name %s', [N]));
+  { Nothing further to test. What makes an addition safe is not another gate but
+    WidenScopeThroughAddedTypes, which puts the newly reachable member names into
+    the scoped set before the pass runs -- see its header. 'permissive' is the
+    instrument that switches that widening OFF, and is never a shipping value. }
   Result:= '';
 end;
+
+{ CLOSE THE RESIDUAL CHANNEL OF POINT 4a, by widening the scope rather than by
+  refusing to scope.
+
+  DEMONSTRATED, not theorised -- tests\autotest\pending_scoped_resolve_additions:
+
+      uBase.pas      TBase declares Ping         (untouched)
+      uConsumer.pas  X: TNew; X.Ping             (untouched)
+      uNew.pas       TNew = class(TBase)         (added by the run)
+
+  The whole-database pass binds `X.Ping` to `uBase.TBase.Ping` with confidence
+  `certain`; the scoped pass loses it. TNew declares no members, so 'ping' never
+  enters FScopeNames through UpsertSymbol, and uConsumer is not in FScopeFiles.
+  ORM3 reported EQUIVALENT over a 12-file addition only because it happens not to
+  contain this shape -- which is exactly why a corpus A/B could not settle it.
+
+  THE CLOSURE. Whatever route the receiver takes -- a local, a field of a class
+  declared in some third file, a cast -- a target that becomes reachable BECAUSE
+  a type name was added is a member of that type or of one of its ancestors. So
+  collecting those member names is sufficient, and it is name-keyed, which is the
+  form MaterializeResolveScope already selects on.
+
+  IT ALSO SUBSUMES THE COLLISION CASE, which an earlier draft handled with a
+  separate gate that declined the whole run. The anchor SELECT matches EVERY
+  declaration of the name, not just this run's, so when an added name is one some
+  untouched file also declares, both candidates' members are pulled in. That
+  matters: on ORM3, 1 of 31 added type names (TPrePlan) was already declared
+  elsewhere, and declining on that would have surrendered the 4x for a single
+  duplicated name -- and duplicate type names are ordinary in Delphi.
+
+  COST is one recursive query per type name this run newly declared, walking
+  bound ancestor links only. ResolveAncestry has already run by this point (the
+  calls pass is last), so the links are there to walk. On a project index the
+  chain stops early because RTL/VCL ancestors live in the library index and never
+  bind here -- the walk cannot leave the database it is in. }
+procedure TSQLiteSymbolStore.WidenScopeThroughAddedTypes;
+var
+  Q     : TFDQuery;
+  N     : string  ;
+  Added : Integer ;
+begin
+  if FScopeWhole then Exit;
+  { THE INSTRUMENT. 'permissive' switches the widening off, leaving the residual
+    channel open on purpose so a suite can prove it is really there -- a guard
+    that can only ever pass is the failure mode this repo has been bitten by. It
+    is not a setting anyone should run: under it the scoped pass is KNOWN to drop
+    edges. Default (any other non-empty value) widens. }
+  if AdditionsHatch = 'permissive' then Exit;
+  Added:= 0;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { The anchor's kind list is IsTypeDeclaringKind's, in SQL: two spellings of
+      one rule, so a kind added there must be added here.
+      UNION (not UNION ALL) terminates the walk on a cyclic or self-referencing
+      heritage row, which a malformed or half-resolved index can contain. }
+    { Built with Add, not concatenation: every line here is a literal, and the
+      one value that varies is the bound :n. }
+    Q.SQL.Add('WITH RECURSIVE chain(sid) AS (');
+    Q.SQL.Add('  SELECT id FROM symbols');
+    Q.SQL.Add('   WHERE name = :n COLLATE NOCASE');
+    Q.SQL.Add('     AND kind IN (''class'', ''interface'', ''record'', ''type'', ''enum'', ''form'')');
+    Q.SQL.Add('  UNION');
+    Q.SQL.Add('  SELECT ta.ancestor_symbol_id FROM type_ancestors ta');
+    Q.SQL.Add('    JOIN chain ON ta.symbol_id = chain.sid');
+    Q.SQL.Add('   WHERE ta.ancestor_symbol_id IS NOT NULL');
+    Q.SQL.Add(')');
+    Q.SQL.Add('SELECT DISTINCT s.name FROM symbols s JOIN chain ON s.parent_id = chain.sid');
+    Q.ParamByName('n').DataType:= ftString;
+    Q.Prepare;
+    for N in FScopeTypesAfter.Keys do
+    begin
+      if FScopeTypesBefore.ContainsKey(N) then Continue; { not an addition }
+      if Q.Active then Q.Close;
+      Q.ParamByName('n').AsString:= N;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        var Lc:= LowerCase(Q.Fields[0].AsString);
+        if (Lc <> '') and not FScopeNames.ContainsKey(Lc) then
+        begin
+          FScopeNames.AddOrSetValue(Lc, True);
+          Inc(Added);
+        end;
+        Q.Next;
+      end;
+    end;
+  finally
+    Q.Free;
+  end; // try
+  if Added > 0 then
+    ResolveLog(Format('calls      ... +%d inherited member name(s) in scope, from %d added type name(s)',
+                      [Added, FScopeTypesAfter.Count - FScopeTypesBefore.Count]));
+end; // procedure
 
 { Puts FScopeFiles / FScopeNames into two connection-local temp tables and
   returns the predicate over `refs` that selects everything the scoped
@@ -8678,6 +8831,9 @@ begin
   { Only the temp tables are built here. The DELETE they feed happens INSIDE the
     rebuild transaction below -- see the note there. MaterializeResolveScope
     writes nothing but connection-local temp tables, so it is safe outside. }
+  { WIDEN BEFORE MATERIALISING. MaterializeResolveScope copies FScopeNames into
+    a temp table, so a name added after it would never reach the predicate. }
+  if Scoped then WidenScopeThroughAddedTypes;
   if Scoped then ScopeWhere:= MaterializeResolveScope
   else ScopeWhere:= '';
   TClear  := ResolveSecs(T0);
