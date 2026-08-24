@@ -96,6 +96,33 @@ type
       procedure Clear;
   end;
 
+{ v(2026-08-24): the LSP-backed fast path.
+
+  PopulateOnce shells `query find-callers` ONCE PER METHOD. Measured on
+  DataCopy's uMainZeissCopy.pas: 136 routines at ~165 ms per process start is
+  over twenty seconds of serial spawning to label ONE file, repeated every time
+  the cache repopulates. `draglint/callerCounts` answers the whole file in one
+  round trip against the already-open stores -- 2.10 s including a COLD process
+  start and index open, and a fraction of that against the warm server.
+
+  WHY A HOOK RATHER THAN A DIRECT CALL. This unit cannot use
+  DragLint.Plugin.Editor, which owns the LSP client: Editor already uses
+  DragLint.Plugin.EditViewNotifier, which uses this unit, so the reverse edge
+  would close a cycle. Editor installs the hook at startup instead, and nothing
+  here needs to know the LSP exists.
+
+  Returns False when the LSP cannot answer -- not started, down, or the file is
+  in no index -- and PopulateOnce then does exactly what it did before. The slow
+  path is the FALLBACK, not the norm, and it is deliberately still there: a code
+  lens that stops appearing while the server restarts is worse than a slow one. }
+type
+  TCallerCountsHook = reference to function(const AFilePath: string;
+    out ALines, ACounts: TArray<Integer>): Boolean;
+
+/// <summary>Installs the LSP-backed caller-count source. Pass nil to remove it
+/// and force the per-method spawn path.</summary>
+procedure SetCallerCountsHook(const AHook: TCallerCountsHook);
+
 function CodeLensCache: TDragLintCodeLensCache;
 
 implementation
@@ -243,6 +270,14 @@ begin
     List.Free;
   end; // try
 end; // function
+
+var
+  GCallerCountsHook: TCallerCountsHook = nil;
+
+procedure SetCallerCountsHook(const AHook: TCallerCountsHook);
+begin
+  GCallerCountsHook:= AHook;
+end;
 
 { ---- parse caller count from "drag-lint query find-callers" output ---- }
 
@@ -447,6 +482,30 @@ begin
     FLock.Leave;
   end;
   if HaveIt then Exit;
+
+  { THE FAST PATH. One round trip to the warm LSP for the whole file, instead
+    of one process start per method. Falls through to the loop below whenever
+    the hook is absent or says no -- see SetCallerCountsHook for why the slow
+    path is kept rather than removed. }
+  if Assigned(GCallerCountsHook) then
+  begin
+    var HLines, HCounts: TArray<Integer>;
+    if GCallerCountsHook(AFilePath, HLines, HCounts) and (Length(HLines) = Length(HCounts)) then
+    begin
+      Inner:= TDictionary<Integer, string>.Create;
+      for var K: Integer:= 0 to High(HLines) do
+      begin
+        { The server already reports 0-BASED lines, which is what this cache
+          stores -- the conversion lives on the server so exactly one place
+          knows about the offset. }
+        if HLines[K] < 0 then Continue;
+        if HCounts[K] = 1 then Inner.AddOrSetValue(HLines[K], '[1 caller]')
+        else Inner.AddOrSetValue(HLines[K], Format('[%d callers]', [HCounts[K]]));
+      end;
+      StoreForFile(Key, Inner);
+      Exit;
+    end;
+  end;
 
   { Get symbol list via surface }
   UnitName:= TPath.GetFileNameWithoutExtension(AFilePath);

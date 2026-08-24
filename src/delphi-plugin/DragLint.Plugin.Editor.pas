@@ -209,6 +209,7 @@ uses
   , DRagLint.Core.GhostText        { v1.7 B3: the completion endpoint KAI calls }
   , DragLint.Plugin.DiagnosticCache
   , DragLint.Plugin.EditViewNotifier
+  , DragLint.Plugin.CodeLensCache  { SetCallerCountsHook -- the LSP fast path }
   , DragLint.Plugin.HoverTracker
   , DragLint.Plugin.DockForm
   , DragLint.Plugin.GraphWindow
@@ -5452,6 +5453,69 @@ end;
 
   Returns True only when the engine reports success; the caller re-asks the
   resolver rather than trusting that. }
+{ v(2026-08-24): the code-lens cache's caller counts, over the warm LSP.
+
+  Installed as a HOOK because DragLint.Plugin.CodeLensCache cannot use this unit
+  -- this one already uses DragLint.Plugin.EditViewNotifier, which uses the
+  cache, so a direct call would close a cycle.
+
+  What it replaces: one `query find-callers` PROCESS PER METHOD, plus a
+  `surface` spawn to list them. 136 routines in DataCopy's uMainZeissCopy.pas at
+  ~165 ms each is over twenty seconds of serial process starts to label one
+  file. This path starts nothing.
+
+  Returns False on ANY doubt -- no client, server down, malformed reply -- and
+  the cache then does exactly what it did before. Never raises: it runs off the
+  view-activation path, and a code lens is not worth an exception dialog. }
+function LspCallerCounts(const AFilePath: string; out ALines, ACounts: TArray<Integer>): Boolean;
+var
+  Cli   : TDragLintLspClient;
+  Params: TJSONObject       ;
+  Reply : TJSONValue        ;
+  Arr   : TJSONArray        ;
+  I     : Integer           ;
+begin
+  Result:= False;
+  SetLength(ALines , 0);
+  SetLength(ACounts, 0);
+  try
+    Cli:= EnsureLspClient;
+    if (Cli = nil) or (not Cli.IsAlive) then Exit;
+
+    Params:= TJSONObject.Create;
+    try
+      var Td: TJSONObject:= TJSONObject.Create;
+      { Same shape the rest of this unit sends (see line ~547): 'file:///' plus
+        the path with forward slashes. }
+      Td.AddPair('uri', 'file:///' + StringReplace(AFilePath, '\', '/', [rfReplaceAll]));
+      Params.AddPair('textDocument', Td);
+      Reply:= Cli.Request('draglint/callerCounts', Params, 8000);
+    finally
+      Params.Free;
+    end;
+    if Reply = nil then Exit;
+    try
+      Arr:= (Reply as TJSONObject).GetValue('counts') as TJSONArray;
+      if Arr = nil then Exit;
+      SetLength(ALines , Arr.Count);
+      SetLength(ACounts, Arr.Count);
+      for I:= 0 to Arr.Count - 1 do
+      begin
+        var O: TJSONObject:= Arr.Items[I] as TJSONObject;
+        if O = nil then Exit;
+        ALines [I]:= O.GetValue<Integer>('line' );
+        ACounts[I]:= O.GetValue<Integer>('count');
+      end;
+      Result:= True;
+    finally
+      Reply.Free;
+    end;
+  except
+    { A code lens must never surface an exception. Falling back is the answer. }
+    Result:= False;
+  end;
+end;
+
 function RegisterProjectInManifest(const AProjectFile: string): Boolean;
 var
   Cmd : string ;
@@ -6116,6 +6180,12 @@ begin
       end; // procedure
 
     initialization
+
+{ Install the LSP-backed caller-count source. Done HERE and not in the cache
+  unit because the cache cannot see this one -- see LspCallerCounts. The hook
+  is only ever consulted; if the server is down it answers False and the cache
+  falls back to spawning, so installing it early costs nothing. }
+SetCallerCountsHook(LspCallerCounts);
 
 finalization
 UnregisterDragLintMenu;

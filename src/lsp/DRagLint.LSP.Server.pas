@@ -314,6 +314,14 @@ type
       /// from cold, the very indexes this server already holds open. Opens no
       /// database of its own.</remarks>
       procedure HandleHoverBundle    (const AId: TJSONValue; const AParams: TJSONObject);
+      /// <summary>Answers `draglint/callerCounts`: the caller count for EVERY
+      /// routine in one file, in a single round trip.</summary>
+      /// <param name="AParams">`{textDocument:{uri}}`.</param>
+      /// <remarks>Replaces one engine SPAWN PER METHOD in the plugin's code-lens
+      /// cache. Measured on DataCopy's uMainZeissCopy: 77 methods x 165 ms =
+      /// 12.7 s of serial process starts to label one file. Every store consulted
+      /// here is already open.</remarks>
+      procedure HandleCallerCounts   (const AId: TJSONValue; const AParams: TJSONObject);
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
@@ -1678,6 +1686,118 @@ begin
   end; // try
 end; // procedure
 
+procedure TLSPServer.HandleCallerCounts(const AId: TJSONValue; const AParams: TJSONObject);
+{ The caller count for every routine in one file, in ONE reply.
+
+  WHAT IT REPLACES. DragLint.Plugin.CodeLensCache listed a file's methods and
+  then shelled `query find-callers` ONCE PER METHOD, parsing the text output with
+  a line-shape heuristic. Measured on DataCopy's uMainZeissCopy.pas: 77 methods
+  at ~165 ms per process start is 12.7 SECONDS of serial spawning to label one
+  file -- repeated every time the cache repopulates.
+
+  Same argument as draglint/hoverBundle, which replaced four spawns per tooltip:
+  every store this touches is ALREADY OPEN on FStores, so the work is a few
+  in-process queries. Nothing here opens a database.
+
+  It also removes the text parsing. The old ParseCallerCount guessed at which
+  output lines were callers by their shape -- skip blanks, skip '---', skip
+  anything starting '[' -- which is a contract nobody wrote down and the engine
+  could change without noticing. A number in JSON cannot drift that way.
+
+  ROUTINES ONLY. A field or a property has no caller count worth showing in a
+  code lens, and including them would put a '[0 callers]' label on half the
+  lines of a form class. }
+var
+  Reply : TJSONObject;
+  Res   : TJSONObject;
+  Arr   : TJSONArray ;
+  Uri   : string     ;
+  Path  : string     ;
+  Syms  : TArray<TSymbol>;
+  St    : ISymbolStore;
+  Seen  : TDictionary<Integer, Integer>;
+  Sites : TDictionary<string, Byte>;   { distinct (file:line) call sites }
+  Pair  : TPair<Integer, Integer>;
+  Total : Integer    ;
+begin
+  Reply:= TJSONObject.Create;
+  try
+    Reply.AddPair('jsonrpc', '2.0');
+    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
+
+    Res:= TJSONObject.Create;
+    Arr:= TJSONArray.Create;
+
+    Uri := '';
+    if AParams <> nil then
+    begin
+      var TdObj: TJSONObject:= AParams.GetValue('textDocument') as TJSONObject;
+      if TdObj <> nil then TdObj.TryGetValue<string>('uri', Uri);
+    end;
+    Path:= FileFromUri(Uri);
+
+    { A file this index does not know is not an error -- it is a file with no
+      lenses. An empty array says that unambiguously; an error would make the
+      client retry something that will never succeed. }
+    if Path <> '' then
+    begin
+      Seen := TDictionary<Integer, Integer>.Create;
+      Sites:= TDictionary<string, Byte>.Create;
+      try
+        for St in FStores do
+        begin
+          if St = nil then Continue;
+          Syms:= St.FindSymbolsByFile(Path);
+          for var Sym: TSymbol in Syms do
+          begin
+            if not (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Continue;
+            if Sym.StartLine <= 0 then Continue;
+            { ONE PER CALL SITE, not one per reference. FindCallersByName returns
+              BOTH a 'call' and a 'member-access' ref for `T.Thrice;`, so a raw
+              Length() reports three calls as six. The CLI's text output happens
+              to collapse them per line, which is why the plugin's old
+              line-counting parser got the right number -- by accident of the
+              formatting, not by asking for it. Deduplicating on (file, line)
+              asks for it, and keeps a reference that is not a call: a caller the
+              user can navigate to is a caller.
+
+              Counted across EVERY open store, because a caller in another
+              project still calls this routine. }
+            Sites.Clear;
+            for var R: TReference in St.FindCallersByName(Sym.Name) do
+              Sites.AddOrSetValue(LowerCase(St.GetFilePath(R.FileId)) + ':' + IntToStr(R.StartLine), 1);
+            Total:= Sites.Count;
+            if Seen.ContainsKey(Sym.StartLine) then
+              Seen[Sym.StartLine]:= Seen[Sym.StartLine] + Total
+            else
+              Seen.Add(Sym.StartLine, Total);
+          end;
+        end;
+
+        for Pair in Seen do
+        begin
+          var Item: TJSONObject:= TJSONObject.Create;
+          { 0-BASED, matching LSP convention. The store is 1-based and the
+            plugin's cache is 0-based; converting HERE means exactly one place
+            knows about the offset. }
+          Item.AddPair('line' , TJSONNumber.Create(Pair.Key - 1));
+          Item.AddPair('count', TJSONNumber.Create(Pair.Value));
+          Arr.AddElement(Item);
+        end;
+      finally
+        Sites.Free;
+        Seen.Free;
+      end;
+    end;
+
+    Res.AddPair('counts', Arr);
+    Reply.AddPair('result', Res);
+    SendMessage(Reply);
+  finally
+    Reply.Free;
+  end;
+end;
+
 procedure TLSPServer.HandleHoverBundle(const AId: TJSONValue; const AParams: TJSONObject);
 { ONE reply carrying everything the IDE popup used to gather in four round
   trips. See THoverComputation and the unit header of DRagLint.Query.Callers
@@ -2140,6 +2260,7 @@ begin
         answers -32601 through the catch-all below, immediately, so a client can
         detect absence in one round trip instead of waiting for a timeout. }
       else if Method = 'draglint/hoverBundle' then HandleHoverBundle(Id, Params)
+      else if Method = 'draglint/callerCounts' then HandleCallerCounts(Id, Params)
       else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)
       else if Method = 'textDocument/signatureHelp' then HandleSignatureHelp(Id, Params)
       else if Method = 'textDocument/didOpen' then HandleDidOpenOrSave(Params)
