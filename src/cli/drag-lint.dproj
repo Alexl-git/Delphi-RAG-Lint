@@ -122,6 +122,7 @@
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Callers.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.HoverModel.pas"/>
+        <DCCReference Include="..\query\DRagLint.Symbol.Describe.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Config.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.RuleCatalog.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Baseline.pas"/>

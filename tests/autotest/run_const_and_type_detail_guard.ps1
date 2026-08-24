@@ -269,6 +269,64 @@ foreach ($b in @('TBase', 'TRec')) {
   Check ("CONTROL: {0} invents no ancestor"  -f $b) ($got -eq ''        ) "detail='$got'"
 }
 
+# ---- THE SAME FACTS, THROUGH THE HOVER ------------------------------------
+# Found in a live IDE 2026-08-24: hovering an enum showed only
+# `enum FileLockInfo.TRmAppType` -- no members -- while the completion popup
+# listed them correctly. The type-kind description had been built inside
+# MakeCompletionItem, so it reached exactly one of the two surfaces.
+#
+# DRagLint.Query.HoverModel's own header says why that was the wrong shape:
+# copying an assembly creates a second definition of what a hover says about a
+# symbol, and the two drift the first time either is touched. So the fix is ONE
+# shared describer called by both, and this block is what stops them separating
+# again -- it asserts the hover reports the SAME strings the popup does.
+function HoverModelAt([int]$line, [int]$col) {
+  $m  = Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } }
+  $m += Frame @{ jsonrpc='2.0'; method='initialized'; params=@{} }
+  $m += Frame @{ jsonrpc='2.0'; id=2; method='draglint/hoverBundle';
+                 params=@{ textDocument=@{ uri=$uri }; position=@{ line=$line; character=$col } } }
+  $m += Frame @{ jsonrpc='2.0'; id=3; method='shutdown'; params=@{} }
+  $inF  = Join-Path $WorkDir 'hin.txt'
+  $outF = Join-Path $WorkDir 'hout.txt'
+  [System.IO.File]::WriteAllText($inF, $m, (New-Object System.Text.ASCIIEncoding))
+  Start-Process $Exe -ArgumentList @('lsp', '--db', $Db) -WorkingDirectory $WorkDir `
+    -RedirectStandardInput $inF -RedirectStandardOutput $outF `
+    -RedirectStandardError (Join-Path $WorkDir 'herr.txt') -NoNewWindow -Wait | Out-Null
+  foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    if ($o.id -eq 2 -and $null -ne $o.result) { return $o.result.model }
+  }
+  return $null
+}
+function LineOf([string]$needle) {
+  for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Contains($needle)) { return $i } }
+  return -1
+}
+
+Write-Host ''
+Write-Host 'THE HOVER: the same facts, or the two surfaces have drifted' -ForegroundColor Cyan
+foreach ($h in @(
+  @{ decl = 'TState = ('        ; sym = 'TState'; want = 'sIdle, sBusy, sDone'; note = 'enum members'  },
+  @{ decl = 'TThing = class('   ; sym = 'TThing'; want = 'TBase'              ; note = 'class ancestor'},
+  @{ decl = 'IFoo = interface(' ; sym = 'IFoo'  ; want = 'IInterface'         ; note = 'interface parent' }
+)) {
+  $ln = LineOf $h.decl
+  if ($ln -lt 0) { Check ("located the {0} declaration" -f $h.sym) $false; continue }
+  $mdl = HoverModelAt $ln ($lines[$ln].IndexOf($h.sym) + 1)
+  $got = if ($null -eq $mdl) { '<no model>' } else { [string]$mdl.signature }
+  Check ("HOVER: {0} ({1})" -f $h.sym, $h.note) ($got -eq $h.want) "want='$($h.want)' got='$got'"
+}
+
+# CONTROL: the hover must not invent what the popup does not. Same claim, other
+# direction -- a describer that returns something for everything would satisfy
+# the three assertions above and be wrong here.
+$lnB2 = LineOf 'TBase = class'
+if ($lnB2 -ge 0) {
+  $mdlB = HoverModelAt $lnB2 ($lines[$lnB2].IndexOf('TBase') + 1)
+  $gotB = if ($null -eq $mdlB) { '<no model>' } else { [string]$mdlB.signature }
+  Check 'CONTROL: HOVER invents no ancestor for a bare class' ($gotB -eq '') "signature='$gotB'"
+}
+
 # CONTROL: the previous guard's win must survive. The cheapest wrong way to make
 # the assertions above pass is to start falling back to the qualified name again
 # for anything blank -- which is exactly the defect P3 fixed.

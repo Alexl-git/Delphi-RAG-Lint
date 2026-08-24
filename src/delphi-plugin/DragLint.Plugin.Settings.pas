@@ -145,6 +145,25 @@ begin
     if Reg.OpenKeyReadOnly(REG_KEY) then
     try
       if Reg.ValueExists('ExePath') then Result.ExePath:= Reg.ReadString('ExePath');
+      { A BARE EXE NAME IS A LANDMINE, not a convenience. This machine sets
+        NoDefaultCurrentDirectoryInExePath, so a bare 'drag-lint.exe' resolves
+        off PATH -- which once meant a frozen two-month-old Win32 build
+        answering, and reporting 33,626 findings against a real 14,764. The
+        diagnose screen flags it ("BARE NAME -- manifest lookups beside the
+        engine cannot resolve"); resolving it here fixes every consumer at
+        once instead of each spawn site guessing.
+
+        Resolution mirrors EnsureLspClient: the Win64 exe in the sibling
+        dll-win64\ folder, else one beside the BPL. If neither exists the bare
+        name survives untouched -- a wrong absolute path would be worse than
+        the status quo. }
+      if (Result.ExePath <> '') and (ExtractFilePath(Result.ExePath) = '') then
+      begin
+        var BplDir  : string:= ExtractFilePath(GetModuleName(HInstance));
+        var Win64Dir: string:= ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64';
+        if FileExists(Win64Dir + Result.ExePath) then Result.ExePath:= Win64Dir + Result.ExePath
+        else if FileExists(BplDir + Result.ExePath) then Result.ExePath:= BplDir + Result.ExePath;
+      end;
       if Reg.ValueExists('DbPathTemplate') then
       begin
         Result.DbPathTemplate:= Reg.ReadString('DbPathTemplate');
@@ -154,6 +173,20 @@ begin
           actually shipped that way in any user's environment. The new
           default has no dot. Existing registry values get silently rewritten. }
         if SameText(Result.DbPathTemplate, '<projdir>\.drag-lint.sqlite') then Result.DbPathTemplate:= '<projdir>\drag-lint.sqlite';
+        { v(2026-08-24): AND ON to the CURRENT default. The migration above
+          stopped at the flat '<projdir>\drag-lint.sqlite', which the _D-RAG
+          relocation then made obsolete in turn -- so a registry written before
+          that relocation was migrated from one dead template to another and
+          left there. The plugin's own diagnose screen reports it as
+          "pre-_D-RAG template: has no <projname>, so it cannot name a
+          per-project index", which is where the owner found it on 2026-08-24.
+
+          Migrating rather than merely warning is the point: a saved value
+          SHADOWS a changed default, so shipping a better default fixes nobody
+          who already has a registry key. Only the two known dead templates are
+          rewritten -- a deliberately customised template is never touched. }
+        if SameText(Result.DbPathTemplate, '<projdir>\drag-lint.sqlite') then
+          Result.DbPathTemplate:= '<projdir>' + DRAG_HOME_DIR + '\<projname>.sqlite';
       end;
       if Reg.ValueExists('AutoIndex'            ) then Result.AutoIndex            := Reg.ReadInteger('AutoIndex'            ) <> 0;
       if Reg.ValueExists('AutoReindexOnSave'    ) then Result.AutoReindexOnSave    := Reg.ReadInteger('AutoReindexOnSave'    ) <> 0;

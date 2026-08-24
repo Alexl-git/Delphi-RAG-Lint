@@ -48,6 +48,11 @@ type
       FState          : TDragLintLspState               ;
       FLastError      : string                          ;
       FStartedAt      : TDateTime                       ;
+      { Set when a write to the server's stdin fails with a pipe error. The
+        process handle can still report ALIVE while the pipe is gone, so this
+        is a SECOND liveness fact, not a duplicate of FProcessHandle. }
+      FPipeBroken     : Boolean                         ;
+      procedure NotePipeError(ALastError: DWORD);
       procedure WriteFramedMessage(const AJson: string);
     private
       { Accessible to TLspReaderThread in same unit }
@@ -267,11 +272,19 @@ begin
   FState    := dlsDown;
   FLastError:= '';
   FStartedAt:= 0;
+  FPipeBroken:= False;
 end;
 
 function TDragLintLspClient.IsAlive: Boolean;
 begin
   Result:= False;
+  { A LIVE PROCESS BEHIND A DEAD PIPE IS NOT ALIVE for any purpose a caller
+    has. Reported 2026-08-24 from a plugin log in which EVERY write on
+    2026-08-21 failed with GetLastError=232 (ERROR_NO_DATA, 'the pipe is
+    being closed') -- hovers, completions and didChange alike -- while the
+    client went on sending and no caller was ever told. Checking only the
+    process handle is what let that run for eighteen minutes. }
+  if FPipeBroken then Exit;
   if FProcessHandle = 0 then Exit;
   { WAIT_TIMEOUT means "still running"; WAIT_OBJECT_0 means it has exited. }
   Result:= WaitForSingleObject(FProcessHandle, 0) = WAIT_TIMEOUT;
@@ -596,6 +609,22 @@ begin
   end;
 end;
 
+{ ERROR_NO_DATA (232) and ERROR_BROKEN_PIPE (109) both mean the server is no
+  longer reading us. Anything else is a transient write problem and is left
+  alone -- declaring the client dead on, say, a partial write would throw away
+  a working server. Latched, so the log records the transition once instead of
+  once per message: the 2026-08-21 log is 40 identical failure lines and the
+  repetition is what made it look like noise rather than a state change. }
+procedure TDragLintLspClient.NotePipeError(ALastError: DWORD);
+begin
+  if FPipeBroken then Exit;
+  if (ALastError <> ERROR_NO_DATA) and (ALastError <> ERROR_BROKEN_PIPE) then Exit;
+  FPipeBroken:= True;
+  FLastError := Format('the server stopped reading (GetLastError=%d)', [ALastError]);
+  FState     := dlsFailed;
+  DebugLog('LSP pipe is BROKEN -- client marked not alive; EnsureLspClient will restart it');
+end;
+
 procedure TDragLintLspClient.WriteFramedMessage(const AJson: string);
 var
   Bytes  : TBytes    ;
@@ -615,6 +644,7 @@ begin
     begin
       LastErr:= GetLastError;
       DebugLog(Format('WriteFile(header) FAILED, GetLastError=%d', [LastErr]));
+      NotePipeError(LastErr);
     end;
     if Length(Bytes) > 0 then
     begin
@@ -623,6 +653,7 @@ begin
       begin
         LastErr:= GetLastError;
         DebugLog(Format('WriteFile(body) FAILED, GetLastError=%d', [LastErr]));
+        NotePipeError(LastErr);
       end;
     end;
   finally

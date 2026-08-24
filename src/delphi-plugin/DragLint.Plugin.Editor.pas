@@ -416,6 +416,31 @@ begin
   if (GLspClient = nil) and (GLspRetryAfter > 0) and (Now < GLspRetryAfter) then
     Exit(nil);
 
+  { RECONNECT. Until 2026-08-24 the only question asked here was "is the
+    client nil", so a client whose server had died was reused for the rest of
+    the IDE session. The owner's plugin log for 2026-08-21 shows the result:
+    every hover, completion and didChange for eighteen minutes written into a
+    pipe nobody was reading, each failing with GetLastError=232, and no
+    surface saying so. IsAlive now reports a dead PIPE as well as a dead
+    process, which is what makes this check able to see it.
+
+    Disposing and returning nil -- rather than restarting inline -- is
+    deliberate. Session 27 already had to kill a spawn storm here; if the
+    server dies on startup every time, restarting inline would spawn one per
+    hover. Going through the SAME backoff the create path uses caps it at one
+    attempt per LSP_RETRY_SECONDS. The hover that discovers the death is lost;
+    the next one after the window gets a fresh server. }
+  if (GLspClient <> nil) and not GLspClient.IsAlive then
+  begin
+    DebugLog('EnsureLspClient: existing client is NOT alive -- disposing; retry in '
+      + IntToStr(LSP_RETRY_SECONDS) + 's');
+    try GLspClient.Stop; except { a dead server must not raise on teardown } end;
+    FreeAndNil(GLspClient);
+    GLspRetryAfter:= Now + LSP_RETRY_SECONDS / SecsPerDay;
+    UpdateLspStatusIndicator;
+    Exit(nil);
+  end;
+
   if GLspClient = nil then
   begin
     GLspClient:= TDragLintLspClient.Create;

@@ -25,9 +25,10 @@ unit DRagLint.Query.HoverModel;
 interface
 
 uses
-  DRagLint.Core .Model     ,
-  DRagLint.Core .Interfaces,
-  DRagLint.Hover.Renderer  ;
+  DRagLint.Core  .Model     ,
+  DRagLint.Core  .Interfaces,
+  DRagLint.Symbol.Describe  ,
+  DRagLint.Hover .Renderer  ;
 
 type
   /// <summary>Everything a hover surface needs about one symbol.</summary>
@@ -122,7 +123,18 @@ begin
   end;
 
   UnitFile        := ExtractFileName(AStore.GetFilePath(ASym.FileId));
-  Result.Model    := BuildHoverModel(ASym, Doc, UnitFile, Rhs, RhsLines);
+
+  { A TYPE carries nothing in Signature -- the parser has no single line to
+    put there -- so the hover showed a bare `enum FileLockInfo.TRmAppType`
+    while Ctrl-Space on the same type listed its members. Reported from a
+    live IDE 2026-08-24. DescribeTypeKind is the ONE describer the
+    completion item builder also calls; see its header for why it does not
+    live in either surface. Applied only when the symbol says nothing for
+    itself, so a real signature is never overwritten. }
+  var Described: TSymbol:= ASym;
+  if Described.Signature = '' then Described.Signature:= DescribeTypeKind(Described, AStore);
+
+  Result.Model    := BuildHoverModel(Described, Doc, UnitFile, Rhs, RhsLines);
   Result.ReturnRhs:= Rhs;
 
   { TDocFactsBuilder.Build + TDocRegions.FormatPhase2FactLines is the identical
