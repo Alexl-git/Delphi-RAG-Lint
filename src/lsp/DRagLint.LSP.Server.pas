@@ -322,6 +322,18 @@ type
       /// 12.7 s of serial process starts to label one file. Every store consulted
       /// here is already open.</remarks>
       procedure HandleCallerCounts   (const AId: TJSONValue; const AParams: TJSONObject);
+      /// <summary>Answers `draglint/usages`: the same payload
+      /// `usages --format json` prints, built from the stores already open on
+      /// this server.</summary>
+      /// <param name="AId">JSON-RPC id; nil for a notification.</param>
+      /// <param name="AParams">`name` (required), `width`, `depth`.</param>
+      /// <remarks>Replaces a PROCESS SPAWN per user-initiated Find Usages --
+      /// measured at 1,678 ms with the library index open versus 163 ms without,
+      /// nearly all of it opening databases this server already holds. The reply
+      /// shape is deliberately identical to the CLI verb's, and
+      /// tests\autotest\run_lsp_usages_guard.ps1 compares the two so they cannot
+      /// drift apart.</remarks>
+      procedure HandleUsages         (const AId: TJSONValue; const AParams: TJSONObject);
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
@@ -1798,6 +1810,159 @@ begin
   end;
 end;
 
+procedure TLSPServer.HandleUsages(const AId: TJSONValue; const AParams: TJSONObject);
+{ WHAT IT REPLACES. The IDE's Find Usages shelled `drag-lint usages` and parsed
+  the result: one process start per invocation, measured at 1,678 ms with the
+  platform library index in the set against 163 ms without it. Almost all of that
+  is opening databases -- and THIS SERVER ALREADY HAS THEM OPEN on FStores. Same
+  argument as draglint/hoverBundle (four spawns per tooltip) and
+  draglint/callerCounts (77 spawns to label one file).
+
+  THE OTHER OPTION WAS REJECTED, and deliberately. Dropping the library DB from
+  the query is ~10x for one line of change, but it CHANGES WHAT IS FOUND -- a
+  usage in RTL/VCL/third-party code stops being reported. That is a product
+  decision about what Find Usages MEANS, not an optimisation, and it was not
+  taken. This path is the one that keeps the answer identical.
+
+  THE REPLY SHAPE IS THE CLI VERB'S, KEY FOR KEY: name, width, declarations,
+  reads, writes, calls, types, attributes, events, impact. That is not tidiness
+  -- a client that can fall back to spawning the CLI must not have to parse two
+  shapes, and a second shape drifts silently. run_lsp_usages_guard.ps1 asserts
+  the two agree.
+
+  EVERY store is consulted, not FStores[0]: a symbol's declaration and its usages
+  routinely live in different indexes (project + platform library), which is the
+  whole reason the CLI accepts several --db. }
+var
+  Reply  : TJSONObject   ;
+  Res    : TJSONObject   ;
+  JDecls : TJSONArray    ;
+  JReads : TJSONArray    ;
+  JWrites: TJSONArray    ;
+  JCalls : TJSONArray    ;
+  JTypes : TJSONArray    ;
+  JAttrs : TJSONArray    ;
+  JEvents: TJSONArray    ;
+  JImpact: TJSONArray    ;
+  Nm     : string        ;
+  Width  : string        ;
+  Depth  : Integer       ;
+  St     : ISymbolStore  ;
+  S      : TSymbol       ;
+  R      : TReference    ;
+  L      : TImpactLevel  ;
+  DeclO  : TJSONObject   ;
+
+  procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer);
+  var
+    O: TJSONObject;
+  begin
+    O:= TJSONObject.Create;
+    O.AddPair('file', AFile);
+    O.AddPair('line', TJSONNumber.Create(ALine));
+    O.AddPair('col' , TJSONNumber.Create(ACol ));
+    AArr.AddElement(O);
+  end;
+
+  { The ref-kind -> bucket mapping is the CLI verb's, including its catch-all:
+    'call + anything else' lands in calls. Changing it here would make the two
+    shapes disagree on a row's bucket while both still "work". }
+  function GroupFor(const AKind: string): TJSONArray;
+  begin
+    if AKind      = 'read'          then Result:= JReads
+    else if AKind = 'write'         then Result:= JWrites
+    else if AKind = 'type_use'      then Result:= JTypes
+    else if AKind = 'attribute'     then Result:= JAttrs
+    else if AKind = 'event-binding' then Result:= JEvents
+    else Result:= JCalls;
+  end;
+
+begin
+  Nm:= '';
+  Width:= '';
+  Depth:= 0;
+  if AParams <> nil then
+  begin
+    AParams.TryGetValue<string>('name', Nm);
+    AParams.TryGetValue<string>('width', Width);
+    var DepthNum: TJSONNumber:= AParams.GetValue('depth') as TJSONNumber;
+    if DepthNum <> nil then Depth:= DepthNum.AsInt;
+  end;
+
+  if Nm = '' then
+  begin
+    { A missing name is a CLIENT error, not an empty result. Returning an empty
+      payload here would look exactly like "this symbol has no usages". }
+    SendError(AId, -32602, 'draglint/usages requires a non-empty "name"');
+    Exit;
+  end;
+
+  { Width/depth defaults are the CLI's, restated because they are part of the
+    contract the guard compares: anything but 'very-wide' pins depth at 2, and a
+    non-positive depth becomes 4. }
+  Width:= LowerCase(Width);
+  if Width = '' then Width:= 'narrow';
+  if Width <> 'very-wide' then Depth:= 2; { only very-wide honours a caller depth }
+  if Depth <= 0 then Depth:= 4;
+
+  Reply:= TJSONObject.Create;
+  try
+    Reply.AddPair('jsonrpc', '2.0');
+    if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
+
+    JDecls := TJSONArray.Create;
+    JReads := TJSONArray.Create;
+    JWrites:= TJSONArray.Create;
+    JCalls := TJSONArray.Create;
+    JTypes := TJSONArray.Create;
+    JAttrs := TJSONArray.Create;
+    JEvents:= TJSONArray.Create;
+    JImpact:= TJSONArray.Create;
+
+    for St in FStores do
+    begin
+      if St = nil then Continue;
+      for S in St.FindSymbolsByExactName(Nm) do
+      begin
+        DeclO:= TJSONObject.Create;
+        DeclO.AddPair('kind'     , S.Kind.ToText);
+        DeclO.AddPair('qname'    , S.QualifiedName);
+        DeclO.AddPair('file'     , St.GetFilePath(S.FileId));
+        DeclO.AddPair('line'     , TJSONNumber.Create(S.StartLine));
+        DeclO.AddPair('signature', S.Signature);
+        JDecls.AddElement(DeclO);
+      end;
+      for R in St.FindCallersByName(Nm) do
+        AddRefRow(GroupFor(R.Kind), St.GetFilePath(R.FileId), R.StartLine, R.StartCol);
+      if Width = 'very-wide' then
+        for L in St.FindTransitiveCallers(Nm, Depth) do
+        begin
+          var IO_: TJSONObject:= TJSONObject.Create;
+          IO_.AddPair('depth'  , TJSONNumber.Create(L.Depth      ));
+          IO_.AddPair('callers', TJSONNumber.Create(L.CallerCount));
+          IO_.AddPair('units'  , TJSONNumber.Create(L.UnitCount  ));
+          JImpact.AddElement(IO_);
+        end;
+    end;
+
+    Res:= TJSONObject.Create;
+    Res.AddPair('name'        , Nm     );
+    Res.AddPair('width'       , Width  );
+    Res.AddPair('declarations', JDecls );
+    Res.AddPair('reads'       , JReads );
+    Res.AddPair('writes'      , JWrites);
+    Res.AddPair('calls'       , JCalls );
+    Res.AddPair('types'       , JTypes );
+    Res.AddPair('attributes'  , JAttrs );
+    Res.AddPair('events'      , JEvents);
+    Res.AddPair('impact'      , JImpact);
+    Reply.AddPair('result', Res);
+    SendMessage(Reply);
+  finally
+    Reply.Free;
+  end;
+end;
+
 procedure TLSPServer.HandleHoverBundle(const AId: TJSONValue; const AParams: TJSONObject);
 { ONE reply carrying everything the IDE popup used to gather in four round
   trips. See THoverComputation and the unit header of DRagLint.Query.Callers
@@ -2261,6 +2426,7 @@ begin
         detect absence in one round trip instead of waiting for a timeout. }
       else if Method = 'draglint/hoverBundle' then HandleHoverBundle(Id, Params)
       else if Method = 'draglint/callerCounts' then HandleCallerCounts(Id, Params)
+      else if Method = 'draglint/usages' then HandleUsages(Id, Params)
       else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)
       else if Method = 'textDocument/signatureHelp' then HandleSignatureHelp(Id, Params)
       else if Method = 'textDocument/didOpen' then HandleDidOpenOrSave(Params)
