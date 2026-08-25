@@ -747,8 +747,28 @@ begin
       CheckInlineCommentInMultilineArgs(Source, AFilePath, Findings);
       // External *.scm rules
       var R: TQueryRule;
+      { LITERAL PRE-FILTER -- see TQueryRule.RequiredText.
+        A rule whose predicate is anchored to a literal cannot match a file whose
+        text does not contain that literal, so running its query over the AST is
+        provably wasted. Measured on ORM3: gettickcount-wraparound alone was
+        17.48 s of the 52.82 s all 55 rules cost together, for ONE finding.
+        The lowercased copy is built at most ONCE per file, and only when some
+        rule actually declares a literal -- a corpus of rules that declare none
+        pays nothing. LowerReady is a separate flag because an EMPTY file
+        lowercases to '' and must not be mistaken for "not computed yet". }
+      var LowerSrc  : string  := '';
+      var LowerReady: Boolean := False;
       for R in FQueryRules do
       begin
+        if R.RequiredText <> '' then
+        begin
+          if not LowerReady then
+          begin
+            LowerSrc  := LowerCase(TEncoding.UTF8.GetString(Source));
+            LowerReady:= True;
+          end;
+          if not LowerSrc.Contains(R.RequiredText) then Continue;
+        end;
         var QFindings:= R.Run(Tree.RootNode, Source, AFilePath);
         var F: TLintFinding;
         for F in QFindings do

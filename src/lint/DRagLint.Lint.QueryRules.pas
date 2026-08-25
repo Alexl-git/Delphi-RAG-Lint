@@ -37,6 +37,9 @@ type
       FWarnCapture    : string         ;
       FEnabled        : Boolean        ;
       FRuleId         : string         ;
+      { A literal that MUST appear in a file's text for this query to have any
+        chance of matching, or '' when none could be proven. See RequiredText. }
+      FRequiredText   : string         ;
       FExcludeAncestors: TArray<string>;
       { The MIRROR of FExcludeAncestors: node kinds at least one of which must be
         an ancestor for the match to count at all. Empty = no requirement, which
@@ -142,6 +145,33 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string): TArray<TLintFinding>;
+      /// <summary>A literal the FILE TEXT must contain for this rule's query to
+      /// be capable of matching -- a cheap pre-filter the caller may use to skip
+      /// running the query at all. '' when no such literal could be proven.</summary>
+      /// <remarks>
+      /// WHY. Measured on ORM3 2026-08-24: `gettickcount-wraparound` cost 17.48 s
+      /// of the 52.82 s ALL 55 .scm rules cost together -- a third of the phase --
+      /// to produce ONE finding on the whole corpus. It matches bare
+      /// `(identifier)`, so tree-sitter visits every identifier in every file and
+      /// runs a regex on each.
+      ///
+      /// The tempting fix is to narrow the pattern to `(exprCall ...)` like its
+      /// cheap sibling `outputdebugstring` (1.41 s, same job). That is WRONG: the
+      /// rule's one real hit is `GetTickCount` WITHOUT parentheses, passed as an
+      /// argument, so narrowing would buy 16 s by deleting the only finding it has
+      /// ever produced here.
+      ///
+      /// This is the semantics-preserving alternative. The predicate is anchored
+      /// to a literal, so the query provably cannot match a file whose text does
+      /// not contain that literal -- skipping it changes no result.
+      ///
+      /// DELIBERATELY CONSERVATIVE: set ONLY when the .scm holds exactly ONE
+      /// `#match?` whose pattern is exactly `(?i)^word$`. More than one predicate,
+      /// or any regex machinery beyond that, and this stays '' and the rule runs
+      /// as before. A wrong literal here would silence a rule, which is far worse
+      /// than a slow one -- so the bar is "provable", not "probably fine".
+      /// </remarks>
+      property RequiredText: string read FRequiredText;
       property Id        : string  read FId      ;
       property Severity  : string  read FSeverity;
       property Message   : string  read FMessage ;
@@ -325,6 +355,55 @@ begin
   end;
 end;
 
+{ The literal a query's text must contain for it to be able to match -- see
+  TQueryRule.RequiredText for why this exists and why it is this strict.
+
+  PROVEN, NOT GUESSED. Returns a literal ONLY for the exact shape
+
+      (#match? @cap "(?i)^word$")
+
+  appearing EXACTLY ONCE in the .scm, where word is [A-Za-z0-9_]+. Anything else
+  -- a second #match?, a #not-match?, alternation, character classes, an unanchored
+  pattern -- returns '' and the rule runs unfiltered. Getting this wrong silences a
+  rule, which is far worse than a slow rule, so the bar is deliberately high and
+  the failure direction is "run it anyway".
+
+  Comment lines (';' to end of line) are ignored: a rule's header prose routinely
+  mentions the API name and must not be mistaken for a predicate. }
+function ExtractRequiredLiteral(const AQuerySource: string): string;
+var
+  Code: TStringBuilder;
+  Line: string        ;
+  P    : Integer      ;
+  M    : TMatchCollection;
+begin
+  Result:= '';
+  { Strip ';' comments first. }
+  Code:= TStringBuilder.Create;
+  try
+    for Line in AQuerySource.Split([sLineBreak, #10]) do
+    begin
+      P:= Pos(';', Line);
+      if P > 0 then Code.AppendLine(Copy(Line, 1, P - 1))
+               else Code.AppendLine(Line);
+    end;
+    { Every #match?-family predicate, so a second one (or a #not-match?) is seen
+      and disqualifies the rule rather than being skipped over. }
+    M:= TRegEx.Matches(Code.ToString, '#(?:not-)?match\?\s+@\S+\s+"([^"]*)"');
+    if M.Count <> 1 then Exit;
+    var Pat: string:= M.Item[0].Groups[1].Value;
+    { Exactly the anchored case-insensitive word form, nothing else. }
+    var W: TMatch:= TRegEx.Match(Pat, '^\(\?i\)\^([A-Za-z0-9_]+)\$$');
+    if not W.Success then Exit;
+    { And it must be a #match?, not a #not-match? -- absence of the literal makes
+      a NEGATED predicate TRUE, so the file would still need visiting. }
+    if Code.ToString.Contains('#not-match?') then Exit;
+    Result:= LowerCase(W.Groups[1].Value);
+  finally
+    Code.Free;
+  end;
+end;
+
 constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
 var
   ErrOff : UInt32       ;
@@ -341,6 +420,7 @@ begin
   FMessage:= Format('matched rule "%s"', [FId]);
   FWarnCapture:= 'warn';
   FEnabled:= True;   // rules run unless their sidecar json says "enabled": false
+  FRequiredText:= ExtractRequiredLiteral(AQuerySource);
 
   if (AJsonPath <> '') and TFile.Exists(AJsonPath) then
   begin

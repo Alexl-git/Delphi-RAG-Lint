@@ -35,6 +35,34 @@
   a primary. That is a behaviour change with real blast radius (it decides which
   index answers every query for one of the verbs) and is an owner call.
 
+  2026-08-25 CORRECTION: `document`'s last-`--db` rule is DELIBERATE, and the
+  two verbs' conventions are OPPOSITE. Do not "align" one to the other.
+
+  Changing `document` to open the FIRST `--db` (to match `lint-all`) was tried
+  and REVERTED the same day. It broke `tests\autotest\run_doc_multidb.ps1` and
+  `run_doc_multidb_overload_tag.ps1`, whose headers document the rule as a
+  convention and depend on it:
+
+      "document --unit opens its PRIMARY store from the LAST --db flag ... So the
+       target unit's own db must be passed LAST; any earlier --db is an extra
+       store searched (name-only) for callers/used-in."
+
+  So the two verbs document OPPOSITE orderings for the same flags:
+
+      document   the target's own DB goes LAST
+      lint-all   the project DB goes FIRST  (`--db <proj> --db <lib>`)
+
+  A user passing one `--db` list to both cannot satisfy both. THAT is the defect
+  -- a UX/contract contradiction, not a wrong line of code -- and it cannot be
+  fixed by silently flipping either side.
+
+  ALSO CORRECTED: extras are NOT useless for callers. run_doc_multidb's scenario
+  B surfaces `Called from: uApp.Run` from an extra store by NAME. What the extras
+  path does not surface is this fixture's shape -- `T.DoIt`, a member access on a
+  typed receiver, which the CalledFrom bucket ambiguity-gates. A plain call by
+  name (`Compute(21)`) comes through fine. The earlier claim here that extras
+  contribute nothing was drawn from this one fixture and was too broad.
+
   THREE THINGS THIS FIXTURE GOT WRONG BEFORE, all of which read as "the engine
   is fine" -- recorded so the fourth version does not repeat them:
 
