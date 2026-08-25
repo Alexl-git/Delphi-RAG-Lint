@@ -9112,8 +9112,55 @@ begin
       Q.Close;
       FConn.Commit;
     except
-      FConn.Rollback;
-      raise;
+      on E: Exception do
+      begin
+        { SELF-CAPTURE FOR THE INTERMITTENT `FOREIGN KEY constraint failed`.
+          INBOX-intermittent-fk-failure-on-incremental-reindex: seen ONCE, on the
+          2.3 GB library index while 84 files arrived at once, and never since --
+          not at 12 or 100 added files on ORM3, and not on the library-scale run
+          of 2026-08-25. A re-run succeeded last time, which is exactly why it
+          was never diagnosed: the evidence was gone before anyone looked.
+
+          The note's open question is not "is the database corrupt" -- that was
+          checked at the moment of failure and it was clean (foreign_key_check 0,
+          integrity_check ok, no orphans). It is WHICH EDGE the failing statement
+          was writing, which the old handler discarded by re-raising a bare
+          "FOREIGN KEY constraint failed" with no row identity at all.
+
+          Every value below is ALREADY IN MEMORY -- Edge and Ref are the loop's
+          own variables -- so this costs nothing on the hot path. Deliberately NOT
+          placed inside UpsertCallEdge: a try/except frame per row would sit on a
+          path that writes ~500k edges on the library index, and this file has
+          three recorded instances of optimising the wrong thing.
+
+          DELIBERATELY NO DATABASE PROBING HERE. Asking whether refs(rid) still
+          exists would be useful, but a query inside an exception handler can
+          itself throw and would then MASK the original error -- and the failure
+          is rare enough that a masked one might not recur for months. The edge
+          identity is what was missing; the database itself survives (the copies
+          under the A/B harness, or the real index) and can be queried offline
+          once this line names the ids to look for. }
+        var Diag : string:= '';
+        var Shape: string:= 'whole-db';
+        if Scoped then Shape:= 'scoped';
+        try
+          Diag:= sLineBreak +
+            Format('  [call-edge capture] shape=%s written=%d streamed=%d',
+                   [Shape, Written, Streamed]) + sLineBreak +
+            Format('  failing edge: ref_id=%d target_symbol_id=%d receiver_type_symbol_id=%d confidence=%s',
+                   [Edge.RefId, Edge.TargetSymbolId, Edge.ReceiverTypeSymbolId, Edge.Confidence]) + sLineBreak +
+            Format('  its ref: id=%d file_id=%d %d:%d name=%s',
+                   [Ref.Id, Ref.FileId, Ref.StartLine, Ref.StartCol, Ref.NameText]) + sLineBreak +
+            '  KEEP THIS DATABASE AND THIS LOG -- do not simply re-run. A re-run ' +
+            'succeeded in 2026-08-17 and destroyed the only occurrence.';
+        except
+          { The capture must never be the reason a build failure is lost. }
+          Diag:= sLineBreak + '  [call-edge capture] unavailable';
+        end;
+        FConn.Rollback;
+        E.Message:= E.Message + Diag;
+        raise;
+      end;
     end;
     if Scoped then
       ResolveLog(Format('calls      %d edge(s) from %d affected call-site ref(s) in %d changed file(s)  [%.1fs, clear %.1fs, maps %.1fs]',
