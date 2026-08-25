@@ -562,6 +562,29 @@ Enable an autofix by adding its rule id, e.g. in `drag-lint-lint.json`:
 ```
 See the **v0.96 / v0.97** CHANGELOG entries for the full behaviour notes.
 
+### Naming your exceptions unit (`raise-bare-exception` gets specific)
+
+Tell drag-lint which unit owns your exception classes and `raise-bare-exception`
+stops saying *"raise a specific subclass"* and starts naming **which** one:
+
+```json
+{ "exceptions": { "unit": "MyApp.Exceptions" } }
+```
+
+Each finding then reports either `EInvoiceNotFound already covers this message
+-- raise it instead.` or `No existing exception class covers this message -- add
+one to MyApp.Exceptions.`
+
+A class's "message" is the literal at its own `raise` sites -- a declaration
+carries no message -- and matching is **normalized** (casing, punctuation and a
+short stopword list), so `'Invoice not found'` and `'Invoice was not found'`
+resolve to the same class rather than inviting two near-duplicate classes.
+Messages are read from the **AST**, so a doubled-quote escape or a `raise` split
+across lines is handled; concatenations contribute their static prefix.
+
+**Omit the block and nothing changes** -- the message is exactly what it always
+was, and the extra AST walk is skipped rather than filtered.
+
 ---
 
 ## 4c. Writing code that passes the linter first time

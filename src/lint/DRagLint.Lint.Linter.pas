@@ -26,10 +26,36 @@ type
   /// Used in units: DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server
   /// <!-- drag-lint:auto END -->
   /// </remarks>
+  { STAGE 1 of exception-class-unit. A candidate is a class someone already
+    raises with a literal message; a site is a bare `raise Exception.Create(...)`
+    waiting to be told which candidate covers it. Both are harvested from the
+    AST during the parse the linter already does. }
+  TDragExcCand = record
+    ClsName: string; { the exception class raised, e.g. EInvoiceNotFound }
+    Msg    : string; { its message, NORMALIZED                          }
+  end;
+
+  TDragExcSite = record
+    FilePath: string ;
+    Line    : Integer;
+    Col     : Integer;
+    Msg     : string ; { the bare raise's static message, NORMALIZED }
+  end;
+
   TLinter = class
     strict private
       FLanguage  : PTSLanguage                                             ;
       FQueryRules: TArray<TQueryRule>                                      ;
+      { exception-class-unit stage 1. FExcUnit = '' means the feature is OFF and
+        HarvestExceptions never runs, so a project that has not opted in pays
+        nothing. Plain arrays rather than dictionaries: these hold tens of
+        entries on a real project (64 distinct messages measured on ORM3), the
+        lookup is linear over that once per finding, and an array needs no
+        construction in Create or teardown in Destroy. }
+      FExcUnit   : string                                                  ;
+      FExcCand   : TArray<TDragExcCand>                                    ;
+      FExcSites  : TArray<TDragExcSite>                                    ;
+      procedure HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TLintFinding&gt;</returns>
       /// <remarks>
@@ -96,6 +122,19 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LintFile(const AFilePath: string): TArray<TLintFinding>                          ;
+      /// <summary>Names the unit that owns the project's exception classes,
+      /// enabling stage 1 of exception-class-unit. Set it BEFORE linting; empty
+      /// (the default) disables the harvest entirely.</summary>
+      property ExceptionsUnit: string read FExcUnit write FExcUnit;
+      /// <summary>Rewrites every raise-bare-exception finding to name the
+      /// existing exception class whose message covers it, or to say plainly
+      /// that none does.</summary>
+      /// <param name="AFindings">Findings for the WHOLE run; modified in place.</param>
+      /// <remarks>Must be called after every file has been linted and while the
+      /// linter is still alive: a class's message routinely lives in a different
+      /// unit from the bare raise, so no per-file answer can be correct. No-op
+      /// when ExceptionsUnit is empty.</remarks>
+      procedure EnrichExceptionFindings(var AFindings: TArray<TLintFinding>);
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ARecursive"><!-- drag-lint:auto type -->Boolean = True</param>
       /// <returns><!-- drag-lint:auto -->Observed: All.ToArray.</returns>
@@ -469,6 +508,56 @@ end; // procedure
   row-reader is rather than how many places need fixing.
   Nested loops are deliberately NOT descended into: they are inside the outermost
   loop's body, and hoisting happens above that loop. }
+{ THE NORMALIZER behind the owner's 2026-08-25 ruling that "fits" means a
+  NORMALIZED MESSAGE MATCH. 'Invoice not found' and 'Invoice was not found' must
+  collapse to one key, or stage 3 generates EInvoiceNotFound AND
+  EInvoiceWasNotFound and the collision the whole note is about is built in
+  rather than avoided.
+
+  Casing and punctuation go; a short stopword list goes. Deliberately NOT
+  stemming: 'found'/'finding' surviving as different keys costs a duplicate
+  suggestion, while over-stemming silently merges two genuinely different errors
+  onto one class, and a wrong merge is the expensive direction here. }
+function NormalizeExcMessage(const AMsg: string): string;
+const
+  STOPWORDS: array[0..10] of string =
+    ('was', 'were', 'is', 'are', 'be', 'been', 'the', 'a', 'an', 'has', 'have');
+var
+  T    : string        ;
+  I, K : Integer       ;
+  Parts: TArray<string>;
+  Keep : TArray<string>;
+  Skip : Boolean       ;
+begin
+  T:= LowerCase(AMsg);
+  for I:= 1 to Length(T) do
+    if not CharInSet(T[I], ['a'..'z', '0'..'9']) then T[I]:= ' ';
+  Parts:= T.Split([' '], TStringSplitOptions.ExcludeEmpty);
+  SetLength(Keep, 0);
+  for I:= 0 to High(Parts) do
+  begin
+    Skip:= False;
+    for K:= Low(STOPWORDS) to High(STOPWORDS) do
+      if Parts[I] = STOPWORDS[K] then begin Skip:= True; Break; end;
+    if not Skip then Keep:= Keep + [Parts[I]];
+  end;
+  Result:= string.Join(' ', Keep);
+end;
+
+{ A literalString node's text still carries its quotes and Pascal's doubled-quote
+  escape. Read it from the NODE, never from the source line: a regex over the
+  line is the method that produced the 2026-08-17 measurement this feature's note
+  had to retract -- it recovered 80 of 139 sites and then reported the 59 it
+  could not parse as "sites with no literal", writing an extractor limitation up
+  as a property of the code. }
+function UnquotePascalString(const ALit: string): string;
+begin
+  Result:= ALit;
+  if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then
+    Result:= Copy(Result, 2, Length(Result) - 2);
+  Result:= StringReplace(Result, '''''', '''', [rfReplaceAll]);
+end;
+
 procedure WalkForFieldByNameInLoop(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
 var
   NT: string ;
@@ -744,6 +833,9 @@ begin
     else
     begin
       WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, Findings);
+      { Rides the parse above rather than adding one. Returns immediately when
+        the project has not opted in. }
+      if FExcUnit <> '' then HarvestExceptions(Tree.RootNode, Source, AFilePath);
       CheckInlineCommentInMultilineArgs(Source, AFilePath, Findings);
       // External *.scm rules
       var R: TQueryRule;
@@ -789,6 +881,114 @@ begin
     Findings.Free;
   end; // try
 end; // function
+
+{ Collects both halves of stage 1 in ONE walk: every `raise X.Create('lit')`.
+  X = Exception is a SITE needing advice; anything else is a CANDIDATE whose
+  literal is that class's known message.
+
+  WHY CANDIDATES ARE NOT RESTRICTED TO THE CONFIGURED UNIT. A class declaration
+  carries no message -- the only place a message exists is a raise site -- so the
+  map has to be built from raise sites wherever they are, and a class raised
+  anywhere in the project is a genuine candidate. The config key's job is to turn
+  the feature on and to name where a NEW class should go; it is not a filter.
+
+  The first literalString inside the argument list is taken deliberately: for
+  `Create('Disk quota exceeded on ' + S)` that is the STATIC PREFIX, which is
+  what a class name can be derived from. Ruling 2 (exactly where the literal ends
+  and the runtime data begins) is still open and gates stage 3, not this. }
+procedure TLinter.HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
+
+  function FirstLiteralString(const N: TTSNode): string;
+  var
+    I: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    if N.NodeType = 'literalString' then Exit(NodeText(N, ASource));
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      Result:= FirstLiteralString(N.NamedChild(I));
+      if Result <> '' then Exit;
+    end;
+  end;
+
+var
+  I                : Integer      ;
+  Call, Dot, Lhs, Args: TTSNode   ;
+  Cls, Msg         : string       ;
+  Cand             : TDragExcCand ;
+  Site             : TDragExcSite ;
+begin
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'raise' then
+  begin
+    Call:= ANode.ChildByField('exception');
+    if (not Call.IsNull) and (Call.NodeType = 'exprCall') then
+    begin
+      Dot:= Call.ChildByField('entity');
+      if (not Dot.IsNull) and (Dot.NodeType = 'exprDot') then
+      begin
+        Lhs:= Dot.ChildByField('lhs');
+        if not Lhs.IsNull then
+        begin
+          Cls := NodeText(Lhs, ASource);
+          Args:= Call.ChildByField('args');
+          Msg := NormalizeExcMessage(UnquotePascalString(FirstLiteralString(Args)));
+          if SameText(Cls, 'Exception') then
+          begin
+            { The position must match what the .scm rule reports, or the
+              enrichment silently attaches to nothing: its @warn capture is the
+              `raise` node, so this is that node's own start. }
+            Site.FilePath:= AFilePath;
+            Site.Line    := Integer(ANode.StartPoint.row   ) + 1;
+            Site.Col     := Integer(ANode.StartPoint.column) + 1;
+            Site.Msg     := Msg;
+            FExcSites:= FExcSites + [Site];
+          end
+          else if Msg <> '' then
+          begin
+            Cand.ClsName:= Cls;
+            Cand.Msg    := Msg;
+            FExcCand:= FExcCand + [Cand];
+          end;
+        end;
+      end;
+    end;
+  end;
+  for I:= 0 to ANode.NamedChildCount - 1 do
+    HarvestExceptions(ANode.NamedChild(I), ASource, AFilePath);
+end;
+
+procedure TLinter.EnrichExceptionFindings(var AFindings: TArray<TLintFinding>);
+var
+  I, J, K: Integer;
+  Key, Cls: string;
+begin
+  if FExcUnit = '' then Exit;
+  for I:= 0 to High(AFindings) do
+  begin
+    if AFindings[I].RuleId <> 'raise-bare-exception' then Continue;
+    Key:= '';
+    for J:= 0 to High(FExcSites) do
+      if (FExcSites[J].Line = AFindings[I].StartLine) and
+         (FExcSites[J].Col  = AFindings[I].StartCol ) and
+         SameText(FExcSites[J].FilePath, AFindings[I].FilePath) then
+      begin
+        Key:= FExcSites[J].Msg;
+        Break;
+      end;
+    Cls:= '';
+    if Key <> '' then
+      for K:= 0 to High(FExcCand) do
+        if FExcCand[K].Msg = Key then begin Cls:= FExcCand[K].ClsName; Break; end;
+    if Cls <> '' then
+      AFindings[I].Message:= AFindings[I].Message +
+        Format(' %s already covers this message -- raise it instead.', [Cls])
+    else
+      AFindings[I].Message:= AFindings[I].Message +
+        Format(' No existing exception class covers this message -- add one to %s.', [FExcUnit]);
+  end;
+end;
 
 function TLinter.LintFile( const AFilePath: string): TArray<TLintFinding>;
 begin

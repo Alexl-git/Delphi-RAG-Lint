@@ -131,6 +131,13 @@ type
     /// <summary>Naming conventions parsed from the "naming" block; always
     /// populated with TNamingConfig.Default when no block is present.</summary>
     Naming: TNamingConfig;
+    /// <summary>The unit that owns this project's exception classes, from
+    /// "exceptions": { "unit": "..." }. EMPTY when the block is absent, and that
+    /// is the OFF switch for the whole feature: raise-bare-exception then reports
+    /// exactly the text it always did.</summary>
+    /// <remarks>Opting in costs one extra AST walk per linted file, so the empty
+    /// case must stay genuinely free -- the walk is skipped, not filtered.</remarks>
+    ExceptionsUnit: string;
     /// <summary>Loads config from APath (JSON). Empty/missing APath yields a
     /// no-op default config. If AProfile is non-empty and present under
     /// "profiles", the profile is merged over the top-level values: list fields
@@ -591,6 +598,15 @@ begin
   end;
   if AObj.GetValue('naming') is TJSONObject then
     ApplyNamingObject(AObj.GetValue('naming') as TJSONObject);
+  { The "exceptions" block, key "unit" -- names the unit that owns the project's
+    exception classes. Absent leaves ExceptionsUnit empty, which is the feature's
+    off switch. NB: no JSON braces in this comment on purpose; a closing brace
+    inside a brace comment ENDS it, which cost a build here on 2026-08-25. }
+  if AObj.GetValue('exceptions') is TJSONObject then
+  begin
+    var ExcObj: TJSONObject:= AObj.GetValue('exceptions') as TJSONObject;
+    if ExcObj.GetValue('unit') <> nil then ExceptionsUnit:= ExcObj.GetValue('unit').Value;
+  end;
 end;
 
 class function TLintConfig.Load(const APath, AProfile: string): TLintConfig;

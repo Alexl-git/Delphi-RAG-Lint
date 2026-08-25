@@ -745,6 +745,13 @@ Party > drag-lint, each backed by `INTAAddInOptions`. **All plugin settings
 (exe path, DB template, indexer/linter/editor toggles) live here** -- edit a
 value, click OK, and the next hover / lint / index action picks it up (no IDE
 restart needed). Reopen them anytime via **drag-lint > drag-lint Options...**.
+`drag-lint-lint.json` also accepts `"exceptions": { "unit": "MyApp.Exceptions" }`.
+With it set, `raise-bare-exception` names the existing exception class whose
+message already covers each bare `raise Exception.Create(...)` -- matched on the
+normalized message text, so `'Invoice not found'` and `'Invoice was not found'`
+resolve to the same class -- or says none exists. Omit it and the rule's output
+is unchanged.
+
 Per-project lint rules (`drag-lint-lint.json`) are edited from the drag-lint
 dock's Lint Options tab, reachable via **Project Manager right-click a project >
 "drag-lint: Project Rules..."**. That tab now has a **naming-convention preset

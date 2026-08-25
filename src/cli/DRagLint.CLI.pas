@@ -10889,6 +10889,9 @@ begin
   { Per-file rules: external .scm rules + all built-in AST checks }
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
+  { exception-class-unit stage 1. Empty unless the lint config carries an
+    "exceptions" block with a "unit" key; empty means the harvest never runs. }
+  Linter.ExceptionsUnit:= Cfg.ExceptionsUnit;
   LastPct:= -1;
   try
     for FileIdx:= 0 to Length(FilePaths) - 1 do
@@ -10970,6 +10973,11 @@ begin
       { Free cached tree for this file before moving to the next }
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end; // for
+    { AFTER the loop and BEFORE the linter dies. A class's message routinely
+      lives in a different unit from the bare raise, so this cannot be done
+      per-file; and Linter.Free below is long before FinalizeAndOutput, so it
+      cannot be done there either. No-op unless the project opted in. }
+    Linter.EnrichExceptionFindings(Findings);
   finally
     Linter.Free;
     GScanTgt:= nil; { the pointer must not outlive Findings' frame }
