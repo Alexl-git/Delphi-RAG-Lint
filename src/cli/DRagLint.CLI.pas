@@ -70,6 +70,7 @@ uses
   , DRagLint.Lint   .Config
   , DRagLint.Lint   .RuleCatalog
   , DRagLint.Lint   .Linter
+  , DRagLint.Lint   .QueryRules { QueryRuleTimings -- the per-rule .scm breakdown }
   , DRagLint.Lint   .ProjectChecks
   , DRagLint.Lint   .ProjectRules
   , DRagLint.Lint   .ClassMetrics
@@ -10933,6 +10934,32 @@ begin
     Writeln(ErrOutput, Format('      %-26s %8.2f s',
       ['of which .scm queries', (GScanT[0] - DRagLint.Lint.Linter.LinterParseTicks) / TStopwatch.Frequency]));
     Writeln(ErrOutput, Format('    %-28s %8.2f s', ['(sum of the slots above)', (ScanTot + GScanAppend) / TStopwatch.Frequency]));
+    { SESSION 36 (P3): the .scm half broken down PER RULE. The aggregate is the
+      largest single item left in lint-all, but "114 queries cost 54 s" is not
+      something a fix can be aimed at, and the last two attempts to optimise this
+      phase from the aggregate both picked a target worth ~0. Rows are sorted by
+      cost and the tail is summarised rather than printed: the head is the point.
+      No silent cap -- the elided rows are counted and named as elided. }
+    var RuleTimes: TArray<TQueryRuleTiming>:= QueryRuleTimings;
+    if Length(RuleTimes) > 0 then
+    begin
+      var RuleTot: Double:= 0;
+      for var RT in RuleTimes do RuleTot:= RuleTot + RT.Seconds;
+      Writeln(ErrOutput, Format('    PER-RULE .scm BREAKDOWN (%d rule(s), %.2f s total)',
+        [Length(RuleTimes), RuleTot]));
+      var RuleShown: Integer:= Min(15, Length(RuleTimes));
+      for var K:= 0 to RuleShown - 1 do
+        Writeln(ErrOutput, Format('      %-30s %8.2f s  (%d call(s), %.3f ms/call)',
+          [RuleTimes[K].RuleId, RuleTimes[K].Seconds, RuleTimes[K].Calls,
+           RuleTimes[K].Seconds * 1000 / Max(1, RuleTimes[K].Calls)]));
+      if Length(RuleTimes) > RuleShown then
+      begin
+        var Rest: Double:= 0;
+        for var K:= RuleShown to High(RuleTimes) do Rest:= Rest + RuleTimes[K].Seconds;
+        Writeln(ErrOutput, Format('      %-30s %8.2f s  (not listed)',
+          [Format('... %d cheaper rule(s)', [Length(RuleTimes) - RuleShown]), Rest]));
+      end;
+    end;
     Flush(ErrOutput);
   end;
 

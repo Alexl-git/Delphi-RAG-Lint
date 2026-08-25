@@ -177,7 +177,102 @@ type
       class function LoadAll(const ALanguage: PTSLanguage; const ARulesDir: string): TArray<TQueryRule>;
   end;
 
+/// <summary>One rule's share of the .scm query cost, accumulated across every
+/// file this process linted.</summary>
+/// <remarks>Diagnostic only, and populated ONLY while DRAGLINT_PROFILE is set.
+/// See QueryRuleTimings for why this exists.</remarks>
+type
+  TQueryRuleTiming = record
+    /// <summary>The rule id as the sidecar json declares it.</summary>
+    RuleId : string ;
+    /// <summary>Seconds spent inside TQueryRule.Run for this rule.</summary>
+    Seconds: Double ;
+    /// <summary>Times Run was entered -- normally once per scanned file.</summary>
+    Calls  : Int64  ;
+  end;
+
+/// <summary>Per-rule .scm query cost, most expensive first.</summary>
+/// <returns>One entry per rule that ran; empty when DRAGLINT_PROFILE was unset.</returns>
+/// <remarks>
+/// SESSION 36 (P3). The .scm queries are the largest single item left in
+/// lint-all -- 54.35 s of a 277 s ORM3 run -- but that is the cost of all 114
+/// TOGETHER, which is not something a fix can be aimed at. The standing
+/// instruction on this item is to MEASURE PER RULE BEFORE TOUCHING ANYTHING,
+/// because the last two attempts to optimise this phase from the aggregate
+/// picked the wrong target: the quadratic `Findings := Findings + X` measured
+/// 0.00 s, and the .scm double parse was real but worth 1.38 s of 271 s.
+///
+/// Two QueryPerformanceCounter reads per rule per file, and only when armed.
+/// Not thread-safe; lint-all is single-threaded here.
+/// </remarks>
+function QueryRuleTimings: TArray<TQueryRuleTiming>;
+
 implementation
+
+uses
+  System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
+  , System.Generics.Defaults { TComparer -- sorting that table by cost }
+  ;
+
+{ Armed once, from DRAGLINT_PROFILE, so the unarmed path costs one Boolean test
+  per rule per file rather than an environment read. }
+var
+  GRuleProfileArmed: Boolean;
+  GRuleProfileRead : Boolean;
+  GRuleTicks       : TDictionary<string, Int64>;
+  GRuleCalls       : TDictionary<string, Int64>;
+
+function RuleProfileArmed: Boolean;
+begin
+  if not GRuleProfileRead then
+  begin
+    GRuleProfileArmed:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
+    GRuleProfileRead := True;
+    if GRuleProfileArmed then
+    begin
+      GRuleTicks:= TDictionary<string, Int64>.Create;
+      GRuleCalls:= TDictionary<string, Int64>.Create;
+    end;
+  end;
+  Result:= GRuleProfileArmed;
+end;
+
+procedure NoteRuleTicks(const ARuleId: string; ATicks: Int64);
+var
+  Prior: Int64;
+begin
+  if GRuleTicks = nil then Exit;
+  if not GRuleTicks.TryGetValue(ARuleId, Prior) then Prior:= 0;
+  GRuleTicks.AddOrSetValue(ARuleId, Prior + ATicks);
+  if not GRuleCalls.TryGetValue(ARuleId, Prior) then Prior:= 0;
+  GRuleCalls.AddOrSetValue(ARuleId, Prior + 1);
+end;
+
+function QueryRuleTimings: TArray<TQueryRuleTiming>;
+var
+  Pair: TPair<string, Int64>;
+  T   : TQueryRuleTiming    ;
+  N   : Int64               ;
+begin
+  SetLength(Result, 0);
+  if GRuleTicks = nil then Exit;
+  for Pair in GRuleTicks do
+  begin
+    T.RuleId := Pair.Key;
+    T.Seconds:= Pair.Value / TStopwatch.Frequency;
+    if not GRuleCalls.TryGetValue(Pair.Key, N) then N:= 0;
+    T.Calls  := N;
+    Result:= Result + [T];
+  end;
+  { Most expensive first -- the whole point is to name the top few. }
+  TArray.Sort<TQueryRuleTiming>(Result, TComparer<TQueryRuleTiming>.Construct(
+    function(const L, R: TQueryRuleTiming): Integer
+    begin
+      if L.Seconds > R.Seconds then Result:= -1
+      else if L.Seconds < R.Seconds then Result:= 1
+      else Result:= CompareText(L.RuleId, R.RuleId);
+    end));
+end;
 
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
 var
@@ -445,61 +540,73 @@ var
   HasWarn    : Boolean             ;
   HasFirst   : Boolean             ;
   i          : Integer             ;
+  ProfT0     : Int64               ;
+  Profiled   : Boolean             ;
 begin
-  FoundList:= TList<TLintFinding>.Create;
-  Cursor:= TTSQueryCursor.Create;
+  { P3 MEASUREMENT. Off unless DRAGLINT_PROFILE is set -- see QueryRuleTimings.
+    try/finally rather than a tail call: several Exit paths below would otherwise
+    drop the sample, and a per-rule table that silently omits its cheapest-
+    looking rules is worse than none. }
+  Profiled:= RuleProfileArmed;
+  if Profiled then ProfT0:= TStopwatch.GetTimeStamp else ProfT0:= 0;
   try
-    Cursor.Execute(FQuery, ARootNode);
-    while Cursor.NextMatch(Match) do
-    begin
-      // v0.3: evaluate predicates before emitting a finding.
-      if not AllPredicatesPass(FQuery, Match, ASource) then Continue;
-
-      Captures:= Match.CapturesArray;
-      // Prefer the capture named @<FWarnCapture>; otherwise pin to the
-      // first capture.
-      Picked:= Default(TTSNode);
-      HasWarn := False;
-      HasFirst:= False;
-      for i:= 0 to Length(Captures) - 1 do
+    FoundList:= TList<TLintFinding>.Create;
+    Cursor:= TTSQueryCursor.Create;
+    try
+      Cursor.Execute(FQuery, ARootNode);
+      while Cursor.NextMatch(Match) do
       begin
-        CapIdx:= Captures[i].index;
-        CaptureName:= FQuery.CaptureNameForID(CapIdx);
-        CapNode:= Captures[i].node;
-        if (not HasFirst) then
-        begin
-          Picked  := CapNode;
-          HasFirst:= True;
-        end;
-        if SameText(CaptureName, FWarnCapture) then
-        begin
-          Picked := CapNode;
-          HasWarn:= True;
-          Break;
-        end;
-      end; // for
-      if not (HasWarn or HasFirst) then Continue;
+        // v0.3: evaluate predicates before emitting a finding.
+        if not AllPredicatesPass(FQuery, Match, ASource) then Continue;
 
-      { Structural exemption (JSON "exclude_if_ancestor"): drop the match when the
-        picked node lives inside one of the excluded node kinds. }
-      if InExcludedAncestor(Picked) then Continue;
-      if not HasRequiredAncestor(Picked) then Continue;
+        Captures:= Match.CapturesArray;
+        // Prefer the capture named @<FWarnCapture>; otherwise pin to the
+        // first capture.
+        Picked:= Default(TTSNode);
+        HasWarn := False;
+        HasFirst:= False;
+        for i:= 0 to Length(Captures) - 1 do
+        begin
+          CapIdx:= Captures[i].index;
+          CaptureName:= FQuery.CaptureNameForID(CapIdx);
+          CapNode:= Captures[i].node;
+          if (not HasFirst) then
+          begin
+            Picked  := CapNode;
+            HasFirst:= True;
+          end;
+          if SameText(CaptureName, FWarnCapture) then
+          begin
+            Picked := CapNode;
+            HasWarn:= True;
+            Break;
+          end;
+        end; // for
+        if not (HasWarn or HasFirst) then Continue;
 
-      Finding:= Default(TLintFinding);
-      Finding.RuleId  := FId;
-      Finding.Severity:= FSeverity;
-      Finding.FilePath:= AFilePath;
-      Finding.Message := FMessage;
-      Finding.StartLine:= Integer(Picked.StartPoint.row   ) + 1;
-      Finding.StartCol := Integer(Picked.StartPoint.column) + 1;
-      Finding.EndLine  := Integer(Picked.EndPoint  .row   ) + 1;
-      Finding.EndCol   := Integer(Picked.EndPoint  .column) + 1;
-      FoundList.Add(Finding);
-    end; // while
-    Result:= FoundList.ToArray;
+        { Structural exemption (JSON "exclude_if_ancestor"): drop the match when the
+          picked node lives inside one of the excluded node kinds. }
+        if InExcludedAncestor(Picked) then Continue;
+        if not HasRequiredAncestor(Picked) then Continue;
+
+        Finding:= Default(TLintFinding);
+        Finding.RuleId  := FId;
+        Finding.Severity:= FSeverity;
+        Finding.FilePath:= AFilePath;
+        Finding.Message := FMessage;
+        Finding.StartLine:= Integer(Picked.StartPoint.row   ) + 1;
+        Finding.StartCol := Integer(Picked.StartPoint.column) + 1;
+        Finding.EndLine  := Integer(Picked.EndPoint  .row   ) + 1;
+        Finding.EndCol   := Integer(Picked.EndPoint  .column) + 1;
+        FoundList.Add(Finding);
+      end; // while
+      Result:= FoundList.ToArray;
+    finally
+      Cursor.Free;
+      FoundList.Free;
+    end; // try
   finally
-    Cursor.Free;
-    FoundList.Free;
+    if Profiled then NoteRuleTicks(FRuleId, TStopwatch.GetTimeStamp - ProfT0);
   end; // try
 end; // function
 
