@@ -2210,14 +2210,71 @@ begin
     // cross-DB caller (e.g. a COMMON reference) surfaces. Every extra-store hit
     // is marked 'unverified' -- AddDistinct's Display|Location dedupe folds a
     // caller seen in both the primary and an extra store into one entry.
-    { Timed as a WHOLE LOOP -- it holds two store queries per store (the gate and
-      the fan-out) and a run may configure none at all, so a per-query split here
-      would report on a path that is often empty. GCUnresExtra counts the
-      fan-out calls that actually ran. }
+    { Timed as a WHOLE LOOP -- it holds the qname translation, the gate and the
+      name fan-out, and a run may configure no extra store at all, so a per-query
+      split here would report on a path that is often empty. GCUnresExtra counts
+      the NAME fan-out calls that actually ran; the resolved translation below
+      shares this window rather than adding a profile row for a path whose cost
+      is one indexed qname lookup per store. }
     var TE0: Int64:= BTick;
     for var ExStore in AExtraStores do
     begin
       if ExStore = nil then Continue;
+
+      { CROSS-DB RESOLVED CALLERS. The name bucket below cannot see a dotted call
+        on a typed receiver: the extra store's own resolver TYPED that receiver
+        and emitted a call_edges row, so the ref is not in the unresolved bucket
+        at all. `Compute(21)` surfaced; `T.DoIt` did not, and the fact was simply
+        missing with no sign that anything had been dropped.
+
+        The note below is right that ASym.Id is a PRIMARY-store key and that ids
+        are numbered per database -- but the answer is to TRANSLATE the id, not
+        to abandon the resolved edges. Look the target up in THIS store by its
+        FULL qualified name and ask that store about its OWN id.
+
+        THREE CONDITIONS, and each one closes a different half of the 2026-08-13
+        junk-facts channel (dxXMLWriter / FireDAC / Spring / System.JSON written
+        into YADF's source from a library-index fan-out):
+
+          FULL qname, not LastSeg -- that channel was a leaf-name match, and a
+            leaf name is shared by every same-named method in every project.
+          EXACTLY ONE match in this store -- two symbols carrying one qualified
+            name means the store cannot say which was called, and a fact must
+            never depend on which DB a reference happened to live in.
+          A RESOLVED EDGE -- the row exists because that store's resolver
+            attributed the call, not because a name appeared somewhere.
+
+        So this needs no uses-scope filter and no ambiguity gate: it is not
+        guessing. What it cannot rule out is two DIFFERENT codebases declaring
+        the same unit.class.method -- genuinely possible for a shared unit
+        indexed by several projects, which is the common case here and the one
+        where the answer is RIGHT. The residual risk is a same-named unit in an
+        unrelated project, so the rows are marked 'unverified' like every other
+        extra-store hit. Note what that marking does and does not buy: it puts
+        the row in the weaker dedupe bucket and renders ' ?' on a MIXED list,
+        but the renderer suppresses a UNIFORM marker, so a caller list made
+        entirely of cross-DB rows renders plain -- exactly as the existing
+        name-based extras path already does. AddDistinct adds resolved primary
+        rows FIRST, so a caller already seen with stronger evidence keeps it.
+
+        Guard: tests\autotest\run_doc_crossdb_member_callers.ps1, whose two
+        positive controls are a same-leaf-name decoy (must NOT be attributed)
+        and a symbol nothing calls (must render no caller list at all). }
+      var ExSyms: TArray<TSymbol>:= ExStore.FindSymbolsByQualifiedName(ASym.QualifiedName);
+      if Length(ExSyms) = 1 then
+      begin
+        ResCallers:= ExStore.FindResolvedCallers(ExSyms[0].Id);
+        for RC in ResCallers do
+        begin
+          { ExStore, not AStore: these rows' EnclosingSymbolId is meaningful only
+            in the store that produced them -- the same trap run_doc_multidb_
+            overload_tag.ps1 was written for. }
+          FR:= ToFactRef(ExStore, RC);
+          FR.Confidence:= 'unverified';
+          AddDistinct(FR);
+        end;
+      end;
+
       // AMBIGUITY GATE, and it matters MORE here than on the primary store: the
       // note below records that this path has no uses-scope filter at all, so
       // this is the one bucket where section 7's noise could still arrive. The
