@@ -38,6 +38,7 @@ uses
   , System.Generics.Collections
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  , DRagLint.Doc.Facts        { TDocFactsRenderOptions -- the shared render contract }
   , DRagLint.Refactor.TextEdit
   ;
 
@@ -80,14 +81,6 @@ type
     /// TDocDrift signal (renamed/removed param, missing param, spurious/absent
     /// &lt;returns&gt;, never-raised &lt;exception&gt;, stale facts block, ...).</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
-    /// <param name="AIncludeSeeAlso">Threaded straight to TDocDrift.Analyze; must
-    /// match the flag `document` wrote the managed blocks under (default True).
-    /// See that routine for why a mismatch here is reported as drift.</param>
-    /// <param name="AMaxReturnCases">Manifest `docs.max_return_cases`; threaded to
-    /// TDocDrift.Analyze so the CHECKER regenerates under the SAME options the
-    /// DOCUMENTER wrote under. Defaulting it here is what made
-    /// EnumHelper.Generate permanently undrainable -- see Analyze's own note.</param>
-    /// <param name="AMaxCallers">Manifest `docs.max_callers`, same contract.</param>
     /// <returns>'doc-drift' findings, in stable per-symbol/per-signal order; empty
     /// if every documented decl is structurally current.</returns>
     /// <remarks>
@@ -109,9 +102,11 @@ type
     /// <seealso cref="DRagLint.Lint.DocRules.DocumentedPublicDecls"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <param name="AOpts">The render options the DOCUMENTER used. Anything the
+    /// checker does not share with it is measured as drift -- see
+    /// TDocFactsRenderOptions.</param>
     class function RunDocDrift(const AStore: ISymbolStore;
-      AIncludeSeeAlso: Boolean = True;
-      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TArray<TLintFinding>;
+      const AOpts: TDocFactsRenderOptions): TArray<TLintFinding>;
 
     /// <summary>Builds the MergeComment-based text edits that repair the
     /// mechanically-safe subset of doc-drift on AStore's documented public decls.
@@ -127,12 +122,6 @@ type
     /// carrying a reported doc-drift-family finding here are repaired; an empty
     /// array yields no edits. See the remarks -- this parameter is the whole
     /// point of the 2026-08-13 fix and must not be defaulted away.</param>
-    /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto type -->Boolean = True</param>
-    /// <param name="AMaxReturnCases">Manifest `docs.max_return_cases`. The
-    /// REPAIRER must regenerate under the same options the checker compared
-    /// under, or it writes a block the checker calls stale again -- the same
-    /// divergence one step further along.</param>
-    /// <param name="AMaxCallers">Manifest `docs.max_callers`, same contract.</param>
     /// <returns>The repair edits (a delete+insert pair per repaired doc span);
     /// empty when nothing fixable drifted.</returns>
     /// <remarks>
@@ -175,10 +164,11 @@ type
     /// <seealso cref="DRagLint.Lint.DocRules.DocumentedPublicDecls"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <param name="AOpts">MUST be the options the checker just graded under, or
+    /// the repairer regenerates a block the checker calls stale again.</param>
     class function FixEditsForDocDrift(const AStore: ISymbolStore;
       const ATargeted: TArray<TLintFinding>;
-      AIncludeSeeAlso: Boolean = True;
-      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TArray<TTextEdit>;
+      const AOpts: TDocFactsRenderOptions): TArray<TTextEdit>;
 
     /// <summary>Builds the DocInsight comment insert edits for a set of TARGETED
     /// missing-doc findings -- the SINGLE-FIX "Fix it" on an undocumented public
@@ -224,15 +214,21 @@ type
       can repair it because each side keeps regenerating its own version. That
       applies just as much to a block being CREATED here as to one being
       repaired. Defaults match TDocumenter.BuildFor's own. }
+    /// <param name="AOpts">The options a CREATED block is written under. It must
+    /// match what doc-drift will grade it by, or a block is stale the moment it
+    /// is written. NOTE: this path deliberately keeps IncludeSeeAlso=False in the
+    /// body below, which is a pre-existing divergence from the checker's default
+    /// True and is NOT what this record changed -- see the call site.</param>
     class function FixEditsForMissingDoc(const AStore: ISymbolStore; const ATargeted: TArray<TLintFinding>;
-      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TArray<TTextEdit>;
+      const AOpts: TDocFactsRenderOptions): TArray<TTextEdit>;
   end;
 
 implementation
 
 uses
   System.Diagnostics, { TStopwatch -- DRAGLINT_PROFILE doc-drift attribution }
-  DRagLint.Doc.Facts, { DocFactsBuildProfile -- per-section cost of the facts rebuild }
+  { DRagLint.Doc.Facts is in the INTERFACE uses -- TDocFactsRenderOptions appears
+    in the signatures below, and it also supplies DocFactsBuildProfile here. }
   DRagLint.Doc.Drift, DRagLint.Doc.Document;
 
 { Kinds CDD/DocInsight applies to: public/published types + routines +
@@ -357,7 +353,7 @@ begin
 end;
 
 class function TDocLintRules.RunDocDrift(const AStore: ISymbolStore;
-  AIncludeSeeAlso: Boolean; AMaxReturnCases: Integer; AMaxCallers: Integer): TArray<TLintFinding>;
+  const AOpts: TDocFactsRenderOptions): TArray<TLintFinding>;
 var
   Findings: TList<TLintFinding> ;
   Sym     : TSymbol             ;
@@ -406,7 +402,7 @@ begin
         Inc(NDiff);
 
         T0:= Tick;
-        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AIncludeSeeAlso, AMaxReturnCases, AMaxCallers);
+        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AOpts);
         Inc(TAnalyze, Tick - T0);
         for D in Drifts do
         begin
@@ -506,8 +502,8 @@ begin
 end;
 
 class function TDocLintRules.FixEditsForDocDrift(const AStore: ISymbolStore;
-  const ATargeted: TArray<TLintFinding>; AIncludeSeeAlso: Boolean;
-  AMaxReturnCases: Integer; AMaxCallers: Integer): TArray<TTextEdit>;
+  const ATargeted: TArray<TLintFinding>;
+  const AOpts: TDocFactsRenderOptions): TArray<TTextEdit>;
 var
   Edits   : TList<TTextEdit>    ;
   Sym     : TSymbol             ;
@@ -582,7 +578,7 @@ begin
         { Only repair a decl that actually carries a FIXABLE drift signal --
           report-only drift (renamed param, spurious <returns>, never-raised
           <exception>, ...) produces NO edit; a human decides on those. }
-        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AIncludeSeeAlso, AMaxReturnCases, AMaxCallers);
+        Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AOpts);
         AnyFix:= False;
         for D in Drifts do
           if D.Fixable then begin AnyFix:= True; Break; end;
@@ -612,9 +608,9 @@ begin
         { The caps must match what the CHECKER just compared against, or the
           repairer regenerates a block the checker will call stale again -- the
           same divergence, one step further along. See TDocDrift.Analyze. }
-        DocRes:= TDocumenter.BuildFor(AStore, ResSym.QualifiedName, AIncludeSeeAlso,
+        DocRes:= TDocumenter.BuildFor(AStore, ResSym.QualifiedName, AOpts.IncludeSeeAlso,
                                       {AIncludeSince=}False, {ABaseDir=}'',
-                                      {AExtraStores=}nil, AMaxReturnCases, AMaxCallers);
+                                      AOpts.ExtraStores, AOpts.MaxReturnCases, AOpts.MaxCallers);
         if Length(DocRes.Edits) = 0 then ReportTrace('DROP BuildFor-0-edits', ResSym.QualifiedName)
                                      else ReportTrace(Format('OK %d edit(s)', [Length(DocRes.Edits)]), ResSym.QualifiedName);
         for E in DocRes.Edits do Edits.Add(E);
@@ -635,7 +631,7 @@ begin
 end;
 
 class function TDocLintRules.FixEditsForMissingDoc(const AStore: ISymbolStore; const ATargeted: TArray<TLintFinding>;
-  AMaxReturnCases: Integer; AMaxCallers: Integer): TArray<TTextEdit>;
+  const AOpts: TDocFactsRenderOptions): TArray<TTextEdit>;
 var
   Edits : TList<TTextEdit>;
   F     : TLintFinding    ;
@@ -691,9 +687,16 @@ begin
         { Explicit caps -- see the declaration's comment. The fully-defaulted
           2-arg overload was used here, so a freshly CREATED block could be
           graded stale by the checker the moment it was written. }
+        { AExtraStores IS threaded (v2026-08-24): a CREATED block must be able
+          to name the same cross-DB callers the checker will grade it against, or
+          it is stale the moment it is written.
+          AIncludeSeeAlso stays False. That is a PRE-EXISTING divergence from the
+          checker's default True, NOT something this change introduced, and
+          flipping it would alter every created block -- left alone deliberately
+          and recorded on the declaration. }
         DocRes:= TDocumenter.BuildFor(AStore, QName, {AIncludeSeeAlso=}False,
                                       {AIncludeSince=}False, {ABaseDir=}'',
-                                      {AExtraStores=}nil, AMaxReturnCases, AMaxCallers);
+                                      AOpts.ExtraStores, AOpts.MaxReturnCases, AOpts.MaxCallers);
         for E in DocRes.Edits do Edits.Add(E);
       except
         { A single malformed decl must not abort the whole fix sweep. }

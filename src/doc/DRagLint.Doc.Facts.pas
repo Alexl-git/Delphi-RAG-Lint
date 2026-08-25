@@ -385,6 +385,48 @@ type
     SymbolKind       : TSymbolKind      ;
   end;
 
+  /// <summary>The options a managed facts block is RENDERED under -- carried as
+  /// one value so the documenter that writes a block and the drift checker that
+  /// rebuilds it to compare cannot be given different ones.</summary>
+  /// <remarks>
+  /// WHY A RECORD AND NOT MORE ARGUMENTS. Drift compares a REBUILT block against
+  /// the written one byte-for-byte, so any option the two paths do not share is
+  /// measured as drift. That has now happened twice. In v(2026-08-14) it was the
+  /// caps: `document` wrote a Returns: list capped at the manifest's 6 while the
+  /// checker rebuilt one capped at the default 20, called it stale, and
+  /// `document` re-rendered the same 6 -- a finding no command could clear. The
+  /// caps were threaded, and AExtraStores was left behind, which is the same bug
+  /// with a different field: a block documented from two stores is reported as
+  /// drifted forever by a checker that only ever opened one.
+  ///
+  /// Passing them as one record is what makes that class of divergence a
+  /// compile-time question instead of a per-call-site habit.
+  ///
+  /// A ZEROED RECORD IS NOT A VALID ONE. `Default(TDocFactsRenderOptions)` gives
+  /// MaxReturnCases=0 and MaxCallers=0, and 0 means "enumerate nothing" rather
+  /// than "use the default" -- so it would silently render an EMPTY block and
+  /// call every real one stale. Construct with Make or Defaults, never with
+  /// Default(); Normalized() is the backstop for anything that slips through.
+  /// </remarks>
+  TDocFactsRenderOptions = record
+    /// <summary>Compute the &lt;seealso&gt; related set.</summary>
+    IncludeSeeAlso: Boolean;
+    /// <summary>Additional open stores searched for cross-DB callers; not owned.</summary>
+    ExtraStores   : TArray<ISymbolStore>;
+    /// <summary>Cap on mined return cases. 0/negative disables enumeration.</summary>
+    MaxReturnCases: Integer;
+    /// <summary>Cap on listed callers. 0/negative lists none.</summary>
+    MaxCallers    : Integer;
+    /// <summary>The documented defaults: seealso on, no extra stores, 20 and 5.</summary>
+    class function Defaults: TDocFactsRenderOptions; static;
+    /// <summary>Builds an explicit set.</summary>
+    class function Make(AIncludeSeeAlso: Boolean; const AExtraStores: TArray<ISymbolStore>;
+                        AMaxReturnCases, AMaxCallers: Integer): TDocFactsRenderOptions; static;
+    /// <summary>Self with non-positive caps replaced by the documented defaults,
+    /// so a zero-initialised record cannot silently mean "render nothing".</summary>
+    function Normalized: TDocFactsRenderOptions;
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
@@ -1876,6 +1918,40 @@ begin
   finally
     RaiseSet.Free;
   end;
+end;
+
+{ The literals here are the SAME defaults Build declares on its own parameters
+  (20 return cases, 5 callers). They are repeated rather than shared because
+  Build's are part of its published signature; if either moves, both move. }
+class function TDocFactsRenderOptions.Defaults: TDocFactsRenderOptions;
+begin
+  Result.IncludeSeeAlso := True;
+  Result.ExtraStores    := nil;
+  Result.MaxReturnCases := 20;
+  Result.MaxCallers     := 5;
+end;
+
+class function TDocFactsRenderOptions.Make(AIncludeSeeAlso: Boolean;
+  const AExtraStores: TArray<ISymbolStore>;
+  AMaxReturnCases, AMaxCallers: Integer): TDocFactsRenderOptions;
+begin
+  Result.IncludeSeeAlso := AIncludeSeeAlso;
+  Result.ExtraStores    := AExtraStores;
+  Result.MaxReturnCases := AMaxReturnCases;
+  Result.MaxCallers     := AMaxCallers;
+end;
+
+{ A caller that zero-initialised the record would otherwise render a block with
+  no return cases and no callers, and then every genuine block would compare as
+  drifted. Rather than trust every call site, repair it here: a non-positive cap
+  becomes the documented default. Note this deliberately makes 0 unreachable as
+  an explicit "enumerate nothing" through this record -- Build still honours a
+  literal 0 when called positionally, which is where that intent belongs. }
+function TDocFactsRenderOptions.Normalized: TDocFactsRenderOptions;
+begin
+  Result:= Self;
+  if Result.MaxReturnCases <= 0 then Result.MaxReturnCases := 20;
+  if Result.MaxCallers     <= 0 then Result.MaxCallers     := 5;
 end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;

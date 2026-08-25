@@ -1304,11 +1304,9 @@ end;
 // that fails to open (schema stale, file missing) is silently skipped --
 // this is a facts-enrichment path, not a hard dependency. Returns an empty
 // (non-nil) array when the user passed a single --db or none.
+function OpenExtraStoresExcept(const AArgs: TArgs; const APrimaryDb: string): TArray<ISymbolStore>; forward;
+
 function OpenExtraStores(const AArgs: TArgs): TArray<ISymbolStore>;
-var
-  D  : string      ;
-  EOk: Boolean     ;
-  ES : ISymbolStore;
 begin
   SetLength(Result, 0);
 
@@ -1339,10 +1337,33 @@ begin
     Passing several --db explicitly still fans out -- that is the deliberate
     cross-project case (an ORM3 COMMON reference) and it is unchanged. What is
     gone is fanning out when the user asked for one project. }
+  Result:= OpenExtraStoresExcept(AArgs, AArgs.DbPath);
+end;
+
+{ WHICH DB IS "EXTRA" DEPENDS ON WHICH ONE IS PRIMARY, and the two verbs do not
+  agree on that. `document` opens AArgs.DbPath -- the LAST --db, because the
+  parser overwrites it. `lint-all` opens ResolveConsumerDbs' FIRST existing entry.
+  Excluding AArgs.DbPath on the lint path therefore excluded the WRONG store: on
+  `lint-all --db A --db B` it dropped B and handed back [A], the very store
+  already open as primary, so a cross-DB fact could never be accounted for and
+  doc-drift reported the block stale forever. Measured 2026-08-24; the fixture is
+  tests\autotest\pending_doc_drift_extra_stores.ps1.
+
+  So the exclusion is a PARAMETER now. A caller that does not say which store it
+  opened gets the old AArgs.DbPath behaviour. }
+function OpenExtraStoresExcept(const AArgs: TArgs; const APrimaryDb: string): TArray<ISymbolStore>;
+var
+  D  : string      ;
+  EOk: Boolean     ;
+  ES : ISymbolStore;
+begin
+  SetLength(Result, 0);
   if Length(AArgs.DbPaths) < 2 then Exit;
 
   for D in AArgs.DbPaths do
-    if not SameText(D, AArgs.DbPath) then
+    { ExpandFileName, not SameText: the primary arrives from ResolveConsumerDbs
+      and may be spelled differently from the raw --db the user typed. }
+    if not SameText(ExpandFileName(D), ExpandFileName(APrimaryDb)) then
     begin
       ES:= OpenReadOnlyStore(D, EOk);
       if EOk and (ES <> nil) then Result:= Result + [ES];
@@ -1393,6 +1414,34 @@ begin
   except
     Result:= 5;
   end;
+end;
+
+// v(2026-08-24): THE ONE PLACE the doc-drift lint path decides what options a
+// managed facts block is graded under. It exists so the checker and the repairer
+// cannot be handed different ones -- historically they were, three times, and
+// each time the result was a doc-drift finding that no command could clear:
+// <seealso> (514 false findings), the caps (max_return_cases 6 vs 20), and
+// AExtraStores (a block documented from two DBs, graded by a checker holding
+// one). See TDocFactsRenderOptions.
+//
+// OpenExtraStores returns EMPTY unless the user passed 2+ --db, and never
+// includes the primary, so a single-DB lint run is byte-identical to before.
+function DocRenderOptionsFor(const AArgs: TArgs; const APrimaryDb: string): TDocFactsRenderOptions;
+begin
+  { APrimaryDb = '' means "the caller did not say" -- keep the historical
+    AArgs.DbPath exclusion rather than silently treating every --db as extra. }
+  var Prim: string:= APrimaryDb;
+  if Prim = '' then Prim:= AArgs.DbPath;
+  Result:= TDocFactsRenderOptions.Make(AArgs.DocSeeAlso, OpenExtraStoresExcept(AArgs, Prim),
+                                       LoadDocMaxReturnCases, LoadDocMaxCallers);
+  { WHICH STORES THE CHECKER IS USING IS OTHERWISE INVISIBLE, and getting it
+    wrong produces a doc-drift finding no command can clear -- the symptom looks
+    like a stale index, not like a store-selection bug. One line under the
+    existing profile switch. }
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+    Writeln(ErrOutput, Format('doc-opts: primary=%s extras=%d (of %d --db) seealso=%s caps=%d/%d',
+      [ExtractFileName(Prim), Length(Result.ExtraStores), Length(AArgs.DbPaths),
+       BoolToStr(Result.IncludeSeeAlso, True), Result.MaxReturnCases, Result.MaxCallers]));
 end;
 
 // ADP1 T2: reads the docs.accessor_trivial_max_lines threshold for the batch
@@ -6992,8 +7041,13 @@ end; // procedure
 { AScannedFiles: the files this run examined. Optional, and only review-marker-
   unused needs it -- see ApplyLineMarkers for why the finding list alone cannot
   substitute. }
+{ APrimaryDb: the path of the store AStore was opened from. Needed because the
+  doc-fix paths below must render under the SAME options the checker graded
+  under, and "which --db is extra" is defined relative to the primary -- see
+  OpenExtraStoresExcept. '' keeps the historical AArgs.DbPath behaviour. }
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
-  const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil): Integer;
+  const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
+  const APrimaryDb: string = ''): Integer;
 var
   Cfg      : TLintConfig         ;
   Survivors: TArray<TLintFinding>;
@@ -7103,7 +7157,7 @@ begin
           2026-08-13). Targeted has already been through the ownership and
           --project filters, so passing it inherits both. See
           TDocLintRules.FixEditsForDocDrift's remarks. }
-        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore, Targeted, AArgs.DocSeeAlso, LoadDocMaxReturnCases, LoadDocMaxCallers);
+        var DDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift(AStore, Targeted, DocRenderOptionsFor(AArgs, APrimaryDb));
         if Length(DDEdits) > 0 then
         begin
           Edits:= Edits + DDEdits;
@@ -7135,7 +7189,7 @@ begin
       if WantMissingDoc then
       begin
         var MDEdits: TArray<TTextEdit>:= DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc(
-          AStore, Targeted, LoadDocMaxReturnCases, LoadDocMaxCallers);
+          AStore, Targeted, DocRenderOptionsFor(AArgs, APrimaryDb));
         if Length(MDEdits) > 0 then
         begin
           Edits:= Edits + MDEdits;
@@ -10908,7 +10962,7 @@ begin
   { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
   Prof.Phase('doc-drift');
-  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso, LoadDocMaxReturnCases, LoadDocMaxCallers);
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   Prof.Phase('duplicate-code');
@@ -11090,8 +11144,11 @@ begin
       Writeln(Summary + Format(' -- report: %s', [OutPath]));
     end,
     Store, { ADF Task 8: enables the store-backed doc-drift --fix path }
-    FilePaths { the scanned set -- what makes review-marker-unused able to see a
-                marker in a file that now reports nothing }
+    FilePaths, { the scanned set -- what makes review-marker-unused able to see a
+                 marker in a file that now reports nothing }
+    ProjectDb  { the store actually opened above -- the doc --fix path renders
+                 under options defined relative to it, and lint-all's primary is
+                 NOT AArgs.DbPath. See OpenExtraStoresExcept. }
   );
   Prof.Done;
 end; // function
@@ -11169,7 +11226,9 @@ begin
   if (AArgs.Rule = '') or (AArgs.Rule = 'doc-drift') then
     { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
-  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, AArgs.DocSeeAlso, LoadDocMaxReturnCases, LoadDocMaxCallers);
+  { DoLintProject opens AArgs.DbPath itself (see the Create above), so that IS
+    its primary -- unlike DoLintAll, which opens ResolveConsumerDbs' first. }
+  Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, AArgs.DbPath));
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,

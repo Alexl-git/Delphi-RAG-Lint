@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils, System.Classes, System.StrUtils,
   System.Generics.Collections,
-  DRagLint.Core.Model, DRagLint.Core.Interfaces;
+  DRagLint.Core.Model, DRagLint.Core.Interfaces,
+  DRagLint.Doc.Facts; { TDocFactsRenderOptions -- Analyze's render contract }
 
 const
   /// <summary>Substring common to every Auto-Document provenance marker
@@ -117,20 +118,21 @@ type
     /// Raises facts and the fresh facts-block render. Must not be nil.</param>
     /// <param name="ASym">The documented symbol (routine).</param>
     /// <param name="ADoc">The parsed DocInsight comment currently on the decl.</param>
-    /// <param name="AIncludeSeeAlso">Must match the flag the DOCUMENTER used when
-    /// it wrote the managed block (`document`'s --seealso, default True since the
-    /// seealso-on-by-default change). The staleness test regenerates the block and
-    /// compares, so a checker that regenerates WITHOUT &lt;seealso&gt; while the
-    /// writer emitted it reports every such block as stale: that mismatch produced
-    /// 514 false 'managed facts block is out of date' findings on this repo, while
-    /// `document --unit` on the same files reported "nothing to document".</param>
-    /// <param name="AMaxReturnCases">Manifest `docs.max_return_cases`. MUST be
-    /// the value the DOCUMENTER used, or the byte compare below measures the
-    /// option difference instead of drift -- see the note at the
-    /// TDocFactsBuilder.Build call. The default is `BuildFor`'s default and is
-    /// correct only for a caller that also defaults it.</param>
-    /// <param name="AMaxCallers">Manifest `docs.max_callers`, same contract.</param>
     /// <returns>The drift findings, in a stable per-signal order.</returns>
+    /// <remarks>EVERY render option MUST be the one the DOCUMENTER used. The
+    /// staleness test regenerates the block and byte-compares, so any option the
+    /// two paths do not share is measured as drift rather than drift being
+    /// measured. All three known instances of that were real, shipped, and
+    /// unclearable by any command:
+    /// <para>&lt;seealso&gt; -- a checker regenerating without it while the writer
+    /// emitted it produced 514 false 'managed facts block is out of date'
+    /// findings on this repo, while `document --unit` on the same files reported
+    /// "nothing to document".</para>
+    /// <para>the caps -- `docs.max_return_cases` 6 in the manifest against the
+    /// default 20 deadlocked every routine with more than 6 minable cases.</para>
+    /// <para>the extra stores -- a block documented from two DBs reported as
+    /// drifted by a checker that opened one.</para>
+    /// That is what TDocFactsRenderOptions is for.</remarks>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
@@ -145,9 +147,17 @@ type
     /// <seealso cref="DRagLint.Doc.Drift.ExtractCodeIdents"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <param name="AOpts">The options the block under test was WRITTEN under.
+    /// Drift compares a rebuild against the written text, so anything the two
+    /// paths do not share is measured as drift -- see TDocFactsRenderOptions.</param>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
-      const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean = True;
-      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TArray<TDocDriftFinding>;
+      const ADoc: TParsedDoc; const AOpts: TDocFactsRenderOptions): TArray<TDocDriftFinding>; overload;
+    /// <summary>Analyze under the documented default render options.</summary>
+    /// <remarks>For callers with no manifest-configured caps and a single store.
+    /// A caller that HAS extra stores or non-default caps must use the overload
+    /// above, or the rebuild will not match what the documenter wrote.</remarks>
+    class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
+      const ADoc: TParsedDoc): TArray<TDocDriftFinding>; overload;
     /// <summary>Ticks spent in TDocFactsBuilder.Build across every Analyze call
     /// so far, for the DRAGLINT_PROFILE doc-drift breakdown. Diagnostic only.</summary>
     /// <returns><!-- drag-lint:auto -->Observed: GFactsBuildTicks.</returns>
@@ -170,7 +180,9 @@ implementation
 uses
   System.Diagnostics, { TStopwatch -- FactsBuildTicks, see TDocDrift }
   System.IOUtils,
-  DRagLint.Refactor.DocStub, DRagLint.Doc.Facts, DRagLint.Doc.Regions,
+  { DRagLint.Doc.Facts moved to the INTERFACE uses -- TDocFactsRenderOptions is
+    part of Analyze's signature now. It still supplies TDocFactsBuilder here. }
+  DRagLint.Refactor.DocStub, DRagLint.Doc.Regions,
   DRagLint.Doc.SharedFacts;
 
 // ---------------------------------------------------------------------------
@@ -567,8 +579,13 @@ begin
 end;
 
 class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
-  const ADoc: TParsedDoc; AIncludeSeeAlso: Boolean;
-  AMaxReturnCases: Integer; AMaxCallers: Integer): TArray<TDocDriftFinding>;
+  const ADoc: TParsedDoc): TArray<TDocDriftFinding>;
+begin
+  Result:= Analyze(AStore, ASym, ADoc, TDocFactsRenderOptions.Defaults);
+end;
+
+class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
+  const ADoc: TParsedDoc; const AOpts: TDocFactsRenderOptions): TArray<TDocDriftFinding>;
 var
   Findings  : TList<TDocDriftFinding>;
   Sig       : string                 ;
@@ -612,9 +629,19 @@ begin
     // today, which is why only return-cases surfaced; that is luck, not design,
     // and is exactly why they are threaded rather than left to match.
     var TFacts0: Int64:= TStopwatch.GetTimeStamp;
-    Facts:= TDocFactsBuilder.Build(AStore, ASym, AIncludeSeeAlso, {AIncludeSince=}False,
-                                   {ABaseDir=}'', {AExtraStores=}nil,
-                                   AMaxReturnCases, AMaxCallers);
+    // v(2026-08-24): AExtraStores IS THREADED TOO, and it is the last of these.
+    // It was the one field left at nil after the caps were fixed, which meant a
+    // block `document --db A --db B` wrote from BOTH stores was rebuilt here
+    // from A alone, found to name a caller A cannot see, and reported drifted --
+    // permanently, with no command able to clear it. Reproduced by
+    // tests\autotest\pending_doc_drift_extra_stores.ps1.
+    //
+    // AIncludeSince/ABaseDir stay off: <since> is a documenter opt-in that the
+    // checker never compares, and ABaseDir is only read when it is on.
+    var Opts: TDocFactsRenderOptions:= AOpts.Normalized;
+    Facts:= TDocFactsBuilder.Build(AStore, ASym, Opts.IncludeSeeAlso, {AIncludeSince=}False,
+                                   {ABaseDir=}'', Opts.ExtraStores,
+                                   Opts.MaxReturnCases, Opts.MaxCallers);
     Inc(GFactsBuildTicks, TStopwatch.GetTimeStamp - TFacts0);
 
     // Findings 1-6 are param/return drift and make sense ONLY for a routine.
