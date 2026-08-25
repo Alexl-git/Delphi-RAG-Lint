@@ -654,6 +654,18 @@ begin
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help');
   Writeln('');
+  Writeln('Databases (--db is repeatable, on every verb that takes it):');
+  Writeln('  THE FIRST --db IS THE PRIMARY. Every later --db is an EXTRA store.');
+  Writeln('  The primary answers the query and is the only store that contributes RESOLVED');
+  Writeln('  call edges; extras are searched by NAME for callers and used-in units. So the');
+  Writeln('  db that OWNS the code you are asking about goes first -- typically the project');
+  Writeln('  index, with the platform library after it.');
+  Writeln('  The same order holds for document, lint-all, lint-project and the exporters, so');
+  Writeln('  ONE --db list works across verbs: a block written by "document --db P --db L" is');
+  Writeln('  accepted by "lint-all --db P --db L". Passing them the other way round made');
+  Writeln('  doc-drift report a block no command could clear (fixed 2026-08-25).');
+  Writeln('  Omit --db entirely and the manifest resolver supplies the full set in order.');
+  Writeln('');
   Writeln('Defaults:');
   Writeln('  --db = .\drag-lint.sqlite next to the cwd');
 end; // procedure
@@ -827,7 +839,43 @@ begin
     if (A = '--db') and (i < ParamCount) then
     begin
       Inc(i);
-      Result.DbPath:= ParamStr(i);
+      { THE FIRST --db IS THE PRIMARY. Owner ruling 2026-08-25.
+
+        This line used to be an unconditional `Result.DbPath:= ParamStr(i)`, so
+        DbPath ended up holding the LAST --db -- every flag overwrote the one
+        before it. DbPaths (below) kept them all, in order.
+
+        That made the CLI contradict itself. Verbs reading DbPaths[0] via
+        ResolveConsumerDbs -- lint-all, typeat, convert-apply -- treated the
+        FIRST --db as primary; verbs reading DbPath -- document, lint-project,
+        the exporters -- treated the LAST one as primary. A user passing ONE
+        --db list to `document` and `lint-all` could not satisfy both, and the
+        visible symptom was a doc-drift finding NO command could clear:
+        `document --db A --db B --apply` rendered a resolved call edge from B,
+        then `lint-all --db A --db B` graded that block against A and reported
+        it stale forever. A resolved edge is contributed ONLY by the primary
+        store, never by an extra (extras are searched by NAME), so the two verbs
+        could not agree while they disagreed about which store was primary.
+
+        `find-unit` and `resolve-uses` had the same defect in a different dress
+        and were fixed in 16456a2 -- there, last-wins made the answer depend on
+        flag order the caller had every reason to think commutative, and it
+        answered "no such symbol" confidently and wrongly. This is that fix
+        generalised to the remaining verbs, which is why the rule is stated once
+        here rather than per-verb.
+
+        FIRST, not last, because that is what was already documented
+        (docs\AI-USAGE.md: "Repeat --db to search multiple indexes (first one
+        wins)") and what the majority of verbs already did. It also matches the
+        standing authoritative-set advice, where the project DB is named first
+        and the platform library after it.
+
+        OpenExtraStores/OpenExtraStoresExcept exclude AArgs.DbPath, so they
+        follow this automatically: the first --db is primary, every later one is
+        an extra. A single --db is unaffected in every verb.
+
+        Guard: tests\autotest\run_doc_drift_extra_stores.ps1. }
+      if Length(Result.DbPaths) = 0 then Result.DbPath:= ParamStr(i);
       SetLength(Result.DbPaths, Length(Result.DbPaths) + 1);
       Result.DbPaths[High(Result.DbPaths)]:= ParamStr(i);
     end
@@ -1341,17 +1389,23 @@ begin
   Result:= OpenExtraStoresExcept(AArgs, AArgs.DbPath);
 end;
 
-{ WHICH DB IS "EXTRA" DEPENDS ON WHICH ONE IS PRIMARY, and the two verbs do not
-  agree on that. `document` opens AArgs.DbPath -- the LAST --db, because the
-  parser overwrites it. `lint-all` opens ResolveConsumerDbs' FIRST existing entry.
-  Excluding AArgs.DbPath on the lint path therefore excluded the WRONG store: on
-  `lint-all --db A --db B` it dropped B and handed back [A], the very store
-  already open as primary, so a cross-DB fact could never be accounted for and
-  doc-drift reported the block stale forever. Measured 2026-08-24; the fixture is
-  tests\autotest\pending_doc_drift_extra_stores.ps1.
+{ WHICH DB IS "EXTRA" DEPENDS ON WHICH ONE IS PRIMARY, and the two verbs used to
+  disagree about that: `document` opened AArgs.DbPath -- the LAST --db, because
+  the parser overwrote it -- while `lint-all` opened ResolveConsumerDbs' FIRST
+  existing entry. Excluding AArgs.DbPath on the lint path therefore excluded the
+  WRONG store: on `lint-all --db A --db B` it dropped B and handed back [A], the
+  very store already open as primary, so a cross-DB fact could never be accounted
+  for and doc-drift reported the block stale forever. Measured 2026-08-24.
 
-  So the exclusion is a PARAMETER now. A caller that does not say which store it
-  opened gets the old AArgs.DbPath behaviour. }
+  SINCE 2026-08-25 (owner ruling, ParseArgs) the FIRST --db is the primary for
+  BOTH verbs, so AArgs.DbPath and ResolveConsumerDbs[0] name the same store for
+  an explicit --db list and the contradiction is gone. The fixture that pins it
+  is tests\autotest\run_doc_drift_extra_stores.ps1.
+
+  The exclusion stays a PARAMETER regardless: with NO --db, ResolveConsumerDbs
+  supplies the manifest set and may spell the primary differently from anything
+  in DbPaths, so a caller that knows which store it actually opened must be able
+  to say so. A caller that does not gets the AArgs.DbPath default. }
 function OpenExtraStoresExcept(const AArgs: TArgs; const APrimaryDb: string): TArray<ISymbolStore>;
 var
   D  : string      ;
@@ -5442,10 +5496,14 @@ begin
   // v0.94.1 BUGFIX: hover must search ALL --db paths, not just one. The IDE (and
   // manifest resolution) pass several --db values -- e.g. a project index, a SQL
   // index, and a platform library index. The old code used AArgs.DbPath, which
-  // the parser sets to the LAST --db, so hovering a symbol that lives in an
+  // the parser THEN set to the LAST --db, so hovering a symbol that lives in an
   // EARLIER db returned "No symbol matched" and the IDE silently fell back to the
   // plain string popup. Now: iterate every resolved db and use the FIRST one that
   // contains the qname (mirrors how query find-callers walks multiple dbs).
+  // (ParseArgs now sets DbPath to the FIRST --db -- owner ruling 2026-08-25 --
+  // which would have masked this particular symptom for the common ordering.
+  // Walking every db is still the right answer: the qname may live in any of
+  // them, and "not in the primary" is not "nowhere".)
   Dbs:= ResolveConsumerDbs(AArgs);
   if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
 
@@ -11272,7 +11330,9 @@ begin
     { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
   { DoLintProject opens AArgs.DbPath itself (see the Create above), so that IS
-    its primary -- unlike DoLintAll, which opens ResolveConsumerDbs' first. }
+    its primary. Since the 2026-08-25 first-wins ruling that is the same store
+    DoLintAll opens (ResolveConsumerDbs' first existing entry) for an explicit
+    --db list; the two verbs no longer grade a block under different stores. }
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, AArgs.DbPath));
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,

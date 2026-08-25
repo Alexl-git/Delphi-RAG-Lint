@@ -120,6 +120,14 @@ exactly. A question that spans projects needs several `--db` flags -
 `drag-lint resolve-dbs --platform <p>` lists every configured DB, and
 `resolve-dbs --project <x.dproj>` / `--in <x.pas>` resolves a single target.
 
+**The first `--db` is the primary; every later one is an extra store.** The
+primary answers the query and is the only store contributing *resolved* call
+edges - extras are searched by *name* for callers and used-in units. So the DB
+that owns the code under the question goes first, the platform library after it.
+The rule is the same for `document`, `lint-all`, `lint-project` and the
+exporters, so one `--db` list works across verbs: a block written by
+`document --db P --db L` is accepted by `lint-all --db P --db L`.
+
 ### Indexing the Delphi RTL/VCL libraries
 
 To build one index over everything Delphi itself knows about - the IDE's

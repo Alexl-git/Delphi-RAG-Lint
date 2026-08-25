@@ -27,8 +27,9 @@
   would also pass if the engine started tagging everything.
 
   Layout mirrors run_doc_multidb.ps1: `document --unit` takes its PRIMARY store
-  from the LAST --db, every earlier --db being an extra store, so the target
-  unit's own db is passed last.
+  from the FIRST --db, every later --db being an extra store, so the target
+  unit's own db is passed first. (Owner ruling 2026-08-25 flipped this from
+  last-wins; see that suite's header.)
 #>
 [CmdletBinding()]
 param(
@@ -123,7 +124,7 @@ $primDb = Join-Path $WorkDir 'prim.sqlite'
 & $Exe index $applyDir --db $primDb --quiet | Out-Null
 Check 'primary db built' (Test-Path $primDb)
 
-& $Exe document --unit $applyFile --db $appDb --db $primDb --apply --no-backup --quiet | Out-Null
+& $Exe document --unit $applyFile --db $primDb --db $appDb --apply --no-backup --quiet | Out-Null
 Check 'document --apply exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $src = [IO.File]::ReadAllText($applyFile)

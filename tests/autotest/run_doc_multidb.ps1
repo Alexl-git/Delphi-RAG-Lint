@@ -7,21 +7,26 @@
   (interface + impl). app\uApp.pas `uses uLib;` and calls Compute(21) from a
   procedure Run -- a caller of Compute, indexed into a SEPARATE db.
 
-  `document --unit` opens its PRIMARY store from the LAST --db flag (CLI.pas
-  ParseArgs: every --db appends to DbPaths, and DbPath is left holding the last
-  one), and treats every OTHER resolved --db as an extra store (OpenExtraStores /
-  ResolveConsumerDbs). So the target unit's own db must be passed LAST; any
-  earlier --db is an extra store searched (name-only) for callers/used-in.
+  `document --unit` opens its PRIMARY store from the FIRST --db flag (CLI.pas
+  ParseArgs: every --db appends to DbPaths, and only the first sets DbPath), and
+  treats every OTHER resolved --db as an extra store (OpenExtraStores /
+  ResolveConsumerDbs). So the target unit's own db must be passed FIRST; any
+  later --db is an extra store searched (name-only) for callers/used-in.
+
+  THE ORDER FLIPPED ON 2026-08-25 -- owner ruling, first-wins. It used to be
+  last-wins here, which contradicted lint-all/typeat/convert-apply/find-unit and
+  produced a doc-drift finding no command could clear. If this suite is red on
+  the caller assertion, check the --db ORDER before suspecting the facts code.
 
   SCENARIO A (single-db): document a FRESH copy of uLib.pas against ONLY its own
   db (appA.sqlite). No caller db is passed -> the applied file must NOT mention
   uApp anywhere.
 
   SCENARIO B (multi-db): document a DIFFERENT fresh copy of uLib.pas, passing
-  BOTH the caller db (app.sqlite, --db #1) and its own db LAST (appB.sqlite,
-  --db #2, so it is the primary AArgs.DbPath). The name-based Called-from bucket
-  then searches app.sqlite too and should surface `Called from: uApp.Run` in the
-  merged doc-comment written by --apply.
+  its OWN db FIRST (appB.sqlite, --db #1, so it is the primary AArgs.DbPath) and
+  the caller db second (app.sqlite, --db #2, an extra store). The name-based
+  Called-from bucket then searches app.sqlite too and should surface
+  `Called from: uApp.Run` in the merged doc-comment written by --apply.
 
   --apply is IDEMPOTENT: once a unit carries the managed drag-lint:auto block, a
   second apply is a no-op. So EACH scenario applies to its OWN fresh copy of
@@ -130,7 +135,7 @@ $appBDb = Join-Path $WorkDir 'appB.sqlite'
 & $Exe index $applyBDir --db $appBDb | Out-Null
 Check 'appB db built' (Test-Path $appBDb)
 
-& $Exe document --unit $applyBFile --db $appDb --db $appBDb --apply --no-backup | Out-Null
+& $Exe document --unit $applyBFile --db $appBDb --db $appDb --apply --no-backup | Out-Null
 $ecB = $LASTEXITCODE
 Check 'scenario B: apply exit 0' ($ecB -eq 0)
 

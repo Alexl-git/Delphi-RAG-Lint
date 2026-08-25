@@ -1,97 +1,32 @@
 <#
-  PENDING -- deliberately named `pending_*` so the battery's `run_*.ps1`
-  discovery does NOT pick it up. It is the fixture for work that is not
-  implemented (INBOX-buildfor-defaulted-args, the AExtraStores residue), and a
-  test for an unbuilt feature belongs outside the battery, not inside it as a
-  standing red.
+  run_doc_drift_extra_stores.ps1 -- `document` and `lint-all` must agree on
+  WHICH of several --db is the PRIMARY store, so a managed facts block written
+  by one verb is accepted by the other.
 
-  THE DEFECT, as finally reproduced 2026-08-24 -- and it is NOT AExtraStores
-  ---------------------------------------------------------------------------
-  `document --qname X --db A --db B --apply` writes a block naming a caller.
-  `lint-all --db A --db B` -- the SAME two --db, same order -- then reports
+  THE CONVENTION (owner ruling, 2026-08-25): THE FIRST --db IS THE PRIMARY.
+  Every later --db is an extra store. This is the rule `lint-all`, `find-unit`,
+  `resolve-uses`, `typeat` and `convert-apply` already followed, and the one
+  docs\AI-USAGE.md already stated ("Repeat --db to search multiple indexes
+  (first one wins)"). `document` was the outlier -- it read AArgs.DbPath, which
+  ParseArgs left holding the LAST --db because every flag overwrote it.
+
+  THE DEFECT THIS CLOSES, as reproduced 2026-08-24:
+  `document --qname X --db A --db B --apply` wrote a block naming a caller, and
+  `lint-all --db A --db B` -- the SAME two --db, same order -- then reported
 
       doc-drift: managed facts block is out of date
 
-  against the block document just wrote. A permanent false finding: the block
-  can never be made clean, and re-running `document` does not silence it.
-
-  THE CAUSE IS WHICH STORE IS *PRIMARY*, not which are extra. The two verbs
-  disagree about that, from an identical command line:
+  against the block `document` had just written. A permanent false finding: the
+  block could never be made clean, and re-running `document` did not silence it.
+  The cause was the primary disagreement, not the extra stores:
 
       document  primary = AArgs.DbPath          = the LAST  --db  (B)
       lint-all  primary = ResolveConsumerDbs[0] = the FIRST --db  (A)
 
   and the fact at issue -- a RESOLVED call edge, which lives only in B -- is
-  contributed ONLY by the primary store. AExtraStores is searched for NAME-based
+  contributed ONLY by the primary store. Extra stores are searched for NAME-based
   callers and used-in units, not resolved edges, so handing the checker B as an
-  extra does not reproduce what document rendered with B as primary. Measured
-  directly: with primary=A and extra=B, `document` proposes to DELETE the block
-  (renders no facts at all); with primary=B it renders the caller.
-
-  The AExtraStores threading that landed alongside this fixture is still a real
-  fix -- lint-all was excluding the WRONG store from its extras (it dropped B,
-  the one it had not opened, and handed back A, the one already primary) -- but
-  it does not close THIS gap, and step 4 stays red until the two verbs agree on
-  a primary. That is a behaviour change with real blast radius (it decides which
-  index answers every query for one of the verbs) and is an owner call.
-
-  2026-08-25 CORRECTION: `document`'s last-`--db` rule is DELIBERATE, and the
-  two verbs' conventions are OPPOSITE. Do not "align" one to the other.
-
-  Changing `document` to open the FIRST `--db` (to match `lint-all`) was tried
-  and REVERTED the same day. It broke `tests\autotest\run_doc_multidb.ps1` and
-  `run_doc_multidb_overload_tag.ps1`, whose headers document the rule as a
-  convention and depend on it:
-
-      "document --unit opens its PRIMARY store from the LAST --db flag ... So the
-       target unit's own db must be passed LAST; any earlier --db is an extra
-       store searched (name-only) for callers/used-in."
-
-  So the two verbs document OPPOSITE orderings for the same flags:
-
-      document   the target's own DB goes LAST
-      lint-all   the project DB goes FIRST  (`--db <proj> --db <lib>`)
-
-  A user passing one `--db` list to both cannot satisfy both. THAT is the defect
-  -- a UX/contract contradiction, not a wrong line of code -- and it cannot be
-  fixed by silently flipping either side.
-
-  ALSO CORRECTED: extras are NOT useless for callers. run_doc_multidb's scenario
-  B surfaces `Called from: uApp.Run` from an extra store by NAME. What the extras
-  path does not surface is this fixture's shape -- `T.DoIt`, a member access on a
-  typed receiver, which the CalledFrom bucket ambiguity-gates. A plain call by
-  name (`Compute(21)`) comes through fine. The earlier claim here that extras
-  contribute nothing was drawn from this one fixture and was too broad.
-
-  THREE THINGS THIS FIXTURE GOT WRONG BEFORE, all of which read as "the engine
-  is fine" -- recorded so the fourth version does not repeat them:
-
-  1. NO REINDEX AFTER --apply (2026-08-17). doc-drift's population comes from
-     ListDocumentedSymbols, i.e. from the INDEX. `document --apply` writes the
-     SOURCE only, so until the file is re-indexed the declaration is not
-     "documented" as far as the checker is concerned and is never examined.
-     Reindex after EVERY step that rewrites the source.
-
-  2. `--fix` WITHOUT `--apply` IS A DRY RUN (2026-08-24). It reports what it
-     would change and writes nothing ("DRY RUN WITHOUT --apply", drag-lint
-     --help). The previous version drove the whole suite through `lint-all
-     --fix --quiet`, so the file was never touched: steps 2 and 3 passed
-     because nothing happened, and the positive control failed for the same
-     reason.
-
-  3. doc-drift IS NOT ACTUALLY AUTOFIXED (2026-08-24, and this is a separate
-     defect). `rules --json` advertises "fixable": true, but BOTH autofix
-     routes refuse it:
-
-         lint-all --db A --fix --apply   ->  autofix: no fixable findings (of 2 finding(s))
-         lint     --file t.pas --fix     ->  autofix: no fixable findings (of 1 finding(s))
-
-     So the note's "--fix deletes it" mechanism does not exist on this build.
-     What actually deletes the block is `document` run with a NARROWER store
-     set -- `document --db A --apply` prints `doc: removed` and takes the whole
-     managed block out. That is the churn: two legitimate invocations produce
-     opposite results on one source file, and the IDE passes the project DB
-     alone.
+  extra does not reproduce what the documenter rendered with B as primary.
 
   THE FIXTURE:
 
@@ -104,20 +39,43 @@
   The call is a RESOLVED edge in B, not a name match. That is deliberate and it
   is what makes the fixture discriminating: a resolved edge is contributed ONLY
   by the primary store, so the block can be reproduced only by the verb that
-  opened B as primary -- which is exactly the asymmetry under test.
+  opened B as primary.
 
-  WHAT IS ASSERTED, and which one is red today:
+  WHAT IS ASSERTED:
 
-    2  document --db A --db B --apply     writes a block naming B's caller
-    3  lint-all --db A            REPORTS drift   <- POSITIVE CONTROL
-    4  lint-all --db A --db B     REPORTS NOTHING <- THE BUG (red today)
-    5  document --db A --apply    removes the block entirely (the churn, recorded)
+    2  document --db B --db A --apply    writes a block naming B's caller
+    3  lint-all --db A           REPORTS drift   <- POSITIVE CONTROL
+    4  lint-all --db B --db A    REPORTS NOTHING <- the agreement under test
+    5  document --db A --apply   removes the block entirely (the churn, recorded)
+
+  NOTE THE ORDER IN 2 AND 4: B FIRST. B is the store that owns the fact, so
+  under the first-wins convention it is the one to pass first, and BOTH verbs
+  then open it as primary. Passing `--db A --db B` (the old convention's order)
+  makes both verbs agree on A instead -- also self-consistent, and it renders no
+  caller at all; the contradiction is gone either way, which is the point.
+
+  RED AGAINST THE UNFIXED BUILD: with the old last-wins rule, `--db B --db A`
+  gave `document` primary A (no caller written) while `lint-all` used primary B
+  (renders the caller), so steps 2 AND 4 both fail. Verified 2026-08-25 before
+  the ParseArgs change landed.
 
   STEP 3 IS LOAD-BEARING. With one store the entry genuinely is unaccountable,
   so drift SHOULD be reported. Without that assertion, a "fix" that simply
   stopped reporting doc-drift at all would satisfy step 4 and destroy the
-  signal -- and the two earlier versions of this file both failed in exactly
-  that direction.
+  signal -- and two earlier versions of this file both failed in exactly that
+  direction.
+
+  THREE THINGS THIS FIXTURE GOT WRONG BEFORE, all of which read as "the engine
+  is fine" -- kept so the next version does not repeat them:
+
+  1. NO REINDEX AFTER --apply. doc-drift's population comes from
+     ListDocumentedSymbols, i.e. from the INDEX. `document --apply` writes the
+     source; until the index is refreshed the checker examines nothing and
+     reports nothing, which reads exactly like "no drift".
+  2. ASSERTING ONLY THE ABSENCE of a finding, with no positive control -- step 3
+     exists for that reason.
+  3. REUSING LEFTOVER SCRATCH STATE from a previous run instead of recreating
+     the fixture.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -129,7 +87,7 @@ function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS
 
 $exePath = (Resolve-Path $Exe).Path
 
-$scratch = Join-Path C:\TEMP 'draglint_c1_extrastores'
+$scratch = Join-Path C:\TEMP 'draglint_dborder_extrastores'
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path (Join-Path $scratch 'shared') | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $scratch 'bside')  | Out-Null
@@ -220,8 +178,8 @@ try {
   Check '1. SANITY: both section DBs exist' ((Test-Path $dbA) -and (Test-Path $dbB))
 
   # --- 2. document with BOTH stores -----------------------------------------
-  $d2 = (& $exePath document --qname $QNAME --db $dbA --db $dbB --apply 2>&1 | Out-String)
-  Check '2. document --db A --db B wrote a managed block naming B''s caller' `
+  $d2 = (& $exePath document --qname $QNAME --db $dbB --db $dbA --apply 2>&1 | Out-String)
+  Check '2. document --db B --db A wrote a managed block naming B''s caller' `
         (BlockHasCaller) `
         $(($d2 -split "`n" | Where-Object { $_ -match '(?i)doc:' } | Select-Object -First 1))
   Reindex
@@ -235,9 +193,9 @@ try {
         'with only dbA open the caller entry genuinely is unaccountable'
 
   # --- 4. THE BUG: the same two stores that wrote it must accept it ---------
-  $l4 = (& $exePath lint-all --db $dbA --db $dbB --quiet 2>&1 | Out-String)
+  $l4 = (& $exePath lint-all --db $dbB --db $dbA --quiet 2>&1 | Out-String)
   $drift4 = DriftReported $l4
-  Check '4. lint-all --db A --db B reports NO doc-drift on the block it just wrote' `
+  Check '4. lint-all --db B --db A reports NO doc-drift on the block it just wrote' `
         (-not $drift4) `
         ('still reported: ' + (($l4 -split "`r?`n" | Where-Object { $_ -match 'doc-drift|doc-opts' }) -join ' // '))
   if ($drift4) {
@@ -246,8 +204,8 @@ try {
     # what the documenter would write right now under the same two stores.
     Write-Host '      --- block ON DISK ---' -ForegroundColor DarkGray
     (Get-Content $thing) | Where-Object { $_ -match '///' } | ForEach-Object { Write-Host "        $_" -ForegroundColor DarkGray }
-    Write-Host '      --- what document --db A --db B would write now ---' -ForegroundColor DarkGray
-    (& $exePath document --qname $QNAME --db $dbA --db $dbB 2>&1) |
+    Write-Host '      --- what document --db B --db A would write now ---' -ForegroundColor DarkGray
+    (& $exePath document --qname $QNAME --db $dbB --db $dbA 2>&1) |
       ForEach-Object { Write-Host "        $_" -ForegroundColor DarkGray }
   }
 

@@ -50,6 +50,15 @@ You can drive it two ways, both backed by the same engine:
    resolver supply the full set. Use `drag-lint resolve-dbs --platform <p>` to
    list them, or `--project <x.dproj>` / `--in <x.pas>` to resolve just one.
 
+   **Order matters: the FIRST `--db` is the primary, every later one is an
+   extra store.** The primary answers the query and is the only store that
+   contributes **resolved** call edges; extras are searched by **name** for
+   callers and used-in units. Put the DB that owns the code you are asking
+   about first and the platform library after it. Every verb follows this --
+   `document`, `lint-all`, `lint-project` and the exporters included -- so one
+   `--db` list is valid across verbs. (Before 2026-08-25 `document` took the
+   *last* `--db`, which made a block it wrote unclearable by `lint-all`.)
+
 ---
 
 ## 2. Paste this to your AI (CLI mode — recommended)
