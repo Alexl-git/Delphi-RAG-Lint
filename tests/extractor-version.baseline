@@ -44,4 +44,4 @@
 #   The judgement being made explicitly, because the failure mode of getting
 #   this wrong is SILENT: if a future edit to this file ever influenced what is
 #   indexed, the version MUST move.
-1.6.0-alpha|052f041289b66f4e03a1ddba30bb44815635513bef1688b984ee4b6bb05e3a6c
+1.7.0-alpha|3b933512a0a580326f39c657ec711a122660cf1058d412f0a57deb0c5abb9714

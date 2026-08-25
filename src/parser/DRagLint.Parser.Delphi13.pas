@@ -1219,6 +1219,19 @@ end; // function
   Deliberately NOT evaluated: an expression is never folded to a value. Folding
   `MaxItems * 2` to `200` would make the index assert something the source does
   not say, and the constant it depends on can change in another file. }
+{ Classifies a NUMERIC LITERAL's text. Shared so the plain-literal path and the
+  signed-literal path in ConstSignatureOf cannot disagree about what a hex or an
+  exponent literal is -- they were one branch until signed numbers were handled,
+  and two copies would drift on the next edge case. }
+function InferNumericType(const AText: string): string;
+begin
+  { A hex literal is an integer even though it can contain 'E'; test for the
+    '$' prefix FIRST or $1E5 reads as an exponent and types as Extended. }
+  if (AText <> '') and (AText[Low(string)] = '$') then Result:= 'Integer'
+  else if (Pos('.', AText) > 0) or (Pos('e', LowerCase(AText)) > 0) then Result:= 'Extended'
+  else Result:= 'Integer';
+end;
+
 function ConstSignatureOf(const ANode: TTSNode; const ASource: TBytes): string;
 const
   { A value is a popup slot, not a source listing. A 200-entry array initializer
@@ -1256,15 +1269,35 @@ begin
 
     { Infer only from a literal, where the node type IS the answer. Anything
       built out of an expression (exprBinary, exprCall, a bare identifier) is
-      left untyped on purpose. }
+      left untyped on purpose -- with ONE exception, a signed number, below. }
     Inferred:= '';
-    if ValNode.NodeType = 'literalNumber' then
+    if ValNode.NodeType = 'literalNumber' then Inferred:= InferNumericType(ValText)
+    else if ValNode.NodeType = 'exprUnary' then
     begin
-      { A hex literal is an integer even though it can contain 'E'; test for the
-        '$' prefix FIRST or $1E5 reads as an exponent and types as Extended. }
-      if (ValText <> '') and (ValText[Low(string)] = '$') then Inferred:= 'Integer'
-      else if (Pos('.', ValText) > 0) or (Pos('e', LowerCase(ValText)) > 0) then Inferred:= 'Extended'
-      else Inferred:= 'Integer';
+      { A SIGNED NUMBER IS STILL A NUMBER. `X = -1` may parse as a literalNumber
+        with the sign folded in, but `X = - 1` -- a space after the sign, which
+        is what ORM3's iFOLDERS.PAS literally contains -- parses as exprUnary,
+        and the whole declaration was left untyped. Integer is not a guess there;
+        it is the only thing it can be.
+
+        NARROW ON PURPOSE. Only + and - over a NUMERIC LITERAL qualify. `not X`
+        is Boolean, `@X` is a Pointer and `X^` is a dereference -- each is a
+        different inference with its own rules, and lumping them in here would
+        be inventing types rather than reading them. The operator is matched on
+        its TEXT rather than a token node name so this does not depend on which
+        of kMinus/kSub the grammar happens to call it.
+
+        The operand's OWN text is what gets classified, never ValText: ValText
+        is '- 1', whose first character is not '$', so the hex test below would
+        misfire on `= - $1E5`. }
+      var OpNode : TTSNode:= ValNode.ChildByField('operator');
+      var ArgNode: TTSNode:= ValNode.ChildByField('operand' );
+      if (not OpNode.IsNull) and (not ArgNode.IsNull) and (ArgNode.NodeType = 'literalNumber') then
+      begin
+        var OpText: string:= Trim(NodeText(OpNode, ASource));
+        if (OpText = '-') or (OpText = '+') then
+          Inferred:= InferNumericType(CollapseWs(NodeText(ArgNode, ASource)));
+      end;
     end
     else if ValNode.NodeType = 'literalString' then Inferred:= 'string'
     else if (ValNode.NodeType = 'kTrue') or (ValNode.NodeType = 'kFalse') then Inferred:= 'Boolean'
