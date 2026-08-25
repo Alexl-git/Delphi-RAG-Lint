@@ -7162,12 +7162,30 @@ begin
         if Length(DDEdits) > 0 then
         begin
           Edits:= Edits + DDEdits;
-          { Count one fix per repaired doc span. BuildFor emits a delete+insert
-            PAIR per span, so the number of repaired decls is (pairs) = half the
-            edit count; count the insert edits (tekInsertLines) to avoid
-            double-counting. }
+          { Count one fix per repaired doc span.
+
+            A REWRITE emits a delete+insert PAIR per span, so counting inserts
+            counts spans without double-counting. That was the whole rule here,
+            and it silently dropped the case where the correct repair is a
+            REMOVAL: when the fresh render has no facts at all, BuildFor emits a
+            DELETE ALONE. Zero inserts meant FixCount stayed 0, which does not
+            merely misreport -- the apply below is gated on `FixCount > 0`, so
+            the edit was BUILT, added to Edits, and then never written, while the
+            summary said `no fixable findings`. Measured 2026-08-25: the trace
+            said `FIXDOC OK 1 edit(s)` and the file was untouched.
+
+            Deletes beyond the paired ones are exactly the removal-only repairs,
+            so (Ins + unpaired Del) counts every repaired span once, whatever
+            shape it took. A pure insert (a block created from nothing) still
+            counts 1: Del is 0 and Ins is 1. }
+          var DDIns: Integer:= 0;
+          var DDDel: Integer:= 0;
           for var DDE: TTextEdit in DDEdits do
-            if DDE.Kind = tekInsertLines then Inc(FixCount);
+            case DDE.Kind of
+              tekInsertLines: Inc(DDIns);
+              tekDeleteLines: Inc(DDDel);
+            end;
+          Inc(FixCount, DDIns + Max(0, DDDel - DDIns));
         end;
       end;
 
