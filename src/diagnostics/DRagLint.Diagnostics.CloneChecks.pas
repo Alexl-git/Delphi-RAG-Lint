@@ -381,10 +381,38 @@ var
         occurrences are already >= 50% covered by previously-emitted (longer) clones.
         This collapses the sliding/self-similar overlap family to one finding per
         genuinely-duplicated region-pair. }
+      { THE TIE-BREAKERS ARE LOAD-BEARING, not tidiness.
+
+        Cands is built by iterating Buckets.Values -- a TDictionary, whose
+        enumeration order depends on the table's internal layout and therefore
+        on how many distinct window hashes the WHOLE CORPUS produced. TList.Sort
+        is introsort, which is NOT stable. So ordering by length alone left
+        equal-length candidates in an order that changed when any file anywhere
+        changed, and the greedy coverage loop below hands the tokens to whoever
+        comes first. A different winner means a different reported line, a
+        different partner and a different token count.
+
+        Measured 2026-08-26 on a three-file corpus where two files were
+        byte-identical between runs and the third shared no vocabulary with
+        them: uKeepB.pas:48's partner moved from uKeepA.pas:48 to uKeepA.pas:22.
+
+        Why that is worse than cosmetic: `dl:ok` review markers are line-bound,
+        so an anchor that moves for no source reason ORPHANS previously-recorded
+        reviews in files nobody touched, and a project can never hold a stable
+        zero. It cost two marker-shuffling rounds on YADF, each one rewriting
+        dl:ok history for untouched code.
+
+        (Len desc, A asc, B asc) is a total order over the candidate SET, which
+        is itself independent of bucket order -- every bucket is visited either
+        way. A and B are indices into the global token list, built by walking
+        files in the caller's order, so an edit shifts them uniformly and leaves
+        their relative order intact. }
       Cands.Sort(TComparer<TCloneCand>.Construct(
         function(const X, Y: TCloneCand): Integer
         begin
-          Result := Y.Len - X.Len;
+          Result := Y.Len - X.Len;                 { longest first }
+          if Result = 0 then Result := X.A - Y.A;  { then earliest occurrence }
+          if Result = 0 then Result := X.B - Y.B;  { then its partner }
         end));
       SetLength(Covered, N);
       for i := 0 to N - 1 do Covered[i] := False;
