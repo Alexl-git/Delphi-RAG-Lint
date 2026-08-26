@@ -105,5 +105,12 @@ Check 'App.Drift is NOT reported (it IS in the .dpr)' (-not ($out -match 'App\.D
 Check 'FP-9: an unqualified .dpr name still matches a qualified reference' `
     (-not ($out -match 'Vcl\.Legacy')) "out=$out"
 
+# EXACT COUNT, because the reverse direction ("in the .dpr, missing from the
+# .dproj") reports the DPR's spelling -- it would print `Legacy`, not
+# `Vcl.Legacy`, so the FP-9 assertion above cannot see a regression there. Only
+# ONE finding is correct for this fixture, and that pins both directions at once.
+$found = @([regex]::Matches($out, 'unit-not-in-dpr:')).Count
+Check 'EXACTLY one finding -- neither direction gained a false positive' ($found -eq 1) "count=$found; out=$out"
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
