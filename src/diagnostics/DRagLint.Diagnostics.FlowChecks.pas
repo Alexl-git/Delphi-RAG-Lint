@@ -696,6 +696,117 @@ begin
     if AssignedUnderSameGuard(ANode.NamedChild(I), ARoutine, ASrc, AVar, AReadStart, AGuards) then Exit(True);
 end;
 
+{ The name of a WITNESS FLAG that plausibly guards a read of AVar, or ''.
+
+  Loose sibling of AssignedUnderSameGuard. That function demands the read's
+  guard and the assignment's guard be the SAME predicate, and SUPPRESSES when
+  they are. This one asks a strictly weaker question: is one of the read's
+  guards a boolean flag set to literal True in the SAME BLOCK that assigns AVar?
+
+      if C then begin X := ..; HaveX := True; end;
+      ...
+      if HaveX then Use(X);           <- HaveX is the witness flag
+
+  IT MUST NEVER BE USED TO SUPPRESS, and the caller only tiers on it. A Fable
+  analysis (2026-08-26) produced three Pascal counter-examples in which a
+  pairing argument of exactly this shape holds and X is still genuinely
+  unassigned:
+
+    * the flag itself is never initialised, so on the else-path it is stack
+      garbage and can read True;
+    * the flag is set by a NON-LITERAL write (`HaveX := HaveX or Retry`), which
+      no `:= True` site scan can see;
+    * the flag is set from a NESTED routine, where "in the same block" has no
+      meaning at all.
+
+  So an airtight pairing needs roughly six clauses, and every clause omitted
+  SUPPRESSES A TRUE POSITIVE -- the failure direction the SAME-PREDICATE
+  SUPPRESSION block refuses in writing, on a rule that is now ERROR severity.
+  Tiering bounds the cost of a gap in THIS classifier at one severity level
+  instead: the finding survives, lint-all still counts it, and the message names
+  the flag so a human can check the pairing in seconds.
+
+  Pinned by tests\autotest\run_witness_flag_tiering.ps1, whose controls assert
+  that a NON-witness read stays at warning and a DEFINITE read stays an error. }
+function WitnessFlagForRead(const ANode, ARoutine: TTSNode; const ASrc: TBytes;
+  const AVar: string; AReadStart: Integer; AGuards: TList<string>): string;
+
+  { Nearest enclosing `block`, or null. Bounded so a malformed tree cannot spin. }
+  function EnclosingBlock(const N: TTSNode): TTSNode;
+  var
+    Cur: TTSNode;
+    Hop: Integer;
+  begin
+    Result := Default(TTSNode);
+    Cur    := N;
+    Hop    := 0;
+    while (not Cur.IsNull) and (Hop < 64) do
+    begin
+      if Cur.NodeType = 'block' then Exit(Cur);
+      if Cur.StartByte = ARoutine.StartByte then Break;
+      Cur := Cur.Parent;
+      Inc(Hop);
+    end;
+  end;
+
+  { `G := True` for some G in AGuards anywhere inside ABlock -> G, else ''. }
+  function FlagSetTrueIn(const ABlock: TTSNode): string;
+  var
+    I       : Integer;
+    Lhs, Rhs: TTSNode;
+    Nm      : string ;
+  begin
+    Result := '';
+    if ABlock.IsNull then Exit;
+    if ABlock.NodeType = 'assignment' then
+    begin
+      Lhs := ABlock.ChildByField('lhs');
+      Rhs := ABlock.ChildByField('rhs');
+      if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier') then
+      begin
+        Nm := LowerCase(Trim(NodeStr(Lhs, ASrc)));
+        { AGuards holds lowercased bare identifiers (ThenGuardName lowercases),
+          so Nm is lowercased to match; the literal test uses SameText rather
+          than another LowerCase allocation. }
+        if (AGuards.IndexOf(Nm) >= 0)
+           and SameText(Trim(NodeStr(Rhs, ASrc)), 'True') then Exit(Nm);
+      end;
+    end;
+    for I := 0 to ABlock.NamedChildCount - 1 do
+    begin
+      Result := FlagSetTrueIn(ABlock.NamedChild(I));
+      if Result <> '' then Exit;
+    end;
+  end;
+
+var
+  I  : Integer;
+  Lhs: TTSNode;
+  Blk: TTSNode;
+begin
+  Result := '';
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'assignment' then
+  begin
+    Lhs := ANode.ChildByField('lhs');
+    if (not Lhs.IsNull) and (Integer(ANode.StartByte) < AReadStart)
+       and SameText(Trim(NodeStr(Lhs, ASrc)), AVar) then
+    begin
+      Blk := EnclosingBlock(ANode);
+      if not Blk.IsNull then
+      begin
+        Result := FlagSetTrueIn(Blk);
+        if Result <> '' then Exit;
+      end;
+    end;
+  end;
+  for I := 0 to ANode.NamedChildCount - 1 do
+  begin
+    Result := WitnessFlagForRead(ANode.NamedChild(I), ARoutine, ASrc, AVar, AReadStart, AGuards);
+    if Result <> '' then Exit;
+  end;
+end;
+
 function ContainsAtIdentBoundary(const S, AWhat: string): Boolean;
 var P: Integer; Ch: Char;
 begin
@@ -974,6 +1085,118 @@ begin
   end;
 end;
 
+{ True when AAsg's only overwrite sits inside the BODY of a following try, and
+  AName is still used after that try -- so the store is LIVE on the exception
+  path and is not a dead store.
+
+      X := nil;                <- AAsg
+      try
+        X := TObject.Create;   <- the overwrite, INSIDE the try body
+      except
+        ...                    <- handler never mentions X
+      end;
+      R := X;                  <- X read AFTER the try
+
+  If the exception fires before the inner assignment completes, the read after
+  the try observes the value AAsg wrote. Deleting AAsg -- which is exactly what
+  overwrite-before-read's advice says to do -- leaves an uninitialised reference.
+
+  SAME CAUSE AS ITS TWO SIBLINGS: `try..except` wires the handler edge from the
+  END of the try body (Cfg.pas), modelling "the exception fired after the body's
+  assignments ran", so liveness believes the overwrite always happened. That
+  edge is deliberate and tuned -- used-before-assignment depends on the state it
+  carries -- so this is a syntactic guard scoped to the one wrong rule, not a
+  change to the edge.
+
+  NOT COVERED BY ProtectedByFollowingTry, which requires the HANDLER to mention
+  the name. Here the protection comes from where the OVERWRITE sits, not from
+  what the handler says, so the handler is not consulted at all.
+
+  THE "READ AFTER" CLAUSE IS LOAD-BEARING, not belt-and-braces. Without it this
+  degenerates into "any store before a try is safe" -- the cheap version the
+  sibling's comment explicitly bans, because it would suppress a genuine dead
+  store sitting before an unrelated try. If nothing observes AName after the try,
+  the exception path leads nowhere that can see the value and the store really is
+  dead. run_dead_store_overwritten_in_try.ps1 asserts that arm directly. }
+function OverwrittenInsideFollowingTry(const AAsg: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var
+  Cur, C, TryN: TTSNode;
+  Nm, S       : string ;
+  I, Guard    : Integer;
+  SeenHandler, WritesInBody: Boolean;
+
+  { A single statement can arrive wrapped in a `statement` node -- same unwrap
+    ProtectedByFollowingTry and Cfg.pas.EmitStmt both need. }
+  function Unwrap(const N: TTSNode): TTSNode;
+  begin
+    Result := N;
+    if (not Result.IsNull) and (Result.NodeType = 'statement')
+       and (Result.NamedChildCount = 1) then Result := Result.NamedChild(0);
+  end;
+
+  function AssignsName(const N: TTSNode): Boolean;
+  var
+    K  : Integer;
+    Lhs: TTSNode;
+  begin
+    Result := False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'assignment' then
+    begin
+      Lhs := N.ChildByField('lhs');
+      if (not Lhs.IsNull) and SameText(Trim(NodeStr(Lhs, ASrc)), AName) then Exit(True);
+    end;
+    for K := 0 to N.NamedChildCount - 1 do
+      if AssignsName(N.NamedChild(K)) then Exit(True);
+  end;
+
+begin
+  Result := False;
+  Nm := LowerCase(Trim(AName));
+  if Nm = '' then Exit;
+
+  { Skip the run of sibling assignments to the try, exactly as the sibling does:
+    several inits before one shared try is the common form. }
+  Cur   := Unwrap(AAsg.NextNamedSibling);
+  Guard := 0;
+  while (not Cur.IsNull) and (Cur.NodeType = 'assignment') and (Guard < 64) do
+  begin
+    Cur := Unwrap(Cur.NextNamedSibling);
+    Inc(Guard);
+  end;
+  if Cur.IsNull or (Cur.NodeType <> 'try') then Exit;
+  TryN := Cur;
+
+  { Does the try BODY -- everything before kExcept/kFinally -- overwrite AName?
+    KEYWORDS ARE NAMED NODES in this grammar, so the section boundary is found by
+    watching for the keyword, not by a field lookup. }
+  WritesInBody := False;
+  SeenHandler  := False;
+  for I := 0 to TryN.ChildCount - 1 do
+  begin
+    C := TryN.Child(I);
+    if (C.NodeType = 'kExcept') or (C.NodeType = 'kFinally') then
+    begin
+      SeenHandler := True;
+      Break;
+    end;
+    if C.NodeType = 'kTry' then Continue;
+    if AssignsName(C) then WritesInBody := True;
+  end;
+  if not (WritesInBody and SeenHandler) then Exit;
+
+  { And is AName still observed AFTER the try? }
+  Cur   := Unwrap(TryN.NextNamedSibling);
+  Guard := 0;
+  while (not Cur.IsNull) and (Guard < 256) do
+  begin
+    S := LowerCase(NodeStr(Cur, ASrc));
+    if ContainsWholeIdent(S, Nm) then Exit(True);
+    Cur := Unwrap(Cur.NextNamedSibling);
+    Inc(Guard);
+  end;
+end;
+
 /// <summary>True when AAsg assigns the literal <c>nil</c> to a local whose
 /// declared type is an interface -- i.e. the store RELEASES a reference rather
 /// than producing a value.</summary>
@@ -1035,6 +1258,7 @@ function StoreHasEffectLivenessCannotSee(const AAsg: TTSNode;
   const AStore: ISymbolStore; AFileId: Int64): Boolean;
 begin
   Result := ProtectedByFollowingTry(AAsg, AName, ASrc)
+         or OverwrittenInsideFollowingTry(AAsg, AName, ASrc)
          or ReleasesInterfaceRef(AAsg, ASrc, ATypeText, AStore, AFileId);
 end;
 
@@ -1220,15 +1444,24 @@ var
                     correlation can excuse, so the warning arm is deliberately
                     left alone: this can downgrade noise, never hide a certain
                     use-before-assignment. }
+                  var WitnessFlag: string := '';
                   if CurMay[RIx] then
                   begin
                     var Guards: TList<string> := TList<string>.Create;
                     try
                       CollectThenGuards(It.Node, Cfg.RoutineNode, PF.Src, Guards);
-                      if (Guards.Count > 0)
-                         and AssignedUnderSameGuard(Cfg.RoutineNode, Cfg.RoutineNode,
-                               PF.Src, V.Name, Integer(It.Node.StartByte), Guards) then
-                        Continue;
+                      if Guards.Count > 0 then
+                      begin
+                        if AssignedUnderSameGuard(Cfg.RoutineNode, Cfg.RoutineNode,
+                             PF.Src, V.Name, Integer(It.Node.StartByte), Guards) then
+                          Continue;
+                        { WITNESS-FLAG TIERING -- strictly weaker than the
+                          suppression above, and it never suppresses. See
+                          WitnessFlagForRead for the three counter-examples that
+                          rule out turning this into a `Continue`. }
+                        WitnessFlag := WitnessFlagForRead(Cfg.RoutineNode, Cfg.RoutineNode,
+                             PF.Src, V.Name, Integer(It.Node.StartByte), Guards);
+                      end;
                     finally
                       Guards.Free;
                     end;
@@ -1244,8 +1477,23 @@ var
                     known. Definite -> error, may -> warning keeps the certainty
                     distinction the analysis actually computes. }
                   if CurMay[RIx] then
-                    Emit('used-before-assignment', 'warning',
-                      Format('Local "%s" may be used before it is assigned.', [V.Name]), ROW, COL)
+                  begin
+                    { A recognised witness-flag pairing drops ONE step, to info,
+                      and says which flag -- it is not suppressed, because the
+                      pairing cannot be proved (WitnessFlagForRead). The `must`
+                      arm below is untouched: tiering a CERTAIN unassigned read
+                      would be demoting knowledge, not uncertainty. }
+                    if WitnessFlag <> '' then
+                      Emit('used-before-assignment', 'info',
+                        Format('Local "%s" may be used before it is assigned -- the read is guarded by "%s", ' +
+                               'which looks like a witness flag set where "%s" is assigned. Verify that pairing: ' +
+                               'the flag must itself be initialised, never set except beside an assignment to "%s", ' +
+                               'and never set from a nested routine.',
+                               [V.Name, WitnessFlag, V.Name, V.Name]), ROW, COL)
+                    else
+                      Emit('used-before-assignment', 'warning',
+                        Format('Local "%s" may be used before it is assigned.', [V.Name]), ROW, COL);
+                  end
                   else
                     Emit('used-before-assignment', 'error',
                       Format('Local "%s" is used before it is assigned.', [V.Name]), ROW, COL);

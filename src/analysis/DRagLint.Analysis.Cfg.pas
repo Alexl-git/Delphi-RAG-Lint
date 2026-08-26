@@ -362,19 +362,87 @@ end;
   The direction is read from the loop HEADER text only -- ANode.StartByte up to
   the body -- so a nested `downto` inside the body cannot be mistaken for this
   loop's own. }
-function ForLoopAlwaysExecutes(const ANode, AStartN, ABodyN: TTSNode; const ASrc: TBytes): Boolean;
+{ `Fn(Arg)` with exactly one bare-identifier argument -> Arg, lowercased.
+  Anything else (a different callee, no args, two args, an expression argument)
+  returns ''. Shape, from the real tree:
+    (exprCall entity: (identifier "Low") args: (exprArgs (identifier "TGrade"))) }
+function SingleIdentArgOf(const ANode: TTSNode; const AFnName: string; const ASrc: TBytes): string;
+var
+  Ent, Args: TTSNode;
+begin
+  Result := '';
+  if ANode.IsNull then Exit;
+  if not SameText(ANode.NodeType, 'exprCall') then Exit;
+  Ent := ANode.ChildByField('entity');
+  if Ent.IsNull or (not SameText(Ent.NodeType, 'identifier')) then Exit;
+  if LowerText(Ent, ASrc) <> LowerCase(AFnName) then Exit;
+  Args := ANode.ChildByField('args');
+  if Args.IsNull or (not SameText(Args.NodeType, 'exprArgs')) then Exit;
+  if Args.NamedChildCount <> 1 then Exit;
+  if not SameText(Args.NamedChild(0).NodeType, 'identifier') then Exit;
+  Result := LowerText(Args.NamedChild(0), ASrc);
+end;
+
+{ The declared type name of a local var or parameter of ARoutine, lowercased,
+  or '' when it cannot be determined.
+
+  Deliberately does NOT descend into a nested routine: a nested procedure may
+  declare its own variable of the same name with a different type, and answering
+  from that one would be worse than answering nothing -- '' simply means "do not
+  widen", which is the safe direction here.
+
+  A multi-name declaration (`G, H: TGrade`) exposes only its first `name` field,
+  so asking about H returns '' and no widening happens. Also the safe direction. }
+function DeclaredTypeOfVar(const ARoutine: TTSNode; const AVarNameLower: string; const ASrc: TBytes): string;
+
+  function TyperefNameOf(const ATypeField: TTSNode): string;
+  var
+    Tr: TTSNode;
+  begin
+    Result := '';
+    if ATypeField.IsNull or (ATypeField.NamedChildCount = 0) then Exit;
+    Tr := ATypeField.NamedChild(0);
+    if not SameText(Tr.NodeType, 'typeref') then Exit;
+    if Tr.NamedChildCount = 0 then Exit;
+    if not SameText(Tr.NamedChild(0).NodeType, 'identifier') then Exit;
+    Result := LowerText(Tr.NamedChild(0), ASrc);
+  end;
+
+  function Visit(const N: TTSNode): string;
+  var
+    I: Integer;
+  begin
+    Result := '';
+    if N.IsNull then Exit;
+    if SameText(N.NodeType, 'defProc') and (not (N = ARoutine)) then Exit;
+    if SameText(N.NodeType, 'declVar') or SameText(N.NodeType, 'declArg') then
+      if LowerText(N.ChildByField('name'), ASrc) = AVarNameLower then
+        Exit(TyperefNameOf(N.ChildByField('type')));
+    for I := 0 to N.NamedChildCount - 1 do
+    begin
+      Result := Visit(N.NamedChild(I));
+      if Result <> '' then Exit;
+    end;
+  end;
+
+begin
+  Result := Visit(ARoutine);
+end;
+
+function ForLoopAlwaysExecutes(const ANode, AStartN, ABodyN, ARoutineN: TTSNode; const ASrc: TBytes): Boolean;
 var
   LowTxt, HighTxt: string;
   LowVal, HighVal, I: Integer;
-  BoundN: TTSNode;
+  LowN, BoundN: TTSNode;
   IsDownto: Boolean;
+  ArgA, ArgB, CtrlVar, DeclTy: string;
 begin
   Result := False;
   if AStartN.IsNull or ABodyN.IsNull then Exit;
 
   { low bound = the start assignment's rhs }
-  LowTxt := LowerText(AStartN.ChildByField('rhs'), ASrc);
-  if not TryStrToInt(LowTxt, LowVal) then Exit;
+  LowN   := AStartN.ChildByField('rhs');
+  LowTxt := LowerText(LowN, ASrc);
 
   { High bound = the named child that is neither start nor body AND is not a
     KEYWORD TOKEN. The grammar exposes `for` / `to` / `downto` / `do` as named
@@ -395,10 +463,50 @@ begin
   end;
   if BoundN.IsNull then Exit;
   HighTxt := LowerText(BoundN, ASrc);
-  if not TryStrToInt(HighTxt, HighVal) then Exit;
 
-  if IsDownto then Result := LowVal >= HighVal
-  else Result := LowVal <= HighVal;
+  { 1. Both bounds are integer literals -- the original rule, unchanged. }
+  if TryStrToInt(LowTxt, LowVal) and TryStrToInt(HighTxt, HighVal) then
+  begin
+    if IsDownto then Result := LowVal >= HighVal
+    else Result := LowVal <= HighVal;
+    Exit;
+  end;
+
+  { 2. `for G := Low(T) to High(T)` (or the downto mirror) where T is the control
+    variable's own declared type.
+
+    This is a theorem, not a heuristic: Low(T) <= High(T) holds for every ordinal
+    type in the language, so the range is never empty and the body runs at least
+    once. Without it every such loop got the zero-trip shape, its body's writes
+    were may-defs, and a following read was reported "may be used before
+    assigned" -- seven times in DRagLint.Report.Deps.pas alone, all of the form
+    `for G:= Low(TDepsGroup) to High(TDepsGroup) do ProjUnitsPerGroup[G]:= nil`.
+
+    WHY THE CONTROL-VARIABLE'S-DECLARED-TYPE CLAUSE IS LOAD-BEARING. The unsound
+    neighbour is `Low(V) to High(V)` where V is a dynamic array, open array or
+    string VARIABLE: High(V) is -1 when V is empty, so that loop CAN run zero
+    times. Widening to it would SUPPRESS true positives -- the wrong failure
+    direction. Requiring the argument to be the control variable's declared type
+    settles it without a symbol table, because `Low(T)`/`High(T)` on a
+    dynamic-array or string TYPE is not legal Delphi (those need an instance):
+    if the unit compiles and T is a variable's declared type, T is ordinal.
+    run_for_over_ordinal_type_executes.ps1 pins both arms. }
+  if IsDownto then
+  begin
+    ArgA := SingleIdentArgOf(LowN  , 'High', ASrc);
+    ArgB := SingleIdentArgOf(BoundN, 'Low' , ASrc);
+  end
+  else
+  begin
+    ArgA := SingleIdentArgOf(LowN  , 'Low' , ASrc);
+    ArgB := SingleIdentArgOf(BoundN, 'High', ASrc);
+  end;
+  if (ArgA = '') or (ArgA <> ArgB) then Exit;
+
+  CtrlVar := LowerText(AStartN.ChildByField('lhs'), ASrc);
+  if CtrlVar = '' then Exit;
+  DeclTy := DeclaredTypeOfVar(ARoutineN, CtrlVar, ASrc);
+  Result := (DeclTy <> '') and (DeclTy = ArgA);
 end;
 
 { TCfgBlock }
@@ -809,7 +917,7 @@ begin
       possibly-unassigned at every later use -- 29 such findings on one real
       project, none of them reachable. A loop we cannot prove keeps the ordinary
       zero-trip entry, where the warning is legitimate. }
-    if ForLoopAlwaysExecutes(ANode, StartN, ANode.ChildByField('body'), Cfg.Src) then
+    if ForLoopAlwaysExecutes(ANode, StartN, ANode.ChildByField('body'), Cfg.RoutineNode, Cfg.Src) then
       Cfg.Blocks[ACur].AddSucc(BodyIdx)
     else
       Cfg.Blocks[ACur].AddSucc(HdrIdx);
