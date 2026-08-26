@@ -43,7 +43,7 @@ interface
 /// a handle that a concurrent `index --all` would have to drop.
 /// Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Storage.FileMembership.NormalizeForLookup</para>
 /// <para>Returns: False; not Q.Eof</para>
 /// <para>SQL: reads FILES</para>
