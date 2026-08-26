@@ -1233,11 +1233,21 @@ var
                       Guards.Free;
                     end;
                   end;
+                  { OWNER RULING 2026-08-26: raise this rule to error. Reading an
+                    unassigned local is a defect, not advice, and it sat at info/
+                    warning where nobody saw it.
+
+                    BOTH levels move up ONE step; the two are not collapsed. The
+                    MAY case is a genuine maybe -- the variable is assigned on
+                    some paths and not others, and the checker cannot prove which
+                    path runs -- so calling it an error would assert something not
+                    known. Definite -> error, may -> warning keeps the certainty
+                    distinction the analysis actually computes. }
                   if CurMay[RIx] then
-                    Emit('used-before-assignment', 'info',
+                    Emit('used-before-assignment', 'warning',
                       Format('Local "%s" may be used before it is assigned.', [V.Name]), ROW, COL)
                   else
-                    Emit('used-before-assignment', 'warning',
+                    Emit('used-before-assignment', 'error',
                       Format('Local "%s" is used before it is assigned.', [V.Name]), ROW, COL);
                 end;
               end;
@@ -1441,7 +1451,10 @@ var
                 begin
                   ROW := Integer(It.Node.StartPoint.Row) + 1;
                   COL := Integer(It.Node.StartPoint.Column) + 1;
-                  Emit('overwrite-before-read', 'info',
+                  { OWNER RULING 2026-08-26: warning, not info. This is the same
+                    fact a compiler reports as "value assigned ... never used"
+                    (H2077), and compilers do not whisper it. }
+                  Emit('overwrite-before-read', 'warning',
                     Format('Assignment to "%s" is overwritten before it is read (dead store).',
                       [Vars.Get(Tgt).Name]), ROW, COL);
                 end;

@@ -267,10 +267,10 @@ begin
     B('redundant-cast',        'dead-code', 'hint',    'Cast of a value to the type it already has (no-op)');
 
     { --- data-flow --- }
-    B('used-before-assignment','data-flow', 'warning', 'Variable used before assignment');
+    B('used-before-assignment','data-flow', 'error',   'Variable used before assignment');
     B('function-result-not-set','data-flow','warning', 'Function Result not assigned on every path');
     B('out-param-not-set',     'data-flow', 'warning', 'out parameter not assigned on every path');
-    B('overwrite-before-read', 'data-flow', 'info',    'Value overwritten before it is read');
+    B('overwrite-before-read', 'data-flow', 'warning', 'Value overwritten before it is read');
     B('write-only-local',      'data-flow', 'info',    'Local assigned but never read');
     B('loop-var-after-loop',   'data-flow', 'warning', 'Loop variable used after the loop');
     B('object-leak',           'data-flow', 'info',    'Created object may leak (not freed on every path)');

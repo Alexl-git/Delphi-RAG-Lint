@@ -110,7 +110,13 @@ begin
   Result.ShowErrorsInline     := True;
   Result.ShowWarningsInline   := True;
   Result.ShowHintsInline      := True;
-  Result.ShowInfoInline       := False;
+  { OWNER RULING 2026-08-26: info markers ON by default. "Users will unclick
+    it in the settings if they don't like too many messages. We also have an
+    individual rule unclick, so users can adjust it atomically, but we'd rather
+    fight false positives to make it more useful than annoying noise."
+    A finding worth emitting is worth showing; hiding a whole severity was
+    treating noise as a display problem rather than as a rule problem. }
+  Result.ShowInfoInline       := True;
   Result.ScanLibraries        := False;
   Result.EnableCodeLens       := True;
   Result.EnableWorkspaceMode  := True;
