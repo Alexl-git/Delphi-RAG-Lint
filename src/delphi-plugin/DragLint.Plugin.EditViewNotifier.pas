@@ -76,6 +76,9 @@ uses
     DragLint.Plugin.Telemetry
   , { v0.47: log the gutter repaint handle }
     DragLint.Plugin.Settings
+  , { per-severity gutter icons -- see that unit's header for why they are drawn
+      with GDI rather than rasterised from the supplied SVGs }
+    DragLint.Plugin.SeverityGlyph
   ;
 
 { ---- TDragLintEditViewNotifier -------------------------------------------- }
@@ -435,11 +438,21 @@ begin
   SavedBrush     := Canvas.Brush.Color;
   SavedBrushStyle:= Canvas.Brush.Style;
   try
-    { ---- Gutter glyph (v0.47: filled SQUARE + outline) ----
-      Deliberately square, not round: the IDE's own breakpoint glyph is a round
-      red dot, so a round error glyph is easy to confuse with a breakpoint. A
-      square clearly reads as "drag-lint diagnostic". Side = row height, capped
-      by the gutter width and 16 px. }
+    { ---- Gutter glyph ----
+      Until 2026-08-25 this was a filled severity-coloured SQUARE, chosen so as
+      not to be confused with the IDE's round red breakpoint dot. It is now a
+      per-severity ICON -- circle-X, warning triangle, circle-i, circle-check --
+      because the owner asked for icons, and because a single square shape put
+      the whole burden of "which severity is this?" on colour alone.
+
+      The breakpoint-confusion concern the square was answering is still real,
+      and is answered better than the square answered it: only ONE of the four
+      glyphs is a plain circle silhouette, none is a plain red disc, and each
+      carries an interior mark a breakpoint does not have.
+
+      Geometry is unchanged -- side from the row height, capped by the gutter
+      width and 16 px, so high-DPI still scales from GGutterLineHeight rather
+      than from a hardcoded pixel count. }
     var RowH   : Integer:= LineRect.Bottom - LineRect.Top;
     var GutterW: Integer:= TextRect.Left   - LineRect.Left;
     var GlyphD: Integer:= RowH - 2                      ;
@@ -448,12 +461,13 @@ begin
     if GlyphD < 9 then GlyphD:= 9;
     var GX: Integer:= LineRect.Left + 1                   ;
     var GY: Integer:= LineRect.Top + (RowH - GlyphD) div 2;
-    Canvas.Brush.Color:= SeverityColor(MaxSev, Colors);
-    Canvas.Brush.Style:= bsSolid;
-    Canvas.Pen  .Color:= clBlack; { outline for contrast on any gutter colour }
-    Canvas.Pen  .Style:= psSolid;
-    Canvas.Pen  .Width:= 1;
-    Canvas.Rectangle(GX, GY, GX + GlyphD + 1, GY + GlyphD + 1);
+    { GLYPH_USES_EDITOR_COLORS decides whose palette wins -- see the colour
+      policy in DragLint.Plugin.SeverityGlyph's header. The wavy underline below
+      keeps using the editor colours either way. }
+    var GlyphFill: TColor;
+    if GLYPH_USES_EDITOR_COLORS then GlyphFill:= SeverityColor(MaxSev, Colors)
+    else GlyphFill:= SeverityGlyphColor(MaxSev);
+    PaintSeverityGlyph(Canvas, Rect(GX, GY, GX + GlyphD, GY + GlyphD), MaxSev, GlyphFill);
 
     { ---- Wavy underline per diagnostic ---- }
     for I:= 0 to High(Diags) do

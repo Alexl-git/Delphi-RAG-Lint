@@ -132,6 +132,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ConfigWriter.pas"/>
         <DCCReference Include="DragLint.Plugin.LintOptionsFrame.pas"/>
         <DCCReference Include="DragLint.Plugin.ExeResolver.pas"/>
+        <DCCReference Include="DragLint.Plugin.SeverityGlyph.pas"/>
         <DCCReference Include="DragLint.Plugin.Fonts.pas"/>
         <DCCReference Include="..\core\DRagLint.Hover.Contrast.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>

@@ -85,6 +85,7 @@ contains
   DRagLint.Lint.ConfigWriter in '..\lint\DRagLint.Lint.ConfigWriter.pas',
   DragLint.Plugin.LintOptionsFrame in 'DragLint.Plugin.LintOptionsFrame.pas',
   DragLint.Plugin.ExeResolver in 'DragLint.Plugin.ExeResolver.pas',
+  DragLint.Plugin.SeverityGlyph in 'DragLint.Plugin.SeverityGlyph.pas',
   DragLint.Plugin.Fonts in 'DragLint.Plugin.Fonts.pas',
   DRagLint.Hover.Contrast in '..\core\DRagLint.Hover.Contrast.pas',
   DragLint.Plugin.ProjectMenu in 'DragLint.Plugin.ProjectMenu.pas',
