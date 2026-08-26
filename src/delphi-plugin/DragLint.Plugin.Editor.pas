@@ -4093,43 +4093,30 @@ begin
   ShellExecute(0, 'open', PChar(LogPath), nil, nil, SW_SHOWNORMAL);
 end;
 
-procedure AutoPullStagedExe;
-{ v0.40.8h: when the user reinstalls the BPL via Component -> Install Packages,
-  pull a newer drag-lint.exe from C:\TEMP1\bpl_staging\ into the BPL's
-  deployment directory. The previous BPL's UnregisterDragLintMenu killed
-  the LSP child process (LspClient.Stop -> TerminateProcess), so the EXE
-  file handle is free at this point. No-op if the staged file is missing
-  or not newer than the deployed one. Errors are silent: we never want
-  package init to fail just because a copy failed. }
-const
-  STAGING_PATH = 'C:\TEMP1\bpl_staging\drag-lint.exe';
-var
-  DeployDir   : string   ;
-  DeployedExe : string   ;
-  StagedTime  : TDateTime;
-  DeployedTime: TDateTime;
-begin
-  try
-    if not FileExists(STAGING_PATH) then Exit;
-    DeployDir:= ExtractFilePath(GetModuleName(HInstance));
-    DeployedExe:= DeployDir + 'drag-lint.exe';
-    StagedTime:= 0;
-    if FileAge(STAGING_PATH, StagedTime) then
-    begin
-      if FileExists(DeployedExe) and FileAge(DeployedExe, DeployedTime) then
-      begin
-        if StagedTime <= DeployedTime then Exit;
-      end;
-      { Copy staged -> deployed. Give the kernel a beat in case Stop's
-        TerminateProcess hasn't fully released the file yet. }
-      Sleep(500);
-      if Winapi.Windows.CopyFile(PChar(STAGING_PATH), PChar(DeployedExe), False) then DebugLog(Format('AutoPullStagedExe: copied %s -> %s', [STAGING_PATH, DeployedExe]))
-      else DebugLog(Format('AutoPullStagedExe: CopyFile FAILED (Win32 err %d) for %s', [GetLastError, DeployedExe]));
-    end;
-  except
-    on E: Exception do DebugLog('AutoPullStagedExe: ' + E.ClassName + ': ' + E.Message);
-  end; // try
-end; // procedure
+{ AutoPullStagedExe WAS HERE, and is deliberately gone (2026-08-26).
+
+  It copied C:\TEMP1\bpl_staging\drag-lint.exe over <bpl-dir>\drag-lint.exe on
+  every RegisterDragLintMenu. The staged file was drag-lint 0.41.0-alpha of
+  2026-06-10 -- ten weeks stale against a current engine, and nothing said so.
+
+  TWO THINGS MADE IT HARMFUL RATHER THAN MERELY STALE.
+
+  Its skip test -- staged is not newer than deployed -- only applies when the
+  deployed file EXISTS. Removing the stale engine therefore caused an
+  UNCONDITIONAL re-copy: the cleanup re-armed the trap it was cleaning up, and
+  did it 13 seconds before the next resolution read the result.
+
+  And it deployed into the BPL directory, which is where LoadSettings used to
+  look when expanding a bare exe name, so whatever it planted BECAME the engine
+  every heavy command spawned.
+
+  Together that is how Rebuild Index for This Project came to fail with
+  Unknown argument: --platform against an engine that had never heard of the
+  flag, while the command line was correct all along.
+
+  Owner ruling 2026-08-26 stands: there is no 32-bit engine, so nothing should
+  be planting one beside a 32-bit BPL. Staging a BPL is deploy-staged.bat's
+  job, and it stays manual and visible. }
 
 procedure InvokeDockPanel(Sender: TObject);
 begin
@@ -5872,7 +5859,6 @@ var
 begin
   if not Supports(BorlandIDEServices, INTAServices, Services) then Exit;
 
-  AutoPullStagedExe;
   StartGhostTextServer;
 
   GMenuItems:= TObjectList<TMenuItem         >.Create(True);

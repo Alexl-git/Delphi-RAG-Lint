@@ -175,8 +175,16 @@ begin
           EnsureLspClient bakes the separator into its own literal
           (dll-win64\); this line has to append it explicitly. }
         var Win64Dir: string:= ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\';
-        if FileExists(Win64Dir + Result.ExePath) then Result.ExePath:= Win64Dir + Result.ExePath
-        else if FileExists(BplDir + Result.ExePath) then Result.ExePath:= BplDir + Result.ExePath;
+        if FileExists(Win64Dir + Result.ExePath) then Result.ExePath:= Win64Dir + Result.ExePath;
+        { THE BPL-DIRECTORY FALLBACK IS DELIBERATELY GONE (2026-08-26). It read
+          <bpl-dir>\drag-lint.exe -- 32-bit territory, beside a 32-bit BPL --
+          and ExeResolver dropped its own 32-bit step for exactly this reason: a
+          fallback that ANSWERS WRONGLY is worse than one that fails, because
+          nothing distinguishes a stale engine's reply from a current one until
+          it happens to reject a flag. It did, on 2026-08-26.
+
+          If dll-win64 holds no engine the bare name now survives untouched and
+          ExeResolver says so loudly, which is the designed failure. }
       end;
       if Reg.ValueExists('DbPathTemplate') then
       begin
