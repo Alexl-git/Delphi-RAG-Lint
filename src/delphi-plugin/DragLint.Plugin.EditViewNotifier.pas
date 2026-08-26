@@ -222,6 +222,78 @@ begin
   end;
 end;
 
+{ ---- PaintLine instrumentation (2026-08-25) -------------------------------
+  Why this exists, since a counter block in a paint handler needs justifying.
+
+  The owner reported "no icons in the gutter", and it turned out to mean the
+  gutter draws NOTHING. Three explanations fitted equally well from outside:
+  PaintLine never runs; it runs and exits early; it runs and paints something
+  illegible. The only signal in the log was ForceGutterRepaint's
+  "gutterAnchor=0", and that is AMBIGUOUS -- GGutterAnchorHwnd comes from
+  WindowFromDC, which returns 0 for the memory DC of a double-buffered paint,
+  so 0 means "PaintLine never ran" OR "PaintLine ran normally". A number that
+  cannot distinguish the two is not evidence, and the session spent on this one
+  would have been minutes if it were.
+
+  So: count what happened and say it. The constraint is that PaintLine fires
+  once per visible line per repaint -- hundreds of times a second while
+  scrolling -- and DLT opens, appends to and closes a file under a lock. One
+  line per call would be a performance bug of its own. Hence counters plus a
+  throttled flush: the first call reports immediately (so "it is running" shows
+  up at once), then at most one summary every FlushMs, and only when something
+  actually changed.
+
+  All of it is inside try/except and never touches the Canvas. }
+const
+  PAINT_FLUSH_MS = 5000;
+
+var
+  GPaintCalls    : Cardinal = 0;
+  GPaintDrawn    : Cardinal = 0;
+  GPaintNoMarkers: Cardinal = 0;   { EnableInlineMarkers off }
+  GPaintNoView   : Cardinal = 0;   { View or Buffer nil }
+  GPaintNoPath   : Cardinal = 0;   { buffer has no filename }
+  GPaintNoRows   : Cardinal = 0;   { cache had nothing for this line }
+  GPaintAllSupp  : Cardinal = 0;   { rows existed, every one switched off }
+  GPaintSeenErr  : Cardinal = 0;
+  GPaintSeenWarn : Cardinal = 0;
+  GPaintSeenInfo : Cardinal = 0;
+  GPaintSeenHint : Cardinal = 0;
+  { GetTickCount64, not GetTickCount: an IDE session outliving the 49.7-day wrap
+    is unlikely but the 32-bit version has no upside here, and drag-lint's own
+    gettickcount-wraparound rule fired on the first draft of this block. }
+  GPaintLastFlush: UInt64 = 0;
+  GPaintLastLine : string = '';
+
+procedure PaintTelemetryFlush(const AFile: string; AForce: Boolean);
+var
+  Now : UInt64;
+  Line: string;
+begin
+  try
+    Now:= GetTickCount64;
+    if (not AForce) and (GPaintLastFlush <> 0) and (Now - GPaintLastFlush < PAINT_FLUSH_MS) then Exit;
+
+    Line:= Format('calls=%d drawn=%d | exits: markersOff=%d noView=%d noPath=%d ' +
+                  'noRows=%d allSuppressed=%d | rows seen: err=%d warn=%d info=%d hint=%d | file=%s',
+                  [GPaintCalls, GPaintDrawn, GPaintNoMarkers, GPaintNoView, GPaintNoPath,
+                   GPaintNoRows, GPaintAllSupp, GPaintSeenErr, GPaintSeenWarn,
+                   GPaintSeenInfo, GPaintSeenHint, ExtractFileName(AFile)]);
+    { Nothing changed since the last report -- stay quiet rather than filling the
+      log with identical lines while the user reads a file without editing it. }
+    if Line = GPaintLastLine then
+    begin
+      GPaintLastFlush:= Now;
+      Exit;
+    end;
+    GPaintLastLine := Line;
+    GPaintLastFlush:= Now;
+    DLT('paint', Line);
+  except
+    { instrumentation must never disturb a paint }
+  end;
+end; // procedure
+
 procedure TDragLintEditViewNotifier.PaintLine(const View: IOTAEditView;
   LineNumber: Integer; const LineText: PAnsiChar; const TextWidth: Word;
   const LineAttributes: TOTAAttributeArray; const Canvas: TCanvas;
@@ -261,13 +333,32 @@ var
   end;
 
 begin
+  Inc(GPaintCalls);
+  { The very first call reports at once -- "PaintLine is running" is the single
+    fact that was unobtainable before, and waiting 5 s for it helps nobody. }
+  if GPaintCalls = 1 then PaintTelemetryFlush('', True);
+
   Settings:= LoadSettings;
-  if not Settings.EnableInlineMarkers then Exit;
-  if View        = nil then Exit;
-  if View.Buffer = nil then Exit;
+  if not Settings.EnableInlineMarkers then
+  begin
+    Inc(GPaintNoMarkers);
+    PaintTelemetryFlush('', False);
+    Exit;
+  end;
+  if (View = nil) or (View.Buffer = nil) then
+  begin
+    Inc(GPaintNoView);
+    PaintTelemetryFlush('', False);
+    Exit;
+  end;
 
   FilePath:= View.Buffer.FileName;
-  if FilePath = '' then Exit;
+  if FilePath = '' then
+  begin
+    Inc(GPaintNoPath);
+    PaintTelemetryFlush('', False);
+    Exit;
+  end;
 
   { v0.46: publish the row<->client-Y anchor for the hover tracker (gutter hover).
     Recorded for EVERY painted line so it stays fresh as the view scrolls. }
@@ -286,17 +377,55 @@ begin
 
   { PaintLine LineNumber is 1-based; cache stores 0-based. }
   Diags:= Cache.GetForLine(FilePath, LineNumber - 1);
-  if Length(Diags) = 0 then Exit;
+  if Length(Diags) = 0 then
+  begin
+    { The overwhelmingly common case -- most lines have no finding -- so this is
+      counted, never logged per call. It matters only in aggregate: "calls in the
+      thousands, noRows equal to calls, rows seen all zero" is the signature of a
+      cache nothing ever populated, which is what happened on 2026-08-24 when the
+      rules-less Win32 engine published 0 findings over the real ones. }
+    Inc(GPaintNoRows);
+    PaintTelemetryFlush(FilePath, False);
+    Exit;
+  end;
 
+  { Severity tally is per ROW, before the switches, so the log distinguishes
+    "the cache is empty" from "the cache is full and every row is switched off". }
+  for D in Diags do
+    case D.Severity of
+      dlsError  : Inc(GPaintSeenErr );
+      dlsWarning: Inc(GPaintSeenWarn);
+      dlsHint   : Inc(GPaintSeenHint);
+      else        Inc(GPaintSeenInfo);
+    end;
+
+  { Most severe ENABLED row wins the glyph colour.
+
+    Seeded from the first enabled row rather than from a constant. The previous
+    seed was dlsHint, and TDragLintSeverity is declared (dlsError, dlsWarning,
+    dlsHint, dlsInfo) -- so dlsInfo has the HIGHEST Ord, and an info-only line
+    could never satisfy Ord(D.Severity) < Ord(MaxSev). It drew the HINT colour
+    instead. Invisible today only because ShowInfoInline is off, and info is
+    ~83% of all findings, so it would have mislabelled the majority of marks the
+    moment that switch was turned on. Seeding from the data cannot go stale if
+    the enum gains a member. }
   HasDiag:= False;
-  MaxSev := dlsHint;
+  MaxSev := dlsInfo;
   for D in Diags do
     if SevEnabled(D.Severity) then
     begin
+      if (not HasDiag) or (Ord(D.Severity) < Ord(MaxSev)) then MaxSev:= D.Severity;
       HasDiag:= True;
-      if Ord(D.Severity) < Ord(MaxSev) then MaxSev:= D.Severity;
     end;
-  if not HasDiag then Exit;
+  if not HasDiag then
+  begin
+    Inc(GPaintAllSupp);
+    PaintTelemetryFlush(FilePath, False);
+    Exit;
+  end;
+
+  Inc(GPaintDrawn);
+  PaintTelemetryFlush(FilePath, False);
 
   Colors:= LoadEditorColors;
 
@@ -523,7 +652,15 @@ begin
   except
   end;
   if (H = 0) and (GGutterAnchorHwnd <> 0) then H:= GGutterAnchorHwnd;
-  DLT('gutter', Format('ForceGutterRepaint: editFormHwnd=%d gutterAnchor=%d', [H, GGutterAnchorHwnd]));
+  { lineHeight and paintCalls are here because gutterAnchor ALONE is ambiguous:
+    GGutterAnchorHwnd comes from WindowFromDC, which returns 0 for the memory DC
+    of a double-buffered paint, so "gutterAnchor=0" reads identically whether
+    PaintLine has never run or has just run normally. That ambiguity is what made
+    the empty-gutter report expensive to diagnose. GGutterLineHeight is set
+    unconditionally whenever PaintLine reaches the anchor block, so a 0 there is
+    real evidence; paintCalls settles it outright. }
+  DLT('gutter', Format('ForceGutterRepaint: editFormHwnd=%d gutterAnchor=%d lineHeight=%d paintCalls=%d',
+      [H, GGutterAnchorHwnd, GGutterLineHeight, GPaintCalls]));
   if (H <> 0) and IsWindow(H) then
   try
     RedrawWindow(H, nil, 0, RDW_INVALIDATE or RDW_UPDATENOW or RDW_ALLCHILDREN or RDW_ERASE);
