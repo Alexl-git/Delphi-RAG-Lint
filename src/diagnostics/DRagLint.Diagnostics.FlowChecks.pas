@@ -974,6 +974,70 @@ begin
   end;
 end;
 
+/// <summary>True when AAsg assigns the literal <c>nil</c> to a local whose
+/// declared type is an interface -- i.e. the store RELEASES a reference rather
+/// than producing a value.</summary>
+/// <param name="AAsg">The assignment node under test.</param>
+/// <param name="ASrc">Source bytes backing the node.</param>
+/// <param name="ATypeText">The target's declared type text, verbatim from the
+/// routine var table.</param>
+/// <param name="AStore">Symbol store used to resolve the type's kind; may be
+/// nil, in which case IsInterfaceType falls back to the 'I'+uppercase spelling
+/// convention.</param>
+/// <param name="AFileId">File id scoping the resolution (0 when no store).</param>
+/// <returns>True when the store is a release and must not be reported as dead.</returns>
+/// <remarks>
+/// <para>Sibling of ProtectedByFollowingTry, and open for the same reason: the
+/// rule was not merely noisy, ITS ADVICE WAS WRONG. For an interface variable
+/// <c>X := nil</c> drops a reference, which for the last reference runs
+/// _Release and therefore the destructor -- an observable side effect liveness
+/// cannot see, because liveness models a store as producing a VALUE. Reported
+/// 2026-08-25 against DataCopy, where TConfigurationService writes its INI file
+/// in its destructor, so deleting the flagged line does not tidy the code, it
+/// stops the file being written.</para>
+/// <para>Deliberately narrow: ONLY the nil literal. A store of a non-nil
+/// interface value that is overwritten before any read is still a genuine dead
+/// store and still fires -- <c>X := nil</c> is the only shape that can have no
+/// value purpose whatsoever, so the release is the only thing it can be for.
+/// Exempting every <c>:= nil</c> instead would silence class references, where
+/// there is no refcount and nothing observable happens.</para>
+/// </remarks>
+function ReleasesInterfaceRef(const AAsg: TTSNode; const ASrc: TBytes;
+  const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
+var
+  Rhs: TTSNode;
+begin
+  Result := False;
+  Rhs := AAsg.ChildByField('rhs');
+  if Rhs.IsNull then Exit;
+  if not SameText(Trim(NodeStr(Rhs, ASrc)), 'nil') then Exit;
+  Result := IsInterfaceType(ATypeText, AStore, AFileId);
+end;
+
+/// <summary>True when a store the liveness lattice calls DEAD carries a side
+/// effect the lattice cannot see, so reporting it would give wrong advice.</summary>
+/// <param name="AAsg">The assignment node under test.</param>
+/// <param name="AName">The target local's name (for the try-handler scan).</param>
+/// <param name="ATypeText">The target's declared type text.</param>
+/// <param name="ASrc">Source bytes backing the node.</param>
+/// <param name="AStore">Symbol store for type resolution; may be nil.</param>
+/// <param name="AFileId">File id scoping the resolution (0 when no store).</param>
+/// <returns>True when the store must NOT be reported as a dead store.</returns>
+/// <remarks>Names the one thing ProtectedByFollowingTry and ReleasesInterfaceRef
+/// have in common, which is the whole reason both exist: liveness models a store
+/// as producing a VALUE, and in Delphi a store can also produce an OBSERVABLE
+/// EFFECT -- making an exception path safe, or dropping the last reference to an
+/// interface and running its destructor. Both were reported as false positives
+/// whose advice, followed, breaks working code. A third shape belongs here, not
+/// in a fifth conjunct at the call site.</remarks>
+function StoreHasEffectLivenessCannotSee(const AAsg: TTSNode;
+  const AName, ATypeText: string; const ASrc: TBytes;
+  const AStore: ISymbolStore; AFileId: Int64): Boolean;
+begin
+  Result := ProtectedByFollowingTry(AAsg, AName, ASrc)
+         or ReleasesInterfaceRef(AAsg, ASrc, ATypeText, AStore, AFileId);
+end;
+
 { The lowercased name of the AArgIdx-th parameter (flattening multi-name declArgs). }
 function ParamNameAtIndex(const ADefProc: TTSNode; AArgIdx: Integer; const ASrc: TBytes): string;
 var Hdr, Args, DA, NameId: TTSNode; I, J, Idx: Integer;
@@ -1367,10 +1431,13 @@ var
                 Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars); { whole-var only }
                 if (Tgt >= 0) and (Vars.Get(Tgt).Kind = vkLocal)
                    and ReadAny[Tgt] and (not Live[Tgt])
-                   { A nil-init guarding an exception path is not a dead store,
-                     and reporting it advises a change that CRASHES. See
-                     ProtectedByFollowingTry. }
-                   and (not ProtectedByFollowingTry(It.Node, Vars.Get(Tgt).Name, PF.Src)) then
+                   { Two shapes liveness calls dead that are not: a nil-init
+                     guarding an exception path (deleting it CRASHES), and
+                     `X := nil` on an interface local (that store IS the release,
+                     and the destructor it runs is routinely the point of the
+                     line). See StoreHasEffectLivenessCannotSee. }
+                   and (not StoreHasEffectLivenessCannotSee(It.Node, Vars.Get(Tgt).Name,
+                              Vars.Get(Tgt).TypeText, PF.Src, AStore, AFileId)) then
                 begin
                   ROW := Integer(It.Node.StartPoint.Row) + 1;
                   COL := Integer(It.Node.StartPoint.Column) + 1;
