@@ -238,6 +238,11 @@ var
   FileOfStem: TDictionary<string, Int64>   ; { lower last-segment stem -> fid }
   UnitLine  : TDictionary<Int64, Integer>  ; { fid -> unit decl line }
   Adj       : TDictionary<Int64, TList<Int64>>;
+  { Per-edge section provenance, keyed 'fromFid|toFid'. An edge counts as
+    implementation-only when it appears in an implementation uses and NOT in an
+    interface one -- a unit listed in both still couples through its interface. }
+  EdgeHasImpl: TDictionary<string, Boolean>;
+  EdgeHasIntf: TDictionary<string, Boolean>;
   { Tarjan state }
   Index     : TDictionary<Int64, Integer>  ;
   LowLink   : TDictionary<Int64, Integer>  ;
@@ -311,7 +316,30 @@ var
           var F: TLintFinding:= Default(TLintFinding);
           F.RuleId  := 'circular-uses';
           F.Severity:= 'warning';
-          F.Message := Format('Circular unit dependency among %d units: %s -- break the cycle (extract shared code or move a use to the implementation section)', [Comp.Count, Names]);
+          { THE ADVICE MUST MATCH WHAT THE CYCLE ACTUALLY IS.
+            A pure interface-section cycle does not compile, so a cycle in a
+            building project ALREADY routes through an implementation-section
+            uses. Telling its author to "move a use to the implementation
+            section" is telling them to do the thing they have already done --
+            `DRagLint.Doc.Harvest` did exactly that, with a comment explaining
+            why, and was then advised to do it again. Only the extraction remedy
+            is left in that case.
+
+            The other branch is kept rather than assumed unreachable: a cycle can
+            be reported over a set of units that is not currently compiling, or
+            where the implementation edge is outside the component. }
+          var HasImplEdge: Boolean:= False;
+          for var Ai: Integer:= 0 to Comp.Count - 1 do
+            for var Bi: Integer:= 0 to Comp.Count - 1 do
+              if Ai <> Bi then
+              begin
+                var K: string:= IntToStr(Comp[Ai]) + '|' + IntToStr(Comp[Bi]);
+                if EdgeHasImpl.ContainsKey(K) then HasImplEdge:= True;
+              end;
+          if HasImplEdge then
+            F.Message := Format('Circular unit dependency among %d units: %s -- it already routes through an implementation-section uses, so it compiles; this is a coupling smell, not a build error. Extract the shared code into a new unit (moving another use to the implementation section will NOT break this cycle)', [Comp.Count, Names])
+          else
+            F.Message := Format('Circular unit dependency among %d units: %s -- break the cycle (extract shared code or move a use to the implementation section)', [Comp.Count, Names]);
           F.FilePath:= AStore.GetFilePath(Anchor);
           var Ln: Integer:= 1;
           UnitLine.TryGetValue(Anchor, Ln);
@@ -341,6 +369,8 @@ begin
   FileOfStem:= TDictionary<string, Int64>.Create;
   UnitLine  := TDictionary<Int64, Integer>.Create;
   Adj       := TDictionary<Int64, TList<Int64>>.Create;
+  EdgeHasImpl:= TDictionary<string, Boolean>.Create;
+  EdgeHasIntf:= TDictionary<string, Boolean>.Create;
   Index     := TDictionary<Int64, Integer>.Create;
   LowLink   := TDictionary<Int64, Integer>.Create;
   OnStack   := TDictionary<Int64, Boolean>.Create;
@@ -382,6 +412,25 @@ begin
           FileOfStem.TryGetValue(S, Tgt);
         end;
         if (Tgt > 0) and (Tgt <> Fid) and (not Lst.Contains(Tgt)) then Lst.Add(Tgt);
+        { Remember WHICH SECTION each edge came from, so the finding can tell the
+          reader something they can act on. An edge is recorded as
+          implementation-only when the unit appears in the implementation uses and
+          NOT in the interface uses -- a unit listed in both still couples through
+          its interface, so it is not evidence that the cycle has already been
+          relaxed. }
+        if Tgt > 0 then
+        begin
+          var EKey: string:= IntToStr(Fid) + '|' + IntToStr(Tgt);
+          if U.Section = uusImplementation then
+          begin
+            if not EdgeHasIntf.ContainsKey(EKey) then EdgeHasImpl.AddOrSetValue(EKey, True);
+          end
+          else if U.Section = uusInterface then
+          begin
+            EdgeHasIntf.AddOrSetValue(EKey, True);
+            EdgeHasImpl.Remove(EKey);
+          end;
+        end;
       end;
     end;
     { 3) Tarjan SCC over all nodes. }
@@ -392,6 +441,8 @@ begin
   finally
     for var L in Adj.Values do L.Free;
     Adj.Free;
+    EdgeHasImpl.Free;
+    EdgeHasIntf.Free;
     Stack.Free; OnStack.Free; LowLink.Free; Index.Free;
     UnitLine.Free; FileOfStem.Free; FileOfUnit.Free; UnitName.Free;
     Findings.Free;
