@@ -1313,14 +1313,26 @@ end; // procedure
 //   index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate
 // -- so the caller exits nonzero instead of hitting a "no such column" field
 // error. Returns the store (never nil on a successful open); check AOk.
-function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean): ISymbolStore;
+// AQuiet suppresses the schema-behind line. That line goes to STDOUT, and on a
+// machine-readable run (`lint --format sarif|json`) it lands INSIDE the document
+// and stops it parsing -- the hazard that gates the --fix store in DoLint, and
+// that tests/ergonomics/run_pipeline_tests.ps1 pins. A caller that opens a store
+// merely to sharpen an analysis (rather than because the user asked for the
+// index) has no business printing anything, so it passes True and simply gets
+// AOk=False when the schema is behind.
+function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
 var
   Found   : Integer;
   Expected: Integer;
 begin
   Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
   if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
-  else begin AOk:= False; Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
+  else
+  begin
+    AOk:= False;
+    if not AQuiet then
+      Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected]));
+  end;
 end;
 
 // WRITABLE open (same schema-current guard as OpenReadOnlyStore). Used by
@@ -7820,8 +7832,94 @@ begin
       { v0.63: virtual/dynamic method called from a constructor of its own class }
       if (AArgs.Rule = '') or (AArgs.Rule = 'virtual-method-in-constructor') then Findings:= Findings
         + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(EffPath);
-      { M2: flow-sensitive checks (definite-assignment etc.); no store on the bare lint path }
-      for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath) do
+      { M2: flow-sensitive checks (definite-assignment etc.).
+
+        THE STORE IS NOT OPTIONAL HERE. Without it the definite-assignment pass
+        cannot tell a RECORD local -- whose own `X.Init` method call DEFINES it,
+        a record having no constructor -- from a class reference, where the same
+        shape is a nil dereference worth reporting. IsRecordType has no
+        naming-convention fallback by design, so store-free it answers False for
+        everything and every record local read after its own initialiser call is
+        reported as a DEFINITE use-before-assignment.
+
+        Measured 2026-08-26 over this project's own 90 scanned source files:
+        store-free emits 23 used-before-assignment ERRORS where lint-all's
+        store-backed pass emits 3. The other two numbers are IDENTICAL across
+        both paths -- 34 warnings and 29 overwrite-before-read -- so the store is
+        the only variable, and the 20 extra errors are all false.
+
+        That is precisely what the editor gutter shows: DragLint.Plugin.
+        LiveDiagnostics runs `drag-lint lint "<file>"` with NO --db, and this
+        rule has been error-severity since 9f78db3. 20 of 23 red marks on our
+        own source were manufactured by the missing store.
+
+        Resolved like every other consumer resolves one (ResolveConsumerDbs
+        orders by MEMBERSHIP when the run names a file), and the store is kept
+        only when this exact file is IN that index -- a foreign project's
+        symbols would answer wrong-but-plausibly, which is the hazard the
+        membership ordering exists for. No index, or the file not in it, falls
+        back to exactly the previous store-free behaviour.
+
+        Cost was measured BEFORE this was added, not assumed: three runs
+        store-free 4.29 s vs 4.07 s with the store -- the open disappears next
+        to process start and parse. Opened QUIETLY because OpenReadOnlyStore's
+        schema-behind line goes to stdout and would corrupt --format sarif. }
+      var FlowStore: ISymbolStore := nil;
+      var FlowFid  : Int64        := 0;
+      { MEMBERSHIP is the criterion, not existence and not position. Two traps
+        sit on this path and each one alone silently restores the store-free
+        behaviour this block exists to end:
+
+        1. AArgs.DbPath is DEFAULTED to <cwd>\drag-lint.sqlite, a convention the
+           _D-RAG layout retired. On this repo that is
+           C:\Projects\Delphi-RAG-lint\drag-lint.sqlite -- which EXISTS, dated
+           2026-08-25, and holds ZERO files. A stray empty index parked on the
+           old default path passes any existence test, opens cleanly, reports a
+           current schema, and then answers "I do not have that file" for
+           everything. Testing `<> ''` or TFile.Exists both take it.
+        2. ResolveConsumerDbs' FIRST entry is the manifest's first section when
+           the run names no --project -- on this machine an unrelated ORM3
+           project. Position is not ownership.
+
+        So ask every candidate the only question that matters: do you contain
+        THIS file? DbContainsFile is the same probe `resolve-dbs --in` uses, so
+        this verb and that diagnostic now answer with one index by construction. }
+      var FlowAbs  : string := ExpandFileName(EffPath);
+      var FlowDb   : string := '';
+      if TFile.Exists(AArgs.DbPath) and DbContainsFile(AArgs.DbPath, FlowAbs) then
+        FlowDb:= AArgs.DbPath;
+      if FlowDb = '' then
+        for var FlowC: string in ResolveConsumerDbs(AArgs) do
+          if TFile.Exists(FlowC) and DbContainsFile(FlowC, FlowAbs) then
+          begin FlowDb:= FlowC; Break; end;
+      if (FlowDb <> '') and TFile.Exists(FlowDb) then
+      begin
+        var FlowOk: Boolean;
+        FlowStore:= OpenReadOnlyStore(FlowDb, FlowOk, {AQuiet=}True);
+        if not FlowOk then FlowStore:= nil;
+        if FlowStore <> nil then
+        begin
+          { EXPAND FIRST. The index stores absolute, backslash-separated paths,
+            so a relative or forward-slash target misses and the store is then
+            dropped -- silently restoring the very false positives this block
+            exists to remove. Measured on our own CLI.pas: the absolute form
+            reports 2 findings (agreeing with lint-all) and the relative form
+            `src/cli/DRagLint.CLI.pas` reported 20. Try the path as given first,
+            since a caller that already passes the store's own canonical form
+            (lint-all does) must not pay an ExpandFileName per file. }
+          FlowFid:= FlowStore.FindFileIdByPath(EffPath);
+          if FlowFid <= 0 then FlowFid:= FlowStore.FindFileIdByPath(ExpandFileName(EffPath));
+          if FlowFid <= 0 then begin FlowStore:= nil; FlowFid:= 0; end;
+        end;
+      end;
+      { Say which index answered. Both traps above are INVISIBLE from the output
+        -- a dropped store does not fail, it just quietly reports more -- and
+        this line is what turned four rebuild-and-guess cycles into one run.
+        stderr, so it cannot corrupt --format json|sarif. }
+      if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
+        Writeln(ErrOutput, Format('[flowdb] eff=%s db=%s store=%s fid=%d',
+          [EffPath, FlowDb, BoolToStr(FlowStore <> nil, True), FlowFid]));
+      for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath, FlowStore, FlowFid, nil) do
         if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.68: naming-convention prefix rules (config-driven, no store on bare lint path) }
       if (AArgs.Rule = '') or (AArgs.Rule = 'type-name-prefix') or (AArgs.Rule = 'field-name-prefix') or (AArgs.Rule = 'param-name-prefix') or
