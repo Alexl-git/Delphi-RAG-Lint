@@ -57,6 +57,9 @@ uses
   , { v0.47: GGutterAnchorHwnd for forced repaint }
     DragLint.Plugin.Settings
   , DragLint.Plugin.ExeResolver
+  , { pure line parser -- split out so a console harness can test it; see
+      tests\lintoutputparse\ }
+    DragLint.Plugin.LintOutputParse
   ;
 
 const
@@ -174,17 +177,6 @@ begin
   Result:= 'lint';
 end;
 
-function SeverityFromTag(const ATag: string): Integer;
-var
-  L: string;
-begin
-  L:= LowerCase(ATag);
-  if Pos('error', L) > 0 then Result:= 1
-  else if Pos('warn', L) > 0 then Result:= 2
-  else if Pos('hint', L) > 0 then Result:= 4
-  else Result:= 3; { info }
-end;
-
 function TLintDiagnosticProvider.GetDiagnostics( const ACtx: TDragLintDiagContext): TDragLintDiagItems;
 var
   Cmd    : string                  ;
@@ -194,19 +186,14 @@ var
   Tag    : string                  ;
   Rule   : string                  ;
   Msg    : string                  ;
-  Loc    : string                  ;
-  ColStr : string                  ;
-  Loc2   : string                  ;
-  LineStr: string                  ;
   Lines  : TStringList             ;
   Acc    : TList<TDragLintDiagItem>;
   D      : TDragLintDiagItem       ;
   i      : Integer                 ;
-  p      : Integer                 ;
-  lb     : Integer                 ;
-  rb     : Integer                 ;
-  c1     : Integer                 ;
-  c2     : Integer                 ;
+  p       : Integer                ;
+  LineNo  : Integer                ;
+  ColNo   : Integer                ;
+  Rejected: Integer                ; { non-blank lines that were not findings }
 begin
   SetLength(Result, 0);
   if ACtx.ExePath = '' then Exit;
@@ -227,6 +214,7 @@ begin
   end;
   LiveLog(Format('lint: output=%d bytes', [Length(Output)]));
 
+  Rejected:= 0;
   Acc:= TList<TDragLintDiagItem>.Create;
   Lines:= TStringList.Create;
   try
@@ -234,20 +222,13 @@ begin
     for i:= 0 to Lines.Count - 1 do
     begin
       Line:= Lines[i];
-      lb:= Pos('[', Line);
-      rb:= Pos(']', Line);
-      if (lb = 0) or (rb = 0) or (rb < lb) then Continue; { not a finding line }
-      { left of '[' is  <path>:<line>:<col>   -- col is after the last two ':' }
-      Loc:= Trim(Copy(Line, 1, lb - 1));
-      c2:= LastDelimiter(':', Loc);
-      if c2 <= 1 then Continue;
-      ColStr:= Copy(Loc, c2 + 1, MaxInt);
-      Loc2:= Copy(Loc, 1, c2 - 1);
-      c1:= LastDelimiter(':', Loc2);
-      if c1 <= 1 then Continue;
-      LineStr:= Copy(Loc2, c1 + 1, MaxInt);
-      Tag:= Copy(Line, lb + 1, rb - lb - 1); { severity word }
-      Rest:= Trim(Copy(Line, rb + 1, MaxInt)); { rule: message }
+      { A line that does not yield a real location is NOT a finding. It used to
+        become one, on line 1 of the user's file. }
+      if not TryParseFindingLine(Line, LineNo, ColNo, Tag, Rest) then
+      begin
+        if Trim(Line) <> '' then Inc(Rejected);
+        Continue;
+      end;
       p:= Pos(':', Rest);
       if p > 0 then
       begin
@@ -261,8 +242,8 @@ begin
 
       D:= Default(TDragLintDiagItem);
       D.FilePath:= ACtx.FilePath; { map back to the real (saved) path }
-      D.Line:= StrToIntDef(Trim(LineStr), 1);
-      D.Col := StrToIntDef(Trim(ColStr ), 1);
+      D.Line:= LineNo;
+      D.Col := ColNo;
       D.EndLine:= D.Line;
       D.EndCol:= D.Col + 1;
       D.Severity:= SeverityFromTag(Tag);
@@ -271,7 +252,12 @@ begin
       D.Source := 'lint';
       Acc.Add(D);
     end; // for
-    LiveLog(Format('lint: parsed %d finding(s)', [Acc.Count]));
+    { Report rejects. The engine prints a note banner and an "N finding(s)"
+      summary, so a small non-zero count is normal; a count that TRACKS the
+      finding count means the parser is dropping real findings, and that is only
+      visible if it is printed. }
+    LiveLog(Format('lint: parsed %d finding(s), %d non-finding line(s) rejected',
+      [Acc.Count, Rejected]));
     Result:= Acc.ToArray;
   finally
     Lines.Free;

@@ -73,6 +73,7 @@ contains
   DragLint.Plugin.DockForm in 'DragLint.Plugin.DockForm.pas' {DragLintDockFrame: TFrame},
   DragLint.Plugin.Providers in 'DragLint.Plugin.Providers.pas',
   DragLint.Plugin.LiveDiagnostics in 'DragLint.Plugin.LiveDiagnostics.pas',
+  DragLint.Plugin.LintOutputParse in 'DragLint.Plugin.LintOutputParse.pas',
   DRagLint.Core.JobObject in '..\core\DRagLint.Core.JobObject.pas',
   DRagLint.Core.GhostText in '..\core\DRagLint.Core.GhostText.pas',
   DragLint.Plugin.JobQueue in 'DragLint.Plugin.JobQueue.pas',
