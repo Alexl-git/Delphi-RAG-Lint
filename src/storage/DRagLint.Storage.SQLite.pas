@@ -5963,6 +5963,18 @@ begin
       R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
       if not Q.FieldByName('enclosing_symbol_id').IsNull then
         R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt; // v13
+      { receiver_text was selected by the * above and then dropped on the floor
+        -- here and in the sibling method, while FindCallersByName has always
+        read it. Without it a construction site `TStringBuilder.Create` is
+        INVISIBLE: that member-access ref carries 'Create' in name_text and the
+        TYPE only in receiver_text, so any caller asking "does this file
+        reference type X" misses every X.Create. Found by `query type-usage`
+        reporting 2 refs for TStringBuilder where the table holds 3. FindField,
+        not FieldByName, so a pre-v20 DB yields '' rather than raising -- the
+        same guard the method that got this right already uses. }
+      var RcvF: TField:= Q.FindField('receiver_text');
+      if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString
+      else R.ReceiverText:= '';
       List.Add(R);
       Q.Next;
     end;
@@ -6000,6 +6012,18 @@ begin
       R.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
       if not Q.FieldByName('enclosing_symbol_id').IsNull then
         R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt; // v13
+      { receiver_text was selected by the * above and then dropped on the floor
+        -- here and in the sibling method, while FindCallersByName has always
+        read it. Without it a construction site `TStringBuilder.Create` is
+        INVISIBLE: that member-access ref carries 'Create' in name_text and the
+        TYPE only in receiver_text, so any caller asking "does this file
+        reference type X" misses every X.Create. Found by `query type-usage`
+        reporting 2 refs for TStringBuilder where the table holds 3. FindField,
+        not FieldByName, so a pre-v20 DB yields '' rather than raising -- the
+        same guard the method that got this right already uses. }
+      var RcvF: TField:= Q.FindField('receiver_text');
+      if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString
+      else R.ReceiverText:= '';
       List.Add(R);
       Q.Next;
     end;

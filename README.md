@@ -472,6 +472,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 | `query --text "<phrase>"` | Search **string literals only** -- constants, resourcestrings, DFM captions, SQL exception text | `--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N` |
 | [`query find-callers`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-find-callers) `--name <n>` | Every call-site for a symbol, with source context | `--context N`, `--resolved` (precise call-edges) |
 | `query find` | Find symbols by documentation state | `--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public` |
+| [`query type-usage`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-type-usage) `--in <f.pas>` | Of a LIST of type names, which does this file actually **reference**? Counts declarations, `X.Create` sites and inheritance; a name only in a comment or string literal is not a reference -- the difference from grep. Name-keyed | `--names A,B,C`, `--names-file <f>`, `--json` |
 | [`query ancestors`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-ancestors) `--name <t>` | Transitive class/interface ancestry | `--of <ancestor>` |
 | [`query typecat`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-typecat) `--name <t>` | Resolve a type's category (class/interface/float/string/...) | |
 | `query hints` | List stored compiler hints/warnings | `--name <code>`, `--rule <severity>` |

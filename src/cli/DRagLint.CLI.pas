@@ -167,6 +167,8 @@ type
     QName           : string        ;
     OfName          : string        ; // v11 (M1): query ancestors --of <ancestor> (is-descendant check)
     InFile          : string        ; // --in <file.pas> (resolve-uses scope context)
+    TypeNames       : string        ; // --names A,B,C: type names for `query type-usage`
+    NamesFile       : string        ; // --names-file <f>: same list, one name per line
     Rule            : string        ;
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
@@ -511,6 +513,13 @@ begin
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
   Writeln('  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]');
   Writeln('                               unit outline; backs the IDE Structure form.');
+  Writeln('  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]');
+  Writeln('                               of these type names, which does THIS file actually REFERENCE? Answers a');
+  Writeln('                               LIST in one pass (an RTL surface, say). Counts declarations, X.Create');
+  Writeln('                               construction sites and inheritance; a name appearing only in a COMMENT or');
+  Writeln('                               a STRING LITERAL is correctly not a reference -- which is the difference');
+  Writeln('                               from grep. Name-keyed: a project type sharing an RTL name is');
+  Writeln('                               indistinguishable, and the output says so.');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
@@ -887,6 +896,8 @@ begin
     end
     else if (A = '--name') and (i < ParamCount) then begin Inc(i); Result.Name:= ParamStr(i); end
     else if ((A = '--in') or (A = '--file')) and (i < ParamCount) then begin Inc(i); Result.InFile:= ParamStr(i); end
+    else if (A = '--names'     ) and (i < ParamCount) then begin Inc(i); Result.TypeNames:= ParamStr(i); end
+    else if (A = '--names-file') and (i < ParamCount) then begin Inc(i); Result.NamesFile:= ParamStr(i); end
     else if (A = '--qname') and (i < ParamCount) then begin Inc(i); Result.QName:= ParamStr(i); end
     else if (A = '--of') and (i < ParamCount) then { v11 (M1): query ancestors --of }
     begin
@@ -3895,6 +3906,167 @@ begin
   end; // try
 end; // begin
 
+// v1.7: `query type-usage --in <file.pas> --names A,B,C` -- of these type names,
+// which does THIS file actually reference?
+//
+// The question this answers is "does this unit touch any of <list>", asked of a
+// list rather than one name at a time. Grep answers a different question: it
+// cannot tell a reference from the same word inside a comment or a string
+// literal, and on an RTL-sized name list that difference is most of the output.
+//
+// WHY refs IS THE WHOLE ANSWER, verified against the live index before this was
+// written rather than assumed:
+//   * a declaration `V: TStringBuilder`      -> refs.kind='type_use'
+//   * a construction `TStringBuilder.Create` -> a 'read' of the name PLUS a
+//     'member-access' whose receiver_text is the name. So the scan must look at
+//     receiver_text too, or every X.Create site is missed.
+//   * inheritance `class(TInterfacedObject)` -> ALSO a plain type_use ref in the
+//     same file (checked: TIndexer, TSQLiteSymbolStore). type_ancestors does not
+//     need joining, which is just as well -- it holds 20 rows here.
+//   * string literals live in their own table and comments are not indexed at
+//     all, so the comment/literal exclusion is free rather than a filter.
+//
+// NAME-KEYED, and the output says so. RTL type names are matched as text: a
+// project type that happens to share a name is indistinguishable, because
+// refs.symbol_id is NULL for every type_use row.
+function DoQueryTypeUsage(const AArgs: TArgs): Integer;
+type
+  TNameTally = record
+    Name : string ;
+    Kinds: TDictionary<string, Integer>;
+    First: Integer;
+    Total: Integer;
+  end;
+var
+  PathsToScan: TArray<string>;
+  DbPath     : string        ;
+  Store      : ISymbolStore  ;
+  Wanted     : TArray<string>;
+  Tallies    : TArray<TNameTally>;
+  I          : Integer       ;
+begin
+  if AArgs.InFile = '' then
+  begin Writeln('ERROR: query type-usage requires --in <file.pas>'); Exit(2); end;
+
+  { The list may come from --names or --names-file. A file is the practical form
+    once the list is an RTL surface rather than three names on a command line,
+    and it sidesteps the shell's own quoting limits. }
+  Wanted:= nil;
+  if AArgs.TypeNames <> '' then
+    for var Nm: string in SplitString(AArgs.TypeNames, ',') do
+      if Trim(Nm) <> '' then Wanted:= Wanted + [Trim(Nm)];
+  if AArgs.NamesFile <> '' then
+  begin
+    if not TFile.Exists(AArgs.NamesFile) then
+    begin Writeln('ERROR: --names-file not found: ', AArgs.NamesFile); Exit(2); end;
+    for var Ln: string in TFile.ReadAllLines(AArgs.NamesFile) do
+      if (Trim(Ln) <> '') and (not Trim(Ln).StartsWith('#')) then Wanted:= Wanted + [Trim(Ln)];
+  end;
+  if Length(Wanted) = 0 then
+  begin Writeln('ERROR: query type-usage requires --names A,B,C or --names-file <f>'); Exit(2); end;
+
+  if not TFile.Exists(AArgs.InFile) then
+  begin Writeln('ERROR: file not found: ', AArgs.InFile); Exit(2); end;
+
+  PathsToScan:= ResolveConsumerDbs(AArgs);
+
+  SetLength(Tallies, Length(Wanted));
+  for I:= 0 to High(Wanted) do
+  begin
+    Tallies[I].Name := Wanted[I];
+    Tallies[I].Kinds:= TDictionary<string, Integer>.Create;
+    Tallies[I].First:= 0;
+    Tallies[I].Total:= 0;
+  end;
+  try
+    { MEMBERSHIP, not position -- the same rule the lint flow-check store follows.
+      The first configured DB is an unrelated project on a multi-project box, and
+      an index that does not hold this file answers "no usage" for everything,
+      which is indistinguishable from a clean answer. }
+    var Abs   : string := ExpandFileName(AArgs.InFile);
+    var Found : Boolean:= False;
+    for DbPath in PathsToScan do
+    begin
+      if not TFile.Exists(DbPath) then Continue;
+      if not DbContainsFile(DbPath, Abs) then Continue;
+      var RoOk: Boolean;
+      Store:= OpenReadOnlyStore(DbPath, RoOk);
+      if not RoOk then Continue;
+      var Fid: Int64:= Store.FindFileIdByPath(Abs);
+      if Fid <= 0 then Continue;
+      Found:= True;
+
+      for var R: TReference in Store.GetReferencesFromFile(Fid) do
+        for I:= 0 to High(Tallies) do
+          if SameText(R.NameText, Tallies[I].Name) or SameText(R.ReceiverText, Tallies[I].Name) then
+          begin
+            var C: Integer;
+            if not Tallies[I].Kinds.TryGetValue(R.Kind, C) then C:= 0;
+            Tallies[I].Kinds.AddOrSetValue(R.Kind, C + 1);
+            Inc(Tallies[I].Total);
+            if (Tallies[I].First = 0) or (R.StartLine < Tallies[I].First) then
+              Tallies[I].First:= R.StartLine;
+            Break; { one requested name per ref }
+          end;
+      Break; { the owning index answered }
+    end;
+
+    if not Found then
+    begin
+      Writeln('ERROR: no index contains ', AArgs.InFile);
+      Writeln('Run "drag-lint index <dir> --db <db>" first, or pass --db explicitly.');
+      Exit(2);
+    end;
+
+    var Hits: Integer:= 0;
+    for I:= 0 to High(Tallies) do if Tallies[I].Total > 0 then Inc(Hits);
+
+    if AArgs.AsJson then
+    begin
+      var Arr: TJSONArray:= TJSONArray.Create;
+      try
+        for I:= 0 to High(Tallies) do
+        begin
+          var O: TJSONObject:= TJSONObject.Create;
+          O.AddPair('name'      , Tallies[I].Name);
+          O.AddPair('referenced', TJSONBool.Create(Tallies[I].Total > 0));
+          O.AddPair('count'     , TJSONNumber.Create(Tallies[I].Total));
+          if Tallies[I].First > 0 then O.AddPair('first_line', TJSONNumber.Create(Tallies[I].First));
+          var K: TJSONObject:= TJSONObject.Create;
+          for var Pair in Tallies[I].Kinds do K.AddPair(Pair.Key, TJSONNumber.Create(Pair.Value));
+          O.AddPair('kinds', K);
+          Arr.AddElement(O);
+        end;
+        Writeln(Arr.ToJSON);
+      finally
+        Arr.Free;
+      end;
+    end
+    else
+    begin
+      Writeln('file: ', AArgs.InFile);
+      for I:= 0 to High(Tallies) do
+      begin
+        if Tallies[I].Total = 0 then
+          Writeln(Format('  %-32s -', [Tallies[I].Name]))
+        else
+        begin
+          var KindStr: string:= '';
+          for var Pair in Tallies[I].Kinds do
+            KindStr:= KindStr + Format('%s=%d ', [Pair.Key, Pair.Value]);
+          Writeln(Format('  %-32s REFERENCED  %-46s first line %d',
+            [Tallies[I].Name, Trim(KindStr), Tallies[I].First]));
+        end;
+      end;
+      Writeln(Format('%d of %d name(s) referenced (name-keyed: a same-named project type is indistinguishable)',
+        [Hits, Length(Tallies)]));
+    end;
+    Result:= 0;
+  finally
+    for I:= 0 to High(Tallies) do Tallies[I].Kinds.Free;
+  end;
+end; // function
+
 // v0.57 Task 8: text-constant search (phrase / any-order / substring).
 // Placed immediately before DoQuery so no forward declaration is needed.
 function DoQueryText(const AArgs: TArgs): Integer;
@@ -4028,6 +4200,8 @@ var
 begin
   // v0.57 Task 8: text-content search routes to its own handler.
   if AArgs.TextQuery <> '' then Exit(DoQueryText(AArgs));
+  // v1.7: "which of these type names does this file reference?"
+  if AArgs.SubCommand = 'type-usage' then Exit(DoQueryTypeUsage(AArgs));
 
   // v0.45 Task 9: resolve DB list (explicit --db or manifest-driven).
   PathsToScan:= ResolveConsumerDbs(AArgs);

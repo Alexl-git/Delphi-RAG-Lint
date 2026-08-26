@@ -47,6 +47,7 @@ The foundation. Everything below that says *(index)* reads what this produces.
 | What does this call | [`find-callees`](find-callees) |
 | Class / interface ancestry, transitively | [`query ancestors`](query-ancestors) |
 | Resolve a type category (class, interface, float, string, ...) | [`query typecat`](query-typecat) |
+| Does this file reference any of these type names? | [`query type-usage`](query-type-usage) |
 | Type of the expression at a cursor position | `typeat <file>:<line>:<col>` |
 | Find by documentation state | `query find --doc-tag / --no-docs` |
 | Class helpers of a type | [`helpers-of`](helpers-of) |

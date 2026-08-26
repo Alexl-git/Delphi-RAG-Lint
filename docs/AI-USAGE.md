@@ -140,6 +140,7 @@ in 2b.
 | `query --text "<phrase>"` | full-text search over `.pas`/`.dfm`/`.sql` constants: messages, DFM captions, SQL exception text (`--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N`) |
 | `query find-callers --name X` | callers of a symbol (`--context N`; `--resolved` for precise call-edge callers). `--resolved` also reports routines **reached as a callback** -- handed somewhere by bare name, `@X`, or an event assignment -- marked `[callback]` rather than `[certain]`/`[ambiguous]`, because that is a reach, not a call. Without it a live predicate passed to e.g. `TDirectory.GetFiles` read as dead |
 | `query find` | doc-driven find (`--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public`) |
+| `query type-usage --in <f.pas>` | **"does this file reference any of these type names?"** asked of a LIST in one pass (`--names A,B,C` or `--names-file <f>`; `--json`). Counts declarations, `X.Create` construction sites (seen through `receiver_text`) and inheritance. A name appearing only in a COMMENT or a STRING LITERAL is correctly NOT a reference -- that is the whole reason to use this over grep. **Name-keyed**: `refs.symbol_id` is NULL for type_use rows, so a project type sharing an RTL name is indistinguishable, and the output says so |
 | `query ancestors --name T` | transitive class/interface hierarchy (`--of <ancestor>`) |
 | `query typecat --name T` | resolve a type's category (float/string/class/interface/...) |
 | `query hints` | stored lint hints (`--name <code>`, `--rule <severity>`) |
