@@ -62,6 +62,9 @@ uses
   , DragLint.Plugin.DbResolver
   , DragLint.Plugin.Settings
   , DragLint.Plugin.ExeResolver
+  , Vcl.ImgList
+  , { per-severity row icons; one asset shared with the editor gutter }
+    DragLint.Plugin.SeverityGlyph
   , DragLint.Plugin.Editor { v0.88 AutoFix: RunAndCaptureStdout for the fix verbs }
   ;
 
@@ -564,6 +567,8 @@ var
   Shown      : Integer            ;
   Caption    : string             ;
   DiagOrder  : TArray<Integer>    ; { indices into FDiags, sorted by (Line, original index) }
+  Imgs       : TCustomImageList   ; { severity icons; nil when unavailable }
+  GlyphPx    : Integer            ;
 begin
   FTree.Items.BeginUpdate;
   try
@@ -591,6 +596,19 @@ begin
         if Result = 0 then Result:= A - B;
       end));
 
+    { --- Severity icons on the message rows (2026-08-25) ---
+      The owner's reference surface is VS Code's PROBLEMS tab, where every row
+      carries a severity icon. This tree carried a text tag instead -- '[E] ',
+      '[W] ' -- which is what "no icon on the message rows" meant.
+
+      Sized from the screen DPI rather than hardcoded, since a TTreeView grows
+      its row height to fit the image list and a 16px list on a 200% display
+      would give tiny icons beside large text. SeverityGlyphImages caches, so
+      calling it on every rebuild costs a comparison. }
+    GlyphPx:= MulDiv(16, Screen.PixelsPerInch, 96);
+    Imgs   := SeverityGlyphImages(GlyphPx);
+    FTree.Images:= Imgs;
+
     RootDiag:= FTree.Items.Add(nil, Format('Diagnostics (%d)', [Length(FDiags)]));
     RootDiag.Data:= nil;
     FRootDiag:= RootDiag; { v0.88 AutoFix: remember the root for node discrimination }
@@ -600,8 +618,20 @@ begin
       ND:= TStructureNodeData.Create;
       ND.Line:= D.Line + 1;
       ND.Code:= D.Code; { v0.88 AutoFix: rule-id so the popup can offer a per-finding fix }
-      Node:= FTree.Items.AddChild(RootDiag, SeverityPrefix(D.Severity) + Format('(%d) ', [D.Line + 1]) + D.Message);
+      { The '[E] ' text tag and the icon are alternatives, not companions:
+        showing both is noise. But the tag is only dropped when an icon will
+        actually appear -- SeverityGlyphImages returns nil if the list cannot
+        be built, and dropping the tag on that path would leave the row with NO
+        severity at all. Degrade to a tag, never to nothing.
+        CopyDiagnosticsClick keeps the tag unconditionally: clipboard text has
+        no icons. }
+      if Assigned(Imgs) then Caption:= Format('(%d) ', [D.Line + 1]) + D.Message
+      else Caption:= SeverityPrefix(D.Severity) + Format('(%d) ', [D.Line + 1]) + D.Message;
+      Node:= FTree.Items.AddChild(RootDiag, Caption);
       Node.Data:= ND;
+      { Not Ord(D.Severity) -- the enum orders hint before info. }
+      Node.ImageIndex   := SeverityGlyphIndex(D.Severity);
+      Node.SelectedIndex:= Node.ImageIndex;
     end;
 
     { --- Code Elements root (filtered by AFilter) --- }
