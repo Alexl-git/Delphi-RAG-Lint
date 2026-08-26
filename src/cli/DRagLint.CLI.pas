@@ -900,7 +900,17 @@ begin
     else if ((A = '--in') or (A = '--file')) and (i < ParamCount) then begin Inc(i); Result.InFile:= ParamStr(i); end
     else if (A = '--names'     ) and (i < ParamCount) then begin Inc(i); Result.TypeNames:= ParamStr(i); end
     else if (A = '--names-file') and (i < ParamCount) then begin Inc(i); Result.NamesFile:= ParamStr(i); end
-    else if (A = '--unit') and (i < ParamCount) and (Result.SubCommand <> 'ghost-check') and (Result.SubCommand <> 'document') then begin Inc(i); Result.UnitName:= ParamStr(i); end
+    { NO `--unit` HANDLER HERE. There is exactly one, further down, and it routes
+      by Result.Command (document/document-all -> DocUnit, query -> UnitName,
+      otherwise -> GhostUnit).
+
+      A second handler was added at this position in 571d006 and, being EARLIER in
+      the same else-if chain, shadowed it. Its guards tested Result.SubCommand,
+      but `document` and `ghost-check` are COMMANDS, not subcommands, so both
+      guards were always true: `--unit` was consumed here, DocUnit was never set,
+      and `document --unit` fell through to its usage banner and exit 2. That took
+      out 66 battery tests -- the whole autodoc suite -- while every CONTENT
+      assertion in them still passed, because the verb never ran at all. }
     else if (A = '--qname') and (i < ParamCount) then begin Inc(i); Result.QName:= ParamStr(i); end
     else if (A = '--of') and (i < ParamCount) then { v11 (M1): query ancestors --of }
     begin
