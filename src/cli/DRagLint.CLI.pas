@@ -14,13 +14,13 @@ const
     away from the CLI banner again -- see DRAGLINT_VERSION. }
   VERSION = DRAGLINT_VERSION;
 
-/// <returns><!-- drag-lint:auto -->Observed: 2; DoIndexAll(Args); DoIndex(Args); DoQuery
-/// (Args); DoRules (Args); DoLint (Args).</returns>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: 2; DoIndexAll(Args);
+/// DoIndex(Args); DoQuery (Args); DoRules (Args); DoLint (Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+85 more)
-/// Complexity: 99 (cyclomatic, outer body), 234 lines (full implementation)
-/// Touches: file system
+/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+86 more)</para>
+/// <para>Complexity: 101 (cyclomatic, outer body), 247 lines (full implementation)</para>
+/// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
 /// <seealso cref="DRagLint.CLI.DoBenchContext"/>
@@ -11108,6 +11108,47 @@ begin
     project-wide phase. Own.IsOurs also does an ExpandFileName + StringReplace
     per call; findings cluster heavily by file, so a per-file memo turns that
     into one real test per distinct FilePath rather than one per finding. }
+  { exclude_paths -- the OTHER half of ownership, and the half this post-hoc
+    pass never had. The enumeration above tested BOTH settings on adjacent
+    lines, but every rule between there and here reads the WHOLE store, so an
+    excluded file walks straight back in through them. Measured 2026-08-26 on
+    our own source: 207 findings (204 doc-drift, 3 unused-public-symbol)
+    against third_party\delphi-tree-sitter in a run that had ALREADY printed
+    "3 file(s) skipped by exclude_paths". That banner counts pass 1 only, which
+    is precisely why the leak read as a correctly scoped report.
+
+    Deliberately NOT gated on --lint-third-party: that hatch opens ownRoots,
+    while exclude_paths means "never touch these at all" -- the same ruling
+    --document-third-party already obeys (run_doc_honours_exclude_paths.ps1).
+    Memoized per path for the reason the ownership filter below is: findings
+    cluster heavily by file and each call costs a LowerCase + MatchesMask per
+    configured glob. Pinned by
+    tests\autotest\run_lintall_project_rules_honour_exclude_paths.ps1. }
+  Prof.Phase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
+  begin
+    var ExclMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      var Kept: TArray<TLintFinding>;
+      SetLength(Kept, Length(Findings));
+      var KeptCount: Integer:= 0;
+      for F in Findings do
+      begin
+        var Drop: Boolean;
+        if F.FilePath = '' then Drop:= False
+        else if not ExclMemo.TryGetValue(F.FilePath, Drop) then
+        begin
+          Drop:= Cfg.IsPathExcluded(F.FilePath);
+          ExclMemo.Add(F.FilePath, Drop);
+        end;
+        if not Drop then begin Kept[KeptCount]:= F; Inc(KeptCount); end;
+      end;
+      SetLength(Kept, KeptCount);
+      Findings:= Kept;
+    finally
+      ExclMemo.Free;
+    end;
+  end;
+
   Prof.Phase(Format('ownership filter (%d findings)', [Length(Findings)]));
   if (not AArgs.LintThirdParty) and Own.Active then
   begin
