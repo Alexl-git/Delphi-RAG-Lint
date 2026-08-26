@@ -762,6 +762,31 @@ begin
       ClauseEnd:= SemiPos - Pos;
       Clause:= Copy(Stripped, Pos, ClauseEnd);
 
+      { COLUMN-ALIGNED qualified names. Whitespace around the dot of a qualified
+        unit name is insignificant to the compiler, and this codebase aligns them
+        for readability -- DRagLint.CLI.pas alone has 64 entries of the shape
+
+            , DRagLint.Doc        .Batch
+            , DRagLint.Core   .Interfaces
+
+        The identifier regex below stops at the space, so such an entry yielded
+        TWO junk tokens ("DRagLint.Doc" and "Batch") and never the real unit
+        name. Every consumer that asks "is this unit reached via uses?" then
+        answered no: `reconcile-project` reported 28 genuinely-used units as
+        "EXTRA -- listed but never reached via uses (review)", which invites
+        deleting units the build needs.
+
+        The INDEX was never short a file -- the closure also takes the .dproj
+        member list, which covers them (closure 108 = indexed 108, measured
+        before and after this fix) -- so this changes what is REACHABLE, not
+        what is extracted.
+
+        Collapsing the whitespace cannot merge two separate units: a uses clause
+        separates entries with commas, so a dot between two identifiers is by
+        definition part of one qualified name. Strings and comments are already
+        gone (StripCommentsAndStrings above), so no path literal is affected. }
+      Clause:= TRegEx.Replace(Clause, '\s*\.\s*', '.');
+
       Matches:= ReIdent.Matches(Clause);
       for M in Matches do
       begin

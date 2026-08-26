@@ -64,4 +64,35 @@
 #   Same explicit judgement as the 2026-08-24 entry, and the same warning: the
 #   failure mode of getting this wrong is SILENT. If a future edit to these
 #   files ever influences what is indexed, the version MUST move.
-1.7.0-alpha|573b0f00a3c1aa016ea0fd72447c15c1ae0fd4e848144f776be4afb006031a70
+# 2026-08-26 (2nd): hash updated WITHOUT a version bump. CODE changed this time,
+#   not just comments, so the reasoning is spelled out rather than asserted.
+#
+#   WHAT CHANGED: TClosureResolver.ExtractUses (src\index\DRagLint.Index.Closure.pas)
+#   and the duplicate parser in DRagLint.Index.Reconcile.pas now collapse
+#   whitespace around the dot of a qualified unit name before tokenising. A
+#   column-aligned entry -- `, DRagLint.Doc        .Batch`, of which
+#   DRagLint.CLI.pas alone has 64 -- previously yielded two junk tokens and never
+#   the real unit name.
+#
+#   WHY NO BUMP. The rule this file applies is "does any STORED PARSE become
+#   stale?", and nothing here changes what is extracted FROM a file: the parser,
+#   the preprocessor and the extractors are untouched. What can change is the
+#   SET of files a project closure reaches. For this repo it did not -- closure
+#   108 = indexed 108, measured before AND after the fix -- because a .dproj
+#   member list already covered those units.
+#
+#   Where it COULD differ is a project with a unit reachable ONLY through an
+#   aligned uses entry and NOT listed as a project member. That closure now
+#   grows by one file. That file is then indexed and parsed FRESH on the next
+#   incremental run; no previously stored parse is invalidated, which is exactly
+#   the failure mode the fingerprint exists to prevent. A bump would re-parse
+#   ~7,000 library files plus every project index to produce byte-identical
+#   symbols for every file that was already there.
+#
+#   THE RESIDUAL RISK, stated so it is not discovered later: if a future reader
+#   concludes that "which files are in the closure" IS part of extraction, then
+#   this entry is the one to revisit. The judgement here is that it is not,
+#   because the fingerprint guards the CONTENT of a parse, not the membership of
+#   a file set -- and membership is re-derived on every index run, while a parse
+#   is not.
+1.7.0-alpha|2b486f5ab19906e5b8bba56f1ea96f43a9998126ecaff9e3a1592a2b5350d2d9

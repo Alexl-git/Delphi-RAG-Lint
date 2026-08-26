@@ -388,6 +388,17 @@ begin
     SB.Free;
   end; // try
 
+  { Same collapse as TClosureResolver.ExtractUses, and for the same reason:
+    whitespace around the dot of a qualified unit name is insignificant, and
+    PAT_ITEM's identifier class stops at a space, so `DRagLint.Doc   .Batch`
+    parses as two junk tokens instead of one unit. A .dpr is normally
+    IDE-generated with conventional spacing, so this is robustness rather than
+    an observed failure here -- but the two parsers are meant to agree (this
+    one's header says it uses the same logic), and a hand-aligned .dpr must not
+    make them disagree. Strings are already stripped above, so no `in '...'`
+    path is touched. }
+  Stripped:= TRegEx.Replace(Stripped, '\s*\.\s*', '.');
+
   ItemPat:= PAT_ITEM;
   Matches:= TRegEx.Matches(Stripped, ItemPat, [roIgnoreCase]);
   for M in Matches do
