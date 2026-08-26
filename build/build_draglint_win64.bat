@@ -43,10 +43,23 @@ REM the bare-except anchor fix was edited, built, and measured against the OLD
 REM rule, with the whole suite passing. The Release and Win32 copies were 35 and
 REM 104 files behind when this was found.
 REM
-REM tests\run_battery.ps1 (register K41) now hashes rules\ against both of these
+REM dll-win32 is in the list for a DIFFERENT reason than the other two, and it
+REM is not a test reason. The IDE design-time BPL lives there, and
+REM DragLint.Plugin.ExeResolver falls back to the engine beside the BPL whenever
+REM the Win64 one is absent -- which is the NORMAL state for a few seconds every
+REM time this script stages a new exe over a locked one. That fallback had no
+REM rules\ at all, so it loaded 0 external rules and reported "0 finding(s)"
+REM for every file. The live-diagnostics runner published that emptiness into the
+REM diagnostic cache, and PaintLine -- which exits when the cache has no rows for
+REM a line -- then drew nothing. Confirmed 2026-08-25 from the plugin telemetry
+REM log: "cache Update -> 2 diag(s)" followed 1.8 s later by "-> 0 diag(s)"; the
+REM 166-byte rules-less output reproduces byte-exactly from the command line.
+REM
+REM tests\run_battery.ps1 (register K41) now hashes rules\ against all three of
+REM these
 REM and shouts on drift, so this copy and that check are a matched pair: the
 REM build makes them right, the battery proves they stayed right.
-for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
+for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64" "%ROOT%\third_party\dll-win32") do (
   if not exist "%%~D\rules" mkdir "%%~D\rules"
   copy /Y "%ROOT%\rules\*.scm"  "%%~D\rules\" >NUL
   copy /Y "%ROOT%\rules\*.json" "%%~D\rules\" >NUL
