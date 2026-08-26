@@ -316,16 +316,11 @@ Write-Host ''
 # the same trap that made T4d fix round 1's first blast-radius measurement fake.
 # Say it here, once, loudly, naming the tracked source and the fix.
 $rulesSrc = Join-Path $repoRoot 'rules'
-# third_party\dll-win32\rules is in this list for a reason that is NOT
-# about the test suite: no runner uses the Win32 exe. The IDE design-time BPL
-# lives in that directory, and DragLint.Plugin.ExeResolver falls back to the
-# engine beside the BPL whenever the Win64 one is absent -- which it is, for a
-# few seconds, every time build_draglint_win64.bat stages over a locked exe.
-# With no rules\ there, that fallback loads 0 external rules and reports
-# "0 finding(s)" for every file; the live-diagnostics runner publishes the
-# emptiness into the diagnostic cache, and the editor gutter draws nothing.
-# Found 2026-08-25 by reading the plugin telemetry log, not by a test.
-$rulesDsts = @('src\cli\Win64\Debug\rules', 'third_party\dll-win64\rules', 'third_party\dll-win32\rules')
+# third_party\dll-win32\rules was briefly in this list, because the IDE
+# plugin fell back to the engine beside its BPL. That fallback is GONE (owner
+# ruling 2026-08-26: the engine is 64-bit only), so there is no 32-bit engine
+# left to keep a catalogue for. Both entries below ARE test reasons again.
+$rulesDsts = @('src\cli\Win64\Debug\rules', 'third_party\dll-win64\rules')
 $missingRules = @($rulesDsts | Where-Object {
   $p = Join-Path $repoRoot $_
   (-not (Test-Path -LiteralPath $p)) -or
