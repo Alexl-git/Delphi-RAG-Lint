@@ -1037,7 +1037,54 @@ end;
   genuine dead store sitting before an unrelated try, which is the banned failure
   mode for this whole rule family -- the cheap fix for every one of these rules
   is to stop reporting near a `try`. A store before a try whose handler never
-  names it STILL FIRES, and the guard test asserts exactly that. }
+  names it STILL FIRES, and the guard test asserts exactly that.
+
+  SHAPE F -- PROPOSED, MEASURED, AND REJECTED BY OWNER RULING (2026-08-26).
+  Do not re-derive this; the full history is
+  docs\INBOX-Done\INBOX-dead-store-overwritten-inside-following-try.md.
+
+  The proposal (OverwrittenInsideFollowingTry): also protect a store whose only
+  OVERWRITE sits inside the body of a following try, handler silent about the
+  name, variable read after the try:
+
+      X := nil;                 <- reported as a dead store
+      try
+        X := TObject.Create;    <- the only overwrite, INSIDE the try body
+      except
+        Writeln('boom');        <- handler never mentions X
+      end;
+      R := X;                   <- X read AFTER the try
+
+  If the body raises before the inner assignment completes, the read after the
+  try observes the pre-try store; delete that store -- the rule's own advice --
+  and the read is uninitialised. Implemented, it took overwrite-before-read on
+  this repo from 29 to 25.
+
+  WHY IT WAS REJECTED, HONESTLY: the argument has real force -- it is the same
+  handler-edge reasoning this very comment relies on -- but it proves too much.
+  The pretry guard's UnrelatedTry positive control is structurally IDENTICAL to
+  the fixture above (store, following try whose body overwrites it, handler
+  that never names it, read after), and it asserts the finding MUST fire; its
+  own comment calls it what separates the sound predicate ("the handler uses
+  it") from the cheap one ("a try follows"). There is no sound syntactic
+  predicate that separates the two -- "the overwrite is the first statement of
+  the try body" does not, because a call in that position can raise first --
+  so any such predicate protects both or neither, and protecting both IS the
+  cheap version banned two paragraphs up. Applied consistently, the exception-
+  path argument even indicts the control's own store: delete its Val := 1 and
+  its Writeln(Val) prints garbage whenever the try raises. That tension is
+  real and stands unrefuted. The owner ruled: keep reporting these, keep the
+  control exactly as written, and accept that on the exception-path reading
+  some reported stores are live.
+
+  ONE DISTINCTION A FUTURE REVISIT MUST NOT LOSE: the exception-path argument
+  is specific to try..EXCEPT. With an except handler and no re-raise,
+  execution continues past the try's end, so a read after the try CAN observe
+  the pre-try store on the exception path. Under try..FINALLY the exception
+  propagates onward and the statements after the try are UNREACHABLE on that
+  path, so the pre-try store really IS dead there. Any restored
+  OverwrittenInsideFollowingTry that treats the two alike is wrong from the
+  start: shape F, if ever accepted, is an except-only rule. }
 function ProtectedByFollowingTry(const AAsg: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
 var
   Cur, C: TTSNode;
