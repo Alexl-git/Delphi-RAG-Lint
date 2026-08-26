@@ -588,7 +588,19 @@ var
 begin
   Result := '';
   if AIf.IsNull then Exit;
-  if (AIf.NodeType <> 'if') and (AIf.NodeType <> 'exprIf') then Exit;
+  { 'ifElse' is the grammar's spelling of the WITH-ELSE form -- a third node
+    type, not an 'if' with an extra child (INBOX-then-guard-blind-to-ifelse;
+    fifth member of the "node name the grammar spells differently than assumed"
+    family, after kAt/exprIf/kVar/typerefTpl). Refusing it meant the
+    suppression below could never fire for ANY if..then..else, so two
+    textually equivalent programs got different answers. The else-arm
+    containment check below already rejects a child sitting in the else arm --
+    that arm is guarded by the NEGATION -- so accepting the node type is the
+    whole fix. Because this widens a SUPPRESSION (removes findings), it was
+    gated on measurement: see the widening note in
+    run_flow_same_predicate_guard.ps1 for the counts and the per-site check. }
+  if (AIf.NodeType <> 'if') and (AIf.NodeType <> 'exprIf')
+     and (AIf.NodeType <> 'ifElse') then Exit;
   { Children are POSITIONAL (kIf, cond, kThen, then, kElse, else) -- exprIf
     exposes no 'then'/'else' fields, which is why this indexes rather than
     calling ChildByField. Same lesson as MaxNest in AstChecks. }

@@ -42,6 +42,38 @@
   SamePredicate FAILS and all five controls still PASS -- perfect discrimination,
   so this suite measures the fix and nothing else.
 
+  WIDENED 2026-08-26 (INBOX-then-guard-blind-to-ifelse): the grammar spells the
+  with-else form as a THIRD node type, `ifElse`, and ThenGuardName accepted only
+  `if`/`exprIf` -- so the suppression could never fire for ANY if..then..else,
+  and two textually equivalent programs got different answers. Two fixtures pin
+  the widening (guard variables Q/W/Tot, distinct from P/V/Sum so no anchor
+  regex collides):
+
+    SamePredicateIfElse     read in the THEN arm of if..then..ELSE,
+                            assigned under the same bare predicate -> SILENT
+    SamePredicateAsgIfElse  ASSIGNED in the THEN arm of if..then..ELSE,
+                            read under the same bare predicate     -> SILENT
+
+  ElseArm above is ALSO the else-arm control for the widening: its second `if`
+  IS an ifElse node, and a read in the ELSE arm is guarded by the NEGATION, so
+  it must keep firing after `ifElse` is accepted.
+
+  RED VERIFIED 2026-08-26: against the pre-widening engine, both new SILENT
+  assertions FAIL and every control still PASSES.
+
+  MEASURED (the gate for shipping the widening, since it widens a SUPPRESSION):
+  lint-all used-before-assignment on this repo, identical command before and
+  after, 2026-08-26: 30 -> 30. ZERO findings were removed by the wider
+  suppression. The only effect was four sites RE-TIERED warning -> info by the
+  witness-flag tiering, which reads the same guard list and was equally blind:
+  TextEdit.pas 612:7 + 612:42 (LastInSection under HaveLast) and
+  Manifest.pas 1014:27 + 1015:27 (LocalManifest under HaveLocal,
+  GlobalManifest under HaveGlobal). Each was hand-verified as the designed
+  shape: a bare witness flag set exactly beside the guarded variable's
+  assignment, read in the THEN arm of an if..then..else. The compound-predicate
+  siblings at the same sites (TextEdit 604: `(not HaveLast) or ...`;
+  Manifest 982: `HaveGlobal and HaveLocal`) correctly stayed warnings.
+
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
@@ -128,6 +160,24 @@ begin
   if HaveV then Sum := Sum + V;
 end;
 
+procedure SamePredicateIfElse(Q: Boolean);
+var
+  W, Tot: Integer;
+begin
+  Tot := 0;
+  if Q then W := 1;
+  if Q then Tot := Tot + W else Tot := 1;
+end;
+
+procedure SamePredicateAsgIfElse(Q: Boolean);
+var
+  W, Tot: Integer;
+begin
+  Tot := 0;
+  if Q then W := 1 else Tot := 2;
+  if Q then Tot := Tot + W;
+end;
+
 end.
 '@
 [System.IO.File]::WriteAllText($target, (($body -replace "`r`n","`n") -replace "`n","`r`n"),
@@ -157,6 +207,10 @@ try {
   $lNot     = LineOf 'if not P then Sum := Sum \+ V;'
   $lElse    = LineOf '^\s{4}Sum := Sum \+ V;'
   $lWitness = LineOf 'if HaveV then Sum := Sum \+ V;'
+  # The ifElse fixtures use Q/W/Tot, so neither line collides with the
+  # second-occurrence scan for FlagReassigned below.
+  $lIfElse    = LineOf 'if Q then Tot := Tot \+ W else'
+  $lAsgIfElse = LineOf 'if Q then Tot := Tot \+ W;'
   # FlagReassigned's read is the SECOND `if P then Sum := Sum + V;` in the file.
   $lReasgn  = -1
   $seen = 0
@@ -164,13 +218,17 @@ try {
     if ($lines[$i] -match 'if P then Sum := Sum \+ V;') { $seen++; if ($seen -eq 2) { $lReasgn = $i + 1; break } }
   }
 
-  Check 'SANITY: all six anchor lines were located' `
-        (($lSame -gt 0) -and ($lTrue -gt 0) -and ($lNot -gt 0) -and ($lElse -gt 0) -and ($lWitness -gt 0)) `
-        "same=$lSame true=$lTrue not=$lNot else=$lElse witness=$lWitness"
+  Check 'SANITY: all eight anchor lines were located' `
+        (($lSame -gt 0) -and ($lTrue -gt 0) -and ($lNot -gt 0) -and ($lElse -gt 0) -and ($lWitness -gt 0) -and ($lIfElse -gt 0) -and ($lAsgIfElse -gt 0)) `
+        "same=$lSame true=$lTrue not=$lNot else=$lElse witness=$lWitness ifelse=$lIfElse asgifelse=$lAsgIfElse"
 
   # --- the suppression ---
   Check 'SamePredicate: read under the SAME bare predicate is SILENT' `
         (-not (FiredAt $lSame)) ($ub -join "`n")
+  Check 'SamePredicateIfElse: read in the THEN arm of if..then..ELSE, same predicate, is SILENT' `
+        (-not (FiredAt $lIfElse)) ($ub -join "`n")
+  Check 'SamePredicateAsgIfElse: ASSIGNMENT in the THEN arm of if..then..ELSE, read under same predicate, is SILENT' `
+        (-not (FiredAt $lAsgIfElse)) ($ub -join "`n")
 
   # --- the controls: each of these must SURVIVE ---
   Check 'CONTROL: TrueUnassigned STILL fires (rule not switched off)' `
@@ -179,7 +237,7 @@ try {
         (FiredAt $lReasgn) ("line=$lReasgn`n" + ($ub -join "`n"))
   Check 'CONTROL: NotPredicate STILL fires (`if not P` is not the same predicate)' `
         (FiredAt $lNot) ($ub -join "`n")
-  Check 'CONTROL: ElseArm STILL fires (else arm is guarded by the NEGATION)' `
+  Check 'CONTROL: ElseArm STILL fires (else arm of an ifElse node is guarded by the NEGATION)' `
         (FiredAt $lElse) ($ub -join "`n")
   Check 'CONTROL: WitnessUnpaired STILL fires (differing predicates are not correlated)' `
         (FiredAt $lWitness) ($ub -join "`n")
