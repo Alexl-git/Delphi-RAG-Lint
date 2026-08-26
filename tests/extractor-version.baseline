@@ -95,4 +95,11 @@
 #   because the fingerprint guards the CONTENT of a parse, not the membership of
 #   a file set -- and membership is re-derived on every index run, while a parse
 #   is not.
-1.7.0-alpha|2b486f5ab19906e5b8bba56f1ea96f43a9998126ecaff9e3a1592a2b5350d2d9
+# 2026-08-26 (3rd): same run, same reasoning. DRagLint.Index.Reconcile.pas
+#   changed again -- MakeRelPath now emits a proper relative path via
+#   ExtractRelativePath instead of falling back to an ABSOLUTE one, and
+#   EditDpr splices before the last clause entry so the main unit stays last.
+#   Both are about what --apply WRITES into a .dpr/.dproj. Neither the parser,
+#   the preprocessor, nor any extractor is touched, and no stored parse can
+#   become stale, so the version does not move.
+1.7.0-alpha|0fda96a6129afbe71df4913809235712b914ec8e338506322e188316bac2eda1

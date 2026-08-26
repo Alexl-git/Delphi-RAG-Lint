@@ -314,8 +314,19 @@ begin
   NormFile:= TPath.GetFullPath(AFile);
   NormBase:= TPath.GetFullPath(ABase);
   if not NormBase.EndsWith('\') then NormBase:= NormBase + '\';
-  if SameText(Copy(NormFile, 1, Length(NormBase)), NormBase) then Result:= Copy(NormFile, Length(NormBase) + 1, MaxInt)
-  else Result:= NormFile;
+  if SameText(Copy(NormFile, 1, Length(NormBase)), NormBase) then Exit(Copy(NormFile, Length(NormBase) + 1, MaxInt));
+  { NOT under the project folder -- so prefix-stripping cannot express it and
+    this used to fall back to the ABSOLUTE path. That is not a cosmetic
+    difference: --apply writes this straight into the .dpr and .dproj, both
+    CHECKED IN, and all 101 existing entries here are relative. Applying it once
+    put C:\Projects\Delphi-RAG-lint\... into both files, which breaks on any
+    other machine or checkout location -- and drag-lint's own
+    hardcoded-absolute-path rule promptly flagged the .dpr lines.
+
+    ExtractRelativePath is the RTL answer and walks up with '..' properly. It
+    returns the absolute path unchanged when the two are on different DRIVES,
+    which is correct: there is no relative path across volumes. }
+  Result:= ExtractRelativePath(NormBase, NormFile);
 end;
 
 procedure TProjectReconciler.CollectDprMembers(const ADprPath: string; AMembers: TDictionary<string, string>);
@@ -758,9 +769,31 @@ begin
 
   if Additions = '' then Exit;
 
+  { INSERT BEFORE THE LAST ENTRY, not before the ';'.
+
+    A .dpr uses clause ends with the MAIN unit, and the clause order is the
+    INITIALIZATION order, so the main unit belongs last -- everything it uses
+    should have initialized before it. Splicing at the ';' appended after the
+    main unit and quietly demoted it. Harmless the day it was found (neither
+    added unit had an initialization section, checked) but that is luck, not
+    design, and the cost of getting it wrong is a startup-order bug that
+    reproduces nowhere else.
+
+    The last ',' in the BLANKED clause is the start of that final entry, and
+    blanking is length-preserving so the index applies to the original text.
+    Additions already begins with ',', so splicing there yields
+    "...prev, <new entries>, MainUnit;". A single-unit clause has no comma; then
+    there is no last entry to protect and the old ';' position is correct. }
+  var LastComma: Integer:= 0;
+  for var K: Integer:= SemiPos - 1 downto UsesPos + 1 do
+    if Blanked[K] = ',' then begin LastComma:= K; Break; end;
+
+  var SplicePos: Integer;
+  if LastComma > 0 then SplicePos:= LastComma else SplicePos:= SemiPos;
+
   // Splice into the ORIGINAL content at the positions found in the blanked copy.
-  Before:= Copy(Content, 1, SemiPos - 1);
-  After:= Copy(Content, SemiPos, MaxInt); // includes the ';' itself
+  Before:= Copy(Content, 1, SplicePos - 1);
+  After:= Copy(Content, SplicePos, MaxInt); // the ',' of the last entry, or the ';'
   Content:= Before + Additions + After;
 
   TFile.WriteAllText(ADprPath, Content);
