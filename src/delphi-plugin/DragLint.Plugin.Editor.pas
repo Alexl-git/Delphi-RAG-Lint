@@ -6109,22 +6109,47 @@ begin
 
       procedure UnregisterDragLintMenu;
       begin
+        { TEARDOWN TRACE (2026-08-26). bds.exe has twice failed to exit after the IDE
+          window closed. Captured live the second time: no main window, 0.00s CPU over
+          3s, ten minutes silent -- yet 127.0.0.1:8765 was STILL LISTENING and the LSP
+          child was still alive. Both are torn down near the END of this procedure, so
+          it blocked partway and nothing recorded where.
+        
+          Six of the steps below have NO try/except, so an exception aborts teardown
+          just as silently as a hang does -- and either way the BPL is left half torn
+          down with live threads in its code segment.
+        
+          Each step logs BEFORE it runs. DLT appends per call, so the line reaches disk
+          before the step is entered, and the LAST teardown line in
+          drag-lint-telemetry.log therefore NAMES the step that did not return.
+          Reaching COMPLETE means this procedure is not the culprit. }
+        DLT('teardown', 'ENTER UnregisterDragLintMenu (called from finalization)');
         { v0.40.8d: close hover popup before tearing down notifiers, otherwise
     its 150 ms watch timer can fire after the BPL's HoverForm DCU has
     been unloaded -- observed as an IDE crash on Uninstall. }
+        DLT('teardown', '-> CloseDragLintHover');
         try CloseDragLintHover; except end;
+        DLT('teardown', '-> StopAutoComplete');
         try StopAutoComplete; except end;
+        DLT('teardown', '-> StopLiveDiagnostics');
         try StopLiveDiagnostics; except end;
         { v0.43: tear down the dedicated Graph window first so its frame dtor
     terminates the embedded drag_lint_graph.exe before the BPL unloads. }
+        DLT('teardown', '-> UnregisterDragLintGraph');
         try UnregisterDragLintGraph; except end;
+        DLT('teardown', '-> StopHoverTracker (NO try/except)');
         StopHoverTracker;
+        DLT('teardown', '-> UnregisterDragLintEditViewNotifier (NO try/except)');
         UnregisterDragLintEditViewNotifier;
+        DLT('teardown', '-> UnregisterDragLintKeystrokes (NO try/except)');
         UnregisterDragLintKeystrokes;
+        DLT('teardown', '-> UnregisterProjectNotifier (NO try/except)');
         UnregisterProjectNotifier;
 
         { Close the structure form and usages form if still open }
+        DLT('teardown', '-> HideDragLintStructure (NO try/except)');
         HideDragLintStructure;
+        DLT('teardown', '-> HideFindUsages (NO try/except)');
         HideFindUsages;
 
         { Session 27: drop the status-indicator reference BEFORE anything can
@@ -6137,11 +6162,13 @@ begin
         { Close the About window -- it holds no OTA references, but leaving a
           form alive across a BPL unload is how the other teardown bugs here
           started. }
+        DLT('teardown', '-> CloseAboutDialog');
         try CloseAboutDialog; except end;
 
         { v1.7 B3: close the ghost-text socket BEFORE anything else is torn
           down. It owns a thread blocked in accept, and a BPL unloaded with a
           live thread in its code segment is a crash, not a leak. }
+        DLT('teardown', '-> GGhostText.Stop (closes listening socket, joins accept thread)');
         if GGhostText <> nil then
         begin
           try GGhostText.Stop; except end;
@@ -6149,6 +6176,7 @@ begin
         end;
 
         { Stop LSP client first }
+        DLT('teardown', '-> GLspClient.Stop (TerminateProcess + 2s wait)');
         if GLspClient <> nil then
         begin
           GLspClient.Stop;
@@ -6158,11 +6186,13 @@ begin
     menu, so GMenuItems won't reach it). Freeing removes it from the IDE menu --
     this is what stops a duplicate/stale entry surviving an uninstall. Do it
     before GWrappers so its OnClick wrapper isn't dangling. }
+        DLT('teardown', '-> FreeAndNil tool-window items and menus');
         FreeAndNil(GDockToolWinItem );
         FreeAndNil(GGraphToolWinItem);
         { Wrappers hold the OnClick method pointers; free them before the menu items }
         FreeAndNil(GWrappers );
         FreeAndNil(GMenuItems);
+        DLT('teardown', 'COMPLETE -- teardown returned normally');
       end; // procedure
 
     initialization

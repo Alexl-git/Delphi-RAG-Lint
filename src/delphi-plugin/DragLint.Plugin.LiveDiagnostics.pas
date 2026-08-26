@@ -731,6 +731,9 @@ end; // procedure
 
 procedure StopLiveDiagnostics;
 begin
+  { 2026-08-26: freeing the runner destroys a timer and can block. Log each
+    stage so a hang here is distinguishable from a hang in the caller. }
+  LiveLog('StopLiveDiagnostics: ENTER');
   if GLintProvider <> nil then
   begin
     UnregisterDiagnosticProvider(GLintProvider);
@@ -741,12 +744,19 @@ begin
     UnregisterDiagnosticProvider(GSemanticProvider);
     GSemanticProvider:= nil;
   end;
+  LiveLog('StopLiveDiagnostics: providers unregistered; freeing runner');
   FreeAndNil(GRunner);
+  LiveLog('StopLiveDiagnostics: DONE');
 end;
 
 initialization
 
 finalization
+{ 2026-08-26: this unit's OWN finalization also stops the runner, so a runner
+  that goes quiet does NOT prove UnregisterDragLintMenu reached its
+  StopLiveDiagnostics step -- that ambiguity cost a diagnosis today. Record
+  which path actually did it. }
+try LiveLog('finalization: entering StopLiveDiagnostics (UNIT finalization, not the menu teardown)'); except end;
 try StopLiveDiagnostics; except end;
 
 end.
