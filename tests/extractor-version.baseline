@@ -44,4 +44,24 @@
 #   The judgement being made explicitly, because the failure mode of getting
 #   this wrong is SILENT: if a future edit to this file ever influenced what is
 #   indexed, the version MUST move.
-1.7.0-alpha|3b933512a0a580326f39c657ec711a122660cf1058d412f0a57deb0c5abb9714
+# 2026-08-26: hash updated WITHOUT a version bump, per the rule above.
+#   `document --project` regenerated the managed DocInsight blocks across the
+#   whole repo (16210c6), and 23 files of the extraction surface carry them:
+#   src\parser, src\preprocess, src\index and Core.Indexer.pas, 658 insertions
+#   and 563 deletions between them.
+#
+#   EVERY ONE of those lines is a `///` doc comment. Verified mechanically, not
+#   by eye -- `git diff 9f78db3..HEAD -U0` over exactly the four hashed roots,
+#   with `///` and blank lines filtered out, returns NOTHING. No declaration
+#   moved, no code changed.
+#
+#   A doc comment cannot change what the parser sees in a byte sequence, so no
+#   stored parse becomes stale. Bumping would have re-parsed every index on the
+#   box -- ~7,000 library files plus every project -- to say nothing new, which
+#   is the exact cost the DRAGLINT_VERSION/DRAGLINT_EXTRACTOR_VERSION split was
+#   made to avoid.
+#
+#   Same explicit judgement as the 2026-08-24 entry, and the same warning: the
+#   failure mode of getting this wrong is SILENT. If a future edit to these
+#   files ever influences what is indexed, the version MUST move.
+1.7.0-alpha|573b0f00a3c1aa016ea0fd72447c15c1ae0fd4e848144f776be4afb006031a70
