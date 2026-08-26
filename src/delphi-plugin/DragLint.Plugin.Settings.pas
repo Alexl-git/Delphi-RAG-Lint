@@ -166,7 +166,15 @@ begin
       if (Result.ExePath <> '') and (ExtractFilePath(Result.ExePath) = '') then
       begin
         var BplDir  : string:= ExtractFilePath(GetModuleName(HInstance));
-        var Win64Dir: string:= ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64';
+        { THE TRAILING BACKSLASH IS LOAD-BEARING. Without it the probe below
+          tests ...\third_party\dll-win64drag-lint.exe, a path that cannot
+          exist, so the Win64 branch never runs and a bare name silently
+          resolves to whatever sits beside the BPL. That is how the IDE menu
+          came to spawn a 2026-06-10 0.41.0-alpha engine on 2026-08-26: it
+          rejected --platform, a flag the CLI has accepted for months.
+          EnsureLspClient bakes the separator into its own literal
+          (dll-win64\); this line has to append it explicitly. }
+        var Win64Dir: string:= ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\';
         if FileExists(Win64Dir + Result.ExePath) then Result.ExePath:= Win64Dir + Result.ExePath
         else if FileExists(BplDir + Result.ExePath) then Result.ExePath:= BplDir + Result.ExePath;
       end;
