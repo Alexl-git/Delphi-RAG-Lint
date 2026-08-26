@@ -4001,18 +4001,48 @@ begin
       Exit(2);
     end;
 
-    { Find all interface-section symbols from the target unit.
-      Strategy: search for symbols by qualified name using the unit name prefix,
-      then filter for interface-section declarations (Section = 'interface' or Section = '').
-      A symbol is interface-section if it is public/exported; implementation symbols are skipped. }
-    var Syms: TArray<TSymbol> := Store.FindSymbolsByQualifiedName(AArgs.UnitName);
-    for var S: TSymbol in Syms do
+    { The unit's EXPORT SURFACE: the interface-section children of its unit
+      symbol -- i.e. what another unit can name after adding it to `uses`.
+
+      TWO THINGS THIS GETS RIGHT THAT THE OBVIOUS VERSION DOES NOT, both
+      measured against System.IniFiles in the Win32 library index:
+
+      1. NOT FindSymbolsByQualifiedName(<unit>). A unit's members are qualified
+         `System.IniFiles.TIniFile`, so an exact qualified-name lookup on
+         'System.IniFiles' returns exactly ONE row -- the unit symbol itself --
+         and the verb then answered about a one-element "export surface". The
+         members hang off the unit symbol as CHILDREN; that is where to look.
+         (`symbols.parent_id` is never NULL in this schema: every symbol roots at
+         its unit, so "top level" means "parent IS the unit symbol".)
+
+      2. THE UNIT IS RESOLVED IN WHICHEVER STORE HAS IT, not in the store that
+         happens to contain the target file. Those are routinely different: a
+         PROJECT index is the compile closure and deliberately excludes
+         library-path units, so asking "does CSVRoutines.pas use System.IniFiles"
+         needs the project DB for the file and the LIBRARY DB for the unit.
+         Resolving both in one store made the verb fail with "no interface-section
+         symbols found" on precisely the case it was built for.
+
+      Members (methods, fields, properties) are deliberately NOT included: they
+      are not addressable by bare name from another unit, and folding them in is
+      what makes a loop counter named `I` inside System.IniFiles look like a
+      reference to it. }
+    var UnitStore: ISymbolStore := nil;
+    for DbPath in PathsToScan do
     begin
-      { Include only interface-section symbols (Section='' means interface-exported). }
-      if (S.Section = 'interface') or (S.Section = '') then
-      begin
-        ExportSyms:= ExportSyms + [S];
-      end;
+      if not TFile.Exists(DbPath) then Continue;
+      var UOk: Boolean;
+      var Cand: ISymbolStore := OpenReadOnlyStore(DbPath, UOk);
+      if not UOk or (Cand = nil) then Continue;
+      for var U: TSymbol in Cand.FindSymbolsByExactName(AArgs.UnitName) do
+        if U.Kind = skUnit then
+        begin
+          UnitStore := Cand;
+          for var Ch: TSymbol in Cand.FindAllChildSymbols(U.Id) do
+            if SameText(Ch.Section, 'interface') then ExportSyms := ExportSyms + [Ch];
+          Break;
+        end;
+      if UnitStore <> nil then Break;
     end;
 
     if Length(ExportSyms) = 0 then
