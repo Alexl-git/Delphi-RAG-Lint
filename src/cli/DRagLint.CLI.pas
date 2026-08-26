@@ -169,6 +169,7 @@ type
     InFile          : string        ; // --in <file.pas> (resolve-uses scope context)
     TypeNames       : string        ; // --names A,B,C: type names for `query type-usage`
     NamesFile       : string        ; // --names-file <f>: same list, one name per line
+    UnitName        : string        ; // --unit <UnitName>: unit name for `query unit-usage`
     Rule            : string        ;
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
@@ -520,6 +521,7 @@ begin
   Writeln('                               a STRING LITERAL is correctly not a reference -- which is the difference');
   Writeln('                               from grep. Name-keyed: a project type sharing an RTL name is');
   Writeln('                               indistinguishable, and the output says so.');
+  Writeln('  drag-lint query unit-usage   --in <file.pas> --unit <UnitName> [--db ...] [--json]   (does the file reference any export of the unit? Empty = dead import)');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
@@ -898,6 +900,7 @@ begin
     else if ((A = '--in') or (A = '--file')) and (i < ParamCount) then begin Inc(i); Result.InFile:= ParamStr(i); end
     else if (A = '--names'     ) and (i < ParamCount) then begin Inc(i); Result.TypeNames:= ParamStr(i); end
     else if (A = '--names-file') and (i < ParamCount) then begin Inc(i); Result.NamesFile:= ParamStr(i); end
+    else if (A = '--unit') and (i < ParamCount) and (Result.SubCommand <> 'ghost-check') and (Result.SubCommand <> 'document') then begin Inc(i); Result.UnitName:= ParamStr(i); end
     else if (A = '--qname') and (i < ParamCount) then begin Inc(i); Result.QName:= ParamStr(i); end
     else if (A = '--of') and (i < ParamCount) then { v11 (M1): query ancestors --of }
     begin
@@ -1135,11 +1138,13 @@ begin
       if (A = '--clientProcessId') and (i < ParamCount) then Inc(i);
     end
     // --unit routes to DocUnit for the `document` command (whole-unit batch),
-    // else to GhostUnit (ghost-check overlay). Distinct fields avoid a collision.
+    // to UnitName for query commands (unit-usage), else to GhostUnit (ghost-check overlay).
+    // Distinct fields avoid a collision.
     else if (A = '--unit') and (i < ParamCount) then
     begin
       Inc(i);
       if (Result.Command = 'document') or (Result.Command = 'document-all') then Result.DocUnit:= ParamStr(i)
+      else if Result.Command = 'query' then Result.UnitName:= ParamStr(i)
       else Result.GhostUnit:= ParamStr(i);
     end
     // AutoDocument batch: --stubs opt-in (flips the facts-only default for
@@ -3906,6 +3911,163 @@ begin
   end; // try
 end; // begin
 
+// v1.8: `query unit-usage --in <file.pas> --unit <UnitName>` -- of this unit's
+// exported symbols, which does THIS file reference?
+function DoQueryUnitUsage(const AArgs: TArgs): Integer;
+type
+  TSymbolTally = record
+    Symbol: TSymbol;
+    Kinds : TDictionary<string, Integer>;
+    First : Integer;
+    Total : Integer;
+  end;
+var
+  PathsToScan: TArray<string>;
+  DbPath     : string        ;
+  Store      : ISymbolStore  ;
+  Tallies    : TArray<TSymbolTally>;
+  I          : Integer       ;
+begin
+  if AArgs.InFile = '' then
+  begin Writeln('ERROR: query unit-usage requires --in <file.pas>'); Exit(2); end;
+  if AArgs.UnitName = '' then
+  begin Writeln('ERROR: query unit-usage requires --unit <UnitName>'); Exit(2); end;
+
+  if not TFile.Exists(AArgs.InFile) then
+  begin Writeln('ERROR: file not found: ', AArgs.InFile); Exit(2); end;
+
+  PathsToScan:= ResolveConsumerDbs(AArgs);
+
+  try
+    var Abs           : string := ExpandFileName(AArgs.InFile);
+    var TargetFid     : Int64  := -1;
+    var ExportSyms    : TArray<TSymbol>;
+    var Found         : Boolean := False;
+
+    for DbPath in PathsToScan do
+    begin
+      if not TFile.Exists(DbPath) then Continue;
+      if not DbContainsFile(DbPath, Abs) then Continue;
+
+      var RoOk: Boolean;
+      Store:= OpenReadOnlyStore(DbPath, RoOk);
+      if not RoOk then Continue;
+
+      var Fid: Int64:= Store.FindFileIdByPath(Abs);
+      if Fid <= 0 then Continue;
+      TargetFid:= Fid;
+      Found:= True;
+      Break;
+    end;
+
+    if not Found then
+    begin
+      Writeln('ERROR: no index contains ', AArgs.InFile);
+      Writeln('Run "drag-lint index <dir> --db <db>" first, or pass --db explicitly.');
+      Exit(2);
+    end;
+
+    { Find all interface-section symbols from the target unit.
+      Strategy: search for symbols by qualified name using the unit name prefix,
+      then filter for interface-section declarations (Section = 'interface' or Section = '').
+      A symbol is interface-section if it is public/exported; implementation symbols are skipped. }
+    var Syms: TArray<TSymbol> := Store.FindSymbolsByQualifiedName(AArgs.UnitName);
+    for var S: TSymbol in Syms do
+    begin
+      { Include only interface-section symbols (Section='' means interface-exported). }
+      if (S.Section = 'interface') or (S.Section = '') then
+      begin
+        ExportSyms:= ExportSyms + [S];
+      end;
+    end;
+
+    if Length(ExportSyms) = 0 then
+    begin
+      Writeln('ERROR: no interface-section symbols found in unit: ', AArgs.UnitName);
+      Writeln('       The unit may not be indexed, or it contains no public symbols.');
+      Exit(2);
+    end;
+
+    { Build tallies for each export }
+    SetLength(Tallies, Length(ExportSyms));
+    for I:= 0 to High(ExportSyms) do
+    begin
+      Tallies[I].Symbol:= ExportSyms[I];
+      Tallies[I].Kinds := TDictionary<string, Integer>.Create;
+      Tallies[I].First := 0;
+      Tallies[I].Total := 0;
+    end;
+
+    { Scan the target file for references to each export }
+    for var R: TReference in Store.GetReferencesFromFile(TargetFid) do
+      for I:= 0 to High(Tallies) do
+      begin
+        var Sym := Tallies[I].Symbol;
+        if SameText(R.NameText, Sym.Name) or SameText(R.ReceiverText, Sym.Name) then
+        begin
+          var C: Integer;
+          if not Tallies[I].Kinds.TryGetValue(R.Kind, C) then C:= 0;
+          Tallies[I].Kinds.AddOrSetValue(R.Kind, C + 1);
+          Inc(Tallies[I].Total);
+          if (Tallies[I].First = 0) or (R.StartLine < Tallies[I].First) then
+            Tallies[I].First:= R.StartLine;
+          Break;
+        end;
+      end;
+
+    var Used: Integer:= 0;
+    for I:= 0 to High(Tallies) do if Tallies[I].Total > 0 then Inc(Used);
+
+    if AArgs.AsJson then
+    begin
+      var Arr: TJSONArray:= TJSONArray.Create;
+      try
+        for I:= 0 to High(Tallies) do
+        begin
+          var O: TJSONObject:= TJSONObject.Create;
+          var Sym := Tallies[I].Symbol;
+          O.AddPair('name', Sym.Name);
+          O.AddPair('qualified', Sym.QualifiedName);
+          O.AddPair('kind', Sym.Kind.ToText);
+          O.AddPair('referenced', TJSONBool.Create(Tallies[I].Total > 0));
+          O.AddPair('count', TJSONNumber.Create(Tallies[I].Total));
+          if Tallies[I].First > 0 then O.AddPair('first_line', TJSONNumber.Create(Tallies[I].First));
+          var K: TJSONObject:= TJSONObject.Create;
+          for var Pair in Tallies[I].Kinds do K.AddPair(Pair.Key, TJSONNumber.Create(Pair.Value));
+          O.AddPair('kinds', K);
+          Arr.AddElement(O);
+        end;
+        Writeln(Arr.ToJSON);
+      finally
+        Arr.Free;
+      end;
+    end
+    else
+    begin
+      Writeln('file: ', AArgs.InFile);
+      Writeln('unit: ', AArgs.UnitName);
+      for I:= 0 to High(Tallies) do
+      begin
+        var Sym := Tallies[I].Symbol;
+        if Tallies[I].Total = 0 then
+          Writeln(Format('  %-32s %-48s UNUSED', [Sym.Name, Sym.QualifiedName]))
+        else
+        begin
+          var KindStr: string:= '';
+          for var Pair in Tallies[I].Kinds do
+            KindStr:= KindStr + Format('%s=%d ', [Pair.Key, Pair.Value]);
+          Writeln(Format('  %-32s %-48s USED  %-40s first line %d',
+            [Sym.Name, Sym.QualifiedName, Trim(KindStr), Tallies[I].First]));
+        end;
+      end;
+      Writeln(Format('%d of %d export(s) referenced', [Used, Length(Tallies)]));
+    end;
+    Result:= 0;
+  finally
+    for I:= 0 to High(Tallies) do Tallies[I].Kinds.Free;
+  end;
+end; // function
+
 // v1.7: `query type-usage --in <file.pas> --names A,B,C` -- of these type names,
 // which does THIS file actually reference?
 //
@@ -4202,6 +4364,8 @@ begin
   if AArgs.TextQuery <> '' then Exit(DoQueryText(AArgs));
   // v1.7: "which of these type names does this file reference?"
   if AArgs.SubCommand = 'type-usage' then Exit(DoQueryTypeUsage(AArgs));
+  // v1.8: "of a unit's exports, which does this file reference?"
+  if AArgs.SubCommand = 'unit-usage' then Exit(DoQueryUnitUsage(AArgs));
 
   // v0.45 Task 9: resolve DB list (explicit --db or manifest-driven).
   PathsToScan:= ResolveConsumerDbs(AArgs);
