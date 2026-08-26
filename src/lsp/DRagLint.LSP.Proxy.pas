@@ -40,6 +40,12 @@ type
   /// <summary>Everything the relay needs to start. All fields are optional;
   /// a zeroed record resolves DelphiLSP from the installed Studio and relays
   /// stdio.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Proxy</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspProxyOptions = record
     /// <summary>Full path to the DelphiLSP executable to spawn. Empty means
     /// resolve it from the installed RAD Studio. The test harness sets this to
@@ -59,9 +65,18 @@ type
 /// caller actually asked for rather than a silently substituted default.</param>
 /// <returns>Full path to `bin64\DelphiLSP.exe`, or an empty string when no
 /// installed Studio could be located.</returns>
-/// <remarks>The 64-bit binary is deliberate. The IDE currently launches the
+/// <remarks>
+/// The 64-bit binary is deliberate. The IDE currently launches the
 /// 32-bit one (CodeInsightUse64BitBinary = False), so proxying also moves the
-/// Pascal LSP to x64, which is the build that copes with a large project.</remarks>
+/// Pascal LSP to x64, which is the build that copes with a large project.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+/// <para>Calls: DRagLint.LSP.Proxy.StdErrLine, ExcludeTrailingPathDelimiter, FileExists</para>
+/// <para>Returns: Root + '\bin64\DelphiLSP.exe'; ''</para>
+/// <para>Touches: registry</para>
+/// <seealso cref="DRagLint.LSP.Proxy.StdErrLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveDelphiLspPath(const AOverride: string): string;
 
 /// <summary>Runs the transparent relay until the child exits or either stream
@@ -69,9 +84,23 @@ function ResolveDelphiLspPath(const AOverride: string): string;
 /// <param name="AOptions">Child selection; see TLspProxyOptions.</param>
 /// <returns>The child's exit code on a normal relay; 3 when the child could
 /// not be found or spawned (criterion 3), which is reported on stderr.</returns>
-/// <remarks>Blocking; call from the main thread. Writes NOTHING to stdout
+/// <remarks>
+/// Blocking; call from the main thread. Writes NOTHING to stdout
 /// except bytes received from the child -- anything else would land inside the
-/// JSON-RPC stream and desynchronise the client.</remarks>
+/// JSON-RPC stream and desynchronise the client.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: CloseHandle, CreatePipe, CreateProcess, DRagLint.Core.JobObject.AssignToDragLintJob, DRagLint.LSP.Proxy.PumpFramed, DRagLint.LSP.Proxy.ResolveDelphiLspPath, DRagLint.LSP.Proxy.StdErrLine, DRagLint.LSP.Proxy.TPumpThread.Create, FileExists, FillChar (+9 more)</para>
+/// <para>Returns: EXIT_SPAWN_FAILED; Integer(Code)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 147 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.JobObject.AssignToDragLintJob"/>
+/// <seealso cref="DRagLint.LSP.Proxy.PumpFramed"/>
+/// <seealso cref="DRagLint.LSP.Proxy.ResolveDelphiLspPath"/>
+/// <seealso cref="DRagLint.LSP.Proxy.StdErrLine"/>
+/// <seealso cref="DRagLint.LSP.Proxy.TPumpThread.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunLspProxy(const AOptions: TLspProxyOptions): Integer;
 
 implementation

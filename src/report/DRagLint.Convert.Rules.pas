@@ -49,7 +49,7 @@ type
   /// rkUseSwap=#useswap (replace Old with one-or-more New units; UnitName=Old,
   /// UnitsAdd=the New list; canonically #unuse Old + #use New...).
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Convert.Rules.pas)
+  /// <para>Used by: declaration (DRagLint.Convert.Rules.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre, rkIgnore, rkUse, rkUseSwap);
@@ -77,8 +77,8 @@ type
   /// old identifier after the last such prefix. This preserves the receiver
   /// intent without over-modelling it in Batch 1 (validation ignores Scope).
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.HasConvertFor (DRagLint.Convert.DfmReemit.pas) (+4 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules
+  /// <para>Used by: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.HasConvertFor (DRagLint.Convert.DfmReemit.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TConversionRule = record
@@ -95,8 +95,8 @@ type
   /// ASCII-only description (e.g. 'unknown directive: #frobnicate' or
   /// 'link ToPath not found in --to tree: Bogus.Path').
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateConversionRules (DRagLint.Convert.Rules.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Convert.Rules
+  /// <para>Used by: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateConversionRules (DRagLint.Convert.Rules.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleError = record
@@ -116,8 +116,8 @@ type
   /// Task-2 brief's minimal shape -- documented as acceptable there; Task 3 reads
   /// Rules and may inspect ParseErrors but is not broken by its presence.)
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas) (+1 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules
+  /// <para>Used by: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TConversionRuleSet = record
@@ -147,10 +147,10 @@ type
 /// rule (Search -&gt; Replace). Any other '#word' is an unknown directive
 /// recorded in ParseErrors. Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)
-/// Calls: CharInSet, Copy, Default, DRagLint.Convert.Rules.ParseConversionRules.AddError, DRagLint.Convert.Rules.ParseConversionRules.AddRule, DRagLint.Convert.Rules.ParseConversionRules.Directive, DRagLint.Convert.Rules.SplitHeadAndUnits, DRagLint.Convert.Rules.SplitLines, DRagLint.Convert.Rules.SplitMigrateLhs, Insert, Pos, SameText, Trim
-/// Complexity: 25 (cyclomatic, outer body), 215 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
+/// <para>Calls: CharInSet, Copy, Default, DRagLint.Convert.Rules.ParseConversionRules.AddError, DRagLint.Convert.Rules.ParseConversionRules.AddRule, DRagLint.Convert.Rules.ParseConversionRules.Directive, DRagLint.Convert.Rules.SplitHeadAndUnits, DRagLint.Convert.Rules.SplitLines, DRagLint.Convert.Rules.SplitMigrateLhs, Insert, Pos, SameText, Trim</para>
+/// <para>Complexity: 27 (cyclomatic, outer body), 236 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.AddError"/>
 /// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.AddRule"/>
 /// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.Directive"/>
@@ -185,11 +185,11 @@ function ParseConversionRules(const AText: string): TConversionRuleSet;
 /// tolerated (it simply matches nothing), never a hard error.
 /// Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)
-/// Calls: DRagLint.Convert.Rules.PathExists, DRagLint.Convert.Rules.ValidateConversionRules.Add, DRagLint.Convert.Rules.ValidateConversionRules.IsStub, Format, Trim
-/// Returns: Errs.ToArray
-/// Complexity: 15 (cyclomatic, outer body), 62 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Convert.Rules.PathExists, DRagLint.Convert.Rules.ValidateConversionRules.Add, DRagLint.Convert.Rules.ValidateConversionRules.IsStub, Format, Trim</para>
+/// <para>Returns: Errs.ToArray</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 62 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.Rules.PathExists"/>
 /// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.Add"/>
 /// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.IsStub"/>

@@ -68,10 +68,10 @@ type
     /// unit-name-matches-file fires when the unit name differs from the file
     /// base name (case-insensitive); program/library roots are skipped.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: ChangeFileExt, CharInSet, Copy, Default, Delete, DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EmitAt, EmitShortHungarian, EndsText (+30 more)
-    /// Returns: nil; Deduped.ToArray
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: ChangeFileExt, CharInSet, Copy, Default, Delete, DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EmitAt, EmitShortHungarian, EndsText (+30 more)</para>
+    /// <para>Returns: nil; Deduped.ToArray</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
     /// <!-- drag-lint:auto END -->

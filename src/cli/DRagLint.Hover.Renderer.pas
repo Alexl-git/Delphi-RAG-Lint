@@ -17,12 +17,14 @@ uses
 
 /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
 /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
-/// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+/// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Trim
-/// Pure
+/// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Hover.Renderer.UnescapeJsonText, Trim</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 69 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
+/// <seealso cref="DRagLint.Hover.Renderer.UnescapeJsonText"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
@@ -48,15 +50,16 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 /// caller-computes pattern; keeps this unit decoupled from
 /// DRagLint.Doc.Facts/DRagLint.Storage, which DoHover/HandleHover already
 /// have open).</param>
-/// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+/// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown
-/// Complexity: 13 (cyclomatic, outer body), 107 lines (full implementation)
-/// Pure
+/// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown, DRagLint.Hover.Renderer.UnescapeJsonText, Trim</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 126 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
 /// <seealso cref="DRagLint.Hover.Renderer.HasAnyParamDescription"/>
 /// <seealso cref="DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown"/>
+/// <seealso cref="DRagLint.Hover.Renderer.UnescapeJsonText"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil; const AFactLines: TArray<string> = nil): string;
@@ -66,9 +69,9 @@ function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const 
 /// <returns><!-- drag-lint:auto type -->string</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, IfThen
-/// Overload 1 of 2
-/// Pure
+/// <para>Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, IfThen</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Model.DocFormatToStr"/>
 /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
@@ -81,13 +84,13 @@ function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string; o
 // each parameter name + type on its own line, plus the return type. Returns ''
 // when the signature has no parameter list (containers, fields, properties).
 /// <param name="ASignature"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->Observed: ''; SB.ToString.</returns>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''; SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas) ?
-/// Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Format, Pos, StartsText, Trim
-/// Complexity: 16 (cyclomatic, outer body), 82 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas) ?</para>
+/// <para>Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Format, Pos, StartsText, Trim</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 82 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Renderer.LastTopLevelColon"/>
 /// <seealso cref="DRagLint.Hover.Renderer.SplitTopLevel"/>
 /// <!-- drag-lint:auto END -->
@@ -98,8 +101,8 @@ function RenderSignatureParamsMarkdown(const ASignature: string): string;
   /// const/var/out modifier (if any), the parameter name, and its type text.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Hover.Renderer.ParseSignatureParams (DRagLint.Hover.Renderer.pas)
-  /// Used in units: DRagLint.Hover.Renderer
+  /// <para>Used by: DRagLint.Hover.Renderer.ParseSignatureParams (DRagLint.Hover.Renderer.pas)</para>
+  /// <para>Used in units: DRagLint.Hover.Renderer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
 type
@@ -122,8 +125,8 @@ type
   /// lay out / color without re-parsing a flat string.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), declaration (DRagLint.Hover.Renderer.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Hover.Renderer
+  /// <para>Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), declaration (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), declaration (DRagLint.Query.HoverModel.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Hover.Renderer, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
 type
@@ -149,11 +152,11 @@ type
 /// <returns>One TParamPart per parameter name, in declaration order.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas)
-/// Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Pos, StartsText, Trim
-/// Returns: Parts.ToArray
-/// Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas)</para>
+/// <para>Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Pos, StartsText, Trim</para>
+/// <para>Returns: Parts.ToArray</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Renderer.LastTopLevelColon"/>
 /// <seealso cref="DRagLint.Hover.Renderer.SplitTopLevel"/>
 /// <!-- drag-lint:auto END -->
@@ -174,9 +177,9 @@ function ParseSignatureParams(const ASignature: string): TArray<TParamPart>;
 /// <returns>A populated THoverModel.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas)
-/// Calls: DRagLint.Hover.Renderer.KindQualifier, DRagLint.Hover.Renderer.ParseSignatureParams, DRagLint.Hover.Renderer.ReturnTypeFromSig
-/// Pure
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+/// <para>Calls: DRagLint.Hover.Renderer.KindQualifier, DRagLint.Hover.Renderer.ParseSignatureParams, DRagLint.Hover.Renderer.ReturnTypeFromSig</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Renderer.KindQualifier"/>
 /// <seealso cref="DRagLint.Hover.Renderer.ParseSignatureParams"/>
 /// <seealso cref="DRagLint.Hover.Renderer.ReturnTypeFromSig"/>
@@ -195,10 +198,10 @@ function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUni
 /// <returns>A single-line JSON object string.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, IntToStr
-/// Returns: SB.ToString
-/// Overload 2 of 2
-/// Pure
+/// <para>Calls: DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, IntToStr</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
 /// <!-- drag-lint:auto END -->

@@ -39,15 +39,15 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas), declaration (DRagLint.Refactor.TestStub.pas), DRagLint.Refactor.TestStub.TTestStubGenerator.Generate (DRagLint.Refactor.TestStub.pas)
+  /// <para>Used by: DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas), declaration (DRagLint.Refactor.TestStub.pas), DRagLint.Refactor.TestStub.TTestStubGenerator.Generate (DRagLint.Refactor.TestStub.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTestFramework = (tfDUnitX, tfDUnit);
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTestStubGenerator = class
@@ -60,8 +60,18 @@ type
       /// `MyUnit.TMyClass.DoThing` or `My.Dotted.Unit.FreeRoutine`.</param>
       /// <param name="AFramework">DUnitX or legacy DUnit output shape.</param>
       /// <returns>The unit source, or '' when the name matches no symbol.</returns>
-      /// <remarks>The emitted test FAILS until a human writes it. That is
-      /// deliberate -- see the unit header on invented assertions.</remarks>
+      /// <remarks>
+      /// The emitted test FAILS until a human writes it. That is
+      /// deliberate -- see the unit header on invented assertions.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Refactor.TestStub.ResolveTarget</para>
+      /// <para>Returns: ''; Sb.ToString</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 132 lines (full implementation)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Refactor.TestStub.ResolveTarget"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Generate(const AStore: ISymbolStore; const AQName: string; AFramework: TTestFramework): string;
   end;
 

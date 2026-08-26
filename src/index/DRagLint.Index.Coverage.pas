@@ -26,7 +26,7 @@ type
   /// <summary>Classification of a folder relative to the index manifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Index.Coverage.pas)
+  /// <para>Used by: declaration (DRagLint.Index.Coverage.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCoverageKind = (
@@ -44,8 +44,8 @@ type
   /// <summary>Coverage classification result for one immediate child folder.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Index.Coverage
+  /// <para>Used by: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Coverage</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCoverageItem = record
@@ -78,11 +78,11 @@ type
 /// 5. ckUnassigned - none of the above.
 /// Not thread-safe; call from the owning thread only.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas)
-/// Calls: Default, DRagLint.Index.Coverage.IsBuiltinPrune, DRagLint.Index.Coverage.IsUnderRoot, DRagLint.Index.Coverage.NormPath, DRagLint.Index.Glob.TGlob.Matches, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths, LowerCase
-/// Returns: nil; Results.ToArray
-/// Complexity: 21 (cyclomatic, outer body), 185 lines (full implementation)
-/// Touches: file system
+/// <para>Called from: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Index.Coverage.IsBuiltinPrune, DRagLint.Index.Coverage.IsUnderRoot, DRagLint.Index.Coverage.NormPath, DRagLint.Index.Glob.TGlob.Matches, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths, LowerCase</para>
+/// <para>Returns: nil; Results.ToArray</para>
+/// <para>Complexity: 21 (cyclomatic, outer body), 185 lines (full implementation)</para>
+/// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Coverage.IsBuiltinPrune"/>
 /// <seealso cref="DRagLint.Index.Coverage.IsUnderRoot"/>
 /// <seealso cref="DRagLint.Index.Coverage.NormPath"/>
@@ -97,9 +97,9 @@ function ComputeCoverage(const AManifest: TIndexManifest; const ARoot: string; A
 /// <returns>'indexed', 'overlap', 'excluded', 'library', or 'unassigned'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas)
-/// Returns: 'indexed'; 'overlap'; 'excluded'; 'library'; 'unassigned'
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas)</para>
+/// <para>Returns: 'indexed'; 'overlap'; 'excluded'; 'library'; 'unassigned'</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CoverageKindStr(K: TCoverageKind): string;

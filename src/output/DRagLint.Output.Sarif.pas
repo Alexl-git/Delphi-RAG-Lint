@@ -13,12 +13,12 @@ type
     /// <summary>Maps a drag-lint severity to a SARIF level. error->error,
     /// warning->warning, everything else (info/hint/unknown)->note.</summary>
     /// <param name="ASeverity"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: 'error'; 'warning'; 'note'.</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: 'error'; 'warning'; 'note'.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Output.Sarif.TSarifWriter.BuildResult (DRagLint.Output.Sarif.pas)
-    /// Calls: SameText
-    /// Pure
+    /// <para>Called from: DRagLint.Output.Sarif.TSarifWriter.BuildResult (DRagLint.Output.Sarif.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
     /// <!-- drag-lint:auto END -->
@@ -27,13 +27,13 @@ type
     /// <summary>Builds one SARIF result object for a finding. Caller owns it
     /// (added into a results array which frees it).</summary>
     /// <param name="AFinding"><!-- drag-lint:auto type -->const TLintFinding</param>
-    /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
+    /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Output.Sarif.TSarifWriter.ToJson (DRagLint.Output.Sarif.pas)
-    /// Calls: DRagLint.Output.Sarif.TSarifWriter.SarifLevel, Max
-    /// Owns returned: new (caller owns)
-    /// Pure
+    /// <para>Called from: DRagLint.Output.Sarif.TSarifWriter.ToJson (DRagLint.Output.Sarif.pas)</para>
+    /// <para>Calls: DRagLint.Output.Sarif.TSarifWriter.SarifLevel, Max</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
     /// <!-- drag-lint:auto END -->
@@ -47,10 +47,10 @@ type
     /// distinct rule ids; runs[0].results carries one entry per finding.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Output.Sarif.TSarifWriter.BuildResult
-    /// Returns: Root.Format(2)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Output.Sarif.TSarifWriter.BuildResult</para>
+    /// <para>Returns: Root.Format(2)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
     /// <!-- drag-lint:auto END -->

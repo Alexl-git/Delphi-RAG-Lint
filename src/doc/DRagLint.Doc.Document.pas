@@ -40,15 +40,15 @@ type
   /// managed fence, so HasManagedBlock is False for it and a batch run would
   /// otherwise have silently STOPPED removing decayed blocks.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Doc.Document.pas)
+  /// <para>Used by: declaration (DRagLint.Doc.Document.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocumentAction = (daCreated, daExtended, daUnchanged, daNotFound, daRemoved);
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), declaration (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) (+2 more)
-  /// Used in units: DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Lint.DocRules
+  /// <para>Used by: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), declaration (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocumentResult = record
@@ -61,8 +61,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)
-  /// Used in units: DRagLint.Doc.Batch, DRagLint.Lint.DocRules
+  /// <para>Used by: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Batch, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocumenter = class
@@ -110,11 +110,11 @@ type
     /// iterating actual resolved rows (e.g. one per overload) should call
     /// BuildForSymbol directly instead (see its remarks).
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Doc.Document.TDocumenter.BuildForSymbol
-    /// Returns: Default(TDocumentResult)
-    /// Overload 1 of 2
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Doc.Document.TDocumenter.BuildForSymbol</para>
+    /// <para>Returns: Default(TDocumentResult)</para>
+    /// <para>Overload 1 of 2</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
@@ -129,13 +129,13 @@ type
     /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
     /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
     /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: BuildFor(AStore, AQName, False).</returns>
+    /// <returns><!-- drag-lint:auto -->TDocumentResult -- Observed: BuildFor(AStore,
+    /// AQName, False).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)
-    /// Calls: DRagLint.Doc.Document.TDocumenter.BuildFor/9
-    /// Overload 2 of 2
-    /// Pure
+    /// <para>Calls: DRagLint.Doc.Document.TDocumenter.BuildFor/9</para>
+    /// <para>Overload 2 of 2</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
@@ -169,11 +169,11 @@ type
     /// on BuildFor's full overload (see its remarks). Result.QName is
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas)
-    /// Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan (+16 more)
-    /// Returns: Default(TDocumentResult)
-    /// Complexity: 27 (cyclomatic, outer body), 474 lines (full implementation)
-    /// Touches: file system
+    /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas)</para>
+    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan (+16 more)</para>
+    /// <para>Returns: Default(TDocumentResult)</para>
+    /// <para>Complexity: 27 (cyclomatic, outer body), 474 lines (full implementation)</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.CommentLinesContain"/>
@@ -199,11 +199,11 @@ type
     /// <returns>The parsed on-disk doc (Default/empty when AHasDoc is False).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.FindDocRegionAbove, DRagLint.Parser.DocComments.TDocCommentParser.Dispatch, DRagLint.Parser.DocComments.TDocCommentScanner.Scan, TDocCommentKind
-    /// Returns: Default(TParsedDoc); TDocCommentParser.Dispatch(Region)
-    /// Mutates: ASym (out), AFound (out), AHasDoc (out)
-    /// Touches: file system
+    /// <para>Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.FindDocRegionAbove, DRagLint.Parser.DocComments.TDocCommentParser.Dispatch, DRagLint.Parser.DocComments.TDocCommentScanner.Scan, TDocCommentKind</para>
+    /// <para>Returns: Default(TParsedDoc); TDocCommentParser.Dispatch(Region)</para>
+    /// <para>Mutates: ASym (out), AFound (out), AHasDoc (out)</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>

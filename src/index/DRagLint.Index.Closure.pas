@@ -34,8 +34,8 @@ type
   /// <summary>Holds the result of a compile-closure walk.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+3 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Closure, DRagLint.Index.Reconcile
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Closure, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TClosureResult = record
@@ -53,8 +53,8 @@ type
   /// <summary>Resolves the compile closure of a Delphi .dpr or .dproj project.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+1 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Reconcile
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TClosureResolver = class
@@ -83,13 +83,13 @@ type
       /// caller falls back to the old all-branch scan for that file.</summary>
       /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFileLabel"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: TEncoding.UTF8.GetString(Resolved);
-      /// AContent.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed:
+      /// TEncoding.UTF8.GetString(Resolved); AContent.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Preprocess.Preprocess/2, Format, Writeln
-      /// Reads: FPreprocessEnabled, FProfile, FPreprocessFellBack   Writes: FPreprocessFellBack
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Preprocess.Preprocess/2, Format, Writeln</para>
+      /// <para>Reads: FPreprocessEnabled, FProfile, FPreprocessFellBack   Writes: FPreprocessFellBack</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Preprocess.Preprocess"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
@@ -105,13 +105,13 @@ type
       /// <summary><!-- drag-lint:auto -->Return True if AFile is rooted under any library
       /// root (case-insensitive).</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Calls: LowerCase, StringReplace
-      /// Reads: FLibraryRoots
-      /// Pure
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Calls: LowerCase, StringReplace</para>
+      /// <para>Reads: FLibraryRoots</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
@@ -128,11 +128,11 @@ type
       /// found.</summary>
       /// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASearchPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ''.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
@@ -150,11 +150,11 @@ type
       /// <param name="AIncName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFromDir"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASearchPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ''.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
@@ -178,9 +178,9 @@ type
       /// <param name="AUnitFiles"><!-- drag-lint:auto type -->TStringList</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Calls: Copy, DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout, Pos, SameText
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout, Pos, SameText</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
@@ -198,8 +198,8 @@ type
       /// <param name="AFiles"><!-- drag-lint:auto type -->TStringList</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
@@ -217,9 +217,9 @@ type
       /// <param name="APaths"><!-- drag-lint:auto type -->TStringList</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Calls: Pos
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Calls: Pos</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
@@ -240,12 +240,12 @@ type
       /// inside them. Does NOT strip // comments (they end at EOL, and our regex won't
       /// cross lines for uses-identifiers anyway).</summary>
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.ExtractUses (DRagLint.Index.Closure.pas)
-      /// Complexity: 22 (cyclomatic, outer body), 110 lines (full implementation)
-      /// Pure
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.ExtractUses (DRagLint.Index.Closure.pas)</para>
+      /// <para>Complexity: 22 (cyclomatic, outer body), 110 lines (full implementation)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
@@ -260,12 +260,12 @@ type
       /// <summary><!-- drag-lint:auto -->Scan AText for uses-clause identifiers (both
       /// interface and implementation sections). Returns a list of dotted unit names.</summary>
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Calls: Copy, DRagLint.Index.Closure.TClosureResolver.StripCommentsAndStrings, SameText
-      /// Pure
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Index.Closure.TClosureResolver.StripCommentsAndStrings, SameText</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.StripCommentsAndStrings"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
@@ -279,11 +279,11 @@ type
       /// <summary><!-- drag-lint:auto -->Scan AText for {$I filename} / {$INCLUDE
       /// filename} directives.</summary>
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)
-      /// Pure
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindIncFile"/>
@@ -300,10 +300,10 @@ type
       /// <param name="ALibraryRoots"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+1 more)
-      /// Calls: Default
-      /// constructor
-      /// Writes: FLibraryRoots, FPreprocessEnabled, FProfile, FPreprocessFellBack
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+1 more)</para>
+      /// <para>Calls: Default</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FLibraryRoots, FPreprocessEnabled, FProfile, FPreprocessFellBack</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindIncFile"/>
@@ -323,8 +323,8 @@ type
       /// and/or .dproj-derived DCC_Define). Used only when AEnabled.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?
-      /// Writes: FPreprocessEnabled, FProfile, FPreprocessFellBack
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?</para>
+      /// <para>Writes: FPreprocessEnabled, FProfile, FPreprocessFellBack</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
@@ -347,10 +347,10 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas) (+1 more)
-      /// Calls: DRagLint.Index.Closure.TClosureResolver.ExtractIncludes, DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.FindIncFile, DRagLint.Index.Closure.TClosureResolver.FindUnitFile, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile, LowerCase
-      /// Complexity: 23 (cyclomatic, outer body), 207 lines (full implementation)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas) (+1 more)</para>
+      /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.ExtractIncludes, DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.FindIncFile, DRagLint.Index.Closure.TClosureResolver.FindUnitFile, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile, LowerCase</para>
+      /// <para>Complexity: 23 (cyclomatic, outer body), 207 lines (full implementation)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindIncFile"/>

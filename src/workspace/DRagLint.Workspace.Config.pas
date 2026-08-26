@@ -13,8 +13,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Workspace.Config
+  /// <para>Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Workspace.Config</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TWorkspaceProject = record
@@ -24,8 +24,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), declaration (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Workspace.Config
+  /// <para>Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), declaration (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Workspace.Config</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TWorkspaceConfig = record
@@ -37,22 +37,23 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TWorkspaceConfigIO = class
     public
       /// <summary><!-- drag-lint:auto -->TWorkspaceConfigIO</summary>
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Default(TWorkspaceConfig).</returns>
+      /// <returns><!-- drag-lint:auto -->TWorkspaceConfig -- Observed:
+      /// Default(TWorkspaceConfig).</returns>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?
-      /// Calls: Default, TJSONArray, TJSONObject
-      /// Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?</para>
+      /// <para>Calls: Default, TJSONArray, TJSONObject</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.FindWorkspaceRoot"/>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile"/>
       /// <!-- drag-lint:auto END -->
@@ -62,19 +63,19 @@ type
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.FindWorkspaceRoot"/>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class procedure SaveToFile(const AConfig: TWorkspaceConfig; const APath: string); static;
       /// <param name="AStartDir"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ''; Dir.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Dir.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile"/>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile"/>
       /// <!-- drag-lint:auto END -->

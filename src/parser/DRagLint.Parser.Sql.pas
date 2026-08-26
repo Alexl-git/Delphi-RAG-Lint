@@ -50,28 +50,28 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFirebirdSqlParser = class(TInterfacedObject, IParser)
     public
       /// <summary><!-- drag-lint:auto -->---- TFirebirdSqlParser ----</summary>
-      /// <returns><!-- drag-lint:auto -->Observed: 'firebird-sql'.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: 'firebird-sql'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Implements: DRagLint.Core.Interfaces.IParser.LanguageName
-      /// Pure
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.LanguageName</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.Sql.TFirebirdSqlParser.FileExtensions"/>
       /// <seealso cref="DRagLint.Parser.Sql.TFirebirdSqlParser.Parse"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LanguageName: string                                               ;
-      /// <returns><!-- drag-lint:auto -->Observed: ['.sql'].</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: ['.sql'].</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Implements: DRagLint.Core.Interfaces.IParser.FileExtensions
-      /// Pure
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.FileExtensions</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.Sql.TFirebirdSqlParser.LanguageName"/>
       /// <seealso cref="DRagLint.Parser.Sql.TFirebirdSqlParser.Parse"/>
       /// <!-- drag-lint:auto END -->
@@ -79,13 +79,13 @@ type
       function FileExtensions: TArray<string>                                     ;
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Default(TParseResult).</returns>
+      /// <returns><!-- drag-lint:auto -->TParseResult -- Observed: Default(TParseResult).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Parser.Sql.ComputeLineCol, DRagLint.Parser.Sql.FindMatchingParen, DRagLint.Parser.Sql.ParseColumnList, DRagLint.Parser.Sql.ReadSqlExceptionMessage, DRagLint.Parser.Sql.StripCommentsAndStrings, DRagLint.Parser.Sql.TSqlState.AddRef, DRagLint.Parser.Sql.TSqlState.AddSymbol, DRagLint.Parser.Sql.TSqlState.Create
-      /// Implements: DRagLint.Core.Interfaces.IParser.Parse
-      /// Complexity: 14 (cyclomatic, outer body), 151 lines (full implementation)
-      /// Pure
+      /// <para>Calls: Default, DRagLint.Parser.Sql.ComputeLineCol, DRagLint.Parser.Sql.FindMatchingParen, DRagLint.Parser.Sql.ParseColumnList, DRagLint.Parser.Sql.ReadSqlExceptionMessage, DRagLint.Parser.Sql.StripCommentsAndStrings, DRagLint.Parser.Sql.TSqlState.AddRef, DRagLint.Parser.Sql.TSqlState.AddSymbol, DRagLint.Parser.Sql.TSqlState.Create</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 151 lines (full implementation)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.Sql.ComputeLineCol"/>
       /// <seealso cref="DRagLint.Parser.Sql.FindMatchingParen"/>
       /// <seealso cref="DRagLint.Parser.Sql.ParseColumnList"/>

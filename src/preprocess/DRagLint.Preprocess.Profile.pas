@@ -38,10 +38,10 @@ uses
 /// <returns>Lowercased built-in define names.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas)
-/// Calls: SameText
-/// Owns returned: new (caller owns)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function PlatformBuiltins(const APlatform: string): TArray<string>;
@@ -63,9 +63,9 @@ function PlatformBuiltins(const APlatform: string): TArray<string>;
 /// lowercased).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas)
-/// Calls: DRagLint.Preprocess.Profile.AddDccDefines, DRagLint.Preprocess.Profile.CfgAliasFor, DRagLint.Preprocess.Profile.DccDefineInGroup, DRagLint.Preprocess.Profile.PlatformBuiltins
-/// Touches: file system
+/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Profile.AddDccDefines, DRagLint.Preprocess.Profile.CfgAliasFor, DRagLint.Preprocess.Profile.DccDefineInGroup, DRagLint.Preprocess.Profile.PlatformBuiltins</para>
+/// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Preprocess.Profile.AddDccDefines"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.CfgAliasFor"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.DccDefineInGroup"/>

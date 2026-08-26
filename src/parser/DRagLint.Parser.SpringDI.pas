@@ -31,8 +31,8 @@ type
   /// surrounding angle brackets already stripped, or '' when the link has no
   /// type argument (e.g. '.AsSingleton').
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Parser.SpringDI.FindLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.HasLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.FirstDiRegistrationVerb (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.ClassifyDiChain (DRagLint.Parser.SpringDI.pas)
-  /// Used in units: DRagLint.Parser.SpringDI
+  /// <para>Used by: DRagLint.Parser.SpringDI.FindLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.HasLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.FirstDiRegistrationVerb (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.ClassifyDiChain (DRagLint.Parser.SpringDI.pas)</para>
+  /// <para>Used in units: DRagLint.Parser.SpringDI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDiChainLink = record
@@ -43,7 +43,7 @@ type
   /// <summary>Classification of a captured method-access chain.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas), declaration (DRagLint.Parser.SpringDI.pas)
+  /// <para>Used by: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas), declaration (DRagLint.Parser.SpringDI.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDiOutcome = (
@@ -63,8 +63,8 @@ type
   /// generics.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas), declaration (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.ClassifyDiChain (DRagLint.Parser.SpringDI.pas)
-  /// Used in units: DRagLint.Parser.Delphi13, DRagLint.Parser.SpringDI
+  /// <para>Used by: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas), declaration (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.ClassifyDiChain (DRagLint.Parser.SpringDI.pas)</para>
+  /// <para>Used in units: DRagLint.Parser.Delphi13, DRagLint.Parser.SpringDI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDiBinding = record
@@ -91,11 +91,11 @@ const
 /// <remarks>
 /// Pure and side-effect free. Method-name matching is case-insensitive.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas)
-/// Calls: Default, DRagLint.Parser.SpringDI.FindLink, DRagLint.Parser.SpringDI.FirstDiRegistrationVerb, DRagLint.Parser.SpringDI.HasLink
-/// Returns: dioNone; dioRegister; dioResolve; dioUnresolved
-/// Complexity: 13 (cyclomatic, outer body), 52 lines (full implementation)
-/// Mutates: ABinding (out), AResolveInterface (out), AUnresolvedMethod (out)
+/// <para>Called from: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas)</para>
+/// <para>Calls: Default, DRagLint.Parser.SpringDI.FindLink, DRagLint.Parser.SpringDI.FirstDiRegistrationVerb, DRagLint.Parser.SpringDI.HasLink</para>
+/// <para>Returns: dioNone; dioRegister; dioResolve; dioUnresolved</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 52 lines (full implementation)</para>
+/// <para>Mutates: ABinding (out), AResolveInterface (out), AUnresolvedMethod (out)</para>
 /// <seealso cref="DRagLint.Parser.SpringDI.FindLink"/>
 /// <seealso cref="DRagLint.Parser.SpringDI.FirstDiRegistrationVerb"/>
 /// <seealso cref="DRagLint.Parser.SpringDI.HasLink"/>

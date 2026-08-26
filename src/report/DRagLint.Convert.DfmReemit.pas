@@ -33,7 +33,7 @@ type
   /// or a binary/data blob.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas)
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmNodeKind = (dnkScalar, dnkEvent, dnkSubObject, dnkCollection, dnkBinary);
@@ -52,8 +52,8 @@ type
   /// verbatim in ValueText, not modelled as child nodes. Only a dnkSubObject has
   /// children: its properties + nested objects.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas) (+3 more)
-  /// Used in units: DRagLint.Convert.DfmReemit
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmNode = class
@@ -67,17 +67,17 @@ type
     /// <summary><!-- drag-lint:auto -->TDfmNode</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Convert.DfmReemit.CloneNode (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas)
-    /// constructor
-    /// Writes: FChildren
+    /// <para>Called from: DRagLint.Convert.DfmReemit.CloneNode (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FChildren</para>
     /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Destroy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     constructor Create;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Reads: FChildren
-    /// Pure
+    /// <para>Reads: FChildren</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -98,8 +98,8 @@ type
   /// rules (WARN). Notes=free-form (e.g. a relocated collection). Each entry is an
   /// ASCII, human-readable string.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Convert.DfmReemit.pas)
-  /// Used in units: DRagLint.Convert.DfmReemit
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitReport = record
@@ -119,8 +119,8 @@ type
   /// block, or no #convert header in the rules. Error carries the reason when Ok
   /// is False.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit
+  /// <para>Used by: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitResult = record
@@ -145,10 +145,10 @@ type
 /// indexer's TDFMParser is lossy -- symbols/refs only). Not thread-safe with
 /// respect to the tree-sitter runtime if called concurrently.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)
-/// Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, Trim
-/// Complexity: 10 (cyclomatic, outer body), 53 lines (full implementation)
-/// Mutates: ARoot (out)
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, Trim</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 53 lines (full implementation)</para>
+/// <para>Mutates: ARoot (out)</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.NodeText"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Create"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.WalkNodeInto"/>
@@ -179,11 +179,11 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// #convert rules is left unconverted + Report.OwnedParts. A nested Controls/
 /// Components child is left ALONE. Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)
-/// Calls: CloneNode, Copy, Default, DRagLint.Convert.DfmReemit.BareTypeTail, DRagLint.Convert.DfmReemit.EmitBlock, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.PlaceAtPath, DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested, DRagLint.Convert.DfmReemit.ReemitComponent.RemapLeaf, DRagLint.Convert.DfmReemit.TDfmNode.Create (+11 more)
-/// Returns: Default(TReemitResult)
-/// Complexity: 14 (cyclomatic, outer body), 275 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: CloneNode, Copy, Default, DRagLint.Convert.DfmReemit.BareTypeTail, DRagLint.Convert.DfmReemit.EmitBlock, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.PlaceAtPath, DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested, DRagLint.Convert.DfmReemit.ReemitComponent.RemapLeaf, DRagLint.Convert.DfmReemit.TDfmNode.Create (+11 more)</para>
+/// <para>Returns: Default(TReemitResult)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 275 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.BareTypeTail"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.EmitBlock"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.ParseDfmBlock"/>

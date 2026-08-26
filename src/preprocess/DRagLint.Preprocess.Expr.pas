@@ -58,10 +58,10 @@ uses
 /// is returned as-is. ANY parse error or exception returns False (conservative).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoDumpPpEval (DRagLint.CLI.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)
-/// Calls: DRagLint.Preprocess.Expr.TPPExprParser.Eval, DRagLint.Preprocess.Expr.TPPExprParser.Init, DRagLint.Preprocess.Expr.Truthy
-/// Returns: Truthy(V); False
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoDumpPpEval (DRagLint.CLI.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Expr.TPPExprParser.Eval, DRagLint.Preprocess.Expr.TPPExprParser.Init, DRagLint.Preprocess.Expr.Truthy</para>
+/// <para>Returns: Truthy(V); False</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Eval"/>
 /// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Init"/>
 /// <seealso cref="DRagLint.Preprocess.Expr.Truthy"/>

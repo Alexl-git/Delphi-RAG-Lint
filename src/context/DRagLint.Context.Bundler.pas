@@ -19,8 +19,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.MCP.Server
+  /// <para>Used by: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TContextBundler = class
@@ -37,10 +37,10 @@ type
       /// <returns><!-- drag-lint:auto type -->TContextBundle</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: Copy, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolSlice, FillChar, LastDelimiter, Pos, SameText
-      /// Complexity: 20 (cyclomatic, outer body), 130 lines (full implementation)
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolSlice, FillChar, LastDelimiter, Pos, SameText</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 130 lines (full implementation)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Context.Bundler.StripDfmFields"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext"/>
@@ -52,11 +52,11 @@ type
         const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
         AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True): TContextBundle;
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Round(Length(AText) / 3.7).</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: Round(Length(AText) / 3.7).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
-      /// Pure
+      /// <para>Called from: DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderJson"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderMarkdown"/>
@@ -65,13 +65,13 @@ type
       /// </remarks>
       class function EstimateTokens(const AText: string)          : Integer;
       /// <param name="ABundle"><!-- drag-lint:auto type -->const TContextBundle</param>
-      /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas)
-      /// Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, FormatDateTime
-      /// Complexity: 14 (cyclomatic, outer body), 90 lines (full implementation)
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, FormatDateTime</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 90 lines (full implementation)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
@@ -84,9 +84,9 @@ type
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: Format, IfThen
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Format, IfThen</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderMarkdown"/>
@@ -95,11 +95,11 @@ type
       /// </remarks>
       class function RenderJson(const ABundle: TContextBundle)    : string ;
       /// <param name="ABundle"><!-- drag-lint:auto type -->const TContextBundle</param>
-      /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas)
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderJson"/>

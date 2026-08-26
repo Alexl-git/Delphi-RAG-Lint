@@ -85,12 +85,12 @@ uses
 /// No shared mutable state -- each call builds its own defines
 /// dictionary and IF stack.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)
-/// Calls: DRagLint.Preprocess.Preprocess/2
-/// Returns: Preprocess(AUtf8, Opts)
-/// Overload 1 of 2
-/// Recursive
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Preprocess/2</para>
+/// <para>Returns: Preprocess(AUtf8, Opts)</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Recursive</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes; overload;
@@ -111,9 +111,9 @@ function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes
 /// directive is always blanked, never spliced.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.Preprocess.PreprocessInto, DRagLint.Preprocess.Tolerance.ApplyTolerances, LowerCase
-/// Overload 2 of 2
-/// Pure
+/// <para>Calls: DRagLint.Preprocess.PreprocessInto, DRagLint.Preprocess.Tolerance.ApplyTolerances, LowerCase</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Preprocess.PreprocessInto"/>
 /// <seealso cref="DRagLint.Preprocess.Tolerance.ApplyTolerances"/>
 /// <!-- drag-lint:auto END -->

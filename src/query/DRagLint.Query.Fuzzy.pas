@@ -15,12 +15,12 @@ uses
 /// case-insensitive at the language level.</summary>
 /// <param name="A"><!-- drag-lint:auto type -->const string</param>
 /// <param name="B"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->Observed: RowPrev[Lb].</returns>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: RowPrev[Lb].</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas)
-/// Calls: Copy, LowerCase
-/// Pure
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: Copy, LowerCase</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function LevenshteinDistance(const A, B: string): Integer;
@@ -31,11 +31,11 @@ function LevenshteinDistance(const A, B: string): Integer;
 /// against APattern. Tighter for short patterns to keep precision; looser for long
 /// patterns.</summary>
 /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->Observed: 1; 2; 3.</returns>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: 1; 2; 3.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas)
-/// Pure
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function FuzzyMaxDistanceFor(const APattern: string): Integer;
@@ -46,12 +46,12 @@ function FuzzyMaxDistanceFor(const APattern: string): Integer;
 /// Patterns shorter than 3 chars return an empty array (caller should fall back to full
 /// scan).</summary>
 /// <param name="S"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
+/// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.EnsureTrigramTablePopulated (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbol (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas)
-/// Calls: Copy, LowerCase
-/// Pure
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.EnsureTrigramTablePopulated (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbol (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: Copy, LowerCase</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Trigrams(const S: string): TArray<string>;

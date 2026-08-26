@@ -30,8 +30,8 @@ type
   /// deep) All $(BDS) and similar macros are expanded.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), declaration (DRagLint.Index.Coverage.pas), declaration (DRagLint.Index.DbSelect.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), declaration (DRagLint.Index.Plan.pas)
-  /// Used in units: DRagLint.Doc.Batch, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan
+  /// <para>Used by: DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), declaration (DRagLint.Index.Coverage.pas), declaration (DRagLint.Index.DbSelect.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), declaration (DRagLint.Index.Plan.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Batch, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProjectResolver = class
@@ -42,10 +42,10 @@ type
       FEnvVarsLoaded  : Boolean                          ;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro (DRagLint.Project.Resolver.pas)
-      /// Calls: UpperCase
-      /// Reads: FEnvVarsLoaded, FEnvVars   Writes: FEnvVarsLoaded
-      /// Touches: registry
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: UpperCase</para>
+      /// <para>Reads: FEnvVarsLoaded, FEnvVars   Writes: FEnvVarsLoaded</para>
+      /// <para>Touches: registry</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -56,13 +56,13 @@ type
       procedure EnsureEnvVarsLoaded                     ;
       /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AValue"><!-- drag-lint:auto type -->out string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: AValue &lt;&gt; ''.</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: AValue &lt;&gt; ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Project.Resolver.TProjectResolver.ExpandMacros (DRagLint.Project.Resolver.pas)
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded, GetEnvironmentVariable, UpperCase
-      /// Reads: FEnvVars
-      /// Mutates: AValue (out)
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ExpandMacros (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded, GetEnvironmentVariable, UpperCase</para>
+      /// <para>Reads: FEnvVars</para>
+      /// <para>Mutates: AValue (out)</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
@@ -75,10 +75,10 @@ type
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas)
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro, Pos, StringReplace
-      /// Reads: FBDS, FCurrentPlatform
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro, Pos, StringReplace</para>
+      /// <para>Reads: FBDS, FCurrentPlatform</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
@@ -91,9 +91,9 @@ type
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths (DRagLint.Project.Resolver.pas)
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ExpandMacros, SameText
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ExpandMacros, SameText</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ExpandMacros"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -107,9 +107,9 @@ type
       /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths (DRagLint.Project.Resolver.pas)
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, DRagLint.Project.Resolver.TProjectResolver.ExpandMacros
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, DRagLint.Project.Resolver.TProjectResolver.ExpandMacros</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ExpandMacros"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -122,11 +122,11 @@ type
       /// ...\BDS\37.0\Library across both hives and registry views, deduplicated
       /// case-insensitively. These are the names Delphi itself registers (Win32, Win64,
       /// Android64, iOSDevice64, ...).</summary>
-      /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique, HKEY, SameText
-      /// Touches: registry
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique, HKEY, SameText</para>
+      /// <para>Touches: registry</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
@@ -139,9 +139,9 @@ type
       /// <param name="APlatforms"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths (DRagLint.Project.Resolver.pas)
-      /// Calls: DRagLint.Project.Resolver.ReadRegPathInto, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList, HKEY
-      /// Writes: FCurrentPlatform
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.ReadRegPathInto, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList, HKEY</para>
+      /// <para>Writes: FCurrentPlatform</para>
       /// <seealso cref="DRagLint.Project.Resolver.ReadRegPathInto"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
@@ -154,9 +154,9 @@ type
       /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders (DRagLint.Project.Resolver.pas)
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList, Format
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList, Format</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -169,9 +169,9 @@ type
       /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders (DRagLint.Project.Resolver.pas)
-      /// Calls: Copy, DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, Pos, PosEx
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, Pos, PosEx</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -190,9 +190,9 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveProjectOnly (DRagLint.Project.Resolver.pas)
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ReadDProj, DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveProjectOnly (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadDProj, DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadDProj"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
@@ -204,10 +204,10 @@ type
     public
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas)
-      /// Calls: GetEnvironmentVariable
-      /// constructor
-      /// Reads: FBDS   Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded
+      /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas)</para>
+      /// <para>Calls: GetEnvironmentVariable</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FBDS   Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -218,8 +218,8 @@ type
       constructor Create;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Reads: FEnvVars
-      /// Pure
+      /// <para>Reads: FEnvVars</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -241,10 +241,10 @@ type
       /// indexes the entire RTL/VCL and every installed component's source. Use
       /// <see cref="ResolveProjectOnly"/> to index a project.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders, DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths
-      /// Returns: List.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders, DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths</para>
+      /// <para>Returns: List.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
@@ -267,9 +267,9 @@ type
       /// and library-Win64.sqlite wholesale. Library coverage belongs in those
       /// shared indexes; a consumer reaches it by passing a second --db.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders
-      /// Returns: List.ToArray
-      /// Pure
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders</para>
+      /// <para>Returns: List.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
@@ -292,12 +292,12 @@ type
       /// additionally pulls in the Posix / Androidapi / iOSapi / Macapi platform source
       /// trees.</summary>
       /// <param name="AAllPlatforms"><!-- drag-lint:auto type -->Boolean = False</param>
-      /// <returns><!-- drag-lint:auto -->Observed: List.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+4 more)
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+4 more)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
@@ -312,9 +312,9 @@ type
       /// <returns>Array of platform names (e.g. Win32, Win64, Android64).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)
-      /// Returns: EnumLibraryPlatforms; ['Win32', 'Win64']
-      /// Pure
+      /// <para>Called from: DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
+      /// <para>Returns: EnumLibraryPlatforms; ['Win32', 'Win64']</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -330,10 +330,10 @@ type
       /// <returns>Deduplicated array of existing absolute folder paths.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems (DRagLint.Lint.ProjectChecks.pas) ?
-      /// Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths
-      /// Returns: List.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems (DRagLint.Lint.ProjectChecks.pas) ?</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths</para>
+      /// <para>Returns: List.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>

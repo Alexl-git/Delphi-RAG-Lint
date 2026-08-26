@@ -64,9 +64,9 @@ interface
 /// pairs are adjacent in the implementation section, which is where a stale
 /// span lands.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
-/// Calls: DRagLint.Hover.Returns.MineReturnExpressionsEx
-/// Pure
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Hover.Returns.MineReturnExpressionsEx</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Returns.MineReturnExpressionsEx"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -79,8 +79,8 @@ type
   /// into an absolute source line (ImplStartLine + LineOffset) for navigation.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Hover.Returns.MineReturnExpressionsEx (DRagLint.Hover.Returns.pas)
-  /// Used in units: DRagLint.Hover.Returns
+  /// <para>Used by: DRagLint.Hover.Returns.MineReturnExpressionsEx (DRagLint.Hover.Returns.pas)</para>
+  /// <para>Used in units: DRagLint.Hover.Returns</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReturnMined = record
@@ -102,10 +102,10 @@ type
 /// Masking never changes the line COUNT, so LineOffset still indexes
 /// ABodyLines.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Hover.Returns.MineReturnExpressions (DRagLint.Hover.Returns.pas)
-/// Calls: DRagLint.Hover.Returns.CollapseCommentGaps, DRagLint.Hover.Returns.ExitRhs, DRagLint.Hover.Returns.HasResultMutation, DRagLint.Hover.Returns.MaskNestedRoutines, DRagLint.Hover.Returns.ResultRhs
-/// Returns: nil; Ordered.ToArray
-/// Pure
+/// <para>Called from: DRagLint.Hover.Returns.MineReturnExpressions (DRagLint.Hover.Returns.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+/// <para>Calls: DRagLint.Hover.Returns.CollapseCommentGaps, DRagLint.Hover.Returns.ExitRhs, DRagLint.Hover.Returns.HasResultMutation, DRagLint.Hover.Returns.MaskNestedRoutines, DRagLint.Hover.Returns.ResultRhs</para>
+/// <para>Returns: nil; Ordered.ToArray</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Returns.CollapseCommentGaps"/>
 /// <seealso cref="DRagLint.Hover.Returns.ExitRhs"/>
 /// <seealso cref="DRagLint.Hover.Returns.HasResultMutation"/>

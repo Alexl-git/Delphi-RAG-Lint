@@ -29,8 +29,8 @@ type
   /// .gitignore is always glob. Matching uses TGlob's direct linear matcher,
   /// so no pattern can cause pathological CPU/stack behavior on the walk.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Core.Indexer
+  /// <para>Used by: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TIgnoreStack = class
@@ -38,8 +38,8 @@ type
       type
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Used by: DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas)
-        /// Used in units: DRagLint.Index.IgnoreFiles
+        /// <para>Used by: DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas)</para>
+        /// <para>Used in units: DRagLint.Index.IgnoreFiles</para>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>
@@ -55,7 +55,7 @@ type
       end;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Used by: declaration (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.Create (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas)
+      /// <para>Used by: declaration (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.Create (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas)</para>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>
@@ -70,14 +70,14 @@ type
 
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AIsHg"><!-- drag-lint:auto type -->Boolean</param>
-      /// <returns><!-- drag-lint:auto -->Observed: TLayer.Create.</returns>
+      /// <returns><!-- drag-lint:auto -->TLayer -- Observed: TLayer.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas)
-      /// Calls: Copy, Default, Pos, Trim
-      /// Complexity: 12 (cyclomatic, outer body), 55 lines (full implementation)
-      /// Owns returned: new (caller owns)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas)</para>
+      /// <para>Calls: Copy, Default, Pos, Trim</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 55 lines (full implementation)</para>
+      /// <para>Owns returned: new (caller owns)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>
@@ -90,9 +90,9 @@ type
         /// <summary><!-- drag-lint:auto -->TIgnoreStack</summary>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas)
-        /// constructor
-        /// Pure
+        /// <para>Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas)</para>
+        /// <para>constructor</para>
+        /// <para>Pure</para>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile"/>
@@ -111,9 +111,9 @@ type
         /// leaving the directory. Multiple ignore files in the same directory are
         /// merged into one layer in git-first, hg-second order.
         /// <!-- drag-lint:auto BEGIN -->
-        /// Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
-        /// Calls: DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile
-        /// Touches: file system
+        /// <para>Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)</para>
+        /// <para>Calls: DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile</para>
+        /// <para>Touches: file system</para>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
@@ -128,8 +128,8 @@ type
         /// Safe to call when the stack is empty; the call is a no-op in
         /// that case.
         /// <!-- drag-lint:auto BEGIN -->
-        /// Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
-        /// Pure
+        /// <para>Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)</para>
+        /// <para>Pure</para>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>
@@ -148,10 +148,10 @@ type
         /// no rule matches or the last match is a negation rule.</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)
-        /// Calls: DRagLint.Index.Glob.TGlob.Matches, DRagLint.Index.IgnoreFiles.BaseName, DRagLint.Index.IgnoreFiles.NormPath
-        /// Returns: False; not Rule.Negated
-        /// Pure
+        /// <para>Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)</para>
+        /// <para>Calls: DRagLint.Index.Glob.TGlob.Matches, DRagLint.Index.IgnoreFiles.BaseName, DRagLint.Index.IgnoreFiles.NormPath</para>
+        /// <para>Returns: False; not Rule.Negated</para>
+        /// <para>Pure</para>
         /// <seealso cref="DRagLint.Index.Glob.TGlob.Matches"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.BaseName"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.NormPath"/>

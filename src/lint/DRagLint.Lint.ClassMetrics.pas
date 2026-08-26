@@ -46,11 +46,11 @@ type
     /// <remarks>
     /// Project-wide; call from lint-all only. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: CollectDefProcNodes, CollectIdentifiers, Connected, Copy, Default, DelegateBaseField, DelegationField, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory, DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildMemberMap (+26 more)
-    /// Returns: Roots.Count; Default(TMiddleManResult); nil; Findings.ToArray
-    /// Complexity: 24 (cyclomatic, outer body), 938 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: CollectDefProcNodes, CollectIdentifiers, CompareText, Connected, Copy, Default, DelegateBaseField, DelegationField, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory (+32 more)</para>
+    /// <para>Returns: Roots.Count; Default(TMiddleManResult); nil; Findings.ToArray</para>
+    /// <para>Complexity: 28 (cyclomatic, outer body), 1042 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory"/>
     /// <seealso cref="DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildMemberMap"/>

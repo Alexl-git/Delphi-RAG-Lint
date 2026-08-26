@@ -19,8 +19,8 @@ type
   /// <summary>One project-owned source file and its optional sibling .dfm.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Project.Coherence.pas)
-  /// Used in units: DRagLint.Project.Coherence
+  /// <para>Used by: declaration (DRagLint.Project.Coherence.pas)</para>
+  /// <para>Used in units: DRagLint.Project.Coherence</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProjectMember = record
@@ -41,9 +41,9 @@ type
 /// <returns>One TProjectMember per input path, in the same order.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-/// Calls: SameText
-/// Touches: file system
+/// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function PairDfmSiblings(const AUnitPaths: TArray<string>): TArray<TProjectMember>;

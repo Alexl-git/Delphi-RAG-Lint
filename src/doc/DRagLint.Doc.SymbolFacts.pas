@@ -254,11 +254,11 @@ uses
 /// applied: entries are Pascal identifiers / qualified names, which never
 /// contain a comma.</summary>
 /// <param name="AItems">Field/table/test qualified names, in display order.</param>
-/// <returns><!-- drag-lint:auto -->Observed: string.Join(',', AItems).</returns>
+/// <returns><!-- drag-lint:auto -->string -- Observed: string.Join(',', AItems).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas)</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SymbolFactsCsvJoin(const AItems: TArray<string>): string;
@@ -268,11 +268,12 @@ function SymbolFactsCsvJoin(const AItems: TArray<string>): string;
 /// yields an empty array (never a 1-element array holding '').</summary>
 /// <param name="ACsv">A raw symbol_facts TEXT column value, e.g. as returned
 /// by ISymbolStore.GetSymbolFacts.</param>
-/// <returns><!-- drag-lint:auto -->Observed: SplitString(ACsv, ',').</returns>
+/// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: SplitString(ACsv,
+/// ',').</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: SplitString, Trim
-/// Pure
+/// <para>Calls: SplitString, Trim</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
@@ -301,10 +302,10 @@ function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
 /// detected as a test -- see IsTestRoutine for the two detection rules.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
-/// Calls: DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers, DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk, DRagLint.Doc.SymbolFacts.JoinCappedDisplay, IsTestRoutine, LastSegment
-/// Returns: ''; JoinCappedDisplay(Capped, COVERED_BY_CAP)
-/// Pure
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers, DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk, DRagLint.Doc.SymbolFacts.JoinCappedDisplay, IsTestRoutine, LastSegment</para>
+/// <para>Returns: ''; JoinCappedDisplay(Capped, COVERED_BY_CAP)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers"/>
 /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
 /// <seealso cref="DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk"/>
@@ -347,11 +348,11 @@ function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): stri
 /// its own. The dataset link is looked up for both the symbol and its parent, since orm-link may
 /// attach either.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
-/// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDiBindingsForImpl, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Doc.SymbolFacts.ComputeWiring.AddDatasetLinks, Format, Trim
-/// Returns: ''; string.Join('; ', Entries.ToStringArray)
-/// Complexity: 11 (cyclomatic, outer body), 71 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDiBindingsForImpl, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Doc.SymbolFacts.ComputeWiring.AddDatasetLinks, Format, Trim</para>
+/// <para>Returns: ''; string.Join('; ', Entries.ToStringArray)</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 71 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDiBindingsForImpl"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
 /// <seealso cref="DRagLint.Doc.SymbolFacts.ComputeWiring.AddDatasetLinks"/>
@@ -365,8 +366,8 @@ type
   /// group Phase 2 will ever add (see the unit banner comment).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
-  /// Used in units: DRagLint.Core.Indexer
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSymbolFactsAnalyzer = class
@@ -438,10 +439,10 @@ type
       /// unit's implementation section) for the full site-collection +
       /// unanimity + object-type-gate ruleset.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches, DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity, DRagLint.Doc.SymbolFacts.ProcsForFile, Integer
-      /// Returns: Default(TSymbolFacts)
-      /// Pure
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches, DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity, DRagLint.Doc.SymbolFacts.ProcsForFile, Integer</para>
+      /// <para>Returns: Default(TSymbolFacts)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent"/>

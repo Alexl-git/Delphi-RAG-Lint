@@ -14,7 +14,7 @@ type
   /// <summary>Iteration direction of a data-flow analysis.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Direction (DRagLint.Analysis.Flow.Lattices.pas) (+1 more)
+  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Direction (DRagLint.Analysis.Flow.Lattices.pas) (+1 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFlowDir = (fdForward, fdBackward);
@@ -63,12 +63,12 @@ type
     /// <param name="AAnalysis"><!-- drag-lint:auto type -->const IDataFlowAnalysis&lt;TValue&gt;</param>
     /// <param name="AIn"><!-- drag-lint:auto type -->out TArray&lt;TValue&gt;</param>
     /// <param name="AOut"><!-- drag-lint:auto type -->out TArray&lt;TValue&gt;</param>
-    /// <returns><!-- drag-lint:auto -->Observed: True.</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Analysis.Cfg.TCfg.BlockCount
-    /// Complexity: 17 (cyclomatic, outer body), 64 lines (full implementation)
-    /// Mutates: AIn (out), AOut (out)
+    /// <para>Calls: DRagLint.Analysis.Cfg.TCfg.BlockCount</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 64 lines (full implementation)</para>
+    /// <para>Mutates: AIn (out), AOut (out)</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>

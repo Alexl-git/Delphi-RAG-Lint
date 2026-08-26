@@ -29,8 +29,8 @@ interface
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
-  /// Used in units: DRagLint.Doc.Facts
+  /// <para>Used by: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGitSince = class
@@ -61,10 +61,10 @@ type
     /// drifting committer-time) is used, so re-committing the fixture never
     /// changes the emitted date.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
-    /// Calls: DRagLint.Doc.GitSince.ParsePorcelainAuthorDate, DRagLint.Doc.GitSince.SpawnGit, Format, Trim
-    /// Returns: ''; ParsePorcelainAuthorDate(Output)
-    /// Pure
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <para>Calls: DRagLint.Doc.GitSince.ParsePorcelainAuthorDate, DRagLint.Doc.GitSince.SpawnGit, Format, Trim</para>
+    /// <para>Returns: ''; ParsePorcelainAuthorDate(Output)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.GitSince.ParsePorcelainAuthorDate"/>
     /// <seealso cref="DRagLint.Doc.GitSince.SpawnGit"/>
     /// <!-- drag-lint:auto END -->

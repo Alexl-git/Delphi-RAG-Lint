@@ -16,10 +16,10 @@ uses
 /// <remarks>
 /// Pure function; no state; thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
-/// Calls: DRagLint.Output.ExitCode.SeverityRank, SameText
-/// Returns: 0
-/// Pure
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Output.ExitCode.SeverityRank, SameText</para>
+/// <para>Returns: 0</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Output.ExitCode.SeverityRank"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

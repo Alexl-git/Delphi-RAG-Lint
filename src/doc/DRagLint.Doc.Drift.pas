@@ -48,7 +48,7 @@ type
   //                             was simply never written. User ruling 2026-08-07.
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Doc.Drift.pas)
+  /// <para>Used by: declaration (DRagLint.Doc.Drift.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocDriftKind = (
@@ -80,8 +80,8 @@ type
   /// function with nothing minable is report-only. Consumers must read this
   /// field, never infer fixability from Kind.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Drift, DRagLint.Lint.DocRules
+  /// <para>Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Drift, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocDriftFinding = record
@@ -101,8 +101,8 @@ type
   /// the engine stays silent.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Lint.DocRules
+  /// <para>Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocDrift = class
@@ -118,8 +118,12 @@ type
     /// Raises facts and the fresh facts-block render. Must not be nil.</param>
     /// <param name="ASym">The documented symbol (routine).</param>
     /// <param name="ADoc">The parsed DocInsight comment currently on the decl.</param>
+    /// <param name="AOpts">The options the block under test was WRITTEN under.
+    /// Drift compares a rebuild against the written text, so anything the two
+    /// paths do not share is measured as drift -- see TDocFactsRenderOptions.</param>
     /// <returns>The drift findings, in a stable per-signal order.</returns>
-    /// <remarks>EVERY render option MUST be the one the DOCUMENTER used. The
+    /// <remarks>
+    /// EVERY render option MUST be the one the DOCUMENTER used. The
     /// staleness test regenerates the block and byte-compares, so any option the
     /// two paths do not share is measured as drift rather than drift being
     /// measured. All three known instances of that were real, shipped, and
@@ -132,43 +136,56 @@ type
     /// default 20 deadlocked every routine with more than 6 minable cases.</para>
     /// <para>the extra stores -- a block documented from two DBs reported as
     /// drifted by a checker that opened one.</para>
-    /// That is what TDocFactsRenderOptions is for.</remarks>
-    /// <remarks>
+    /// That is what TDocFactsRenderOptions is for.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
-    /// Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile, DRagLint.Doc.Drift.GroupParamNames (+20 more)
-    /// Returns: Findings.ToArray
-    /// Complexity: 53 (cyclomatic, outer body), 492 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
+    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile (+22 more)</para>
+    /// <para>Returns: Findings.ToArray</para>
+    /// <para>Overload 1 of 2</para>
+    /// <para>Complexity: 55 (cyclomatic, outer body), 511 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
     /// <seealso cref="DRagLint.Doc.Drift.DescReadsInputOnly"/>
     /// <seealso cref="DRagLint.Doc.Drift.EffectiveSignature"/>
-    /// <seealso cref="DRagLint.Doc.Drift.ExtractCodeIdents"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="AOpts">The options the block under test was WRITTEN under.
-    /// Drift compares a rebuild against the written text, so anything the two
-    /// paths do not share is measured as drift -- see TDocFactsRenderOptions.</param>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
       const ADoc: TParsedDoc; const AOpts: TDocFactsRenderOptions): TArray<TDocDriftFinding>; overload;
     /// <summary>Analyze under the documented default render options.</summary>
-    /// <remarks>For callers with no manifest-configured caps and a single store.
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;TDocDriftFinding&gt; -- Observed:
+    /// Analyze(AStore, ASym, ADoc, TDocFactsRenderOptions.Defaults).</returns>
+    /// <remarks>
+    /// For callers with no manifest-configured caps and a single store.
     /// A caller that HAS extra stores or non-default caps must use the overload
-    /// above, or the rebuild will not match what the documenter wrote.</remarks>
+    /// above, or the rebuild will not match what the documenter wrote.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults</para>
+    /// <para>Overload 2 of 2</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults"/>
+    /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
       const ADoc: TParsedDoc): TArray<TDocDriftFinding>; overload;
     /// <summary>Ticks spent in TDocFactsBuilder.Build across every Analyze call
     /// so far, for the DRAGLINT_PROFILE doc-drift breakdown. Diagnostic only.</summary>
-    /// <returns><!-- drag-lint:auto -->Observed: GFactsBuildTicks.</returns>
+    /// <returns><!-- drag-lint:auto -->Int64 -- Observed: GFactsBuildTicks.</returns>
     /// <remarks>
     /// Analyze regenerates the whole facts block per decl purely to
     /// compare it, so this separates "rebuilding the facts" from the drift
     /// comparisons themselves. Accumulated unconditionally -- two stopwatch
     /// reads per decl -- and read only when the profiler prints.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)
-    /// Pure
+    /// <para>Called from: DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>

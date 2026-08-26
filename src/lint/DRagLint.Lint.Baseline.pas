@@ -15,13 +15,13 @@ type
   strict private
     /// <summary>Lowercased, backslash-normalized file path.</summary>
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: LowerCase(StringReplace(APath, '/', '\',
-    /// [rfReplaceAll])).</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: LowerCase(StringReplace(APath,
+    /// '/', '\', [rfReplaceAll])).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf (DRagLint.Lint.Baseline.pas)
-    /// Calls: LowerCase, StringReplace
-    /// Pure
+    /// <para>Called from: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf (DRagLint.Lint.Baseline.pas)</para>
+    /// <para>Calls: LowerCase, StringReplace</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
@@ -35,12 +35,12 @@ type
     /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
     /// <param name="ACache"><!-- drag-lint:auto type -->const TDictionary&lt;string, TArray&lt;string&gt;&gt;</param>
-    /// <returns><!-- drag-lint:auto -->Observed: ''; Trim(Lines[ALine - 1]).</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Trim(Lines[ALine - 1]).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf (DRagLint.Lint.Baseline.pas)
-    /// Calls: Trim
-    /// Touches: file system
+    /// <para>Called from: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf (DRagLint.Lint.Baseline.pas)</para>
+    /// <para>Calls: Trim</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
@@ -56,9 +56,9 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Baseline.TBaseline.Filter (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Fingerprint (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Write (DRagLint.Lint.Baseline.pas)
-    /// Calls: DRagLint.Lint.Baseline.TBaseline.NormPath, DRagLint.Lint.Baseline.TBaseline.SourceLineText, IntToStr, LowerCase
-    /// Pure
+    /// <para>Called from: DRagLint.Lint.Baseline.TBaseline.Filter (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Fingerprint (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Write (DRagLint.Lint.Baseline.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Baseline.TBaseline.NormPath, DRagLint.Lint.Baseline.TBaseline.SourceLineText, IntToStr, LowerCase</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.SourceLineText"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
@@ -71,11 +71,11 @@ type
     /// <summary>Fingerprint for one finding (occurrence ordinal 0). Stable across
     /// line-number shifts; changes only when rule, file, or the line text change.</summary>
     /// <param name="AFinding"><!-- drag-lint:auto type -->const TLintFinding</param>
-    /// <returns><!-- drag-lint:auto -->Observed: Fps[0].</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: Fps[0].</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf
-    /// Pure
+    /// <para>Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
@@ -90,9 +90,9 @@ type
     /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas) ?, DRagLint.CLI.DoHover (DRagLint.CLI.pas) ?, DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas) ?, DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ? (+4 more)
-    /// Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf
-    /// Touches: file system
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas) ?, DRagLint.CLI.DoHover (DRagLint.CLI.pas) ?, DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas) ?, DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ? (+4 more)</para>
+    /// <para>Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
@@ -109,9 +109,9 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TLintFinding&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf
-    /// Touches: file system
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>

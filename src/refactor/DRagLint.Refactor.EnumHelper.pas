@@ -38,7 +38,7 @@ type
   /// <summary>The set of helper methods requested for one generation run.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
+  /// <para>Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumHelperMethods = set of TEnumHelperMethod;
@@ -51,7 +51,7 @@ type
   /// hand if members are added).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
+  /// <para>Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TToStringMode = (tsmRtti, tsmCase);
@@ -62,8 +62,8 @@ type
   /// must not act on it.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
-  /// Used in units: DRagLint.Refactor.EnumHelper
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <para>Used in units: DRagLint.Refactor.EnumHelper</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumHelperResolve = record
@@ -132,8 +132,8 @@ type
   /// live on TEnumHelperResolve).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
-  /// Used in units: DRagLint.Refactor.EnumHelper
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <para>Used in units: DRagLint.Refactor.EnumHelper</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumHelperGen = record
@@ -161,7 +161,7 @@ type
   /// edits.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Refactor.EnumHelper.pas)
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumHelperAction = (ehaBuilt, ehaExists, ehaNoImplSection, ehaNotFound);
@@ -171,8 +171,8 @@ type
   /// reason and no edits.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Refactor.EnumHelper
+  /// <para>Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.EnumHelper</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumHelperResult = record
@@ -200,8 +200,8 @@ type
   /// / PLACE (this task) are all implemented.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumHelperRefactoring = class
@@ -219,11 +219,11 @@ type
     /// not resolve to exactly one skEnum symbol.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.EnumHelper.DetectExplicitOrdinal, DRagLint.Refactor.EnumHelper.ReadDeclSpan
-    /// Returns: Default(TEnumHelperResolve)
-    /// Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.EnumHelper.DetectExplicitOrdinal, DRagLint.Refactor.EnumHelper.ReadDeclSpan</para>
+    /// <para>Returns: Default(TEnumHelperResolve)</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
@@ -256,11 +256,11 @@ type
     /// FromString were emitted.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)
-    /// Calls: Default, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase
-    /// Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue))
-    /// Complexity: 20 (cyclomatic, outer body), 164 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+    /// <para>Calls: Default, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase</para>
+    /// <para>Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue))</para>
+    /// <para>Complexity: 20 (cyclomatic, outer body), 164 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase"/>
     /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build"/>
     /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve"/>
@@ -297,11 +297,11 @@ type
     /// bodies, and -- only when needed -- a System.TypInfo uses edit).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas)
-    /// Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Refactor.EnumHelper.FindImplementationLine, DRagLint.Refactor.EnumHelper.IndentLines, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve, DRagLint.Refactor.EnumHelper.UsesContainsTypInfo, ExtractFileName, Format, TrimLeft
-    /// Returns: Default(TEnumHelperResult)
-    /// Complexity: 23 (cyclomatic, outer body), 193 lines (full implementation)
-    /// Touches: file system
+    /// <para>Called from: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Refactor.EnumHelper.FindImplementationLine, DRagLint.Refactor.EnumHelper.IndentLines, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve, DRagLint.Refactor.EnumHelper.UsesContainsTypInfo, ExtractFileName, Format, TrimLeft</para>
+    /// <para>Returns: Default(TEnumHelperResult)</para>
+    /// <para>Complexity: 23 (cyclomatic, outer body), 193 lines (full implementation)</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
     /// <seealso cref="DRagLint.Refactor.EnumHelper.FindImplementationLine"/>

@@ -66,8 +66,8 @@ type
   /// (To), per the matching #convert rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)
-  /// Used in units: DRagLint.Convert.Apply
+  /// <para>Used by: DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TConvertInstance = record
@@ -86,8 +86,8 @@ type
   /// plan.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Convert.Apply.pas)
-  /// Used in units: DRagLint.Convert.Apply
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyReport = record
@@ -112,8 +112,8 @@ type
   /// even when Ok=True (e.g. a field declaration that could not be located, or
   /// a ToType whose unit could not be resolved for the uses-add).
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply
+  /// <para>Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyResult = record
@@ -140,8 +140,8 @@ type
   /// would be built from a property tree that does not reflect the type's
   /// real current shape.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply
+  /// <para>Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFreshnessResult = record
@@ -172,10 +172,10 @@ type
 /// vacuously fresh (nothing to check) -- callers should have already
 /// validated ARules has at least one #convert rule before reaching here.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
-/// Calls: Default, DRagLint.Convert.Apply.BareTypeTail, DRagLint.Convert.Apply.CheckTypeFreshness
-/// Returns: Default(TFreshnessResult)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.Apply.BareTypeTail, DRagLint.Convert.Apply.CheckTypeFreshness</para>
+/// <para>Returns: Default(TFreshnessResult)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
 /// <seealso cref="DRagLint.Convert.Apply.CheckTypeFreshness"/>
 /// <!-- drag-lint:auto END -->
@@ -226,11 +226,11 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// otherwise (including every instance skipped by a re-emit failure).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
-/// Calls: BuildPropTree, Default, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile, DRagLint.Convert.Apply.BuildApplyPlan.TreeFor, DRagLint.Convert.Apply.FindConstructionSites, DRagLint.Convert.Apply.FindConvertInstances, DRagLint.Convert.Apply.FindDfmInstanceSymbol, DRagLint.Convert.Apply.FindMemberAccessSites, DRagLint.Convert.Apply.LeadingIndent, DRagLint.Convert.Apply.LocateFieldTypeToken (+10 more)
-/// Returns: Default(TApplyResult)
-/// Complexity: 33 (cyclomatic, outer body), 380 lines (full implementation)
-/// Touches: file system
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
+/// <para>Calls: BuildPropTree, Default, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile, DRagLint.Convert.Apply.BuildApplyPlan.TreeFor, DRagLint.Convert.Apply.FindConstructionSites, DRagLint.Convert.Apply.FindConvertInstances, DRagLint.Convert.Apply.FindDfmInstanceSymbol, DRagLint.Convert.Apply.FindMemberAccessSites, DRagLint.Convert.Apply.LeadingIndent, DRagLint.Convert.Apply.LocateFieldTypeToken (+10 more)</para>
+/// <para>Returns: Default(TApplyResult)</para>
+/// <para>Complexity: 33 (cyclomatic, outer body), 380 lines (full implementation)</para>
+/// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.TreeFor"/>
 /// <seealso cref="DRagLint.Convert.Apply.FindConstructionSites"/>
@@ -263,10 +263,10 @@ function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADf
 /// scan only, not a full DFM parse (Task 3's ParseDfmBlock/ReemitComponent do
 /// the real per-instance re-emit). Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)
-/// Calls: Default, DRagLint.Convert.Apply.FindConvertRuleFor, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.TryParseObjectHeader, Trim
-/// Returns: nil; List.ToArray
-/// Pure
+/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.Apply.FindConvertRuleFor, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.TryParseObjectHeader, Trim</para>
+/// <para>Returns: nil; List.ToArray</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.Apply.FindConvertRuleFor"/>
 /// <seealso cref="DRagLint.Convert.Apply.InOnlyList"/>
 /// <seealso cref="DRagLint.Convert.Apply.TryParseObjectHeader"/>

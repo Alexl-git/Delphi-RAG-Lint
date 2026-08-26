@@ -63,10 +63,10 @@ type
     /// record/enum), routines (procedure/function/method/constructor/
     /// destructor), and properties. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.DocRules.IsDocumentableKind, Format
-    /// Returns: nil; Findings.ToArray
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.DocRules.IsDocumentableKind, Format</para>
+    /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Lint.DocRules.IsDocumentableKind"/>
@@ -81,6 +81,9 @@ type
     /// TDocDrift signal (renamed/removed param, missing param, spurious/absent
     /// &lt;returns&gt;, never-raised &lt;exception&gt;, stale facts block, ...).</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
+    /// <param name="AOpts">The render options the DOCUMENTER used. Anything the
+    /// checker does not share with it is measured as drift -- see
+    /// TDocFactsRenderOptions.</param>
     /// <returns>'doc-drift' findings, in stable per-symbol/per-signal order; empty
     /// if every documented decl is structurally current.</returns>
     /// <remarks>
@@ -91,10 +94,10 @@ type
     /// re-parsing the message: a finding is merely a report here. Never raises;
     /// per-symbol failures are swallowed so one bad decl cannot abort the sweep.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Lint.DocRules.DocumentedPublicDecls, Flush, Format, GetEnvironmentVariable, Writeln
-    /// Returns: nil; Findings.ToArray
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Lint.DocRules.DocumentedPublicDecls, Flush, Format, GetEnvironmentVariable, Writeln</para>
+    /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
@@ -102,9 +105,6 @@ type
     /// <seealso cref="DRagLint.Lint.DocRules.DocumentedPublicDecls"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="AOpts">The render options the DOCUMENTER used. Anything the
-    /// checker does not share with it is measured as drift -- see
-    /// TDocFactsRenderOptions.</param>
     class function RunDocDrift(const AStore: ISymbolStore;
       const AOpts: TDocFactsRenderOptions): TArray<TLintFinding>;
 
@@ -122,6 +122,8 @@ type
     /// carrying a reported doc-drift-family finding here are repaired; an empty
     /// array yields no edits. See the remarks -- this parameter is the whole
     /// point of the 2026-08-13 fix and must not be defaulted away.</param>
+    /// <param name="AOpts">MUST be the options the checker just graded under, or
+    /// the repairer regenerates a block the checker calls stale again.</param>
     /// <returns>The repair edits (a delete+insert pair per repaired doc span);
     /// empty when nothing fixable drifted.</returns>
     /// <remarks>
@@ -152,11 +154,11 @@ type
     /// doc BuildFor returns daUnchanged (no edits), so a second --fix is a no-op.
     /// Never raises; per-symbol failures are swallowed.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildFor/9, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, Format, GetEnvironmentVariable, LowerCase, Writeln
-    /// Returns: nil; Edits.ToArray
-    /// Complexity: 13 (cyclomatic, outer body), 127 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildFor/9, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, Format, GetEnvironmentVariable, LowerCase, Writeln</para>
+    /// <para>Returns: nil; Edits.ToArray</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 127 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
@@ -164,8 +166,6 @@ type
     /// <seealso cref="DRagLint.Lint.DocRules.DocumentedPublicDecls"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="AOpts">MUST be the options the checker just graded under, or
-    /// the repairer regenerates a block the checker calls stale again.</param>
     class function FixEditsForDocDrift(const AStore: ISymbolStore;
       const ATargeted: TArray<TLintFinding>;
       const AOpts: TDocFactsRenderOptions): TArray<TTextEdit>;
@@ -214,11 +214,27 @@ type
       can repair it because each side keeps regenerating its own version. That
       applies just as much to a block being CREATED here as to one being
       repaired. Defaults match TDocumenter.BuildFor's own. }
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="ATargeted"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
     /// <param name="AOpts">The options a CREATED block is written under. It must
     /// match what doc-drift will grade it by, or a block is stale the moment it
     /// is written. NOTE: this path deliberately keeps IncludeSeeAlso=False in the
     /// body below, which is a pre-existing divergence from the checker's default
     /// True and is NOT what this record changed -- see the call site.</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;TTextEdit&gt; -- Observed: nil;
+    /// Edits.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Document.TDocumenter.BuildFor/9, LowerCase, SameText</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
+    /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift"/>
+    /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift"/>
+    /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function FixEditsForMissingDoc(const AStore: ISymbolStore; const ATargeted: TArray<TLintFinding>;
       const AOpts: TDocFactsRenderOptions): TArray<TTextEdit>;
   end;

@@ -37,8 +37,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), declaration (DRagLint.Sql.OrmLinker.pas), DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Sql.OrmLinker
+  /// <para>Used by: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), declaration (DRagLint.Sql.OrmLinker.pas), DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Sql.OrmLinker</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TOrmLinkerStats = record
@@ -50,21 +50,22 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TOrmLinker = class
     public
       /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Default       (TOrmLinkerStats).</returns>
+      /// <returns><!-- drag-lint:auto -->TOrmLinkerStats -- Observed: Default
+      /// (TOrmLinkerStats).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas)
-      /// Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, StripPrefix, UpperCase
-      /// Complexity: 13 (cyclomatic, outer body), 244 lines (full implementation)
-      /// SQL: writes ORM_LINKS
-      /// Transaction: starts, commits, rolls back
+      /// <para>Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, StripPrefix, UpperCase</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 244 lines (full implementation)</para>
+      /// <para>SQL: writes ORM_LINKS</para>
+      /// <para>Transaction: starts, commits, rolls back</para>
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink"/>
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>

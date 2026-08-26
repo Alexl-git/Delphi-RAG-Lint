@@ -20,8 +20,8 @@ type
   /// process) on large trees where Matches is invoked tens of millions of
   /// times. Not thread-safe state is involved: Matches is a pure function.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.ShouldPruneDir (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile (DRagLint.Index.Closure.pas), DRagLint.Index.Coverage.IsBuiltinPrune (DRagLint.Index.Coverage.pas) (+4 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Index.Closure, DRagLint.Index.Coverage, DRagLint.Index.IgnoreFiles, DRagLint.Index.Reconcile, DRagLint.Lint.ProjectRules
+  /// <para>Used by: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.ShouldPruneDir (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile (DRagLint.Index.Closure.pas), DRagLint.Index.Coverage.IsBuiltinPrune (DRagLint.Index.Coverage.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Index.Closure, DRagLint.Index.Coverage, DRagLint.Index.IgnoreFiles, DRagLint.Index.Reconcile, DRagLint.Lint.ProjectRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlob = class
@@ -34,10 +34,10 @@ type
       /// <returns>True if AName matches APattern.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.Coverage.IsBuiltinPrune (DRagLint.Index.Coverage.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.Reconcile.IsStaleName (DRagLint.Index.Reconcile.pas) (+2 more)
-      /// Calls: DRagLint.Index.Glob.GlobMatch, DRagLint.Index.Glob.Normalize
-      /// Returns: GlobMatch(Normalize(AName), Normalize(APattern))
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.Coverage.IsBuiltinPrune (DRagLint.Index.Coverage.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.Reconcile.IsStaleName (DRagLint.Index.Reconcile.pas) (+2 more)</para>
+      /// <para>Calls: DRagLint.Index.Glob.GlobMatch, DRagLint.Index.Glob.Normalize</para>
+      /// <para>Returns: GlobMatch(Normalize(AName), Normalize(APattern))</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Index.Glob.GlobMatch"/>
       /// <seealso cref="DRagLint.Index.Glob.Normalize"/>
       /// <seealso cref="DRagLint.Index.Glob.TGlob.MatchesAny"/>
@@ -51,10 +51,10 @@ type
       /// <returns>True if AName matches at least one pattern.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.ShouldPruneDir (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile (DRagLint.Index.Closure.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf (DRagLint.Lint.ProjectRules.pas)
-      /// Calls: DRagLint.Index.Glob.GlobMatch, DRagLint.Index.Glob.Normalize
-      /// Returns: False
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoSelfTestGlob (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.ShouldPruneDir (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile (DRagLint.Index.Closure.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf (DRagLint.Lint.ProjectRules.pas)</para>
+      /// <para>Calls: DRagLint.Index.Glob.GlobMatch, DRagLint.Index.Glob.Normalize</para>
+      /// <para>Returns: False</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Index.Glob.GlobMatch"/>
       /// <seealso cref="DRagLint.Index.Glob.Normalize"/>
       /// <seealso cref="DRagLint.Index.Glob.TGlob.Matches"/>

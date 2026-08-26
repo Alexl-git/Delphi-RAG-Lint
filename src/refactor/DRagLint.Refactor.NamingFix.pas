@@ -12,7 +12,7 @@ type
   /// <summary>Target casing styles, matching TNamingConfig's textual vocabulary.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
+  /// <para>Used by: declaration (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TNameStyle = (nsPascalCase, nsCamelCase, nsUpperCase);
@@ -20,12 +20,13 @@ type
 /// <summary>Maps a TNamingConfig case string ('PascalCase' | 'camelCase' |
 /// 'UPPER_CASE') to a TNameStyle. Unknown/empty -> nsPascalCase.</summary>
 /// <param name="AConfigCase"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->Observed: nsCamelCase; nsUpperCase; nsPascalCase.</returns>
+/// <returns><!-- drag-lint:auto -->TNameStyle -- Observed: nsCamelCase; nsUpperCase;
+/// nsPascalCase.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
-/// Calls: SameText
-/// Pure
+/// <para>Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function StyleFromConfigText(const AConfigCase: string): TNameStyle;
@@ -43,10 +44,10 @@ function StyleFromConfigText(const AConfigCase: string): TNameStyle;
 /// (word-boundary detection is a phase-2 concern; this keeps phase-1
 /// collision-free and mechanical).
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
-/// Calls: Copy, LowerCase, UpperCase
-/// Returns: UpperCase(AOldName); LowerCase(AOldName[1]) + Copy(AOldName, 2, MaxInt); UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)
-/// Pure
+/// <para>Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: Copy, LowerCase, UpperCase</para>
+/// <para>Returns: UpperCase(AOldName); LowerCase(AOldName[1]) + Copy(AOldName, 2, MaxInt); UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string;
@@ -62,10 +63,10 @@ function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string
 /// <returns>The prefixed identifier, or AOldName unchanged if already prefixed/empty input.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
-/// Calls: CharInSet, Copy, SameText, UpperCase
-/// Returns: APrefix + UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)
-/// Pure
+/// <para>Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: CharInSet, Copy, SameText, UpperCase</para>
+/// <para>Returns: APrefix + UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SynthesizePrefixedName(const AOldName, APrefix: string): string;
@@ -122,11 +123,11 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// whose span is out of range or does not hold the expected identifier is
 /// DROPPED and counted in ASkippedCount -- never written.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
-/// Calls: CharInSet, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf, DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.LocalNameCollides, DRagLint.Refactor.NamingFix.ReadIdentifierAt, DRagLint.Refactor.NamingFix.ResolveSymbolAt, DRagLint.Refactor.NamingFix.StyleFromConfigText, DRagLint.Refactor.NamingFix.SynthesizeCasedName (+9 more)
-/// Returns: nil; Edits.ToArray
-/// Complexity: 35 (cyclomatic, outer body), 239 lines (full implementation)
-/// Mutates: AFixCount (out), ASkippedCount (out)
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: CharInSet, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf, DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.LocalNameCollides, DRagLint.Refactor.NamingFix.ReadIdentifierAt, DRagLint.Refactor.NamingFix.ResolveSymbolAt, DRagLint.Refactor.NamingFix.StyleFromConfigText, DRagLint.Refactor.NamingFix.SynthesizeCasedName (+9 more)</para>
+/// <para>Returns: nil; Edits.ToArray</para>
+/// <para>Complexity: 35 (cyclomatic, outer body), 239 lines (full implementation)</para>
+/// <para>Mutates: AFixCount (out), ASkippedCount (out)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.LocalNameCollides"/>

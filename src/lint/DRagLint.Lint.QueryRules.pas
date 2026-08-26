@@ -23,8 +23,8 @@ type
   /// id, severity, message.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Lint.Linter.TLinter.Destroy (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)
-  /// Used in units: DRagLint.Lint.Linter, DRagLint.Lint.QueryRules
+  /// <para>Used by: DRagLint.Lint.Linter.TLinter.Destroy (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.Linter, DRagLint.Lint.QueryRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TQueryRule = class
@@ -61,13 +61,13 @@ type
       /// integer literal that IS the value of a const definition, for
       /// large-magic-number).</summary>
       /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
-      /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)
-      /// Calls: SameText
-      /// Reads: FExcludeAncestors
-      /// Pure
+      /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
+      /// <para>Calls: SameText</para>
+      /// <para>Reads: FExcludeAncestors</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Destroy"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
@@ -80,13 +80,13 @@ type
       /// <summary><!-- drag-lint:auto -->True when FRequireAncestors is empty (no
       /// requirement) or the node has an ancestor of one of those kinds.</summary>
       /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
-      /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)
-      /// Calls: SameText
-      /// Reads: FRequireAncestors
-      /// Pure
+      /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
+      /// <para>Calls: SameText</para>
+      /// <para>Reads: FRequireAncestors</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Destroy"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
@@ -102,24 +102,24 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)
-      /// Calls: Format, SameText, TreeSitter.Query.TTSQuery.Create, TSQueryError
-      /// constructor
-      /// Complexity: 12 (cyclomatic, outer body), 57 lines (full implementation)
-      /// Reads: FId, FExcludeAncestors, FRequireAncestors, FQuery   Writes: FSourcePath, FId, FSeverity, FMessage, FWarnCapture, FEnabled, FRuleId, FExcludeAncestors (+2 more)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)</para>
+      /// <para>Calls: DRagLint.Lint.QueryRules.ExtractRequiredLiteral, Format, SameText, TreeSitter.Query.TTSQuery.Create, TSQueryError</para>
+      /// <para>constructor</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 58 lines (full implementation)</para>
+      /// <para>Reads: FId, FExcludeAncestors, FRequireAncestors, FQuery   Writes: FSourcePath, FId, FSeverity, FMessage, FWarnCapture, FEnabled, FRequiredText, FRuleId (+3 more)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.ExtractRequiredLiteral"/>
       /// <seealso cref="TreeSitter.Query.TTSQuery.Create"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Destroy"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Run"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Reads: FQuery
-      /// Pure
+      /// <para>Reads: FQuery</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
@@ -130,18 +130,19 @@ type
       /// <param name="ARootNode"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: FoundList.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
+      /// FoundList.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, Integer, SameText, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.Query.TTSQueryCursor.Create, TreeSitter.Query.TTSQueryCursor.Execute, TreeSitter.Query.TTSQueryCursor.NextMatch
-      /// Complexity: 10 (cyclomatic, outer body), 70 lines (full implementation)
-      /// Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage
-      /// Pure
+      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, Integer, SameText, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.Query.TTSQueryCursor.Create, TreeSitter.Query.TTSQueryCursor.Execute, TreeSitter.Query.TTSQueryCursor.NextMatch</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 82 lines (full implementation)</para>
+      /// <para>Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage, FRuleId</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.AllPredicatesPass"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.NoteRuleTicks"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
       /// <seealso cref="TreeSitter.Query.TTSQuery.CaptureNameForID"/>
-      /// <seealso cref="TreeSitter.Query.TTSQueryCursor.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string): TArray<TLintFinding>;
@@ -182,8 +183,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas)
-  /// Used in units: DRagLint.Lint.Linter
+  /// <para>Used by: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.Linter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TQueryRuleLoader = class
@@ -198,19 +199,25 @@ type
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TQueryRule&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas)
-      /// Calls: ChangeFileExt, DRagLint.Lint.QueryRules.TQueryRule.Create, Format, Writeln
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas)</para>
+      /// <para>Calls: ChangeFileExt, DRagLint.Lint.QueryRules.TQueryRule.Create, Format, Writeln</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function LoadAll(const ALanguage: PTSLanguage; const ARulesDir: string): TArray<TQueryRule>;
   end;
 
-/// <summary>One rule's share of the .scm query cost, accumulated across every
-/// file this process linted.</summary>
-/// <remarks>Diagnostic only, and populated ONLY while DRAGLINT_PROFILE is set.
-/// See QueryRuleTimings for why this exists.</remarks>
+  /// <summary>One rule's share of the .scm query cost, accumulated across every
+  /// file this process linted.</summary>
+  /// <remarks>
+  /// Diagnostic only, and populated ONLY while DRAGLINT_PROFILE is set.
+  /// See QueryRuleTimings for why this exists.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Lint.QueryRules.QueryRuleTimings (DRagLint.Lint.QueryRules.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.QueryRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 type
   TQueryRuleTiming = record
     /// <summary>The rule id as the sidecar json declares it.</summary>
@@ -231,9 +238,12 @@ type
 /// because the last two attempts to optimise this phase from the aggregate
 /// picked the wrong target: the quadratic `Findings := Findings + X` measured
 /// 0.00 s, and the .scm double parse was real but worth 1.38 s of 271 s.
-///
 /// Two QueryPerformanceCounter reads per rule per file, and only when armed.
 /// Not thread-safe; lint-all is single-threaded here.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: CompareText</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function QueryRuleTimings: TArray<TQueryRuleTiming>;
 

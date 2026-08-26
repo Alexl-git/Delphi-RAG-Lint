@@ -26,8 +26,8 @@ type
   /// All three are False when Indexed is False.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Project.Coherence.pas)
-  /// Used in units: DRagLint.Project.Coherence
+  /// <para>Used by: declaration (DRagLint.Project.Coherence.pas)</para>
+  /// <para>Used in units: DRagLint.Project.Coherence</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TMemberCoherence = record
@@ -53,9 +53,9 @@ type
 /// <returns>One TMemberCoherence per AMembers entry, same order.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-/// Calls: DateTimeToUnix, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetFileCompiledAt, DRagLint.Core.Interfaces.ISymbolStore.GetFileMTime
-/// Touches: file system
+/// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+/// <para>Calls: DateTimeToUnix, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetFileCompiledAt, DRagLint.Core.Interfaces.ISymbolStore.GetFileMTime</para>
+/// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFileCompiledAt"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFileMTime"/>
@@ -69,9 +69,9 @@ function ComputeCoherence(const AStore: ISymbolStore; const AMembers: TArray<TPr
 /// <returns>(not AC.Indexed) or (not AC.IndexFresh) or (not AC.CompiledFresh).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-/// Returns: (not AC.Indexed) or (not AC.IndexFresh) or (not AC.CompiledFresh)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+/// <para>Returns: (not AC.Indexed) or (not AC.IndexFresh) or (not AC.CompiledFresh)</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsIncoherent(const AC: TMemberCoherence): Boolean;

@@ -46,10 +46,21 @@ uses
 type
   /// <summary>A manifest copy could not be parsed or understood well enough to
   /// be edited safely.</summary>
-  /// <remarks>Specific rather than a bare Exception so a caller can tell a
-  /// malformed config apart from an I/O failure and report it usefully.</remarks>
+  /// <remarks>
+  /// Specific rather than a bare Exception so a caller can tell a
+  /// malformed config apart from an I/O failure and report it usefully.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Index.ManifestWrite.AppendSectionToText (DRagLint.Index.ManifestWrite.pas)</para>
+  /// <para>Used in units: DRagLint.Index.ManifestWrite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EManifestWriteError = class(Exception);
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.ManifestWrite.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRegisterOutcome = (
     roAdded,          { section written to every manifest copy   }
     roAlreadyOwned,   { a section already claims this project    }
@@ -57,6 +68,12 @@ type
     roNoManifest,     { no drag-lint.json found to write to      }
     roFailed);        { parse or write error; see the message    }
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas), declaration (DRagLint.Index.ManifestWrite.pas), DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.ManifestWrite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRegisterResult = record
     Outcome  : TRegisterOutcome;
     Section  : string          ; { the section name added or found      }
@@ -77,9 +94,22 @@ type
 /// nothing.</param>
 /// <returns>A result whose Outcome says what happened; Written lists every
 /// manifest path affected.</returns>
-/// <remarks>Refuses when a section already claims the project -- registering a
+/// <remarks>
+/// Refuses when a section already claims the project -- registering a
 /// second owner would create the ambiguity the reindex command exists to
-/// refuse. Not thread-safe; call from one thread.</remarks>
+/// refuse. Not thread-safe; call from one thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Index.Manifest.ResolveProjectDb, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Index.ManifestWrite.AppendSectionToText, DRagLint.Index.ManifestWrite.BuildSectionJson, DRagLint.Index.ManifestWrite.FindManifestCopies</para>
+/// <para>Returns: Default(TRegisterResult)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+/// <seealso cref="DRagLint.Index.ManifestWrite.AppendSectionToText"/>
+/// <seealso cref="DRagLint.Index.ManifestWrite.BuildSectionJson"/>
+/// <seealso cref="DRagLint.Index.ManifestWrite.FindManifestCopies"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RegisterProjectSection(const AEngineDir, AProjectFile, AName: string;
   AApply: Boolean): TRegisterResult;
 
@@ -87,6 +117,15 @@ function RegisterProjectSection(const AEngineDir, AProjectFile, AName: string;
 /// engine plus the one beside the design-time BPL.</summary>
 /// <param name="AEngineDir">Directory of the running engine.</param>
 /// <returns>Absolute paths of the manifest copies that exist.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
+/// <para>Calls: DRagLint.Index.ManifestWrite.FindManifestCopies.Consider, ExcludeTrailingPathDelimiter</para>
+/// <para>Returns: Acc.ToStringArray</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Index.ManifestWrite.FindManifestCopies.Consider"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindManifestCopies(const AEngineDir: string): TArray<string>;
 
 implementation

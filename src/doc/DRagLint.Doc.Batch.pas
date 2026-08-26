@@ -39,8 +39,8 @@ type
   /// doc-source tasks and are inert here.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), declaration (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+2 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch
+  /// <para>Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), declaration (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocBatchOptions = record
@@ -146,8 +146,8 @@ type
   /// DocCount is how many of them contributed at least one edit.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), declaration (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+3 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch
+  /// <para>Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), declaration (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocBatchResult = record
@@ -171,8 +171,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch
+  /// <para>Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocBatch = class
@@ -196,11 +196,11 @@ type
     /// <remarks>
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Batch.HasManagedBlock, DRagLint.Doc.Batch.IsDocumentableKind, DRagLint.Doc.Batch.IsTrivialAccessor, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Strip.TDocStripper.StripFile, Format, SameText, Writeln
-    /// Returns: Default(TDocBatchResult)
-    /// Complexity: 14 (cyclomatic, outer body), 126 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Batch.HasManagedBlock, DRagLint.Doc.Batch.IsDocumentableKind, DRagLint.Doc.Batch.IsTrivialAccessor, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Strip.TDocStripper.StripFile, Format, SameText, Writeln</para>
+    /// <para>Returns: Default(TDocBatchResult)</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 126 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Doc.Batch.HasManagedBlock"/>
     /// <seealso cref="DRagLint.Doc.Batch.IsDocumentableKind"/>
@@ -225,10 +225,10 @@ type
     /// <remarks>
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths
-    /// Returns: AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths</para>
+    /// <para>Returns: AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
     /// <seealso cref="DRagLint.Doc.Batch.FilterToOwnRoots"/>
     /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
@@ -250,10 +250,10 @@ type
     /// <remarks>
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Batch.AggregateOverFiles
-    /// Returns: AggregateOverFiles(AStore, Paths.ToArray, AOptions)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Batch.AggregateOverFiles</para>
+    /// <para>Returns: AggregateOverFiles(AStore, Paths.ToArray, AOptions)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>

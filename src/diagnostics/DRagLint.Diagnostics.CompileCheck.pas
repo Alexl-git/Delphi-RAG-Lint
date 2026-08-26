@@ -21,8 +21,8 @@ type
   /// for diagnostics and fallback parsing).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), declaration (DRagLint.Diagnostics.CompileCheck.pas) (+2 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Diagnostics.CompileCheck
+  /// <para>Used by: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), declaration (DRagLint.Diagnostics.CompileCheck.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Diagnostics.CompileCheck</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCompileCheckResult = record
@@ -39,8 +39,8 @@ type
   /// IDE plugin's live + ghost compile. Not thread-safe (shares no instance
   /// state, but each call spawns a process and reads its pipe synchronously).
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas) (+1 more)
-  /// Used in units: DRagLint.CLI, DRagLint.MCP.Server
+  /// <para>Used by: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCompileChecker = class
@@ -67,11 +67,11 @@ type
       /// unit so findings are reported even for units DCC would otherwise skip as
       /// already up to date. Not thread-safe.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture, ExtractFileExt, Format, LowerCase, PChar, SameText, SetEnvironmentVariable
-      /// Returns: Default(TCompileCheckResult)
-      /// Complexity: 17 (cyclomatic, outer body), 103 lines (full implementation)
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture, ExtractFileExt, Format, LowerCase, PChar, SameText, SetEnvironmentVariable</para>
+      /// <para>Returns: Default(TCompileCheckResult)</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 103 lines (full implementation)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture"/>
@@ -88,10 +88,10 @@ type
       /// <remarks>
       /// Used by check-unit for the single-unit shadow-overlay compile.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture
-      /// Returns: Default(TCompileCheckResult)
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture</para>
+      /// <para>Returns: Default(TCompileCheckResult)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
@@ -109,10 +109,10 @@ type
       /// (path(line[,col]): severity code: message) and the native dcc64 format
       /// (path(line) Severity: code message).
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas)
-      /// Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SeverityFromCode, StrToIntDef, Trim
-      /// Returns: False; True
-      /// Mutates: AFinding (out)
+      /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SeverityFromCode, StrToIntDef, Trim</para>
+      /// <para>Returns: False; True</para>
+      /// <para>Mutates: AFinding (out)</para>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.SeverityFromCode"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
@@ -127,9 +127,9 @@ type
       /// <param name="AFindings">Findings to persist.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.InsertCompilerFinding
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.InsertCompilerFinding</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.InsertCompilerFinding"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
@@ -147,10 +147,10 @@ type
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)
-      /// Calls: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf, GetShortPathName, LowerCase, Pos, PWideChar, SetString, StringReplace, Trim
-      /// Complexity: 14 (cyclomatic, outer body), 103 lines (full implementation)
-      /// Touches: file system, registry
+      /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)</para>
+      /// <para>Calls: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf, GetShortPathName, LowerCase, Pos, PWideChar, SetString, StringReplace, Trim</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 103 lines (full implementation)</para>
+      /// <para>Touches: file system, registry</para>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
@@ -165,13 +165,13 @@ type
       /// <param name="ACmd"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AEnvBlock"><!-- drag-lint:auto type -->Pointer</param>
       /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: -1; Integer(ExitCode).</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1; Integer(ExitCode).</returns>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas)
-      /// Calls: AnsiString, CloseHandle, CreatePipe, CreateProcessW, FillChar, GetExitCodeProcess, GetStdHandle, Integer, PWideChar, ReadFile, SetHandleInformation, UniqueString, WaitForSingleObject
-      /// Mutates: AOutput (out)
+      /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas)</para>
+      /// <para>Calls: AnsiString, CloseHandle, CreatePipe, CreateProcessW, FillChar, GetExitCodeProcess, GetStdHandle, Integer, PWideChar, ReadFile, SetHandleInformation, UniqueString, WaitForSingleObject</para>
+      /// <para>Mutates: AOutput (out)</para>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
@@ -183,13 +183,13 @@ type
       /// <summary>Canonicalizes a raw severity word (error/fatal/warning/hint/
       /// information) to 'Error'/'Warning'/'Hint'/'Information'.</summary>
       /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: 'Error'; 'Warning'; 'Hint';
+      /// <returns><!-- drag-lint:auto -->string -- Observed: 'Error'; 'Warning'; 'Hint';
       /// 'Information'; ARaw.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine (DRagLint.Diagnostics.CompileCheck.pas)
-      /// Calls: LowerCase
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine (DRagLint.Diagnostics.CompileCheck.pas)</para>
+      /// <para>Calls: LowerCase</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
@@ -206,13 +206,13 @@ type
       /// empty/unrecognized.</summary>
       /// <param name="ACode"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFallbackWord"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: 'hint'; 'warning'; 'error';
+      /// <returns><!-- drag-lint:auto -->string -- Observed: 'hint'; 'warning'; 'error';
       /// AFallbackWord.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine (DRagLint.Diagnostics.CompileCheck.pas)
-      /// Calls: UpCase
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine (DRagLint.Diagnostics.CompileCheck.pas)</para>
+      /// <para>Calls: UpCase</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>

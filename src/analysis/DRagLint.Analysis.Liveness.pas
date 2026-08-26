@@ -38,10 +38,10 @@ uses
 /// the block ended at AItemIdx. Returns all-False (sized to AVars.Count) if
 /// ACfg.Skipped or the indices are out of range.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Refactor.ExtractMethod.LiveOutOfRun (DRagLint.Refactor.ExtractMethod.pas)
-/// Calls: DRagLint.Analysis.Liveness.LiveAtBoundary
-/// Returns: LiveAtBoundary(ACfg, AVars, ASrc, ABlockIdx, AItemIdx, False)
-/// Pure
+/// <para>Called from: DRagLint.Refactor.ExtractMethod.LiveOutOfRun (DRagLint.Refactor.ExtractMethod.pas)</para>
+/// <para>Calls: DRagLint.Analysis.Liveness.LiveAtBoundary</para>
+/// <para>Returns: LiveAtBoundary(ACfg, AVars, ASrc, ABlockIdx, AItemIdx, False)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Analysis.Liveness.LiveAtBoundary"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -67,10 +67,10 @@ function LiveAfterItem(const ACfg: TCfg; AVars: TRoutineVarTable; const ASrc: TB
 /// step (AItemIdx's own kill-then-gen) applied, matching TLiveness.Transfer's
 /// per-item order: kill the whole-var def first, then add its uses.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Refactor.ExtractMethod.LiveOutOfRun.AddExitEdge (DRagLint.Refactor.ExtractMethod.pas)
-/// Calls: DRagLint.Analysis.Liveness.LiveAtBoundary
-/// Returns: LiveAtBoundary(ACfg, AVars, ASrc, ABlockIdx, AItemIdx, True)
-/// Pure
+/// <para>Called from: DRagLint.Refactor.ExtractMethod.LiveOutOfRun.AddExitEdge (DRagLint.Refactor.ExtractMethod.pas)</para>
+/// <para>Calls: DRagLint.Analysis.Liveness.LiveAtBoundary</para>
+/// <para>Returns: LiveAtBoundary(ACfg, AVars, ASrc, ABlockIdx, AItemIdx, True)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Analysis.Liveness.LiveAtBoundary"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

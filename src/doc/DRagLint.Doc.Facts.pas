@@ -28,8 +28,8 @@ type
   /// only where the source states it. Nothing in this record is ever
   /// invented.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas)
-  /// Used in units: DRagLint.Doc.Facts
+  /// <para>Used by: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocParamNote = record
@@ -39,8 +39,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas)
-  /// Used in units: DRagLint.Doc.Facts
+  /// <para>Used by: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocFactRef = record
@@ -61,8 +61,8 @@ type
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+5 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server
+  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), declaration (DRagLint.Doc.Regions.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocFacts = record
@@ -398,15 +398,17 @@ type
   /// caps were threaded, and AExtraStores was left behind, which is the same bug
   /// with a different field: a block documented from two stores is reported as
   /// drifted forever by a checker that only ever opened one.
-  ///
   /// Passing them as one record is what makes that class of divergence a
   /// compile-time question instead of a per-call-site habit.
-  ///
   /// A ZEROED RECORD IS NOT A VALID ONE. `Default(TDocFactsRenderOptions)` gives
   /// MaxReturnCases=0 and MaxCallers=0, and 0 means "enumerate nothing" rather
   /// than "use the default" -- so it would silently render an EMPTY block and
   /// call every real one stale. Construct with Make or Defaults, never with
   /// Default(); Normalized() is the backstop for anything that slips through.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas), declaration (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), declaration (DRagLint.Doc.Facts.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Lint.DocRules</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocFactsRenderOptions = record
     /// <summary>Compute the &lt;seealso&gt; related set.</summary>
@@ -418,19 +420,50 @@ type
     /// <summary>Cap on listed callers. 0/negative lists none.</summary>
     MaxCallers    : Integer;
     /// <summary>The documented defaults: seealso on, no extra stores, 20 and 5.</summary>
+    /// <returns><!-- drag-lint:auto type -->TDocFactsRenderOptions</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Make"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Normalized"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Defaults: TDocFactsRenderOptions; static;
     /// <summary>Builds an explicit set.</summary>
+    /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AExtraStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt;</param>
+    /// <param name="AMaxReturnCases"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="AMaxCallers"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->TDocFactsRenderOptions</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Normalized"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Make(AIncludeSeeAlso: Boolean; const AExtraStores: TArray<ISymbolStore>;
                         AMaxReturnCases, AMaxCallers: Integer): TDocFactsRenderOptions; static;
     /// <summary>Self with non-positive caps replaced by the documented defaults,
     /// so a zero-initialised record cannot silently mean "render nothing".</summary>
+    /// <returns><!-- drag-lint:auto -->TDocFactsRenderOptions -- Observed: Self.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Make"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Normalized: TDocFactsRenderOptions;
   end;
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.LSP.Server
+  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.CalleeRaisesType.BodyRaises (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocFactsBuilder = class
@@ -464,13 +497,13 @@ type
     /// carries the true distinct count so the renderer can add '(+N more)'. 0 or
     /// negative shows no callers (CalledFrom stays empty, total unaffected).
     /// Default 5.</param>
-    /// <returns><!-- drag-lint:auto -->Observed: Default(TDocFacts).</returns>
+    /// <returns><!-- drag-lint:auto -->TDocFacts -- Observed: Default(TDocFacts).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas)
-    /// Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+32 more)
-    /// Complexity: 77 (cyclomatic, outer body), 899 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+34 more)</para>
+    /// <para>Complexity: 72 (cyclomatic, outer body), 992 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
@@ -491,9 +524,21 @@ type
     /// <param name="ASym">The symbol whose body is scanned.</param>
     /// <returns>Raised class names; empty when ASym has no body, or when its
     /// source cannot be read.</returns>
-    /// <remarks>Deliberately ONE routine, not two: Build and the transitive
+    /// <remarks>
+    /// Deliberately ONE routine, not two: Build and the transitive
     /// exception-cref check must never disagree about what "the body raises"
-    /// means. Costs a memoised source read plus a line scan of the body.</remarks>
+    /// means. Costs a memoised source read plus a line scan of the body.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Drift.CalleeRaisesType.BodyRaises (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseClass, DRagLint.Doc.Facts.SourceLines, Min</para>
+    /// <para>Returns: nil; RaiseSet.ToStringArray</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Doc.Facts.CollectRaiseClass"/>
+    /// <seealso cref="DRagLint.Doc.Facts.SourceLines"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function MineRaises(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
   end;
 
@@ -506,8 +551,9 @@ type
 /// the doc-drift rule, and its cost is NOT where two successive guesses put it
 /// -- hence per-section accumulation rather than argument.
 /// <!-- drag-lint:auto BEGIN -->
-/// Calls: DRagLint.Doc.Facts.DocFactsBuildProfile.S, Format
-/// Pure
+/// <para>Calls: DRagLint.Doc.Facts.DocFactsBuildProfile.Per, DRagLint.Doc.Facts.DocFactsBuildProfile.S, Format</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Doc.Facts.DocFactsBuildProfile.Per"/>
 /// <seealso cref="DRagLint.Doc.Facts.DocFactsBuildProfile.S"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -517,11 +563,11 @@ function DocFactsBuildProfile: string;
   /// UNLESS ATotal > 15, in which case only the first 10 are kept and the caller
   /// appends '(+N more)' with N = ATotal - 10. Returns how many to display.</summary>
   /// <param name="ATotal"><!-- drag-lint:auto type -->Integer</param>
-  /// <returns><!-- drag-lint:auto -->Observed: 10.</returns>
+  /// <returns><!-- drag-lint:auto -->Integer -- Observed: 10.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
-  /// Pure
+  /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Pure</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   function DocDisplayCount(ATotal: Integer): Integer;

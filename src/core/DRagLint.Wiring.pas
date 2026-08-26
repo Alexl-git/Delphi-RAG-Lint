@@ -20,10 +20,10 @@ uses
 /// event_handlers[] }. The caller owns and must free it.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-/// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDiResolveSites, DRagLint.Core.Interfaces.ISymbolStore.FindEventHandlersForForm, DRagLint.Core.Interfaces.ISymbolStore.FindImplementationsOf, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath
-/// Returns: TJSONObject.Create
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDiResolveSites, DRagLint.Core.Interfaces.ISymbolStore.FindEventHandlersForForm, DRagLint.Core.Interfaces.ISymbolStore.FindImplementationsOf, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
+/// <para>Returns: TJSONObject.Create</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDiResolveSites"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindEventHandlersForForm"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindImplementationsOf"/>

@@ -24,8 +24,8 @@ type
   /// content.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), declaration (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripFile (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Doc.Strip
+  /// <para>Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), declaration (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripFile (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Doc.Strip</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TStripResult = record
@@ -42,8 +42,8 @@ type
   /// hand-written multi-line &lt;remarks&gt; block is never touched.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch
+  /// <para>Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocStripper = class
@@ -95,10 +95,10 @@ type
     /// exist.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas)
-    /// Calls: Default, DRagLint.Doc.Strip.BuildDeleteEdits, DRagLint.Doc.Strip.IsDocLine, DRagLint.Doc.Strip.StripRegion, DRagLint.Doc.Strip.TryLoadLines
-    /// Returns: Default(TStripResult)
-    /// Pure
+    /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas)</para>
+    /// <para>Calls: Default, DRagLint.Doc.Strip.BuildDeleteEdits, DRagLint.Doc.Strip.IsDocLine, DRagLint.Doc.Strip.StripRegion, DRagLint.Doc.Strip.TryLoadLines</para>
+    /// <para>Returns: Default(TStripResult)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Strip.BuildDeleteEdits"/>
     /// <seealso cref="DRagLint.Doc.Strip.IsDocLine"/>
     /// <seealso cref="DRagLint.Doc.Strip.StripRegion"/>
@@ -166,11 +166,11 @@ type
     /// no such region is found.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas)
-    /// Calls: Default, DRagLint.Core.Model.DocRegionFitsDecl, DRagLint.Core.Model.DocRegionInGapWindow, DRagLint.Doc.Strip.BuildDeleteEdits, DRagLint.Doc.Strip.IsBlankSourceLine, DRagLint.Doc.Strip.IsDocLine, DRagLint.Doc.Strip.StripRegion, DRagLint.Doc.Strip.TryLoadLines
-    /// Returns: Default(TStripResult)
-    /// Complexity: 11 (cyclomatic, outer body), 95 lines (full implementation)
-    /// Mutates: ARegionStartLine (out), ARegionEndLine (out)
+    /// <para>Called from: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Model.DocRegionFitsDecl, DRagLint.Core.Model.DocRegionInGapWindow, DRagLint.Doc.Strip.BuildDeleteEdits, DRagLint.Doc.Strip.IsBlankSourceLine, DRagLint.Doc.Strip.IsDocLine, DRagLint.Doc.Strip.StripRegion, DRagLint.Doc.Strip.TryLoadLines</para>
+    /// <para>Returns: Default(TStripResult)</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 95 lines (full implementation)</para>
+    /// <para>Mutates: ARegionStartLine (out), ARegionEndLine (out)</para>
     /// <seealso cref="DRagLint.Core.Model.DocRegionFitsDecl"/>
     /// <seealso cref="DRagLint.Core.Model.DocRegionInGapWindow"/>
     /// <seealso cref="DRagLint.Doc.Strip.BuildDeleteEdits"/>

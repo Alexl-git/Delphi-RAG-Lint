@@ -83,8 +83,8 @@ type
   /// recovered from the nearest visibility-bearing sibling instead of being
   /// fabricated.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.PropTree.BuildPropTree.Walk (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas), DRagLint.Convert.Rules.PathExists (DRagLint.Convert.Rules.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules
+  /// <para>Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.PropTree.BuildPropTree.Walk (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas), DRagLint.Convert.Rules.PathExists (DRagLint.Convert.Rules.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropNode = record
@@ -113,8 +113,8 @@ type
   /// future field is added) is deterministically False/0/'' rather than
   /// whatever garbage happened to be on the stack.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas) (+2 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.PropTree
+  /// <para>Used by: DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.PropTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropTreeOptions = record
@@ -136,8 +136,8 @@ type
   /// True when the Depth cap stopped a class-typed expansion that would otherwise
   /// have recursed further.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit.TreeFor (DRagLint.CLI.pas) (+9 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules
+  /// <para>Used by: DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit.TreeFor (DRagLint.CLI.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropTree = record
@@ -235,10 +235,10 @@ type
 /// Borrows AStore; performs no I/O of its own.
 /// Not thread-safe with respect to concurrent mutation of the store.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoConvertApply.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree (DRagLint.CLI.pas) (+1 more)
-/// Calls: AddId, BodyOf, ClassChain, Climb, ClimbFrom, ClosureClassIds, CollectFields, CollectProps, CrossesGuiFramework, Default (+21 more)
-/// Returns: List.ToArray; Climb(AClass); Ids.ToArray; Default(TPropTree)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoConvertApply.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree (DRagLint.CLI.pas) (+1 more)</para>
+/// <para>Calls: AddId, BodyOf, ClassChain, Climb, ClimbFrom, ClosureClassIds, CollectFields, CollectProps, CrossesGuiFramework, Default (+21 more)</para>
+/// <para>Returns: List.ToArray; Climb(AClass); Ids.ToArray; Default(TPropTree)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.PropTree.BuildPropTree.ResolveClassByQName"/>
 /// <seealso cref="DRagLint.Convert.PropTree.BuildPropTree.Walk"/>
 /// <!-- drag-lint:auto END -->

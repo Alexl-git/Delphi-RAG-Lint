@@ -17,8 +17,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
-  /// Used in units: DRagLint.LSP.Completion
+  /// <para>Used by: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCloneChecker = class
@@ -29,10 +29,10 @@ type
     /// <returns>One info finding per maximal clone pair, sorted by (FilePath, StartLine).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
-    /// Calls: DRagLint.Diagnostics.CloneChecks.RunEngine
-    /// Returns: RunEngine([AFile], AMinTokens)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Calls: DRagLint.Diagnostics.CloneChecks.RunEngine</para>
+    /// <para>Returns: RunEngine([AFile], AMinTokens)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.CloneChecks.RunEngine"/>
     /// <seealso cref="DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject"/>
     /// <!-- drag-lint:auto END -->
@@ -44,10 +44,10 @@ type
     /// <returns>One info finding per maximal clone pair, sorted by (FilePath, StartLine).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Diagnostics.CloneChecks.RunEngine
-    /// Returns: RunEngine(AFiles, AMinTokens)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Diagnostics.CloneChecks.RunEngine</para>
+    /// <para>Returns: RunEngine(AFiles, AMinTokens)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.CloneChecks.RunEngine"/>
     /// <seealso cref="DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check"/>
     /// <!-- drag-lint:auto END -->

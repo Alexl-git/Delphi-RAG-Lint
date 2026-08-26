@@ -45,9 +45,9 @@ uses
 /// probes); not atomic -- a concurrent writer could race this, which is
 /// acceptable for drag-lint's single-user CLI usage.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Convert.Backup.BackupFiles (DRagLint.Convert.Backup.pas)
-/// Calls: IntToStr
-/// Touches: file system
+/// <para>Called from: DRagLint.Convert.Backup.BackupFiles (DRagLint.Convert.Backup.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function NextBackupName(const APath: string): string;
@@ -65,10 +65,10 @@ function NextBackupName(const APath: string): string;
 /// does not exist or the copy fails (TFile.Copy); callers should backup BEFORE
 /// any conversion write so a failed backup aborts before anything is touched.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
-/// Calls: DRagLint.Convert.Backup.NextBackupName, Format
-/// Mutates: AMappings (out)
-/// Touches: file system
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Convert.Backup.NextBackupName, Format</para>
+/// <para>Mutates: AMappings (out)</para>
+/// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Backup.NextBackupName"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -96,9 +96,9 @@ procedure BackupFiles(const APaths: TArray<string>; out AMappings: TArray<string
 /// a crash between this call and the actual write still leaves a complete
 /// recovery map pointing at the (untouched) .BCK backups.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
-/// Calls: Format
-/// Touches: file system
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
@@ -124,9 +124,9 @@ procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
 /// the rest of the codebase's strict-ASCII/CRLF source-file convention -- this
 /// must run AFTER the conversion write (it stamps the already-converted file).
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)
-/// Calls: ExtractFileExt, Format, SameText
-/// Touches: file system
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
+/// <para>Calls: ExtractFileExt, Format, SameText</para>
+/// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure PrependConvertComment(const APasPath, ATimestamp, ARulesFile: string;

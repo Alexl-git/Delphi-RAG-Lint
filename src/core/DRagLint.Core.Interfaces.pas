@@ -18,8 +18,8 @@ type
   /// record and leaves SqlOnlyMS=False, which indexes every .sql file --
   /// callers must not rely on Default(TWalkFilter) for the safe default.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.Create/3 (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas) (+3 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Index.Plan
+  /// <para>Used by: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.Create/3 (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Index.Plan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TWalkFilter = record
@@ -53,12 +53,12 @@ type
     /// <summary>Returns a TWalkFilter with the safe defaults: SqlOnlyMS=True,
     /// MaxFileKB=2048, all other fields empty/False. Prefer this over
     /// Default(TWalkFilter), which leaves SqlOnlyMS=False and MaxFileKB=0.</summary>
-    /// <returns><!-- drag-lint:auto -->Observed: Default(TWalkFilter).</returns>
+    /// <returns><!-- drag-lint:auto -->TWalkFilter -- Observed: Default(TWalkFilter).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.Create/3 (DRagLint.Core.Indexer.pas), DRagLint.Index.Plan.BuildFilter (DRagLint.Index.Plan.pas)
-    /// Calls: Default
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.Create/3 (DRagLint.Core.Indexer.pas), DRagLint.Index.Plan.BuildFilter (DRagLint.Index.Plan.pas)</para>
+    /// <para>Calls: Default</para>
+    /// <para>Pure</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Create: TWalkFilter; static;
@@ -66,15 +66,15 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.OpenExtraStores (DRagLint.CLI.pas), declaration (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+154 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.PropTree, DRagLint.Core.Indexer, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.CompileCheck, DRagLint.Diagnostics.FlowChecks, DRagLint.Diagnostics.NamingChecks, DRagLint.Doc.Batch (+26 more)
+  /// <para>Used by: DRagLint.CLI.OpenExtraStoresExcept (DRagLint.CLI.pas), declaration (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+166 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.PropTree, DRagLint.Core.Indexer, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.CompileCheck, DRagLint.Diagnostics.FlowChecks, DRagLint.Diagnostics.NamingChecks, DRagLint.Doc.Batch (+29 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   ISymbolStore = interface
     ['{6B9F8AC4-3F19-4E1A-9D38-1A2C3B7EF501}']
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+28 more)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+27 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -98,7 +98,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -117,7 +117,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Convert.Apply.CheckTypeFreshness (DRagLint.Convert.Apply.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Convert.Apply.CheckTypeFreshness (DRagLint.Convert.Apply.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Index.CallResolver.TCallResolver.LinesOf (DRagLint.Index.CallResolver.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -138,7 +138,7 @@ type
     /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -151,7 +151,7 @@ type
     /// <param name="AValue"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.CommitIndexerFingerprint (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -167,7 +167,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TFileTxToken</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -181,7 +181,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -194,7 +194,7 @@ type
     /// <param name="ARef"><!-- drag-lint:auto type -->const TReference</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -207,7 +207,7 @@ type
     /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -222,7 +222,8 @@ type
     /// <param name="AFingerprint">The engine identity string --
     /// DRagLint.CLI.IndexerFingerprint's format, e.g.
     /// 'v=1.3.0-alpha;schema=21;pp=1;plat=win64'. Pass '' to stop stamping.</param>
-    /// <remarks>Enables PER-FILE RESUME: an interrupted run leaves every file it
+    /// <remarks>
+    /// Enables PER-FILE RESUME: an interrupted run leaves every file it
     /// finished stamped with the current engine, so the next run re-parses only
     /// the remainder instead of starting again. A 12.5-hour library walk that
     /// reached 4,748 of 6,978 files previously restarted from file 1.
@@ -234,7 +235,16 @@ type
     /// the index looking complete.
     /// Not stamping is always SAFE: a NULL stamp reads as "unknown" and the file
     /// is re-parsed. Wrongly stamping is not.
-    /// Not thread-safe; call from the owning thread only.</remarks>
+    /// Not thread-safe; call from the owning thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SetIndexerFingerprint(const AFingerprint: string);
     /// <summary>The indexer fingerprint this file's rows were produced by, or ''
     /// when the file is absent from the index or was written before stamping
@@ -243,14 +253,24 @@ type
     /// FileIsUpToDate matches it, so the two always agree about which row a
     /// file is.</param>
     /// <returns>The stored fingerprint, or '' for "unknown -- re-parse it".</returns>
-    /// <remarks>'' must never be read as "matches": that inverts the safe
+    /// <remarks>
+    /// '' must never be read as "matches": that inverts the safe
     /// default and would skip files no engine has ever parsed.
-    /// Not thread-safe; call from the owning thread only.</remarks>
+    /// Not thread-safe; call from the owning thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FileIndexedFingerprint(const AFilePath: string): string;
     /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -264,7 +284,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas) (+29 more)
+    /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas) (+33 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -292,7 +312,7 @@ type
     /// which one comes first. Callers needing the right one must disambiguate by
     /// scope themselves.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoSurface (DRagLint.CLI.pas) (+12 more)
+    /// <para>Called from: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoSurface (DRagLint.CLI.pas) (+12 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -310,7 +330,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoOutline (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) (+11 more)
+    /// <para>Called from: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoOutline (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) (+12 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -326,7 +346,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.Rename.TRenameRefactoring.Build (DRagLint.Refactor.Rename.pas) (+1 more)
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas) (+5 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -342,7 +362,7 @@ type
     /// referenced AT ALL?" of many symbols. One scan answers the question for every
     /// symbol, where the per-symbol call costs one query each.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)
+    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -361,7 +381,7 @@ type
     /// refs.name_text carries NO index, so FindCallersByName is a full table scan
     /// EVERY call: replacing N of those with one scan is the whole point.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)
+    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -385,7 +405,7 @@ type
     /// MUST cache the answer per store: callers invoke it once per declaration
     /// and neither underlying column is indexed.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.SymbolFacts.ComputeCoveredBy (DRagLint.Doc.SymbolFacts.pas)
+    /// <para>Called from: DRagLint.Doc.SymbolFacts.ComputeCoveredBy (DRagLint.Doc.SymbolFacts.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -399,7 +419,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleWorkspaceSymbol (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleWorkspaceSymbol (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -412,7 +432,7 @@ type
     /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoHelpersOf (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas) (+62 more)
+    /// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoHelpersOf (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) (+68 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -424,7 +444,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;Int64&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestFiles (DRagLint.CLI.pas), DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas) (+13 more)
+    /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestFiles (DRagLint.CLI.pas), DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas) (+13 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -437,7 +457,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) (+4 more)
+    /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) (+4 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -449,7 +469,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -461,7 +481,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -473,7 +493,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -503,7 +523,7 @@ type
     /// wrong. "Does not exist on disk" is the only deletion predicate; a file that
     /// is merely out of the walk's filter is never touched.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -557,7 +577,7 @@ type
     /// left pointing at rows that just went away.
     /// Not thread-safe; call on the indexing thread with no walk in flight.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -592,7 +612,7 @@ type
     /// discarding them.
     /// Not thread-safe; call on the indexing thread with no walk in flight.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -609,7 +629,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TImpactLevel&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
+    /// <para>Called from: DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -624,7 +644,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSurfaceLine&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
+    /// <para>Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -637,7 +657,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSliceChunk&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSlice (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)
+    /// <para>Called from: DRagLint.CLI.DoSlice (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -651,7 +671,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Query.Callers.NameCallersForName (DRagLint.Query.Callers.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -666,7 +686,7 @@ type
     /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -679,7 +699,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TParsedDoc</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas)
+    /// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -695,7 +715,7 @@ type
     /// <param name="AUse"><!-- drag-lint:auto type -->const TUnitUse</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -707,7 +727,7 @@ type
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -720,7 +740,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TUnitUse&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) (+7 more)
+    /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) (+8 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -736,7 +756,8 @@ type
     /// when the index names neither or names both equally often.</summary>
     /// <returns>The winning segment, spelled as the source spells it; '' for
     /// "no answer", which callers must treat as "do not prefer either".</returns>
-    /// <remarks>Ask this of a PROJECT index only. A LIBRARY index carries both
+    /// <remarks>
+    /// Ask this of a PROJECT index only. A LIBRARY index carries both
     /// frameworks by construction -- the IDE Library Path holds Vcl.* and FMX.*
     /// alike -- so its answer describes the RTL rather than any consumer and
     /// means nothing.
@@ -744,7 +765,16 @@ type
     /// what it links. A tie returns '': a project that genuinely uses both has
     /// no single framework to prefer, and inventing one is precisely the silent
     /// pick this exists to avoid.
-    /// Not thread-safe; call from the owning thread only.</remarks>
+    /// Not thread-safe; call from the owning thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GuiFrameworkInUse: string;
     /// <summary>Whole-DB post-index pass: RECOMPUTES unit_uses.target_file_id
     /// for every row, from the used unit's name and the set of indexed file
@@ -781,7 +811,7 @@ type
     /// ancestry. ResolveHelpers, the call resolver and the deps report do read
     /// it.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -806,7 +836,7 @@ type
     /// unresolved (ancestor_kind '?'), never guessed.</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -821,7 +851,7 @@ type
     /// type_helpers table.</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -842,7 +872,7 @@ type
     /// into THIS db. Empty (the default) keeps the pre-v21 behaviour exactly.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -865,7 +895,7 @@ type
     /// `find-callers --resolved` answers nothing without erroring.
     /// Errs towards True -- rebuilding costs time, not correctness.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
@@ -881,7 +911,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TTypeAncestor&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.IsTestRoutine (DRagLint.Doc.SymbolFacts.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Resolver.TypeAt.ResolveMemberOnType (DRagLint.Resolver.TypeAt.pas) (+10 more)
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.IsTestRoutine (DRagLint.Doc.SymbolFacts.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.LSP.Completion.EnclosingTypeDescendsFrom (DRagLint.LSP.Completion.pas) (+12 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -898,7 +928,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Diagnostics.FlowChecks.ConstructorTransfersOwnership (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas), DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit (DRagLint.Diagnostics.NamingChecks.pas) ?
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Diagnostics.FlowChecks.ConstructorTransfersOwnership (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas), DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit (DRagLint.Diagnostics.NamingChecks.pas) ?</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -914,7 +944,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Convert.PropTree.BuildPropTree.ClosureClassIds (DRagLint.Convert.PropTree.pas) ?
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Convert.PropTree.BuildPropTree.ClosureClassIds (DRagLint.Convert.PropTree.pas) ?</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -931,7 +961,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -949,7 +979,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TTypeCategory</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Diagnostics.FlowChecks.IsInterfaceType (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.IsManagedType (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.IsRecordType (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CatOf (DRagLint.Diagnostics.AstChecks.pas) ? (+3 more)
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Diagnostics.FlowChecks.IsInterfaceType (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.IsManagedType (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.IsRecordType (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CatOf (DRagLint.Diagnostics.AstChecks.pas) ? (+1 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -975,7 +1005,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;THelperEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoHelpersOf (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoHelpersOf (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -999,7 +1029,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;THelperEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits (DRagLint.Lint.ProjectRules.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve (DRagLint.Refactor.EnumHelper.pas)
+    /// <para>Called from: DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits (DRagLint.Lint.ProjectRules.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve (DRagLint.Refactor.EnumHelper.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1012,7 +1042,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1026,7 +1056,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc (DRagLint.Lint.DocRules.pas)
+    /// <para>Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc (DRagLint.Lint.DocRules.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1039,7 +1069,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1051,7 +1081,7 @@ type
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1076,7 +1106,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.Lint.DocRules.DocumentedPublicDecls (DRagLint.Lint.DocRules.pas)
+    /// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.Lint.DocRules.DocumentedPublicDecls (DRagLint.Lint.DocRules.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1093,7 +1123,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.LSP.Completion.EnclosingTypeDescendsFrom (DRagLint.LSP.Completion.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1106,7 +1136,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas) (+20 more)
+    /// <para>Called from: DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas) (+24 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1119,7 +1149,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+8 more)
+    /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+10 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1134,7 +1164,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason (DRagLint.Refactor.Rename.pas), DRagLint.Resolver.TypeAt.ResolveMemberOnType (DRagLint.Resolver.TypeAt.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas) (+5 more)
+    /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason (DRagLint.Refactor.Rename.pas), DRagLint.Resolver.TypeAt.ResolveMemberOnType (DRagLint.Resolver.TypeAt.pas) (+6 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1165,7 +1195,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Convert.PropTree.BuildPropTree.ResolveTypeInScope (DRagLint.Convert.PropTree.pas) ?
+    /// <para>Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Convert.PropTree.BuildPropTree.ResolveTypeInScope (DRagLint.Convert.PropTree.pas) ?</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1200,7 +1230,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)
+    /// <para>Called from: DRagLint.LSP.Completion.EnclosingTypeDescendsFrom (DRagLint.LSP.Completion.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1215,22 +1245,12 @@ type
     /// <param name="APrefix"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ALimit"><!-- drag-lint:auto type -->Integer</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
-    /// <remarks>
-    /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems (DRagLint.LSP.Completion.pas)
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindingsForFile"/>
-    /// <!-- drag-lint:auto END -->
-    /// </remarks>
     function FindSymbolsByPrefix(const APrefix: string; ALimit: Integer): TArray<TSymbol>;
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Convert.Apply.GetConstructorNames (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ToTypeHasGenericCreate (DRagLint.Convert.Apply.pas), DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+12 more)
+    /// <para>Called from: DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.Convert.Apply.GetConstructorNames (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ToTypeHasGenericCreate (DRagLint.Convert.Apply.pas), DRagLint.Doc.Facts.MemoSiblingRoutines (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas) (+15 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1247,7 +1267,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Refactor.DeadCode.TDeadCodeFinder.Find (DRagLint.Refactor.DeadCode.pas)
+    /// <para>Called from: DRagLint.Refactor.DeadCode.TDeadCodeFinder.Find (DRagLint.Refactor.DeadCode.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1263,7 +1283,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TCompilerFinding&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
+    /// <para>Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1276,7 +1296,7 @@ type
     /// <param name="AFinding"><!-- drag-lint:auto type -->const TCompilerFinding</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings (DRagLint.Diagnostics.CompileCheck.pas)
+    /// <para>Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings (DRagLint.Diagnostics.CompileCheck.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1291,7 +1311,7 @@ type
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1305,7 +1325,7 @@ type
     /// <param name="AUnix"><!-- drag-lint:auto type -->Int64</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1319,7 +1339,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.Project.Coherence.ComputeCoherence (DRagLint.Project.Coherence.pas)
+    /// <para>Called from: DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas), DRagLint.Project.Coherence.ComputeCoherence (DRagLint.Project.Coherence.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1333,7 +1353,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Project.Coherence.ComputeCoherence (DRagLint.Project.Coherence.pas)
+    /// <para>Called from: DRagLint.Project.Coherence.ComputeCoherence (DRagLint.Project.Coherence.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1347,7 +1367,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;Int64&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoRefreshFindings (DRagLint.CLI.pas), DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoRefreshFindings (DRagLint.CLI.pas), DRagLint.CLI.DoTestStoreFreshness (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1363,7 +1383,7 @@ type
     /// <param name="ABinding"><!-- drag-lint:auto type -->const TDiBindingRow</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1377,7 +1397,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TDiBindingRow&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas)
+    /// <para>Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1397,7 +1417,7 @@ type
     /// already indexes. Ordered by file_id then start_line so a class
     /// registered more than once renders in a stable order.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.SymbolFacts.ComputeWiring (DRagLint.Doc.SymbolFacts.pas)
+    /// <para>Called from: DRagLint.Doc.SymbolFacts.ComputeWiring (DRagLint.Doc.SymbolFacts.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1419,7 +1439,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference &gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas)
+    /// <para>Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1431,7 +1451,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1447,7 +1467,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas)
+    /// <para>Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.Wiring.BuildWiringJson (DRagLint.Wiring.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1464,7 +1484,7 @@ type
     /// <param name="ALit"><!-- drag-lint:auto type -->const TStringLiteral</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1478,7 +1498,7 @@ type
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1498,7 +1518,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TStringLitMatch&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoQueryText (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoQueryText (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1524,7 +1544,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TResolvedCaller&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.RenderCallGraphText (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk (DRagLint.Doc.SymbolFacts.pas) ? (+1 more)
+    /// <para>Called from: DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.RenderCallGraphText (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas), DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk (DRagLint.Doc.SymbolFacts.pas) ? (+1 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1618,7 +1638,7 @@ type
     /// predicate because hover resolves properties, fields, locals and SQL
     /// symbols into the same branch.</para>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk (DRagLint.Doc.SymbolFacts.pas) ?
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk (DRagLint.Doc.SymbolFacts.pas) ?</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1637,7 +1657,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TCallEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.CLI.RenderCallGraphText (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+1 more)
+    /// <para>Called from: DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.CLI.RenderCallGraphText (DRagLint.CLI.pas), DRagLint.Doc.Drift.CalleeRaisesType (DRagLint.Doc.Drift.pas) (+2 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1669,7 +1689,7 @@ type
     /// <remarks>
     /// Not thread-safe; call from the owning thread on a writable store.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoPurgeLocals (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoPurgeLocals (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1685,7 +1705,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1701,7 +1721,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TFileScopeEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1726,7 +1746,7 @@ type
     /// one. Returning both and letting the caller filter keeps that visibility
     /// rule in one place.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.BuildMaps (DRagLint.Index.CallResolver.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1742,7 +1762,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TCallEdge&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1768,7 +1788,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TResolvedCaller&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoAmbiguousCalls (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoAmbiguousCalls (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1787,7 +1807,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TSymbolFacts</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)
+    /// <para>Called from: DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1802,7 +1822,7 @@ type
     /// <param name="AFacts"><!-- drag-lint:auto type -->const TSymbolFacts</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCallEdges"/>
@@ -1815,8 +1835,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas), declaration (DRagLint.Parser.Delphi13.pas) (+3 more)
-  /// Used in units: DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, DRagLint.Parser.Sql
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas), declaration (DRagLint.Parser.Delphi13.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, DRagLint.Parser.Sql</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TParseResult = record
@@ -1834,8 +1854,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.Create/3 (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.ParserFor (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas) (+3 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, DRagLint.Parser.Sql
+  /// <para>Used by: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.Create/3 (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.ParserFor (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, DRagLint.Parser.Sql</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   IParser = interface
@@ -1843,7 +1863,7 @@ type
     /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IParser.FileExtensions"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IParser.Parse"/>
     /// <!-- drag-lint:auto END -->
@@ -1852,7 +1872,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.ParserFor (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.ParserFor (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IParser.LanguageName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IParser.Parse"/>
     /// <!-- drag-lint:auto END -->
@@ -1863,7 +1883,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TParseResult</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IParser.FileExtensions"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IParser.LanguageName"/>
     /// <!-- drag-lint:auto END -->
@@ -1873,8 +1893,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Core.Indexer
+  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   IIndexer = interface
@@ -1883,7 +1903,7 @@ type
     /// <param name="ARecursive"><!-- drag-lint:auto type -->Boolean = True</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.ParsedFiles"/>
@@ -1895,7 +1915,7 @@ type
     /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.IndexOneFileTolerant (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.IndexOneFileTolerant (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.ParsedFiles"/>
@@ -1907,7 +1927,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Integer</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
@@ -1937,7 +1957,7 @@ type
     /// <c>--rebuild</c> has cleared the corpus before the walk even starts.
     /// CUMULATIVE over the indexer's lifetime, matching VisitedFiles.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
@@ -1966,7 +1986,7 @@ type
     /// see the union of every tick. That errs toward keeping rows, which is the
     /// safe direction for a deletion predicate.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
@@ -1984,7 +2004,7 @@ type
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.ParsedFiles"/>
@@ -2002,7 +2022,7 @@ type
     /// <param name="AValue"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
@@ -2017,7 +2037,8 @@ type
     /// disables resuming.</summary>
     /// <param name="AFingerprint">The engine identity this run parses with --
     /// the same string handed to ISymbolStore.SetIndexerFingerprint.</param>
-    /// <remarks>SET IT ONLY WHEN THE RUN WAS FORCED BECAUSE THE INDEXER
+    /// <remarks>
+    /// SET IT ONLY WHEN THE RUN WAS FORCED BECAUSE THE INDEXER
     /// FINGERPRINT CHANGED. SetForceReparse is called for three different
     /// reasons and only that one may resume:
     /// a fingerprint change is resumable, because a file already parsed by THIS
@@ -2028,7 +2049,16 @@ type
     /// call rather than something the indexer infers.
     /// Leaving it '' is always SAFE -- it costs a redundant re-parse. Setting it
     /// when the run was forced for either other reason is not.
-    /// Not thread-safe; call from the owning thread only.</remarks>
+    /// Not thread-safe; call from the owning thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.ParsedFiles"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.SetForceReparse"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SetResumeFingerprint(const AFingerprint: string);
     /// <summary>Apply glob-based file/dir filtering to subsequent IndexFolder
     /// calls. Must be called before the first IndexFolder; has no effect on
@@ -2037,7 +2067,7 @@ type
     /// at their zero-value defaults.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>
@@ -2062,7 +2092,7 @@ type
     /// a .dproj-derived config); ignored when AEnabled is False.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.IndexFolder"/>

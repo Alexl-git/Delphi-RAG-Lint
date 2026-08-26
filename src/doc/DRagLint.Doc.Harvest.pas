@@ -96,7 +96,7 @@ type
   /// <summary>Why a candidate comment block was rejected, or hrAccepted.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Doc.Harvest.pas)
+  /// <para>Used by: declaration (DRagLint.Doc.Harvest.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   THarvestReason = (hrAccepted, hrNone, hrBanner, hrCommentedCode, hrTrailer,
@@ -110,8 +110,8 @@ type
   /// still reports its extent so a caller can say WHICH comment it declined,
   /// and so Task 9's strip round-trip has the range to delete.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas), declaration (DRagLint.Doc.Harvest.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.Harvest
+  /// <para>Used by: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas), declaration (DRagLint.Doc.Harvest.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.Harvest</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   THarvestResult = record
@@ -135,10 +135,10 @@ type
 /// <returns>The verdict and the accumulated block. Never raises.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas)
-/// Calls: DRagLint.Doc.Harvest.ClassifyLine, DRagLint.Doc.Harvest.ContainsEndSemi, DRagLint.Doc.Harvest.ContainsWord, DRagLint.Doc.Harvest.IsEndStop, DRagLint.Doc.Harvest.IsSeparatorOnly, DRagLint.Doc.Harvest.SeparatorShare, Pos, Trim
-/// Complexity: 43 (cyclomatic, outer body), 135 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: DRagLint.Doc.Harvest.ClassifyLine, DRagLint.Doc.Harvest.ContainsEndSemi, DRagLint.Doc.Harvest.ContainsWord, DRagLint.Doc.Harvest.IsEndStop, DRagLint.Doc.Harvest.IsSeparatorOnly, DRagLint.Doc.Harvest.SeparatorShare, Pos, Trim</para>
+/// <para>Complexity: 43 (cyclomatic, outer body), 135 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Doc.Harvest.ClassifyLine"/>
 /// <seealso cref="DRagLint.Doc.Harvest.ContainsEndSemi"/>
 /// <seealso cref="DRagLint.Doc.Harvest.ContainsWord"/>
@@ -168,10 +168,10 @@ function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarv
 /// order cannot drift between the two. Harvested prose needs it MORE than mined
 /// identifiers do: it is arbitrary human text.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas)
-/// Calls: CharInSet, Copy, DRagLint.Doc.Harvest.CollapseSpaces, DRagLint.Doc.Harvest.SeparatorShare, DRagLint.Doc.Harvest.StripMarkers, DRagLint.Doc.Regions.EscXml, Trim
-/// Complexity: 25 (cyclomatic, outer body), 107 lines (full implementation)
-/// Mutates: ASummary (out), ARemarks (out)
+/// <para>Called from: DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.Doc.Harvest.CollapseSpaces, DRagLint.Doc.Harvest.SeparatorShare, DRagLint.Doc.Harvest.StripMarkers, DRagLint.Doc.Regions.EscXml, Trim</para>
+/// <para>Complexity: 25 (cyclomatic, outer body), 107 lines (full implementation)</para>
+/// <para>Mutates: ASummary (out), ARemarks (out)</para>
 /// <seealso cref="DRagLint.Doc.Harvest.CollapseSpaces"/>
 /// <seealso cref="DRagLint.Doc.Harvest.SeparatorShare"/>
 /// <seealso cref="DRagLint.Doc.Harvest.StripMarkers"/>
@@ -185,12 +185,12 @@ procedure HarvestText(const AResult: THarvestResult; out ASummary, ARemarks: str
 /// Lives here rather than at the print site so the enum and its wire form
 /// cannot drift apart.</summary>
 /// <param name="AReason"><!-- drag-lint:auto type -->const THarvestReason</param>
-/// <returns><!-- drag-lint:auto -->Observed: 'ACCEPTED'; 'NONE'; 'BANNER';
+/// <returns><!-- drag-lint:auto -->string -- Observed: 'ACCEPTED'; 'NONE'; 'BANNER';
 /// 'COMMENTEDCODE'; 'TRAILER'; 'EMPTY'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas)</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function HarvestReasonToString(const AReason: THarvestReason): string;

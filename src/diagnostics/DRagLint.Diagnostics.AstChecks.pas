@@ -19,17 +19,18 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.SymbolFacts, DRagLint.LSP.Completion, DRagLint.MCP.Server
+  /// <para>Used by: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.SymbolFacts, DRagLint.LSP.Completion, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TAstChecker = class
     strict private
-      /// <returns><!-- drag-lint:auto -->Observed: D.</returns>
+      /// <returns><!-- drag-lint:auto -->TDictionary&lt;string, Boolean&gt; -- Observed:
+      /// D.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: ParamStr, Trim
-      /// Touches: file system
+      /// <para>Calls: ParamStr, Trim</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
@@ -39,13 +40,13 @@ type
       /// </remarks>
       class function LoadBuiltinAllowlist          : TDictionary<string, Boolean>;
       /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed:
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
       /// GKeywordSet.ContainsKey(System.SysUtils.LowerCase(AName)).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUndeclared (DRagLint.Diagnostics.AstChecks.pas)
-      /// Calls: DRagLint.Diagnostics.AstChecks.BuildKeywordSet
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUndeclared (DRagLint.Diagnostics.AstChecks.pas)</para>
+      /// <para>Calls: DRagLint.Diagnostics.AstChecks.BuildKeywordSet</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.BuildKeywordSet"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
@@ -57,12 +58,13 @@ type
     public
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: All.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
+      /// All.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUndeclared
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUndeclared</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUndeclared"/>
@@ -73,12 +75,13 @@ type
       class function Check(const AStore: ISymbolStore; const AFile: string)          : TArray<TLintFinding>;
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Findings.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
+      /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas)
-      /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Diagnostics.AstChecks.MaskCommentsAndStrings, DRagLint.Diagnostics.AstChecks.TAstChecker.IsKeyword, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas)</para>
+      /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Diagnostics.AstChecks.MaskCommentsAndStrings, DRagLint.Diagnostics.AstChecks.TAstChecker.IsKeyword, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.MaskCommentsAndStrings"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.IsKeyword"/>
@@ -88,13 +91,14 @@ type
       /// </remarks>
       class function CheckUndeclared(const AStore: ISymbolStore; const AFile: string): TArray<TLintFinding>;
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: nil; [Finding].</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
+      /// [Finding].</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas)
-      /// Calls: CharInSet, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, SameText
-      /// Complexity: 33 (cyclomatic, outer body), 172 lines (full implementation)
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas)</para>
+      /// <para>Calls: CharInSet, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, SameText</para>
+      /// <para>Complexity: 33 (cyclomatic, outer body), 172 lines (full implementation)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
@@ -109,12 +113,13 @@ type
       /// 'syntax-error' findings. Live syntax diagnostics (Error-Insight-style) without a
       /// compiler.</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
+      /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
-      /// Calls: AnsiUpperCase, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.BuildConditionalRanges, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsInConditionalRegion, StraddlesConditionalRegion
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+      /// <para>Calls: AnsiUpperCase, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.BuildConditionalRanges, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsInConditionalRegion, StraddlesConditionalRegion</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.BuildConditionalRanges"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
@@ -136,12 +141,13 @@ type
       /// used anywhere (incl. a nested routine = closure, or via with/property) raises
       /// the count and suppresses the finding. No compiler / no DB needed.</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
+      /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestUnusedLocals (DRagLint.CLI.pas)
-      /// Calls: CheckProc, CountIdents, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, NodeStr
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestUnusedLocals (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CheckProc, CountIdents, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, NodeStr</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -170,10 +176,10 @@ type
       /// there produces code that will not build. Multi-line name lists are skipped.
       /// Edits never overlap: at most one edit per declVar, one per declVars.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.PosKey, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, HandleProc, Integer, IntToStr, NodeKey, NStr, SameText, Trim
-      /// Returns: nil; Edits.ToArray
-      /// Mutates: AFixedCount (out)
+      /// <para>Called from: DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.PosKey, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, HandleProc, Integer, IntToStr, NodeKey, NStr, SameText, Trim</para>
+      /// <para>Returns: nil; Edits.ToArray</para>
+      /// <para>Mutates: AFixedCount (out)</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.PosKey"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
@@ -191,10 +197,10 @@ type
       /// section. The walk does not descend into nested try blocks, so each try's finally is attributed
       /// to that try. Pure tree-sitter AST; no DB or compiler required. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, SearchForRaise
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, SearchForRaise</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -211,10 +217,10 @@ type
       /// Only direct siblings are considered, so a terminator nested inside an if/case does not
       /// mark code after the if/case as dead. Pure tree-sitter AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CheckList, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsTerminator, LowerCase, NodeStr
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CheckList, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsTerminator, LowerCase, NodeStr</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -231,10 +237,10 @@ type
       /// skips ancestor cleanup (resource leak). Class constructors/destructors and asm-bodied routines
       /// are skipped. The search ignores 'inherited' inside nested routines. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CheckProc, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, HasInherited, Integer
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CheckProc, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, HasInherited, Integer</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -251,10 +257,10 @@ type
       /// propagating out of the protected section. Walks each finally body, not descending into nested
       /// try blocks. Companion to CheckRaiseInFinally. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsCtrlFlow, LowerCase, NodeStr, SearchFinally
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsCtrlFlow, LowerCase, NodeStr, SearchFinally</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -274,10 +280,10 @@ type
       /// <remarks>
       /// One AST walk per routine. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CheckProc, CountNames, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Emit, Format, Integer, MaxNest, NodeStr
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CheckProc, CountNames, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Emit, Format, Integer, MaxNest, NodeStr</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -299,12 +305,13 @@ type
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
-      /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
+      /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
-      /// Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectDecls, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+24 more)
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+      /// <para>Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectDecls, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+24 more)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectDecls"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums"/>
@@ -322,10 +329,10 @@ type
       /// program order. Only fires when the SQL is a recognizable literal, so false positives are rare.
       /// Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, LowerCase, MatchCall, MatchSqlTextAssign, NodeStr, SameText, TrimLeft, UpperCase, WalkBody
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, LowerCase, MatchCall, MatchSqlTextAssign, NodeStr, SameText, TrimLeft, UpperCase, WalkBody</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -343,10 +350,10 @@ type
       /// later 'X.Free' / 'FreeAndNil(X)' on the same variable that is NOT lexically inside a finally
       /// block. Requiring same-routine construction filters destructor field-frees. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CollectLocals, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsConstruction, IsFree, LowerCase, NodeStr, SameText, UpperCase, WalkBody
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CollectLocals, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsConstruction, IsFree, LowerCase, NodeStr, SameText, UpperCase, WalkBody</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnprotectedFree.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -364,11 +371,11 @@ type
       /// [weak] or [unsafe]. Interface detection uses the I-prefix convention; only mutual (2-cycle)
       /// pairs are reported. Pure AST across all files; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-      /// Calls: AddImpl, CharInSet, CollectFields, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles.ExtractFile, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles.HoldsImplementedBy, ExtractFileExt, Format, HandleClass (+8 more)
-      /// Returns: nil; Findings.ToArray
-      /// Complexity: 12 (cyclomatic, outer body), 210 lines (full implementation)
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+      /// <para>Calls: AddImpl, CharInSet, CollectFields, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles.ExtractFile, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles.HoldsImplementedBy, ExtractFileExt, Format, HandleClass (+8 more)</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 210 lines (full implementation)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles.ExtractFile"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles.HoldsImplementedBy"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -385,10 +392,10 @@ type
       /// flags a later 'X.&lt;member&gt;' access (incl. a second X.Free) until X is reassigned. FreeAndNil(X)
       /// clears tracking (it nils X). Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CheckBlock, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FindUse, Integer, IsFreeAndNil, IsRawFree, LowerCase, NodeStr, Primary, SameText
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CheckBlock, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FindUse, Integer, IsFreeAndNil, IsRawFree, LowerCase, NodeStr, Primary, SameText</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUseAfterFree.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -407,10 +414,10 @@ type
       /// Access inside a nested anonymous method (a likely Synchronize/Queue body) is skipped. Pure AST;
       /// no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Flag, Format, Integer, LowerCase, NodeStr, Pos, SameText, WalkExec
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Flag, Format, Integer, LowerCase, NodeStr, Pos, SameText, WalkExec</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
@@ -428,10 +435,10 @@ type
       /// Skipped entirely when no sibling .dfm file exists beside AFile. Pure AST;
       /// no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: ChangeFileExt, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CheckGlobalVarDecls, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CollectClassNames, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, Move, NodeStr
-      /// Returns: nil; Findings.ToArray
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: ChangeFileExt, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CheckGlobalVarDecls, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CollectClassNames, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, Move, NodeStr</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CheckGlobalVarDecls"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars.CollectClassNames"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
@@ -451,10 +458,10 @@ type
       /// .pas file (no .dfm gate, no type filter) -- broader than CheckGlobalFormVars, which
       /// this method does not modify. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Move, NodeStr
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Move, NodeStr</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -476,10 +483,10 @@ type
       /// OFF by default (inherently noisy -- getters that lazily cache, fluent
       /// mutators). Fires at most once per function. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: AddIdentsUnder, BodyMutatesField, CharInSet, CollectLocalsAndParams, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsFunction, LooksLikeFieldName (+7 more)
-      /// Returns: Hit; nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: AddIdentsUnder, BodyMutatesField, CharInSet, CollectLocalsAndParams, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsFunction, LooksLikeFieldName (+7 more)</para>
+      /// <para>Returns: Hit; nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -497,10 +504,10 @@ type
       /// Severity error. Per-callee command-arg index: WinExec=0, ShellExecute=2,
       /// CreateProcess=1. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: ArgIsFixedSchemeUri, CharInSet, CmdArgIndex, CollectAssignments, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer (+6 more)
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: ArgIsFixedSchemeUri, CharInSet, CmdArgIndex, CollectAssignments, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer (+6 more)</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -518,10 +525,10 @@ type
       /// Severity warning. Path-arg index: AssignFile=1, FileOpen/CreateFile=0,
       /// TFile.Open=0. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, NodeStr, PathArgIndex, SameText
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, NodeStr, PathArgIndex, SameText</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -539,10 +546,10 @@ type
       /// Severity warning. Only the direct first statement is inspected, so an
       /// Exit nested in an if is not flagged. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FirstStmtInner, Integer, IsAtMostOnceExit, NodeStr, SameText
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FirstStmtInner, Integer, IsAtMostOnceExit, NodeStr, SameText</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -560,10 +567,10 @@ type
       /// Severity error. Requires a literalString format + exprBrackets argument array;
       /// skips silently otherwise. Variable arguments are not type-checked. Pure AST; no DB.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, NodeStr, Pos, SameText, SpecKinds, StringReplace
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, NodeStr, Pos, SameText, SpecKinds, StringReplace</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -590,10 +597,10 @@ type
       /// which is why the .Message/.ClassName test is restricted to a call and not an assignment.
       /// try-finally is ignored. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CollectHandlingAssignTargets, Copy, Default, Delete, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EnclosingDefProc, HandlesException, Integer, IsExplanatoryComment (+7 more)
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CollectHandlingAssignTargets, Copy, Default, Delete, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EnclosingDefProc, HandlesException, Integer, IsExplanatoryComment (+7 more)</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -611,10 +618,10 @@ type
       /// Severity warning. Per-routine flow analysis (mirrors CheckUnprotectedFree).
       /// Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsActiveAssign, IsDestroyingCall, LowerCase, NodeStr, SameText, WalkBody
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsActiveAssign, IsDestroyingCall, LowerCase, NodeStr, SameText, WalkBody</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -632,10 +639,10 @@ type
       /// Severity error. Per-routine flow analysis (mirrors CheckDatasetOpen).
       /// Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, NodeStr, SameText, WalkBody
-      /// Returns: nil; Findings.ToArray
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, NodeStr, SameText, WalkBody</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -651,10 +658,10 @@ type
       /// <remarks>
       /// Severity info. Threshold = 5 (const). Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/2
-      /// Returns: CheckTooManyExitPoints(AFile, 5)
-      /// Overload 1 of 2
-      /// Pure
+      /// <para>Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/2</para>
+      /// <para>Returns: CheckTooManyExitPoints(AFile, 5)</para>
+      /// <para>Overload 1 of 2</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
@@ -670,11 +677,11 @@ type
       /// <remarks>
       /// Severity info. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/1 (DRagLint.Diagnostics.AstChecks.pas)
-      /// Calls: CountExits, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr, SameText
-      /// Returns: nil; Findings.ToArray
-      /// Overload 2 of 2
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
+      /// <para>Calls: CountExits, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr, SameText</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Overload 2 of 2</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -691,10 +698,10 @@ type
       /// Severity info. Threshold = 15 (const). Node kinds: kAnd/kOr/caseCase verified
       /// against the grammar. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity/2
-      /// Returns: CheckCyclomaticComplexity(AFile, 15)
-      /// Overload 1 of 2
-      /// Pure
+      /// <para>Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity/2</para>
+      /// <para>Returns: CheckCyclomaticComplexity(AFile, 15)</para>
+      /// <para>Overload 1 of 2</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
@@ -710,11 +717,11 @@ type
       /// <remarks>
       /// Severity info. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)
-      /// Calls: CyclomaticOf, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr
-      /// Returns: nil; Findings.ToArray
-      /// Overload 2 of 2
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
+      /// <para>Calls: CyclomaticOf, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Overload 2 of 2</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -738,10 +745,10 @@ type
       /// grammar by CheckCyclomaticComplexity's own tests (tests\lint\cyclomatic-
       /// complexity.pas/.expected).
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit (DRagLint.Diagnostics.AstChecks.pas) ?
-      /// Calls: DRagLint.Diagnostics.AstChecks.CyclomaticCountDecisions
-      /// Returns: 1 + CyclomaticCountDecisions(ABody)
-      /// Pure
+      /// <para>Called from: DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit (DRagLint.Diagnostics.AstChecks.pas) ?</para>
+      /// <para>Calls: DRagLint.Diagnostics.AstChecks.CyclomaticCountDecisions</para>
+      /// <para>Returns: 1 + CyclomaticCountDecisions(ABody)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.CyclomaticCountDecisions"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
@@ -754,12 +761,13 @@ type
       /// the threshold -- each control-flow structure adds 1 + its nesting depth, each and/or/xor
       /// adds 1. Rewards flat code, penalises deep nesting (unlike flat cyclomatic count).</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: CheckCognitiveComplexity(AFile, 25).</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
+      /// CheckCognitiveComplexity(AFile, 25).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2
-      /// Overload 1 of 2
-      /// Pure
+      /// <para>Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2</para>
+      /// <para>Overload 1 of 2</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
@@ -770,13 +778,14 @@ type
       class function CheckCognitiveComplexity(const AFile: string): TArray<TLintFinding>; overload;
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AMaxScore"><!-- drag-lint:auto type -->Integer</param>
-      /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
+      /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)
-      /// Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Score
-      /// Overload 2 of 2
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Score</para>
+      /// <para>Overload 2 of 2</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -800,12 +809,13 @@ type
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
-      /// <returns><!-- drag-lint:auto -->Observed: nil; Findings.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
+      /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: CollectClassMethods, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor.CheckCtors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor.CollectClasses, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FlagCalls, Format, HasVirtualAttr, Integer, LowerCase, NodeStr, SameText, Walk
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CollectClassMethods, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor.CheckCtors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor.CollectClasses, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FlagCalls, Format, HasVirtualAttr, Integer, LowerCase, NodeStr, SameText, Walk</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor.CheckCtors"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor.CollectClasses"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>

@@ -16,8 +16,8 @@ type
   /// PMyType / FMyField / pMyParam, PascalCase, lowercase keywords).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Diagnostics.NamingChecks.pas), DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check (DRagLint.Diagnostics.NamingChecks.pas), declaration (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), declaration (DRagLint.Refactor.NamingFix.pas)
-  /// Used in units: DRagLint.Diagnostics.NamingChecks, DRagLint.Lint.Config, DRagLint.Refactor.NamingFix
+  /// <para>Used by: declaration (DRagLint.Diagnostics.NamingChecks.pas), DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check (DRagLint.Diagnostics.NamingChecks.pas), declaration (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), declaration (DRagLint.Refactor.NamingFix.pas)</para>
+  /// <para>Used in units: DRagLint.Diagnostics.NamingChecks, DRagLint.Lint.Config, DRagLint.Refactor.NamingFix</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TNamingConfig = record
@@ -32,8 +32,8 @@ type
     /// <returns><!-- drag-lint:auto type -->TNamingConfig</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.DoScanAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ? (+40 more)
-    /// Pure
+    /// <para>Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.DoScanAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ? (+42 more)</para>
+    /// <para>Pure</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Default: TNamingConfig; static;
@@ -47,8 +47,8 @@ type
   /// default.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) (+4 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Lint.ClassMetrics, DRagLint.Lint.Config, DRagLint.LSP.Completion
+  /// <para>Used by: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ClassMetrics, DRagLint.Lint.Config, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLintConfig = record
@@ -75,12 +75,12 @@ type
     FExcludePaths: TArray<string> ;
     /// <param name="AArr"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Config.TLintConfig.IsAutoFix (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.ShouldKeep (DRagLint.Lint.Config.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.ErrorSignatures (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveEndpointIds (DRagLint.CLI.pas) ? (+2 more)
-    /// Calls: SameText, Trim
-    /// Pure
+    /// <para>Called from: DRagLint.Lint.Config.TLintConfig.IsAutoFix (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.ShouldKeep (DRagLint.Lint.Config.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.ErrorSignatures (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveEndpointIds (DRagLint.CLI.pas) ? (+2 more)</para>
+    /// <para>Calls: SameText, Trim</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -95,11 +95,11 @@ type
     /// <param name="ANaming"><!-- drag-lint:auto type -->const TJSONObject</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Config.TLintConfig.ApplyConfigObject (DRagLint.Lint.Config.pas)
-    /// Calls: SameText, StrToIntDef
-    /// Complexity: 16 (cyclomatic, outer body), 37 lines (full implementation)
-    /// Reads: Naming
-    /// Pure
+    /// <para>Called from: DRagLint.Lint.Config.TLintConfig.ApplyConfigObject (DRagLint.Lint.Config.pas)</para>
+    /// <para>Calls: SameText, StrToIntDef</para>
+    /// <para>Complexity: 16 (cyclomatic, outer body), 37 lines (full implementation)</para>
+    /// <para>Reads: Naming</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -116,9 +116,9 @@ type
     /// <param name="AReplace"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef
-    /// Complexity: 17 (cyclomatic, outer body), 68 lines (full implementation)
-    /// Reads: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues   Writes: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef</para>
+    /// <para>Complexity: 19 (cyclomatic, outer body), 77 lines (full implementation)</para>
+    /// <para>Reads: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues   Writes: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues, ExceptionsUnit</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyNamingObject"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetSeverityPair"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
@@ -146,12 +146,12 @@ type
     /// omits are inherited unchanged.</summary>
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AProfile"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: Default(TLintConfig).</returns>
+    /// <returns><!-- drag-lint:auto -->TLintConfig -- Observed: Default(TLintConfig).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
-    /// Calls: DRagLint.Lint.Config.TNamingConfig.Default
-    /// Touches: file system
+    /// <para>Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Config.TNamingConfig.Default</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Lint.Config.TNamingConfig.Default"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
@@ -163,13 +163,13 @@ type
     /// <summary>Returns the configured severity for ARuleId, else ADefault.</summary>
     /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ADefault"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: ADefault.</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ADefault.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)
-    /// Calls: SameText
-    /// Reads: FSevNames, FSevValues
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: FSevNames, FSevValues</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -182,13 +182,13 @@ type
     /// off-by-default rule (ADefaultDisabled) is dropped unless re-enabled.</summary>
     /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ADefaultDisabled"><!-- drag-lint:auto type -->Boolean</param>
-    /// <returns><!-- drag-lint:auto -->Observed: True.</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.Lint.Config.TLintConfig.IsEnabled (DRagLint.Lint.Config.pas)
-    /// Calls: DRagLint.Lint.Config.TLintConfig.Contains
-    /// Reads: FDisabled, FEnabled
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.Lint.Config.TLintConfig.IsEnabled (DRagLint.Lint.Config.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Contains</para>
+    /// <para>Reads: FDisabled, FEnabled</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.Contains"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
@@ -199,11 +199,11 @@ type
     function ShouldKeep(const ARuleId: string; ADefaultDisabled: Boolean): Boolean;
     /// <summary>Convenience: ShouldKeep(ARuleId, False).</summary>
     /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: ShouldKeep(ARuleId, False).</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ShouldKeep(ARuleId, False).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Lint.Config.TLintConfig.ShouldKeep
-    /// Pure
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.ShouldKeep</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ShouldKeep"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
@@ -216,13 +216,13 @@ type
     /// Independent of enabled/disabled -- a rule may be enabled without being
     /// auto-fixed, or auto-fixed while off by default.</summary>
     /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: Contains(FAutoFix, ARuleId).</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: Contains(FAutoFix, ARuleId).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Lint.Config.TLintConfig.Contains
-    /// Reads: FAutoFix
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Contains</para>
+    /// <para>Reads: FAutoFix</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.Contains"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
@@ -243,11 +243,11 @@ type
     /// suppression, because vendored code is not this codebase's quality
     /// signal for ANY rule.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
-    /// Calls: LowerCase, MatchesMask, StringReplace
-    /// Returns: False; True
-    /// Reads: FExcludePaths
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
+    /// <para>Calls: LowerCase, MatchesMask, StringReplace</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Reads: FExcludePaths</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -259,13 +259,13 @@ type
     /// <summary>Returns the configured threshold for AName, else ADefault.</summary>
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ADefault"><!-- drag-lint:auto type -->Integer</param>
-    /// <returns><!-- drag-lint:auto -->Observed: ADefault.</returns>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: ADefault.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.ClassMetrics.TClassMetrics.Run (DRagLint.Lint.ClassMetrics.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
-    /// Calls: SameText
-    /// Reads: FThreshNames, FThreshValues
-    /// Pure
+    /// <para>Called from: DRagLint.Lint.ClassMetrics.TClassMetrics.Run (DRagLint.Lint.ClassMetrics.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: FThreshNames, FThreshValues</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -278,8 +278,8 @@ type
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: Trim
-    /// Reads: FEnabled   Writes: FEnabled
+    /// <para>Calls: Trim</para>
+    /// <para>Reads: FEnabled   Writes: FEnabled</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyConfigObject"/>
@@ -292,8 +292,8 @@ type
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: Trim
-    /// Reads: FDisabled   Writes: FDisabled
+    /// <para>Calls: Trim</para>
+    /// <para>Reads: FDisabled   Writes: FDisabled</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyConfigObject"/>
@@ -306,8 +306,8 @@ type
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: Trim
-    /// Reads: FAutoFix   Writes: FAutoFix
+    /// <para>Calls: Trim</para>
+    /// <para>Reads: FAutoFix   Writes: FAutoFix</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyConfigObject"/>
@@ -318,12 +318,12 @@ type
     procedure AddAutoFix(const AIds: TArray<string>);
     // -- Read accessors (for serialization) --
     /// <summary>Returns a copy of the disabled rule-id list.</summary>
-    /// <returns><!-- drag-lint:auto -->Observed: FDisabled.</returns>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: FDisabled.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Reads: FDisabled
-    /// Owns returned: borrowed
-    /// Pure
+    /// <para>Reads: FDisabled</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -333,12 +333,12 @@ type
     /// </remarks>
     function DisabledIds: TArray<string>;
     /// <summary>Returns a copy of the enabled rule-id list.</summary>
-    /// <returns><!-- drag-lint:auto -->Observed: FEnabled.</returns>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: FEnabled.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Reads: FEnabled
-    /// Owns returned: borrowed
-    /// Pure
+    /// <para>Reads: FEnabled</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -348,12 +348,12 @@ type
     /// </remarks>
     function EnabledIds: TArray<string>;
     /// <summary>Returns a copy of the auto-fix rule-id list.</summary>
-    /// <returns><!-- drag-lint:auto -->Observed: FAutoFix.</returns>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: FAutoFix.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Reads: FAutoFix
-    /// Owns returned: borrowed
-    /// Pure
+    /// <para>Reads: FAutoFix</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -366,8 +366,8 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TPair&lt;string,string&gt;&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Reads: FSevNames, FSevValues
-    /// Pure
+    /// <para>Reads: FSevNames, FSevValues</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -380,8 +380,8 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TPair&lt;string,Integer&gt;&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Reads: FThreshNames, FThreshValues
-    /// Pure
+    /// <para>Reads: FThreshNames, FThreshValues</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -395,7 +395,7 @@ type
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Writes: FDisabled
+    /// <para>Writes: FDisabled</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -408,7 +408,7 @@ type
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Writes: FEnabled
+    /// <para>Writes: FEnabled</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -421,7 +421,7 @@ type
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Writes: FAutoFix
+    /// <para>Writes: FAutoFix</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -435,9 +435,9 @@ type
     /// <param name="ASev"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.Config.TLintConfig.ApplyConfigObject (DRagLint.Lint.Config.pas)
-    /// Calls: SameText
-    /// Reads: FSevNames, FSevValues   Writes: FSevNames, FSevValues
+    /// <para>Called from: DRagLint.Lint.Config.TLintConfig.ApplyConfigObject (DRagLint.Lint.Config.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: FSevNames, FSevValues   Writes: FSevNames, FSevValues</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>
@@ -451,8 +451,8 @@ type
     /// <param name="AValue"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: SameText
-    /// Reads: FThreshNames, FThreshValues   Writes: FThreshNames, FThreshValues
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: FThreshNames, FThreshValues   Writes: FThreshNames, FThreshValues</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddEnabled"/>

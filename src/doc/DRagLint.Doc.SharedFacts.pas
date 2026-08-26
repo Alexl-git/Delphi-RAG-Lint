@@ -108,8 +108,8 @@ type
   /// changes for anyone who has not opted in. Not thread-safe: the closure set
   /// is cached in class state, keyed on the store it was built from.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas)
-  /// Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift
+  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedFacts = class
@@ -128,11 +128,11 @@ type
     /// this unit cannot confidently parse.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas)
-    /// Calls: DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase
-    /// Returns: CollapseWs(AStored) &lt;&gt; CollapseWs(AFresh); False
-    /// Complexity: 20 (cyclomatic, outer body), 84 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase</para>
+    /// <para>Returns: CollapseWs(AStored) &lt;&gt; CollapseWs(AFresh); False</para>
+    /// <para>Complexity: 20 (cyclomatic, outer body), 84 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
@@ -160,11 +160,11 @@ type
     /// under B, so each project would rewrite the line the other just wrote.
     /// Order changes only on marked units.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)
-    /// Calls: CompareText, Copy, DRagLint.Doc.SharedFacts.ExtractBlockBody, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, IsUncertainEntry, LowerCase, Pos, Trim, UnitInClosure
-    /// Returns: ADocText; Lines.Text
-    /// Complexity: 21 (cyclomatic, outer body), 146 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
+    /// <para>Calls: CompareText, Copy, DRagLint.Doc.SharedFacts.ExtractBlockBody, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, EndsText (+6 more)</para>
+    /// <para>Returns: ADocText; Lines.Text</para>
+    /// <para>Complexity: 22 (cyclomatic, outer body), 164 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ExtractBlockBody"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
@@ -192,10 +192,10 @@ type
     /// exits on the residual compare ('Pure' vs '') and the writer emits a pure
     /// tekDeleteLines. Both now ask this first.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas)
-    /// Calls: DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared
-    /// Returns: False
-    /// Pure
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared</para>
+    /// <para>Returns: False</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>

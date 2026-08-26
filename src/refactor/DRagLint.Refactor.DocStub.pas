@@ -14,15 +14,15 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoGenerateDocs (DRagLint.CLI.pas), declaration (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)
+  /// <para>Used by: DRagLint.CLI.DoGenerateDocs (DRagLint.CLI.pas), declaration (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocStubFormat = (dsfXmlDoc, dsfPasDoc);
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoGenerateDocs (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoGenerateDocs (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocStubGenerator = class
@@ -30,12 +30,12 @@ type
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFormat"><!-- drag-lint:auto type -->TDocStubFormat</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ''; Sb.ToString.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoGenerateDocs (DRagLint.CLI.pas)
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.DocStub.ExtractParamList, DRagLint.Refactor.DocStub.ParseParamNames, DRagLint.Refactor.DocStub.ReadSourceLine, DRagLint.Refactor.DocStub.SignatureHasReturn, Trim
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoGenerateDocs (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.DocStub.ExtractParamList, DRagLint.Refactor.DocStub.ParseParamNames, DRagLint.Refactor.DocStub.ReadSourceLine, DRagLint.Refactor.DocStub.SignatureDeclaresReturn, DRagLint.Refactor.DocStub.SignatureHasReturn, Trim</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Refactor.DocStub.ExtractParamList"/>
@@ -52,13 +52,13 @@ type
 /// DRagLint.Doc.Regions / .Document can reuse the same param-list extraction the
 /// generate-docs stub uses.</summary>
 /// <param name="ASig"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->Observed: Trim(Copy(ASig, OpenPos + 1, ClosePos -
-/// OpenPos - 1)).</returns>
+/// <returns><!-- drag-lint:auto -->string -- Observed: Trim(Copy(ASig, OpenPos + 1,
+/// ClosePos - OpenPos - 1)).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)
-/// Calls: Copy, LastDelimiter, Pos, Trim
-/// Pure
+/// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Calls: Copy, LastDelimiter, Pos, Trim</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExtractParamList(const ASig: string): string;
@@ -69,9 +69,9 @@ function ExtractParamList(const ASig: string): string;
 /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.GroupParamNames (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)
-/// Calls: DRagLint.Refactor.DocStub.ParseParamDecls
-/// Pure
+/// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.GroupParamNames (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Calls: DRagLint.Refactor.DocStub.ParseParamDecls</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Refactor.DocStub.ParseParamDecls"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -86,8 +86,8 @@ function ParseParamNames(const AParamList: string): TArray<string>;
   /// itself on the next pass -- the exact failure ParseParamNames' own comment
   /// records for parameter NAMES.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)
-  /// Used in units: DRagLint.Doc.Facts, DRagLint.Refactor.DocStub
+  /// <para>Used by: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Refactor.DocStub</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
 type
@@ -106,25 +106,25 @@ type
 /// yields two entries sharing the type T).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas)
-/// Calls: Copy, DRagLint.Refactor.DocStub.ExtractPascalComments, LowerCase, Pos, Trim
-/// Returns: Acc.ToArray
-/// Pure
+/// <para>Called from: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Calls: Copy, DRagLint.Refactor.DocStub.ExtractPascalComments, LowerCase, Pos, Trim</para>
+/// <para>Returns: Acc.ToArray</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Refactor.DocStub.ExtractPascalComments"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParseParamDecls(const AParamList: string): TArray<TParamDecl>;
 /// <param name="ASig"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->Observed: Lower.StartsWith('function') or
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: Lower.StartsWith('function') or
 /// Lower.StartsWith('constructor').</returns>
 /// <remarks>
 /// <!-- drag-lint:auto -->IsFunction: true when the signature starts with 'function' or
 /// 'constructor'. Also returns true for 'method' kind when the text contains 'function ' keyword
 /// before the identifier.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)
-/// Calls: LowerCase, Trim
-/// Pure
+/// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Calls: LowerCase, Trim</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SignatureHasReturn(const ASig: string): Boolean;
@@ -134,7 +134,8 @@ function SignatureHasReturn(const ASig: string): Boolean;
 /// <param name="ASig">A signature in either spelling: the INDEXED form
 /// ('(A: Integer): Integer') or a full declaration line.</param>
 /// <returns>True when a return type follows the parameter list.</returns>
-/// <remarks>THIS IS THE TEST SignatureHasReturn CANNOT PERFORM, and the two are
+/// <remarks>
+/// THIS IS THE TEST SignatureHasReturn CANNOT PERFORM, and the two are
 /// deliberately separate rather than merged. SignatureHasReturn asks a question
 /// about the DECLARATION TEXT ("does it begin with `function`"), which is
 /// exactly right where a caller holds a source line and is always False for an
@@ -144,7 +145,14 @@ function SignatureHasReturn(const ASig: string): Boolean;
 /// ('(ACallback: procedure(X: Integer))') contains an inner ')' whose naive
 /// match would expose that parameter's own colon and report a return type on a
 /// procedure. An unbalanced signature returns False rather than guessing.
-/// Pure.</remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Calls: Copy, Pos, Trim</para>
+/// <para>Returns: Pos(':', Copy(S, i, MaxInt)) &gt; 0</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SignatureDeclaresReturn(const ASig: string): Boolean;
 /// <summary>True when ASig declares a CONSTRUCTOR -- i.e. its first word is
 /// `constructor`. The declaration TEXT is the only ground truth for this: the
@@ -162,10 +170,10 @@ function SignatureDeclaresReturn(const ASig: string): Boolean;
 /// second spelling of this test would put those two back into the
 /// checker-vs-writer disagreement the marker exists to end.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Drift.TDocDrift.Analyze (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.DetectMethodDirectives (DRagLint.Doc.Facts.pas)
-/// Calls: LowerCase, Trim
-/// Returns: LowerCase(Trim(ASig)).StartsWith('constructor')
-/// Pure
+/// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.DetectMethodDirectives (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: LowerCase, Trim</para>
+/// <para>Returns: LowerCase(Trim(ASig)).StartsWith('constructor')</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SignatureIsConstructor(const ASig: string): Boolean;
@@ -174,7 +182,7 @@ function SignatureIsConstructor(const ASig: string): Boolean;
 /// comment removed. Handles the three Pascal spellings ({ }, (* *), //).</summary>
 /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
 /// <param name="ARest"><!-- drag-lint:auto type -->out string</param>
-/// <returns><!-- drag-lint:auto -->Observed: Trim(Note.ToString).</returns>
+/// <returns><!-- drag-lint:auto -->string -- Observed: Trim(Note.ToString).</returns>
 /// <remarks>
 /// ONE implementation, TWO readers, and they must not diverge:
 /// ParseParamNames strips comments out before reading a parameter's NAME (an
@@ -184,10 +192,10 @@ function SignatureIsConstructor(const ASig: string): Boolean;
 /// second copy of this scan is how the name half and the meaning half would end
 /// up disagreeing about where a comment starts.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)
-/// Calls: Copy, Trim
-/// Complexity: 19 (cyclomatic, outer body), 49 lines (full implementation)
-/// Mutates: ARest (out)
+/// <para>Called from: DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Calls: Copy, Trim</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 49 lines (full implementation)</para>
+/// <para>Mutates: ARest (out)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExtractPascalComments(const AText: string; out ARest: string): string;

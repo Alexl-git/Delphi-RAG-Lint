@@ -44,8 +44,8 @@ type
   /// is 7-bit ASCII and the file's original line endings are preserved -- only
   /// the single marker line is ever rewritten.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.SharedFacts
+  /// <para>Used by: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedUnit = class
@@ -53,16 +53,17 @@ type
     /// <summary>True when the unit carries a `dl:shared` marker.</summary>
     /// <param name="AUnitPath">Path to a `.pas` file. A missing file is False,
     /// not an error.</param>
-    /// <returns><!-- drag-lint:auto -->Observed: IsSharedText(ReadUnitText(AUnitPath)).</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+    /// IsSharedText(ReadUnitText(AUnitPath)).</returns>
     /// <remarks>
     /// Scans the unit's HEADER REGION, not line 1 alone: line 1 of a
     /// unit here is frequently the `{` of a block comment, which is the same
     /// anchoring trap already recorded for unit-too-large and
     /// compiler-magic-comments.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)
-    /// Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.IsSharedText
-    /// Pure
+    /// <para>Called from: DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.IsSharedText</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.SharedUnit.ReadUnitText"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsSharedText"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProject"/>
@@ -78,10 +79,10 @@ type
     /// when the marker carries no names.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)
-    /// Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText
-    /// Returns: ProjectsOfText(ReadUnitText(AUnitPath))
-    /// Pure
+    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+    /// <para>Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText</para>
+    /// <para>Returns: ProjectsOfText(ReadUnitText(AUnitPath))</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.SharedUnit.ReadUnitText"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProject"/>
@@ -105,9 +106,9 @@ type
     /// anchor a new marker to.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText
-    /// Returns: False; AddProjectToText(ANewText, AProject, ANewText)
-    /// Mutates: ANewText (out)
+    /// <para>Calls: DRagLint.Lint.SharedUnit.ReadUnitText, DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText</para>
+    /// <para>Returns: False; AddProjectToText(ANewText, AProject, ANewText)</para>
+    /// <para>Mutates: ANewText (out)</para>
     /// <seealso cref="DRagLint.Lint.SharedUnit.ReadUnitText"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsShared"/>
@@ -119,16 +120,16 @@ type
 
     /// <summary>IsShared, against text already in memory.</summary>
     /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: ScanHeader(AText, swMarkInComment) &gt;
-    /// 0.</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ScanHeader(AText,
+    /// swMarkInComment) &gt; 0.</returns>
     /// <remarks>
     /// The IDE plugin holds an unsaved editor buffer; making it write a
     /// temp file just to ask this question is the kind of round-trip that goes
     /// stale.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.IsShared (DRagLint.Lint.SharedUnit.pas)
-    /// Calls: DRagLint.Lint.SharedUnit.ScanHeader
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.IsShared (DRagLint.Lint.SharedUnit.pas)</para>
+    /// <para>Calls: DRagLint.Lint.SharedUnit.ScanHeader</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.SharedUnit.ScanHeader"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProject"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText"/>
@@ -140,12 +141,13 @@ type
 
     /// <summary>ProjectsOf, against text already in memory.</summary>
     /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: nil; Names.ToArray.</returns>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: nil;
+    /// Names.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText (DRagLint.Lint.SharedUnit.pas), DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf (DRagLint.Lint.SharedUnit.pas)
-    /// Calls: Copy, DRagLint.Lint.SharedUnit.LineRangeAt, DRagLint.Lint.SharedUnit.ScanHeader, DRagLint.Lint.SharedUnit.SplitCommentTail, Trim
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText (DRagLint.Lint.SharedUnit.pas), DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf (DRagLint.Lint.SharedUnit.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Lint.SharedUnit.LineRangeAt, DRagLint.Lint.SharedUnit.ScanHeader, DRagLint.Lint.SharedUnit.SplitCommentTail, Trim</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.SharedUnit.LineRangeAt"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.ScanHeader"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.SplitCommentTail"/>
@@ -159,16 +161,16 @@ type
     /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AProject"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ANewText"><!-- drag-lint:auto type -->out string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: False; True.</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
     /// <remarks>
     /// This is the seam the round-trip check uses: the caller re-reads
     /// ANewText with ProjectsOfText and refuses to write anything that does not
     /// parse back. A marker that does not parse back reads as "declared shared"
     /// while behaving as unshared, which is worse than no marker at all.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.AddProject (DRagLint.Lint.SharedUnit.pas)
-    /// Calls: Copy, DRagLint.Lint.SharedUnit.LineRangeAt, DRagLint.Lint.SharedUnit.ScanHeader, DRagLint.Lint.SharedUnit.SplitCommentTail, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText, SameText, Trim, TrimLeft, TrimRight
-    /// Mutates: ANewText (out)
+    /// <para>Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.AddProject (DRagLint.Lint.SharedUnit.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Lint.SharedUnit.LineRangeAt, DRagLint.Lint.SharedUnit.ScanHeader, DRagLint.Lint.SharedUnit.SplitCommentTail, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText, SameText, Trim, TrimLeft, TrimRight</para>
+    /// <para>Mutates: ANewText (out)</para>
     /// <seealso cref="DRagLint.Lint.SharedUnit.LineRangeAt"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.ScanHeader"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.SplitCommentTail"/>

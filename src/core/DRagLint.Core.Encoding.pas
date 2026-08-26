@@ -34,10 +34,10 @@ uses
 /// (ASCII is valid UTF-8, so this returns the input unchanged). Pure function;
 /// thread-safe (no shared state; the CP1252 encoding it allocates is freed).
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)
-/// Calls: DRagLint.Core.Encoding.IsValidUtf8, Move
-/// Complexity: 14 (cyclomatic, outer body), 43 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
+/// <para>Calls: DRagLint.Core.Encoding.IsValidUtf8, Move</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 43 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Encoding.IsValidUtf8"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

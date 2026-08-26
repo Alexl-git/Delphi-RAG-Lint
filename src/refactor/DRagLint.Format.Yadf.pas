@@ -12,8 +12,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), declaration (DRagLint.Format.Yadf.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Format.Yadf
+  /// <para>Used by: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), declaration (DRagLint.Format.Yadf.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Format.Yadf</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFormatResult = record
@@ -24,8 +24,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoFormat (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoFormat (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TYadfFormatter = class
@@ -36,20 +36,20 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenWritableStore (DRagLint.CLI.pas) ? (+115 more)
-      /// Calls: DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenWritableStore (DRagLint.CLI.pas) ? (+117 more)</para>
+      /// <para>Calls: DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture"/>
       /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Format(const AFile: string; const AYadfPath: string = ''): TFormatResult;
-      /// <returns><!-- drag-lint:auto -->Observed: ''; RegPath; KNOWN_RELEASE;
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; RegPath; KNOWN_RELEASE;
       /// KNOWN_DEBUG.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Trim
-      /// Touches: file system, registry
+      /// <para>Calls: Trim</para>
+      /// <para>Touches: file system, registry</para>
       /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
       /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture"/>
       /// <!-- drag-lint:auto END -->
@@ -59,13 +59,13 @@ type
       /// <param name="ACmd"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ATimeoutMs"><!-- drag-lint:auto type -->DWORD</param>
       /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: -1; -2; Integer(ExitCode).</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1; -2; Integer(ExitCode).</returns>
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)
-      /// Calls: AnsiString, CloseHandle, CreatePipe, CreateProcessW, FillChar, GetExitCodeProcess, GetStdHandle, Integer, PWideChar, ReadFile, SetHandleInformation, TerminateProcess, UniqueString, WaitForSingleObject
-      /// Mutates: AOutput (out)
+      /// <para>Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+      /// <para>Calls: AnsiString, CloseHandle, CreatePipe, CreateProcessW, FillChar, GetExitCodeProcess, GetStdHandle, Integer, PWideChar, ReadFile, SetHandleInformation, TerminateProcess, UniqueString, WaitForSingleObject</para>
+      /// <para>Mutates: AOutput (out)</para>
       /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
       /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
       /// <!-- drag-lint:auto END -->

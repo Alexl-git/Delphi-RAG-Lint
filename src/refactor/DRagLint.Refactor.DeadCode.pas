@@ -13,8 +13,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDeadCodeFinder = class
@@ -22,13 +22,13 @@ type
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AIncludePrivate"><!-- drag-lint:auto type -->Boolean</param>
-      /// <returns><!-- drag-lint:auto -->Observed: AStore.FindSymbolsWithNoCallers(AKind,
-      /// AIncludePrivate).</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed:
+      /// AStore.FindSymbolsWithNoCallers(AKind, AIncludePrivate).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithNoCallers
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithNoCallers</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithNoCallers"/>
       /// <seealso cref="DRagLint.Refactor.DeadCode.TDeadCodeFinder.RenderText"/>
       /// <!-- drag-lint:auto END -->
@@ -36,12 +36,12 @@ type
       class function Find(const AStore: ISymbolStore; const AKind: string; AIncludePrivate: Boolean): TArray<TSymbol>;
       /// <param name="ASymbols"><!-- drag-lint:auto type -->const TArray&lt;TSymbol&gt;</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Sb.ToString.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Refactor.DeadCode.TDeadCodeFinder.Find"/>
       /// <!-- drag-lint:auto END -->

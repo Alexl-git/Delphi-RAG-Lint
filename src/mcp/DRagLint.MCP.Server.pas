@@ -31,9 +31,9 @@ type
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.SendError (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.SendResult (DRagLint.MCP.Server.pas)
-      /// Calls: Flush, StringOf
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.SendError (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.SendResult (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Flush, StringOf</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
@@ -46,9 +46,9 @@ type
       /// <param name="AResult"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleInitialize (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsList (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.MCP.Server.TMCPServer.SendRaw
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleInitialize (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsList (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.MCP.Server.TMCPServer.SendRaw</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.SendRaw"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -62,9 +62,9 @@ type
       /// <param name="AMessage"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.MCP.Server.TMCPServer.SendRaw
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.MCP.Server.TMCPServer.SendRaw</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.SendRaw"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -77,9 +77,9 @@ type
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.MCP.Server.TMCPServer.SendResult
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.MCP.Server.TMCPServer.SendResult</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.SendResult"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -91,9 +91,9 @@ type
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.MCP.Server.TMCPServer.SendResult, DRagLint.MCP.Server.TMCPServer.ToolDescriptor
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.MCP.Server.TMCPServer.SendResult, DRagLint.MCP.Server.TMCPServer.ToolDescriptor</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.SendResult"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.ToolDescriptor"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
@@ -106,11 +106,11 @@ type
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Model.JsonEscape, DRagLint.Diagnostics.AstChecks.TAstChecker.Check, DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings (+26 more)
-      /// Complexity: 93 (cyclomatic, outer body), 448 lines (full implementation)
-      /// Reads: FStore, FLinter
-      /// Touches: file system
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Model.JsonEscape, DRagLint.Diagnostics.AstChecks.TAstChecker.Check, DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings (+26 more)</para>
+      /// <para>Complexity: 93 (cyclomatic, outer body), 448 lines (full implementation)</para>
+      /// <para>Reads: FStore, FLinter</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderJson"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -122,12 +122,12 @@ type
       /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ADesc"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASchemaJSON"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: TJSONObject.Create.</returns>
+      /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsList (DRagLint.MCP.Server.pas)
-      /// Owns returned: new (caller owns)
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsList (DRagLint.MCP.Server.pas)</para>
+      /// <para>Owns returned: new (caller owns)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
@@ -137,12 +137,12 @@ type
       /// </remarks>
       function ToolDescriptor(const AName, ADesc: string; const ASchemaJSON: string): TJSONObject     ;
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: TJSONArray .Create.</returns>
+      /// <returns><!-- drag-lint:auto -->TJSONArray -- Observed: TJSONArray .Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Owns returned: new (caller owns)
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Owns returned: new (caller owns)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
@@ -152,12 +152,12 @@ type
       /// </remarks>
       function TextContent(const AText: string): TJSONArray                                           ;
       /// <param name="ASymbols"><!-- drag-lint:auto type -->const TArray&lt;TSymbol &gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Sb.ToString.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: Format
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Format</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
@@ -167,13 +167,13 @@ type
       /// </remarks>
       function FormatSymbols   (const ASymbols : TArray<TSymbol     >): string;
       /// <param name="ARefs"><!-- drag-lint:auto type -->const TArray&lt;TReference &gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Sb.ToString.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, Format
-      /// Reads: FStore
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, Format</para>
+      /// <para>Reads: FStore</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -183,12 +183,12 @@ type
       /// </remarks>
       function FormatReferences(const ARefs    : TArray<TReference  >): string;
       /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Sb.ToString.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: Format
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Format</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
@@ -202,9 +202,9 @@ type
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Model.DocFormatToStr"/>
       /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
       /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
@@ -215,13 +215,13 @@ type
       function FormatDocAsJson(const AQName: string; const ADoc: TParsedDoc): string                  ;
       /// <param name="ASymbols"><!-- drag-lint:auto type -->const TArray&lt;TSymbol&gt;</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->ISymbolStore</param>
-      /// <returns><!-- drag-lint:auto -->Observed: '[]'; '[' + string.Join(',', Parts) +
-      /// ']'.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: '[]'; '[' + string.Join(',',
+      /// Parts) + ']'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.JsonEscape, IntToStr
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.JsonEscape, IntToStr</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
@@ -231,14 +231,14 @@ type
       /// </remarks>
       function FormatSymbolsAsJsonArray(const ASymbols: TArray<TSymbol>; AStore: ISymbolStore): string;
       /// <param name="ARefs"><!-- drag-lint:auto type -->const TArray&lt;TReference&gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: '{"callers":[]}'; '{"callers":[' +
-      /// string.Join(',', Parts) + ']}'.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: '{"callers":[]}';
+      /// '{"callers":[' + string.Join(',', Parts) + ']}'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.JsonEscape, IntToStr
-      /// Reads: FStore
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.JsonEscape, IntToStr</para>
+      /// <para>Reads: FStore</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
@@ -249,14 +249,14 @@ type
       function FormatReferencesWithContext(const ARefs: TArray<TReference>): string                   ;
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ALevels"><!-- drag-lint:auto type -->const TArray&lt;TImpactLevel&gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: '{"qname":"' + JsonEscape(AQName) +
-      /// '","levels":[]}'; '{"qname":"' + JsonEscape(AQName) + '"' + ',"levels":[' +
-      /// string.Join(',', Parts) + ']}'.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: '{"qname":"' +
+      /// JsonEscape(AQName) + '","levels":[]}'; '{"qname":"' + JsonEscape(AQName) + '"' +
+      /// ',"levels":[' + string.Join(',', Parts) + ']}'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Core.Model.JsonEscape, IntToStr
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Model.JsonEscape, IntToStr</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -267,14 +267,14 @@ type
       function FormatImpactAsJson (const AQName: string; const ALevels: TArray<TImpactLevel>): string;
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ALines"><!-- drag-lint:auto type -->const TArray&lt;TSurfaceLine&gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: '{"qname":"' + JsonEscape(AQName) +
-      /// '","lines":[]}'; '{"qname":"' + JsonEscape(AQName) + '"' + ',"lines":[' +
-      /// string.Join(',', Parts) + ']}'.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: '{"qname":"' +
+      /// JsonEscape(AQName) + '","lines":[]}'; '{"qname":"' + JsonEscape(AQName) + '"' +
+      /// ',"lines":[' + string.Join(',', Parts) + ']}'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Core.Model.JsonEscape, IntToStr
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Model.JsonEscape, IntToStr</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -285,14 +285,14 @@ type
       function FormatSurfaceAsJson(const AQName: string; const ALines : TArray<TSurfaceLine>): string;
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AChunks"><!-- drag-lint:auto type -->const TArray&lt;TSliceChunk &gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: '{"qname":"' + JsonEscape(AQName) +
-      /// '","chunks":[]}'; '{"qname":"' + JsonEscape(AQName) + '"' + ',"chunks":[' +
-      /// string.Join(',', Parts) + ']}'.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: '{"qname":"' +
+      /// JsonEscape(AQName) + '","chunks":[]}'; '{"qname":"' + JsonEscape(AQName) + '"' +
+      /// ',"chunks":[' + string.Join(',', Parts) + ']}'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Core.Model.JsonEscape, IntToStr
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Model.JsonEscape, IntToStr</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -302,13 +302,13 @@ type
       /// </remarks>
       function FormatSliceAsJson  (const AQName: string; const AChunks: TArray<TSliceChunk >): string;
       /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: '[]'; '[' + string.Join(',', Parts) +
-      /// ']'.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: '[]'; '[' + string.Join(',',
+      /// Parts) + ']'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Core.Model.JsonEscape, IntToStr
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Model.JsonEscape, IntToStr</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -318,14 +318,14 @@ type
       /// </remarks>
       function FormatRenameEditsAsJson(const AEdits: TArray<TRenameEdit>): string                     ;
       /// <param name="AArgs"><!-- drag-lint:auto type -->const TJSONObject</param>
-      /// <returns><!-- drag-lint:auto -->Observed: TSQLiteSymbolStore.Create(DbPath);
-      /// FStore.</returns>
+      /// <returns><!-- drag-lint:auto -->ISymbolStore -- Observed:
+      /// TSQLiteSymbolStore.Create(DbPath); FStore.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create
-      /// Reads: FStore
-      /// Pure
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
+      /// <para>Reads: FStore</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -338,10 +338,10 @@ type
       /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Lint.Linter.TLinter.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create
-      /// constructor
-      /// Reads: FDbPaths, FStore   Writes: FDbPaths, FStore, FLinter
+      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Lint.Linter.TLinter.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FDbPaths, FStore   Writes: FDbPaths, FStore, FLinter</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Migrate"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
@@ -352,7 +352,7 @@ type
       constructor Create(const ADbPaths: TArray<string>);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Reads: FLinter   Writes: FStore
+      /// <para>Reads: FLinter   Writes: FStore</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatFindings"/>
@@ -363,9 +363,9 @@ type
       destructor Destroy; override;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: DRagLint.MCP.Server.TMCPServer.HandleInitialize, DRagLint.MCP.Server.TMCPServer.HandleToolsCall, DRagLint.MCP.Server.TMCPServer.HandleToolsList, DRagLint.MCP.Server.TMCPServer.SendError, DRagLint.MCP.Server.TMCPServer.SendResult, Eof, ReadLn, TJSONObject, Trim
-      /// Complexity: 15 (cyclomatic, outer body), 43 lines (full implementation)
-      /// Pure
+      /// <para>Calls: DRagLint.MCP.Server.TMCPServer.HandleInitialize, DRagLint.MCP.Server.TMCPServer.HandleToolsCall, DRagLint.MCP.Server.TMCPServer.HandleToolsList, DRagLint.MCP.Server.TMCPServer.SendError, DRagLint.MCP.Server.TMCPServer.SendResult, Eof, ReadLn, TJSONObject, Trim</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 61 lines (full implementation)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.HandleInitialize"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.HandleToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.HandleToolsList"/>

@@ -27,8 +27,8 @@ type
   /// no --db flags are given.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDbSelect = class
@@ -50,10 +50,10 @@ type
       /// library-{platform} last.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?
-      /// Calls: DRagLint.Index.DbSelect.TDbSelect.Resolve.Append, DRagLint.Index.Plan.ResolvePlan, SameText
-      /// Returns: OutList
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?</para>
+      /// <para>Calls: DRagLint.Index.DbSelect.TDbSelect.Resolve.Append, DRagLint.Index.Plan.ResolvePlan, SameText</para>
+      /// <para>Returns: OutList</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.DbSelect.TDbSelect.Resolve.Append"/>
       /// <seealso cref="DRagLint.Index.Plan.ResolvePlan"/>
       /// <!-- drag-lint:auto END -->

@@ -36,19 +36,36 @@ uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.IOUtils;
 
 type
-  /// <summary>
-  /// Process-wide store of open documents' live text, keyed by absolute path.
-  /// Consulted before disk by every position-based LSP reader.
-  /// </summary>
+  /// <summary>Process-wide store of open documents' live text, keyed by absolute path.
+  /// Consulted before disk by every position-based LSP reader.</summary>
   /// <remarks>
   /// Not thread-safe by design: the LSP server is a single-threaded stdio loop
   /// and every mutation arrives as a message on that loop. A guard here would
   /// be pure cost. If a threaded host is ever added, wrap the class in a lock
   /// rather than making the callers defensive.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLiveDocuments = class
     strict private
       class var FTexts: TDictionary<string, string>;
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->string -- Observed:
+      /// LowerCase(StringReplace(Trim(APath), '/', '\', [rfReplaceAll])).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.LiveDocs.TLiveDocuments.HasText (DRagLint.Core.LiveDocs.pas), DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes (DRagLint.Core.LiveDocs.pas), DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines (DRagLint.Core.LiveDocs.pas), DRagLint.Core.LiveDocs.TLiveDocuments.Remove (DRagLint.Core.LiveDocs.pas), DRagLint.Core.LiveDocs.TLiveDocuments.SetText (DRagLint.Core.LiveDocs.pas)</para>
+      /// <para>Calls: LowerCase, StringReplace, Trim</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.HasText"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Key(const APath: string): string; static;
     public
       class constructor Create;
@@ -57,39 +74,118 @@ type
       /// <summary>Records the client's current text for a document.</summary>
       /// <param name="APath">Absolute file path (already decoded from the URI).</param>
       /// <param name="AText">Full buffer content. Stored verbatim.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key, Trim</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class procedure SetText(const APath, AText: string); static;
 
       /// <summary>Forgets a document, so later reads fall back to disk.</summary>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas), DRagLint.Core.LiveDocs.TLiveDocuments.Remove (DRagLint.Core.LiveDocs.pas) ?</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class procedure Remove(const APath: string); static;
 
       /// <summary>Forgets every document. Used on shutdown.</summary>
       class procedure Clear; static;
 
       /// <summary>True when the client has sent text for this path.</summary>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+      /// FTexts.ContainsKey(Key(APath)).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.LiveDocs.TLiveDocuments.Readable (DRagLint.Core.LiveDocs.pas)</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function HasText(const APath: string): Boolean; static;
 
       /// <summary>Number of documents currently overlaid. For diagnostics.</summary>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: FTexts.Count.</returns>
       class function Count: Integer; static;
 
-      /// <summary>
-      /// The document's content as lines -- overlay when open, else the file on
-      /// disk read as ANSI (the repo's source encoding).
-      /// </summary>
+      /// <summary>The document's content as lines -- overlay when open, else the file on
+      /// disk read as ANSI (the repo's source encoding).</summary>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns>Empty array when the path is neither open nor on disk.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas) (+2 more)</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ReadLines(const APath: string): TArray<string>; static;
 
-      /// <summary>
-      /// The document's raw bytes -- overlay encoded as UTF-8 when open, else
+      /// <summary>The document's raw bytes -- overlay encoded as UTF-8 when open, else
       /// the file on disk verbatim. Callers still normalise disk bytes through
-      /// EnsureUtf8Bytes; overlay bytes are already UTF-8.
-      /// </summary>
+      /// EnsureUtf8Bytes; overlay bytes are already UTF-8.</summary>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFromOverlay"><!-- drag-lint:auto type -->out Boolean</param>
+      /// <returns><!-- drag-lint:auto type -->TBytes</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
+      /// <para>Mutates: AFromOverlay (out)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ReadBytes(const APath: string; out AFromOverlay: Boolean): TBytes; static;
 
-      /// <summary>
-      /// True when the path can be read at all -- open in the client OR present
+      /// <summary>True when the path can be read at all -- open in the client OR present
       /// on disk. Replaces bare TFile.Exists guards, which would reject a
-      /// buffer that exists only in the editor.
-      /// </summary>
+      /// buffer that exists only in the editor.</summary>
+      /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: HasText(APath) or
+      /// TFile.Exists(APath).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas) (+3 more)</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.HasText</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.HasText"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Readable(const APath: string): Boolean; static;
   end;
 

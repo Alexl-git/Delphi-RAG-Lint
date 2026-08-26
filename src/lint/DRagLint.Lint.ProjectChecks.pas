@@ -35,13 +35,14 @@ type
       /// Include="..."/&gt; entries vs the matching .dpr/.dpk's `uses` clause. Returns
       /// findings for every unit that is present on one side but not the other.</summary>
       /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Findings.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
+      /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-      /// Calls: Default, DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames, DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences, ExtractFileName, ExtractFilePath, Format, SameText, StartsText
-      /// Complexity: 24 (cyclomatic, outer body), 96 lines (full implementation)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames, DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences, ExtractFileName, ExtractFilePath, Format, SameText, StartsText</para>
+      /// <para>Complexity: 24 (cyclomatic, outer body), 96 lines (full implementation)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames"/>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile"/>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.NormUnit"/>
@@ -59,12 +60,12 @@ type
       /// <returns>One warning per unresolvable used unit.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-      /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems, ExtractFileName, Format, LowerCase, StartsText
-      /// Returns: nil; Findings.ToArray
-      /// Complexity: 10 (cyclomatic, outer body), 163 lines (full implementation)
-      /// SQL: reads FILES
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+      /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems, ExtractFileName, Format, LowerCase, StartsText</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 163 lines (full implementation)</para>
+      /// <para>SQL: reads FILES</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>

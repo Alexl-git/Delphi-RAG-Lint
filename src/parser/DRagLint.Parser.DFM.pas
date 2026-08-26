@@ -15,8 +15,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDFMParser = class(TInterfacedObject, IParser)
@@ -26,31 +26,31 @@ type
       /// <summary><!-- drag-lint:auto -->TDFMParser</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
-      /// constructor
-      /// Writes: FLanguage
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FLanguage</para>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.FileExtensions"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.LanguageName"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Parse"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create;
-      /// <returns><!-- drag-lint:auto -->Observed: 'dfm'.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: 'dfm'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Implements: DRagLint.Core.Interfaces.IParser.LanguageName
-      /// Pure
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.LanguageName</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Create"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.FileExtensions"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Parse"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LanguageName: string                                               ;
-      /// <returns><!-- drag-lint:auto -->Observed: ['.dfm'].</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: ['.dfm'].</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Implements: DRagLint.Core.Interfaces.IParser.FileExtensions
-      /// Pure
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.FileExtensions</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Create"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.LanguageName"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Parse"/>
@@ -62,10 +62,10 @@ type
       /// <returns><!-- drag-lint:auto type -->TParseResult</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
-      /// Implements: DRagLint.Core.Interfaces.IParser.Parse
-      /// Reads: FLanguage
-      /// Pure
+      /// <para>Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
+      /// <para>Reads: FLanguage</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.DFM.CollectParseErrors"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
       /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
@@ -83,8 +83,8 @@ type
   /// HandlerName='Button1Click'). Produced by ExtractDfmEventBindings.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.WalkProperty (DRagLint.Parser.DFM.pas)
-  /// Used in units: DRagLint.Doc.SymbolFacts, DRagLint.Parser.DFM
+  /// <para>Used by: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.WalkProperty (DRagLint.Parser.DFM.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.SymbolFacts, DRagLint.Parser.DFM</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmEventBinding = record
@@ -117,9 +117,9 @@ external 'tree-sitter-dfm';
 /// Parse's own guard) or a DFM with no event bindings at all.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas)
-/// Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
-/// Pure
+/// <para>Called from: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas)</para>
+/// <para>Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
 /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
 /// <seealso cref="TreeSitter.TTSParser.Create"/>

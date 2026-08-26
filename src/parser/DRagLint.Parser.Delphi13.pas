@@ -17,8 +17,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDelphi13Parser = class(TInterfacedObject, IParser)
@@ -31,31 +31,32 @@ type
       /// <summary><!-- drag-lint:auto -->TDelphi13Parser</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)
-      /// constructor
-      /// Writes: FLanguage
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FLanguage</para>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.FileExtensions"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.LanguageName"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Parse"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create;
-      /// <returns><!-- drag-lint:auto -->Observed: 'delphi13'.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: 'delphi13'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Implements: DRagLint.Core.Interfaces.IParser.LanguageName
-      /// Pure
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.LanguageName</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Create"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.FileExtensions"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Parse"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LanguageName: string                                               ;
-      /// <returns><!-- drag-lint:auto -->Observed: ['.pas', '.dpr', '.dpk', '.inc'].</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: ['.pas',
+      /// '.dpr', '.dpk', '.inc'].</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Implements: DRagLint.Core.Interfaces.IParser.FileExtensions
-      /// Pure
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.FileExtensions</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Create"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.LanguageName"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Parse"/>
@@ -67,10 +68,10 @@ type
       /// <returns><!-- drag-lint:auto type -->TParseResult</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse
-      /// Implements: DRagLint.Core.Interfaces.IParser.Parse
-      /// Reads: FLanguage, EmitUsageRefs
-      /// Pure
+      /// <para>Calls: Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
+      /// <para>Reads: FLanguage, EmitUsageRefs</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.Delphi13.CollectParseErrors"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.HarvestStringLiterals"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TWalkState.Create"/>

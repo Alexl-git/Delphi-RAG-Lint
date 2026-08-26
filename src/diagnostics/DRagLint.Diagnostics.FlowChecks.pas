@@ -36,11 +36,11 @@ type
     /// <returns>All flow findings for the file.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)
-    /// Calls: ApplyEntryDefs, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructedTypeText, ConstructorTransfersOwnership, Copy, Default (+26 more)
-    /// Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); Findings.ToArray
-    /// Complexity: 21 (cyclomatic, outer body), 676 lines (full implementation)
-    /// Touches: file system
+    /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: ApplyEntryDefs, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectInterfaceDerefs, CollectReadsAndCallDefs, CollectThenGuards, ConstructedTypeText, ConstructorTransfersOwnership (+28 more)</para>
+    /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); Findings.ToArray</para>
+    /// <para>Complexity: 21 (cyclomatic, outer body), 712 lines (full implementation)</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>

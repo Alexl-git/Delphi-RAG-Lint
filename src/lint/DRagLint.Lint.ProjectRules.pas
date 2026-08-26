@@ -35,14 +35,19 @@ type
   /// manifest's section names.</param>
   /// <returns>An open store, or nil when the name resolves to no configured
   /// index or the index cannot be opened.</returns>
-  /// <remarks>LAZY on purpose. A run over a project with no shared units must
+  /// <remarks>
+  /// LAZY on purpose. A run over a project with no shared units must
   /// not open anything, and a box with ~30 configured indexes must not open
   /// them all to answer a question about one routine. The rule calls this only
   /// once it already has a finding whose unit declares siblings.
   /// nil is a legitimate answer and must be read as "could not check", never as
   /// "not referenced there" -- those lead to opposite conclusions and only one
   /// of them is safe.
-  /// The caller owns the returned store's lifetime for the whole run.</remarks>
+  /// The caller owns the returned store's lifetime for the whole run.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSiblingStoreResolver = reference to function(const AProjectName: string): ISymbolStore;
 
   /// <summary>Index-wide lint rules (oversized classes; unused exported routines).</summary>
@@ -52,14 +57,19 @@ type
     /// <summary>Runs the project rules over AStore and returns all findings.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
     /// <param name="ARuleId">If non-empty, only that rule id is evaluated.</param>
+    /// <param name="ASiblingStore">Optional. When supplied, `unused-public-symbol`
+    /// CONSULTS the sibling projects a shared unit's own `dl:shared` header names
+    /// and suppresses the finding when the routine is referenced in one of them.
+    /// nil (the default) keeps the historic behaviour: report, and tell the
+    /// reader to check the siblings by hand.</param>
     /// <returns>Findings across the whole index (file paths + lines); empty if none.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedSymbolIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile (+24 more)
-    /// Returns: nil; Findings.ToArray
-    /// Complexity: 48 (cyclomatic, outer body), 421 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+    /// <para>Calls: ASiblingStore, ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedSymbolIds (+25 more)</para>
+    /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Complexity: 52 (cyclomatic, outer body), 471 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
@@ -67,11 +77,6 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="ASiblingStore">Optional. When supplied, `unused-public-symbol`
-    /// CONSULTS the sibling projects a shared unit's own `dl:shared` header names
-    /// and suppresses the finding when the routine is referenced in one of them.
-    /// nil (the default) keeps the historic behaviour: report, and tell the
-    /// reader to check the siblings by hand.</param>
     class function Run(const AStore: ISymbolStore; const ARuleId: string = '';
                        const ASiblingStore: TSiblingStoreResolver = nil): TArray<TLintFinding>;
     /// <summary>Flags forbidden cross-layer 'uses' edges per a layer-config JSON file.</summary>
@@ -84,11 +89,11 @@ type
     /// DEFINED layers: a use A(layerX)->B(layerY), X&lt;&gt;Y, is a violation unless Y is in allow[X]. Units
     /// matching no layer are ignored (e.g. RTL/third-party). Never raises.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)
-    /// Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf, Format, LowerCase, SameText, TJSONArray, TJSONObject, TJSONString, Writeln
-    /// Returns: nil; Findings.ToArray
-    /// Complexity: 29 (cyclomatic, outer body), 139 lines (full implementation)
-    /// Touches: file system
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf, Format, LowerCase, SameText, TJSONArray, TJSONObject, TJSONString, Writeln</para>
+    /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Complexity: 29 (cyclomatic, outer body), 139 lines (full implementation)</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>

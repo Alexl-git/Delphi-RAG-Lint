@@ -31,8 +31,8 @@ type
   /// Value type; copy freely. Immutable after Load. Thread-safe to
   /// share for reading.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), declaration (DRagLint.Project.OwnRoots.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Project.OwnRoots
+  /// <para>Used by: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), declaration (DRagLint.Project.OwnRoots.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Project.OwnRoots</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TOwnRoots = record
@@ -58,10 +58,10 @@ type
     /// empty "ownRoots": [] IS an error, because scoping to nothing would report
     /// a clean project, the same reasoning as the empty --project refusal.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)
-    /// Calls: Default, DRagLint.Project.OwnRoots.NormalizeDir, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONObject, Trim
-    /// Returns: Default(TOwnRoots)
-    /// Touches: file system
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
+    /// <para>Calls: Default, DRagLint.Project.OwnRoots.NormalizeDir, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONObject, Trim</para>
+    /// <para>Returns: Default(TOwnRoots)</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Project.OwnRoots.NormalizeDir"/>
     /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.IsOurs"/>
     /// <!-- drag-lint:auto END -->
@@ -76,11 +76,11 @@ type
     /// DRagLint.Storage.FileMembership.NormalizeForLookup: forward slashes
     /// folded to backslashes, compared case-insensitively.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?
-    /// Calls: ExpandFileName, StartsText, StringReplace
-    /// Returns: True; False
-    /// Reads: FActive, FRoots
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
+    /// <para>Calls: ExpandFileName, StartsText, StringReplace</para>
+    /// <para>Returns: True; False</para>
+    /// <para>Reads: FActive, FRoots</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.Load"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -107,10 +107,10 @@ type
 /// property of the path, so no manifest lookup and no CWD-sensitive config
 /// discovery is needed to find a project's declaration.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas)
-/// Calls: ExpandFileName, ExtractFileDir, ExtractFileName, SameText, StringReplace
-/// Returns: ''; ExtractFileDir(Dir)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas)</para>
+/// <para>Calls: ExpandFileName, ExtractFileDir, ExtractFileName, SameText, StringReplace</para>
+/// <para>Returns: ''; ExtractFileDir(Dir)</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function AnchorDirForDb(const ADbPath: string): string;

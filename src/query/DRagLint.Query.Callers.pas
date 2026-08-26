@@ -26,12 +26,18 @@ uses
 type
   /// <summary>One caller row, in the shape both the CLI renderer and the LSP
   /// hoverBundle reply need.</summary>
-  /// <remarks>FilePath is file-NAME-only for resolved and callback rows (the
+  /// <remarks>
+  /// FilePath is file-NAME-only for resolved and callback rows (the
   /// idempotency design the JSON contract already carries) and the FULL path
   /// for name-matched rows, because the hover popup navigates to them. Line is
   /// meaningful only when HasLine is True: a resolved row whose caller symbol
   /// id is unknown deliberately carries no line, and the JSON renderer must
-  /// omit the pair rather than emit 0.</remarks>
+  /// omit the pair rather than emit 0.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.NameCallersForName (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used in units: DRagLint.Query.Callers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TQueryCallerRow = record
     CallerQName: string ;
     FilePath   : string ;
@@ -81,6 +87,11 @@ type
     EnclosingSymbolId: Int64;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TQueryCallerRows = TArray<TQueryCallerRow>;
 
 /// <summary>Precise callers of every symbol matching <paramref name="AName"/>
@@ -112,6 +123,17 @@ type
 /// because that ref's receiver is NULL.</para>
 /// <para>Still name-keyed, so a local variable sharing a routine's name can
 /// produce a spurious row; the 'callback' marker is what keeps that honest.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, ExtractFileName, Format, Trim</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 83 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string): TQueryCallerRows;
 
@@ -124,8 +146,18 @@ function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string)
 /// <returns>One row per reference, FilePath fully qualified, CodeText set to
 /// the call site's own trimmed source line (empty when the file could not be
 /// read). Confidence and TargetQName are empty: a name match asserts neither.</returns>
-/// <remarks>Kind-blind by design -- this is the wide net the resolved query is
-/// checked against, not a claim that each row is a call.</remarks>
+/// <remarks>
+/// Kind-blind by design -- this is the wide net the resolved query is
+/// checked against, not a claim that each row is a call.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Query.Callers.CodeLineFromContext, Trim</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Query.Callers.CodeLineFromContext"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NameCallersForName(const AStore: ISymbolStore; const AName: string; AContextLines: Integer = 1): TQueryCallerRows;
 
 implementation

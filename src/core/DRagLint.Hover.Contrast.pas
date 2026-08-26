@@ -16,10 +16,10 @@ uses
 /// <remarks>
 /// Order-independent (lighter/darker sorted internally).
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoContrastSelfTest (DRagLint.CLI.pas), DRagLint.Hover.Contrast.EnsureReadable (DRagLint.Hover.Contrast.pas)
-/// Calls: DRagLint.Hover.Contrast.RelLuminance
-/// Returns: (Hi + 0.05) / (Lo + 0.05)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoContrastSelfTest (DRagLint.CLI.pas), DRagLint.Hover.Contrast.EnsureReadable (DRagLint.Hover.Contrast.pas)</para>
+/// <para>Calls: DRagLint.Hover.Contrast.RelLuminance</para>
+/// <para>Returns: (Hi + 0.05) / (Lo + 0.05)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Contrast.RelLuminance"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -35,10 +35,10 @@ function ContrastRatio(AForeground, ABackground: TColor): Double;
 /// <remarks>
 /// Hue is preserved where possible so "keyword blue" stays blue.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoContrastSelfTest (DRagLint.CLI.pas)
-/// Calls: ColorToRGB, DRagLint.Hover.Contrast.ContrastRatio, DRagLint.Hover.Contrast.RelLuminance, EnsureRange, GetBValue, GetGValue, GetRValue, RGB, TColor
-/// Returns: AForeground; clWhite
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoContrastSelfTest (DRagLint.CLI.pas)</para>
+/// <para>Calls: ColorToRGB, DRagLint.Hover.Contrast.ContrastRatio, DRagLint.Hover.Contrast.RelLuminance, EnsureRange, GetBValue, GetGValue, GetRValue, RGB, TColor</para>
+/// <para>Returns: AForeground; clWhite</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Contrast.ContrastRatio"/>
 /// <seealso cref="DRagLint.Hover.Contrast.RelLuminance"/>
 /// <!-- drag-lint:auto END -->

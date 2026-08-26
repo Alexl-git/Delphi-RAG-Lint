@@ -26,11 +26,11 @@ uses
 /// Not thread-safe; call from a single thread. Disk scan uses early
 /// exit on first source file found -- no full enumeration of large roots.
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDrift (DRagLint.CLI.pas)
-/// Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Index.Drift.DirHasSource, DRagLint.Index.Drift.NormPath, DRagLint.Index.Drift.NormRoot, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create
-/// Returns: nil; Missing
-/// Complexity: 12 (cyclomatic, outer body), 66 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDrift (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Index.Drift.DirHasSource, DRagLint.Index.Drift.NormPath, DRagLint.Index.Drift.NormRoot, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
+/// <para>Returns: nil; Missing</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 66 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Index.Drift.DirHasSource"/>

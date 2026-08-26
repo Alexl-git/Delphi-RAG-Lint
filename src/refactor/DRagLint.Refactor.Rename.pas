@@ -18,8 +18,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.Rename.TRenameRefactoring.Build (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.TRenameRefactoring.Apply (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.TRenameRefactoring.RenderDryRun (DRagLint.Refactor.Rename.pas) (+1 more)
-  /// Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.Rename
+  /// <para>Used by: DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.Rename.TRenameRefactoring.Build (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.TRenameRefactoring.Apply (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.TRenameRefactoring.RenderDryRun (DRagLint.Refactor.Rename.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.Rename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRenameEdit = record
@@ -32,8 +32,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.NamingFix
+  /// <para>Used by: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.NamingFix</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRenameRefactoring = class
@@ -41,13 +41,14 @@ type
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ANewName"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: nil; List.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TRenameEdit&gt; -- Observed: nil;
+      /// List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
-      /// Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.CompareEdits, DRagLint.Refactor.Rename.LastDotSegment, IntToStr, SameText, UpperCase
-      /// Complexity: 12 (cyclomatic, outer body), 113 lines (full implementation)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.CompareEdits, DRagLint.Refactor.Rename.LastDotSegment, IntToStr, SameText, UpperCase</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 113 lines (full implementation)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -58,13 +59,13 @@ type
       class function Build(const AStore: ISymbolStore; const AQName, ANewName: string): TArray<TRenameEdit>;
       /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
       /// <param name="AWriteBackups"><!-- drag-lint:auto type -->Boolean</param>
-      /// <returns><!-- drag-lint:auto -->Observed: FilesTouched.</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: FilesTouched.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)
-      /// Calls: Copy, SameText
-      /// Complexity: 16 (cyclomatic, outer body), 111 lines (full implementation)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Copy, SameText</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 111 lines (full implementation)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason"/>
@@ -74,12 +75,12 @@ type
       /// </remarks>
       class function Apply(const AEdits: TArray<TRenameEdit>; AWriteBackups: Boolean) : Integer            ; // returns files touched
       /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
-      /// <returns><!-- drag-lint:auto -->Observed: SB.ToString.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas)
-      /// Calls: Format
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Format</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Apply"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
@@ -91,12 +92,12 @@ type
       /// <summary>True when AName is a Delphi reserved word (case-insensitive) and
       /// therefore cannot be used as an identifier.</summary>
       /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: False.</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason (DRagLint.Refactor.Rename.pas)
-      /// Calls: CompareStr, LowerCase
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason (DRagLint.Refactor.Rename.pas)</para>
+      /// <para>Calls: CompareStr, LowerCase</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Apply"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
@@ -111,14 +112,14 @@ type
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ANewName"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ''; Format('"%s" is a reserved word',
-      /// [ANewName]); Format('a symbol named "%s" already exists in the same scope',
-      /// [ANewName]).</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Format('"%s" is a
+      /// reserved word', [ANewName]); Format('a symbol named "%s" already exists in the
+      /// same scope', [ANewName]).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
-      /// Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Refactor.Rename.TRenameRefactoring.IsReservedWord, Format
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Refactor.Rename.TRenameRefactoring.IsReservedWord, Format</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.IsReservedWord"/>
@@ -142,12 +143,13 @@ type
       /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
       /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
       /// <param name="ANewName"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: nil; Final.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TRenameEdit&gt; -- Observed: nil;
+      /// Final.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)
-      /// Calls: AddEdit, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.Walk, HdrName, Integer (+7 more)
-      /// Pure
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+      /// <para>Calls: AddEdit, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.Walk, HdrName, Integer (+7 more)</para>
+      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.EnclosingProc"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.FindIdentAt"/>

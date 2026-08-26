@@ -14,8 +14,8 @@ type
   /// empty at the depth cap or when a node is a cycle re-encounter.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree.Expand (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildForwardCallTree.Expand (DRagLint.Report.RCallTree.pas)
-  /// Used in units: DRagLint.Report.RCallTree
+  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree.Expand (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildForwardCallTree.Expand (DRagLint.Report.RCallTree.pas)</para>
+  /// <para>Used in units: DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRCallNode = record
@@ -30,8 +30,8 @@ type
   /// <summary>Whole-tree totals.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildForwardCallTree (DRagLint.Report.RCallTree.pas)
-  /// Used in units: DRagLint.Report.RCallTree
+  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildForwardCallTree (DRagLint.Report.RCallTree.pas)</para>
+  /// <para>Used in units: DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRCallSummary = record
@@ -44,8 +44,8 @@ type
   /// <summary>The reverse call tree rooted at a symbol, plus summary totals.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), declaration (DRagLint.Report.RCallTree.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Report.RCallTree
+  /// <para>Used by: DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), declaration (DRagLint.Report.RCallTree.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRCallTree = record
@@ -56,8 +56,8 @@ type
   /// <summary>Tuning knobs for BuildReverseCallTree.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), declaration (DRagLint.Report.RCallTree.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Report.RCallTree
+  /// <para>Used by: DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), declaration (DRagLint.Report.RCallTree.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRCallOptions = record
@@ -75,9 +75,9 @@ type
 /// <returns>The tree + summary. Root.Site is ''.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas)
-/// Calls: Copy, Default, DRagLint.Report.RCallTree.BuildReverseCallTree.Expand, Format, LastDelimiter, StrToIntDef
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Report.RCallTree.BuildReverseCallTree.Expand, Format, LastDelimiter, StrToIntDef</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Report.RCallTree.BuildReverseCallTree.Expand"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -98,9 +98,9 @@ function BuildReverseCallTree(const AStore: ISymbolStore; ARootId: Int64;
 /// <returns>The tree + summary. Root.Site is ''.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas)
-/// Calls: Default, DRagLint.Report.RCallTree.BuildForwardCallTree.Expand
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Report.RCallTree.BuildForwardCallTree.Expand</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Report.RCallTree.BuildForwardCallTree.Expand"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

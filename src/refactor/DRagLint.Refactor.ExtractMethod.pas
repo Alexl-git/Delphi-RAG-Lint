@@ -37,7 +37,7 @@ type
   /// string returned alongside.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Refactor.ExtractMethod.pas)
+  /// <para>Used by: declaration (DRagLint.Refactor.ExtractMethod.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TExtractOutcome = (eoOK, eoRefused);
@@ -53,8 +53,8 @@ type
   /// 1-based line/column span from the first statement's start to the last
   /// statement's end, as reported by tree-sitter's StartPoint/EndPoint.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
-  /// Used in units: DRagLint.Refactor.ExtractMethod
+  /// <para>Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
+  /// <para>Used in units: DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TExtractSelection = record
@@ -83,8 +83,8 @@ type
   /// new method parameter or return type cannot be synthesized without it.
   /// All fields are undefined when Refuse &lt;> ''.
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
-  /// Used in units: DRagLint.Refactor.ExtractMethod
+  /// <para>Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
+  /// <para>Used in units: DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TExtractVars = record
@@ -115,8 +115,8 @@ type
   /// guessing -- see the module comment.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TExtractMethodRefactoring = class
@@ -151,11 +151,11 @@ type
     /// fields, globals) are skipped entirely -- they need no
     /// parameter.
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
-    /// Calls: AssignmentTargetIndex, CollectExprUses, CollectReadsAndCallDefs, Copy, Default, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Refactor.ExtractMethod.LiveOutOfRun, DRagLint.Refactor.ExtractMethod.LocateStatementList, DRagLint.Refactor.ExtractMethod.RoutineBodyList, DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars.ProcessStmt, DRagLint.Refactor.ExtractMethod.VarUsedOutsideRun, Format, LowerNodeText, Trim
-    /// Returns: Default(TExtractVars)
-    /// Complexity: 17 (cyclomatic, outer body), 332 lines (full implementation)
-    /// Pure
+    /// <para>Called from: DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
+    /// <para>Calls: AssignmentTargetIndex, CollectExprUses, CollectReadsAndCallDefs, Copy, Default, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Refactor.ExtractMethod.LiveOutOfRun, DRagLint.Refactor.ExtractMethod.LocateStatementList, DRagLint.Refactor.ExtractMethod.RoutineBodyList, DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars.ProcessStmt, DRagLint.Refactor.ExtractMethod.VarUsedOutsideRun, Format, LowerNodeText, Trim</para>
+    /// <para>Returns: Default(TExtractVars)</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 332 lines (full implementation)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Count"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get"/>
     /// <seealso cref="DRagLint.Refactor.ExtractMethod.LiveOutOfRun"/>
@@ -182,11 +182,11 @@ type
     /// only: every selection that passes all safety checks still refuses
     /// with 'not-yet-implemented' (Tasks 3-4 add classification + synthesis).
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)
-    /// Calls: Default, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ArgListText, DRagLint.Refactor.ExtractMethod.ClassHasMemberNamed, DRagLint.Refactor.ExtractMethod.EmitInternalDeletions, DRagLint.Refactor.ExtractMethod.FindDeclClass (+11 more)
-    /// Returns: nil; ' + OutName + '; Edits.ToArray
-    /// Complexity: 30 (cyclomatic, outer body), 226 lines (full implementation)
-    /// Mutates: ARefuse (out)
+    /// <para>Called from: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ArgListText, DRagLint.Refactor.ExtractMethod.ClassHasMemberNamed, DRagLint.Refactor.ExtractMethod.EmitInternalDeletions, DRagLint.Refactor.ExtractMethod.FindDeclClass (+11 more)</para>
+    /// <para>Returns: nil; ' + OutName + '; Edits.ToArray</para>
+    /// <para>Complexity: 30 (cyclomatic, outer body), 226 lines (full implementation)</para>
+    /// <para>Mutates: ARefuse (out)</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBuilder.Build"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build"/>
@@ -200,12 +200,13 @@ type
     /// <summary>Human-readable preview of the edit set, matching the other
     /// refactorings' dry-run rendering (delegates to TTextEditApplier).</summary>
     /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TTextEdit&gt;</param>
-    /// <returns><!-- drag-lint:auto -->Observed: TTextEditApplier.RenderDryRun(AEdits).</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed:
+    /// TTextEditApplier.RenderDryRun(AEdits).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)
-    /// Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun"/>
     /// <seealso cref="DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build"/>
     /// <seealso cref="DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.ClassifyVars"/>
@@ -226,11 +227,11 @@ type
   /// found; eoRefused otherwise.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Called from: DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)
-  /// Calls: Default, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ByteOfLineEnd, DRagLint.Refactor.ExtractMethod.ByteOfLineStart, DRagLint.Refactor.ExtractMethod.CollectEnclosingProcs, DRagLint.Refactor.ExtractMethod.ContainsGotoOrLabel, DRagLint.Refactor.ExtractMethod.FindEscapingControlFlow, DRagLint.Refactor.ExtractMethod.InnermostProc (+8 more)
-  /// Returns: eoRefused; eoOK
-  /// Complexity: 37 (cyclomatic, outer body), 224 lines (full implementation)
-  /// Mutates: ASel (out), ARefuse (out)
+  /// <para>Called from: DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
+  /// <para>Calls: Default, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ByteOfLineEnd, DRagLint.Refactor.ExtractMethod.ByteOfLineStart, DRagLint.Refactor.ExtractMethod.CollectEnclosingProcs, DRagLint.Refactor.ExtractMethod.ContainsGotoOrLabel, DRagLint.Refactor.ExtractMethod.FindEscapingControlFlow, DRagLint.Refactor.ExtractMethod.InnermostProc (+8 more)</para>
+  /// <para>Returns: eoRefused; eoOK</para>
+  /// <para>Complexity: 37 (cyclomatic, outer body), 224 lines (full implementation)</para>
+  /// <para>Mutates: ASel (out), ARefuse (out)</para>
   /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
   /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBuilder.Build"/>
   /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>

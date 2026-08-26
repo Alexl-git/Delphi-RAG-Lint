@@ -13,7 +13,7 @@ type
   /// group.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)
+  /// <para>Used by: DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsGroup = (dgRTL, dgDevExpress, dgSpring4D, dgFireDAC, dgOther, dgUnknown);
@@ -23,8 +23,8 @@ type
   /// file, and the shortest import chain from any project source.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)
-  /// Used in units: DRagLint.Report.Deps
+  /// <para>Used by: DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used in units: DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsExternal = record
@@ -55,8 +55,8 @@ type
   /// <summary>One project-unit -&gt; external-unit uses edge.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)
-  /// Used in units: DRagLint.Report.Deps
+  /// <para>Used by: DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used in units: DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsEdge = record
@@ -84,8 +84,8 @@ type
   /// <summary>Whole-report totals.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Report.Deps.pas)
-  /// Used in units: DRagLint.Report.Deps
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used in units: DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsSummary = record
@@ -103,8 +103,8 @@ type
   /// per-external rollup, and the flat edge list.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Report.Deps
+  /// <para>Used by: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsReport = record
@@ -119,8 +119,8 @@ type
   /// <summary>Tuning knobs for BuildDepsReport.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Report.Deps
+  /// <para>Used by: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsOptions = record
@@ -140,13 +140,13 @@ type
 /// path contains '\embarcadero\', '\program files', or '\dcc\'). The canonical
 /// project-vs-library path test; shared with find-unit.</summary>
 /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->Observed: (Pos('\embarcadero\', L) &gt; 0) or
-/// (Pos('\program files', L) &gt; 0) or (Pos('\dcc\', L) &gt; 0).</returns>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: (Pos('\embarcadero\', L) &gt; 0)
+/// or (Pos('\program files', L) &gt; 0) or (Pos('\dcc\', L) &gt; 0).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.WalkBfs (DRagLint.Report.Deps.pas)
-/// Calls: LowerCase, Pos
-/// Pure
+/// <para>Called from: DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.WalkBfs (DRagLint.Report.Deps.pas)</para>
+/// <para>Calls: LowerCase, Pos</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsLibraryPath(const APath: string): Boolean;
@@ -157,14 +157,14 @@ function IsLibraryPath(const APath: string): Boolean;
 /// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
 /// <param name="AResolvedPath"><!-- drag-lint:auto type -->const string</param>
 /// <param name="AResolved"><!-- drag-lint:auto type -->Boolean</param>
-/// <returns><!-- drag-lint:auto -->Observed: dgUnknown; dgRTL; dgDevExpress; dgSpring4D;
-/// ClassifyByName(AUnitName); dgOther.</returns>
+/// <returns><!-- drag-lint:auto -->TDepsGroup -- Observed: dgUnknown; dgRTL;
+/// dgDevExpress; dgSpring4D; ClassifyByName(AUnitName); dgOther.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas)
-/// Calls: DRagLint.Report.Deps.ClassifyByName, LowerCase, Pos
-/// Complexity: 12 (cyclomatic, outer body), 17 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas)</para>
+/// <para>Calls: DRagLint.Report.Deps.ClassifyByName, LowerCase, Pos</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 17 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Report.Deps.ClassifyByName"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -173,12 +173,12 @@ function ClassifyDepsGroup(const AUnitName, AResolvedPath: string; AResolved: Bo
 /// <summary>Lowercase group label for output ('RTL','DevExpress','Spring4D',
 /// 'FireDAC','other','unknown').</summary>
 /// <param name="AGroup"><!-- drag-lint:auto type -->TDepsGroup</param>
-/// <returns><!-- drag-lint:auto -->Observed: 'RTL'; 'DevExpress'; 'Spring4D'; 'FireDAC';
-/// 'other'; 'unknown'.</returns>
+/// <returns><!-- drag-lint:auto -->string -- Observed: 'RTL'; 'DevExpress'; 'Spring4D';
+/// 'FireDAC'; 'other'; 'unknown'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoDepsReport.RenderCsv (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderJson (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoDepsReport.RenderCsv (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderJson (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas)</para>
+/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DepsGroupStr(AGroup: TDepsGroup): string;
@@ -192,10 +192,10 @@ function DepsGroupStr(AGroup: TDepsGroup): string;
 /// <returns><!-- drag-lint:auto type -->TDepsReport</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas)
-/// Calls: CompareText, Copy, DRagLint.Report.Deps.GroupOrd, DRagLint.Report.Deps.IsLibraryPath, DRagLint.Report.Deps.LoadFilesAndEdges, DRagLint.Report.Deps.WalkBfs, LowerCase, Pos
-/// Complexity: 30 (cyclomatic, outer body), 181 lines (full implementation)
-/// Pure
+/// <para>Called from: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas)</para>
+/// <para>Calls: CompareText, Copy, DRagLint.Report.Deps.GroupOrd, DRagLint.Report.Deps.IsLibraryPath, DRagLint.Report.Deps.LoadFilesAndEdges, DRagLint.Report.Deps.WalkBfs, LowerCase, Pos</para>
+/// <para>Complexity: 30 (cyclomatic, outer body), 181 lines (full implementation)</para>
+/// <para>Pure</para>
 /// <seealso cref="DRagLint.Report.Deps.GroupOrd"/>
 /// <seealso cref="DRagLint.Report.Deps.IsLibraryPath"/>
 /// <seealso cref="DRagLint.Report.Deps.LoadFilesAndEdges"/>

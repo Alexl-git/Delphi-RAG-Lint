@@ -32,11 +32,17 @@ uses
 
 type
   /// <summary>Everything a hover surface needs about one symbol.</summary>
-  /// <remarks>Returned as a record rather than a model plus out-params because
+  /// <remarks>
+  /// Returned as a record rather than a model plus out-params because
   /// the three parts are produced by one pass and are only correct together:
   /// ReturnRhs is what Model's return facts were built FROM, so a caller that
   /// rendered markdown from a separately mined list could contradict the JSON
-  /// its own model produces.</remarks>
+  /// its own model produces.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), declaration (DRagLint.Query.HoverModel.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THoverAssembly = record
     Model    : THoverModel   ;
     /// <summary>Formatted Phase-2 fact lines; empty when the symbol has none.</summary>
@@ -57,10 +63,24 @@ type
 /// -- `hover --format plain` never has, because the covered-by BFS inside it is
 /// the expensive part of assembling a hover.</param>
 /// <returns>A populated assembly; a zeroed one when AStore is nil.</returns>
-/// <remarks>Reads the symbol's implementation span through TLiveDocuments, so
+/// <remarks>
+/// Reads the symbol's implementation span through TLiveDocuments, so
 /// an editor's UNSAVED buffer is mined when one is registered and the file on
 /// disk otherwise. The disk path is byte-for-byte the read the CLI has always
-/// done (ANSI), which is what lets the CLI keep emitting identical JSON.</remarks>
+/// done (ANSI), which is what lets the CLI keep emitting identical JSON.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Hover.Renderer.BuildHoverModel, DRagLint.Hover.Returns.MineReturnExpressionsEx, DRagLint.Symbol.Describe.DescribeTypeKind, ExtractFileName</para>
+/// <para>Returns: Default(THoverAssembly)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 72 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc"/>
+/// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
+/// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
+/// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
   AWithFacts: Boolean = True): THoverAssembly;
 

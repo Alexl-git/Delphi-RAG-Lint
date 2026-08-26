@@ -27,7 +27,7 @@ type
   /// <summary>Identifies which reconcile set an item belongs to.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Index.Reconcile.pas)
+  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReconcileKind = (rkMissing, rkExtra, rkStale);
@@ -35,8 +35,8 @@ type
   /// <summary>One item in a reconcile report.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDpr (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDproj (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Index.Reconcile
+  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDpr (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDproj (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReconcileItem = record
@@ -57,8 +57,8 @@ type
   /// <summary>Output of TProjectReconciler.Analyze.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), declaration (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Index.Reconcile
+  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), declaration (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReconcileResult = record
@@ -80,8 +80,8 @@ type
   /// Not thread-safe; construct and use from a single thread.
   /// Owns nothing after construction (no resources to free).
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProjectReconciler = class
@@ -99,10 +99,10 @@ type
       /// <param name="AMembers"><!-- drag-lint:auto type -->TDictionary&lt;string, string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)
-      /// Calls: Copy, DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember, LowerCase, Pos, SameText
-      /// Complexity: 16 (cyclomatic, outer body), 95 lines (full implementation)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember, LowerCase, Pos, SameText</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 95 lines (full implementation)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
@@ -119,9 +119,9 @@ type
       /// <param name="AMembers"><!-- drag-lint:auto type -->TDictionary&lt;string, string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)
-      /// Calls: DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember, LowerCase
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)</para>
+      /// <para>Calls: DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember, LowerCase</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
@@ -135,12 +135,12 @@ type
       /// <summary><!-- drag-lint:auto -->Resolve a path token relative to ABaseDir.</summary>
       /// <param name="AToken"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ''; TPath.GetFullPath(AToken);
-      /// TPath.GetFullPath(TPath.Combine(ABaseDir, AToken)).</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: '';
+      /// TPath.GetFullPath(AToken); TPath.GetFullPath(TPath.Combine(ABaseDir, AToken)).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers (DRagLint.Index.Reconcile.pas)
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers (DRagLint.Index.Reconcile.pas)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
@@ -155,13 +155,13 @@ type
       /// (backslash sep).</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ABase"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Copy(NormFile, Length(NormBase) + 1,
-      /// MaxInt); NormFile.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: Copy(NormFile,
+      /// Length(NormBase) + 1, MaxInt); NormFile.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)
-      /// Calls: Copy, SameText
-      /// Touches: file system
+      /// <para>Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
+      /// <para>Calls: Copy, SameText</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
@@ -180,9 +180,9 @@ type
       /// <param name="AStaleGlobs"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-      /// constructor
-      /// Writes: FLibraryRoots, FStaleGlobs
+      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FLibraryRoots, FStaleGlobs</para>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
@@ -200,11 +200,11 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-      /// Calls: DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Index.Reconcile.IsStaleName, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase, SameText
-      /// Complexity: 11 (cyclomatic, outer body), 125 lines (full implementation)
-      /// Reads: FLibraryRoots, FStaleGlobs
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Index.Reconcile.IsStaleName, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase, SameText</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 125 lines (full implementation)</para>
+      /// <para>Reads: FLibraryRoots, FStaleGlobs</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Resolve"/>
       /// <seealso cref="DRagLint.Index.Reconcile.IsStaleName"/>
@@ -224,9 +224,9 @@ type
       /// <param name="AResult">Result from a prior Analyze call.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)
-      /// Calls: DRagLint.Index.Reconcile.EditDpr, DRagLint.Index.Reconcile.EditDproj, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase
-      /// Touches: file system
+      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Index.Reconcile.EditDpr, DRagLint.Index.Reconcile.EditDproj, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Reconcile.EditDpr"/>
       /// <seealso cref="DRagLint.Index.Reconcile.EditDproj"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath"/>
@@ -249,10 +249,10 @@ type
 /// <returns>True if the name looks stale.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)
-/// Calls: DRagLint.Index.Glob.TGlob.Matches
-/// Returns: False
-/// Touches: file system
+/// <para>Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)</para>
+/// <para>Calls: DRagLint.Index.Glob.TGlob.Matches</para>
+/// <para>Returns: False</para>
+/// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Glob.TGlob.Matches"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

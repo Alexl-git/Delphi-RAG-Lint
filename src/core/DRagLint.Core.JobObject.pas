@@ -38,7 +38,15 @@ uses
 /// Lazily creates the job on first call. No-op for a 0/invalid handle, and
 /// best-effort (a failed assignment is swallowed, e.g. a child already in an
 /// incompatible job on pre-Win8 -- the --parent-pid watcher still covers it).</summary>
-/// <remarks>Thread-safety: call from the main (IDE) thread, like the spawn sites.</remarks>
+/// <param name="AProcess"><!-- drag-lint:auto type -->THandle</param>
+/// <remarks>
+/// Thread-safety: call from the main (IDE) thread, like the spawn sites.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+/// <para>Calls: AssignProcessToJobObject</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure AssignToDragLintJob(AProcess: THandle);
 
 implementation

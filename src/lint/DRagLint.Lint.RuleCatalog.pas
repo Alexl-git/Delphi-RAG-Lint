@@ -31,8 +31,8 @@ type
   /// <summary>A single configurable parameter of a rule (threshold or naming knob).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleParam = record
@@ -44,8 +44,8 @@ type
   /// <summary>One catalogued rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas) (+2 more)
-  /// Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleInfo = record
@@ -61,8 +61,8 @@ type
   /// <summary>Per-category and total rule counts for the catalog summary.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), declaration (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize (DRagLint.Lint.RuleCatalog.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog
+  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), declaration (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize (DRagLint.Lint.RuleCatalog.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCatalogSummary = record
@@ -73,18 +73,18 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleCatalog = class
   public
     /// <summary>The in-code registry of all built-in rules (no .scm).</summary>
-    /// <returns><!-- drag-lint:auto -->Observed: L.ToArray.</returns>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleInfo&gt; -- Observed: L.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Calls: DRagLint.Lint.RuleCatalog.MkParam, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B, IntToStr
-    /// Pure
+    /// <para>Calls: DRagLint.Lint.RuleCatalog.MkParam, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B, IntToStr</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.MkParam"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog"/>
@@ -98,13 +98,13 @@ type
     /// (category, id). When ACategory&lt;&gt;'' only that category is returned.</summary>
     /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string = ''</param>
     /// <param name="ACategory"><!-- drag-lint:auto type -->const string = ''</param>
-    /// <returns><!-- drag-lint:auto -->Observed: Res.ToArray.</returns>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleInfo&gt; -- Observed: Res.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas)
-    /// Calls: CompareText, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, ParamStr, SameText
-    /// Complexity: 14 (cyclomatic, outer body), 80 lines (full implementation)
-    /// Touches: file system
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas)</para>
+    /// <para>Calls: CompareText, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, ParamStr, SameText</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 80 lines (full implementation)</para>
+    /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize"/>
@@ -117,8 +117,8 @@ type
     /// <returns><!-- drag-lint:auto type -->TCatalogSummary</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas)
-    /// Pure
+    /// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory"/>
@@ -127,13 +127,13 @@ type
     class function Summarize(const ACatalog: TArray<TRuleInfo>): TCatalogSummary; static;
     /// <summary>Category bucket for an external .scm rule id; 'other' if unmapped.</summary>
     /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Observed: 'bug-patterns'; 'resource-lifetime';
-    /// 'security'; 'platform'; 'structure'; 'dead-code'.</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: 'bug-patterns';
+    /// 'resource-lifetime'; 'security'; 'platform'; 'structure'; 'dead-code'.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Called from: DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas)
-    /// Calls: MatchStr
-    /// Pure
+    /// <para>Called from: DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas)</para>
+    /// <para>Calls: MatchStr</para>
+    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize"/>

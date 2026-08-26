@@ -47,8 +47,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), declaration (DRagLint.Sql.FbSnapshot.pas), DRagLint.Sql.FbSnapshot.TFbSnapshot.Run (DRagLint.Sql.FbSnapshot.pas)
-  /// Used in units: DRagLint.CLI, DRagLint.Sql.FbSnapshot
+  /// <para>Used by: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), declaration (DRagLint.Sql.FbSnapshot.pas), DRagLint.Sql.FbSnapshot.TFbSnapshot.Run (DRagLint.Sql.FbSnapshot.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Sql.FbSnapshot</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFbSnapshotStats = record
@@ -62,22 +62,23 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas)
-  /// Used in units: DRagLint.CLI
+  /// <para>Used by: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFbSnapshot = class
     public
       /// <param name="AConnectionString"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASqliteStore"><!-- drag-lint:auto type -->const TSQLiteSymbolStore</param>
-      /// <returns><!-- drag-lint:auto -->Observed: Default       (TFbSnapshotStats).</returns>
+      /// <returns><!-- drag-lint:auto -->TFbSnapshotStats -- Observed: Default
+      /// (TFbSnapshotStats).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas)
-      /// Calls: Copy, DateTimeToUnix, Default, DRagLint.Sql.FbSnapshot.ClearPriorSnapshot, DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks, DRagLint.Sql.FbSnapshot.TableExists, DRagLint.Sql.FbSnapshot.TFbSnapshot.Run.ConnectFb, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, Pos, Trim, UpCase, UpperCase, Writeln
-      /// Complexity: 11 (cyclomatic, outer body), 299 lines (full implementation)
-      /// SQL: writes FB_COLUMNS, FB_DATASETS, FB_ENUM_VALUES, FB_FIELD_INFO, FB_RELATIONS
-      /// Transaction: starts, commits, rolls back
+      /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Copy, DateTimeToUnix, Default, DRagLint.Sql.FbSnapshot.ClearPriorSnapshot, DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks, DRagLint.Sql.FbSnapshot.TableExists, DRagLint.Sql.FbSnapshot.TFbSnapshot.Run.ConnectFb, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, Pos, Trim, UpCase, UpperCase, Writeln</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 299 lines (full implementation)</para>
+      /// <para>SQL: writes FB_COLUMNS, FB_DATASETS, FB_ENUM_VALUES, FB_FIELD_INFO, FB_RELATIONS</para>
+      /// <para>Transaction: starts, commits, rolls back</para>
       /// <seealso cref="DRagLint.Sql.FbSnapshot.ClearPriorSnapshot"/>
       /// <seealso cref="DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks"/>
       /// <seealso cref="DRagLint.Sql.FbSnapshot.TableExists"/>

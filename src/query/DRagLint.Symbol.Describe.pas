@@ -42,10 +42,19 @@ uses
 /// in which case an enum yields ''.</param>
 /// <returns>'TBase', 'TBar, IBaz', 'helper for TColor', 'sIdle, sBusy, sDone',
 /// or '' when the symbol declares nothing worth saying.</returns>
-/// <remarks>NOTHING IS INVENTED. A bare `TBase = class` declares no ancestor and
+/// <remarks>
+/// NOTHING IS INVENTED. A bare `TBase = class` declares no ancestor and
 /// yields '' rather than 'TObject': both surfaces draw this string after a
 /// colon, so a guessed value would be indistinguishable from an indexed one.
-/// Callers apply it only when the symbol's own Signature is empty.</remarks>
+/// Callers apply it only when the symbol's own Signature is empty.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+/// <para>Calls: DRagLint.Symbol.Describe.EnumMembersPreview</para>
+/// <para>Returns: ''; 'helper for ' + ASym.Heritage; ASym.Heritage; EnumMembersPreview(ASym, AStore)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Symbol.Describe.EnumMembersPreview"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DescribeTypeKind(const ASym: TSymbol; const AStore: ISymbolStore): string;
 
 implementation
