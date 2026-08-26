@@ -102,4 +102,27 @@
 #   Both are about what --apply WRITES into a .dpr/.dproj. Neither the parser,
 #   the preprocessor, nor any extractor is touched, and no stored parse can
 #   become stale, so the version does not move.
-1.7.0-alpha|0fda96a6129afbe71df4913809235712b914ec8e338506322e188316bac2eda1
+# 2026-08-26 (4th): a REAL BUMP, 1.7.0-alpha -> 1.8.0-alpha. src\parser changed
+#   what it produces, so every stored parse IS stale and a full re-parse is the
+#   point, not a cost to be argued away.
+#
+#   WHAT CHANGED: a generic type instantiation emitted NO ref. `TList<T>` and
+#   `TDictionary<K,V>` produced nothing for the base type name, a DECLARATION
+#   emitted nothing at all (not even its type arguments), and a construction
+#   site `TList<T>.Create` also lost its `Create` member-access. The comment at
+#   EmitTypeUseReference had GUESSED the node shape -- it claimed
+#   `(typeref (identifier) (declTypeArgs ...))`; the grammar has no such node,
+#   so the whole typeref fell to the `else Exit`. The real shapes, dumped from
+#   the tree, are typerefTpl (declarations) and exprTpl (expressions).
+#
+#   THE MEASUREMENT: 3,878 generic instantiation sites in this repo's own src#   produced 16 refs, and no ref anywhere in any index carried a '<' -- so the
+#   names were not merely mangled, they were absent. Consumers affected:
+#   query type-usage, unused-unit-in-uses, the call graph (every generic
+#   construction was an invisible call site), and unused-public-symbol.
+#
+#   Every index on the box must be re-parsed to pick the new refs up. Until it
+#   is, a query about a generic type answers confidently with fewer results --
+#   which is the failure this fingerprint exists to make impossible to ignore.
+#
+#   Pinned by tests\autotest\run_generic_typeref_refs.ps1.
+1.8.0-alpha|aa6c86ba116d4f67c36e25668bb796b35f1cae9b3205db8836d909580e82ce1d

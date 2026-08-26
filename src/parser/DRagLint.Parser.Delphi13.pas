@@ -245,29 +245,87 @@ procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx:
 // inheritance clause, etc. emits a kind='type_use' reference. This lets
 // `find-callers` / LSP references answer "where is type X used?" not just
 // "where is method X called?".
-procedure EmitTypeUseReference(const ANode: TTSNode; const AState: TWalkState);
+{ Emit type_use refs for ONE node of the type-expression family, recursing
+  through a generic instantiation so both the base type name and every type
+  ARGUMENT are recorded.
+
+  The shapes below are taken from the real tree-sitter tree (AstDump over a
+  generics fixture), not assumed. The previous comment here guessed
+  `(typeref (identifier) (declTypeArgs ...))` for generics; the grammar has no
+  such node, so the whole generic typeref fell to the `else Exit` and emitted
+  NOTHING -- not the base name and not the arguments. Measured before the fix:
+  3,878 generic instantiation sites in this repo's own src\ produced 16 refs.
+
+    (identifier)                                       TFoo
+    (genericDot lhs: .. operator: (kDot) rhs: id)      Unit.TFoo
+    (typerefDot lhs: .. operator: (kDot) rhs: id)      A.B.C.TFoo
+    (typerefTpl entity: <any of the above>
+                (kLt) args: (typerefArgs <any of the above>...) (kGt))
+
+  DELIBERATELY NOT HANDLED: genericTpl / genericArgs / genericArg. That family
+  is the type-PARAMETER DECLARATION (`TBox<T> = class`, `function F<T>`) -- those
+  identifiers declare T, they do not use it, and reaching them would put a bogus
+  type_use row on every generic class in the corpus.
+  run_generic_typeref_refs.ps1 asserts that negative directly. }
+procedure EmitTypeExprRefs(const ANode: TTSNode; const AState: TWalkState; ADepth: Integer);
 var
-  Child  : TTSNode;
-  RefName: string ;
+  NT : string ;
+  Rhs: TTSNode;
+  i  : Integer;
 begin
-  // A typeref is (typeref (identifier "TFoo")) or sometimes
-  // (typeref (genericDot lhs: id operator: kDot rhs: id)) for qualified types
-  // and (typeref (identifier) (declTypeArgs ...)) for generics. Take the
-  // first named-child identifier-shaped thing.
-  if ANode.NamedChildCount = 0 then Exit;
-  Child:= ANode.NamedChild(0);
-  if Child.NodeType      = 'identifier' then RefName:= NodeText(Child, AState.Source)
-  else if Child.NodeType = 'genericDot' then
+  if ANode.IsNull then Exit;
+  { Nested generics are legal to any depth (TDictionary<string, TArray<string>>);
+    real code stays in single digits, so this only bounds a pathological or
+    malformed tree. }
+  if ADepth > 16 then Exit;
+  NT:= ANode.NodeType;
+
+  if NT = 'identifier' then
   begin
-    // qualified: take rhs
-    var Rhs:= Child.ChildByField('rhs');
-    if not Rhs.IsNull then RefName:= NodeText(Rhs, AState.Source)
-    else Exit;
-    Child:= Rhs;
-  end
-  else Exit;
-  if RefName = '' then Exit;
-  AState.EmitRef('type_use', RefName, Child);
+    if NodeText(ANode, AState.Source) <> '' then
+      AState.EmitRef('type_use', NodeText(ANode, AState.Source), ANode);
+    Exit;
+  end;
+
+  if (NT = 'genericDot') or (NT = 'typerefDot') then
+  begin
+    // qualified: take rhs, exactly as before
+    Rhs:= ANode.ChildByField('rhs');
+    if (not Rhs.IsNull) and (NodeText(Rhs, AState.Source) <> '') then
+      AState.EmitRef('type_use', NodeText(Rhs, AState.Source), Rhs);
+    Exit;
+  end;
+
+  if NT = 'typerefTpl' then
+  begin
+    EmitTypeExprRefs(ANode.ChildByField('entity'), AState, ADepth + 1);
+    for i:= 0 to ANode.NamedChildCount - 1 do
+      if ANode.NamedChild(i).NodeType = 'typerefArgs' then
+        EmitTypeExprRefs(ANode.NamedChild(i), AState, ADepth + 1);
+    Exit;
+  end;
+
+  if NT = 'typerefArgs' then
+  begin
+    for i:= 0 to ANode.NamedChildCount - 1 do
+      EmitTypeExprRefs(ANode.NamedChild(i), AState, ADepth + 1);
+    Exit;
+  end;
+  // anything else: silently ignored, matching the original `else Exit`
+end; // procedure
+
+// v0.8: every `typeref` node that appears in a parameter type, field type,
+// inheritance clause, etc. emits a kind='type_use' reference. This lets
+// `find-callers` / LSP references answer "where is type X used?" not just
+// "where is method X called?".
+procedure EmitTypeUseReference(const ANode: TTSNode; const AState: TWalkState);
+begin
+  { Still only the FIRST named child, as before -- a typeref carries exactly one
+    type expression, and widening this to every child would start emitting for
+    whatever else a typeref can hold (array bounds and the like). The generic
+    support is entirely inside EmitTypeExprRefs. }
+  if ANode.NamedChildCount = 0 then Exit;
+  EmitTypeExprRefs(ANode.NamedChild(0), AState, 0);
 end; // procedure
 
 procedure EmitCallReference(const ANode: TTSNode; const AState: TWalkState);
@@ -2200,6 +2258,35 @@ begin
     if NodeType = 'exprDot' then
     begin
       var L:= ANode.ChildByField('lhs');
+      { A GENERIC receiver -- `TList<Integer>.Create` -- arrives as an exprTpl,
+        never an identifier, and all three gates below test for 'identifier'.
+        So both the receiver read AND the member-access were dropped for every
+        construction of a generic type, while the non-generic
+        `TStringList.Create` on the next line emitted both.
+
+        Shape, from the real tree:
+          (exprDot lhs: (exprTpl entity: (identifier) | (exprDot .. rhs: id)
+                                 (kLt) args: (typeref ..) (kGt))
+                   operator: (kDot) rhs: (identifier))
+
+        Reduce the exprTpl to its base type identifier and let the EXISTING
+        gates run on that. The type ARGUMENTS are deliberately not emitted here:
+        in the expression form they are plain `typeref` children, which Walk's
+        own recursion below already reaches -- emitting them here too would
+        double-count them. }
+      if (not L.IsNull) and (L.NodeType = 'exprTpl') then
+      begin
+        var TplEnt:= L.ChildByField('entity');
+        if not TplEnt.IsNull then
+        begin
+          if TplEnt.NodeType = 'identifier' then L:= TplEnt
+          else if TplEnt.NodeType = 'exprDot' then
+          begin
+            var TplRhs:= TplEnt.ChildByField('rhs');
+            if (not TplRhs.IsNull) and (TplRhs.NodeType = 'identifier') then L:= TplRhs;
+          end;
+        end;
+      end;
       if (not L.IsNull) and (L.NodeType = 'identifier') then AState.EmitRef('read', NodeText(L, AState.Source), L);
       // Ref-gap D: capture the MEMBER of a Self.-qualified access (Self.field) as a
       // read of the field. Gated to lhs = Self so we do NOT flood refs with every

@@ -3911,6 +3911,30 @@ begin
   end; // try
 end; // begin
 
+{ Does a stored receiver_text name the type ATypeName?
+
+  refs.receiver_text holds the LITERAL receiver expression: `L.Free` stores the
+  variable 'L', `TStringList.Create` stores the type 'TStringList', and a GENERIC
+  construction `TList<Integer>.Create` therefore stores 'TList<Integer>'. A
+  caller asking "is type X referenced in this file" means the base type, so the
+  type-argument list is stripped HERE rather than at write time -- truncating the
+  column in the extractor would make it mean the receiver expression for a plain
+  receiver and something else for a generic one.
+
+  Before the generic-typeref extractor fix a generic construction emitted no ref
+  at all, so this comparison had nothing to match and the omission was invisible.
+  tests\autotest\run_generic_typeref_refs.ps1 pins both halves. }
+function ReceiverNamesType(const AReceiverText, ATypeName: string): Boolean;
+var
+  Base: string ;
+  P   : Integer;
+begin
+  Base:= Trim(AReceiverText);
+  P   := Pos('<', Base);
+  if P > 0 then Base:= Trim(Copy(Base, 1, P - 1));
+  Result:= (Base <> '') and SameText(Base, ATypeName);
+end;
+
 // v1.8: `query unit-usage --in <file.pas> --unit <UnitName>` -- of this unit's
 // exported symbols, which does THIS file reference?
 function DoQueryUnitUsage(const AArgs: TArgs): Integer;
@@ -4003,7 +4027,7 @@ begin
       for I:= 0 to High(Tallies) do
       begin
         var Sym := Tallies[I].Symbol;
-        if SameText(R.NameText, Sym.Name) or SameText(R.ReceiverText, Sym.Name) then
+        if SameText(R.NameText, Sym.Name) or ReceiverNamesType(R.ReceiverText, Sym.Name) then
         begin
           var C: Integer;
           if not Tallies[I].Kinds.TryGetValue(R.Kind, C) then C:= 0;
@@ -4160,7 +4184,7 @@ begin
 
       for var R: TReference in Store.GetReferencesFromFile(Fid) do
         for I:= 0 to High(Tallies) do
-          if SameText(R.NameText, Tallies[I].Name) or SameText(R.ReceiverText, Tallies[I].Name) then
+          if SameText(R.NameText, Tallies[I].Name) or ReceiverNamesType(R.ReceiverText, Tallies[I].Name) then
           begin
             var C: Integer;
             if not Tallies[I].Kinds.TryGetValue(R.Kind, C) then C:= 0;
