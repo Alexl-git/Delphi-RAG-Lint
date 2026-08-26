@@ -1085,118 +1085,6 @@ begin
   end;
 end;
 
-{ True when AAsg's only overwrite sits inside the BODY of a following try, and
-  AName is still used after that try -- so the store is LIVE on the exception
-  path and is not a dead store.
-
-      X := nil;                <- AAsg
-      try
-        X := TObject.Create;   <- the overwrite, INSIDE the try body
-      except
-        ...                    <- handler never mentions X
-      end;
-      R := X;                  <- X read AFTER the try
-
-  If the exception fires before the inner assignment completes, the read after
-  the try observes the value AAsg wrote. Deleting AAsg -- which is exactly what
-  overwrite-before-read's advice says to do -- leaves an uninitialised reference.
-
-  SAME CAUSE AS ITS TWO SIBLINGS: `try..except` wires the handler edge from the
-  END of the try body (Cfg.pas), modelling "the exception fired after the body's
-  assignments ran", so liveness believes the overwrite always happened. That
-  edge is deliberate and tuned -- used-before-assignment depends on the state it
-  carries -- so this is a syntactic guard scoped to the one wrong rule, not a
-  change to the edge.
-
-  NOT COVERED BY ProtectedByFollowingTry, which requires the HANDLER to mention
-  the name. Here the protection comes from where the OVERWRITE sits, not from
-  what the handler says, so the handler is not consulted at all.
-
-  THE "READ AFTER" CLAUSE IS LOAD-BEARING, not belt-and-braces. Without it this
-  degenerates into "any store before a try is safe" -- the cheap version the
-  sibling's comment explicitly bans, because it would suppress a genuine dead
-  store sitting before an unrelated try. If nothing observes AName after the try,
-  the exception path leads nowhere that can see the value and the store really is
-  dead. run_dead_store_overwritten_in_try.ps1 asserts that arm directly. }
-function OverwrittenInsideFollowingTry(const AAsg: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
-var
-  Cur, C, TryN: TTSNode;
-  Nm, S       : string ;
-  I, Guard    : Integer;
-  SeenHandler, WritesInBody: Boolean;
-
-  { A single statement can arrive wrapped in a `statement` node -- same unwrap
-    ProtectedByFollowingTry and Cfg.pas.EmitStmt both need. }
-  function Unwrap(const N: TTSNode): TTSNode;
-  begin
-    Result := N;
-    if (not Result.IsNull) and (Result.NodeType = 'statement')
-       and (Result.NamedChildCount = 1) then Result := Result.NamedChild(0);
-  end;
-
-  function AssignsName(const N: TTSNode): Boolean;
-  var
-    K  : Integer;
-    Lhs: TTSNode;
-  begin
-    Result := False;
-    if N.IsNull then Exit;
-    if N.NodeType = 'assignment' then
-    begin
-      Lhs := N.ChildByField('lhs');
-      if (not Lhs.IsNull) and SameText(Trim(NodeStr(Lhs, ASrc)), AName) then Exit(True);
-    end;
-    for K := 0 to N.NamedChildCount - 1 do
-      if AssignsName(N.NamedChild(K)) then Exit(True);
-  end;
-
-begin
-  Result := False;
-  Nm := LowerCase(Trim(AName));
-  if Nm = '' then Exit;
-
-  { Skip the run of sibling assignments to the try, exactly as the sibling does:
-    several inits before one shared try is the common form. }
-  Cur   := Unwrap(AAsg.NextNamedSibling);
-  Guard := 0;
-  while (not Cur.IsNull) and (Cur.NodeType = 'assignment') and (Guard < 64) do
-  begin
-    Cur := Unwrap(Cur.NextNamedSibling);
-    Inc(Guard);
-  end;
-  if Cur.IsNull or (Cur.NodeType <> 'try') then Exit;
-  TryN := Cur;
-
-  { Does the try BODY -- everything before kExcept/kFinally -- overwrite AName?
-    KEYWORDS ARE NAMED NODES in this grammar, so the section boundary is found by
-    watching for the keyword, not by a field lookup. }
-  WritesInBody := False;
-  SeenHandler  := False;
-  for I := 0 to TryN.ChildCount - 1 do
-  begin
-    C := TryN.Child(I);
-    if (C.NodeType = 'kExcept') or (C.NodeType = 'kFinally') then
-    begin
-      SeenHandler := True;
-      Break;
-    end;
-    if C.NodeType = 'kTry' then Continue;
-    if AssignsName(C) then WritesInBody := True;
-  end;
-  if not (WritesInBody and SeenHandler) then Exit;
-
-  { And is AName still observed AFTER the try? }
-  Cur   := Unwrap(TryN.NextNamedSibling);
-  Guard := 0;
-  while (not Cur.IsNull) and (Guard < 256) do
-  begin
-    S := LowerCase(NodeStr(Cur, ASrc));
-    if ContainsWholeIdent(S, Nm) then Exit(True);
-    Cur := Unwrap(Cur.NextNamedSibling);
-    Inc(Guard);
-  end;
-end;
-
 /// <summary>True when AAsg assigns the literal <c>nil</c> to a local whose
 /// declared type is an interface -- i.e. the store RELEASES a reference rather
 /// than producing a value.</summary>
@@ -1258,7 +1146,6 @@ function StoreHasEffectLivenessCannotSee(const AAsg: TTSNode;
   const AStore: ISymbolStore; AFileId: Int64): Boolean;
 begin
   Result := ProtectedByFollowingTry(AAsg, AName, ASrc)
-         or OverwrittenInsideFollowingTry(AAsg, AName, ASrc)
          or ReleasesInterfaceRef(AAsg, ASrc, ATypeText, AStore, AFileId);
 end;
 
