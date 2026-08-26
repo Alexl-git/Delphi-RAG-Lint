@@ -54,6 +54,27 @@ type
 /// </remarks>
 function NormUnit(const AName: string): string;
 
+/// <summary>Normalise a unit name or path for comparison, KEEPING the dotted
+/// qualification: strips any directory and .pas/.dpk/.dpr extension and
+/// lowercases, so 'Foo.ViewModel' and 'src\Foo.ViewModel.pas' compare equal --
+/// but 'A.Drift' and 'B.Drift' stay DISTINCT.</summary>
+/// <param name="AName">A unit name or a path to its source file.</param>
+/// <returns>The lowercased, extension-free, still-qualified unit name.</returns>
+/// <remarks>
+/// <para>Use this, not <see cref="NormUnit"/>, whenever BOTH sides of the
+/// comparison carry their full qualification -- as they do when a .dproj's
+/// DCCReference list is matched against its .dpr's uses clause. NormUnit
+/// additionally truncates to the LAST dot-segment, which collapses
+/// <c>DRagLint.Doc.Drift</c> and <c>DRagLint.Index.Drift</c> onto the same key
+/// <c>drift</c>, so a unit listed in the .dproj but missing from the .dpr was
+/// silently satisfied by an unrelated namesake.</para>
+/// <para>NormUnit's truncation is still correct where it is used to match a
+/// LEGACY UNQUALIFIED name against a qualified file -- <c>Graphics</c> against
+/// <c>Vcl.Graphics.pas</c> -- which is the FP-9 class it was added for. That is
+/// why the truncation is not simply removed.</para>
+/// </remarks>
+function NormUnitQualified(const AName: string): string;
+
 /// <summary>Blank out Pascal comments -- { ... }, (* ... *), and // ... -- in
 /// place, preserving overall length and every line-break so byte offsets and
 /// line numbers stay valid. String literals ('...') are left intact.</summary>
@@ -196,6 +217,28 @@ begin
   Result:= LowerCase(Result);
   DotPos:= LastDelimiter('.', Result);
   if DotPos > 0 then Result:= Copy(Result, DotPos + 1, MaxInt);
+end;
+
+function NormUnitQualified(const AName: string): string;
+const
+  CSrcExt: array[0..2] of string = ('.pas', '.dpk', '.dpr');
+var
+  Ext: string ;
+  I  : Integer;
+begin
+  { Identical to NormUnit except for the last-dot-segment truncation: directory
+    and a KNOWN SOURCE extension are stripped, the rest is lowercased, and the
+    namespace qualification is kept. ChangeFileExt alone would eat '.ViewModel'
+    from 'Foo.ViewModel', which is the FP-9 trap, hence the extension whitelist. }
+  Result:= ExtractFileName(AName);
+  Ext   := LowerCase(ExtractFileExt(Result));
+  for I:= Low(CSrcExt) to High(CSrcExt) do
+    if Ext = CSrcExt[I] then
+    begin
+      Result:= ChangeFileExt(Result, '');
+      Break;
+    end;
+  Result:= LowerCase(Result);
 end;
 
 function StripPasCommentsKeepLayout(const ASrc: string): string;

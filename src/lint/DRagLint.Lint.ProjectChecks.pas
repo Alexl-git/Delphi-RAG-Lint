@@ -90,6 +90,9 @@ var
   ProgramPath: string                     ;
   DCCSet     : TDictionary<string, string>;
   UsesSet    : TDictionary<string, string>;
+  StemSatisfies: TFunc<string, TDictionary<string, string>, Boolean>;
+  DCCStemSet : TDictionary<string, string>;  { legacy unqualified fallback only }
+  UsesStemSet: TDictionary<string, string>;
   Pair       : TPair<string, string>      ;
   Finding    : TLintFinding               ;
   Findings   : TList<TLintFinding>        ;
@@ -100,6 +103,8 @@ begin
   Findings:= TList<TLintFinding>.Create;
   DCCSet := TDictionary<string, string>.Create;
   UsesSet:= TDictionary<string, string>.Create;
+  DCCStemSet := TDictionary<string, string>.Create;
+  UsesStemSet:= TDictionary<string, string>.Create;
   try
     DCCRefs    := ReadDCCReferences     (ADprojPath);
     ProgramPath:= FindSiblingProgramFile(ADprojPath);
@@ -117,15 +122,57 @@ begin
     end;
     ProgramUses:= ExtractUsesNames(ProgramPath, UsesLine);
 
-    // Normalize BOTH sides identically (NormUnit) so dotted unit names like
-    // 'Foo.ViewModel' / 'Foo.ViewModel.pas' compare equal (FP-9 class of bug).
-    for RefPath in DCCRefs     do DCCSet .AddOrSetValue(NormUnit(RefPath), RefPath);
-    for Name    in ProgramUses do UsesSet.AddOrSetValue(NormUnit(Name   ), Name   );
+    { The stem fallback exists for ONE case: a LEGACY UNQUALIFIED name on one
+      side matching a qualified file on the other -- a .dpr saying `Graphics`
+      where the DCCReference is `Vcl.Graphics.pas`. It fires only when the
+      COUNTERPART entry is itself unqualified.
+
+      Testing the wrong side is the trap this replaced. Gating on the key being
+      undotted looks equivalent and is not: in the FP-9 case the DOTTED name is
+      the one being looked up (`vcl.graphics`) and the UNQUALIFIED one is what it
+      must match, so that gate skips the fallback and reports a false positive.
+      Gating on the counterpart also keeps `DRagLint.Doc.Drift` from being
+      satisfied by `DRagLint.Index.Drift`, which is the whole point: both are
+      qualified, so no fallback applies. }
+    StemSatisfies := TFunc<string, TDictionary<string, string>, Boolean>(
+      function(const AStem: string; const ASet: TDictionary<string, string>): Boolean
+      var
+        Orig: string;
+      begin
+        Result := ASet.TryGetValue(AStem, Orig) and (Pos('.', NormUnitQualified(Orig)) = 0);
+      end);
+
+    { Normalize BOTH sides identically so dotted unit names like 'Foo.ViewModel'
+      and 'Foo.ViewModel.pas' compare equal (FP-9 class of bug).
+
+      KEYED ON THE QUALIFIED NAME, not the last dot-segment. NormUnit truncates
+      to the final segment, which collapses DRagLint.Doc.Drift and
+      DRagLint.Index.Drift onto the same key 'drift' -- so a unit present in the
+      .dproj and MISSING from the .dpr was silently satisfied by an unrelated
+      namesake and never reported. Measured on this repo: DRagLint.Doc.Drift is
+      in the .dproj, absent from the .dpr, and the rule returned 0 findings.
+
+      The stem sets are kept alongside for the LEGACY UNQUALIFIED case that
+      truncation was added for -- a .dpr naming 'Graphics' where the reference is
+      'Vcl.Graphics.pas'. The fallback is consulted ONLY for a name that carries
+      no qualification of its own, so it can no longer let one namespace stand in
+      for another. }
+    for RefPath in DCCRefs do
+    begin
+      DCCSet    .AddOrSetValue(NormUnitQualified(RefPath), RefPath);
+      DCCStemSet.AddOrSetValue(NormUnit         (RefPath), RefPath);
+    end;
+    for Name in ProgramUses do
+    begin
+      UsesSet    .AddOrSetValue(NormUnitQualified(Name), Name);
+      UsesStemSet.AddOrSetValue(NormUnit         (Name), Name);
+    end;
 
     // In .dproj but not in .dpr/.dpk uses -> most dangerous case.
     for Pair in DCCSet do
     begin
-      if not UsesSet.ContainsKey(Pair.Key) then
+      if not (UsesSet.ContainsKey(Pair.Key)
+              or StemSatisfies(NormUnit(Pair.Value), UsesStemSet)) then
       begin
         Finding:= Default(TLintFinding);
         Finding.RuleId  := 'unit-not-in-dpr';
@@ -144,7 +191,8 @@ begin
     // via search path, but IDE-managed dependency tracking misses it.
     for Pair in UsesSet do
     begin
-      if not DCCSet.ContainsKey(Pair.Key) then
+      if not (DCCSet.ContainsKey(Pair.Key)
+              or StemSatisfies(NormUnit(Pair.Value), DCCStemSet)) then
       begin
         // Skip RTL/VCL/FMX/standard-library names - they live in BDS Lib paths
         // and are never expected in DCCReference.
@@ -177,6 +225,8 @@ begin
   finally
     DCCSet.Free;
     UsesSet.Free;
+    DCCStemSet.Free;
+    UsesStemSet.Free;
     Findings.Free;
   end; // try
 end; // function
