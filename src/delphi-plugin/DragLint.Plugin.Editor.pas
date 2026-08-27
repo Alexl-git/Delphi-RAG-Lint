@@ -207,6 +207,7 @@ uses
   , DragLint.Plugin.StatusBar      { SetDragLintNote -- the ONE drag-lint status strip }
   , DragLint.Plugin.HoverSignature { v(property type): pure header-signature composer }
   , DRagLint.Core.GhostText        { v1.7 B3: the completion endpoint KAI calls }
+  , DRagLint.Core.EngineHold       { the sentinel that lets a build reclaim the engine }
   , DragLint.Plugin.DiagnosticCache
   , DragLint.Plugin.EditViewNotifier
   , DragLint.Plugin.CodeLensCache  { SetCallerCountsHook -- the LSP fast path }
@@ -407,10 +408,51 @@ end;
 
 function EnsureLspClient: TDragLintLspClient;
 var
-  ExePath: string;
-  BplDir : string;
-  LogPath: string;
+  ExePath : string ;
+  BplDir  : string ;
+  LogPath : string ;
+  HoldLeft: Integer;
 begin
+  { ENGINE HOLD -- let an external build have the binary back.
+    ------------------------------------------------------------------------
+    A running process holds an EXECUTE LOCK on its own image, and the client
+    below spawns drag-lint.exe as a long-lived child. So an IDE that is merely
+    OPEN blocks `build\build_draglint_win64.bat` from staging the engine it
+    just compiled -- the compile succeeds and the deploy fails one line later,
+    naming the file and not the holder.
+
+    The build writes a sentinel (see DRagLint.Core.EngineHold, or run
+    `drag-lint ide-release`) and then kills the child itself. THIS CHECK IS THE
+    HALF THAT MAKES THE KILL STICK: without it the very next hover respawns the
+    server within about a second and the build loses the race again. Measured
+    that way against VS Code on 2026-08-27 -- it took a kill-loop running for
+    the whole build to stage cleanly.
+
+    NO TIMER, DELIBERATELY. The comment on GLspRetryAfter records why: a timer
+    here would be a second uninvited source of process spawns, and this plugin
+    has already shipped one of those. So the hold is observed LAZILY, exactly
+    like the retry backoff -- on the next call that wants the client. That is
+    also why stopping the running child is the BUILD'S job and not ours: with
+    no timer we cannot promise to notice promptly, and a promise we cannot keep
+    is worse than a clear division of labour.
+
+    It expires on its own, so a build that crashes cannot leave the IDE mute. }
+  if EngineIsHeld(HoldLeft) then
+  begin
+    if GLspClient <> nil then
+    begin
+      DebugLog('EnsureLspClient: engine hold active -- stopping the server for a rebuild');
+      try GLspClient.Stop; except { a server being torn down must not raise } end;
+      FreeAndNil(GLspClient);
+      UpdateLspStatusIndicator;
+    end;
+    { The note is what stops a mute IDE being a mystery. Set here rather than on
+      a timer means it appears exactly when the user next asks for something --
+      which is precisely when they would otherwise wonder why nothing happened. }
+    SetDragLintNote(Format('drag-lint: engine released for a rebuild (%ds left)', [HoldLeft]));
+    Exit(nil);
+  end;
+
   { Session 27: a failed start no longer leaves the client nil forever, and no
     longer raises a modal. It backs off for LSP_RETRY_SECONDS and retries on the
     next call that needs the server, so a transient failure heals on its own. }

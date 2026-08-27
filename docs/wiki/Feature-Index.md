@@ -133,6 +133,7 @@ See also [Features](Features) for the grouped overview and
 * [query unit-usage](query-unit-usage) -- `query unit-usage`
 * [rules](rules) -- `rules`
 * [safe-delete](safe-delete) -- `safe-delete`
+* [ide-release](ide-release) -- `ide-release`
 * [schema](schema) -- `schema`
 * [sql](sql) -- `sql`
 * [serve](serve) -- `serve`

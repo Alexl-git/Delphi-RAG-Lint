@@ -625,6 +625,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | [`schema`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/schema) `--db <db>` | Self-documenting live index schema: tables, columns, row counts | `--format text\|json`, `--output <f>` |
 | [`sql`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/sql) `--query "SELECT ..."` / `--file <q.sql>` `--db <db>` | **Guarded read-only SQL over the index** -- one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, plus a row cap and a wall-clock cap | `--limit N` (default 200), `--timeout-ms N` (default 10000), `--format text\|json`, `--output <f>` |
 | [`info`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Engine self-info: version, build date, tree-sitter versions, capabilities | `--json` |
+| [`ide-release`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ide-release) | Ask a running Delphi IDE plugin to stop its `drag-lint.exe` children so the engine can be **rebuilt while the IDE stays open**. Expires on its own | `--seconds N` (default 120), `--resume`, `--status`, `--json` |
 | [`dump-refs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-refs) `<file> --db <db>` | Diagnostic: refs + enclosing-symbol attribution | |
 | [`dump-call-edges`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-call-edges) `--db <db>` | Diagnostic: resolved call edges | |
 | `check-ast <file>` | Run tree-sitter lint rules without compiling | `--format text\|json` |

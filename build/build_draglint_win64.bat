@@ -60,10 +60,26 @@ for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
   if exist "%ROOT%\rules\builtin-symbols.txt" copy /Y "%ROOT%\rules\builtin-symbols.txt" "%%~D\rules\" >NUL
 )
 
+REM STAGE THE ENGINE. The plain copy stays FIRST and is the ordinary path: when
+REM nothing holds the target this is one copy and no PowerShell is launched.
+REM
+REM When it does fail, the cause is almost always a LOCK, and the old message
+REM ("failed to stage <path>") named the FILE and not the HOLDER -- which is why
+REM the real cause took several rebuild cycles to identify. A running process
+REM holds an execute lock on its own image, and the Delphi plugin spawns
+REM drag-lint.exe as a long-lived LSP child, so an IDE that is merely OPEN
+REM blocks the deploy moments after the compile succeeded.
+REM
+REM stage-engine.ps1 names the holder, asks the plugin to hold off so it will
+REM NOT respawn, stops it, and retries. Killing without the hold-off loses the
+REM race -- both clients respawn the server within about a second.
 copy /Y "%ROOT%\src\cli\Win64\Debug\drag-lint.exe" "%ROOT%\third_party\dll-win64\drag-lint.exe" >NUL
 if errorlevel 1 (
-  echo ERROR: failed to stage %ROOT%\third_party\dll-win64\drag-lint.exe
-  exit /b 1
+  pwsh -NoProfile -File "%ROOT%\build\stage-engine.ps1" -FreshExe "%ROOT%\src\cli\Win64\Debug\drag-lint.exe" -Target "%ROOT%\third_party\dll-win64\drag-lint.exe"
+  if errorlevel 1 (
+    echo ERROR: failed to stage %ROOT%\third_party\dll-win64\drag-lint.exe
+    exit /b 1
+  )
 )
 echo OK: staged Win64 drag-lint.exe + tree-sitter companions
 endlocal

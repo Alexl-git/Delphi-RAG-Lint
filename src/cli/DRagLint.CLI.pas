@@ -69,6 +69,7 @@ uses
   , DRagLint.Sql    .FbSnapshot
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Sql    .Guarded   { TSqlGuard: the authorizer + time cap behind `sql` }
+  , DRagLint.Core   .EngineHold { the sentinel behind `ide-release` }
   , DRagLint.Lint   .Config
   , DRagLint.Lint   .RuleCatalog
   , DRagLint.Lint   .Linter
@@ -176,6 +177,9 @@ type
       join from wedging the IDE holding a multi-gigabyte index open. The
       OTHER source, --file, reuses InFile above rather than adding a field. }
     NameLike        : string        ; // --name-like <substr>: substring search over symbol names
+    HoldSeconds     : Integer       ; // --seconds N: `ide-release` hold length
+    Resume          : Boolean       ; // --resume: `ide-release` clears the hold instead of setting it
+    StatusOnly      : Boolean       ; // --status: `ide-release` reports the hold without changing it
     SqlQuery        : string        ; // --query "SELECT ...": the one statement `sql` runs
     TimeoutMs       : Integer       ; // --timeout-ms N: `sql` wall-clock cap (default 10000)
     Rule            : string        ;
@@ -578,6 +582,7 @@ begin
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
   Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
+  Writeln('  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (asks a running Delphi IDE plugin to STOP its drag-lint.exe children and not respawn them, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Writes a sentinel -- the plugin acts on its next status tick, so wait for the lock before staging)');
   Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint info [--json]                              (engine self-info: version, build date, MIT, tree-sitter + capabilities; read-only)');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
@@ -1050,6 +1055,9 @@ begin
     else if (A = '--connection') and (i < ParamCount) then begin Inc(i); Result.FbConnection:= ParamStr(i); end
     else if (A = '--limit') and (i < ParamCount) then begin Inc(i); Result.Limit:= StrToIntDef(ParamStr(i), 50); end
     else if (A = '--name-like') and (i < ParamCount) then begin Inc(i); Result.NameLike:= ParamStr(i); end
+    else if (A = '--seconds') and (i < ParamCount) then begin Inc(i); Result.HoldSeconds:= StrToIntDef(ParamStr(i), 0); end
+    else if A = '--resume' then Result.Resume:= True
+    else if A = '--status' then Result.StatusOnly:= True
     else if (A = '--query') and (i < ParamCount) then begin Inc(i); Result.SqlQuery:= ParamStr(i); end
     else if (A = '--timeout-ms') and (i < ParamCount) then begin Inc(i); Result.TimeoutMs:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--by') and (i < ParamCount) then begin Inc(i); Result.SortBy:= ParamStr(i); end
@@ -9727,6 +9735,140 @@ end; // function
     self-correctingly rather than returning an empty set that reads as "there
     is no such data".
   --------------------------------------------------------------------------- }
+
+
+{ ---------------------------------------------------------------------------
+  drag-lint ide-release -- ask a running IDE plugin to let go of the engine.
+
+  WHY IT EXISTS
+    The Delphi plugin spawns `drag-lint.exe lsp --stdio` as a long-lived child,
+    and a running process holds an execute lock on its own image. So an OPEN
+    IDE makes build\build_draglint_win64.bat fail to stage the file it just
+    compiled -- the compile succeeds, the deploy does not, and the message
+    names the file rather than the holder.
+
+    Verified before this was designed: the BPL contains no parser, linter or
+    SQLite units, so the IDE loads no tree-sitter or sqlite DLL in-process.
+    Every lock on third_party\dll-win64\ is a spawned child. Stop the children
+    and the entire folder becomes writable.
+
+  IT ASKS FOR A WINDOW, NOT AN EVENT
+    "Stop now" does not work: the client respawns within about a second and the
+    build loses the race again. Measured against VS Code the hard way on
+    2026-08-27 -- it took a kill-loop running for the DURATION of the build to
+    stage cleanly. So this writes a DEADLINE, and the plugin stays stopped
+    until it passes.
+
+  RUNNING THIS DOES NOT ITSELF FREE THE FILE
+    It writes a sentinel; the plugin acts on it when its status timer next
+    fires. A caller that needs the lock actually gone must wait and retry --
+    which build_draglint_win64.bat does. Said plainly here because a verb named
+    "release" that returns instantly invites the assumption that it finished.
+  --------------------------------------------------------------------------- }
+
+/// <summary>drag-lint ide-release: writes the engine-hold sentinel so a running
+/// IDE plugin stops its drag-lint.exe children and does not respawn them until
+/// the hold expires. With --resume, clears the hold instead.</summary>
+/// <param name="AArgs">Parsed CLI args. Limit doubles as the hold length in
+/// seconds when given (--seconds is its alias); Resume selects the clear
+/// operation; AsJson or Format='json' selects JSON output.</param>
+/// <returns>0 on success; 1 when the sentinel could not be written or removed.</returns>
+/// <remarks>Touches no index and needs no --db. The sentinel lives in the
+/// current user's TEMP directory -- the IDE and the build run as the same
+/// user.</remarks>
+function DoIdeRelease(const AArgs: TArgs): Integer;
+var
+  Err     : string ;
+  Secs    : Integer;
+  Left    : Integer;
+  Held    : Boolean;
+  UseJson : Boolean;
+  JRoot   : TJSONObject;
+begin
+  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+
+  if AArgs.StatusOnly then
+  begin
+    { READ-ONLY. This exists so the fail-open promise is TESTABLE from outside:
+      a corrupt or expired sentinel must report NOT held, and without a read
+      path that is the one property nobody could check. }
+    Held:= EngineIsHeld(Left);
+    if UseJson then
+    begin
+      JRoot:= TJSONObject.Create;
+      try
+        JRoot.AddPair('schema'      , 'ide-release/1');
+        JRoot.AddPair('held'        , TJSONBool.Create(Held));
+        JRoot.AddPair('seconds_left', TJSONNumber.Create(Left));
+        JRoot.AddPair('sentinel'    , EngineHoldFilePath);
+        Writeln(JRoot.Format(2));
+      finally
+        JRoot.Free;
+      end;
+    end
+    else if Held then
+      Writeln(System.SysUtils.Format('engine hold ACTIVE, %d second(s) left.', [Left]))
+    else
+      Writeln('no engine hold; the IDE plugin may run its engine.');
+    Exit(0);
+  end;
+
+  if AArgs.Resume then
+  begin
+    if not ReleaseEngineHold(Err) then
+    begin
+      Writeln(ErrOutput, 'ERROR: could not clear the engine hold: ', Err);
+      Exit(1);
+    end;
+    if UseJson then
+    begin
+      JRoot:= TJSONObject.Create;
+      try
+        JRoot.AddPair('schema', 'ide-release/1');
+        JRoot.AddPair('held'  , TJSONBool.Create(False));
+        Writeln(JRoot.Format(2));
+      finally
+        JRoot.Free;
+      end;
+    end
+    else
+      Writeln('engine hold cleared; the IDE plugin may respawn its engine.');
+    Exit(0);
+  end;
+
+  Secs:= AArgs.HoldSeconds;
+  if Secs <= 0 then Secs:= ENGINE_HOLD_DEFAULT_SECONDS;
+  if not HoldEngine(Secs, Err) then
+  begin
+    Writeln(ErrOutput, 'ERROR: could not write the engine hold: ', Err);
+    Exit(1);
+  end;
+  Held:= EngineIsHeld(Left);
+
+  if UseJson then
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('schema'      , 'ide-release/1');
+      JRoot.AddPair('held'        , TJSONBool.Create(Held));
+      JRoot.AddPair('seconds_left', TJSONNumber.Create(Left));
+      JRoot.AddPair('sentinel'    , EngineHoldFilePath);
+      Writeln(JRoot.Format(2));
+    finally
+      JRoot.Free;
+    end;
+  end
+  else
+  begin
+    Writeln(System.SysUtils.Format('engine hold set for %d second(s).', [Left]));
+    { Do NOT let this read as "the file is free now". It is not, yet. }
+    Writeln('The IDE plugin stops its engine children on its next status tick;');
+    Writeln('wait for the lock to clear before staging. Clear early with:');
+    Writeln('  drag-lint ide-release --resume');
+    Writeln('sentinel: ' + EngineHoldFilePath);
+  end;
+  Result:= 0;
+end; // function
 
 /// <summary>drag-lint sql: runs ONE read-only SQL statement against an index
 /// and prints the result set as text or JSON. Enforces at the SQLite engine --
@@ -20479,6 +20621,7 @@ begin
     else if Args.Command = 'deps-report'       then Result:= DoDepsReport      (Args)
     else if Args.Command = 'schema'            then Result:= DoSchema          (Args)
     else if Args.Command = 'sql'               then Result:= DoSql             (Args)
+    else if Args.Command = 'ide-release'       then Result:= DoIdeRelease      (Args)
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
     else if Args.Command = 'info'              then Result:= DoInfo            (Args)
     else if Args.Command = 'resolve-uses'      then Result:= DoResolveUses     (Args)

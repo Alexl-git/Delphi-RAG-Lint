@@ -76,6 +76,7 @@ contains
   DragLint.Plugin.LintOutputParse in 'DragLint.Plugin.LintOutputParse.pas',
   DRagLint.Core.JobObject in '..\core\DRagLint.Core.JobObject.pas',
   DRagLint.Core.GhostText in '..\core\DRagLint.Core.GhostText.pas',
+  DRagLint.Core.EngineHold in '..\core\DRagLint.Core.EngineHold.pas',
   DragLint.Plugin.JobQueue in 'DragLint.Plugin.JobQueue.pas',
   DragLint.Plugin.StatusBar in 'DragLint.Plugin.StatusBar.pas',
   DragLint.Plugin.GraphWindow in 'DragLint.Plugin.GraphWindow.pas',

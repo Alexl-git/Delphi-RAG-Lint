@@ -216,6 +216,7 @@ in 2b.
 | `schema` | live index schema: version + tables + columns + row counts (read-only) |
 | `query --name-like <substr>` | SUBSTRING search over symbol NAMES -- the DISCOVERY query, when you do not know the identifier yet (`--kind class,interface,...`, `--limit N` default 50, `--json`). Distinct from `--name`, which is exact with an edit-distance fallback and CANNOT match mid-name; distinct from `--text`, which searches string literals. JSON rows carry `match_kind: substring` |
 | `sql --query "SELECT ..."` | guarded READ-ONLY SQL over the index -- one statement; `--file <q.sql>`, `--limit N` (default 200), `--timeout-ms N` (default 10000), `--json` |
+| `ide-release` | ask a running Delphi IDE plugin to stop its `drag-lint.exe` children so the engine binary can be rebuilt while the IDE stays open (`--seconds N` default 120, `--resume`, `--status`, `--json`). No DB. The staging step of `build_draglint_win64.bat` does this automatically when it hits the lock |
 | `info` | engine self-info: version, build date, tree-sitter versions, capabilities, exe path, platform (`--json`; read-only, no DB) |
 | `find-deadcode` | unreferenced symbols (`--kind`, `--include-private`) |
 | `doc-drift --qname X` | doc-vs-code drift findings for one symbol |

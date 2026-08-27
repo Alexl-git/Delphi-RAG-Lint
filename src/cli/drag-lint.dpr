@@ -75,6 +75,7 @@ uses
   DRagLint.Sql.FbSnapshot in '..\sql\DRagLint.Sql.FbSnapshot.pas',
   DRagLint.Sql.OrmLinker in '..\sql\DRagLint.Sql.OrmLinker.pas',
   DRagLint.Sql.Guarded in '..\sql\DRagLint.Sql.Guarded.pas',
+  DRagLint.Core.EngineHold in '..\core\DRagLint.Core.EngineHold.pas',
   DRagLint.Parser.DocComments in '..\parser\DRagLint.Parser.DocComments.pas',
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',
   DRagLint.Query.Callers in '..\query\DRagLint.Query.Callers.pas',
