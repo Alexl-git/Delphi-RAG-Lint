@@ -18893,6 +18893,9 @@ var
   MI          : Integer                                   ;
   CohMembers  : Integer                                   ;
   CohIncoher  : Integer                                   ;
+  CohNotIdx   : Integer                                   ;
+  CohIdxStale : Integer                                   ;
+  CohCompStale: Integer                                   ;
   CohScanned  : Integer                                   ;
   CohRecomp   : Boolean                                   ;
   HaveCoh     : Boolean                                   ;
@@ -18955,6 +18958,7 @@ begin
     HaveCoh   := False;
     CohMembers:= 0;
     CohIncoher:= 0;
+    CohNotIdx:= 0; CohIdxStale:= 0; CohCompStale:= 0;
     CohScanned:= 0;
     CohRecomp := False;
     if Length(AArgs.DbPaths) > 0 then
@@ -19005,6 +19009,20 @@ begin
             if IsIncoherent(Coh[MI]) then
             begin
               Inc(CohIncoher);
+              { WHICH KIND of incoherent. IsIncoherent ORs three orthogonal
+                causes, and collapsing them into one number made the metric
+                uninformative exactly when it mattered: a reconcile run straight
+                after a full reindex reported members=105 incoherent=105, which
+                READS like a broken index and was in fact CORRECT. A reindex
+                refreshes files.mtime, but only a compile sweep writes
+                last_compiled_unix, so every member is compile-stale by
+                definition at that moment. Counting the causes separately is
+                what tells 'the index is garbage' apart from 'you just
+                reindexed'. Attribution is ordered and exclusive, so the three
+                always sum to CohIncoher. }
+              if      not Coh[MI].Indexed    then Inc(CohNotIdx)
+              else if not Coh[MI].IndexFresh then Inc(CohIdxStale)
+              else                                Inc(CohCompStale);
               Indexer2.IndexFile(Coh[MI].Member.UnitPath);
               Inc(CohScanned);
               if Coh[MI].Member.HasDfm then
@@ -19101,6 +19119,12 @@ begin
           JCoh:= TJSONObject.Create;
           JCoh.AddPair('members'   , TJSONNumber.Create(CohMembers));
           JCoh.AddPair('incoherent', TJSONNumber.Create(CohIncoher));
+          { Added ALONGSIDE `incoherent`, which stays as the sum: the --json
+            contract is one valid object on stdout and existing keys are
+            load-bearing. }
+          JCoh.AddPair('notIndexed'  , TJSONNumber.Create(CohNotIdx));
+          JCoh.AddPair('indexStale'  , TJSONNumber.Create(CohIdxStale));
+          JCoh.AddPair('compileStale', TJSONNumber.Create(CohCompStale));
           JCoh.AddPair('scanned'   , TJSONNumber.Create(CohScanned));
           JCoh.AddPair('recompiled', TJSONBool.Create(CohRecomp));
           JRoot.AddPair('coherence', JCoh);
@@ -19138,8 +19162,15 @@ begin
 
       // Coherence summary line (only when --db ran the phase).
       if HaveCoh then
-        Writeln(Format('coherence: members=%d incoherent=%d scanned=%d recompiled=%s',
-          [CohMembers, CohIncoher, CohScanned, IfThen(CohRecomp, 'true', 'false')]));
+        Writeln(Format('coherence: members=%d incoherent=%d '
+                     + '(notIndexed=%d indexStale=%d compileStale=%d) '
+                     + 'scanned=%d recompiled=%s',
+          [CohMembers, CohIncoher, CohNotIdx, CohIdxStale, CohCompStale,
+           CohScanned, IfThen(CohRecomp, 'true', 'false')]));
+        if (CohCompStale > 0) and (CohNotIdx = 0) and (CohIdxStale = 0) then
+          Writeln('           (compile-stale only: every member is indexed and fresh. '
+                + 'A full reindex resets compile-freshness, so this is expected '
+                + 'straight after one.)');
 
       // --apply: write changes to .dpr/.dproj (with .bak backups).
       if AArgs.Apply then begin Reconciler.Apply(ProjectFile, RR); Writeln('Applied: Missing units added to .dpr and .dproj (.bak backups written).'); end;
