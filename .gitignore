@@ -135,3 +135,9 @@ docs/drag-lint-manual.pdf
 
 # Old release staging dirs -- retrievable from backups / GitHub releases.
 build/release-artifacts*/
+
+# autodoc writes <unit>.pas.bak beside every file it rewrites unless
+# --no-backup is passed. 40 of them reached a commit on 2026-08-26 (45,025
+# lines) because `git add -A src` swept them in.
+*.pas.bak
+*.dfm.bak
