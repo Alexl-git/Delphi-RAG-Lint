@@ -439,11 +439,29 @@ begin
   except
     Exit;
   end;
-  if (CurFile <> '') and not SameText(CurFile, FLastStructFile) then
+  { CLOSING THE LAST EDITOR IS A FILE CHANGE TOO.
+
+    This used to read `(CurFile <> '') and not SameText(...)`, so the one
+    transition it never noticed was the transition to NOTHING. After File >
+    Close All the panel went on showing the last file's diagnostics and code
+    elements indefinitely -- stale data that looks exactly like current data.
+    Reported from a live IDE, 2026-08-27.
+
+    The clearing code already existed and was simply never reached:
+    TDragLintStructureForm.RefreshForFile('') empties both lists and captions
+    the panel '(no active editor)'. The guard was the whole bug.
+
+    Startup is unaffected: FLastStructFile starts empty too, so SameText('','')
+    is True and no refresh fires until something actually opens. }
+  if not SameText(CurFile, FLastStructFile) then
   begin
     FLastStructFile:= CurFile;
-    FLastDiagCount:= Length(Cache.GetForFile(CurFile));
-    DLT('dock', Format('watch: file change -> %s (full structure refresh)', [ExtractFileName(CurFile)]));
+    if CurFile <> '' then FLastDiagCount:= Length(Cache.GetForFile(CurFile))
+    else                  FLastDiagCount:= 0;
+    if CurFile <> '' then
+      DLT('dock', Format('watch: file change -> %s (full structure refresh)', [ExtractFileName(CurFile)]))
+    else
+      DLT('dock', 'watch: no editor left open -> clearing the structure panel');
     try RefreshEmbeddedStructure(FStructure); except end;
     Exit;
   end;

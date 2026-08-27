@@ -178,6 +178,54 @@ begin
   end;
 end;
 
+{ Which glyph class a Structure row belongs to.
+
+  Lives HERE, not in DragLint.Plugin.SeverityGlyph, because the TSymbolKind in
+  scope for this tree is DragLint.Plugin.StructureCaches -- a smaller enum
+  than DRagLint.Core.Models and one that starts at skUnknown. A drawing unit
+  must not have to pick between two models it does not own.
+
+  TOTAL BY CONSTRUCTION: anything unmapped becomes kgOther, a neutral dot. The
+  defect this replaces was an unmapped node keeping TTreeNodes default
+  ImageIndex of 0 -- which, with the severity-only image list, was the ERROR
+  glyph. Every root and every code element was badged as an error. }
+function GlyphClassFor(AKind: TSymbolKind): TKindGlyph;
+begin
+  case AKind of
+    skUnit                      : Result:= kgUnit;
+    skClass                     : Result:= kgClass;
+    skInterface                 : Result:= kgInterface;
+    skRecord, skType            : Result:= kgRecord;
+    skEnum, skEnumValue         : Result:= kgEnum;
+    skProcedure, skFunction,
+    skMethod, skConstructor,
+    skDestructor                : Result:= kgRoutine;
+    skProperty                  : Result:= kgProperty;
+    skConstant                  : Result:= kgConst;
+    skField, skVariable         : Result:= kgData;
+    else                          Result:= kgOther;
+  end; // case
+end;
+
+{ ONE rule for putting a glyph on a node.
+
+  -1 is the VCL "no image" sentinel, and it is what must be used when the image
+  list could not be built -- NOT 0, which is a real entry. Leaving the default 0
+  in place is exactly the bug this replaces: every node that never assigned an
+  index rendered the ERROR glyph, so the Diagnostics root, the Code Elements
+  root and every symbol in the tree were badged as errors.
+
+  Centralised rather than repeated at each of the four call sites, because the
+  failure mode is a node someone forgot -- and a forgotten node does not look
+  blank, it looks like a finding. }
+procedure SetNodeGlyph(ANode: TTreeNode; AIndex: Integer);
+begin
+  if ANode = nil then Exit;
+  if AIndex < 0 then AIndex:= -1;
+  ANode.ImageIndex   := AIndex;
+  ANode.SelectedIndex:= AIndex;
+end;
+
 function KindPrefix(AKind: TSymbolKind): string;
 begin
   case AKind of
@@ -606,11 +654,19 @@ begin
       would give tiny icons beside large text. SeverityGlyphImages caches, so
       calling it on every rebuild costs a comparison. }
     GlyphPx:= MulDiv(16, Screen.PixelsPerInch, 96);
-    Imgs   := SeverityGlyphImages(GlyphPx);
+    { StructureGlyphImages, NOT SeverityGlyphImages: this ONE list is assigned
+      to the whole tree, and a TTreeView node that never assigns ImageIndex
+      keeps the default 0. With the severity-only list that default WAS THE
+      ERROR GLYPH, so both roots and every code element were badged as errors
+      -- reported from a live IDE, 2026-08-27. The combined list keeps
+      severity at 0..3 and adds a kind glyph per element, and every node
+      below now sets an index explicitly. }
+    Imgs   := StructureGlyphImages(GlyphPx);
     FTree.Images:= Imgs;
 
     RootDiag:= FTree.Items.Add(nil, Format('Diagnostics (%d)', [Length(FDiags)]));
     RootDiag.Data:= nil;
+    SetNodeGlyph(RootDiag, KindGlyphIndex(kgFolder));
     FRootDiag:= RootDiag; { v0.88 AutoFix: remember the root for node discrimination }
     for i:= 0 to High(DiagOrder) do
     begin
@@ -630,14 +686,14 @@ begin
       Node:= FTree.Items.AddChild(RootDiag, Caption);
       Node.Data:= ND;
       { Not Ord(D.Severity) -- the enum orders hint before info. }
-      Node.ImageIndex   := SeverityGlyphIndex(D.Severity);
-      Node.SelectedIndex:= Node.ImageIndex;
+      SetNodeGlyph(Node, SeverityGlyphIndex(D.Severity));
     end;
 
     { --- Code Elements root (filtered by AFilter) --- }
     Shown:= 0;
     RootSym:= FTree.Items.Add(nil, ''); { caption set after we count }
     RootSym.Data:= nil;
+    SetNodeGlyph(RootSym, KindGlyphIndex(kgFolder));
     for i:= 0 to High(FSyms) do
     begin
       S:= FSyms[i];
@@ -656,6 +712,7 @@ begin
       end;
       Node:= FTree.Items.AddChild(RootSym, Caption);
       Node.Data:= ND;
+      SetNodeGlyph(Node, KindGlyphIndex(GlyphClassFor(S.Kind)));
     end; // for
 
     if AFilter = '' then RootSym.Text:= Format('Code Elements (%d)', [Shown])

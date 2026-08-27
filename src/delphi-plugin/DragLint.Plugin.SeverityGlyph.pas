@@ -114,6 +114,68 @@ function SeverityGlyphImages(ASize: Integer): TCustomImageList;
 /// mislabels every icon and looks like an artwork problem.</remarks>
 function SeverityGlyphIndex(ASeverity: TDragLintSeverity): Integer;
 
+type
+  /// <summary>The visual classes the Structure tree draws for code elements.</summary>
+  /// <remarks>DELIBERATELY FEWER THAN TSymbolKind HAS. There are 30+ kinds and
+  /// no set of 30 shapes is distinguishable at 16 pixels; pretending otherwise
+  /// produces 30 smudges that all look like a rendering fault. These group by
+  /// ROLE, which is what a reader scanning a tree is actually using the icon
+  /// for, and the exact kind stays in the row text -- see KindPrefix in
+  /// DragLint.Plugin.StructureForm. Icon for grouping, text for precision.</remarks>
+  { The mapping FROM a symbol kind TO one of these lives with the caller, not
+    here: this unit draws, and the plugin has two different TSymbolKind
+    enums (DRagLint.Core.Model's and DragLint.Plugin.StructureCache's, which
+    is smaller and starts at skUnknown). Depending on either one would make a
+    drawing unit pick a side in someone else's model, and it picked wrong the
+    first time -- the compiler caught it, which is the only reason it is
+    written down rather than shipped. }
+  TKindGlyph = (
+    kgFolder,      { a tree ROOT: Diagnostics, Code Elements }
+    kgUnit,        { unit / program / package / form / init / final }
+    kgClass,       { class }
+    kgInterface,   { interface }
+    kgRecord,      { record / type alias }
+    kgEnum,        { enum and its values }
+    kgRoutine,     { procedure / function / method / ctor / dtor }
+    kgProperty,    { property }
+    kgConst,       { constant }
+    kgData,        { field / var / local / param }
+    kgSql,         { every skSql* }
+    kgOther        { anything unclassified -- a neutral dot, never an error }
+  );
+
+/// <summary>The fill colour for a glyph class.</summary>
+/// <param name="AGlyph">The class to colour.</param>
+/// <returns>A solid TColor; never clNone.</returns>
+function KindGlyphColor(AGlyph: TKindGlyph): TColor;
+
+/// <summary>Draws a code-element glyph into ARect on ACanvas.</summary>
+/// <param name="ACanvas">Target canvas; pen and brush are saved and restored.</param>
+/// <param name="ARect">Bounding box; the glyph is inscribed and centred.</param>
+/// <param name="AGlyph">Which shape.</param>
+/// <param name="AFill">Fill colour, normally KindGlyphColor(AGlyph).</param>
+/// <remarks>Pure GDI, same as PaintSeverityGlyph. VCL thread only.</remarks>
+procedure PaintKindGlyph(ACanvas: TCanvas; const ARect: TRect;
+  AGlyph: TKindGlyph; AFill: TColor);
+
+/// <summary>One image list for the Structure tree: the four severity glyphs
+/// FIRST, at their usual SeverityGlyphIndex positions, then one entry per
+/// TKindGlyph.</summary>
+/// <param name="ASize">Square glyph size in pixels; clamped to 8..64.</param>
+/// <returns>A cached list owned by this unit -- do NOT free it. nil if it
+/// cannot be built, in which case the caller must show no icons at all.</returns>
+/// <remarks>ONE list, because a TTreeView has ONE Images property and every
+/// node indexes into it. Severity keeps indices 0..3 so SeverityGlyphIndex
+/// stays valid against this list as well as against SeverityGlyphImages --
+/// two lists whose shared prefix disagreed would mislabel rows in a way that
+/// looks like bad artwork rather than a bad index.</remarks>
+function StructureGlyphImages(ASize: Integer): TCustomImageList;
+
+/// <summary>Index into StructureGlyphImages for a glyph class.</summary>
+/// <param name="AGlyph">The class.</param>
+/// <returns>4 + Ord(AGlyph) -- past the four severity entries.</returns>
+function KindGlyphIndex(AGlyph: TKindGlyph): Integer;
+
 implementation
 
 uses
@@ -366,9 +428,268 @@ begin
   end; // try
 end; // function
 
+{ ---------------------------------------------------------------------------
+  CODE-ELEMENT GLYPHS
+
+  Same GDI-only policy as the severity glyphs above, and for the same reasons:
+  no SVG decoder exists in the VCL image stack, and pulling Skia or DevExpress
+  into a design-time BPL is a one-way door that compiles clean and fails only
+  in a live IDE.
+
+  Geometry is in PERCENT of the glyph box, so every shape scales with DPI.
+  --------------------------------------------------------------------------- }
+
+const
+  { Palette. Chosen for hue separation at 16px, and deliberately sharing NO
+    colour with a severity -- a code element must never read as a finding.
+    That confusion is precisely what this set replaces. }
+  KG_FOLDER_FILL    = TColor($008C8C8C); { #8C8C8C grey   }
+  KG_UNIT_FILL      = TColor($00A0713C); { #3C71A0 slate  }
+  KG_CLASS_FILL     = TColor($00B08A21); { #218AB0 teal   }
+  KG_INTERFACE_FILL = TColor($00C05FA0); { #A05FC0 violet }
+  KG_RECORD_FILL    = TColor($00A08A4A); { #4A8AA0 steel  }
+  KG_ENUM_FILL      = TColor($002FA8D8); { #D8A82F amber  }
+  KG_ROUTINE_FILL   = TColor($00C05A7A); { #7A5AC0 purple }
+  KG_PROPERTY_FILL  = TColor($004E9C4E); { #4E9C4E green  }
+  KG_CONST_FILL     = TColor($002B8CD8); { #D88C2B orange }
+  KG_DATA_FILL      = TColor($00997766); { #667799 slate  }
+  KG_SQL_FILL       = TColor($00998033); { #338099 cyan   }
+  KG_OTHER_FILL     = TColor($00A6A6A6); { #A6A6A6 grey   }
+
+  { Shape geometry, percent of the box. }
+  KG_INSET      = 18;  { square / circle inset from the box edge }
+  KG_SMALL      = 30;  { small-square inset (const / data)       }
+  KG_RING       = 26;  { interface ring thickness                }
+  KG_FOLDER_TAB = 34;  { folder tab width                        }
+  KG_DOT        = 34;  { kgOther dot inset                       }
+
+function KindGlyphIndex(AGlyph: TKindGlyph): Integer;
+begin
+  { Past the four severity entries. See StructureGlyphImages' remarks. }
+  Result:= 4 + Ord(AGlyph);
+end;
+
+function KindGlyphColor(AGlyph: TKindGlyph): TColor;
+begin
+  case AGlyph of
+    kgFolder   : Result:= KG_FOLDER_FILL   ;
+    kgUnit     : Result:= KG_UNIT_FILL     ;
+    kgClass    : Result:= KG_CLASS_FILL    ;
+    kgInterface: Result:= KG_INTERFACE_FILL;
+    kgRecord   : Result:= KG_RECORD_FILL   ;
+    kgEnum     : Result:= KG_ENUM_FILL     ;
+    kgRoutine  : Result:= KG_ROUTINE_FILL  ;
+    kgProperty : Result:= KG_PROPERTY_FILL ;
+    kgConst    : Result:= KG_CONST_FILL    ;
+    kgData     : Result:= KG_DATA_FILL     ;
+    kgSql      : Result:= KG_SQL_FILL      ;
+    else         Result:= KG_OTHER_FILL    ;
+  end; // case
+end;
+
+procedure PaintKindGlyph(ACanvas: TCanvas; const ARect: TRect;
+  AGlyph: TKindGlyph; AFill: TColor);
+var
+  D, X, Y, Ins, Sm: Integer    ;
+  SavedPenColor   : TColor     ;
+  SavedPenStyle   : TPenStyle  ;
+  SavedPenWidth   : Integer    ;
+  SavedBrushColor : TColor     ;
+  SavedBrushStyle : TBrushStyle;
+  Pts             : array[0..3] of TPoint;
+
+  { percent of the glyph box -> absolute pixels }
+  function PX(APct: Integer): Integer;
+  begin
+    Result:= X + MulDiv(D, APct, PCT);
+  end;
+
+  function PY(APct: Integer): Integer;
+  begin
+    Result:= Y + MulDiv(D, APct, PCT);
+  end;
+
+begin
+  if not Assigned(ACanvas) then Exit;
+
+  D:= Min(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  { Same floor as PaintSeverityGlyph: below this the shapes stop being
+    distinguishable, and a smudge reads as a rendering fault. }
+  if D < 7 then Exit;
+
+  X:= ARect.Left + (ARect.Right  - ARect.Left - D) div 2;
+  Y:= ARect.Top  + (ARect.Bottom - ARect.Top  - D) div 2;
+
+  SavedPenColor  := ACanvas.Pen  .Color;
+  SavedPenStyle  := ACanvas.Pen  .Style;
+  SavedPenWidth  := ACanvas.Pen  .Width;
+  SavedBrushColor:= ACanvas.Brush.Color;
+  SavedBrushStyle:= ACanvas.Brush.Style;
+  try
+    ACanvas.Pen  .Style:= psSolid;
+    ACanvas.Pen  .Width:= 1;
+    ACanvas.Pen  .Color:= Darken(AFill, OUTLINE_DARKEN_PCT);
+    ACanvas.Brush.Style:= bsSolid;
+    ACanvas.Brush.Color:= AFill;
+
+    Ins:= KG_INSET;
+    Sm := KG_SMALL;
+
+    case AGlyph of
+      kgClass, kgRoutine:
+        { A circle. These are the two commonest rows in any tree, so they get
+          the shape that survives smallest; colour is what separates them. }
+        ACanvas.Ellipse(PX(Ins), PY(Ins), PX(PCT - Ins), PY(PCT - Ins));
+
+      kgInterface:
+        begin
+          { A RING -- a class-shaped thing with nothing inside it. The inner
+            ellipse is punched out in the mask colour, so it reads as a hole
+            rather than as a second filled shape. }
+          ACanvas.Ellipse(PX(Ins), PY(Ins), PX(PCT - Ins), PY(PCT - Ins));
+          ACanvas.Brush.Color:= clFuchsia;
+          ACanvas.Pen  .Color:= clFuchsia;
+          ACanvas.Ellipse(PX(Ins + KG_RING), PY(Ins + KG_RING),
+                          PX(PCT - Ins - KG_RING), PY(PCT - Ins - KG_RING));
+        end;
+
+      kgRecord, kgEnum, kgUnit:
+        { A square -- a composite, as against the circles above. }
+        ACanvas.Rectangle(PX(Ins), PY(Ins), PX(PCT - Ins), PY(PCT - Ins));
+
+      kgProperty:
+        begin
+          { A diamond: an accessor is neither plain data nor a plain routine. }
+          Pts[0]:= Point(PX(50)       , PY(Ins)      );
+          Pts[1]:= Point(PX(PCT - Ins), PY(50)       );
+          Pts[2]:= Point(PX(50)       , PY(PCT - Ins));
+          Pts[3]:= Point(PX(Ins)      , PY(50)       );
+          ACanvas.Polygon(Pts);
+        end;
+
+      kgConst, kgData:
+        { A SMALL square. Data is subordinate to whatever declares it, and
+          drawing it smaller says so without a second hue to learn. }
+        ACanvas.Rectangle(PX(Sm), PY(Sm), PX(PCT - Sm), PY(PCT - Sm));
+
+      kgSql:
+        { A wide, short bar -- a table. }
+        ACanvas.Rectangle(PX(12), PY(30), PX(PCT - 12), PY(PCT - 30));
+
+      kgFolder:
+        begin
+          { Folder: a body plus a tab, which is what the IDE uses for a
+            container row. Two rectangles rather than a polygon, so the edges
+            stay square and legible at 16px. }
+          ACanvas.Rectangle(PX(10), PY(22), PX(10 + KG_FOLDER_TAB), PY(34));
+          ACanvas.Rectangle(PX(10), PY(30), PX(PCT - 10), PY(PCT - 20));
+        end;
+
+      else
+        { kgOther: a neutral dot. NEVER a fallback that means something -- the
+          defect this whole set replaces was unmapped nodes falling through to
+          image index 0, which was the ERROR glyph. }
+        ACanvas.Ellipse(PX(KG_DOT), PY(KG_DOT), PX(PCT - KG_DOT), PY(PCT - KG_DOT));
+    end; // case
+  finally
+    ACanvas.Pen  .Color:= SavedPenColor  ;
+    ACanvas.Pen  .Style:= SavedPenStyle  ;
+    ACanvas.Pen  .Width:= SavedPenWidth  ;
+    ACanvas.Brush.Color:= SavedBrushColor;
+    ACanvas.Brush.Style:= SavedBrushStyle;
+  end; // try
+end; // procedure
+
+var
+  GStructImages    : TImageList = nil;
+  GStructImagesSize: Integer    = 0;
+
+function StructureGlyphImages(ASize: Integer): TCustomImageList;
+const
+  ORDER: array[0..3] of TDragLintSeverity = (dlsError, dlsWarning, dlsInfo, dlsHint);
+var
+  I  : Integer   ;
+  G  : TKindGlyph;
+  Bmp: TBitmap   ;
+begin
+  { Same deliberate redundant nil as SeverityGlyphImages -- see its comment for
+    why this is not dead code. }
+  Result:= nil;
+  try
+    ASize:= Max(8, Min(64, ASize));
+    if Assigned(GStructImages) and (GStructImagesSize = ASize) then Exit(GStructImages);
+
+    FreeAndNil(GStructImages);
+    GStructImagesSize:= 0;
+
+    GStructImages:= TImageList.Create(nil);
+    GStructImages.Width  := ASize;
+    GStructImages.Height := ASize;
+    GStructImages.Masked := True;
+    GStructImages.BkColor:= clNone;
+
+    { 0..3 -- the severity glyphs, in SeverityGlyphIndex order. This prefix is a
+      CONTRACT: SeverityGlyphIndex is used against this list as well as against
+      SeverityGlyphImages, and two lists whose shared prefix disagreed would
+      mislabel rows in a way that looks like bad artwork, not a bad index. }
+    for I:= Low(ORDER) to High(ORDER) do
+    begin
+      Bmp:= TBitmap.Create;
+      try
+        Bmp.PixelFormat:= pf24bit;
+        Bmp.SetSize(ASize, ASize);
+        Bmp.Canvas.Brush.Color:= clFuchsia;
+        Bmp.Canvas.Brush.Style:= bsSolid;
+        Bmp.Canvas.FillRect(Rect(0, 0, ASize, ASize));
+        PaintSeverityGlyph(Bmp.Canvas, Rect(0, 0, ASize, ASize), ORDER[I],
+                           SeverityGlyphColor(ORDER[I]));
+        GStructImages.AddMasked(Bmp, clFuchsia);
+      finally
+        Bmp.Free;
+      end;
+    end;
+
+    { 4.. -- one per TKindGlyph, in enum order, which is exactly what
+      KindGlyphIndex assumes. }
+    for G:= Low(TKindGlyph) to High(TKindGlyph) do
+    begin
+      Bmp:= TBitmap.Create;
+      try
+        Bmp.PixelFormat:= pf24bit;
+        Bmp.SetSize(ASize, ASize);
+        Bmp.Canvas.Brush.Color:= clFuchsia;
+        Bmp.Canvas.Brush.Style:= bsSolid;
+        Bmp.Canvas.FillRect(Rect(0, 0, ASize, ASize));
+        PaintKindGlyph(Bmp.Canvas, Rect(0, 0, ASize, ASize), G, KindGlyphColor(G));
+        GStructImages.AddMasked(Bmp, clFuchsia);
+      finally
+        Bmp.Free;
+      end;
+    end;
+
+    GStructImagesSize:= ASize;
+    Result:= GStructImages;
+  except
+    { Never let icon construction take down a form -- but SAY so, because "no
+      icon" and "no findings" look identical in a tree. }
+    on E: Exception do
+    begin
+      FreeAndNil(GStructImages);
+      GStructImagesSize:= 0;
+      Result           := nil;
+      DLT('glyph', 'StructureGlyphImages failed: ' + E.ClassName + ': ' + E.Message);
+    end;
+  end; // try
+end; // function
+
 initialization
 
 finalization
 FreeAndNil(GImages);
+{ The Structure trees combined list is owned here too -- see
+  StructureGlyphImages. Leaking it would leak a GDI image list per BPL load. }
+FreeAndNil(GStructImages);
+
+
 
 end.

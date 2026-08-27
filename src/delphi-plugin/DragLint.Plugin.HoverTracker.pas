@@ -401,7 +401,31 @@ begin
       Combined:= Combined + DiagText;
     end;
 
-    if Combined = '' then Exit;
+    { THE NOTE MUST DIE ON EVERY PATH, NOT JUST THE ONE THAT SHOWS A POPUP.
+
+      This Exit is the common case, not a corner: the server answers
+      `"result":null` for any position that is not a resolvable identifier --
+      whitespace, a keyword, punctuation, or a file no resolved index covers.
+      The clear at the bottom of this routine sits BELOW here, so the note set
+      just before the request stayed on the strip forever, reading as though
+      drag-lint were still working on a symbol it had already given up on.
+
+      Reported from a live IDE, 2026-08-27: "it shows a status message hover
+      TDeltaBatch forever". It had been true since the note was added on
+      2026-08-19 and was simply invisible until the paint fix (fc7731b) and the
+      naming change made the note appear at all -- two fixes that, between them,
+      turned a silent bug into a visible one.
+
+      It does NOT clear to empty. "Asked and got nothing back" is a different
+      state from "asked and here is the popup", and collapsing them loses
+      exactly the distinction the owner asked for: whether the engine is
+      thinking, finished, or has nothing. The commonest cause by far is that no
+      resolved index covers this file, so that is what it says. }
+    if Combined = '' then
+    begin
+      SetDragLintNote('drag-lint: hover -- nothing indexed at the cursor');
+      Exit;
+    end;
 
     FHintShown:= True;
     { v0.40.7: dwell tracker uses the simple 1-arg overload (no callers /
