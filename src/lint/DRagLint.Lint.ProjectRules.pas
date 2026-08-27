@@ -954,7 +954,17 @@ var
         if U.Kind <> skUnit then Continue;
         for Ch in AFrom.FindAllChildSymbols(U.Id) do
           if SameText(Ch.Section, 'interface') and (Ch.Name <> '') then
+          begin
+            { BOTH SIDES must be stripped of type parameters. A generic export is
+              stored under its DECLARED name, `TComparer<T>`, while a use site
+              references `TComparer` (or `TComparer<TRuleInfo>`), so a literal
+              match fires on neither. Stripping only the reference side -- which
+              is what I did first -- changes nothing, and the measurement said so:
+              91 findings before and 91 after. }
             ATo.AddOrSetValue(LowerCase(Ch.Name), True);
+            var LtPos: Integer:= Pos('<', Ch.Name);
+            if LtPos > 1 then ATo.AddOrSetValue(LowerCase(Copy(Ch.Name, 1, LtPos - 1)), True);
+          end;
         if ATo.Count > 0 then Break;   { first store that actually has it wins }
       end;
     end;
@@ -966,6 +976,27 @@ var
     CollectFrom(AStore, Result);
     if Result.Count = 0 then CollectFrom(ALibraryStore, Result);
     ExportsOfUnit.Add(AUnitName, Result);
+  end;
+
+  { A referenced name, plus its GENERIC BASE.
+
+    A reference to TComparer<TRuleInfo>.Construct arrives with the type
+    arguments attached -- 'TComparer<TRuleInfo>' -- and the unit exports plain
+    'TComparer', so a literal match never fires. Measured on drag-lint's own
+    source: 15 of 91 unused-unit-in-uses findings were System.Generics.Defaults
+    in files that demonstrably call TComparer<T>.Construct. Every one was a
+    FALSE POSITIVE of exactly this shape.
+
+    Both forms are recorded: the base for the export match, the full text
+    because a non-generic name is its own base. }
+  procedure AddRefName(ASet: TDictionary<string, Boolean>; const AName: string);
+  var
+    Lt: Integer;
+  begin
+    if AName = '' then Exit;
+    ASet.AddOrSetValue(LowerCase(AName), True);
+    Lt:= Pos('<', AName);
+    if Lt > 1 then ASet.AddOrSetValue(LowerCase(Copy(AName, 1, Lt - 1)), True);
   end;
 
   procedure Add(const AId, ASeverity, AMsg: string; const ASym: TSymbol);
@@ -1059,8 +1090,8 @@ begin
             Refs:= AStore.GetReferencesFromFile(Fid);
             for Ref in Refs do
             begin
-              if Ref.NameText     <> '' then RefdUnitStems.AddOrSetValue(LowerCase(Ref.NameText    ), True);
-              if Ref.ReceiverText <> '' then RefdUnitStems.AddOrSetValue(LowerCase(Ref.ReceiverText), True);
+              AddRefName(RefdUnitStems, Ref.NameText    );
+              AddRefName(RefdUnitStems, Ref.ReceiverText);
             end;
             { Check each used unit: flag if its stem is absent from the ref set. }
             for U in UsesList do

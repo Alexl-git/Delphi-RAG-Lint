@@ -64,6 +64,16 @@ unit Far.Lib;
 
 interface
 
+type
+  { A GENERIC export. It is STORED under its declared name, TBox<T>, while a use
+    site says TBox<Integer> -- so a literal match fires on neither side and the
+    unit reads as unused. Measured on drag-lint's own source: 15 of 91 findings
+    were System.Generics.Defaults in files that demonstrably call
+    TComparer<T>.Construct. }
+  TBox<T> = record
+    Value: T;
+  end;
+
 procedure ExportedThing;
 
 implementation
@@ -153,6 +163,29 @@ implementation
 end.
 '@
 
+# Uses ONLY the generic export -> must NOT be reported.
+Write-Ascii (Join-Path $prj 'uGeneric.pas') @'
+unit uGeneric;
+
+interface
+
+uses
+  Far.Lib;
+
+procedure UseBox;
+
+implementation
+
+procedure UseBox;
+var
+  B: TBox<Integer>;
+begin
+  B.Value := 1;
+end;
+
+end.
+'@
+
 $libDb = Join-Path $WorkDir 'lib.sqlite'
 $prjDb = Join-Path $WorkDir 'prj.sqlite'
 & $Exe index $lib --db $libDb 2>&1 | Out-Null
@@ -169,6 +202,8 @@ Check 'a unit referenced only via an IMPLEMENTATION-section name IS reported' `
   (($uuiu -join "`n") -match 'uImplOnly[\s\S]{0,200}?Far\.Lib') "the export surface is what counts"
 Check 'a unit whose EXPORT is called is NOT reported' `
   (-not (($uuiu -join "`n") -match 'uGood')) 'false positive on a live import'
+Check 'a unit used ONLY through a GENERIC export is NOT reported' `
+  (-not (($uuiu -join "`n") -match 'uGeneric')) 'TBox<T> declared vs TBox<Integer> used -- both sides need stripping'
 Check 'a registration unit (dxSkin*) is NOT reported' `
   (-not (($uuiu -join "`n") -match 'dxSkinFake')) 'registration units export nothing by design'
 
