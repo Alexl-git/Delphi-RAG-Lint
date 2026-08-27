@@ -146,6 +146,7 @@ uses
   DRagLint.Doc.SharedFacts in '..\doc\DRagLint.Doc.SharedFacts.pas',
   DRagLint.Doc.Strip in '..\doc\DRagLint.Doc.Strip.pas',
   DRagLint.Doc.SymbolFacts in '..\doc\DRagLint.Doc.SymbolFacts.pas',
+  DRagLint.Doc.Wiki in '..\doc\DRagLint.Doc.Wiki.pas',
   DRagLint.Index.CallResolver in '..\index\DRagLint.Index.CallResolver.pas',
   DRagLint.Lint.DocRules in '..\lint\DRagLint.Lint.DocRules.pas',
   DRagLint.Preprocess.Expr in '..\preprocess\DRagLint.Preprocess.Expr.pas',

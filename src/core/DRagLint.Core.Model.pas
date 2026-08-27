@@ -763,6 +763,25 @@ type
     EndLine  : Integer;
   end;
 
+  /// <summary>One symbol_docs row whose raw_block carries a `dl:wiki` marker,
+  /// joined to everything the wiki parser needs to place it.</summary>
+  /// <remarks>Declared HERE rather than in DRagLint.Doc.Wiki so that
+  /// DRagLint.Storage.SQLite can return it without src\storage acquiring a
+  /// dependency on src\doc. This record adds no table and no column -- it is a
+  /// projection of columns that already exist -- so neither
+  /// DRAGLINT_EXTRACTOR_VERSION nor SCHEMA_VERSION moves for it.</remarks>
+  TWikiDocRow = record
+    SymbolId : Int64  ;
+    QName    : string ;
+    Kind     : string ;
+    FilePath : string ;
+    /// <summary>symbol_docs.start_line: the 1-based file line of the comment's
+    /// FIRST line, which is the base the wiki header's own line is offset
+    /// from.</summary>
+    StartLine: Integer;
+    RawBlock : string ;
+  end;
+
   // v0.18: resolved caller entry for a context bundle (FilePath pre-resolved
   // from FileId so renderers don't need a store callback).
   /// <summary><!-- drag-lint:auto -->v0.18: resolved caller entry for a context bundle

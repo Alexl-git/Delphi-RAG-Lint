@@ -111,6 +111,18 @@ You can drive it two ways, both backed by the same engine:
 >   `symbols.section` has THREE values, one of which is the EMPTY string.
 >   Read those before writing a query: table names are discoverable,
 >   semantics are not.
+> - **When the task uses a word that is not an identifier:**
+>   `drag-lint wiki --term "<the phrase>" --db <DB>`
+>   A `dl:wiki` block is a concept note a human wrote INSIDE an ordinary `///`
+>   comment, naming the aliases the team actually uses and the symbols that
+>   implement the concept. Nothing infers these -- if the answer is there, it is
+>   there because somebody wrote it down. Reach for it BEFORE guessing an
+>   identifier from a project noun: a wrong guess costs a fruitless
+>   `query --name-like` sweep, and this costs one 25 ms scan.
+>   Exit code 1 means "no topic matches", which is an answer, not an error.
+>   `--check` resolves every `SeeCode` entry and exits 1 on drift -- run it after
+>   editing a block, the same way `lint` is run after editing code.
+>   Authoring format: [docs/wiki/Wiki-Blocks-Authoring.md](wiki/Wiki-Blocks-Authoring.md).
 > - **Ask the index anything (no verb needed):**
 >   `drag-lint sql --query "SELECT ..." --db <DB> [--json] [--limit N] [--timeout-ms N]`
 >   (or `--file <q.sql>`). This is the escape hatch for questions no canned
@@ -216,6 +228,7 @@ in 2b.
 | `schema` | live index schema: version + tables + columns + row counts (read-only) |
 | `query --name-like <substr>` | SUBSTRING search over symbol NAMES -- the DISCOVERY query, when you do not know the identifier yet (`--kind class,interface,...`, `--limit N` default 50, `--json`). Distinct from `--name`, which is exact with an edit-distance fallback and CANNOT match mid-name; distinct from `--text`, which searches string literals. JSON rows carry `match_kind: substring` |
 | `sql --query "SELECT ..."` | guarded READ-ONLY SQL over the index -- one statement; `--file <q.sql>`, `--limit N` (default 200), `--timeout-ms N` (default 10000), `--json` |
+| `wiki --term "<phrase>"` | route a HUMAN word to the code -- looks a phrase or alias up against the `dl:wiki` concept topics authors wrote in `///` comments, and prints the owning symbol, its resolved `SeeCode` participants and the body. **Use this when a task names something that is not an identifier** ("the scheduler", "delta streaming") -- it is the only query that maps team vocabulary to symbols. `--list` prints every topic, `--check` is the drift gate (exit 1). Exits 1 on no match, so "not in the wiki" is branchable. `--json` |
 | `ide-release` | ask a running Delphi IDE plugin to stop its `drag-lint.exe` children so the engine binary can be rebuilt while the IDE stays open (`--seconds N` default 120, `--resume`, `--status`, `--json`). No DB. The staging step of `build_draglint_win64.bat` does this automatically when it hits the lock |
 | `info` | engine self-info: version, build date, tree-sitter versions, capabilities, exe path, platform (`--json`; read-only, no DB) |
 | `find-deadcode` | unreferenced symbols (`--kind`, `--include-private`) |

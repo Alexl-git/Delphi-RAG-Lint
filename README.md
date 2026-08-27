@@ -349,6 +349,36 @@ drag-lint sql --db myapp.sqlite --limit 5 \n  --query "SELECT kind, COUNT(*) AS 
 Ask `schema --format json` for the columns first: table names are
 discoverable, semantics are not.
 
+### Words the code does not spell
+
+Every other query here assumes you already have an identifier. `wiki` starts
+from a word a *person* uses. A `dl:wiki` block is written inside an ordinary
+`///` comment -- on the type that owns the concept, or above `unit X;` when the
+concept spans several types -- and names the aliases the team actually says:
+
+```
+/// <remarks>
+/// dl:wiki Delta Streaming
+/// Aliases: delta stream, cmdDelta pipeline, the streaming path
+/// SeeCode: TDeltaStreamer, TDeltaSet.ApplyDelta
+/// Body:
+/// How row changes travel from client to server.
+/// </remarks>
+unit Micronite.Delta.Pipe;
+```
+
+```
+drag-lint wiki --term "the streaming path"   # -> owning symbol, SeeCode targets, body
+drag-lint wiki --list                        # every topic in the resolved indexes
+drag-lint wiki --check                       # every SeeCode entry must resolve; exit 1 on drift
+```
+
+Nothing about this is a new index: the block lands in `symbol_docs.raw_block`
+through the existing extractor, so authoring one costs no reindex beyond the
+ordinary incremental walk any edited file already gets. Format:
+[docs/wiki/Wiki-Blocks-Authoring.md](docs/wiki/Wiki-Blocks-Authoring.md).
+
+
 ### Semantic errors without a full build
 
 `check-unit` compiles a single unit in its project's context, so you get real
@@ -482,6 +512,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 |---|---|---|
 | `query --name <n>` / `--qname <q>` | Find symbols by name (fuzzy) or exact qualified name | `--json`, `--case-sensitive`, `--exact` |
 | `query --name-like <substr>` | **Substring search over symbol NAMES** -- the discovery query, for when you do not know the identifier yet. Shortest-name-first; trigram-driven (12 ms vs 18.9 s for a bare scan on a 3.3 GB index) | `--kind class,interface,...`, `--limit N` (default 50), `--json` |
+| [`wiki --term "<phrase>"`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/wiki) | **Route a human word to the code.** Looks a phrase or alias up against the `dl:wiki` concept topics authors write inside ordinary `///` comments -- "the scheduler", "delta streaming" -- and prints the owning symbol, its `SeeCode` participants (each resolved to `file:line`) and the body. Exits 1 when nothing matches, so a script can branch on it | `--list` (every topic), `--check` (SeeCode drift gate, exits 1 on drift), `--json` |
 | `query --text "<phrase>"` | Search **string literals only** -- constants, resourcestrings, DFM captions, SQL exception text | `--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N` |
 | [`query find-callers`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-find-callers) `--name <n>` | Every call-site for a symbol, with source context | `--context N`, `--resolved` (precise call-edges) |
 | `query find` | Find symbols by documentation state | `--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public` |

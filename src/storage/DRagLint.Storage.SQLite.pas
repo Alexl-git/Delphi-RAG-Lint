@@ -2380,6 +2380,22 @@ type
       /// <remarks>Read-only. Driven by `symbol_trigrams` -- see the
       /// implementation comment for the measurements behind that choice.</remarks>
       function FindByNameLike(const ATerm, AKind: string; ALimit: Integer): TArray<TSymbol>;
+
+      /// <summary>Every stored doc block that carries the <c>dl:wiki</c>
+      /// marker, joined to its owning symbol and file.</summary>
+      /// <returns>The candidate rows, ordered by file then line so the output
+      /// of <c>wiki --list</c> is reproducible. Empty is a normal answer: most
+      /// indexes carry no wiki blocks at all.</returns>
+      /// <remarks>Read-only, and safe on a read-only store. The LIKE is a
+      /// PRE-FILTER, not the parse -- DRagLint.Doc.Wiki.TWikiParser decides
+      /// what is actually a topic, so a raw_block that merely mentions the
+      /// marker in prose costs one wasted parse and yields nothing.
+      /// <para>No index is used or wanted: measured 2026-08-27, a full scan of
+      /// ORM3's 4,577 doc rows answers in 25 ms, and doc rows are a small
+      /// fraction of any index. If that ever stops being true the fix is a
+      /// lazily-built cache table (see docs\PLAN-wiki-comments.md section 7),
+      /// which still moves neither version constant.</para></remarks>
+      function FindWikiDocBlocks: TArray<TWikiDocRow>;
     private
       /// <summary>Task 3c: the GUI framework (exactly 'Vcl' or 'FMX') that the
       /// classes declared in AFileId demonstrably inherit FROM, or '' when the
@@ -7721,6 +7737,62 @@ begin
     Result:= List.ToArray;
   finally
     Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.FindWikiDocBlocks: TArray<TWikiDocRow>;
+var
+  Q   : TFDQuery          ;
+  List: TList<TWikiDocRow>;
+  Row : TWikiDocRow       ;
+  FId : TField            ;
+  FQn : TField            ;
+  FKnd: TField            ;
+  FPth: TField            ;
+  FLn : TField            ;
+  FRaw: TField            ;
+begin
+  SetLength(Result, 0);
+  List:= TList<TWikiDocRow>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { The marker is matched case-insensitively because SQLite's LIKE is
+      ASCII-case-insensitive by default, and TWikiParser.HasMarker lowercases
+      before searching for the same reason. The two must agree or a row the SQL
+      admits would be silently dropped by the parser -- or worse, the reverse. }
+    Q.SQL.Text:=
+      'SELECT d.symbol_id, s.qualified_name, s.kind, f.path, d.start_line, d.raw_block' +
+      '  FROM symbol_docs d' +
+      '  JOIN symbols s ON s.id = d.symbol_id' +
+      '  LEFT JOIN files f ON f.id = s.file_id' +
+      ' WHERE d.raw_block LIKE ' + QuotedStr('%dl:wiki%') +
+      ' ORDER BY f.path, d.start_line';
+    Q.Open;
+    { Resolved once. FieldByName is a linear name search per call, and raw_block
+      rows are read in bulk. }
+    FId := Q.FieldByName('symbol_id'     );
+    FQn := Q.FieldByName('qualified_name');
+    FKnd:= Q.FieldByName('kind'          );
+    FPth:= Q.FieldByName('path'          );
+    FLn := Q.FieldByName('start_line'    );
+    FRaw:= Q.FieldByName('raw_block'     );
+    while not Q.Eof do
+    begin
+      Row:= Default(TWikiDocRow);
+      Row.SymbolId := FId .AsLargeInt;
+      Row.QName    := FQn .AsString  ;
+      Row.Kind     := FKnd.AsString  ;
+      Row.FilePath := FPth.AsString  ;
+      Row.StartLine:= FLn .AsInteger ;
+      Row.RawBlock := FRaw.AsString  ;
+      List.Add(Row);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q   .Free;
     List.Free;
   end; // try
 end; // function
