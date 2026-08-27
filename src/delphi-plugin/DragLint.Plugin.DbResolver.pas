@@ -737,6 +737,33 @@ begin
       AncestorDb:= FindAncestorDb(ProjDir, ASettings);
       if AncestorDb <> '' then AddUnique(Result, AncestorDb);
     end;
+  end
+  else if EditorPath <> '' then
+  begin
+    { NO PROJECT OPEN. Until now this fell straight through and resolved NO
+      project index at all -- every walk-up above starts from a .dproj's
+      folder, so with ProjPath empty FindAncestorDb was never called and the
+      only database left was the platform library.
+
+      That is a real editing situation, not a corner: a loose unit opened
+      with File > Open, a file browsed from another repository, anything
+      after File > Close All. The symptom is silent and reads as a broken
+      index -- hover answers nothing, and nothing on screen says why.
+      Reported from a live IDE, 2026-08-27.
+
+      Walking up from the FILE is exactly what FindAncestorDb was written to
+      do; it simply had no caller for this case. Its candidates at each level
+      are specific -- the configured template, the canonical default, and
+      <dirname>.sqlite -- so a hit means a database deliberately named for
+      the folder it sits in, which is the convention. It stops at the drive
+      root and only tests file existence, so a miss is cheap. }
+    AncestorDb:= FindAncestorDb(ExtractFilePath(EditorPath), ASettings);
+    if AncestorDb <> '' then
+    begin
+      AddUnique(Result, AncestorDb);
+      DLT('dbresolve', Format('no project open; walked up from %s -> %s',
+                              [ExtractFilePath(EditorPath), AncestorDb]));
+    end;
   end;
 
   DiscoverSiblings(Result, ProjPath, ASettings);
