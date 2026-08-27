@@ -336,10 +336,46 @@ Check 'and resolved=false with the topic named for a phrase' `
   (($null -ne $cj2) -and ($cj2.resolved -eq $false) -and (@($cj2.wiki).Count -eq 1)) $ctxJson2.Out
 
 # ---------------------------------------------------------------------------
-# CHECK 8 -- usage errors
+# CHECK 8 -- the HOVER shows a pointer, never the body (owner ruling R3)
 # ---------------------------------------------------------------------------
 Write-Host ''
-Write-Host '-- check 8: mode selection' -ForegroundColor Cyan
+Write-Host '-- check 8: hover carries an indicator, not paragraphs' -ForegroundColor Cyan
+
+$hov = Run @('hover', '--qname', 'uWikiGood.TZorbPayload', '--db', $goodDb)
+Check 'hover exits 0' ($hov.Code -eq 0) "exit $($hov.Code) / $($hov.Err.Trim())"
+Check 'it names the topic' ($hov.Out -match 'Wiki: Zorb Payload') $hov.Out
+
+# THE RULING ITSELF: the body must not be in a popup. Asserted on a body line
+# that exists ONLY inside the wiki block.
+Check 'the topic BODY is NOT rendered' `
+  ($hov.Out -notmatch 'A type-attached block') $hov.Out
+Check 'nor is the Aliases: line' ($hov.Out -notmatch 'Aliases:') $hov.Out
+
+# POSITIVE CONTROL: stripping the topic must not take ordinary remarks with it.
+# Without this, "the body is gone" is equally satisfied by deleting everything.
+Check 'CONTROL: hand-written remarks prose SURVIVES the strip' `
+  ($hov.Out -match 'Ordinary hand-written remarks prose') $hov.Out
+
+# The line must be in the exact shape DragLint.Plugin.HoverForm navigates, and
+# point at the dl:wiki HEADER line -- not the comment's first line.
+$payloadHdr = 1 + [Array]::FindIndex([string[]](Get-Content -LiteralPath $goodFile),
+                                     [Predicate[string]]{ param($l) $l -match 'dl:wiki Zorb Payload' })
+Check 'the indicator is in the popup''s clickable "- X -> Q - line N" shape' `
+  ($hov.Out -match ('- Wiki: Zorb Payload -> uWikiGood\.TZorbPayload - line ' + $payloadHdr)) `
+  "expected line $payloadHdr; got: $($hov.Out)"
+
+# NEGATIVE CONTROL: a symbol with no wiki block must be untouched.
+$hovNo = Run @('hover', '--qname', 'uWikiGood.TZorbDispatcher', '--db', $goodDb)
+Check 'CONTROL: a symbol with no topic gets no indicator' `
+  ($hovNo.Out -notmatch 'Wiki:') $hovNo.Out
+Check 'and its own summary still renders' `
+  ($hovNo.Out -match 'Routes payloads') $hovNo.Out
+
+# ---------------------------------------------------------------------------
+# CHECK 9 -- usage errors
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '-- check 9: mode selection' -ForegroundColor Cyan
 
 $noMode = Run @('wiki', '--db', $goodDb)
 Check 'no mode is a usage error (exit 2)' ($noMode.Code -eq 2) "exit $($noMode.Code)"

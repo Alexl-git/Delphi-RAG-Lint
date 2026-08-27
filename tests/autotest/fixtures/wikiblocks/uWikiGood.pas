@@ -16,6 +16,8 @@ interface
 type
   /// <summary>Carries one zorbimatic payload.</summary>
   /// <remarks>
+  /// Ordinary hand-written remarks prose that has nothing to do with the wiki
+  /// block below it. The hover strip must leave this alone.
   /// dl:wiki Zorb Payload
   /// Aliases: the payload
   /// Body:

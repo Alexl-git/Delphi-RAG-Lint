@@ -222,7 +222,47 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , DRagLint.Doc.Regions
+  , DRagLint.Doc.Wiki      { R3: a dl:wiki BODY never goes in a popup }
   ;
+
+{ THE WIKI INDICATOR -- owner ruling R3, 2026-08-27.
+
+  A hover for a symbol carrying a dl:wiki topic shows a short CLICKABLE line
+  naming the topic, and never the body. The owner, verbatim: "might be too
+  long. Hover should say has Wiki - a clickable link to jump to the text."
+
+  Before this, the body went straight into "Remarks:" -- measured on a probe
+  fixture, four lines of concept prose in a popup that exists to be glanced at.
+
+  THE LINE FORMAT IS NOT COSMETIC. DragLint.Plugin.HoverForm already navigates
+  a memo line of the shape "- <qname> - line N"; this reuses that machinery
+  rather than adding a control, which is what R3 asked to be established before
+  designing anything. The "Wiki: <name> -> " prefix is what the popup strips
+  before running its existing parse, so the two must stay in step -- see
+  LineIsClickable / HandleMemoClick in that unit.
+
+  The LOCATION comes from the raw block, not from Remarks: only the raw block
+  plus symbol_docs.start_line yields the file line the dl:wiki header sits on,
+  which is where the click must land. }
+function WikiIndicatorLines(const ASym: TSymbol; const ADoc: TParsedDoc): TArray<string>;
+var
+  T: TWikiTopic;
+begin
+  SetLength(Result, 0);
+  if not TWikiParser.HasMarker(ADoc.RawBlock) then Exit;
+  for T in TWikiParser.ParseRawBlock(ADoc.RawBlock, ASym.QualifiedName, ASym.Kind.ToText,
+                                     '', ADoc.StartLine) do
+  begin
+    if Trim(T.Name) = '' then Continue;
+    { An owner qname the popup cannot resolve to a unit would render a dead
+      link. Emitting nothing is better than emitting something that does not
+      work when clicked. }
+    if T.OwnerQName = '' then Continue;
+    Result:= Result + [Format('- Wiki: %s -> %s - line %d',
+                              [T.Name, T.OwnerQName, T.HeaderLine])];
+  end;
+end;
+
 
 // v(ADP3 T1) review fix: StripForDisplay is now DRagLint.Doc.Regions'
 // TDocRegions.StripForDisplay -- a single exported presentation-layer
@@ -515,7 +555,11 @@ begin
     // the raw AUTO_BEGIN/AUTO_END fence around its facts lines -- strip just
     // the fence markers, keep the facts text between them.
     var CleanRemarks: string:= TDocRegions.StripForDisplay(ADoc.Remarks);
+    { R3: the topic body is removed and replaced by a one-line pointer. }
+    var WikiNames: TArray<string>;
+    CleanRemarks:= TWikiParser.StripTopics(CleanRemarks, WikiNames);
     if CleanRemarks <> '' then SB.AppendLine('Remarks: ' + CleanRemarks);
+    for var WLine in WikiIndicatorLines(ASym, ADoc) do SB.AppendLine(WLine);
     if ADoc.ExampleText <> '' then
     begin
       SB.AppendLine('Example:');
@@ -635,11 +679,21 @@ begin
     // v(ADP3 T1) review fix (finding 1b): strip just the AUTO_BEGIN/AUTO_END
     // fence markers, keep the facts lines between them.
     var CleanMdRemarks: string:= TDocRegions.StripForDisplay(ADoc.Remarks);
+    var MdWikiNames: TArray<string>;
+    CleanMdRemarks:= TWikiParser.StripTopics(CleanMdRemarks, MdWikiNames);
     if CleanMdRemarks <> '' then
     begin
       SB.AppendLine(''          );
       SB.AppendLine('## Remarks');
       SB.AppendLine(CleanMdRemarks);
+    end;
+    { R3: a pointer, not the paragraphs. Rendered as its own section so the
+      popup's line scan finds it whether or not there are any remarks. }
+    var MdWiki: TArray<string>:= WikiIndicatorLines(ASym, ADoc);
+    if Length(MdWiki) > 0 then
+    begin
+      SB.AppendLine('');
+      for var WLine in MdWiki do SB.AppendLine(WLine);
     end;
     if ADoc.ExampleText <> '' then
     begin

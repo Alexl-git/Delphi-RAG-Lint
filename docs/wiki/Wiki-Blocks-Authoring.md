@@ -129,6 +129,19 @@ loudly instead of quietly.
 Body prose is **not** checkable, and nothing pretends it is. That is the cost
 of a free-text concept note, stated rather than hidden.
 
+## What a hover shows
+
+A short pointer, not the body:
+
+```
+- Wiki: Delta Streaming -> Micronite.Delta.Pipe - line 3
+```
+
+It is clickable and jumps to the `dl:wiki` header. That is deliberate -- a
+concept body is paragraphs and a hover popup is a glance. Ordinary `<remarks>`
+prose written around the block is shown as usual, so you can keep normal doc
+text and a topic in the same comment without one hiding the other.
+
 ## After writing one
 
 ```

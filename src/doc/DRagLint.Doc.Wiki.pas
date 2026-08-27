@@ -88,6 +88,25 @@ type
       class function ParseRawBlock(const ARaw, AOwnerQName, AOwnerKind,
         AFilePath: string; ADocStartLine: Integer): TArray<TWikiTopic>; static;
 
+      /// <summary>Removes every <c>dl:wiki</c> topic from a doc text, leaving
+      /// the prose that was not part of one.</summary>
+      /// <param name="AText">Any doc text -- typically a symbol's
+      /// &lt;remarks&gt; after TDocRegions.StripForDisplay.</param>
+      /// <param name="ANames">Receives the names of the topics removed, so the
+      /// caller can put an indicator where the body used to be.</param>
+      /// <returns>AText minus the topic sections.</returns>
+      /// <remarks>FOR HOVER AND OTHER GLANCE-SIZED SURFACES. Owner ruling R3,
+      /// 2026-08-27: <i>"might be too long. Hover should say has Wiki - a
+      /// clickable link to jump to the text."</i> A concept body is paragraphs
+      /// and a hover popup is a glance; putting one inside the other makes the
+      /// popup useless for its actual job.
+      /// <para>Engine-generated fact blocks (AUTO_BEGIN..AUTO_END) are KEPT --
+      /// the hover renderer deliberately shows those, and they are not part of
+      /// any topic. Shares ParseRawBlock's single walk, so what is removed here
+      /// is exactly what <c>wiki</c> reports, and the two cannot drift into
+      /// disagreeing about where a topic ends.</para></remarks>
+      class function StripTopics(const AText: string; out ANames: TArray<string>): string; static;
+
       /// <summary>How well ATerm matches a topic's name or any of its
       /// aliases.</summary>
       /// <param name="ATopic">The candidate.</param>
@@ -132,6 +151,22 @@ type
       /// <param name="ANeedle">Needle; must already be lower case.</param>
       /// <returns>True on a whole-word occurrence.</returns>
       class function ContainsWholeWord(const AHay, ANeedle: string): Boolean; static;
+      /// <summary>THE ONE WALK. Parses topics and, when ANonWiki is supplied,
+      /// simultaneously collects every line that is NOT part of a topic.</summary>
+      /// <param name="ARaw">The text to walk.</param>
+      /// <param name="AOwnerQName">Owning symbol, stamped on each topic.</param>
+      /// <param name="AOwnerKind">Its kind.</param>
+      /// <param name="AFilePath">Owning file, stamped on each topic.</param>
+      /// <param name="ADocStartLine">File line of the comment's first line.</param>
+      /// <param name="ANonWiki">Receives the non-topic lines, or nil when the
+      /// caller only wants the topics.</param>
+      /// <returns>The topics, in the order they appear.</returns>
+      /// <remarks>Both public entry points route through here so that "what a
+      /// topic covers" has exactly one definition. Two walks would drift, and
+      /// the failure would be silent: the hover would strip a line the wiki
+      /// verb still showed, or leave one it did not.</remarks>
+      class function Walk(const ARaw, AOwnerQName, AOwnerKind, AFilePath: string;
+        ADocStartLine: Integer; ANonWiki: TStrings): TArray<TWikiTopic>; static;
   end;
 
 implementation
@@ -207,6 +242,35 @@ end;
 
 class function TWikiParser.ParseRawBlock(const ARaw, AOwnerQName, AOwnerKind,
   AFilePath: string; ADocStartLine: Integer): TArray<TWikiTopic>;
+begin
+  Result:= Walk(ARaw, AOwnerQName, AOwnerKind, AFilePath, ADocStartLine, nil);
+end;
+
+class function TWikiParser.StripTopics(const AText: string; out ANames: TArray<string>): string;
+var
+  Rest  : TStringList      ;
+  Topics: TArray<TWikiTopic>;
+  T     : TWikiTopic       ;
+begin
+  SetLength(ANames, 0);
+  Rest:= TStringList.Create;
+  try
+    { Line numbers are meaningless here -- AText is a <remarks> fragment, not
+      the whole comment -- so 0 is passed deliberately. The caller that needs a
+      LOCATION parses the raw block instead; this one only needs the names. }
+    Topics:= Walk(AText, '', '', '', 0, Rest);
+    for T in Topics do
+      if Trim(T.Name) <> '' then ANames:= ANames + [T.Name];
+    { TStringList.Text appends a trailing break; Trim keeps the caller's
+      "is there anything left" test honest. }
+    Result:= Trim(Rest.Text);
+  finally
+    Rest.Free;
+  end;
+end;
+
+class function TWikiParser.Walk(const ARaw, AOwnerQName, AOwnerKind, AFilePath: string;
+  ADocStartLine: Integer; ANonWiki: TStrings): TArray<TWikiTopic>;
 var
   Lines    : TArray<string>   ;
   Topics   : TList<TWikiTopic>;
@@ -219,6 +283,14 @@ var
   L        : string           ;
   Low      : string           ;
   Rest     : string           ;
+
+  { A line that belongs to NO topic. Collected only when the caller asked;
+    every Continue in the walk below is therefore an explicit decision about
+    which side of the line it falls on, rather than a silent drop. }
+  procedure Keep(const ALine: string);
+  begin
+    if ANonWiki <> nil then ANonWiki.Add(ALine);
+  end;
 
   procedure Flush;
   begin
@@ -246,7 +318,14 @@ var
 
 begin
   SetLength(Result, 0);
-  if not HasMarker(ARaw) then Exit;
+  if not HasMarker(ARaw) then
+  begin
+    { No marker: every line is non-wiki. Returning early WITHOUT saying so
+      would hand the stripper an empty string and silently delete a doc
+      comment that had nothing to do with this feature. }
+    if ANonWiki <> nil then ANonWiki.Text:= ARaw;
+    Exit;
+  end;
 
   { BuildCleaned, not a hand split: it is the ONE definition of "raw_block with
     the comment prefix removed", and going through it is what makes the line
@@ -268,9 +347,9 @@ begin
       { Engine-owned facts never belong in a hand-written concept body. The
         fence is checked before anything else so a topic that happens to sit
         beside a facts block cannot swallow it. }
-      if Pos(AUTO_BEGIN, L) > 0 then begin InAuto:= True ; Continue; end;
-      if Pos(AUTO_END  , L) > 0 then begin InAuto:= False; Continue; end;
-      if InAuto then Continue;
+      if Pos(AUTO_BEGIN, L) > 0 then begin InAuto:= True ; Keep(Raw); Continue; end;
+      if Pos(AUTO_END  , L) > 0 then begin InAuto:= False; Keep(Raw); Continue; end;
+      if InAuto then begin Keep(Raw); Continue; end;
 
       Low:= LowerCase(L);
 
@@ -287,7 +366,7 @@ begin
         end;
       end;
 
-      if not Have then Continue;  { text before the first header is not ours }
+      if not Have then begin Keep(Raw); Continue; end;  { not ours }
 
       if StartsText('Aliases:', L) then
       begin
@@ -310,7 +389,7 @@ begin
         keeps the body readable without needing the author to end the block
         explicitly. A prose line that merely MENTIONS a tag is kept -- see
         IsMarkupOnly. }
-      if IsMarkupOnly(L) then Continue;
+      if IsMarkupOnly(L) then begin Keep(Raw); Continue; end;
 
       { Lenient fallback (plan section 3): untagged lines after the header join
         the body even when the author never wrote `Body:`. }

@@ -25,10 +25,19 @@ Exactly one of `--term` / `--list` / `--check`.
 
 ## Reaching it in the IDE
 
-No IDE surface today. A hover over a symbol whose doc block carries a topic is
-planned to show a short clickable `Wiki: <name>` indicator that jumps to the
-block -- deliberately the indicator only, never the body, because a concept
-body is paragraphs and a hover popup is a glance.
+There is no menu item. What the IDE does show is an **indicator**: hover a
+symbol whose doc block carries a topic and the popup adds one line,
+
+```
+- Wiki: Delta Streaming -> Micronite.Delta.Pipe - line 3
+```
+
+which is clickable and jumps to the `dl:wiki` header itself. The **body is
+never rendered in the popup** -- a concept body is paragraphs and a hover is a
+glance; putting one inside the other makes the popup useless for its actual
+job. Ordinary hand-written `<remarks>` prose around the block is untouched.
+
+Read the body with `wiki --term`, or let `context --task` include it.
 
 ## What it needs
 

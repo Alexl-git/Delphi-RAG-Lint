@@ -735,6 +735,32 @@ begin
       Exit(FReturnLines[I]);
 end;
 
+{ A "- Wiki: <name> -> <qname> - line N" indicator, reduced to the plain
+  "<qname> - line N" tail every other clickable definition row already uses.
+
+  WHY A PREFIX AND NOT A NEW CONTROL. Owner ruling R3 asked for a clickable
+  "has Wiki" link and explicitly said to establish whether the popup already
+  had a navigation affordance before designing one. It does: a memo line of
+  that shape navigates via GOnNavigateToQname. So the engine emits the pointer
+  in that shape with a readable prefix, and this strips the prefix -- no new
+  control, no second navigation path to keep working.
+
+  The producer is WikiIndicatorLines in DRagLint.Hover.Renderer; the two
+  formats must stay in step. Returns ABody unchanged when it is not one. }
+function StripWikiIndicatorPrefix(const ABody: string): string;
+const
+  WIKI_PREFIX = 'Wiki: ';
+  WIKI_ARROW  = ' -> ';
+var
+  ArrowAt: Integer;
+begin
+  Result:= ABody;
+  if not ABody.StartsWith(WIKI_PREFIX) then Exit;
+  ArrowAt:= Pos(WIKI_ARROW, ABody);
+  if ArrowAt <= 0 then Exit;
+  Result:= Trim(Copy(ABody, ArrowAt + Length(WIKI_ARROW), MaxInt));
+end;
+
 procedure TDragLintHoverForm.HandleMemoClick(Sender: TObject);
 { v0.40.8g: single-click navigation. We don't navigate on every click in the
   memo (the user has to be able to scroll / position the caret to read) -- we
@@ -827,7 +853,7 @@ begin
     (and ordinary "- bullet" prose) are left alone. }
   Body:= LineText.TrimLeft;
   if not Body.StartsWith('- ') then Exit;
-  Body:= Copy(Body, 3, MaxInt); { drop the "- " bullet }
+  Body:= StripWikiIndicatorPrefix(Copy(Body, 3, MaxInt)); { bullet, then any Wiki: prefix }
 
   DashAt:= Pos(' - line ', Body);
   if DashAt <= 0 then Exit;
@@ -869,7 +895,7 @@ begin
   if FStructured and (ReturnLineForBodyLine(ALineText) > 0) then Exit(True);
   Body:= ALineText.TrimLeft;
   if not Body.StartsWith('- ') then Exit;
-  Body:= Copy(Body, 3, MaxInt);
+  Body:= StripWikiIndicatorPrefix(Copy(Body, 3, MaxInt));
   DashAt:= Pos(' - line ', Body);
   if DashAt <= 0 then Exit;
   Result:= StrToIntDef(Trim(Copy(Body, DashAt + Length(' - line '), MaxInt)), 0) > 0;
