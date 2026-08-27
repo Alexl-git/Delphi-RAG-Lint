@@ -2366,6 +2366,20 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindCallersByNameWithContext(const ACalleeName: string; AContextLines: Integer): TArray<TReference>;
+
+      /// <summary>Case-insensitive SUBSTRING search over symbol names -- the
+      /// discovery query, for when the caller does not know the identifier
+      /// yet.</summary>
+      /// <param name="ATerm">The substring to look for. Matched against a
+      /// lowercased name; three characters or more uses the trigram index,
+      /// shorter falls back to a full scan.</param>
+      /// <param name="AKind">Optional kind filter, comma-separated (e.g.
+      /// 'class,interface'). Empty means every kind.</param>
+      /// <param name="ALimit">Maximum rows; values below 1 mean 50.</param>
+      /// <returns>Matching symbols, shortest name first.</returns>
+      /// <remarks>Read-only. Driven by `symbol_trigrams` -- see the
+      /// implementation comment for the measurements behind that choice.</remarks>
+      function FindByNameLike(const ATerm, AKind: string; ALimit: Integer): TArray<TSymbol>;
     private
       /// <summary>Task 3c: the GUI framework (exactly 'Vcl' or 'FMX') that the
       /// classes declared in AFileId demonstrably inherit FROM, or '' when the
@@ -7606,6 +7620,108 @@ begin
     Result:= Acc.ToArray;
   finally
     Acc.Free;
+  end; // try
+end; // function
+
+{ ---------------------------------------------------------------------------
+  SUBSTRING SEARCH OVER SYMBOL NAMES -- the query that gets you TO an identifier.
+
+  Every other lookup in this store assumes you already know the name. This is
+  the discovery shape: "does this install have anything that can rasterise an
+  SVG?", asked by someone who does not yet know that the answer is called
+  TSkSvgBrush. Its absence used to force `grep -i svg` over the RTL and
+  DevExpress trees -- tens of thousands of files, hits dominated by comments and
+  string literals -- which is precisely what the index exists to replace.
+
+  WHY IT IS DRIVEN BY symbol_trigrams AND NOT BY A BARE LIKE
+    `LIKE '%svg%'` cannot use a B-tree index: the leading wildcard defeats it,
+    so SQLite scans every row of `symbols`. MEASURED on library-Win32.sqlite
+    (3.3 GB): 18,923 ms. The same question driven from the trigram table:
+    12 ms. The trigram table already exists (it backs the fuzzy `--name`
+    fallback) and is exactly the right shape.
+
+  WHY THE **FIRST** TRIGRAM, AND NOT THE RAREST
+    Any name containing the term necessarily contains every trigram of the
+    term, so ANY ONE of them yields a complete candidate set and the LIKE below
+    only has to confirm. Choosing the rarest would narrow that set -- and was
+    measured as a NET LOSS: on the same index, the counting query needed to
+    find the rarest trigram of 'string' cost 308 ms, while simply driving from
+    its first and most common trigram ('str', 77,644 candidate rows) answered
+    in 474 ms. Paying 308 ms to save at most ~200 is not an optimisation.
+
+  THE BOUND, STATED RATHER THAN HIDDEN
+    A term shorter than three characters has NO trigram (Trigrams returns nil
+    below 3), so it falls back to the full scan and is slow on a large index by
+    construction. The caller is expected to say so rather than leave the user
+    wondering; this function does not silently pretend otherwise.
+  --------------------------------------------------------------------------- }
+function TSQLiteSymbolStore.FindByNameLike(const ATerm, AKind: string;
+  ALimit: Integer): TArray<TSymbol>;
+var
+  Q      : TFDQuery      ;
+  List   : TList<TSymbol>;
+  Term   : string        ;
+  Grams  : TArray<string>;
+  Kinds  : TArray<string>;
+  KindIn : string        ;
+  Part   : string        ;
+  i      : Integer       ;
+  SqlText: string        ;
+begin
+  SetLength(Result, 0);
+  Term:= LowerCase(Trim(ATerm));
+  if Term = '' then Exit;
+  if ALimit <= 0 then ALimit:= 50;
+
+  { The kind filter is assembled as a list of PARAMETER PLACEHOLDERS. The
+    parameter NAMES are generated here (:k0, :k1, ...) and only their VALUES
+    come from the caller, so nothing the user typed is ever inlined into SQL. }
+  SetLength(Kinds, 0);
+  for Part in string(AKind).Split([',']) do
+    if Trim(Part) <> '' then Kinds:= Kinds + [LowerCase(Trim(Part))];
+  KindIn:= '';
+  if Length(Kinds) > 0 then
+  begin
+    for i:= 0 to High(Kinds) do
+    begin
+      if i > 0 then KindIn:= KindIn + ', ';
+      KindIn:= KindIn + ':k' + IntToStr(i);
+    end;
+    KindIn:= ' AND LOWER(s.kind) IN (' + KindIn + ')';
+  end;
+
+  { Shortest name first: for a discovery query TSkSvg is a far more useful first
+    row than TdxSVGImageCollectionHelperInternal. Name and qualified_name break
+    ties so the order is total and the output is reproducible. }
+  Grams:= DRagLint.Query.Fuzzy.Trigrams(Term);
+  if Length(Grams) > 0 then
+    SqlText:= 'SELECT s.* FROM symbol_trigrams t JOIN symbols s ON s.id = t.symbol_id' +
+              ' WHERE t.trigram = :tg AND LOWER(s.name) LIKE :pat' + KindIn +
+              ' ORDER BY LENGTH(s.name), s.name, s.qualified_name LIMIT :lim'
+  else
+    SqlText:= 'SELECT s.* FROM symbols s' +
+              ' WHERE LOWER(s.name) LIKE :pat' + KindIn +
+              ' ORDER BY LENGTH(s.name), s.name, s.qualified_name LIMIT :lim';
+
+  List:= TList<TSymbol>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := SqlText;
+    if Length(Grams) > 0 then Q.ParamByName('tg').AsString:= Grams[0];
+    Q.ParamByName('pat').AsString := '%' + Term + '%';
+    Q.ParamByName('lim').AsInteger:= ALimit;
+    for i:= 0 to High(Kinds) do Q.ParamByName('k' + IntToStr(i)).AsString:= Kinds[i];
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(ReadSymbolFromQuery(Q));
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
   end; // try
 end; // function
 

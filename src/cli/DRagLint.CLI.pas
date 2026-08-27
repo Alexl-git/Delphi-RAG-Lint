@@ -175,6 +175,7 @@ type
     { `sql`: the statement itself, and the wall-clock cap that keeps a bad
       join from wedging the IDE holding a multi-gigabyte index open. The
       OTHER source, --file, reuses InFile above rather than adding a field. }
+    NameLike        : string        ; // --name-like <substr>: substring search over symbol names
     SqlQuery        : string        ; // --query "SELECT ...": the one statement `sql` runs
     TimeoutMs       : Integer       ; // --timeout-ms N: `sql` wall-clock cap (default 10000)
     Rule            : string        ;
@@ -505,7 +506,7 @@ begin
   Writeln('                               --case-sensitive restores byte-exact matching.');
   Writeln('                               --name also accepts a QUALIFIED name (falls back to --qname on a dotted value).');
   Writeln('                               --exact suppresses the fuzzy fallback, so 0 rows means "no such symbol".');
-  Writeln('                               JSON rows carry "match_kind": "exact" | "fuzzy" -- reject "fuzzy" unless');
+  Writeln('                               JSON rows carry "match_kind": "exact" | "fuzzy" | "substring" (--name-like) -- reject "fuzzy" unless');
   Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
   Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
   Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--limit N] [--db ...] [--json]');
@@ -576,6 +577,7 @@ begin
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]');
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
+  Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
   Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint info [--json]                              (engine self-info: version, build date, MIT, tree-sitter + capabilities; read-only)');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
@@ -1047,6 +1049,7 @@ begin
     else if (A = '--max-file-kb') and (i < ParamCount) then begin Inc(i); Result.MaxFileKB:= StrToIntDef(ParamStr(i), 2048); Result.MaxFileKBSet:= True; end
     else if (A = '--connection') and (i < ParamCount) then begin Inc(i); Result.FbConnection:= ParamStr(i); end
     else if (A = '--limit') and (i < ParamCount) then begin Inc(i); Result.Limit:= StrToIntDef(ParamStr(i), 50); end
+    else if (A = '--name-like') and (i < ParamCount) then begin Inc(i); Result.NameLike:= ParamStr(i); end
     else if (A = '--query') and (i < ParamCount) then begin Inc(i); Result.SqlQuery:= ParamStr(i); end
     else if (A = '--timeout-ms') and (i < ParamCount) then begin Inc(i); Result.TimeoutMs:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--by') and (i < ParamCount) then begin Inc(i); Result.SortBy:= ParamStr(i); end
@@ -3646,7 +3649,7 @@ end; // function
 ///  to check, and its absence would be ambiguous between "exact" and "written by
 ///  an older engine". Additive -- existing consumers ignore it.</para></remarks>
 procedure PrintSymbols(const ASymbols: TArray<TSymbol>; AsJson: Boolean; const AFilePaths: TArray<string> = nil;
-  AFuzzy: Boolean = False);
+  AFuzzy: Boolean = False; const AMatchKind: string = '');
 var
   JArr: TJSONArray ;
   JObj: TJSONObject;
@@ -3666,7 +3669,15 @@ begin
         { 'exact' | 'fuzzy' -- see the AFuzzy param. A consumer that wants only
           real hits must reject 'fuzzy'; the row is a SUGGESTION, and the name
           it carries is NOT the name that was asked for. }
-        JObj.AddPair('match_kind', (if AFuzzy then 'fuzzy' else 'exact'));
+        { AMatchKind exists because `exact` is a CLAIM ABOUT THE NAME, not a
+          statement that the lookup succeeded: it tells a consumer "this symbol
+          IS what you asked for". A --name-like row is neither exact nor fuzzy
+          -- `qlitesymbol` matched TSQLiteSymbolStore as a SUBSTRING, and
+          labelling that `exact` asserts something false in precisely the way
+          this field was added to prevent. Callers with a third kind of match
+          pass its name; every existing caller is unchanged. }
+        if AMatchKind <> '' then JObj.AddPair('match_kind', AMatchKind)
+        else JObj.AddPair('match_kind', (if AFuzzy then 'fuzzy' else 'exact'));
         JObj.AddPair('kind', Sym.Kind.ToText);
         JObj.AddPair('name'          , Sym.Name         );
         JObj.AddPair('qualified_name', Sym.QualifiedName);
@@ -4497,6 +4508,126 @@ begin
   if Lockstep then APaths:= OutPaths;
 end; // procedure
 
+
+{ ---------------------------------------------------------------------------
+  query --name-like <term> -- substring search over symbol NAMES.
+
+  THE SHAPE OF QUESTION THIS ANSWERS
+    Every other drag-lint query assumes you already know the identifier. This
+    is the one that gets you TO it. The case it was filed for: "does this
+    Delphi install have anything that can rasterise an SVG?" -- asked by
+    someone who does not yet know the answer is called TSkSvgBrush.
+
+    `query --name SVG` returned two rows, both literally NAMED `SVG`, because
+    the fuzzy fallback is EDIT-DISTANCE shaped, not substring shaped: `SVG`
+    cannot fuzzy-match `TSkSvgBrush`, which is four times longer. And
+    `query --text` searches string LITERALS, not identifiers -- correct
+    behaviour, wrong question. So the fallback was grep over the RTL and
+    DevExpress trees, which is exactly what this index exists to prevent.
+
+  IT IS A SEPARATE FLAG ON PURPOSE
+    Quietly turning `--name` into a substring search would change what every
+    existing caller gets back, the IDE plugin included. `--name` keeps its
+    contract; discovery gets its own flag.
+
+  THE SLOW CASE IS ANNOUNCED, NOT HIDDEN
+    Under three characters there is no trigram to drive the search, so it
+    degrades to a full scan -- ~19 s on a 3.3 GB library index. The user is
+    told, on stderr, rather than left wondering why a two-letter query hung.
+  --------------------------------------------------------------------------- }
+
+/// <summary>drag-lint query --name-like: case-insensitive SUBSTRING search over
+/// symbol names, ordered shortest-name-first so the most likely answer to a
+/// discovery question comes out on top.</summary>
+/// <param name="AArgs">Parsed CLI args. NameLike is the search term; Kind
+/// optionally filters (comma-separated, e.g. "class,interface"); Limit caps the
+/// result set (default 50); AsJson or Format='json' selects JSON.</param>
+/// <returns>0 when the search ran (including when it matched nothing); 2 on a
+/// usage error or an unreadable --db.</returns>
+/// <remarks>Read-only. Driven by the `symbol_trigrams` table -- see
+/// TSQLiteSymbolStore.FindByNameLike for why, and for the measurements.</remarks>
+function DoQueryNameLike(const AArgs: TArgs): Integer;
+var
+  PathsToScan: TArray<string>;
+  DbPath     : string        ;
+  Store      : ISymbolStore  ;
+  Ok         : Boolean       ;
+  Found      : TArray<TSymbol>;
+  All        : TArray<TSymbol>;
+  AllPaths   : TArray<string> ;
+  S          : TSymbol        ;
+  Limit      : Integer        ;
+  Term       : string         ;
+begin
+  Term:= Trim(AArgs.NameLike);
+  if Term = '' then
+  begin
+    Writeln(ErrOutput, 'Usage: drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>');
+    Exit(2);
+  end;
+
+  Limit:= AArgs.Limit;
+  if Limit <= 0 then Limit:= 50;
+
+  { Say it BEFORE the wait, not after. Below three characters there is no
+    trigram, so this is a full table scan and on a multi-gigabyte library index
+    that is tens of seconds. Stderr, so a --json consumer's document stays
+    clean. }
+  if Length(Term) < 3 then
+    Writeln(ErrOutput, 'NOTE: "', Term, '" is shorter than 3 characters, so the trigram index cannot ',
+                       'narrow it -- this falls back to a full scan and will be slow on a large index.');
+
+  PathsToScan:= ResolveConsumerDbs(AArgs);
+  if Length(PathsToScan) = 0 then
+  begin
+    Writeln(ErrOutput, 'ERROR: no index database resolved. Pass --db, or run "drag-lint resolve-dbs --project <x.dproj>".');
+    Exit(2);
+  end;
+  for DbPath in PathsToScan do
+    if not TFile.Exists(DbPath) then
+    begin
+      Writeln(ErrOutput, 'ERROR: database not found: ', DbPath);
+      Exit(2);
+    end;
+
+  SetLength(All     , 0);
+  SetLength(AllPaths, 0);
+  for DbPath in PathsToScan do
+  begin
+    Store:= OpenReadOnlyStore(DbPath, Ok, {AQuiet=}True);
+    if (Store = nil) or (not Ok) then Continue;
+    { FindByNameLike is on the concrete store rather than ISymbolStore, the same
+      way FindChildSymbols is; the cast mirrors the existing call sites. }
+    Found:= TSQLiteSymbolStore(Store).FindByNameLike(Term, AArgs.Kind, Limit);
+    for S in Found do
+    begin
+      All     := All      + [S];
+      AllPaths:= AllPaths + [Store.GetFilePath(S.FileId)];
+    end;
+  end;
+
+  { Re-cap AFTER the merge. Each store was asked for at most Limit rows, so N
+    databases could otherwise return N*Limit -- a cap that the user's --limit
+    silently failed to mean. }
+  if Length(All) > Limit then
+  begin
+    SetLength(All     , Limit);
+    SetLength(AllPaths, Limit);
+  end;
+
+  PrintSymbols(All, AArgs.AsJson or SameText(AArgs.Format, 'json'), AllPaths,
+               {AFuzzy=}False, {AMatchKind=}'substring');
+  if not (AArgs.AsJson or SameText(AArgs.Format, 'json')) then
+  begin
+    { PrintSymbols already emits its own "N match(es)" line; a second one here
+      was pure duplication in the first build. Only the cap notice is added. }
+    { NEVER a silent cap. }
+    if Length(All) = Limit then
+      Writeln(Format('-- LIMIT REACHED at %d; there may be more. Pass --limit N, or narrow with --kind.', [Limit]));
+  end;
+  Result:= 0;
+end; // function
+
 function DoQuery(const AArgs: TArgs): Integer;
 var
   Symbols       : TArray<TSymbol>                 ;
@@ -4513,6 +4644,9 @@ var
 begin
   // v0.57 Task 8: text-content search routes to its own handler.
   if AArgs.TextQuery <> '' then Exit(DoQueryText(AArgs));
+  // substring/discovery search over NAMES (distinct from --name, whose
+  // contract stays exact-plus-edit-distance-fallback).
+  if AArgs.NameLike <> '' then Exit(DoQueryNameLike(AArgs));
   // v1.7: "which of these type names does this file reference?"
   if AArgs.SubCommand = 'type-usage' then Exit(DoQueryTypeUsage(AArgs));
   // v1.8: "of a unit's exports, which does this file reference?"
