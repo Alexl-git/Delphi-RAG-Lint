@@ -125,4 +125,22 @@
 #   which is the failure this fingerprint exists to make impossible to ignore.
 #
 #   Pinned by tests\autotest\run_generic_typeref_refs.ps1.
-1.8.0-alpha|aa6c86ba116d4f67c36e25668bb796b35f1cae9b3205db8836d909580e82ce1d
+# 2026-08-26: hash updated WITHOUT a version bump, per the rule above.
+#   src\index\DRagLint.Index.Closure.pas gained 29 lines: the .dpr branch of
+#   Resolve now reads a sibling .dproj for its DCC_UnitSearchPath. It is the
+#   ONLY surface file changed since 0fdee4a (verified with git diff over the
+#   four hashed roots).
+#
+#   It CANNOT affect extraction. The version exists because the incremental skip
+#   compares path+mtime+sha -- FILE identity -- and so cannot tell that a newer
+#   engine would parse an UNCHANGED file differently. This change does not touch
+#   what the parser produces from any byte sequence; it changes WHICH FILES the
+#   closure walk reaches, by adding search paths. Every file it newly reaches is
+#   a new PATH, so the skip indexes it fresh -- there is no stored parse for it
+#   to keep. And the change only ADDS paths, so no file leaves the closure with
+#   a stale row behind it.
+#
+#   Same shape as the 2026-08-24 entry: a src\index file inside the hashed
+#   surface that plays no part in a walk's extraction.
+
+1.8.0-alpha|589bc8c6d91dd746427e1123bf3e853d36c2c71dd26ed92d22094bfc17debfea
