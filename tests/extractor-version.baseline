@@ -143,4 +143,20 @@
 #   Same shape as the 2026-08-24 entry: a src\index file inside the hashed
 #   surface that plays no part in a walk's extraction.
 
-1.8.0-alpha|589bc8c6d91dd746427e1123bf3e853d36c2c71dd26ed92d22094bfc17debfea
+# 2026-08-26 (2nd): hash updated WITHOUT a version bump -- `document --project`.
+#   A full autodoc pass rewrote managed DocInsight blocks across 40 files, seven
+#   of them inside the hashed surface (Index.Closure, Index.Coverage, Index.Plan,
+#   Index.Reconcile, Parser.DFM, Parser.SpringDI, Preprocess.Types).
+#
+#   PROVEN comment-only, not asserted: `git diff -U0` over exactly the four
+#   hashed roots, with every added/removed line that is neither blank nor a
+#   `///` line collected -> ZERO. The same check over all 40 changed files also
+#   returns zero. A `///` comment cannot change a parse, so no stored parse in
+#   any index becomes stale and a re-parse would buy nothing.
+#
+#   The pass reached a FIXED POINT before this was recorded: run, reindex, run
+#   again -> "1100 public decl(s), nothing to document", with the working diff
+#   byte-identical to the first run. Autodoc has a documented non-idempotency
+#   history, so a clean first run alone would not have been evidence.
+
+1.8.0-alpha|34d24ba997d045bac833c65be11a448a3e4bfb0fc81d28b6b04d9910a6d6ea98

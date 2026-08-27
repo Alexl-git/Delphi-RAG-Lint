@@ -23,7 +23,7 @@ type
   /// file, and the shortest import chain from any project source.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
   /// <para>Used in units: DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -55,7 +55,7 @@ type
   /// <summary>One project-unit -&gt; external-unit uses edge.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
   /// <para>Used in units: DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -75,6 +75,12 @@ type
 
   /// <summary>Per-group rollup: total distinct external units in the group,
   /// and how many distinct project units depend on at least one of them.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used in units: DRagLint.Report.Deps</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDepsGroupCount = record
     Group: TDepsGroup;
     UnitCount: Integer;

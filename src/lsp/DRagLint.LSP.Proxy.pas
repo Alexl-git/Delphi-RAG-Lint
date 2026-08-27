@@ -42,8 +42,8 @@ type
   /// stdio.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Proxy.pas)</para>
-  /// <para>Used in units: DRagLint.LSP.Proxy</para>
+  /// <para>Used by: DRagLint.CLI.Run (DRagLint.CLI.pas), declaration (DRagLint.LSP.Proxy.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLspProxyOptions = record

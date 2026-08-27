@@ -44,7 +44,7 @@ type
   /// <summary>Coverage classification result for one immediate child folder.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), declaration (DRagLint.Index.Coverage.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Coverage</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

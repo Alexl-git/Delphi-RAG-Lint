@@ -86,7 +86,7 @@ function ParseParamNames(const AParamList: string): TArray<string>;
   /// itself on the next pass -- the exact failure ParseParamNames' own comment
   /// records for parameter NAMES.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)</para>
+  /// <para>Used by: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), declaration (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Refactor.DocStub</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

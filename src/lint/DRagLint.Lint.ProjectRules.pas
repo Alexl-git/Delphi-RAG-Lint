@@ -45,7 +45,7 @@ type
   /// of them is safe.
   /// The caller owns the returned store's lifetime for the whole run.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSiblingStoreResolver = reference to function(const AProjectName: string): ISymbolStore;
@@ -62,13 +62,17 @@ type
     /// and suppresses the finding when the routine is referenced in one of them.
     /// nil (the default) keeps the historic behaviour: report, and tell the
     /// reader to check the siblings by hand.</param>
+    /// <param name="ALibraryStore">The platform LIBRARY index, or nil. Needed by
+    /// unused-unit-in-uses: a project store cannot see System.IniFiles, so
+    /// without this the rule's own "is the unit indexed?" gate answered False
+    /// for every RTL/VCL import and the rule reported ZERO, everywhere.</param>
     /// <returns>Findings across the whole index (file paths + lines); empty if none.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ASiblingStore, ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedSymbolIds (+25 more)</para>
-    /// <para>Returns: nil; Findings.ToArray</para>
-    /// <para>Complexity: 52 (cyclomatic, outer body), 471 lines (full implementation)</para>
+    /// <para>Calls: ASiblingStore, ChangeFileExt, CollectFrom, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower (+27 more)</para>
+    /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; nil; Findings.ToArray</para>
+    /// <para>Complexity: 50 (cyclomatic, outer body), 554 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
@@ -77,10 +81,6 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <param name="ALibraryStore">The platform LIBRARY index, or nil. Needed by
-    /// unused-unit-in-uses: a project store cannot see System.IniFiles, so
-    /// without this the rule's own "is the unit indexed?" gate answered False
-    /// for every RTL/VCL import and the rule reported ZERO, everywhere.</param>
     class function Run(const AStore: ISymbolStore; const ARuleId: string = '';
                        const ASiblingStore: TSiblingStoreResolver = nil;
                        const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;

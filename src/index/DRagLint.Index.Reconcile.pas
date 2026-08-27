@@ -35,7 +35,7 @@ type
   /// <summary>One item in a reconcile report.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDpr (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDproj (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), declaration (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDpr (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDproj (DRagLint.Index.Reconcile.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -101,7 +101,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)</para>
       /// <para>Calls: Copy, DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember, LowerCase, Pos, SameText</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 95 lines (full implementation)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 106 lines (full implementation)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.ResolveMember"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
@@ -155,12 +155,12 @@ type
       /// (backslash sep).</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ABase"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->string -- Observed: Copy(NormFile,
-      /// Length(NormBase) + 1, MaxInt); NormFile.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed:
+      /// ExtractRelativePath(NormBase, NormFile).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
-      /// <para>Calls: Copy, SameText</para>
+      /// <para>Calls: Copy, ExtractRelativePath, SameText</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>

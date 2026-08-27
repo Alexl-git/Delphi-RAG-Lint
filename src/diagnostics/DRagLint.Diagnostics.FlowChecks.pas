@@ -37,9 +37,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ApplyEntryDefs, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectInterfaceDerefs, CollectReadsAndCallDefs, CollectThenGuards, ConstructedTypeText, ConstructorTransfersOwnership (+28 more)</para>
+    /// <para>Calls: ApplyEntryDefs, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectInterfaceDerefs, CollectReadsAndCallDefs, CollectThenGuards, ConstructedTypeText, ConstructorTransfersOwnership (+29 more)</para>
     /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); Findings.ToArray</para>
-    /// <para>Complexity: 21 (cyclomatic, outer body), 712 lines (full implementation)</para>
+    /// <para>Complexity: 21 (cyclomatic, outer body), 736 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>

@@ -35,24 +35,25 @@ type
       /// Include="..."/&gt; entries vs the matching .dpr/.dpk's `uses` clause. Returns
       /// findings for every unit that is present on one side but not the other.</summary>
       /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AClosureFiles">The project's compile-closure .pas files,
+      /// already scoped to its own roots. Optional: when empty the third
+      /// direction below is SKIPPED rather than half-answered.</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
-      /// Findings.ToArray.</returns>
+      /// Findings.ToArray; ASet.TryGetValue(AStem, Orig) and (Pos('.',
+      /// NormUnitQualified(Orig)) = 0).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames, DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences, ExtractFileName, ExtractFilePath, Format, SameText, StartsText</para>
-      /// <para>Complexity: 24 (cyclomatic, outer body), 96 lines (full implementation)</para>
+      /// <para>Calls: Default, DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames, DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.NormUnitQualified, DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences, DRagLint.Lint.ProjectChecks.RealCasedFileName, ExtractFileExt, ExtractFileName, ExtractFilePath, Format, Pos, SameText, StartsText, StemSatisfies</para>
+      /// <para>Complexity: 36 (cyclomatic, outer body), 199 lines (full implementation)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames"/>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile"/>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.NormUnit"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.NormUnitQualified"/>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences"/>
-      /// <seealso cref="DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      /// <param name="AClosureFiles">The project's compile-closure .pas files,
-      /// already scoped to its own roots. Optional: when empty the third
-      /// direction below is SKIPPED rather than half-answered.</param>
       class function CheckUnitsInDpr( const ADprojPath: string;
                                       const AClosureFiles: TArray<string> = nil): TArray<TLintFinding>;
       /// <summary>Flags every `uses X` whose unit X resolves to no known unit

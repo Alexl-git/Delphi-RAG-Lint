@@ -28,7 +28,7 @@ type
   /// <summary>One navigable form (a .dfm root that descends from a form base).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.FormsMap.LoadInventory (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.NavPath (DRagLint.FormsMap.pas), DRagLint.FormsMap.CalledFrom (DRagLint.FormsMap.pas), DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas)</para>
+  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.LoadInventory (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.NavPath (DRagLint.FormsMap.pas), DRagLint.FormsMap.CalledFrom (DRagLint.FormsMap.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.FormsMap</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -47,7 +47,7 @@ type
   /// control binds the launching routine.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.FormsMap.BuildEdges.TryAddEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.NavPath (DRagLint.FormsMap.pas), DRagLint.FormsMap.DetectRoot (DRagLint.FormsMap.pas), DRagLint.FormsMap.CalledFrom (DRagLint.FormsMap.pas)</para>
+  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.TryAddEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.NavPath (DRagLint.FormsMap.pas), DRagLint.FormsMap.DetectRoot (DRagLint.FormsMap.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.FormsMap</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

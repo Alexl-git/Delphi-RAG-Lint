@@ -23,7 +23,7 @@ type
   /// id, severity, message.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Lint.Linter.TLinter.Destroy (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.Destroy (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), declaration (DRagLint.Lint.QueryRules.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.Lint.Linter, DRagLint.Lint.QueryRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -214,8 +214,8 @@ type
   /// Diagnostic only, and populated ONLY while DRAGLINT_PROFILE is set.
   /// See QueryRuleTimings for why this exists.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Lint.QueryRules.QueryRuleTimings (DRagLint.Lint.QueryRules.pas)</para>
-  /// <para>Used in units: DRagLint.Lint.QueryRules</para>
+  /// <para>Used by: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), declaration (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.QueryRules.QueryRuleTimings (DRagLint.Lint.QueryRules.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.QueryRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
 type

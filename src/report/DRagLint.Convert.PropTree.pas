@@ -83,7 +83,7 @@ type
   /// recovered from the nearest visibility-bearing sibling instead of being
   /// fabricated.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.PropTree.BuildPropTree.Walk (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas), DRagLint.Convert.Rules.PathExists (DRagLint.Convert.Rules.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), declaration (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.BuildPropTree.Walk (DRagLint.Convert.PropTree.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

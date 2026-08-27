@@ -101,7 +101,7 @@ function RenderSignatureParamsMarkdown(const ASignature: string): string;
   /// const/var/out modifier (if any), the parameter name, and its type text.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Hover.Renderer.ParseSignatureParams (DRagLint.Hover.Renderer.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.ParseSignatureParams (DRagLint.Hover.Renderer.pas)</para>
   /// <para>Used in units: DRagLint.Hover.Renderer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -114,6 +114,12 @@ type
 
   /// <summary>One mined `Result:= &lt;Expr>` / `Exit(&lt;Expr>)` return expression,
   /// as produced by the Task 2 returns-miner.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas)</para>
+  /// <para>Used in units: DRagLint.Hover.Renderer</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 type
   TReturnFact = record
     Expr: string ;

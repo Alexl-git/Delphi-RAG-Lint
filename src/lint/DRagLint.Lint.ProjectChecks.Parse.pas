@@ -72,6 +72,11 @@ function NormUnit(const AName: string): string;
 /// LEGACY UNQUALIFIED name against a qualified file -- <c>Graphics</c> against
 /// <c>Vcl.Graphics.pas</c> -- which is the FP-9 class it was added for. That is
 /// why the truncation is not simply removed.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas)</para>
+/// <para>Calls: ChangeFileExt, ExtractFileExt, ExtractFileName, LowerCase</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function NormUnitQualified(const AName: string): string;
 

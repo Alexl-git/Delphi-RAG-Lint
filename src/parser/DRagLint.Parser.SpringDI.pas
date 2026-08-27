@@ -31,8 +31,8 @@ type
   /// surrounding angle brackets already stripped, or '' when the link has no
   /// type argument (e.g. '.AsSingleton').
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Parser.SpringDI.FindLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.HasLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.FirstDiRegistrationVerb (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.ClassifyDiChain (DRagLint.Parser.SpringDI.pas)</para>
-  /// <para>Used in units: DRagLint.Parser.SpringDI</para>
+  /// <para>Used by: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas), declaration (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.FindLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.HasLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.FirstDiRegistrationVerb (DRagLint.Parser.SpringDI.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Parser.Delphi13, DRagLint.Parser.SpringDI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDiChainLink = record

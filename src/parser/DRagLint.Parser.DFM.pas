@@ -83,7 +83,7 @@ type
   /// HandlerName='Button1Click'). Produced by ExtractDfmEventBindings.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.WalkProperty (DRagLint.Parser.DFM.pas)</para>
+  /// <para>Used by: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas), declaration (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.WalkProperty (DRagLint.Parser.DFM.pas)</para>
   /// <para>Used in units: DRagLint.Doc.SymbolFacts, DRagLint.Parser.DFM</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

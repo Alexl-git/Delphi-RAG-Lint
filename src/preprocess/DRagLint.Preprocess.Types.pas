@@ -25,7 +25,7 @@ type
   /// offsets into the input; Line is 0-based (matches lexer.js lineAt).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), declaration (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Preprocess, DRagLint.Preprocess.Lexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

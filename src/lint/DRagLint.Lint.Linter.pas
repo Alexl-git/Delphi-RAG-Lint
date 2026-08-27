@@ -32,7 +32,7 @@ type
     AST during the parse the linter already does. }
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
   /// <para>Used in units: DRagLint.Lint.Linter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -43,7 +43,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
   /// <para>Used in units: DRagLint.Lint.Linter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -56,8 +56,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), declaration (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas), declaration (DRagLint.MCP.Server.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server</para>
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), declaration (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), declaration (DRagLint.LSP.Server.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLinter = class

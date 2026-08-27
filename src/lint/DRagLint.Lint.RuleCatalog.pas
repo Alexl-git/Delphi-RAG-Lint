@@ -31,8 +31,8 @@ type
   /// <summary>A single configurable parameter of a rule (threshold or naming knob).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI</para>
+  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), declaration (DRagLint.Lint.RuleCatalog.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleParam = record
@@ -44,7 +44,7 @@ type
   /// <summary>One catalogued rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry (DRagLint.Lint.RuleCatalog.pas) (+2 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), declaration (DRagLint.Lint.RuleCatalog.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

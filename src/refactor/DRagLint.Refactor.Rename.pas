@@ -18,7 +18,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.Rename.TRenameRefactoring.Build (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.TRenameRefactoring.Apply (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.TRenameRefactoring.RenderDryRun (DRagLint.Refactor.Rename.pas) (+1 more)</para>
+  /// <para>Used by: DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.CLI.DoRename (DRagLint.CLI.pas), declaration (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.FormatRenameEditsAsJson (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.Rename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
