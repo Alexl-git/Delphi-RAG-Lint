@@ -678,7 +678,10 @@ begin
   Writeln('  Omit --db entirely and the manifest resolver supplies the full set in order.');
   Writeln('');
   Writeln('Defaults:');
-  Writeln('  --db = .\drag-lint.sqlite next to the cwd');
+  Writeln('  --db   no default. A verb with no --db resolves its database from the');
+  Writeln('         manifest (see resolve-dbs); if none resolves it FAILS rather');
+  Writeln('         than adopting or creating one in the current directory.');
+  Writeln('         index with no --db writes to <target>\_D-RAG\<name>.sqlite');
 end; // procedure
 
 /// <summary>True when ASwitch appears verbatim on the command line.</summary>
@@ -785,7 +788,19 @@ var
   A: string ;
 begin
   Result:= Default(TArgs);
-  Result.DbPath:= TPath.Combine(GetCurrentDir, 'drag-lint.sqlite');
+  { NO DEFAULT DATABASE (owner ruling 2026-08-26). DbPath stays EMPTY unless
+    --db is given or a manifest section resolves one.
+
+    This used to seed <cwd>\drag-lint.sqlite -- a path retired when the _D-RAG
+    layout landed. It did not merely go stale, it kept REGENERATING: a folder
+    scan run from anywhere without --db created an index there, gitignored, so
+    invisible rather than harmless. It then opened cleanly, reported a current
+    schema, and answered 'not mine' to everything.
+
+    It also made roughly fifteen 'requires --db' guards DEAD CODE, because
+    DbPath could never be empty -- including purge-locals, which was measured
+    on 2026-08-26 silently adopting a stray and running a purge against it.
+    Emptying the default is what revives every one of those guards. }
   Result.Docs               := DefaultDocConfig;
   Result.Depth              := 3;
   Result.MaxCallers         := 5;
@@ -2568,8 +2583,27 @@ end; // function
 /// <param name="AIndexPath">Path being indexed (folder or file); used for matching.</param>
 /// <returns>Absolute path to the DB to use for this index operation.</returns>
 /// <remarks>Library sections (source=registry-libraries) are skipped. Not thread-safe.</remarks>
+{ ONE PLACE THAT SAYS WHY THERE IS NO DATABASE (2026-08-26).
+
+  Every consumer below used to test TFile.Exists(DbPath) alone. With the cwd
+  default gone DbPath can now legitimately be empty, and 'database not found: '
+  with a blank path is not a diagnosis. Worse, TFile.Exists was ALREADY tried as
+  the fix for the stray-index problem and changed nothing -- a stray that exists
+  passes an existence test. Existence is not sufficiency.
+
+  Returns True when there is nothing to open, having said so. }
+function NoDbResolved(const ADbPath, AVerb: string): Boolean;
+begin
+  Result:= ADbPath = '';
+  if not Result then Exit;
+  Writeln('ERROR: ', AVerb, ': no --db was given and no project database resolves here.');
+  Writeln('       Run "drag-lint resolve-dbs" to list the configured databases,');
+  Writeln('       or pass --db <file.sqlite> explicitly.');
+end;
+
 function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string): string;
 var
+  DbBase: string;
   Manifest : TIndexManifest ;
   Sec      : TIndexSection  ;
   IncPath  : string         ;
@@ -2622,8 +2656,31 @@ begin
     // Manifest unavailable -- fall through to default.
   end; // try
 
-  if BestDb <> '' then Result:= BestDb
-  else Result:= AArgs.DbPath; // default: drag-lint.sqlite in CWD
+  if BestDb <> '' then Exit(BestDb);
+  if AArgs.DbPath <> '' then Exit(AArgs.DbPath);   { an explicit --db always wins }
+
+  { THE INDEX LIVES BESIDE WHAT IT INDEXES. This used to fall back to the cwd
+    default, so a scan of a folder outside every manifest section wrote its
+    index wherever the shell happened to be standing -- which is how the repo
+    root acquired a 4-file index of a temp fixture folder.
+
+    index is the CREATOR verb, so unlike a consumer it should not refuse: it
+    should write somewhere defensible. The layout already says where -- the
+    same _D-RAG rule ExpandSectionDb applies to a manifest section. }
+  if AIndexPath <> '' then
+  begin
+    if TDirectory.Exists(AIndexPath) then
+    begin
+      DbBase:= ExcludeTrailingPathDelimiter(AIndexPath);
+      Exit(TPath.Combine(TPath.Combine(DbBase, DRAG_HOME_DIR),
+                         TPath.GetFileName(DbBase) + '.sqlite'));
+    end;
+    DbBase:= ExcludeTrailingPathDelimiter(ExtractFilePath(AIndexPath));
+    if DbBase <> '' then
+      Exit(TPath.Combine(TPath.Combine(DbBase, DRAG_HOME_DIR),
+                         TPath.GetFileNameWithoutExtension(AIndexPath) + '.sqlite'));
+  end;
+  Result:= '';
 end; // function ResolveIndexDb
 
 // INBOX 2.3 (converter-editor team, 2026-08-02): the identity of everything that
@@ -2878,7 +2935,23 @@ begin
   end;
 
   var ResolvedDb: string:= ResolveIndexDb(AArgs, IfThen(AArgs.Path <> '', AArgs.Path, GetCurrentDir));
+  if ResolvedDb = '' then
+  begin
+    Writeln('ERROR: index: no --db given and no index location resolves for this target.');
+    Writeln('       Run "drag-lint resolve-dbs" or pass --db <file.sqlite>.');
+    Exit(2);
+  end;
   Writeln('Database: ', ResolvedDb);
+
+  { CREATE THE _D-RAG HOME BEFORE OPENING. The --all path already does this
+    for a manifest item; this single-target path never did, because the old
+    cwd default always pointed at a directory that already existed. Now that a
+    folder scan resolves to <target>\_D-RAG\<name>.sqlite, the home usually
+    does NOT exist yet, and SQLite answers 'unable to open database file' --
+    measured 2026-08-26, and it reads like a permissions problem rather than a
+    missing directory. }
+  var DbHome: string:= ExtractFilePath(ResolvedDb);
+  if (DbHome <> '') and (not TDirectory.Exists(DbHome)) then TDirectory.CreateDirectory(DbHome);
 
   Store:= TSQLiteSymbolStore.Create(ResolvedDb);
   Store.Migrate;
@@ -3672,6 +3745,7 @@ begin
     end;
   end;
 
+  if NoDbResolved(AArgs.DbPath, 'query-find') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   var RoOk: Boolean;
@@ -6107,6 +6181,7 @@ var
   JArr      : TJSONArray          ;
 begin
   if AArgs.QName = '' then begin Writeln('Usage: drag-lint impact --qname <Qualified.Name> ' + '[--depth N] [--db <path>] [--format text|json]'); Exit(2); end;
+  if NoDbResolved(AArgs.DbPath, 'impact') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
   Depth:= AArgs.Depth;
   if Depth <= 0 then begin Writeln(AArgs.QName); Writeln('  (depth 0 returns nothing)'); Exit (1 ); end;
@@ -6171,6 +6246,7 @@ begin
     Writeln('Usage: drag-lint surface --qname <Foo.TBar> ' + '[--db <path>] [--include-impl] [--all-visibility] ' + '[--format text|json]');
     Exit(2);
   end;
+  if NoDbResolved(AArgs.DbPath, 'surface') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   var RoOk: Boolean;
@@ -6276,6 +6352,7 @@ var
   JObj : TJSONObject    ;
 begin
   if AArgs.InFile = '' then begin Writeln('Usage: drag-lint outline --file <path.pas> ' + '[--db <path>] [--format text|json]'); Exit(2); end;
+  if NoDbResolved(AArgs.DbPath, 'outline') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   var RoOk: Boolean;
@@ -6457,6 +6534,7 @@ var
   JObj : TJSONObject        ;
 begin
   if AArgs.QName = '' then begin Writeln('Usage: drag-lint slice --qname <Foo.TBar> ' + '[--db <path>] [--format text|json]'); Exit(2); end;
+  if NoDbResolved(AArgs.DbPath, 'slice') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
@@ -8272,13 +8350,15 @@ begin
         sit on this path and each one alone silently restores the store-free
         behaviour this block exists to end:
 
-        1. AArgs.DbPath is DEFAULTED to <cwd>\drag-lint.sqlite, a convention the
-           _D-RAG layout retired. On this repo that is
-           C:\Projects\Delphi-RAG-lint\drag-lint.sqlite -- which EXISTS, dated
-           2026-08-25, and holds ZERO files. A stray empty index parked on the
-           old default path passes any existence test, opens cleanly, reports a
-           current schema, and then answers "I do not have that file" for
-           everything. Testing `<> ''` or TFile.Exists both take it.
+        1. AArgs.DbPath USED TO BE defaulted to <cwd>\drag-lint.sqlite, a
+           convention the _D-RAG layout retired. That default is GONE (owner
+           ruling 2026-08-26) and DbPath is now empty unless --db or a manifest
+           section supplies one -- so the specific trap below can no longer be
+           armed by ParseArgs itself. The REASONING still stands and is why the
+           membership probe is here: a stray index left on any path passes an
+           existence test, opens cleanly, reports a current schema, and then
+           answers "I do not have that file" for everything. Testing `<> ''` or
+           TFile.Exists both take it.
         2. ResolveConsumerDbs' FIRST entry is the manifest's first section when
            the run names no --project -- on this machine an unrelated ORM3
            project. Position is not ownership.
@@ -8427,6 +8507,7 @@ var
   IncImpl   : Boolean       ;
 begin
   if AArgs.Task = '' then begin Writeln('Usage: drag-lint context --task "verb qname" [--db PATH] ' + '[--format md|json|raw]'); Exit(2); end;
+  if NoDbResolved(AArgs.DbPath, 'context') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
@@ -8465,6 +8546,7 @@ var
   TotalBaseline : Double                     ;
   Count         : Integer                    ;
 begin
+  if NoDbResolved(AArgs.DbPath, 'bench-context') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
 
   N:= AArgs.BenchN;
@@ -12088,6 +12170,7 @@ begin
     else if SameText(F.Severity, 'Hint') then Inc(HintCount);
   end;
 
+  if NoDbResolved(AArgs.DbPath, 'compile-check') then Exit(2);
   if TFile.Exists(AArgs.DbPath) then begin Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate; TCompileChecker.InsertFindings(Store, Res.Findings); end;
 
   Fmt:= LowerCase(AArgs.Format);
@@ -12307,6 +12390,7 @@ begin
       '[--platform win32|win64] [--full] [--json]');
     Exit(2);
   end;
+  if NoDbResolved(AArgs.DbPath, 'refresh-findings') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then
   begin
     Writeln('ERROR: database not found: ', AArgs.DbPath);
@@ -13001,6 +13085,7 @@ begin
   end;
 
   { open the index only if --resolve-uses asked AND the db exists }
+  if NoDbResolved(AArgs.DbPath, 'check-unit') then Exit(2);
   HasStore:= AArgs.ResolveUsesFlag and TFile.Exists(AArgs.DbPath);
   if HasStore then begin Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate; end;
 
@@ -13159,6 +13244,7 @@ var
   K    : string          ;
   L    : TList<string>   ;
 begin
+  if NoDbResolved(AArgs.DbPath, 'cycles') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
@@ -13629,6 +13715,7 @@ var
 
 begin
   if AArgs.Target = '' then begin Writeln('Usage: drag-lint uses-audit <unit.pas> --db <sqlite> [--format json|text]'); Exit (2 ); end;
+  if NoDbResolved(AArgs.DbPath, 'uses-audit') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
@@ -13878,6 +13965,7 @@ var
   Uo         : TUnitUse          ;
   HeaderShown: Boolean           ;
 begin
+  if NoDbResolved(AArgs.DbPath, 'uses-fix-sweep') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   RootFilter:= LowerCase(StringReplace(AArgs.InFile, '/', '\', [rfReplaceAll]));
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
@@ -14217,6 +14305,7 @@ begin
     Writeln('   or: drag-lint uses-fix --project <dproj> --db <sqlite> [--in <dir>] [--remove-unused]   (sweep report)');
     Exit   (2                                                                                                          );
   end;
+  if NoDbResolved(AArgs.DbPath, 'uses-fix') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Proj:= AArgs.ProjectPath;
   Plat:= AArgs.CheckPlatform;
@@ -14354,6 +14443,7 @@ var
 begin
   if AArgs.Target = '' then begin Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--format text|json]'); Exit (2 ); end;
   if not TFile.Exists(AArgs.Target) then begin Writeln('ERROR: file not found: ', AArgs.Target); Exit(2); end;
+  if NoDbResolved(AArgs.DbPath, 'check-ast') then Exit(2);
   if TFile.Exists(AArgs.DbPath) then begin Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate; end
   else Store:= nil;
   Findings:= TAstChecker.Check(Store, AArgs.Target);
@@ -18143,6 +18233,7 @@ var
   Id     : Int64        ;
   Path   : string       ;
 begin
+  if NoDbResolved(AArgs.DbPath, 'self-test-files') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   FileIds:= Store.GetAllFileIds;
@@ -18158,6 +18249,7 @@ var
   Missing: TArray<string>;
   M      : string        ;
 begin
+  if NoDbResolved(AArgs.DbPath, 'self-test-drift') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Missing:= AnalyzeLibraryDrift(AArgs.DbPath, AArgs.Roots);
   for M in Missing do Writeln('MISSING ', M);
