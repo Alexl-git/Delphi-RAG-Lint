@@ -325,6 +325,28 @@ type
       /// </remarks>
       class procedure Save(const AManifest: TIndexManifest; const APath: string); static;
 
+      /// <summary>Writes a JSON document over a hand-maintained config file:
+      /// pretty-printed, UTF-8 with NO byte-order mark, swapped into place
+      /// atomically.</summary>
+      /// <param name="APath">The file to replace.</param>
+      /// <param name="ARoot">The document. The caller keeps ownership.</param>
+      /// <remarks>EXTRACTED SO THERE IS ONE OF THESE, NOT FOUR. Save had the
+      /// only correct implementation and three copies in the IDE plugins
+      /// options pages did
+      /// <c>TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8)</c> instead --
+      /// minified onto one line, and with a BOM. One of them even carried a
+      /// comment claiming it matched this routine "byte-for-byte", which was
+      /// the reverse of the truth.
+      /// <para>The damage is silent and only shows up outside drag-lint:
+      /// TFile.ReadAllText skips a BOM on the way back in, so the tool that
+      /// wrote it never notices, while jq, git diff and the human who
+      /// maintains the file all do. On 2026-08-27 opening Tools &gt; Options and
+      /// pressing OK collapsed a 313-line manifest to a single 5 KB line.</para>
+      /// <para>Not a plain write: see Saves own comment for why the temp-file
+      /// plus MoveFileEx swap is required rather than TFile.WriteAllText or
+      /// TFile.Replace.</para></remarks>
+      class procedure WriteJsonAtomic(const APath: string; ARoot: TJSONObject); static;
+
       /// <summary>Validate the manifest and return the first human-readable error,
       /// or '' if the manifest is valid.</summary>
       /// <param name="AManifest">Manifest to validate.</param>
@@ -1208,16 +1230,26 @@ end; // function
 
 class procedure TManifestIO.Save(const AManifest: TIndexManifest; const APath: string);
 var
-  Root    : TJSONObject;
-  JsonText: string     ;
-  TmpPath : string     ;
+  Root: TJSONObject;
 begin
   Root:= ToJson(AManifest);
   try
-    JsonText:= Root.Format(2);
+    WriteJsonAtomic(APath, Root);
   finally
     Root.Free;
   end;
+end;
+
+class procedure TManifestIO.WriteJsonAtomic(const APath: string; ARoot: TJSONObject);
+var
+  JsonText: string;
+  TmpPath : string;
+begin
+  if ARoot = nil then Exit;
+  { Format(2), NOT ToJSON. This file is hand-maintained and lives in a git
+    repository; minifying it destroys both its readability and every future
+    diff of it, and no caller gains anything from the smaller bytes. }
+  JsonText:= ARoot.Format(2);
   { Atomic write. migrate-dbs calls this once per section moved -- up to 27
     times in one unattended run -- against the user's real, hand-maintained
     manifest. A plain TFile.WriteAllText TRUNCATES APath before writing a

@@ -19947,9 +19947,10 @@ function DoSelfTestManifestSaveAtomic: Integer;
 var
   M     : TIndexManifest;
   Path  : string        ;
-  Before: string        ;
-  After : string        ;
-  Raised: Boolean       ;
+  Before  : string        ;
+  After   : string        ;
+  Raised  : Boolean       ;
+  RawBytes: TBytes        ;
 begin
   Result:= 1;
   Path:= TPath.Combine(TPath.GetTempPath, 'draglint-selftest-save-atomic-' + TPath.GetGUIDFileName(False) + '.json');
@@ -19966,6 +19967,26 @@ begin
   Before:= TFile.ReadAllText(Path);
   if Pos('Sentinel', Before) = 0 then
     begin Writeln('SAVEATOMIC-FAIL: initial save did not persist'); Exit; end;
+
+  { THE FORM OF THE FILE IS PART OF THE CONTRACT, not decoration.
+    drag-lint.json is hand-maintained and lives in a git repository, so a
+    writer that minifies it or prepends a BOM damages it without losing a
+    single key -- which is exactly why it went unnoticed: TFile.ReadAllText
+    skips a BOM on the way in, so drag-lint itself sees nothing wrong while
+    jq, git diff and the person maintaining the file all do.
+
+    On 2026-08-27 three copies of the write in the IDE plugin's options
+    pages used TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8), one of
+    them commented as matching Save 'byte-for-byte'. Pressing OK in Tools >
+    Options collapsed a 313-line manifest to one 5 KB line. Nothing failed.
+    They now share TManifestIO.WriteJsonAtomic, and these two assertions are
+    what stop it drifting back. }
+  RawBytes:= TFile.ReadAllBytes(Path);
+  if (Length(RawBytes) >= 3) and (RawBytes[0] = $EF) and (RawBytes[1] = $BB) and
+     (RawBytes[2] = $BF) then
+    begin Writeln('SAVEATOMIC-FAIL: manifest was written with a UTF-8 BOM'); Exit; end;
+  if Pos(#10, Before) = 0 then
+    begin Writeln('SAVEATOMIC-FAIL: manifest was minified onto one line'); Exit; end;
 
   { Force the atomic swap to fail -- deterministically, no timing required:
     Windows refuses to replace/rename onto a read-only destination. }

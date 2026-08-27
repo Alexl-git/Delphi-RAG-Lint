@@ -192,6 +192,8 @@ uses
   DragLint.Plugin.ExeResolver
   , DRagLint.Project.Resolver
   , DragLint.Plugin.DockForm
+  
+  , DRagLint.Index.Manifest   { TManifestIO.WriteJsonAtomic -- pretty, no BOM, atomic }
   ;
 
 { Minimal .dfm resource for the BASE frame class (TDLPageFrame). TCustomFrame.Create
@@ -762,10 +764,15 @@ begin
     OldPair.Free; { RemovePair returns nil if absent; TObject(nil).Free is a no-op }
     Docs.AddPair('max_return_cases', TJSONNumber.Create(AValue));
 
-    { UTF-8 (with BOM, via TEncoding.UTF8) -- matches TManifestIO.Save
-      (DRagLint.Index.Manifest.pas) byte-for-byte so the IDE-written and
-      CLI-written manifest are encoding-consistent. }
-    TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8);
+    { THAT COMMENT USED TO SAY THIS MATCHED TManifestIO.Save BYTE-FOR-BYTE.
+      It was the reverse of the truth: Save uses Format(2) and GetBytes
+      SPECIFICALLY to avoid a BOM, and says so at length. This wrote
+      Root.ToJSON through TEncoding.UTF8 -- minified onto one line, BOM at
+      byte 0. Opening Tools > Options and pressing OK was enough: on
+      2026-08-27 it collapsed the 313-line manifest to a single 5 KB line.
+      No data was lost, which is exactly why nobody noticed sooner.
+      One writer now, in the unit that documents why. }
+    TManifestIO.WriteJsonAtomic(Path, Root);
   finally
     Root.Free;
   end; // try

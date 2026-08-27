@@ -204,6 +204,8 @@ uses
   , DragLint.Plugin.Settings
   , DRagLint.Lint.ConfigWriter
   , DragLint.Plugin.ExeResolver
+  
+  , DRagLint.Index.Manifest   { TManifestIO.WriteJsonAtomic -- pretty, no BOM, atomic }
   ;
 
 { ============================================================
@@ -1641,7 +1643,9 @@ begin
     OldPair.Free; { RemovePair returns nil if absent; TObject(nil).Free is a no-op }
     Naming.AddPair('presets', NewArr);
 
-    TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8);
+    { Pretty + no BOM + atomic swap, via the one implementation that gets it
+      right -- see TManifestIO.WriteJsonAtomic. }
+    TManifestIO.WriteJsonAtomic(Path, Root);
   finally
     Root.Free;
   end; // try
@@ -1706,7 +1710,9 @@ begin
     OldPair.Free; { RemovePair returns nil if absent; TObject(nil).Free is a no-op }
     Naming.AddPair('presets', NewArr);
 
-    TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8);
+    { Pretty + no BOM + atomic swap, via the one implementation that gets it
+      right -- see TManifestIO.WriteJsonAtomic. }
+    TManifestIO.WriteJsonAtomic(Path, Root);
   finally
     Root.Free;
   end; // try
