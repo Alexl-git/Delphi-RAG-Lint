@@ -2,7 +2,7 @@
   "name": "drag-lint",
   "displayName": "drag-lint (Delphi)",
   "description": "Delphi/Pascal language server backed by the drag-lint index: hover, go-to-definition, find-references, workspace symbols, completion and signature help.",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "publisher": "drag-lint",
   "license": "SEE LICENSE IN LICENSE",
   "engines": { "vscode": "^1.75.0" },
@@ -14,6 +14,11 @@
       {
         "command": "dragLint.restartServer",
         "title": "Restart Language Server",
+        "category": "drag-lint"
+      },
+      {
+        "command": "dragLint.updateEngine",
+        "title": "Update Engine Copy Now",
         "category": "drag-lint"
       }
     ],
@@ -28,10 +33,26 @@
     "configuration": {
       "title": "drag-lint",
       "properties": {
-        "dragLint.serverPath": {
+        "dragLint.engineSource": {
           "type": "string",
           "default": "C:\\Projects\\Delphi-RAG-lint\\third_party\\dll-win64\\drag-lint.exe",
-          "markdownDescription": "Path to `drag-lint.exe`. Defaults to the **same deployed binary the Delphi IDE loads**, so redeploying the engine updates VS Code with no extension change and the two can never disagree about which build answered."
+          "markdownDescription": "The deployed engine this extension MIRRORS FROM -- the same binary the Delphi IDE loads. VS Code does not run it directly (see `#dragLint.engineUpdate#`); it copies it, because a running language server holds an execute lock on its own image, and that lock is what makes `build_draglint_win64.bat` fail to stage a fresh build."
+        },
+        "dragLint.engineUpdate": {
+          "type": "string",
+          "enum": ["onActivate", "manual", "off"],
+          "default": "onActivate",
+          "markdownEnumDescriptions": [
+            "Refresh the private copy when the extension activates (VS Code start, window reload, or the first Pascal file opened) and NEVER mid-session. This is what keeps a live VS Code session from blocking an engine rebuild.",
+            "Never refresh automatically. Run **drag-lint: Update Engine Copy Now** when you want it.",
+            "Do not use a private copy at all -- run `#dragLint.engineSource#` directly. Restores the pre-1.4 behaviour, in which VS Code and the Delphi IDE always run the identical file AND a live session blocks restaging."
+          ],
+          "markdownDescription": "When the private engine copy is refreshed from `#dragLint.engineSource#`. The copy exists so VS Code can sit a few builds behind on purpose: the Delphi IDE keeps the current engine, and rebuilds are never blocked."
+        },
+        "dragLint.serverPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Explicit override: an absolute path to a `drag-lint.exe` to run AS-IS. When set, no copy is made and `#dragLint.engineSource#` / `#dragLint.engineUpdate#` are ignored. Leave EMPTY (the default) to use the managed private copy. **If you point this at the deployed path, a live VS Code session will lock that binary and engine rebuilds will fail to stage.**"
         },
         "dragLint.databases": {
           "type": "array",

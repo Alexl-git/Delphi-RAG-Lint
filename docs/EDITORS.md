@@ -56,16 +56,57 @@ Restart VS Code, open any `.pas`, and hover a symbol.
 
 | setting | default | meaning |
 |---|---|---|
-| `dragLint.serverPath` | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` | Path to `drag-lint.exe`. |
+| `dragLint.engineSource` | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` | The deployed engine the extension **mirrors from** -- the same binary the Delphi IDE loads. VS Code does not run it directly. |
+| `dragLint.engineUpdate` | `onActivate` | When the private copy is refreshed: `onActivate` (VS Code start / window reload / first Pascal file), `manual` (only the command), or `off` (run the deployed engine directly). |
+| `dragLint.serverPath` | `""` (empty) | Explicit override -- run this exact exe, make no copy. Leave empty to use the managed copy. |
 | `dragLint.databases` | `[]` (empty) | Optional explicit `--db` paths. |
 | `dragLint.trace.server` | `off` | Log the LSP conversation to the *drag-lint* output channel. |
 
-**Both defaults are deliberate.**
+**The defaults are deliberate.**
 
-*The server path points at the same deployed binary the Delphi IDE loads.*
-Redeploying the engine therefore updates VS Code with no extension change, and
-the editor and the IDE can never disagree about which build answered a query.
-Point it elsewhere only if you keep a separate build.
+*VS Code runs a PRIVATE COPY of the engine; the Delphi IDE runs the deployed
+one.* This is the one place the two editors are deliberately NOT identical, and
+the reason is a Windows fact: a running process holds an execute lock on its own
+image. The VS Code language server **is** `drag-lint.exe`, so while VS Code is
+open it locks whatever binary it was started from.
+
+Until extension v1.4 that binary was the deployed one, shared with the IDE --
+and the result was that an idle VS Code window made
+`build\build_draglint_win64.bat` fail:
+
+```
+ERROR: failed to stage C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe
+```
+
+The compile succeeded; only the deploy failed. Killing the server did not help,
+because VS Code respawns it within a second and the build lost the race again.
+
+So the extension now mirrors the engine into its own `globalStorage` folder and
+runs that. The consequences are worth stating plainly:
+
+* **the Delphi IDE always has the current engine** -- it is the one that must,
+  and nothing about it changed;
+* **VS Code can sit several builds behind, on purpose.** The copy is refreshed
+  only when the extension activates: VS Code start, window reload, or the first
+  Pascal file opened. It is never swapped underneath a live session;
+* **engine rebuilds are no longer blocked** by a VS Code window;
+* run **drag-lint: Update Engine Copy Now** from the command palette when you
+  do want the copy current immediately. It stops the server, re-copies, and
+  restarts.
+
+The copy is the exe plus what the language server actually needs beside it:
+`drag-lint.json` (the DB manifest -- every path in it is absolute, so a
+relocated copy resolves to exactly the same databases), the three tree-sitter
+DLLs, and `rules\`. The BPL, `drag_lint_graph.exe` and `ConvRulesEditor.exe`
+are not copied; the server never opens them.
+
+*Setting `dragLint.serverPath`* bypasses all of this and runs the exact path you
+give, with no copy. If you point it at the deployed binary you get the pre-v1.4
+behaviour back -- including the blocked builds.
+
+*The Delphi IDE still locks the deployed engine while it is open.* That is by
+design, and it is why the standing rule is to build with the IDE closed. Only
+the VS Code half of the problem is solved here.
 
 *Leaving `databases` empty is the recommended setup.* drag-lint then resolves
 databases from the `drag-lint.json` sitting beside the exe -- the same manifest
