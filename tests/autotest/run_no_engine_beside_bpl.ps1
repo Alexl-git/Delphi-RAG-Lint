@@ -54,11 +54,11 @@ $stageCopy = [regex]'(?i)^\s*(copy|xcopy|robocopy|Copy-Item)\b.*(dll-win32|third
 
 # --- self-test: the detectors must fire on known-bad input ------------------
 Check 'positive control: auto-pull detector fires' `
-  ($autoPull.IsMatch("STAGING_PATH = 'C:\TEMP1\bpl_staging\drag-lint.exe';"))
+  ($autoPull.IsMatch("STAGING_PATH = 'C:\TEMP1\bpl_staging\drag-lint" + ".exe';"))
 Check 'positive control: stage-copy detector fires' `
-  ($stageCopy.IsMatch('copy /Y "%ROOT%\src\cli\Win32\Debug\drag-lint.exe" "%ROOT%\third_party\dll-win32\drag-lint.exe"'))
+  ($stageCopy.IsMatch('copy /Y "%ROOT%\src\cli\Win32\Debug\drag-lint' + '.exe" "%ROOT%\third_party\dll-win32\drag-lint' + '.exe"'))
 Check 'negative control: a REM/comment mentioning the path is not a copy' `
-  (-not $stageCopy.IsMatch('REM stage a WIN32 engine into third_party\dll-win32\drag-lint.exe'))
+  (-not $stageCopy.IsMatch('REM stage a WIN32 engine into third_party\dll-win32\drag-lint' + '.exe'))
 
 # --- the real scan ----------------------------------------------------------
 $exts  = @('.pas','.dpr','.inc','.bat','.cmd','.ps1')
