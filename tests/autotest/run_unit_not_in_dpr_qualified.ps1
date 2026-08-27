@@ -53,7 +53,35 @@ function Write-Ascii([string]$Path, [string]$Body) {
 #                 (same last segment as App.Drift -- the collision)
 #   Vcl.Legacy -- in the .dproj as a dotted path, named UNQUALIFIED in the .dpr
 #                 -> must NOT be reported (FP-9)
-foreach ($u in @('App.Drift','Lib.Drift','Vcl.Legacy')) {
+# Two more, for the THIRD direction (in the closure, in NEITHER project file):
+#   Hidden.Helper -- reached only because App.Drift uses it. In no .dpr, in no
+#                    .dproj -> MUST be reported. Without this the direction
+#                    would ship passing by never firing.
+#   Loose.Orphan  -- a .pas sitting in the folder that nothing uses, so it is
+#                    NOT in the compile closure -> must NOT be reported. This is
+#                    what pins the direction to the CLOSURE rather than to "every
+#                    .pas next to the project".
+Write-Ascii (Join-Path $WorkDir 'Hidden.Helper.pas') @'
+unit Hidden.Helper;
+
+interface
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $WorkDir 'Loose.Orphan.pas') @'
+unit Loose.Orphan;
+
+interface
+
+implementation
+
+end.
+'@
+
+foreach ($u in @('Lib.Drift','Vcl.Legacy')) {
   Write-Ascii (Join-Path $WorkDir ("{0}.pas" -f $u)) @"
 unit $u;
 
@@ -64,6 +92,19 @@ implementation
 end.
 "@
 }
+
+Write-Ascii (Join-Path $WorkDir 'App.Drift.pas') @'
+unit App.Drift;
+
+interface
+
+uses
+  Hidden.Helper;
+
+implementation
+
+end.
+'@
 
 Write-Ascii (Join-Path $WorkDir 'P.dpr') @'
 program P;
@@ -110,7 +151,19 @@ Check 'FP-9: an unqualified .dpr name still matches a qualified reference' `
 # `Vcl.Legacy`, so the FP-9 assertion above cannot see a regression there. Only
 # ONE finding is correct for this fixture, and that pins both directions at once.
 $found = @([regex]::Matches($out, 'unit-not-in-dpr:')).Count
-Check 'EXACTLY one finding -- neither direction gained a false positive' ($found -eq 1) "count=$found; out=$out"
+# THIRD DIRECTION (2026-08-26). Hidden.Helper is reached only because App.Drift
+# uses it, and is in neither project file -- structurally invisible to the two
+# set-difference directions above.
+Check 'a unit in the closure but in NEITHER project file IS reported' `
+  ($out -match 'Hidden\.Helper[\s\S]{0,200}compile closure') "out=$out"
+# The control that pins it to the CLOSURE: Loose.Orphan is a .pas in the same
+# folder that nothing uses. A direction implemented as "every .pas beside the
+# project" would report it.
+Check 'a loose .pas NOT in the closure is NOT reported' `
+  (-not ($out -match 'Loose\.Orphan')) "out=$out"
+# The pinned count moves 1 -> 2 CONSCIOUSLY: Lib.Drift (direction 1) plus
+# Hidden.Helper (direction 3). Any third finding is a false positive.
+Check 'EXACTLY two findings -- no direction gained a false positive' ($found -eq 2) "count=$found; out=$out"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

@@ -50,7 +50,11 @@ type
       /// <seealso cref="DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckUnitsInDpr( const ADprojPath: string): TArray<TLintFinding>;
+      /// <param name="AClosureFiles">The project's compile-closure .pas files,
+      /// already scoped to its own roots. Optional: when empty the third
+      /// direction below is SKIPPED rather than half-answered.</param>
+      class function CheckUnitsInDpr( const ADprojPath: string;
+                                      const AClosureFiles: TArray<string> = nil): TArray<TLintFinding>;
       /// <summary>Flags every `uses X` whose unit X resolves to no known unit
       /// (project member / platform library / standard alias / RTL namespace).
       /// Findings attach to the `uses` token line on the using file. No .dproj
@@ -83,7 +87,25 @@ uses
   FireDAC.Comp.Client
   ;
 
-class function TProjectChecks.CheckUnitsInDpr( const ADprojPath: string): TArray<TLintFinding>;
+{ The scoped closure list arrives LOWERCASED, so a unit reported from it read as
+  "hidden.helper" rather than "Hidden.Helper" -- and the advice is "add this to
+  your project files", where the name is copied by hand. FindFirst returns the
+  name as the filesystem holds it, which is the only authority on its case. }
+function RealCasedFileName(const APath: string): string;
+var
+  SR: TSearchRec;
+begin
+  Result:= ExtractFileName(APath);
+  if FindFirst(APath, faAnyFile, SR) = 0 then
+  try
+    if SR.Name <> '' then Result:= SR.Name;
+  finally
+    FindClose(SR);
+  end;
+end;
+
+class function TProjectChecks.CheckUnitsInDpr( const ADprojPath: string;
+                                               const AClosureFiles: TArray<string>): TArray<TLintFinding>;
 var
   DCCRefs    : TArray<string>             ;
   ProgramUses: TArray<string>             ;
@@ -220,6 +242,58 @@ begin
         Findings.Add(Finding);
       end; // if
     end; // for
+
+    { THIRD DIRECTION: in the COMPILE CLOSURE but in NEITHER project file.
+
+      The two loops above are set differences between the .dproj DCCReference
+      list and the .dpr uses clause. A unit reached only TRANSITIVELY -- unit A
+      is listed, A uses B, B is listed nowhere -- is in neither input set, so it
+      is not merely unreported: it is structurally invisible to both directions.
+
+      Measured on this repo 2026-08-26: DRagLint.Project.Coherence and
+      DRagLint.Project.Members are both in the live compile closure and both
+      indexed, and appear 0 times in drag-lint.dpr and 0 times in
+      drag-lint.dproj. Such a unit builds today via the search path, but the IDE
+      does not track it as a build input, it is absent from the project view,
+      and nothing carries it if the search path changes.
+
+      SCOPE COMES FROM THE CALLER, deliberately. AClosureFiles is the scoped
+      project file list the caller already computed (own roots honoured,
+      exclude_paths applied). Resolving the closure here would mean src\lint
+      depending on src\index -- a new cycle in the very tool that reports them
+      -- and would also re-derive a scope the caller has already decided. When
+      the list is empty this direction is SKIPPED rather than half-answered:
+      silence beats a wrong answer, and a project whose closure could not be
+      resolved must not have every one of its units reported as missing. }
+    if Length(AClosureFiles) > 0 then
+    begin
+      var ProgBase: string := '';
+      if ProgramPath <> '' then ProgBase:= TPath.GetFileNameWithoutExtension(ProgramPath);
+      for var ClosureFile: string in AClosureFiles do
+      begin
+        if not SameText(ExtractFileExt(ClosureFile), '.pas') then Continue;
+        var UnitBase: string := TPath.GetFileNameWithoutExtension(RealCasedFileName(ClosureFile));
+        if (ProgBase <> '') and SameText(UnitBase, ProgBase) then Continue;
+        if DCCSet .ContainsKey(NormUnitQualified(UnitBase)) then Continue;
+        if UsesSet.ContainsKey(NormUnitQualified(UnitBase)) then Continue;
+        if StemSatisfies(NormUnit(UnitBase), DCCStemSet ) then Continue;
+        if StemSatisfies(NormUnit(UnitBase), UsesStemSet) then Continue;
+        Finding:= Default(TLintFinding);
+        Finding.RuleId  := 'unit-not-in-dpr';
+        Finding.Severity:= 'warning';
+        Finding.Message := Format(
+          'Unit "%s" is in the compile closure but appears in NEITHER %s nor ' +
+          'the .dproj DCCReference list. It builds via the search path today, ' +
+          'but the IDE does not track it as a build input and it is invisible ' +
+          'in the project view. Add it to both.',
+          [UnitBase, ExtractFileName(ProgramPath)]);
+        Finding.FilePath := TPath.Combine(ExtractFilePath(ClosureFile),
+                                          RealCasedFileName(ClosureFile));
+        Finding.StartLine:= 1;
+        Finding.StartCol := 1;
+        Findings.Add(Finding);
+      end; // for
+    end; // if
 
     Result:= Findings.ToArray;
   finally

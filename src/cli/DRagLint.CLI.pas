@@ -702,6 +702,9 @@ end;
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
+{ Forward: DoLint needs the project's scoped closure for unit-not-in-dpr's third
+  direction, and BuildProjectFileScope is defined some 3,000 lines below it. }
+function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>; forward;
 function ResolveLibraryDb  (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
 function MakeSiblingStoreResolver(const AArgs: TArgs;
@@ -8120,7 +8123,27 @@ begin
   begin
     if (AArgs.Rule = '') or (AArgs.Rule = 'unit-not-in-dpr') then
     begin
-      ProjFindings:= DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
+      { Give the check the project's own scoped closure so its THIRD direction
+        (in the closure, in neither project file) can run here too. Without
+        this, `lint --project` and `lint-all --project` would answer the same
+        question differently -- and the guard for the rule drives THIS verb, so
+        the direction would ship untested. }
+      var ScopeDict: TDictionary<string, Boolean> := nil;
+      var ClosureList: TArray<string> := nil;
+      try
+        ScopeDict:= BuildProjectFileScope(AArgs);
+        if ScopeDict <> nil then
+          for var ScopedFile: string in ScopeDict.Keys do ClosureList:= ClosureList + [ScopedFile];
+      except
+        { A closure that cannot be resolved must not take the whole verb down;
+          the direction simply does not run. }
+        ClosureList:= nil;
+      end;
+      try
+        ProjFindings:= DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, ClosureList);
+      finally
+        ScopeDict.Free;
+      end;
       Findings:= Findings + ProjFindings;
     end;
   end;
@@ -11670,7 +11693,7 @@ begin
   if LayersCfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
   Prof.Phase('unit-not-in-dpr');
-  if AArgs.ProjectPath <> '' then Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath);
+  if AArgs.ProjectPath <> '' then Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, FilePaths);
   { Used-unit resolvability (used-unit-not-resolvable) }
   Prof.Phase('used-unit-resolvable');
   Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
