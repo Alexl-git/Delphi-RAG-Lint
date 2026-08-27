@@ -11847,6 +11847,38 @@ begin
         [Length(ASurv), EC, WC, IC, HC, Length(FilePaths)]);
       OL:= TStringBuilder.Create;
       try
+        { CIRCULAR USES SECTION, at the TOP of the report (owner request).
+
+          The finding line alone was not an answer to "does this project have
+          import cycles?" -- absence of a line is indistinguishable from the rule
+          not having run, and a reader who does not already know the rule exists
+          cannot tell the difference. So the section states the outcome
+          explicitly, including the negative one.
+
+          THE DISABLED BRANCH IS THE POINT. Printing "none detected" when the
+          rule was switched off in config would be the exact failure this
+          section exists to prevent -- a check whose absence reads as success.
+          The report says NOT CHECKED, and says it is not the same as none.
+
+          Cycle findings deliberately REMAIN in ASurv and are listed again
+          below: the section owns the narrative, the finding line owns the
+          tooling contract (--fail-on, counts, machine-readable output). Both
+          are rendered from the same post-suppression survivors, so the two
+          surfaces reconcile by construction. }
+        var CycF: TArray<TLintFinding> := nil;
+        for FF in ASurv do
+          if SameText(FF.RuleId, 'circular-uses') then CycF:= CycF + [FF];
+        OL.AppendLine('circular unit dependencies');
+        OL.AppendLine('--------------------------');
+        if not LoadLintConfig(AArgs).ShouldKeep('circular-uses', False) then
+          OL.AppendLine('  NOT CHECKED -- circular-uses is disabled by config. This is NOT "none found".')
+        else if Length(CycF) = 0 then
+          OL.AppendLine(Format('  none detected across %d file(s) scanned.', [Length(FilePaths)]))
+        else
+          for FF in CycF do
+            OL.AppendLine(Format('  %s:%d  %s', [FF.FilePath, FF.StartLine, FF.Message]));
+        OL.AppendLine('');
+
         for FF in ASurv do OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
         OL.AppendLine(Summary);
         { Fix 1 (2026-08-11 review): the skip-block ("N file(s) outside the
