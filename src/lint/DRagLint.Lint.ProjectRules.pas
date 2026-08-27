@@ -77,8 +77,13 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <param name="ALibraryStore">The platform LIBRARY index, or nil. Needed by
+    /// unused-unit-in-uses: a project store cannot see System.IniFiles, so
+    /// without this the rule's own "is the unit indexed?" gate answered False
+    /// for every RTL/VCL import and the rule reported ZERO, everywhere.</param>
     class function Run(const AStore: ISymbolStore; const ARuleId: string = '';
-                       const ASiblingStore: TSiblingStoreResolver = nil): TArray<TLintFinding>;
+                       const ASiblingStore: TSiblingStoreResolver = nil;
+                       const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
     /// <summary>Flags forbidden cross-layer 'uses' edges per a layer-config JSON file.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
     /// <param name="AConfigPath">Path to a layers JSON file (see remarks); missing/invalid -> no findings.</param>
@@ -116,6 +121,27 @@ const
     'designintf', 'designeditors'
   );
 
+{ REGISTRATION FAMILIES, matched by PREFIX rather than by name.
+
+  A unit whose whole purpose is its initialization section exports nothing you
+  would ever reference, so "no symbols from it are referenced" is TRUE of it and
+  says nothing. Removing it is what breaks the program.
+
+  Measured on DataCopy 2026-08-26, when unused-unit-in-uses first produced
+  findings at all: 7 of 79 were exactly this -- dxSkinWXI (a DevExpress skin,
+  which registers a painter), ExceptionLog7 and EExceptionManager (EurekaLog's
+  injected block, which installs the exception hook). All three are correct to
+  list and wrong to report.
+
+  A prefix list, not an exact list: dxSkin* alone is dozens of units and every
+  DevExpress release adds more, so enumerating them is a losing game. }
+  KSideEffectPrefixes: array[0..6] of string = (
+    'dxskin',        { DevExpress skins -- register a painter, export nothing }
+    'vectorskin',    { the same, vector family }
+    'exceptionlog',  { EurekaLog: installs the hook in initialization }
+    'ememleaks', 'eresleaks', 'eappvcl', 'eexceptionmanager'
+  );
+
 function IsSideEffectUnit(const AUnitName: string): Boolean;
 var
   Low: string;
@@ -124,6 +150,8 @@ begin
   Low:= LowerCase(AUnitName);
   for S in KSideEffectUnits do
     if Low = S then Exit(True);
+  for S in KSideEffectPrefixes do
+    if Low.StartsWith(S) then Exit(True);
   Result:= False;
 end;
 
@@ -753,7 +781,7 @@ begin
 end; // function
 
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
-  const ASiblingStore: TSiblingStoreResolver): TArray<TLintFinding>;
+  const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore): TArray<TLintFinding>;
 var
   Findings      : TList<TLintFinding>         ;
   FileIds       : TArray<Int64>               ;
@@ -780,6 +808,9 @@ var
   StemsOfName   : TDictionary<string, TArray<string>>;
   PathOfFile    : TDictionary<Int64, string>        ;
   UnitIndexed   : TDictionary<string, Boolean>      ;
+  { unused-unit-in-uses: unit name -> lowercase set of the names it EXPORTS
+    (its interface-section children). Owns its values. }
+  ExportsOfUnit : TObjectDictionary<string, TDictionary<string, Boolean>>;
   { Per-rule cost attribution, printed only under DRAGLINT_PROFILE. `lint-all`'s
     phase profiler can say "project-rules cost N seconds" but not WHICH of the
     seven rules in this pass spent it, and the answer decided the fix: on YADF,
@@ -896,6 +927,47 @@ var
     UnitIndexed.Add(AUnitName, Result);
   end;
 
+  { The EXPORT SURFACE of AUnitName: the lowercase names of its interface-section
+    children, from whichever store holds the unit -- project first, then library.
+
+    This replaces a name-stem match that asked "does this file reference ANY
+    symbol declared in a file whose stem matches the unit?". That question
+    admits implementation-section locals, so a loop counter named I inside
+    System.IniFiles made every file that uses a variable I "reference" it. Only
+    what a unit EXPORTS can be imported, so only that can keep an import alive.
+
+    parent_id is never NULL in this schema -- every symbol roots at its unit --
+    so "top level" means the parent IS the unit symbol, which is what
+    FindAllChildSymbols(U.Id) answers.
+
+    An EMPTY result means "not found in either store", and the caller treats
+    that as DO NOT REPORT. Silence about a unit nothing can see beats guessing. }
+  function ExportNamesFor(const AUnitName: string): TDictionary<string, Boolean>;
+    procedure CollectFrom(const AFrom: ISymbolStore; ATo: TDictionary<string, Boolean>);
+    var
+      U : TSymbol;
+      Ch: TSymbol;
+    begin
+      if AFrom = nil then Exit;
+      for U in AFrom.FindSymbolsByExactName(AUnitName) do
+      begin
+        if U.Kind <> skUnit then Continue;
+        for Ch in AFrom.FindAllChildSymbols(U.Id) do
+          if SameText(Ch.Section, 'interface') and (Ch.Name <> '') then
+            ATo.AddOrSetValue(LowerCase(Ch.Name), True);
+        if ATo.Count > 0 then Break;   { first store that actually has it wins }
+      end;
+    end;
+  var
+    Cached: TDictionary<string, Boolean>;
+  begin
+    if ExportsOfUnit.TryGetValue(AUnitName, Cached) then Exit(Cached);
+    Result:= TDictionary<string, Boolean>.Create;
+    CollectFrom(AStore, Result);
+    if Result.Count = 0 then CollectFrom(ALibraryStore, Result);
+    ExportsOfUnit.Add(AUnitName, Result);
+  end;
+
   procedure Add(const AId, ASeverity, AMsg: string; const ASym: TSymbol);
   var
     F: TLintFinding;
@@ -919,6 +991,7 @@ begin
   StemsOfName:= TDictionary<string, TArray<string>>.Create;
   PathOfFile := TDictionary<Int64, string>        .Create;
   UnitIndexed:= TDictionary<string, Boolean>      .Create;
+  ExportsOfUnit:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
@@ -980,12 +1053,14 @@ begin
             This correctly handles refs where SymbolId is 0 (unresolved). }
           RefdUnitStems:= TDictionary<string, Boolean>.Create;
           try
+            { NAMES referenced by this file, lowercased -- not unit stems.
+              The receiver is included because `IniFile.ReadString` references
+              TIniFile through the receiver's type, not through NameText. }
             Refs:= AStore.GetReferencesFromFile(Fid);
             for Ref in Refs do
             begin
-              if Ref.NameText = '' then Continue;
-              for var RefStem: string in StemsFor(Ref.NameText) do
-                RefdUnitStems.AddOrSetValue(RefStem, True);
+              if Ref.NameText     <> '' then RefdUnitStems.AddOrSetValue(LowerCase(Ref.NameText    ), True);
+              if Ref.ReceiverText <> '' then RefdUnitStems.AddOrSetValue(LowerCase(Ref.ReceiverText), True);
             end;
             { Check each used unit: flag if its stem is absent from the ref set. }
             for U in UsesList do
@@ -996,17 +1071,21 @@ begin
               if IsSideEffectUnit(U.UnitName) then Continue;
               { Skip known built-ins never in the index. }
               if SameText(U.UnitName, 'System') or SameText(U.UnitName, 'SysInit') then Continue;
-              { Derive the stem -- last dotted segment, lowercase (e.g. 'System.SysUtils' -> 'sysutils'
-                but also try full lowercase name so qualified names match). }
-              UnitStem:= LowerCase(U.UnitName);
-              { Conservative: only flag when the unit IS in the index (has a skUnit symbol). }
-              if not UnitIsIndexed(U.UnitName) then Continue;
-              { Also build the plain stem (last segment after the dot) for matching. }
-              var DotPos: Integer:= LastDelimiter('.', UnitStem);
-              var PlainStem: string:= UnitStem;
-              if DotPos > 0 then PlainStem:= Copy(UnitStem, DotPos + 1, MaxInt);
-              { Flag if neither the full name nor the plain stem appear in the ref set. }
-              if (not RefdUnitStems.ContainsKey(UnitStem)) and (not RefdUnitStems.ContainsKey(PlainStem)) then
+              { WHAT THE UNIT EXPORTS is the only thing an import can keep alive.
+                Conservative in the same way as before -- an empty export set
+                means the unit is in NEITHER the project nor the library index,
+                and an unseen unit is never reported. That gate is load-bearing:
+                removing it yields 208 findings on DataCopy, nearly all wrong. }
+              var UnitExports: TDictionary<string, Boolean>:= ExportNamesFor(U.UnitName);
+              if UnitExports.Count = 0 then Continue;
+              var UsesAnyExport: Boolean:= False;
+              for var ExportName: string in UnitExports.Keys do
+                if RefdUnitStems.ContainsKey(ExportName) then
+                begin
+                  UsesAnyExport:= True;
+                  Break;
+                end;
+              if not UsesAnyExport then
               begin
                 UF:= Default(TLintFinding);
                 UF.RuleId  := 'unused-unit-in-uses';
@@ -1219,6 +1298,7 @@ begin
     RefdNames  .Free;
     RefdIds    .Free;
     UnitIndexed.Free;
+    ExportsOfUnit.Free;
     PathOfFile .Free;
     StemsOfName.Free;
     Findings   .Free;

@@ -11661,7 +11661,12 @@ begin
   var SibOwned: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
   try
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
-      Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned));
+      Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore);
+    { LibStore is the platform library index, already open above for the
+      ownership/DCU checks. unused-unit-in-uses needs it because a PROJECT
+      store cannot see System.IniFiles: without it the rule's own
+      is-it-indexed gate answered False for every RTL/VCL import, and the
+      rule reported ZERO on every project it has ever run on. }
   finally
     SibKeep .Free;
     SibOwned.Free;
