@@ -105,6 +105,12 @@ You can drive it two ways, both backed by the same engine:
 >   counts (read-only). See [docs/INDEX-SCHEMA.md](INDEX-SCHEMA.md) for the full
 >   index reference and the project-vs-external boundary rule if you want to
 >   consume the SQLite index directly.
+>   With `--format json` each column may also carry `description` and an
+>   enumerated `values` list where the vocabulary is closed -- `refs.kind`
+>   is exactly {read, call, member-access, write, type_use}, and
+>   `symbols.section` has THREE values, one of which is the EMPTY string.
+>   Read those before writing a query: table names are discoverable,
+>   semantics are not.
 > - **Introspect the engine itself:** `drag-lint info [--json]` -- engine
 >   self-info: version, build date, tree-sitter versions, capabilities (FTS5,
 >   CLI verb count), exe path, platform. Read-only, no DB. This is what the IDE

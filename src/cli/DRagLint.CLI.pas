@@ -9285,6 +9285,72 @@ var
   RowCount    : Int64         ;
   OutStr      : string        ;
 
+  { WHAT A COLUMN MEANS, and what it is allowed to contain.
+
+    Agents rarely invent TABLE names -- those are discoverable. They invent
+    SEMANTICS: that refs.kind might be 'reference', that symbols.section is
+    always one of two things, that a parent_id of 0 means "no parent". Every
+    entry below was verified against a live index on 2026-08-26 with
+    SELECT DISTINCT, not recalled.
+
+    Curated rather than derived on the fly: deriving would mean a DISTINCT scan
+    per TEXT column, and `schema` already counts every row in every table --
+    on a 2 GB index that is the difference between a diagnostic and a wait. }
+  function ColumnSemantics(const ATable, AColumn: string;
+                           out ADesc: string; out AValues: string): Boolean;
+  var
+    Key: string;
+  begin
+    ADesc:= ''; AValues:= '';
+    Key:= LowerCase(ATable) + '.' + LowerCase(AColumn);
+
+    if Key = 'refs.kind' then
+    begin
+      ADesc  := 'How the name is used at this site.';
+      AValues:= 'call,member-access,read,type_use,write';
+    end
+    else if Key = 'symbols.kind' then
+    begin
+      ADesc  := 'Declaration kind.';
+      AValues:= 'class,const,constructor,destructor,enum,enum_value,field,'
+              + 'finalization,function,initialization,interface,local_var,'
+              + 'method,param,procedure,property,record,type,unit,var';
+    end
+    else if Key = 'symbols.section' then
+    begin
+      ADesc  := 'Which part of the unit the declaration sits in. The EMPTY '
+              + 'string is a real third value -- it is what the unit symbol '
+              + 'itself and other non-sectioned rows carry, so a filter of '
+              + '"interface" silently drops them.';
+      AValues:= ',implementation,interface';
+    end
+    else if Key = 'call_edges.confidence' then
+    begin
+      ADesc  := 'How firmly the call site was bound to its target. '
+              + '"ambiguous" means several overloads or receivers matched.';
+      AValues:= 'ambiguous,certain';
+    end
+    else if Key = 'symbols.parent_id' then
+      ADesc:= 'NEVER NULL and never 0 in this schema: every symbol roots at '
+            + 'its unit. "Top level" therefore means parent_id IS the unit '
+            + 'symbol id, NOT that the parent is absent.'
+    else if Key = 'files.mtime_unix' then
+      ADesc:= 'Source file mtime as stored at index time. Compared against '
+            + 'the file on disk to decide index freshness.'
+    else if Key = 'files.last_compiled_unix' then
+      ADesc:= 'When a COMPILE sweep last ran for this file -- written only by '
+            + 'that sweep, never by indexing. A full reindex therefore leaves '
+            + 'every file compile-stale by definition.'
+    else if Key = 'refs.name_text' then
+      ADesc:= 'The identifier as written at the use site. For a generic this '
+            + 'carries the type arguments, e.g. TComparer<TFoo>.'
+    else if Key = 'refs.receiver_text' then
+      ADesc:= 'The receiver expression, when the reference is qualified '
+            + '(the "A" of A.B). Empty for a bare name.';
+
+    Result:= (ADesc <> '') or (AValues <> '');
+  end;
+
   function IsSafeIdent(const AName: string): Boolean;
   var
     Ch: Char;
@@ -9401,6 +9467,17 @@ begin
               JCol:= TJSONObject.Create;
               JCol.AddPair('name', QCols.FieldByName('name').AsString);
               JCol.AddPair('type', QCols.FieldByName('type').AsString);
+              var CDesc, CVals: string;
+              if ColumnSemantics(T, QCols.FieldByName('name').AsString, CDesc, CVals) then
+              begin
+                if CDesc <> '' then JCol.AddPair('description', CDesc);
+                if CVals <> '' then
+                begin
+                  var JVals: TJSONArray:= TJSONArray.Create;
+                  for var V: string in CVals.Split([',']) do JVals.Add(V);
+                  JCol.AddPair('values', JVals);
+                end;
+              end;
               JCols.AddElement(JCol);
               QCols.Next;
             end;
