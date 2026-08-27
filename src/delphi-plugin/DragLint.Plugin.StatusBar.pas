@@ -230,6 +230,28 @@ begin
   else
     FDepthLbl.Caption:= '';
   FCancel.Enabled:= AState.QueueDepth > 0;
+
+  { PAINT NOW, DO NOT MERELY INVALIDATE.
+
+    Assigning TLabel.Caption invalidates the control and leaves the actual
+    drawing to the next pass of the message loop. That is fine for the job
+    queue, whose state changes on a timer while the IDE is idle. It is USELESS
+    for the hover note, which is the case this strip's note mechanism exists
+    for: DragLint.Plugin.HoverTracker sets the note and then BLOCKS THE MAIN
+    THREAD in the hover request (its own comment: "all on the main thread while
+    a tooltip was trying to appear"), then clears the note as soon as the answer
+    arrives. Between the set and the clear the message loop never runs, so the
+    invalidation is never serviced and the caption is painted neither time.
+
+    Reported by the owner as "I never saw this message ever" -- which was
+    exactly right, and had been true since the note was added on 2026-08-19.
+    The logic was correct the whole time; the pixels never happened.
+
+    Update sends WM_PAINT straight to the control rather than posting it, so
+    the note is on screen BEFORE the caller blocks. Cheap, and idempotent when
+    nothing is invalid. }
+  FStateLbl.Update;
+  FDepthLbl.Update;
 end;
 
 { `initialization` is REQUIRED here even though it is empty: Delphi rejects a
