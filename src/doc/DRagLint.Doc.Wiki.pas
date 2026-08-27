@@ -58,37 +58,6 @@ const
   WIKI_MARK = 'dl:wiki';
 
 type
-  /// <summary>One concept topic parsed out of one symbol's doc comment.</summary>
-  /// <remarks>A record, not a class: topics are produced in small arrays, read
-  /// once and discarded, and every consumer so far wants value semantics.</remarks>
-  TWikiTopic = record
-    /// <summary>The human name from the header line, verbatim after trimming.
-    /// Empty means a malformed `dl:wiki` line with no name -- kept rather than
-    /// dropped so `wiki --check` can REPORT it. A silently ignored header is
-    /// indistinguishable from a topic nobody wrote.</summary>
-    Name      : string        ;
-    Aliases   : TArray<string>;
-    /// <summary>Bare or qualified identifiers naming the other participants of
-    /// a multi-symbol concept. Unresolved here; `wiki --check` resolves them.</summary>
-    SeeCode   : TArray<string>;
-    /// <summary>The prose, lines joined with the platform line break. XML-only
-    /// lines and anything between the engine's AUTO_BEGIN/AUTO_END fences are
-    /// excluded.</summary>
-    Body      : string        ;
-    /// <summary>The symbol whose doc comment carried the topic. This is the
-    /// IMPLICIT SeeCode entry -- the block's own location is a code location,
-    /// so a single-owner topic needs no SeeCode line at all.</summary>
-    OwnerQName: string        ;
-    OwnerKind : string        ;
-    FilePath  : string        ;
-    /// <summary>1-based file line of the `dl:wiki` header itself, not of the
-    /// comment. This is what the hover indicator navigates to (ruling R3).</summary>
-    HeaderLine: Integer       ;
-    /// <summary>Which index answered. Printed when the same alias resolves in
-    /// more than one database, so the reader can tell them apart.</summary>
-    DbPath    : string        ;
-  end;
-
   /// <summary>Parses `dl:wiki` topics out of stored doc-comment text, and ranks
   /// them against a human phrase.</summary>
   /// <remarks>Stateless; every method is a class function. Reads nothing but

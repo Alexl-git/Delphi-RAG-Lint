@@ -1110,7 +1110,9 @@ begin
       if Args.GetValue('full_surface') <> nil then BundleFullSurface:= SameText(Args.GetValue('full_surface').Value, 'true');
 
       // Build the bundle
-      var Bundle:= TContextBundler.Build(BundleStore, BundleVerb, BundleQName, BundleCallerContext, BundleMaxCallers, True, True, True, {AExcludeDfmFields=} not BundleFullSurface);
+      { BundleTask, not BundleQName: the wiki lookup matches a HUMAN phrase, and
+        the qname has already been reduced to an identifier by the split above. }
+      var Bundle:= TContextBundler.Build(BundleStore, BundleVerb, BundleQName, BundleCallerContext, BundleMaxCallers, True, True, True, {AExcludeDfmFields=} not BundleFullSurface, {ATaskText=} BundleTask);
 
       // Render as JSON
       ResultText:= TContextBundler.RenderJson(Bundle);

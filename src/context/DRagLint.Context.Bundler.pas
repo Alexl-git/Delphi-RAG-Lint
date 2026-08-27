@@ -34,6 +34,12 @@ type
       /// <param name="AIncludeSurface"><!-- drag-lint:auto type -->Boolean</param>
       /// <param name="AIncludeImpl"><!-- drag-lint:auto type -->Boolean</param>
       /// <param name="AExcludeDfmFields"><!-- drag-lint:auto type -->Boolean = True</param>
+      /// <param name="ATaskText">The caller's raw task phrase, if any. Matched
+      /// against the aliases of every <c>dl:wiki</c> topic in this index; up to
+      /// two matches ride along in WikiTopics. Empty (the default) skips the
+      /// lookup entirely, so every existing caller is unaffected. Honoured only
+      /// when AIncludeDocs is set -- <c>--no-docs</c> means no prose, and a
+      /// concept body is prose.</param>
       /// <returns><!-- drag-lint:auto type -->TContextBundle</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -50,7 +56,7 @@ type
       /// </remarks>
       class function Build(
         const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
-        AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True): TContextBundle;
+        AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''): TContextBundle;
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: Round(Length(AText) / 3.7).</returns>
       /// <remarks>
@@ -113,6 +119,7 @@ implementation
 
 uses
   DRagLint.Doc.Regions
+  , DRagLint.Doc.Wiki   { TWikiParser -- alias matching for the ## Wiki section }
   ;
 
 class function TContextBundler.EstimateTokens(const AText: string): Integer;
@@ -181,7 +188,7 @@ end; // function
 
 class function TContextBundler.Build(
   const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
-  AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True): TContextBundle;
+  AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''): TContextBundle;
 var
   Syms       : TArray<TSymbol>   ;
   Sym        : TSymbol           ;
@@ -195,6 +202,67 @@ var
   C          : TSliceChunk       ;
   BC         : TBundleCaller     ;
   R          : TReference        ;
+
+  { Up to MAX_WIKI_TOPICS topics whose name or alias the task phrase matched.
+
+    THIS IS THE ROUTER FROM HUMAN VOCABULARY TO SYMBOLS, and it earns its place
+    in a bundle whose whole reason to exist is being small: two short concept
+    notes are cheap, and the alternative is the reader guessing which identifier
+    a project noun refers to. A third loosely-matching note is not.
+
+    Runs against the TARGET DB ONLY -- the store handed in, not the resolved
+    set. A concept note from an unrelated project's index would be a confident
+    wrong answer, which is worse than none. }
+  procedure MatchWikiTopics;
+  const
+    MAX_WIKI_TOPICS = 2;
+  var
+    Rows  : TArray<TWikiDocRow>;
+    Row   : TWikiDocRow        ;
+    Cands : TArray<TWikiTopic> ;
+    Scores: TArray<Integer>    ;
+    T     : TWikiTopic         ;
+    Best  : Integer            ;
+    BestIx: Integer            ;
+    K     : Integer            ;
+    N     : Integer            ;
+  begin
+    if Trim(ATaskText) = '' then Exit;
+    Rows:= AStore.FindWikiDocBlocks;
+    if Length(Rows) = 0 then Exit;
+
+    SetLength(Cands, 0);
+    for Row in Rows do
+      for T in TWikiParser.ParseRawBlock(Row.RawBlock, Row.QName, Row.Kind,
+                                         Row.FilePath, Row.StartLine) do
+        if TWikiParser.MatchScore(T, ATaskText) > 0 then Cands:= Cands + [T];
+    if Length(Cands) = 0 then Exit;
+
+    SetLength(Scores, Length(Cands));
+    for K:= 0 to High(Cands) do Scores[K]:= TWikiParser.MatchScore(Cands[K], ATaskText);
+
+    { Selection rather than a sort: at most two are kept, so repeatedly taking
+      the best and blanking it is both shorter and obviously correct. }
+    N:= Length(Cands);
+    if N > MAX_WIKI_TOPICS then N:= MAX_WIKI_TOPICS;
+    for K:= 1 to N do
+    begin
+      Best  := -1;
+      BestIx:= -1;
+      for var J: Integer:= 0 to High(Cands) do
+        if (Scores[J] > 0) and
+           ((BestIx < 0) or (TWikiParser.CompareRanked(Scores[J], Cands[J].Name,
+                                                       Best, Cands[BestIx].Name) < 0)) then
+        begin
+          Best  := Scores[J];
+          BestIx:= J;
+        end;
+      if BestIx < 0 then Break;
+      Result.WikiTopics:= Result.WikiTopics + [Cands[BestIx]];
+      Scores[BestIx]:= 0;
+    end;
+  end;
+
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Verb       := AVerb;
@@ -233,8 +301,23 @@ begin
     end;
   end;
 
-  if Length(Syms) = 0 then Exit;
-  Sym:= Syms[0];
+  { THE ALIAS IS ALSO A FALLBACK, not only an enrichment. When the qname
+    resolved to nothing, the task phrase may still name a CONCEPT -- which is
+    exactly the case where the caller used a project word instead of an
+    identifier. Returning the topic and its SeeCode symbols turns a bare "not
+    found" into the pointer the reader was actually asking for. }
+  if Length(Syms) = 0 then
+  begin
+    if AIncludeDocs then MatchWikiTopics;
+    if Length(Result.WikiTopics) > 0 then
+      for I:= 0 to High(Result.WikiTopics) do
+        Inc(Result.TokenEstimate, EstimateTokens(Result.WikiTopics[I].Body));
+    Exit;
+  end;
+  Sym          := Syms[0];
+  Result.Resolved:= True;
+
+  if AIncludeDocs then MatchWikiTopics;
 
   // Doc
   if AIncludeDocs then
@@ -305,6 +388,11 @@ begin
       BC:= Result.Callers[I];
       Inc(Total, EstimateTokens(BC.ContextText));
     end;
+    { Wiki bodies are rendered, so they are counted. A token estimate that
+      omitted a section the reader can see would understate the bundle by
+      exactly the amount that matters when deciding whether to read it. }
+    for I:= 0 to High(Result.WikiTopics) do
+      Inc(Total, EstimateTokens(Result.WikiTopics[I].Name + Result.WikiTopics[I].Body));
     Result.TokenEstimate:= Total;
   finally
     SB.Free;
@@ -326,6 +414,14 @@ begin
     SB.AppendLine;
     SB.AppendLine(Format('> Generated by drag-lint v0.18 at %s', [FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', ABundle.GeneratedAt)]));
     SB.AppendLine(Format('> Token count (estimated): %d', [ABundle.TokenEstimate]));
+    { Say it in the DOCUMENT, not only in the exit code. A bundle that silently
+      contains nothing reads as "this symbol has no context"; one that says the
+      name did not resolve sends the reader somewhere useful. }
+    if not ABundle.Resolved then
+      SB.AppendLine(Format('> NOT FOUND: no symbol named `%s` in this index.%s',
+        [ABundle.QName,
+         IfThen(Length(ABundle.WikiTopics) > 0,
+                ' The phrase does match a wiki topic -- see below.', '')]));
     SB.AppendLine;
 
     if ABundle.HasDoc then
@@ -342,6 +438,31 @@ begin
       if CleanReturns <> '' then SB.AppendLine('**Returns:** ' + CleanReturns);
       if CleanRemarks <> '' then SB.AppendLine('**Remarks:** ' + CleanRemarks);
       SB.AppendLine;
+    end;
+
+    { FIRST, above the code. A concept note explains what the symbols below are
+      FOR, and a reader who meets it after the impl slice has already had to
+      guess. It is also what makes a "not found" bundle useful: when the qname
+      resolved to nothing, this section is the entire answer. }
+    if Length(ABundle.WikiTopics) > 0 then
+    begin
+      SB.AppendLine('## Wiki');
+      for I:= 0 to High(ABundle.WikiTopics) do
+      begin
+        var W: TWikiTopic:= ABundle.WikiTopics[I];
+        SB.AppendLine(Format('### %s', [W.Name]));
+        SB.AppendLine(Format('- defined at: %s:%d (%s)', [W.FilePath, W.HeaderLine, W.OwnerQName]));
+        if Length(W.Aliases) > 0 then
+          SB.AppendLine('- also called: ' + string.Join(', ', W.Aliases));
+        if Length(W.SeeCode) > 0 then
+          SB.AppendLine('- see code: ' + string.Join(', ', W.SeeCode));
+        if W.Body <> '' then
+        begin
+          SB.AppendLine;
+          SB.AppendLine(W.Body);
+        end;
+        SB.AppendLine;
+      end;
     end;
 
     if Length(ABundle.ClassSurface) > 0 then
@@ -435,12 +556,31 @@ begin
 end; // function
 
 class function TContextBundler.RenderJson(const ABundle: TContextBundle): string;
+var
+  Wiki: string    ;
+  I   : Integer   ;
+  W   : TWikiTopic;
 begin
-  // Minimal hand-rolled JSON; schema mirrors the spec.
+  { The wiki topics are NAMED here rather than dumped: a JSON consumer that
+    wants the body has `wiki --term`, and a bundle summary that inlined
+    paragraphs would stop being a summary. `resolved` is new and load-bearing --
+    without it a consumer cannot tell an empty bundle from a missing symbol. }
+  Wiki:= '';
+  for I:= 0 to High(ABundle.WikiTopics) do
+  begin
+    W:= ABundle.WikiTopics[I];
+    if I > 0 then Wiki:= Wiki + ',';
+    Wiki:= Wiki + Format('{"name":"%s","file":"%s","line":%d}',
+      [JsonEscape(W.Name), JsonEscape(W.FilePath), W.HeaderLine]);
+  end;
+
   Result:= Format(
-    '{"task":"%s","verb":"%s","qname":"%s","token_estimate":%d,' + '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d}', [
-      ABundle.Verb + ' ' + ABundle.QName, ABundle.Verb, ABundle.QName, ABundle.TokenEstimate, IfThen(ABundle.HasDoc, 'true', 'false'), Length(ABundle.Callers),
-      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice)]);
+    '{"task":"%s","verb":"%s","qname":"%s","resolved":%s,"token_estimate":%d,' +
+    '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"wiki":[%s]}', [
+      JsonEscape(ABundle.Verb + ' ' + ABundle.QName), JsonEscape(ABundle.Verb), JsonEscape(ABundle.QName),
+      IfThen(ABundle.Resolved, 'true', 'false'),
+      ABundle.TokenEstimate, IfThen(ABundle.HasDoc, 'true', 'false'), Length(ABundle.Callers),
+      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), Wiki]);
 end; // function
 
 end.

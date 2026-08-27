@@ -441,6 +441,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetFilePath(AFileId: Int64): string                                           ;
+    /// <summary>Every stored doc block carrying the <c>dl:wiki</c> marker,
+    /// joined to its owning symbol and file.</summary>
+    /// <returns>Candidate rows ordered by file then line; empty is a normal
+    /// answer, and the common one -- most indexes have no wiki blocks.</returns>
+    /// <remarks>On the INTERFACE rather than only the concrete store because
+    /// TContextBundler.Build consumes it, and src\context must not acquire a
+    /// dependency on src\storage to do so. The marker test is a pre-filter;
+    /// DRagLint.Doc.Wiki.TWikiParser decides what is actually a topic.</remarks>
+    function FindWikiDocBlocks: TArray<TWikiDocRow>                                        ;
     /// <returns><!-- drag-lint:auto type -->TArray&lt;Int64&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->

@@ -31,3 +31,27 @@ drag-lint context --task "modify CustomerOrder.TCustomerOrder.Total" --db C:\Pro
 ```
 This would return `Total`'s doc comment, its class's surface, its own body,
 and a capped list of callers, as markdown.
+
+## When the phrase is not an identifier
+
+The bundle also carries a `## Wiki` section: if the task phrase matches the
+name or an alias of a [`dl:wiki`](Wiki-Blocks-Authoring.md) concept topic in
+this index, up to **two** topics are included, above the code, with their
+owning symbol, `SeeCode` participants and body. `--no-docs` suppresses it --
+a concept body is prose, and `--no-docs` means no prose.
+
+That also makes a failed lookup useful. `--task "modify the streaming path"`
+names no symbol, so the bundle reports `NOT FOUND` and **exits 1** -- but if
+the phrase names a concept, the topic and its symbols are printed anyway, and
+that is the pointer the reader was actually asking for.
+
+> The `NOT FOUND` line and the non-zero exit are recent. Until 2026-08-27 a
+> qname that resolved to nothing produced an empty bundle reading
+> `Token count (estimated): 0` and **exit 0** -- indistinguishable from a
+> symbol that genuinely has no context. The check meant to catch it tested
+> whether the bundle carried a qname, which `Build` had already filled in from
+> the request, so it never fired.
+
+Topics are read from the SAME index the bundle came from. A concept note from
+an unrelated project would be a confidently wrong answer, so cross-database
+matching is deliberately not done.

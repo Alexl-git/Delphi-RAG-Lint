@@ -75,6 +75,8 @@ You can drive it two ways, both backed by the same engine:
 >   (won't suggest implementation-only symbols).
 > - **Understand or modify a symbol — get a lean context bundle, do NOT open the
 >   files:** `drag-lint context --task "modify <Unit.TClass.Method>" --db <DB> --format markdown`
+>   If the task phrase is a project WORD rather than an identifier, the bundle
+>   answers with the matching `dl:wiki` topic and its symbols instead of nothing.
 >   It returns the doc + class surface (signatures) + that symbol's own body +
 >   its callers. Add `--full-surface` ONLY when working on a form's
 >   components/DFM/layout (otherwise the auto-generated component fields are
@@ -209,7 +211,7 @@ in 2b.
 **Analysis / reports (call graph, deps, cycles, impact)**
 | Verb | What it does |
 |------|--------------|
-| `context --task "verb qname"` | curated context bundle (doc + surface + body + callers); `--full-surface` only for form/DFM work |
+| `context --task "verb qname"` | curated context bundle (doc + surface + body + callers); `--full-surface` only for form/DFM work. Adds a `## Wiki` section when the task phrase matches a `dl:wiki` alias (suppressed by `--no-docs`). **A qname that resolves to nothing now exits 1 and says `NOT FOUND`** -- it used to render an empty bundle at exit 0 |
 | `impact --qname U.T.M` | transitive caller blast radius (`--depth N`) |
 | `wiring --qname IIntf\|TForm` | Spring4D DI edges + DFM event handlers (`--coverage` for unresolved DI registrations) |
 | `find-callees --qname U.T.M` | resolved outgoing calls of a routine |

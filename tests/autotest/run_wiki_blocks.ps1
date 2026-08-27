@@ -286,10 +286,60 @@ if ($payload.Count -eq 1) {
 }
 
 # ---------------------------------------------------------------------------
-# CHECK 7 -- usage errors
+# CHECK 7 -- the context bundle carries matched topics, and only then
 # ---------------------------------------------------------------------------
 Write-Host ''
-Write-Host '-- check 7: mode selection' -ForegroundColor Cyan
+Write-Host '-- check 7: context --task routes a human phrase' -ForegroundColor Cyan
+
+# A phrase that is an ALIAS and not an identifier. Before this feature the
+# bundle for it was empty -- and, worse, exited 0.
+$ctx = Run @('context', '--task', 'modify zorb dispatch', '--db', $goodDb)
+Check 'a bundle for a non-identifier phrase carries a ## Wiki section' `
+  ($ctx.Out -match '## Wiki') $ctx.Out
+Check 'and names the topic' ($ctx.Out -match 'Zorbimatic Dispatch') ''
+Check 'and hands over the SeeCode symbols, which is the actual pointer' `
+  ($ctx.Out -match 'see code:.*TZorbDispatcher') ''
+Check 'the unresolved qname is REPORTED, not silently empty' `
+  ($ctx.Out -match 'NOT FOUND') $ctx.Out
+Check 'and it exits 1 -- the symbol genuinely was not found' ($ctx.Code -eq 1) "exit $($ctx.Code)"
+
+# NEGATIVE CONTROL 1: the section must not appear for an unrelated phrase.
+# Without this, a `## Wiki` header emitted unconditionally would pass above.
+$ctxNo = Run @('context', '--task', 'modify TZorbDispatcher', '--db', $goodDb)
+Check 'CONTROL: a resolved symbol whose phrase matches no alias gets NO ## Wiki' `
+  ($ctxNo.Out -notmatch '## Wiki') $ctxNo.Out
+Check 'and that bundle resolved normally (exit 0)' ($ctxNo.Code -eq 0) "exit $($ctxNo.Code)"
+
+# NEGATIVE CONTROL 2: --no-docs means no prose, and a concept body is prose.
+$ctxNoDocs = Run @('context', '--task', 'modify zorb dispatch', '--no-docs', '--db', $goodDb)
+Check 'CONTROL: --no-docs suppresses the wiki section' `
+  ($ctxNoDocs.Out -notmatch '## Wiki') $ctxNoDocs.Out
+
+# NEGATIVE CONTROL 3: a phrase matching nothing at all still exits 1, and does
+# NOT print a bundle -- otherwise "exit 1" would be the only difference between
+# a useful answer and a useless one.
+$ctxNone = Run @('context', '--task', 'modify NoSuchThingAtAllHere', '--db', $goodDb)
+Check 'CONTROL: an unmatched, unresolvable phrase exits 1' ($ctxNone.Code -eq 1) "exit $($ctxNone.Code)"
+Check 'and says no symbol matched' ($ctxNone.Out -match 'No symbol matched') $ctxNone.Out
+
+# The JSON form must expose `resolved`, or a machine consumer is back to
+# guessing from an empty bundle.
+$ctxJson = Run @('context', '--task', 'modify TZorbDispatcher', '--format', 'json', '--db', $goodDb)
+$cj = $null
+try { $cj = $ctxJson.Out | ConvertFrom-Json } catch { }
+Check 'the JSON bundle reports resolved=true for a real symbol' `
+  (($null -ne $cj) -and ($cj.resolved -eq $true)) $ctxJson.Out
+$ctxJson2 = Run @('context', '--task', 'modify zorb dispatch', '--format', 'json', '--db', $goodDb)
+$cj2 = $null
+try { $cj2 = $ctxJson2.Out | ConvertFrom-Json } catch { }
+Check 'and resolved=false with the topic named for a phrase' `
+  (($null -ne $cj2) -and ($cj2.resolved -eq $false) -and (@($cj2.wiki).Count -eq 1)) $ctxJson2.Out
+
+# ---------------------------------------------------------------------------
+# CHECK 8 -- usage errors
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '-- check 8: mode selection' -ForegroundColor Cyan
 
 $noMode = Run @('wiki', '--db', $goodDb)
 Check 'no mode is a usage error (exit 2)' ($noMode.Code -eq 2) "exit $($noMode.Code)"

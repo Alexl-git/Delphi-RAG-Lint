@@ -582,7 +582,7 @@ begin
   Writeln('  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)');
   Writeln('  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]');
   Writeln('  drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]');
-  Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw]');
+  Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
   Writeln('                               [--max-callers N] [--context N] [--no-docs]');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
@@ -8704,8 +8704,32 @@ begin
   IncImpl:= SameText(AArgs.Verb, 'modify') or SameText(AArgs.Verb, 'refactor') or SameText(AArgs.Verb, 'extend');
   Bundle:= TContextBundler.Build(
     Store, AArgs.Verb, AArgs.BundleQName, AArgs.ContextLines, AArgs.MaxCallers, IncDocs, IncSurface, IncImpl, {AExcludeDfmFields=}
-    not AArgs.FullSurface);
-  if Bundle.QName = '' then begin Writeln(Format('No symbol matched: %s', [AArgs.BundleQName])); Exit(1); end;
+    not AArgs.FullSurface, {ATaskText=}AArgs.Task);
+
+  { THE OLD TEST HERE WAS `Bundle.QName = ''`, AND IT WAS DEAD. Build stamps
+    QName with what the caller asked for BEFORE it looks anything up, so it is
+    never empty for a non-empty request: `context --task "modify Nonexistent"`
+    printed an empty bundle reading `Token count (estimated): 0` and exited 0 --
+    which is exactly the silent empty answer the bare-name fallback inside Build
+    was added to stop, surviving one layer up. Resolved is the real answer. }
+  if not Bundle.Resolved then
+  begin
+    { Still RENDER when the phrase named a concept: the ## Wiki section is then
+      the useful part of the answer, and throwing it away to print one line of
+      apology would be the worse trade. The exit code stays 1 either way,
+      because the symbol genuinely was not found. }
+    if Length(Bundle.WikiTopics) > 0 then
+    begin
+      if SameText(AArgs.Format, 'json') then Writeln(TContextBundler.RenderJson(Bundle))
+      else Writeln(TContextBundler.RenderMarkdown(Bundle));
+      Writeln(ErrOutput, Format('No symbol matched "%s", but the task phrase matches %d wiki topic(s) -- see the bundle.',
+                                [AArgs.BundleQName, Length(Bundle.WikiTopics)]));
+    end
+    else
+      Writeln(Format('No symbol matched: %s', [AArgs.BundleQName]));
+    Exit(1);
+  end;
+
   if SameText(AArgs.Format, 'json') then Writeln(TContextBundler.RenderJson(Bundle))
   else if SameText(AArgs.Format, 'raw') then Writeln(TContextBundler.RenderRaw(Bundle))
   else Writeln(TContextBundler.RenderMarkdown(Bundle));
