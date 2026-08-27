@@ -111,6 +111,38 @@ You can drive it two ways, both backed by the same engine:
 >   `symbols.section` has THREE values, one of which is the EMPTY string.
 >   Read those before writing a query: table names are discoverable,
 >   semantics are not.
+> - **Ask the index anything (no verb needed):**
+>   `drag-lint sql --query "SELECT ..." --db <DB> [--json] [--limit N] [--timeout-ms N]`
+>   (or `--file <q.sql>`). This is the escape hatch for questions no canned
+>   verb answers -- a join across `symbols`/`refs`/`files`, a distribution, a
+>   spot check on what the extractor wrote.
+>
+>   **The safety model, because you should not have to trust prose.** It is
+>   enforced by SQLite, not by pattern-matching your query: the connection is
+>   `PRAGMA query_only = ON`; an **sqlite3 authorizer** permits only SELECT,
+>   table/column reads, `WITH RECURSIVE`, transaction control and safe scalar
+>   functions, and denies everything else -- `ATTACH` (which `query_only` does
+>   NOT block), `DETACH`, `PRAGMA`, all DDL, all writes, `load_extension` and
+>   friends; and a progress handler enforces the wall-clock cap so a runaway
+>   join is interrupted rather than left to pin the machine. On top of that:
+>   exactly ONE statement (a `;` inside a string or comment does not count),
+>   and a row cap that ANNOUNCES itself when it truncates -- a silent cap
+>   would read as the complete answer.
+>
+>   **The handshake: run `schema --format json` FIRST.** Table names are
+>   discoverable; semantics are not. That document carries each column's
+>   description and, where the vocabulary is closed, its enumerated values, so
+>   you do not assume a `refs.kind` that does not exist and get an empty
+>   result that reads like an answer. When a query does fail, the error names
+>   that command for you.
+>
+>   `--json` emits the stable `sql/1` document: `columns`, `rows`,
+>   `row_count`, `truncated`, `row_cap`, `timeout_ms`, `elapsed_ms`. Rows are
+>   **arrays positionally matching `columns`**, not objects -- a query may
+>   return two columns with the same name and an object would lose one -- and
+>   cell types are preserved, so an integer column is a JSON number. The
+>   document is alone on stdout; diagnostics go to stderr.
+>   Exit codes: `0` ok, `2` usage error, `1` refused / timed out / SQL error.
 > - **Introspect the engine itself:** `drag-lint info [--json]` -- engine
 >   self-info: version, build date, tree-sitter versions, capabilities (FTS5,
 >   CLI verb count), exe path, platform. Read-only, no DB. This is what the IDE
@@ -182,6 +214,7 @@ in 2b.
 | `deps-report` | third-party dependency rollup (`--edges`, `--format text\|json\|csv`) |
 | `graph --format dot\|mermaid` | export the symbol/uses graph for a viewer (`--name <root-substr>`) |
 | `schema` | live index schema: version + tables + columns + row counts (read-only) |
+| `sql --query "SELECT ..."` | guarded READ-ONLY SQL over the index -- one statement; `--file <q.sql>`, `--limit N` (default 200), `--timeout-ms N` (default 10000), `--json` |
 | `info` | engine self-info: version, build date, tree-sitter versions, capabilities, exe path, platform (`--json`; read-only, no DB) |
 | `find-deadcode` | unreferenced symbols (`--kind`, `--include-private`) |
 | `doc-drift --qname X` | doc-vs-code drift findings for one symbol |
@@ -404,7 +437,7 @@ in 2b.
 | `forms-csv --project P --db DB` | test-helper form-navigation CSV, one row per form |
 | `import-log <logfile>` | ingest a dcc/msbuild log into the index |
 | `export enums\|obsidian` | export enums (firebird-sql/csv/json/delphi-const) or an Obsidian vault |
-| `top` / `schema` / `diff` | (also above) index introspection |
+| `top` / `schema` / `sql` / `diff` | (also above) index introspection |
 
 **Servers**
 | Verb | What it does |

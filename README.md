@@ -337,6 +337,18 @@ live with:
 drag-lint schema --db myapp.sqlite --format json        # schema_version + tables + columns + row counts
 ```
 
+When no verb answers the question you actually have, query the index directly.
+`sql` is read-only by construction -- an sqlite3 authorizer refuses ATTACH,
+PRAGMA, DDL and every write, a row cap and a wall-clock cap bound the answer,
+and exactly one statement is allowed:
+
+```
+drag-lint sql --db myapp.sqlite --limit 5 \n  --query "SELECT kind, COUNT(*) AS n FROM refs GROUP BY kind ORDER BY n DESC"
+```
+
+Ask `schema --format json` for the columns first: table names are
+discoverable, semantics are not.
+
 ### Semantic errors without a full build
 
 `check-unit` compiles a single unit in its project's context, so you get real
@@ -610,6 +622,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | Command | What it does | Notable flags |
 |---|---|---|
 | [`schema`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/schema) `--db <db>` | Self-documenting live index schema: tables, columns, row counts | `--format text\|json`, `--output <f>` |
+| [`sql`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/sql) `--query "SELECT ..."` / `--file <q.sql>` `--db <db>` | **Guarded read-only SQL over the index** -- one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, plus a row cap and a wall-clock cap | `--limit N` (default 200), `--timeout-ms N` (default 10000), `--format text\|json`, `--output <f>` |
 | [`info`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Engine self-info: version, build date, tree-sitter versions, capabilities | `--json` |
 | [`dump-refs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-refs) `<file> --db <db>` | Diagnostic: refs + enclosing-symbol attribution | |
 | [`dump-call-edges`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-call-edges) `--db <db>` | Diagnostic: resolved call edges | |

@@ -53,6 +53,7 @@ uses
   , FireDAC.Stan.Async
   , FireDAC.Stan.Def
   , FireDAC.Stan.Param
+  , FireDAC.Stan.Option { fmOnDemand / RecsMax -- the row cap `sql` enforces at the engine }
   , { v0.42: lets TFDParam.SetAsX inline (was H2443) }
       FireDAC.DApt
   , TreeSitter
@@ -67,6 +68,7 @@ uses
   , DRagLint.Parser .Sql
   , DRagLint.Sql    .FbSnapshot
   , DRagLint.Sql    .OrmLinker
+  , DRagLint.Sql    .Guarded   { TSqlGuard: the authorizer + time cap behind `sql` }
   , DRagLint.Lint   .Config
   , DRagLint.Lint   .RuleCatalog
   , DRagLint.Lint   .Linter
@@ -170,6 +172,11 @@ type
     TypeNames       : string        ; // --names A,B,C: type names for `query type-usage`
     NamesFile       : string        ; // --names-file <f>: same list, one name per line
     UnitName        : string        ; // --unit <UnitName>: unit name for `query unit-usage`
+    { `sql`: the statement itself, and the wall-clock cap that keeps a bad
+      join from wedging the IDE holding a multi-gigabyte index open. The
+      OTHER source, --file, reuses InFile above rather than adding a field. }
+    SqlQuery        : string        ; // --query "SELECT ...": the one statement `sql` runs
+    TimeoutMs       : Integer       ; // --timeout-ms N: `sql` wall-clock cap (default 10000)
     Rule            : string        ;
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
@@ -569,6 +576,7 @@ begin
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]');
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
+  Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint info [--json]                              (engine self-info: version, build date, MIT, tree-sitter + capabilities; read-only)');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
@@ -1039,6 +1047,8 @@ begin
     else if (A = '--max-file-kb') and (i < ParamCount) then begin Inc(i); Result.MaxFileKB:= StrToIntDef(ParamStr(i), 2048); Result.MaxFileKBSet:= True; end
     else if (A = '--connection') and (i < ParamCount) then begin Inc(i); Result.FbConnection:= ParamStr(i); end
     else if (A = '--limit') and (i < ParamCount) then begin Inc(i); Result.Limit:= StrToIntDef(ParamStr(i), 50); end
+    else if (A = '--query') and (i < ParamCount) then begin Inc(i); Result.SqlQuery:= ParamStr(i); end
+    else if (A = '--timeout-ms') and (i < ParamCount) then begin Inc(i); Result.TimeoutMs:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--by') and (i < ParamCount) then begin Inc(i); Result.SortBy:= ParamStr(i); end
     else if (A = '--doc-tag') and (i < ParamCount) then begin Inc(i); Result.DocTag:= ParamStr(i); end
     else if (A = '--doc-contains') and (i < ParamCount) then begin Inc(i); Result.DocContains:= ParamStr(i); end
@@ -9540,6 +9550,412 @@ begin
   finally
     Store.Free;
   end; // try
+end; // function
+
+{ ---------------------------------------------------------------------------
+  drag-lint sql -- ONE guarded, read-only SQL statement against an index.
+
+  WHY A PASSTHROUGH RATHER THAN THE NEXT VERB
+    Every question drag-lint answers today costs its own verb, its own flags,
+    its own --help line, its own README row and its own AI-USAGE entry, and the
+    docs-sync guard enforces all of it. That price is paid PER QUESTION and the
+    backlog never closes -- stats\draglint-gaps.log exists precisely because
+    sessions keep meeting questions no verb answers. One guarded SQL verb pays
+    the documentation cost ONCE and makes the answerable set unbounded.
+
+    Owner ruling (2026-08-26): build the SQL passthrough, do NOT build a DSL.
+    A second query language would have to be designed, documented, guarded,
+    taught and extended forever, aimed at consumers who already speak SQL.
+
+  THE SAFETY MODEL LIVES IN DRagLint.Sql.Guarded, NOT HERE
+    Three independent layers, none of them a regex over the query text:
+      1. the connection is opened read-only -- PRAGMA query_only = ON, set by
+         TSQLiteSymbolStore.Connect;
+      2. an sqlite3 AUTHORIZER denies every action but SELECT/READ/RECURSIVE
+         (plus safe functions and transaction control). This is what blocks
+         ATTACH, which query_only does NOT;
+      3. a progress handler enforces a wall-clock cap, so a cartesian join is
+         interrupted mid-step instead of wedging the IDE that holds the index.
+    Plus a row cap, and a single-statement check that exists only so
+    "SELECT 1; DROP TABLE x" reports the real reason instead of an authorizer
+    denial about a statement the reader has stopped thinking about.
+
+  IT FAILS CLOSED
+    If the guard cannot install itself the query does NOT run. A fallback that
+    quietly proceeded unguarded would be indistinguishable from a working guard
+    right up to the moment it mattered.
+
+  THE HALLUCINATION HANDSHAKE
+    Agents rarely invent table names -- those are discoverable. They invent
+    SEMANTICS. So a query that fails in SQLite is answered with a line naming
+    `drag-lint schema --db <db> --format json`, which carries the columns AND
+    their enumerated vocabularies. A wrong column name then fails loudly and
+    self-correctingly rather than returning an empty set that reads as "there
+    is no such data".
+  --------------------------------------------------------------------------- }
+
+/// <summary>drag-lint sql: runs ONE read-only SQL statement against an index
+/// and prints the result set as text or JSON. Enforces at the SQLite engine --
+/// not by inspecting the query text -- that nothing but a read can happen: an
+/// authorizer denies ATTACH/PRAGMA/DDL/writes, a progress handler caps
+/// wall-clock time, and the connection is already query_only.</summary>
+/// <param name="AArgs">Parsed CLI args. SqlQuery (--query) or InFile (--file)
+/// supplies the statement -- exactly one of the two; DbPath/DbPaths[0] names
+/// the index; Limit caps rows (default 200); TimeoutMs caps wall-clock time
+/// (default 10000); Format='json' or AsJson selects JSON; Output redirects to
+/// a file.</param>
+/// <returns>0 on success; 2 for a usage error (no query, both sources, more
+/// than one statement, missing or absent --db); 1 when the guard refuses the
+/// query, the time cap fires, or SQLite rejects it.</returns>
+/// <remarks>Strictly read-only. The row cap is REPORTED when it truncates --
+/// a silent cap reads as "that is all the data there is".</remarks>
+function DoSql(const AArgs: TArgs): Integer;
+const
+  DEFAULT_ROW_CAP    = 200  ;
+  DEFAULT_TIMEOUT_MS = 10000;
+var
+  DbPath   : string            ;
+  SqlText  : string            ;
+  Reason   : string            ;
+  RowCap   : Integer           ;
+  TimeoutMs: Integer           ;
+  UseJson  : Boolean           ;
+  Store    : TSQLiteSymbolStore;
+  Conn     : TFDConnection     ;
+  Guard    : TSqlGuard         ;
+  Q        : TFDQuery          ;
+  Widths   : TArray<Integer>   ;
+  Cells    : TArray<TArray<string>>;
+  RowVals  : TArray<string>    ;
+  ColNames : TArray<string>    ;
+  ColTypes : TArray<string>    ;
+  c        : Integer           ;
+  r        : Integer           ;
+  Truncated: Boolean           ;
+  ElapsedMs: Int64             ;
+  Failure  : string            ;
+  Refused  : Boolean           ;
+  TimedOut : Boolean           ;
+  JRoot    : TJSONObject       ;
+  JCols    : TJSONArray        ;
+  JCol     : TJSONObject       ;
+  JRows    : TJSONArray        ;
+  JRow     : TJSONArray        ;
+  SB       : TStringBuilder    ;
+  OutStr   : string            ;
+  Line     : TStringBuilder    ;
+
+  { One cell, rendered for the TEXT grid. Newlines and tabs are escaped rather
+    than emitted, so one row stays one line and the column alignment below
+    means what it looks like. NULL is spelled out, not blanked -- '' and NULL
+    are different answers and a blank cell cannot tell them apart. }
+  function CellText(AField: TField): string;
+  begin
+    if AField.IsNull then Exit('NULL');
+    if AField.DataType in [ftBlob, ftBytes, ftVarBytes, ftGraphic] then
+      Exit(System.SysUtils.Format('<blob %d bytes>', [Length(AField.AsBytes)]));
+    Result:= AField.AsString;
+    Result:= StringReplace(Result, #13#10, '\n', [rfReplaceAll]);
+    Result:= StringReplace(Result, #10   , '\n', [rfReplaceAll]);
+    Result:= StringReplace(Result, #13   , '\n', [rfReplaceAll]);
+    Result:= StringReplace(Result, #9    , '\t', [rfReplaceAll]);
+  end;
+
+  { The same cell as JSON. The TYPE is preserved: an id that comes back as the
+    string "12" instead of the number 12 is exactly the difference that makes a
+    consumer's join silently match nothing. }
+  function CellJson(AField: TField): TJSONValue;
+  begin
+    if AField.IsNull then Exit(TJSONNull.Create);
+    case AField.DataType of
+      ftShortint, ftByte, ftSmallint, ftWord, ftInteger, ftLongWord, ftLargeint:
+        Result:= TJSONNumber.Create(AField.AsLargeInt);
+      ftFloat, ftSingle, ftExtended, ftCurrency, ftBCD, ftFMTBcd:
+        Result:= TJSONNumber.Create(AField.AsFloat);
+      ftBoolean:
+        Result:= TJSONBool.Create(AField.AsBoolean);
+      ftBlob, ftBytes, ftVarBytes, ftGraphic:
+        Result:= TJSONString.Create(System.SysUtils.Format('<blob %d bytes>', [Length(AField.AsBytes)]));
+    else
+      Result:= TJSONString.Create(AField.AsString);
+    end;
+  end;
+
+begin
+  { ---- the statement: exactly one source ---------------------------------- }
+  SqlText:= AArgs.SqlQuery;
+  if (SqlText <> '') and (AArgs.InFile <> '') then
+  begin
+    Writeln(ErrOutput, 'ERROR: pass either --query or --file, not both.');
+    Exit(2);
+  end;
+  if (SqlText = '') and (AArgs.InFile <> '') then
+  begin
+    if not TFile.Exists(AArgs.InFile) then
+    begin
+      Writeln(ErrOutput, 'ERROR: query file not found: ', AArgs.InFile);
+      Exit(2);
+    end;
+    SqlText:= TFile.ReadAllText(AArgs.InFile);
+  end;
+  if Trim(SqlText) = '' then
+  begin
+    Writeln(ErrOutput, 'Usage: drag-lint sql --query "SELECT ..." --db <file.sqlite> [--json] [--limit N] [--timeout-ms N] [--output <file>]');
+    Writeln(ErrOutput, '       drag-lint sql --file <q.sql>       --db <file.sqlite> [--json] [--limit N] [--timeout-ms N]');
+    Writeln(ErrOutput, 'Read-only: ONE SELECT. ATTACH, PRAGMA, DDL and every write are refused by an sqlite3 authorizer.');
+    Exit(2);
+  end;
+
+  if not IsSingleStatement(SqlText, Reason) then
+  begin
+    Writeln(ErrOutput, 'ERROR: ', Reason, '. drag-lint sql runs exactly one statement.');
+    Exit(2);
+  end;
+
+  { ---- the index ---------------------------------------------------------- }
+  if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
+  else DbPath:= AArgs.DbPath;
+  if DbPath = '' then
+  begin
+    Writeln(ErrOutput, 'ERROR: --db is required. Resolve it with "drag-lint resolve-dbs --project <x.dproj>" or "--in <x.pas>".');
+    Exit(2);
+  end;
+
+  { A read-only open still CREATES the file when it is absent -- the same trap
+    that once left a 4096-byte drag-lint.sqlite in an arbitrary directory and
+    reported it as a valid, empty index. Only an existence check can express
+    "do not create". }
+  if not TFile.Exists(DbPath) then
+  begin
+    Writeln(ErrOutput, 'ERROR: database not found: ', DbPath);
+    Writeln(ErrOutput, 'Resolve it with "drag-lint resolve-dbs --project <x.dproj>" or "--in <x.pas>".');
+    Exit(2);
+  end;
+
+  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  RowCap := AArgs.Limit;
+  if RowCap <= 0 then RowCap:= DEFAULT_ROW_CAP;
+  TimeoutMs:= AArgs.TimeoutMs;
+  if TimeoutMs <= 0 then TimeoutMs:= DEFAULT_TIMEOUT_MS;
+
+  Truncated:= False;
+  ElapsedMs:= 0;
+  Failure  := '';
+  Refused  := False;
+  TimedOut := False;
+  SetLength(ColNames, 0);
+  SetLength(ColTypes, 0);
+  SetLength(Cells   , 0);
+  JRows:= nil;
+  if UseJson then JRows:= TJSONArray.Create;
+  try
+    Store:= TSQLiteSymbolStore.Create(DbPath, {AReadOnly=}True);
+    try
+      Conn:= Store.GetConnection;
+
+      { FAIL CLOSED. If the authorizer cannot be installed the query does not
+        run -- proceeding would be a silent downgrade of the only control that
+        blocks ATTACH. }
+      Guard:= nil;
+      try
+        try
+          Guard:= TSqlGuard.Create(Conn, TimeoutMs);
+        except
+          on E: ESqlGuardError do
+          begin
+            Writeln(ErrOutput, 'ERROR: ', E.Message);
+            Writeln(ErrOutput, 'Refusing to run the query without its guard.');
+            Exit(1);
+          end;
+        end; // try
+
+        Q:= TFDQuery.Create(nil);
+        try
+          Q.Connection:= Conn;
+          { fmOnDemand is the row cap ENFORCED AT THE ENGINE. FireDAC's default
+            fmAll would materialise the whole result set before the first row
+            was ever seen, which is precisely the case the cap exists for; on
+            demand, the loop below simply stops asking and the rest is never
+            fetched.
+
+            RecsMax IS NOT USED, and that is a correctness fix rather than a
+            preference. Setting it makes FireDAC append its OWN "LIMIT n" to the
+            statement, so a query that already ends in LIMIT compiles as
+            "... LIMIT 2 LIMIT 201" and dies with `near "LIMIT": syntax error`.
+            LIMIT is the first thing anyone writes in an ad-hoc query, so that
+            would have broken the common case while every test without a LIMIT
+            passed. Measured, not reasoned about. }
+          Q.FetchOptions.Mode      := fmOnDemand;
+          Q.FetchOptions.RowsetSize:= 100;
+          Q.SQL.Text:= SqlText;
+          try
+            Q.Open;
+
+            SetLength(ColNames, Q.FieldCount);
+            SetLength(ColTypes, Q.FieldCount);
+            for c:= 0 to Q.FieldCount - 1 do
+            begin
+              ColNames[c]:= Q.Fields[c].FieldName;
+              ColTypes[c]:= FieldTypeNames[Q.Fields[c].DataType];
+            end;
+
+            r:= 0;
+            while (not Q.Eof) and (r < RowCap) do
+            begin
+              SetLength(RowVals, Q.FieldCount);
+              for c:= 0 to Q.FieldCount - 1 do RowVals[c]:= CellText(Q.Fields[c]);
+              Cells:= Cells + [RowVals];
+              if UseJson then
+              begin
+                JRow:= TJSONArray.Create;
+                for c:= 0 to Q.FieldCount - 1 do JRow.AddElement(CellJson(Q.Fields[c]));
+                JRows.AddElement(JRow);
+              end;
+              Inc(r);
+              Q.Next;
+            end;
+            Truncated:= not Q.Eof;
+          except
+            on E: Exception do
+            begin
+              TimedOut:= Guard.TimedOut;
+              Refused := Guard.Denied or TimedOut;
+              if Refused then Failure:= Guard.Explain
+              else Failure:= E.Message;
+            end;
+          end; // try
+        finally
+          Q.Free;
+        end; // try
+
+        ElapsedMs:= Guard.ElapsedMs;
+      finally
+        Guard.Free;
+      end; // try
+    finally
+      Store.Free;
+    end; // try
+
+    { ---- failure ---------------------------------------------------------- }
+    if Failure <> '' then
+    begin
+      if Refused then
+      begin
+        { A time cap and an authorizer denial are DIFFERENT answers and must not
+          share a footer: telling someone whose slow query was interrupted that
+          "drag-lint sql is read-only" sends them looking for a write they never
+          wrote. }
+        if TimedOut then
+          Writeln(ErrOutput, 'ERROR: stopped -- ', Failure)
+        else
+        begin
+          Writeln(ErrOutput, 'ERROR: refused -- ', Failure);
+          Writeln(ErrOutput, 'drag-lint sql is read-only: ONE SELECT, no ATTACH, no PRAGMA, no DDL, no writes.');
+        end;
+      end
+      else
+      begin
+        Writeln(ErrOutput, 'ERROR: ', Failure);
+        Writeln(ErrOutput, System.SysUtils.Format(
+          'Run "drag-lint schema --db %s --format json" for the real tables, columns and their allowed values.', [DbPath]));
+      end;
+      Exit(1);
+    end;
+
+    { ---- success ---------------------------------------------------------- }
+    if UseJson then
+    begin
+      JRoot:= TJSONObject.Create;
+      try
+        JRoot.AddPair('schema', 'sql/1');
+        JRoot.AddPair('db'    , DbPath  );
+        JCols:= TJSONArray.Create;
+        for c:= 0 to High(ColNames) do
+        begin
+          JCol:= TJSONObject.Create;
+          JCol.AddPair('name', ColNames[c]);
+          JCol.AddPair('type', ColTypes[c]);
+          JCols.AddElement(JCol);
+        end;
+        JRoot.AddPair('columns', JCols);
+
+        { Rows are ARRAYS, positionally matching `columns`, not objects. Two
+          reasons, both load-bearing: a query may legitimately return two
+          columns with the same name (SELECT a.id, b.id) and an object would
+          silently lose one; and repeating every key on every row is pure token
+          cost for the consumer this verb exists to serve. }
+        JRoot.AddPair('rows', JRows);
+        JRows:= nil; { ownership handed to JRoot }
+
+        JRoot.AddPair('row_count' , TJSONNumber.Create(Length(Cells)));
+        JRoot.AddPair('truncated' , TJSONBool  .Create(Truncated)    );
+        JRoot.AddPair('row_cap'   , TJSONNumber.Create(RowCap)       );
+        JRoot.AddPair('timeout_ms', TJSONNumber.Create(TimeoutMs)    );
+        JRoot.AddPair('elapsed_ms', TJSONNumber.Create(ElapsedMs)    );
+        OutStr:= JRoot.Format(2);
+      finally
+        JRoot.Free;
+      end; // try
+    end
+    else
+    begin
+      SetLength(Widths, Length(ColNames));
+      for c:= 0 to High(ColNames) do Widths[c]:= Length(ColNames[c]);
+      for r:= 0 to High(Cells) do
+        for c:= 0 to High(Cells[r]) do
+          if Length(Cells[r][c]) > Widths[c] then Widths[c]:= Length(Cells[r][c]);
+
+      SB:= TStringBuilder.Create;
+      try
+        Line:= TStringBuilder.Create;
+        try
+          for c:= 0 to High(ColNames) do
+          begin
+            if c > 0 then Line.Append('  ');
+            Line.Append(ColNames[c].PadRight(Widths[c]));
+          end;
+          SB.AppendLine(Line.ToString.TrimRight);
+          Line.Clear;
+          for c:= 0 to High(ColNames) do
+          begin
+            if c > 0 then Line.Append('  ');
+            Line.Append(StringOfChar('-', Widths[c]));
+          end;
+          SB.AppendLine(Line.ToString.TrimRight);
+
+          for r:= 0 to High(Cells) do
+          begin
+            Line.Clear;
+            for c:= 0 to High(Cells[r]) do
+            begin
+              if c > 0 then Line.Append('  ');
+              Line.Append(Cells[r][c].PadRight(Widths[c]));
+            end;
+            SB.AppendLine(Line.ToString.TrimRight);
+          end;
+        finally
+          Line.Free;
+        end; // try
+
+        SB.AppendLine(System.SysUtils.Format('%d row(s) in %d ms', [Length(Cells), ElapsedMs]));
+        { NEVER a silent cap: a truncated answer that does not say so reads as
+          the complete answer, and the reader draws a conclusion from data that
+          was cut off. }
+        if Truncated then
+          SB.AppendLine(System.SysUtils.Format(
+            '-- ROW CAP REACHED at %d rows; there are more. Pass --limit N.', [RowCap]));
+        OutStr:= SB.ToString;
+      finally
+        SB.Free;
+      end; // try
+    end; // else
+  finally
+    JRows.Free; { nil once JRoot took it; a failure path still owns it here }
+  end; // try
+
+  if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.ANSI)
+  else Writeln(OutStr);
+  Result:= 0;
 end; // function
 
 { Local re-declarations of the tree-sitter grammar entry points, mirroring the
@@ -19928,6 +20344,7 @@ begin
     else if Args.Command = 'uses-report'       then Result:= DoUsesReport      (Args)
     else if Args.Command = 'deps-report'       then Result:= DoDepsReport      (Args)
     else if Args.Command = 'schema'            then Result:= DoSchema          (Args)
+    else if Args.Command = 'sql'               then Result:= DoSql             (Args)
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
     else if Args.Command = 'info'              then Result:= DoInfo            (Args)
     else if Args.Command = 'resolve-uses'      then Result:= DoResolveUses     (Args)
