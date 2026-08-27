@@ -245,6 +245,45 @@ try {
   Check 'positive control: that harness had actually been LISTENING' `
     ($sOut -match 'LISTENING') "output: $($sOut.Trim())"
   Check 'the port is released after Stop' (-not (Wait-Listening $sPort 1200)) "port $sPort"
+  # ---- CASE H: Stop() with a client MID-REQUEST -- the observed hang --------
+  # CASE G parks the thread in accept(), which closesocket already unblocked.
+  # The IDE hang was the other shape: the thread inside ServeOne, in recv/send.
+  # Those are bounded by SO_RCVTIMEO/SO_SNDTIMEO at 5s -- LONGER than the 3s
+  # join -- so the join always lost that race and abandoned a thread that was
+  # working normally. Teardown telemetry showed exactly this on 2026-08-26:
+  #   Stop: listening socket closed; joining accept thread
+  #   Stop: TIMEOUT -- accept thread did not exit within 3000 ms
+  # The fix is for Stop to close the CONNECTION BEING SERVED, not just the
+  # listener. This case fails without it.
+  Write-Host ""
+  Write-Host 'CASE H: Stop() returns promptly with a client mid-request' -ForegroundColor Cyan
+  $hPort = Get-FreePort
+  $hLog  = "$WorkDir\stop_mid_$hPort.log"
+  $hp = Start-Process $harness -ArgumentList '--port',"$hPort",'--seconds','4','--mode','empty','--enabled','1' `
+         -PassThru -NoNewWindow -RedirectStandardOutput $hLog
+  $script:procs += $hp
+  $null = Wait-Listening $hPort 8000
+  # Connect and send a PARTIAL request -- no blank line, so ServeOne stays in recv.
+  $cli = [System.Net.Sockets.TcpClient]::new()
+  try {
+    $cli.Connect('127.0.0.1', $hPort)
+    $s = $cli.GetStream()
+    $b = [System.Text.Encoding]::ASCII.GetBytes("POST /api/generate HTTP/1.1`r`nHost: x`r`nContent-Length: 999`r`n`r`n{")
+    $s.Write($b, 0, $b.Length); $s.Flush()
+  } catch { }
+  $exitedH = $hp.WaitForExit(25000)
+  Check 'the harness exits with a client mid-request' $exitedH `
+    $(if ($exitedH) { "" } else { "still running after 25s" })
+  if (-not $exitedH) { try { $hp.Kill() } catch { } }
+  try { $cli.Close() } catch { }
+  $hOut = Get-Content $hLog -Raw -ErrorAction SilentlyContinue
+  $hMs = -1
+  if ($hOut -match 'STOP_MS=(\d+)') { $hMs = [int]$Matches[1] }
+  Check 'positive control: that harness really was serving' ($hOut -match 'LISTENING') "output: $($hOut.Trim())"
+  # 500ms, not 1500: measured FIXED=0 and UNFIXED=1513, and a threshold 13ms
+  # from the failing value is a control that flakes into green.
+  Check 'Stop() with a client mid-request returns in under 500 ms' `
+    (($hMs -ge 0) -and ($hMs -lt 500)) "STOP_MS=$hMs (measured unfixed: 1513)"
 }
 finally {
   Stop-All

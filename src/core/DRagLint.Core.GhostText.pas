@@ -42,6 +42,8 @@ uses
   , Winapi.WinSock2
   , System.Classes
   , System.SysUtils
+  , System.SyncObjs   { TCriticalSection -- guards the in-flight client socket,
+                        which is a FIELD, so this belongs in the interface uses }
   ;
 
 type
@@ -73,6 +75,11 @@ type
       FListen  : TSocket             ;
       FThread  : TThread             ;
       FStopping: Integer             ;
+      { The connection currently being SERVED, and a lock for it. Stop closes it
+        so a blocked recv/send returns at once instead of waiting out its
+        timeout -- see the note on Stop. }
+      FClient  : TSocket             ;
+      FClientCS: TCriticalSection    ;
       procedure AcceptLoop;
       procedure ServeOne(ASock: TSocket);
     public
@@ -107,8 +114,8 @@ var
 implementation
 
 uses
-    System.JSON
-  , System.SyncObjs
+    System.JSON   { System.SyncObjs moved to the INTERFACE uses -- the critical
+                    section guarding the in-flight client is a field. }
   ;
 
 const
@@ -247,11 +254,14 @@ begin
   FProvider:= AProvider;
   FListen  := INVALID_SOCKET;
   FStopping:= 0;
+  FClient  := INVALID_SOCKET;
+  FClientCS:= TCriticalSection.Create;
 end;
 
 destructor TGhostTextServer.Destroy;
 begin
   Stop;
+  FreeAndNil(FClientCS);
   inherited;
 end;
 
@@ -315,6 +325,28 @@ begin
   FListen:= INVALID_SOCKET;
   closesocket(Sock);
 
+  { CLOSE THE CONNECTION BEING SERVED, not just the listener.
+
+    Closing the listener only unblocks accept(). If the thread is inside
+    ServeOne it is in recv or send, and those are bounded by SO_RCVTIMEO /
+    SO_SNDTIMEO at 5s -- LONGER than the 3s join below, so the join always lost
+    that race and reported a timeout for a thread that was working normally.
+    Observed exactly once the trace existed: teardown reached Stop, the socket
+    closed, and 3s later the thread was still alive.
+
+    Closing the client makes the blocked call return immediately. }
+  FClientCS.Enter;
+  try
+    if FClient <> INVALID_SOCKET then
+    begin
+      GT('Stop: closing the in-flight client connection');
+      closesocket(FClient);
+      FClient:= INVALID_SOCKET;
+    end;
+  finally
+    FClientCS.Leave;
+  end;
+
   GT('Stop: listening socket closed; joining accept thread');
 
   if Assigned(FThread) then
@@ -371,13 +403,29 @@ begin
   begin
     Client:= accept(FListen, nil, nil);
     if Client = INVALID_SOCKET then Break;   { closed by Stop, or a real error }
+    { PUBLISH the connection being served, so Stop can reach in and close it.
+      Without this the only way out of a blocked recv/send is its own timeout,
+      and Stop's join gave up first. }
+    FClientCS.Enter;
+    try FClient:= Client; finally FClientCS.Leave; end;
     try
       ServeOne(Client);
     except
       { A failure serving ONE request must never end the loop -- the next
         keystroke deserves an answer even if this one broke. }
     end;
-    closesocket(Client);
+    FClientCS.Enter;
+    try
+      { Only close it here if Stop has not already done so -- a double close on
+        a handle the OS may have reused is a real hazard, not a tidy-up. }
+      if FClient <> INVALID_SOCKET then
+      begin
+        closesocket(FClient);
+        FClient:= INVALID_SOCKET;
+      end;
+    finally
+      FClientCS.Leave;
+    end;
   end;
 end;
 
