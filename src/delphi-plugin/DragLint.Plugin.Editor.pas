@@ -65,6 +65,31 @@ function StripFirstHeaderLine(const AMarkdown: string): string;
   (caller shows the string popup) on any miss. }
 function TryBuildHoverModel(const ARawMarkdown: string; out AModel: TDragLintHoverModel; out ACallers: TArray<TDragLintCallerInfo>): Boolean;
 
+/// <summary>The identifier the caret is sitting in (or immediately after) in
+/// the active editor.</summary>
+/// <returns>The identifier, or an empty string when the caret is on
+/// whitespace, punctuation or outside any word.</returns>
+/// <remarks>PROMOTED TO THE INTERFACE for the dwell tracker, which needs the
+/// symbol name BEFORE it issues its hover request -- the name the SERVER
+/// resolves arrives only in the answer, which is too late to put in a
+/// "thinking" note. Shared rather than copied: two implementations of "what is
+/// under the caret" would drift, and the menu path and the dwell path showing
+/// different names for the same caret is exactly the confusion the note exists
+/// to remove. Main thread only; never raises.</remarks>
+function IdentifierAtCursor: string;
+
+/// <summary>Writes the "drag-lint is looking this up" note for the symbol
+/// under the caret onto the status strip.</summary>
+/// <remarks>ONE formatter for BOTH hover paths -- the menu-invoked hover and
+/// the dwell tracker. They used to build the string separately, which is how
+/// the same caret comes to read two different ways depending on how the popup
+/// was triggered. Call it immediately BEFORE the request goes out; the request
+/// blocks the main thread, and announcing afterwards would be useless.
+/// <para>Three states, deliberately distinguishable: a named identifier, a
+/// dwell that resolved no identifier, and (once the caller clears the note) an
+/// answered hover.</para></remarks>
+procedure AnnounceHoverStart;
+
 /// <summary>Fetches hover markdown, the structured model and the CALLED FROM
 /// rows in ONE request to the already-running LSP server.</summary>
 /// <param name="AUri">Document uri of the hovered file.</param>
@@ -776,7 +801,6 @@ end; // function
   implementation-section forward is no longer needed -- the interface decl serves
   as the forward for ordering. ResolvePrimaryIndexDb and DLLibraryDb are now also
   in the interface (v1.1.0: exposed for the About dialog). }
-function IdentifierAtCursor: string; forward;
 { v0.64.1: forward so all heavy-command handlers above can call DLExe64
   before its implementation appears later in this unit. }
 function DLExe64: string; forward;
@@ -1679,7 +1703,7 @@ begin
 
   { Tell the user we started BEFORE the request goes out -- that is the whole
     point of the note; announcing after the answer arrives would be useless. }
-  SetDragLintNote('drag-lint: hover ' + IdentifierAtCursor);
+  AnnounceHoverStart;
 
   { v(hover bundle): ONE request for everything the popup needs. The block below
     -- a hover round trip plus three drag-lint.exe spawns -- is kept verbatim as
@@ -3426,6 +3450,15 @@ begin
 
   ShowMessage(Format('drag-lint AST Checks:'#13#10'%s', [Trim(Output)]));
 end; // procedure
+
+procedure AnnounceHoverStart;
+var
+  N: string;
+begin
+  N:= IdentifierAtCursor;
+  if N <> '' then SetDragLintNote('drag-lint: hover ' + N + '...')
+  else             SetDragLintNote('drag-lint: hover ...');
+end;
 
 { v0.33: Find Usages }
 function IdentifierAtCursor: string;

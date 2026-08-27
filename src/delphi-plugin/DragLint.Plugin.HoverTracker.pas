@@ -358,8 +358,22 @@ begin
       Uri:= 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
       { Announce BEFORE the request. Only this branch does engine work -- a
         cached caret re-show is instant and needs no note. Asked for
-        2026-08-19 so a slow hover reads as THINKING rather than absent. }
-      SetDragLintNote('drag-lint: hover');
+        2026-08-19 so a slow hover reads as THINKING rather than absent.
+
+        NAME THE SYMBOL. One string could not distinguish the three states the
+        owner actually needs told apart -- "it saw my identifier and is working"
+        from "it saw nothing to look up" from "it is not running at all":
+
+          drag-lint: hover WindowState...   a request is out for a KNOWN name
+          drag-lint: hover ...              dwelling, but no identifier resolved
+          (cleared)                         answered; the popup IS the answer
+
+        The name CANNOT come from the response: BQName arrives after the call
+        below, and the whole point is to say something before it blocks. So it
+        is read locally at the caret, through the SAME AnnounceHoverStart the
+        menu-invoked hover path uses (Editor.pas) -- ONE formatter, so the two
+        paths can never name the same caret differently. }
+      AnnounceHoverStart;
       { v(hover bundle): ONE request for markdown + model + callers. This used to
         be a hover round trip here and three drag-lint.exe spawns later on, all
         on the main thread while a tooltip was trying to appear. On any miss --

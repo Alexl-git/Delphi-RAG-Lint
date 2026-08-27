@@ -18,6 +18,7 @@ uses
   , Vcl.ComCtrls
   , System.Generics.Collections   { GBars -- the live strips a note reaches }
   , DragLint.Plugin.JobQueue
+  , DRagLint.Core.EngineHold      { EngineIsHeld -- announced from the tick below }
   ;
 
 type
@@ -30,6 +31,11 @@ type
     FTimer   : TTimer      ;
     FLast    : TQueueState ;
     FHasLast : Boolean     ;
+    { Engine-hold announcement. FHoldText is what WE last wrote, so the clear
+      can check it is still ours and not stomp a note somebody else set. }
+    FHoldTick: Integer     ;
+    FHoldText: string      ;
+    procedure PollEngineHold;
     procedure HandleTimer (Sender: TObject);
     procedure HandleCancel(Sender: TObject);
     procedure Relayout;
@@ -185,10 +191,64 @@ begin
        and (A.LastResult = B.LastResult);
 end;
 
+procedure TDragLintStatusBar.PollEngineHold;
+const
+  { 200 ms tick; every fifth is once a second, which is the resolution the
+    countdown is printed at anyway. }
+  HOLD_POLL_TICKS = 5;
+var
+  Secs: Integer;
+  Txt : string ;
+begin
+  { WHY THIS IS ON A TIMER, AND WHY THAT IS NOT THE THING THE NO-TIMER RULE
+    FORBIDS.
+    ------------------------------------------------------------------------
+    EnsureLspClient already announces the hold, but only when something ASKS
+    for the client. That is correct for the no-spawn rule and useless for the
+    person who is not currently interacting: a build takes the engine away, the
+    IDE goes quiet, and nothing on screen says why.
+
+    The rule recorded on GLspRetryAfter objects to "a second uninvited source
+    of PROCESS SPAWNS". This spawns nothing -- it stats one file, five times
+    slower than the tick it rides on. It also must NOT grow into the respawn
+    path: stopping and restarting the client stays lazy, exactly where it is.
+    Announcing is not the same act as acting.
+
+    BOUND, stated rather than discovered later: this strip lives in the
+    drag-lint dock window. With that window closed there is nowhere to show
+    this. Adding a second status surface to the IDE was tried before and
+    removed -- see SetDragLintNote's own remarks. }
+  Inc(FHoldTick);
+  if (FHoldTick mod HOLD_POLL_TICKS) <> 0 then Exit;
+  try
+    if EngineIsHeld(Secs) then
+    begin
+      Txt:= Format('drag-lint: engine held for a rebuild (%ds)', [Secs]);
+      SetDragLintNote(Txt);
+      FHoldText:= Txt;
+    end
+    else if (FHoldText <> '') then
+    begin
+      { Clear ONLY what we wrote. Between two ticks a hover can set its own
+        note, and clearing that would make the hover look like it never ran --
+        the very symptom this strip spent a session fixing. }
+      if GNote = FHoldText then SetDragLintNote('');
+      FHoldText:= '';
+    end;
+  except
+    { A status strip must never take the IDE down over a missing sentinel. }
+  end;
+end;
+
 procedure TDragLintStatusBar.HandleTimer(Sender: TObject);
 var
   S: TQueueState;
 begin
+  { BEFORE the unchanged-state early exit below. The queue is idle for the
+    whole duration of a hold, so anything downstream of that Exit would never
+    run -- which is exactly how a correct announcement ends up never appearing. }
+  PollEngineHold;
+
   S:= JobQueue.GetState;
   if FHasLast and StatesEqual(S, FLast) then Exit;
   FLast   := S;
