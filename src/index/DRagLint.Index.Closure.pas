@@ -923,6 +923,35 @@ begin
     end
     else // .dpr  (or .dpk)
     begin
+      { SEARCH PATHS COME FROM THE .dproj, EVEN WHEN RESOLVING A .dpr.
+
+        A .dpr carries no search paths -- they live in the .dproj's
+        DCC_UnitSearchPath. Without them a unit that sits outside the project
+        folder cannot be resolved to a file at all, so it never enters the
+        closure.
+
+        That is not cosmetic. TProjectReconciler.Analyze resolves the closure
+        from the .dpr NO MATTER which file it was given, so this branch is the
+        one reconcile always takes. On this repo it left src\doc off the path,
+        DRagLint.Doc.Drift could not be resolved, it was absent from ClosureSet,
+        and reconcile reported it as EXTRA -- "listed but never reached via
+        uses" -- which was false. Reproduced 2026-08-26.
+
+        SEARCH PATHS ONLY -- deliberately NOT ParseDprojRefs. Seeding the
+        DCCReference members here would make the EXTRA set vacuously empty:
+        every listed unit would be in the closure BECAUSE it was listed, and
+        reconcile would go green without ever reaching anything through uses.
+        That is the wrong kind of green, and it would hide the very defect the
+        verb exists to find. }
+      var SiblingDproj: string := TPath.ChangeExtension(ProjectAbs, '.dproj');
+      if TFile.Exists(SiblingDproj) then
+        try
+          ParseDprojSearchPaths(TFile.ReadAllText(SiblingDproj), BaseDir, SearchPaths);
+        except
+          { An unreadable or malformed .dproj must not take the .dpr walk down;
+            it simply contributes no extra search paths. }
+        end;
+
       // PP-Task-10: preprocess the .dpr/.dpk source before its uses-scan so the
       // inactive-branch units are blanked (per-config discovery). The .dproj XML
       // branch above is NOT preprocessed (Content there feeds XML parsers).
