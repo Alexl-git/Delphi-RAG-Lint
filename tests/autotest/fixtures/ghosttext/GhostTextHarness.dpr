@@ -26,6 +26,7 @@ program GhostTextHarness;
 uses
     System.SysUtils
   , System.Classes
+  , System.Diagnostics
   , DRagLint.Core.GhostText in '..\..\..\..\src\core\DRagLint.Core.GhostText.pas'
   ;
 
@@ -41,6 +42,7 @@ var
   Server  : TGhostTextServer;
   Provider: TGhostCompletionFunc;
   I       : Integer;
+  SW      : TStopwatch;
   A       : string ;
 
 begin
@@ -83,6 +85,20 @@ begin
     Flush(Output);
     Sleep(Seconds * 1000);
   finally
+    { TEARDOWN PROBE (2026-08-26). Time the shutdown, do not just perform it.
+
+      Stop must return PROMPTLY even though the accept thread is parked in a
+      blocking accept(). It did NOT: closesocket() called from another thread
+      does not reliably interrupt a blocked accept() on Windows, so Stop joined
+      a thread that never woke, and bds.exe could not exit -- twice, with the
+      port still LISTENING while Stop sat in WaitFor.
+
+      A harness that only checks the server ANSWERS cannot catch this: the hang
+      is on the way OUT. Hence a number, printed, and asserted by the guard. }
+    SW:= TStopwatch.StartNew;
     Server.Free;
+    SW.Stop;
+    Writeln('STOP_MS=', SW.ElapsedMilliseconds);
+    Flush(Output);
   end;
 end.

@@ -62,6 +62,10 @@ type
   /// is called, and the observed IDE error names the Ollama one. Start returns
   /// False rather than raising when the port cannot be bound: a completion
   /// provider that cannot start must not take the IDE down with it.</remarks>
+  /// <summary>Optional teardown/diagnostic sink. The host assigns it; this unit
+  /// has no log of its own and must not acquire one.</summary>
+  TGhostTraceProc = reference to procedure(const AMsg: string);
+
   TGhostTextServer = class
     private
       FPort    : Integer             ;
@@ -94,6 +98,12 @@ type
       property Port: Integer read FPort;
   end;
 
+var
+  /// <summary>Set by the host to receive teardown trace lines. Never called
+  /// unless assigned, and every call is guarded -- a diagnostic must not be
+  /// able to break the thing it is diagnosing.</summary>
+  GGhostTextTrace: TGhostTraceProc = nil;
+
 implementation
 
 uses
@@ -110,6 +120,11 @@ const
   { The IDE waits on this call, so a slow client must not hold completion
     hostage. Loopback with a local client: generous already. }
   RECV_TIMEOUT_MS = 5000;
+
+  { How long Stop waits for the accept thread before abandoning it. Long enough
+    that a request in flight finishes, short enough that no human calls it a
+    hang. }
+  STOP_JOIN_TIMEOUT_MS = 3000;
 
 type
   TAcceptThread = class(TThread)
@@ -135,6 +150,12 @@ end;
 { ---------------------------------------------------------------------------
   Small helpers
   --------------------------------------------------------------------------- }
+
+procedure GT(const AMsg: string);
+begin
+  if Assigned(GGhostTextTrace) then
+    try GGhostTextTrace(AMsg); except end;
+end;
 
 function SendAll(ASock: TSocket; const AData: RawByteString): Boolean;
 var
@@ -283,7 +304,8 @@ procedure TGhostTextServer.Stop;
 var
   Sock: TSocket;
 begin
-  if FListen = INVALID_SOCKET then Exit;
+  GT('Stop: ENTER');
+  if FListen = INVALID_SOCKET then begin GT('Stop: already stopped'); Exit; end;
   TInterlocked.Exchange(FStopping, 1);
 
   { Closing the listening socket is what unblocks accept. There is no portable
@@ -293,12 +315,43 @@ begin
   FListen:= INVALID_SOCKET;
   closesocket(Sock);
 
+  GT('Stop: listening socket closed; joining accept thread');
+
   if Assigned(FThread) then
   begin
-    FThread.WaitFor;
-    FreeAndNil(FThread);
+    { BOUNDED JOIN (2026-08-26). This used to be an unbounded FThread.WaitFor,
+      and bds.exe twice failed to exit with teardown parked exactly here.
+
+      The trade is deliberate and worth stating. Abandoning a live thread whose
+      code lives in a BPL that is about to unload is a real hazard -- but on IDE
+      SHUTDOWN the process dies moments later, whereas an unbounded wait hangs
+      the IDE forever and the user must kill it. A bounded wait converts an
+      indefinite hang into a bounded one, and says so loudly either way.
+
+      If this line ever reports a timeout, the accept thread is stuck in
+      ServeOne, and the trace above says which stage. Do not raise the timeout
+      to make it quiet. }
+    if FThread.Handle <> 0 then
+    begin
+      if WaitForSingleObject(FThread.Handle, STOP_JOIN_TIMEOUT_MS) = WAIT_OBJECT_0 then
+      begin
+        GT('Stop: accept thread joined cleanly');
+        FreeAndNil(FThread);
+      end
+      else
+      begin
+        { Deliberately NOT freed: TThread.Destroy waits on the thread, which is
+          the very wait that just timed out. Leaking the object is the lesser
+          harm and the process is exiting. }
+        GT(Format('Stop: TIMEOUT -- accept thread did not exit within %d ms; ' +
+                  'abandoning it rather than hanging the IDE', [STOP_JOIN_TIMEOUT_MS]));
+        FThread:= nil;
+      end;
+    end
+    else FreeAndNil(FThread);
   end;
   WSACleanup;
+  GT('Stop: DONE');
 end;
 
 class function TGhostTextServer.StartWhen(AEnabled: Boolean; APort: Integer;
@@ -350,6 +403,11 @@ var
 begin
   Timeout:= RECV_TIMEOUT_MS;
   setsockopt(ASock, SOL_SOCKET, SO_RCVTIMEO, @Timeout, SizeOf(Timeout));
+  { SEND MUST BE BOUNDED TOO (2026-08-26). Only the receive was, so a client
+    that opened a connection and then stopped READING parked this thread in
+    send() forever -- and Stop joins this thread, so the IDE could not exit.
+    An unanswered completion is a non-event; an IDE that will not close is not. }
+  setsockopt(ASock, SOL_SOCKET, SO_SNDTIMEO, @Timeout, SizeOf(Timeout));
 
   Raw      := '';
   HeaderEnd:= 0;

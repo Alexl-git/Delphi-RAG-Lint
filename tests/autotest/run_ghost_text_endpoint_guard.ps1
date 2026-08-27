@@ -214,6 +214,37 @@ try {
   Write-Host 'CASE F: an endpoint we do not serve is a 404, not a fabricated 200' -ForegroundColor Cyan
   $r4 = Post-Json "http://127.0.0.1:$port/v1/chat/completions" '{"prompt":"begin W.TSampleWorker."}'
   Check 'an unserved path returns 404' ($r4.Status -eq 404) "status=$($r4.Status) $($r4.Err)"
+
+  # ---- CASE G: Stop() must RETURN -- the IDE-hang regression --------------
+  # 2026-08-26: bds.exe twice failed to exit after the IDE window closed. The
+  # teardown trace ended at "-> GGhostText.Stop" and never continued, with
+  # 127.0.0.1:8765 STILL LISTENING. Stop assumed closesocket() from another
+  # thread interrupts a blocked accept(); Windows does not guarantee that, so
+  # Stop joined a thread that never woke.
+  #
+  # Every check above passes with that bug present, because they all probe a
+  # server that is UP. The hang is on the way OUT, so it needs its own case.
+  Write-Host ""
+  Write-Host 'CASE G: Stop() returns promptly with the accept thread parked' -ForegroundColor Cyan
+  $sPort = Get-FreePort
+  $sLog  = "$WorkDir\stop_$sPort.log"
+  $sp = Start-Process $harness -ArgumentList '--port',"$sPort",'--seconds','2','--mode','empty','--enabled','1' `
+         -PassThru -NoNewWindow -RedirectStandardOutput $sLog
+  $script:procs += $sp
+  $exited = $sp.WaitForExit(20000)
+  Check 'the harness process exits (Stop did not hang)' $exited `
+    $(if ($exited) { "" } else { "still running after 20s -- Stop() never returned" })
+  if (-not $exited) { try { $sp.Kill() } catch { } }
+  $sOut = Get-Content $sLog -Raw -ErrorAction SilentlyContinue
+  $ms = -1
+  if ($sOut -match 'STOP_MS=(\d+)') { $ms = [int]$Matches[1] }
+  Check 'the harness reported a teardown time' ($ms -ge 0) "output: $($sOut.Trim())"
+  Check 'Stop() returned in under 2000 ms' (($ms -ge 0) -and ($ms -lt 2000)) "STOP_MS=$ms"
+  # POSITIVE CONTROL: the port really was serving, so a fast Stop cannot be
+  # explained by the server having failed to start.
+  Check 'positive control: that harness had actually been LISTENING' `
+    ($sOut -match 'LISTENING') "output: $($sOut.Trim())"
+  Check 'the port is released after Stop' (-not (Wait-Listening $sPort 1200)) "port $sPort"
 }
 finally {
   Stop-All

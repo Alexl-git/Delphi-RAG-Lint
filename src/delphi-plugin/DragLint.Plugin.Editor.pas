@@ -5838,6 +5838,17 @@ var
   S: TDragLintSettings;
 begin
   if GGhostText <> nil then Exit;
+
+  { Route the server's own teardown trace into the plugin log. The unit has no
+    log of its own on purpose -- it is core code shared with the CLI -- so
+    without this the most informative lines about a stuck shutdown would be
+    written nowhere. Assigned before Start so nothing can happen untraced. }
+  GGhostTextTrace :=
+    procedure(const AMsg: string)
+    begin
+      DLT('ghosttext', AMsg);
+    end;
+
   S:= LoadSettings;
   GGhostText:= TGhostTextServer.StartWhen(
     S.EnableGhostText, S.GhostTextPort,
