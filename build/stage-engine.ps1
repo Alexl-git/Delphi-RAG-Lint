@@ -55,6 +55,27 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# NORMALISE BOTH PATHS BEFORE ANYTHING COMPARES THEM.
+#
+# The caller is build_draglint_win64.bat, whose %ROOT% is "%~dp0.." -- so
+# $Target arrives as
+#     C:\Projects\Delphi-RAG-lint\build\..\third_party\dll-win64\drag-lint.exe
+# while Win32_Process.ExecutablePath is always the canonical
+#     C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe
+#
+# Copy-Item happily resolves the first form, so the ordinary path worked and
+# hid this completely. Only the holder comparison broke -- `-ieq` between those
+# two strings is never true -- which made Get-Holders return EMPTY every single
+# time, on 2026-08-27 against a VS Code LSP child that was demonstrably running
+# that exact image. The script then reported "the lock is something else",
+# killed nothing, and burned the full 45-second timeout.
+#
+# That is worse than the message it replaced: the old one merely failed to name
+# the holder, this one asserted there wasn't one. GetFullPath, not Resolve-Path
+# -- the target may legitimately not exist yet on a first deploy.
+$Target   = [System.IO.Path]::GetFullPath($Target)
+$FreshExe = [System.IO.Path]::GetFullPath($FreshExe)
+
 function Try-Copy {
   try { Copy-Item -LiteralPath $FreshExe -Destination $Target -Force -ErrorAction Stop; return $true }
   catch { return $false }
