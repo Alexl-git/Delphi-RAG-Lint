@@ -129,6 +129,7 @@ See also [Features](Features) for the grouped overview and
 * [query find-callers](query-find-callers) -- `query find-callers`
 * [query typecat](query-typecat) -- `query typecat`
 * [query type-usage](query-type-usage) -- `query type-usage`
+* [query unit-usage](query-unit-usage) -- `query unit-usage`
 * [rules](rules) -- `rules`
 * [safe-delete](safe-delete) -- `safe-delete`
 * [schema](schema) -- `schema`
