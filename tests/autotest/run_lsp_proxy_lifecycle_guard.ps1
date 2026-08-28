@@ -84,12 +84,42 @@ function Start-Relay {
   $before = Stub-Pids
   $p = [System.Diagnostics.Process]::Start($psi)
 
+  # IDENTIFY THE CHILD BY ITS PARENT, NOT BY NAME.
+  #
+  # This used to take the first LspStubServer pid that appeared anywhere on the
+  # machine after we started -- `Stub-Pids | Where-Object { $_ -notin $before }`,
+  # then `$new[0]`. Get-Process matches by NAME across every session, so any
+  # other stub starting in that window could be picked as "our child", and then
+  # "the child is gone" waits 15 s for a process we never owned and reports an
+  # orphan leak that did not happen.
+  #
+  # That is the shape of the intermittent battery failure: this guard and
+  # run_lsp_proxy_byte_identity_guard.ps1 sit three tests apart, both drive
+  # LspStubServer, and across three battery runs ONE of the pair failed each
+  # time while BOTH pass 3/3 in isolation -- and under 7 CPU spinners, which
+  # rules out plain scheduling latency.
+  #
+  # ParentProcessId is exact and cannot be confused by a sibling. The name-diff
+  # is kept only as a fallback for the case where the CIM query is unavailable,
+  # and it is NOT silent: it says which route answered, so a future flake is not
+  # re-diagnosed from scratch.
   $childPid = $null
   $deadline = (Get-Date).AddSeconds(10)
   while ((Get-Date) -lt $deadline) {
-    $new = @(Stub-Pids | Where-Object { $_ -notin $before })
-    if ($new.Count -gt 0) { $childPid = $new[0]; break }
+    $kid = @(Get-CimInstance Win32_Process -Filter "Name='LspStubServer.exe'" -ErrorAction SilentlyContinue |
+             Where-Object { $_.ParentProcessId -eq $p.Id } |
+             Select-Object -ExpandProperty ProcessId)
+    if ($kid.Count -gt 0) { $childPid = $kid[0]; break }
     Start-Sleep -Milliseconds 100
+  }
+  if (-not $childPid) {
+    $new = @(Stub-Pids | Where-Object { $_ -notin $before })
+    if ($new.Count -eq 1) {
+      $childPid = $new[0]
+      Write-Host '  [note] child identified by name-diff, not parentage (CIM unavailable?)' -ForegroundColor DarkYellow
+    } elseif ($new.Count -gt 1) {
+      Write-Host ("  [note] {0} unparented stubs appeared; refusing to guess which is ours" -f $new.Count) -ForegroundColor DarkYellow
+    }
   }
   return [pscustomobject]@{ Proxy = $p; ChildPid = $childPid }
 }
