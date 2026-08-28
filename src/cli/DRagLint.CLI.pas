@@ -9,6 +9,25 @@ uses
   DRagLint.Core.Model;
 
 const
+  { THE PROJECT-LEVEL RULES THAT SHIP OFF BY DEFAULT, IN ONE PLACE.
+
+    These are emitted by TClassMetrics.Run and TProjectLintRules, whose catalog
+    default_enabled=False does NOT suppress CLI output on its own -- each verb
+    has to list them for the ShouldKeep filter. lint-all listed them; `lint` did
+    not, because these rules never ran on the per-file path at all.
+
+    The moment T4 made them run per file, that omission became visible as the
+    REVERSE of the parity bug: `lint <f> --db` reported feature-envy and
+    missing-doc on a unit where lint-all deliberately says nothing. Measured on
+    DataCopy's uMainZeissCopy.pas -- 12 rule ids per-file against lint-all's 10.
+
+    So it is ONE list consumed by both verbs. A third hand-written copy is the
+    disease this whole change set is treating. }
+  PROJECT_RULES_OFF_BY_DEFAULT: TArray<string> = [
+    'middle-man', 'fan-out', 'fan-in', 'feature-envy', 'instability',
+    'repeated-type-switch', 'missing-doc'];
+
+const
   { Kept as a local alias so the seven existing uses below read unchanged; the
     value now comes from DRagLint.Core.Model so the LSP handshake cannot drift
     away from the CLI banner again -- see DRAGLINT_VERSION. }
@@ -300,6 +319,15 @@ type
       is about a temp file nobody has. Measured before it was built:
       `[flowdb] eff=C:\TEMP\drag-lint-live-...pas db= store=False fid=0`. }
     StandInFor   : string ; // --stand-in-for <realpath> ('' = the target is itself)
+    { --project-rules: also run the store-backed PER-DECL doc rules (doc-drift,
+      missing-doc) for this one file. OFF by default, and the default is a
+      MEASUREMENT, not caution: doc-drift rebuilds the expected facts block per
+      declaration -- ~16 ms each -- so a 53-decl unit costs 0.83 s and this
+      repo's own DRagLint.CLI.pas costs 60.84 s. The IDE spawns `lint` per
+      buffer against a HARD 8 s timeout whose failure branch shows NO
+      diagnostics at all, so running these by default would replace a partial
+      gutter with an EMPTY one on exactly the largest files. }
+    ProjectRules : Boolean; // --project-rules (per-file doc-drift + missing-doc)
     RemoveUnused : Boolean; // --remove-unused (uses-fix: also comment unused)
     // v0.27: generate-test + format
     TestFramework: string; // --framework dunitx|dunit (default 'dunitx')
@@ -556,6 +584,8 @@ begin
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess]');
   Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)');
+  Writeln('                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:');
+  Writeln('                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE''s 8s budget)');
   Writeln('                               [--stand-in-for <realpath>]  (analyse <path>''s TEXT as though it were <realpath>:');
   Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
   Writeln('                               unit-name and the reported path)');
@@ -1199,6 +1229,7 @@ begin
     else if (A = '--fix-line') and (i < ParamCount) then begin Inc(i); Result.FixLine:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--fix-rule') and (i < ParamCount) then begin Inc(i); Result.FixRule:= ParamStr(i); end
     else if (A = '--stand-in-for') and (i < ParamCount) then begin Inc(i); Result.StandInFor:= ParamStr(i); end
+    else if A = '--project-rules' then Result.ProjectRules:= True
     else if A = '--include-private' then Result.IncludePrivate:= True
     else if (A = '--target') and (i < ParamCount) then begin Inc(i); Result.Target:= ParamStr(i); end
     else if (A = '--add-project') and (i < ParamCount) then begin Inc(i); Result.AddProjectName:= ParamStr(i); end
@@ -8441,6 +8472,11 @@ begin
     The directory is per-PROCESS and the file keeps the real base name, so the
     same buffer reuses one path instead of growing TEMP without bound, and two
     engines running at once cannot collide on it. }
+  { Did an index actually cover this file? Recorded in the OUTER scope because
+    the store itself lives inside the .pas-only block, and the closing note
+    below has to tell the truth about which of two very different runs this
+    was: store-backed and at parity, or store-free and quietly narrower. }
+  var FlowStoreSeen: Boolean := False;
   var StandInLogical: string := '';
   if (AArgs.StandInFor <> '') and (EffPath <> '') then
   begin
@@ -8648,6 +8684,10 @@ begin
         field-write predicate keeps FP low, but ships OFF. Opt in via "enabled":
         ["separate-query-from-modifier"] or --rule separate-query-from-modifier. }
       if AArgs.Rule <> 'separate-query-from-modifier' then DefDisabled:= DefDisabled + ['separate-query-from-modifier'];
+      { The project-level rules T4 made reachable from this verb. Same guard
+        pattern as every line above: --rule <id> still opts one back in. }
+      for var POff: string in PROJECT_RULES_OFF_BY_DEFAULT do
+        if AArgs.Rule <> POff then DefDisabled:= DefDisabled + [POff];
       { --rule MUST gate the external query-rule pass too, not just the built-in
         checks above. Every builtin is wrapped in `if (AArgs.Rule = '') or
         (AArgs.Rule = '<id>')`, but these two lines appended the .scm findings
@@ -8954,6 +8994,71 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'duplicate-code') then
         for F in DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check(EffPath, Cfg.ThresholdFor('duplicate-code', 90)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      { THE PROJECT-WIDE RULES THAT ARE COMPUTABLE FOR ONE FILE.
+
+        This is the 75% of the owner's report the IDE never showed. Measured
+        against their own DataCopy lint-report-20260828.txt, 207 of 260 findings
+        (79%) came from rules `lint <file>` does not run -- doc-drift 128 (49%),
+        unused-unit-in-uses 66 (25%), review-marker-unused 9, unused-public-
+        symbol 4. None of them is genuinely whole-project: the INDEX already
+        holds the project-wide state, and the two verbs simply never shared it.
+
+        Gated on the store CONTAINING this file, which is the same membership
+        rule the flow store uses above. Without an index these questions have no
+        answer at all, so the verb degrades to exactly what it did before. }
+      FlowStoreSeen:= (FlowStore <> nil) and (FlowFid > 0);
+      if (FlowStore <> nil) and (FlowFid > 0) then
+      begin
+        { THE INDEX-WIDE RULES, NARROWED TO THIS FILE'S FINDINGS.
+
+          Computed over the whole store and then filtered, deliberately, rather
+          than plumbing a file filter down through TProjectLintRules: these
+          rules are RELATIONAL -- unused-unit-in-uses asks whether anything in
+          the project still references an import, unused-public-symbol asks
+          whether anything calls a routine. A filter applied INSIDE would have
+          to be threaded through every one of those questions without changing
+          any of their answers, and getting that subtly wrong yields findings
+          that are confidently wrong rather than absent. Filtering the RESULT
+          cannot: the computation is bit-for-bit the one lint-all does.
+
+          It is affordable because the whole-store pass is one indexed sweep,
+          not per-declaration work -- measured below and recorded in the commit.
+          That is exactly why doc-drift is NOT here: its cost is per-decl.
+
+          LibStore is load-bearing for unused-unit-in-uses, not optional. A
+          PROJECT store cannot see System.IniFiles, so without the library index
+          the rule's own is-it-indexed gate answers False for every RTL/VCL
+          import and it reports ZERO -- which reads as a clean project. }
+        var MyPath: string := FlowStore.GetFilePath(FlowFid);
+        var SibKeep : TList<ISymbolStore>  := TList<ISymbolStore>.Create;
+        var SibOwned: TObjectList<TObject> := TObjectList<TObject>.Create(True);
+        try
+          for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
+                     FlowStore, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore) do
+            if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
+              Findings:= Findings + [F];
+          for F in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(FlowStore, ResolveLibraryDb(AArgs)) do
+            if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
+              Findings:= Findings + [F];
+          for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, '') do
+            if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
+              Findings:= Findings + [F];
+        finally
+          SibKeep .Free;
+          SibOwned.Free;
+        end;
+      end;
+      if (FlowStore <> nil) and (FlowFid > 0) and AArgs.ProjectRules then
+      begin
+        var DocDb: string := IfThen(FlowDb <> '', FlowDb, AArgs.DbPath);
+        if (AArgs.Rule = '') or (AArgs.Rule = 'doc-drift') then
+          for F in DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(
+                     FlowStore, DocRenderOptionsFor(AArgs, DocDb), FlowFid) do
+            if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+        if (AArgs.Rule = '') or (AArgs.Rule = 'missing-doc') then
+          for F in DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(FlowStore, FlowFid) do
+            if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      end;
       { Free cached tree after single-file lint }
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
     end; // if
@@ -8989,23 +9094,46 @@ begin
     Store:= OpenReadOnlyStore(AArgs.DbPath, StoreOk);
     if not StoreOk then Store:= nil;
   end;
-  { SAY WHAT THIS VERB CANNOT SEE. `lint <file>` runs only the per-file rules;
-    the whole-run rules (index-wide project rules, and the review-marker
-    reporters, which must see every file before they can know a marker matches
-    nothing) run under lint-all. Measured 2026-08-16 on a one-file fixture
-    carrying a stranded dl:ok: `lint <f>` printed "0 finding(s)" while
-    `lint-all` over that SAME single file printed 2. A zero that means "I did
-    not look" is indistinguishable from a zero that means "nothing is wrong",
-    and this verb is what the IDE plugin calls on every buffer.
+  { SAY WHAT THIS VERB CANNOT SEE -- AND SAY IT ACCURATELY.
+
+    The old note claimed "project-wide checks" wholesale, which stopped being
+    true in T4: with a store that CONTAINS this file, unused-unit-in-uses,
+    unused-public-symbol, circular-uses, class metrics and used-unit-resolvable
+    all run here now, scoped to this file. Naming them as missing would be the
+    same defect in the opposite direction -- telling the reader to go run
+    lint-all for answers they already have.
+
+    A zero that means "I did not look" is indistinguishable from a zero that
+    means "nothing is wrong", and this verb is what the IDE plugin calls on
+    every buffer, so the note stays. It now names ONLY what is genuinely absent:
+
+    * doc-drift / missing-doc -- computable per file and correct, but rebuilt
+      PER DECLARATION at ~16 ms each, so a 53-decl unit costs 0.83 s and a real
+      DataCopy unit reached 8.75 s against the plugin's HARD 8 s timeout, whose
+      failure branch shows NO diagnostics at all. Opt in with --project-rules.
+    * review-marker-unused -- must see every file before it can know a marker
+      matches nothing.
+    * cross-file duplicate-code and interface-reference-cycle -- no per-file
+      answer can be correct.
+    * exception-class enrichment -- a class's message routinely lives in a
+      different unit from the bare raise (Linter.pas:174-178).
+    * unit-not-in-dpr, unless --project names the project.
 
     Written to stderr and only in the human path, so JSON consumers and the
     plugin's diagnostic stream are untouched.
-    See docs\INBOX-lint-single-file-silently-omits-lint-all-rules.md. }
+    See docs\INBOX-ide-per-unit-view-omits-79pct-of-lint-all.md. }
   if (not AArgs.AsJson) and (not AArgs.Quiet) then
-    Writeln(ErrOutput,
-      'drag-lint: note: `lint <file>` runs per-file rules only. Whole-run rules ' +
-      '(project-wide checks, review-marker-unused/stale) need `lint-all` and are ' +
-      'NOT reported here -- a 0 above does not mean they are clean.');
+    if FlowStoreSeen then
+      Writeln(ErrOutput,
+        'drag-lint: note: project rules ran for this file. STILL NOT reported here: ' +
+        'doc-drift/missing-doc (pass --project-rules), review-marker-unused, cross-file ' +
+        'duplicate-code, interface-reference-cycle, exception-class enrichment, and ' +
+        'unit-not-in-dpr without --project.')
+    else
+      Writeln(ErrOutput,
+        'drag-lint: note: no index covers this file, so the store-backed and project ' +
+        'rules did NOT run -- pass --db <index.sqlite> for parity with lint-all. ' +
+        'A 0 above does not mean they are clean.');
 
   { REPORT THE REAL PATH. Every finding so far names the materialised snapshot,
     which exists only inside this process's temp directory. A consumer -- the
@@ -13433,10 +13561,10 @@ begin
     still overrides (opt-in). doc-drift stays ON -- do NOT list it. }
   Prof.Phase('finalize+output');
   Result:= FinalizeAndOutput(
-    AArgs, Findings, ScmDefOff + [
+    AArgs, Findings, ScmDefOff + PROJECT_RULES_OFF_BY_DEFAULT + [
       'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter',
-      'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'repeated-type-switch', 'middle-man', 'default-encoding-io', 'fan-out', 'fan-in', 'feature-envy',
-      'instability', 'interface-object-mixing', 'split-variable', 'separate-query-from-modifier', 'missing-doc',
+      'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'default-encoding-io',
+      'interface-object-mixing', 'split-variable', 'separate-query-from-modifier',
       { commented-out-code -- owner ruling 2026-08-13. Parking code, or commenting
         out a debug Writeln that may be wanted again, is a deliberate habit here,
         and the rule cannot distinguish that from an oversight. Nor can it tell

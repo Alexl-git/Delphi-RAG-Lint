@@ -74,7 +74,7 @@ type
     /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function RunMissingDoc(const AStore: ISymbolStore): TArray<TLintFinding>;
+    class function RunMissingDoc(const AStore: ISymbolStore; AFileId: Int64 = 0): TArray<TLintFinding>;
 
     /// <summary>Reports deterministic doc-vs-code drift for every DOCUMENTED
     /// public/published declaration in AStore -- one 'doc-drift' finding per
@@ -106,7 +106,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RunDocDrift(const AStore: ISymbolStore;
-      const AOpts: TDocFactsRenderOptions): TArray<TLintFinding>;
+      const AOpts: TDocFactsRenderOptions; AFileId: Int64 = 0): TArray<TLintFinding>;
 
     /// <summary>Builds the MergeComment-based text edits that repair the
     /// mechanically-safe subset of doc-drift on AStore's documented public decls.
@@ -300,7 +300,7 @@ begin
        and SameText(Trim(ASym.Section), 'interface');
 end;
 
-class function TDocLintRules.RunMissingDoc(const AStore: ISymbolStore): TArray<TLintFinding>;
+class function TDocLintRules.RunMissingDoc(const AStore: ISymbolStore; AFileId: Int64 = 0): TArray<TLintFinding>;
 var
   Findings: TList<TLintFinding>;
   Syms    : TArray<TSymbol>    ;
@@ -316,6 +316,9 @@ begin
     Syms:= AStore.FindUndocumented('', True);
     for Sym in Syms do
     begin
+      { AFileId <= 0 means the whole store (lint-all); a positive id narrows to
+        the one unit the per-file verb was asked about. }
+      if (AFileId > 0) and (Sym.FileId <> AFileId) then Continue;
       if not IsDocumentableKind(Sym.Kind) then Continue;
       F:= Default(TLintFinding);
       F.RuleId  := 'missing-doc';
@@ -353,15 +356,22 @@ end;
   decl was reported by NEITHER rule, and `lint-all --fix --apply` could not
   clean a stale facts block on it even though `document --apply` could, so the
   two routes diverged. See DRagLint.Storage.SQLite's FQListDocumentedSymbols. }
-function DocumentedPublicDecls(const AStore: ISymbolStore): TArray<TSymbol>;
+function DocumentedPublicDecls(const AStore: ISymbolStore; AFileId: Int64 = 0): TArray<TSymbol>;
 var
   Acc: TList<TSymbol>;
   Sym: TSymbol       ;
 begin
   Acc:= TList<TSymbol>.Create;
   try
+    { AFileId <= 0 means the WHOLE store, which is what lint-all wants. A
+      positive id narrows to one file so the per-file `lint` verb can ask the
+      same question about the unit in front of the user without paying for the
+      project. The filter is applied here, after the query, because the cost
+      that matters is the PER-DECL work below (re-reading each doc comment off
+      disk and re-analysing it), not the single indexed lookup. }
     for Sym in AStore.ListDocumentedSymbols(MaxInt) do
-      if IsDocumentableKind(Sym.Kind) and IsPublicSymbol(Sym) then Acc.Add(Sym);
+      if ((AFileId <= 0) or (Sym.FileId = AFileId))
+         and IsDocumentableKind(Sym.Kind) and IsPublicSymbol(Sym) then Acc.Add(Sym);
     Result:= Acc.ToArray;
   finally
     Acc.Free;
@@ -369,7 +379,7 @@ begin
 end;
 
 class function TDocLintRules.RunDocDrift(const AStore: ISymbolStore;
-  const AOpts: TDocFactsRenderOptions): TArray<TLintFinding>;
+  const AOpts: TDocFactsRenderOptions; AFileId: Int64 = 0): TArray<TLintFinding>;
 var
   Findings: TList<TLintFinding> ;
   Sym     : TSymbol             ;
@@ -401,7 +411,7 @@ begin
   Findings:= TList<TLintFinding>.Create;
   try
     T0:= Tick;
-    var Decls: TArray<TSymbol>:= DocumentedPublicDecls(AStore);
+    var Decls: TArray<TSymbol>:= DocumentedPublicDecls(AStore, AFileId);
     Inc(TDecls, Tick - T0);
     for Sym in Decls do
     begin
