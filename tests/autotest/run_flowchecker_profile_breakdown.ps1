@@ -107,7 +107,12 @@ try {
   # ---- A1: the sub-lines exist and name the phases.
   Check 'A1 the breakdown header is printed under DRAGLINT_PROFILE' `
         ($withP -match 'FlowChecker\.Check breakdown') 'no breakdown line'
-  foreach ($ph in @('CFG build','var table','definite-assignment','interface derefs','liveness','escape')) {
+  # Session 47 split the two big windows into SOLVE and the work after it. The
+  # names are matched in full, not as prefixes: 'definite-assignment' alone is a
+  # substring of both halves, so the old list would keep passing even if the
+  # split silently collapsed back into one bucket.
+  foreach ($ph in @('CFG build','var table','definite-assignment solve','definite-assignment replay',
+                    'interface derefs','liveness','escape solve','escape rest')) {
     Check "A1 phase line present: $ph" ($withP -match [regex]::Escape($ph)) 'phase missing from the profile'
   }
 

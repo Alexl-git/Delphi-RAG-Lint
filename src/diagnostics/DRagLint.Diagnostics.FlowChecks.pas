@@ -85,10 +85,17 @@ implementation
   DRAGLINT_PROFILE. That keeps this out of the "is the profiler changing what it
   measures?" class of question: the same code runs either way. }
 const
-  FLOW_PHASES = 7;
+  { 7 -> 9: definite-assignment and escape each split into SOLVE and the work
+    that follows it. Both were single windows holding two very different costs,
+    and their fixes are different -- a fixpoint solver gets faster by narrowing
+    the lattice or the iteration order, a per-item replay by touching fewer
+    items. Optimising against the merged number would have aimed at whichever
+    half happened to be smaller. }
+  FLOW_PHASES = 9;
   FLOW_PHASE_NAMES: array[0..FLOW_PHASES - 1] of string = (
-    'CFG build', 'var table', 'definite-assignment', 'interface derefs',
-    'freed/dangling', 'liveness', 'escape');
+    'CFG build', 'var table', 'definite-assignment solve', 'interface derefs',
+    'freed/dangling', 'liveness', 'escape rest',
+    'definite-assignment replay', 'escape solve');
 var
   GFlowT: array[0..FLOW_PHASES - 1] of Int64;
   GFlowRoutines: Int64;
@@ -1601,7 +1608,9 @@ var
           double-free (freeing an already-dangling pointer, whichever kind of
           free it is). Then advance the state per the free's own kind. }
         FreedAna := TFreedState.Create(Vars, PF.Src);
-        FlowTick(2, TickAt, TickEx);
+        { Everything since the definite-assignment SOLVE tick is the per-item
+          REPLAY, not the solve -- charged separately as of session 47. }
+        FlowTick(7, TickAt, TickEx);
         if TDataFlowSolver<TFreedVal>.Solve(Cfg, FreedAna, FIn, FOut) then
         begin
           for B := 0 to Cfg.BlockCount - 1 do
@@ -1966,6 +1975,7 @@ var
         FlowTick(5, TickAt, TickEx);
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, EscAna, EIn2, EOut2) then
         begin
+          FlowTick(8, TickAt, TickEx); { the escape SOLVE; phase 6 keeps the rest }
           SetLength(CreateRow, Vars.Count); SetLength(CreateCol, Vars.Count);
           SetLength(CreateType, Vars.Count);
           for I := 0 to Vars.Count - 1 do begin CreateRow[I] := 0; CreateCol[I] := 0; CreateType[I] := ''; end;
