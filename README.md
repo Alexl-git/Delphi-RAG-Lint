@@ -662,7 +662,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | `check-ast <file>` | Run tree-sitter lint rules without compiling | `--format text\|json` |
 | [`purge-locals`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/purge-locals) `--db <db>` | Size escape hatch: drop local-var/param symbols + VACUUM (call graph unchanged; re-inflated on next index) | `--json` |
 | [`workspace index`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-index) / [`status`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-status) / [`add <dproj>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-add) | Multi-project workspace management | `--config <file>` |
-| `--version` / `--help` | Print version / usage | |
+| `--version` / `--help` | Print version / usage. `--help` (aliases `-h`, `-?`) is accepted **after any verb** too -- `drag-lint lint --help` prints this same full banner and exits 0. There is no per-verb help text. | |
 
 ### MCP tools (15)
 

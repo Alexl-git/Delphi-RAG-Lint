@@ -687,7 +687,10 @@ begin
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
   Writeln('  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project''s _D-RAG folder');
   Writeln('  drag-lint --version');
-  Writeln('  drag-lint --help');
+  Writeln('  drag-lint --help             (aliases -h / -?). Accepted AFTER A VERB too: `drag-lint lint --help`,');
+  Writeln('                               `drag-lint query find-callers -h` and `drag-lint index -?` all print THIS');
+  Writeln('                               banner and exit 0. Until 2026-08-28 every one of those FATALed with exit 3.');
+  Writeln('                               There is no per-verb help TEXT -- one banner answers them all.');
   Writeln('');
   Writeln('Databases (--db is repeatable, on every verb that takes it):');
   Writeln('  THE FIRST --db IS THE PRIMARY. Every later --db is an EXTRA store.');
@@ -809,6 +812,25 @@ begin
     Writeln(ErrOutput, '(loaded defaults from ', Candidate, ')');
 end; // procedure
 
+{ THE ONE PLACE THAT DECIDES WHAT "ASK FOR HELP" LOOKS LIKE. INBOX
+  `per-verb-help-fatals`. Three call sites in ParseArgs need this answer -- the
+  first token, the optional subcommand slot, and the flag loop -- and the whole
+  defect was that they disagreed:
+
+    drag-lint --help          -> banner, exit 0   (only this one ever worked)
+    drag-lint lint --help     -> FATAL, exit 3    (fell through to the raise)
+    drag-lint lint -h         -> "path does not exist: -h", exit 2
+    drag-lint query -h        -> taken as the SUBCOMMAND, exit 2
+
+  The last two share one cause: '-h' and '-?' do not start with '--', so every
+  branch written as "not A.StartsWith('--')" claims them. Hard-coding the token
+  list at each site is what let three sites drift apart in the first place, so
+  it is asked here or nowhere. }
+function IsHelpToken(const A: string): Boolean;
+begin
+  Result:= (A = '--help') or (A = '-h') or (A = '-?');
+end;
+
 function ParseArgs: TArgs;
 var
   i: Integer;
@@ -875,7 +897,7 @@ begin
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
-  if (Result.Command = '--help') or (Result.Command = '-h') then begin Result.ShowHelp:= True; Exit; end;
+  if IsHelpToken(Result.Command) then begin Result.ShowHelp:= True; Exit; end;
   if Result.Command = '--version' then begin Result.ShowVersion:= True; Exit; end;
 
   // Optional subcommand: ParamStr(2) if it doesn't start with '--'.
@@ -883,12 +905,44 @@ begin
   if ((Result.Command = 'query') or (Result.Command = 'export') or (Result.Command = 'workspace') or (Result.Command = 'selftest')) and (ParamCount >= 2) then
   begin
     A:= ParamStr(2);
-    if (A <> '') and (not A.StartsWith('--')) then begin Result.SubCommand:= A; i:= 3; end;
+    { `not StartsWith('--')` is what made `drag-lint query -h` take '-h' as the
+      SUBCOMMAND and never reach the loop below, so the help check there could
+      not see it. The verbs with subcommands are the only ones that had this
+      third failure shape. }
+    if (A <> '') and (not A.StartsWith('--')) and (not IsHelpToken(A)) then begin Result.SubCommand:= A; i:= 3; end;
   end;
 
   while i <= ParamCount do
   begin
     A:= ParamStr(i);
+    { HELP WINS, WHEREVER IT APPEARS ON THE LINE. INBOX `per-verb-help-fatals`.
+
+      This check did not exist, so `--help` fell all the way through the chain
+      below to the `Unknown argument` raise: EVERY verb answered the single most
+      natural discovery move -- `drag-lint lint --help` -- with a
+      stack-trace-shaped FATAL and exit 3, which reads as "this verb is broken"
+      rather than "help lives elsewhere". `drag-lint --help` with no verb worked
+      all along, which is exactly why nothing ever said so.
+
+      The SHORT forms were worse, not merely equal. '-h' and '-?' do not start
+      with '--', so the positional-Path branch at the bottom of this chain
+      claimed them: `drag-lint lint -h` answered "path does not exist: -h" with
+      exit 2 -- an exit code a wrapper script reads as "the verb ran and found
+      nothing". That is why this sits at the TOP of the loop and not beside the
+      other flag branches.
+
+      Help stays unreachable only behind a flag that CONSUMES the next token
+      (`--rule --help` takes --help as the rule id), which is correct.
+
+      EXIT immediately rather than setting the flag and parsing on: once help is
+      asked for nothing later on the line can change the answer, and continuing
+      could still raise on a neighbouring token -- turning a help request back
+      into the FATAL this fixes.
+
+      Routing is deliberately to the WHOLE banner for every verb. Per-verb help
+      TEXT is a separate product decision with its own docs-sync cost (a third
+      surface for run_docs_sync_guard.ps1 to police); not crashing is not. }
+    if IsHelpToken(A) then begin Result.ShowHelp:= True; Exit; end;
     if (A = '--db') and (i < ParamCount) then
     begin
       Inc(i);

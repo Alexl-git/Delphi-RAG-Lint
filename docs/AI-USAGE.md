@@ -181,9 +181,10 @@ Add `--json` to most commands for machine-readable output.
 ### 2a. Full verb reference (grouped)
 
 Every verb below is a real `drag-lint` subcommand. Most take `--db <file>`
-(repeatable) and `--json`; pass `--help` for the exact flags. This is the
-canonical list an AI should reach for; the pure-diagnostic verbs are broken out
-in 2b.
+(repeatable) and `--json`. `--help` (aliases `-h`, `-?`) is accepted after any
+verb and prints the FULL banner -- there is no per-verb help TEXT, so read the
+banner's line for the verb you want. This is the canonical list an AI should
+reach for; the pure-diagnostic verbs are broken out in 2b.
 
 **Query / search (find symbols, callers, text)**
 | Verb | What it does |
