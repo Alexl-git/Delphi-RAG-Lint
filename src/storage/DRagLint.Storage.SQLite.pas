@@ -5144,14 +5144,55 @@ var
   I: Integer;
 begin
   if (AIds = nil) or (AIds.Count = 0) then Exit;
-  { RESOLVE SCOPE: this removes symbols without their names ever passing through
-    NoteScopeRemoval, so the scoped call-target pass can no longer account for
-    the edges the cascade is about to take. Both sweeps -- PruneMissingFiles and
-    EvictOutOfScopeFiles -- reach the database only through here, which is why
-    the latch lives at this one point rather than in each of them. }
-  FScopeWhole:= True;
-  FScopeWholeWhy:= Format('%d file(s) were pruned or evicted, and the FK cascade took their edges ' +
-                          'outside the file transactions this run recorded', [AIds.Count]);
+  { RESOLVE SCOPE. This removes symbols, and the FK cascade takes the call edges
+    that pointed at them, so the scoped pass has to be told. Both sweeps --
+    PruneMissingFiles and EvictOutOfScopeFiles -- reach the database only through
+    here, which is why this lives at one point rather than in each of them.
+
+    IT USED TO LATCH FScopeWhole OUTRIGHT, and that cost a whole-database pass --
+    documented at ~37 minutes on a 2 GB index -- for a SINGLE evicted file
+    (INBOX-incremental-index-hangs-on-large-db, the eviction half).
+
+    NoteScopeRemoval is the routine OpenFileTx already calls, for exactly this
+    reason, BEFORE it deletes a file's rows. Calling it here needs NO NEW
+    SOUNDNESS ARGUMENT -- it is the one written on ScopedResolveIsSound:
+
+      * every name the doomed file declared goes into FScopeNames, so every ref
+        anywhere that named one of its symbols is re-resolved. That is point 2,
+        unchanged, and it is the whole of what the cascade can take;
+      * the file's OWN refs die with it, so there is nothing there to re-resolve;
+      * every TYPE name it declared goes into FScopeTypesBefore and never appears
+        in FScopeTypesAfter, so the WITHDRAWAL test declines the scoped pass
+        outright. Point 4's indirect channel -- a call routed through a type
+        whose meaning changed -- stays fatal for evictions, exactly as before,
+        and the operator now gets the type's name instead of a file count;
+      * a file declaring no types cannot reach that channel at all.
+
+    It also brings the 1-in-3 coverage latch with it, so a large sweep still
+    ends in the whole-database pass -- which is the right answer there anyway.
+
+    MUST RUN BEFORE THE DELETE: NoteScopeRemoval reads `symbols WHERE file_id`,
+    and after the cascade those rows are unrecoverable. Before StartTransaction,
+    so a rolled-back delete leaves the scope set merely WIDER than the truth,
+    which is the safe direction.
+
+    Pinned by tests\autotest\run_scoped_resolve_eviction.ps1, which was run RED
+    first: its type-declaring case already answered correctly (via the old
+    latch), and the two cases that moved are the DECLINE REASON and the
+    procs-only file taking the scoped path. }
+  try
+    for I:= 0 to AIds.Count - 1 do NoteScopeRemoval(AIds[I]);
+  except
+    on E: Exception do
+    begin
+      { Degrade to the old behaviour rather than failing the sweep -- but SAY SO.
+        A silent fallback here would look exactly like the fix working, which is
+        the failure mode this repo has already paid for once. }
+      FScopeWhole   := True;
+      FScopeWholeWhy:= Format('the pruned/evicted files could not be recorded in the resolve scope (%s)', [E.Message]);
+      ResolveLog('calls      ... eviction scope capture FAILED, falling back to the whole database: ' + E.Message);
+    end;
+  end;
   FConn.StartTransaction;
   try
     for I:= 0 to AIds.Count - 1 do
