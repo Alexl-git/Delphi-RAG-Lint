@@ -1199,6 +1199,31 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
   begin
     if N.IsNull then Exit;
     K := N.NodeType;
+    { A TYPE ANNOTATION IS NEVER A VARIABLE READ.
+
+      `var Opt: A.B.C.TThing;` parses as
+        varDef(kVar, identifier, type: (type (typeref (typerefDot ...))))
+      -- verified with tools\dumptree, NOT read off the grammar comments, which
+      this repo has been wrong about five times. Note typerefDot, not exprDot:
+      the exprDot case below suppresses the rhs of a dot, but a typerefDot fell
+      through to the generic walk at the bottom, which counted EVERY component
+      of the dotted name as a bare identifier read.
+
+      What that cost: DRagLint.CLI.pas:21160 declares
+      `var ProxyOpt: DRagLint.LSP.Proxy.TLspProxyOptions;`, and the same routine
+      declares a local `LSP` twenty lines further down. The middle component of
+      the TYPE was read as a use of that local before assignment, at ERROR
+      severity, on a line that assigns nothing at all.
+
+      Gap-free, and that matters on this rule -- its author refused two wider
+      suppressions in writing because any gap hides a TRUE positive. There is no
+      gap here: nothing inside a Delphi type annotation can read a local. Array
+      bounds and generic arguments are constant expressions, and a value read
+      lives in the initialiser, which is a sibling of this node, not a child.
+
+      Pinned by tests\autotest\run_flow_typeref_not_a_read.ps1, whose K1/K2
+      cases are genuine reads of the SAME name and must keep firing. }
+    if (K = 'type') or (K = 'typeref') then Exit;
     if K = 'identifier' then
     begin
       if not AAfterDot then
@@ -1275,9 +1300,12 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
           end;
         end;
       Walk(N.ChildByField('entity'), False);
-      Exit;
-    end;
-    for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), False);
+    end
+    else
+      { The generic arm, now an ELSE rather than a fall-through. Behaviour is
+        identical -- the exprCall arm ended in Exit -- and it keeps this routine
+        inside the five-exit budget after the type guard above added one. }
+      for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), False);
   end;
 
 begin

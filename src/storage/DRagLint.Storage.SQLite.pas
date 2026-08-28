@@ -1674,7 +1674,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: Default, DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Index.CallResolver.TCallResolver.Create, DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe, DRagLint.Index.CallResolver.TCallResolver.ResolveOne, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertCallEdge, DRagLint.Storage.SQLite.TSQLiteSymbolStore.WidenScopeThroughAddedTypes, Format, GetEnvironmentVariable, IfThen, SameText</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveCallTargets</para>
-      /// <para>Complexity: 36 (cyclomatic, outer body), 443 lines (full implementation)</para>
+      /// <para>Complexity: 37 (cyclomatic, outer body), 471 lines (full implementation)</para>
       /// <para>Reads: FScopeFiles, FConn</para>
       /// <para>SQL: reads SYMBOLS; writes REFS</para>
       /// <para>Transaction: starts, commits, rolls back</para>
@@ -9313,6 +9313,23 @@ begin
     end;
 
     FConn.StartTransaction;
+    { INBOX-used-before-assignment, shape D -- and the note that called it a
+      FALSE POSITIVE had it backwards. The except handler ~130 lines below
+      renders Edge and Ref as `the failing edge`, and the try starts HERE:
+      above the DELETE and above Q.Open, either of which can raise before the
+      loop has read a single row. On that path the handler formatted
+      UNINITIALISED STACK INTEGERS as ref_id / target_symbol_id and told the
+      reader to KEEP THIS DATABASE for an edge nothing had touched -- the exact
+      opposite of what a capture written to identify one row is for.
+
+      Fixed in the SOURCE, not by widening the rule, because the rule was right.
+      Ref.Id = 0 is now the handler's witness for `no row was reached`, which is
+      itself the first thing the FK investigation
+      (INBOX-intermittent-fk-failure-on-incremental-reindex) needs to know: it
+      separates a failing DELETE/open from a failing edge insert, and those have
+      nothing in common but the message. }
+    Ref := Default(TReference);
+    Edge:= Default(TCallEdge );
     try
       { THE DELETE BELONGS IN THIS TRANSACTION, and it was outside it until
         v0.86. ResolveAncestry and ResolveHelpers both DELETE inside their own
@@ -9478,11 +9495,22 @@ begin
         try
           Diag:= sLineBreak +
             Format('  [call-edge capture] shape=%s written=%d streamed=%d',
-                   [Shape, Written, Streamed]) + sLineBreak +
-            Format('  failing edge: ref_id=%d target_symbol_id=%d receiver_type_symbol_id=%d confidence=%s',
-                   [Edge.RefId, Edge.TargetSymbolId, Edge.ReceiverTypeSymbolId, Edge.Confidence]) + sLineBreak +
-            Format('  its ref: id=%d file_id=%d %d:%d name=%s',
-                   [Ref.Id, Ref.FileId, Ref.StartLine, Ref.StartCol, Ref.NameText]) + sLineBreak +
+                   [Shape, Written, Streamed]) + sLineBreak;
+          { Ref.Id is 0 exactly when the stream never produced a row -- see the
+            zeroing above the try. Naming an edge here would be naming stack
+            noise, and this branch is a FACT the investigation wants: the
+            failure was in the DELETE or in Q.Open, not in an edge insert. }
+          if Ref.Id = 0 then
+            Diag:= Diag +
+              '  no row had been read when this failed -- the DELETE or the ' +
+              'stream open raised, so there is NO failing edge to name.' + sLineBreak
+          else
+            Diag:= Diag +
+              Format('  failing edge: ref_id=%d target_symbol_id=%d receiver_type_symbol_id=%d confidence=%s',
+                     [Edge.RefId, Edge.TargetSymbolId, Edge.ReceiverTypeSymbolId, Edge.Confidence]) + sLineBreak +
+              Format('  its ref: id=%d file_id=%d %d:%d name=%s',
+                     [Ref.Id, Ref.FileId, Ref.StartLine, Ref.StartCol, Ref.NameText]) + sLineBreak;
+          Diag:= Diag +
             '  KEEP THIS DATABASE AND THIS LOG -- do not simply re-run. A re-run ' +
             'succeeded in 2026-08-17 and destroyed the only occurrence.';
         except
