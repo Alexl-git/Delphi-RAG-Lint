@@ -12943,6 +12943,33 @@ begin
        DRagLint.Lint.Linter.LinterParseTicks * 1000 / (TStopwatch.Frequency * Max(1, DRagLint.Lint.Linter.LinterParseCount))]));
     Writeln(ErrOutput, Format('      %-26s %8.2f s',
       ['of which .scm queries', (GScanT[0] - DRagLint.Lint.Linter.LinterParseTicks) / TStopwatch.Frequency]));
+    { FLOWCHECKER SUB-BREAKDOWN -- INBOX-flowchecker-is-half-of-lint-all.
+      FlowChecker.Check measured 54.1% of this run with NOTHING inside it, and
+      that note records four hypotheses about it that measured dead. Printed
+      immediately after the slot table so the sub-lines sit next to the total
+      they decompose. The sum is printed too: if it drifts far from the slot,
+      the phases have stopped covering the routine and the breakdown is lying. }
+    var FlowSum: Double:= 0;
+    for var FP:= 0 to DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseCount - 1 do
+      FlowSum:= FlowSum + DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP);
+    if FlowSum > 0 then
+    begin
+      Writeln(ErrOutput, Format('    %-28s %8.2f s  (%d routine(s))',
+        ['FlowChecker.Check breakdown', FlowSum,
+         DRagLint.Diagnostics.FlowChecks.TFlowChecker.RoutinesAnalysed]));
+      Writeln(ErrOutput,
+        '      (windows, not isolated calls -- each phase carries the emit work that follows its');
+      Writeln(ErrOutput,
+        '       solve, except `interface derefs`, which is measured exactly because it sits inside');
+      Writeln(ErrOutput,
+        '       the replay loop and a window there would have swallowed the loop itself)');
+      for var FP:= 0 to DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseCount - 1 do
+        if DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP) > 0 then
+          Writeln(ErrOutput, Format('      %-26s %8.2f s  (%5.1f%% of the checker)',
+            [DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseName(FP),
+             DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP),
+             100 * DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP) / FlowSum]));
+    end;
     Writeln(ErrOutput, Format('    %-28s %8.2f s', ['(sum of the slots above)', (ScanTot + GScanAppend) / TStopwatch.Frequency]));
     { SESSION 36 (P3): the .scm half broken down PER RULE. The aggregate is the
       largest single item left in lint-all, but "114 queries cost 54 s" is not

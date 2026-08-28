@@ -8,6 +8,7 @@ unit DRagLint.Diagnostics.FlowChecks;
 interface
 
 uses
+  System.Diagnostics,
   System.SysUtils,
   System.IOUtils,
   System.Generics.Collections,
@@ -56,9 +57,86 @@ type
     /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore = nil;
       AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
+    /// <summary>Seconds accumulated in one named phase of Check. See the
+    /// sub-breakdown block in the implementation.</summary>
+    class function PhaseSeconds(APhase: Integer): Double; static;
+    /// <summary>The name of phase APhase, for a profile line.</summary>
+    class function PhaseName(APhase: Integer): string; static;
+    /// <summary>How many phases there are.</summary>
+    class function PhaseCount: Integer; static;
+    /// <summary>Routines analysed since process start -- the denominator for a
+    /// per-routine cost.</summary>
+    class function RoutinesAnalysed: Int64; static;
   end;
 
 implementation
+
+{ FLOWCHECKER SUB-BREAKDOWN. INBOX-flowchecker-is-half-of-lint-all.
+
+  Measured 2026-08-28 on this repo's own 110 files: FlowChecker.Check is
+  113.45 s of a 209.53 s lint-all -- 54.1%, 1031 ms/file, and 5.7x the next
+  item. Until now that was ONE number with nothing inside it, and the note is a
+  record of FOUR hypotheses about it that measured dead, one at literally
+  0.00 s. This exists so the next attempt is aimed rather than guessed.
+
+  Exported the same way DRagLint.Lint.Linter.LinterParseTicks already is, and
+  printed by the CLI as "of which" sub-lines. Accumulation is unconditional --
+  two timestamp reads per phase per routine -- and only the PRINTING is gated on
+  DRAGLINT_PROFILE. That keeps this out of the "is the profiler changing what it
+  measures?" class of question: the same code runs either way. }
+const
+  FLOW_PHASES = 7;
+  FLOW_PHASE_NAMES: array[0..FLOW_PHASES - 1] of string = (
+    'CFG build', 'var table', 'definite-assignment', 'interface derefs',
+    'freed/dangling', 'liveness', 'escape');
+var
+  GFlowT: array[0..FLOW_PHASES - 1] of Int64;
+  GFlowRoutines: Int64;
+
+{ Charge the time since AStart to APhase and re-arm AStart. One call per phase
+  boundary, so a phase skipped for a routine costs nothing and reports nothing --
+  itself a signal worth seeing.
+
+  AEXCLUDE KEEPS THE BREAKDOWN A PARTITION. `interface derefs` is measured
+  exactly, from inside the replay loop, because a window there would swallow the
+  loop itself. Without subtracting it here, that time would be counted TWICE --
+  once in its own bucket and once inside the enclosing window -- and the
+  percentages would not sum to the whole. Measured: that inflated the total to
+  121.12 s against a 114.38 s slot, and percentages that do not partition are
+  exactly how a profile sends an optimisation at the wrong target. }
+procedure FlowTick(APhase: Integer; var AStart, AExclude: Int64);
+var N: Int64;
+begin
+  N:= TStopwatch.GetTimeStamp;
+  if (APhase >= 0) and (APhase < FLOW_PHASES) then
+    Inc(GFlowT[APhase], (N - AStart) - AExclude);
+  AExclude:= 0;
+  AStart  := N;
+end;
+
+class function TFlowChecker.PhaseSeconds(APhase: Integer): Double;
+begin
+  Result:= 0;
+  if (APhase < 0) or (APhase >= FLOW_PHASES) then Exit;
+  Result:= GFlowT[APhase] / TStopwatch.Frequency;
+end;
+
+class function TFlowChecker.PhaseName(APhase: Integer): string;
+begin
+  Result:= '';
+  if (APhase < 0) or (APhase >= FLOW_PHASES) then Exit;
+  Result:= FLOW_PHASE_NAMES[APhase];
+end;
+
+class function TFlowChecker.PhaseCount: Integer;
+begin
+  Result:= FLOW_PHASES;
+end;
+
+class function TFlowChecker.RoutinesAnalysed: Int64;
+begin
+  Result:= GFlowRoutines;
+end;
 
 function NodeStr(const N: TTSNode; const ASrc: TBytes): string;
 var S, E, L: Integer;
@@ -1346,13 +1424,20 @@ var
     FIn, FOut: TArray<TFreedVal>;
     CurFMust, CurFMay: TArray<Boolean>;
     FreedV: Integer; FKind: TFreeKind;
+    TickAt : Int64;  { phase cursor -- see FlowTick }
+    TickEx : Int64;  { time already charged exactly, to subtract from the window }
   begin
+    TickAt := TStopwatch.GetTimeStamp; TickEx := 0;
     Cfg := TCfgBuilder.Build(AProc, PF.Src);
+    FlowTick(0, TickAt, TickEx);
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
+    FlowTick(1, TickAt, TickEx);
     try
       if Cfg.Skipped or (Vars.Count = 0) then Exit;
+      Inc(GFlowRoutines);
       Ana := TDefiniteAssignment.Create(Vars, PF.Src, RecMethodDef, ParamMode);
       if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, Ana, AIn, AOut) then Exit;
+      FlowTick(2, TickAt, TickEx);
 
       Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
       SeqDefs := TList<Integer>.Create;
@@ -1462,7 +1547,17 @@ var
             if not It.Opaque then
             begin
               Derefs.Clear;
+              { EXACT, not a window. This call sits INSIDE the per-item replay
+                loop, so ticking the shared cursor here would charge phase 3
+                with the whole loop body between iterations -- it measured 25.9%
+                that way, which would have sent the next optimisation at the
+                wrong target. Measured on its own and added, leaving the
+                surrounding loop where it belongs, in the enclosing window. }
+              var DerefT0: Int64:= TStopwatch.GetTimeStamp;
               CollectInterfaceDerefs(It.Node, PF.Src, Vars, AStore, AFileId, Derefs);
+              var DerefDt: Int64:= TStopwatch.GetTimeStamp - DerefT0;
+              Inc(GFlowT[3], DerefDt);
+              Inc(TickEx  , DerefDt);   { so the enclosing window does not count it again }
               for J := 0 to Derefs.Count - 1 do
               begin
                 Dr := Derefs[J];
@@ -1506,6 +1601,7 @@ var
           double-free (freeing an already-dangling pointer, whichever kind of
           free it is). Then advance the state per the free's own kind. }
         FreedAna := TFreedState.Create(Vars, PF.Src);
+        FlowTick(2, TickAt, TickEx);
         if TDataFlowSolver<TFreedVal>.Solve(Cfg, FreedAna, FIn, FOut) then
         begin
           for B := 0 to Cfg.BlockCount - 1 do
@@ -1595,6 +1691,7 @@ var
 
         { ============ liveness checks: overwrite-before-read + write-only-local ============ }
         LiveAna := TLiveness.Create(Vars, PF.Src);
+        FlowTick(4, TickAt, TickEx);
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, LiveAna, LIn, LOut) then
         begin
           SetLength(ReadAny, Vars.Count); SetLength(AsgnAny, Vars.Count);
@@ -1866,6 +1963,7 @@ var
 
         { ============ object-leak (store-free, conservative) ============ }
         EscAna := TEscape.Create(Vars, PF.Src, OwnsOracle);
+        FlowTick(5, TickAt, TickEx);
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, EscAna, EIn2, EOut2) then
         begin
           SetLength(CreateRow, Vars.Count); SetLength(CreateCol, Vars.Count);
@@ -1945,7 +2043,16 @@ var
         end;
 
       finally Reads.Free; CallDefs.Free; SeqDefs.Free; Derefs.Free; end;
-    finally Cfg.Free; Vars.Free; end;
+    finally
+      { The escape window closes here, and with it the routine. NOTE these are
+        WINDOWS, not isolated calls -- each phase is charged everything between
+        its predecessor's tick and its own, exactly as the CLI's own ScanMark
+        does for the per-file slots. A window therefore includes the emit/replay
+        code that follows its solve, which is the honest attribution: that work
+        only exists because the solve produced something. }
+      FlowTick(6, TickAt, TickEx);
+      Cfg.Free; Vars.Free;
+    end;
   end;
 
 begin
