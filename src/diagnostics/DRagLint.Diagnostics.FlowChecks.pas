@@ -2063,6 +2063,34 @@ begin
         Any: Boolean;
         I: Integer;
 
+        { A PARAMETER WHOSE TYPE IS A POINTER TELLS US NOTHING ABOUT ITS ARGUMENT.
+          `GetTempFileName(PathBuf, 'mco', 0, NameBuf)` declares lpTempFileName
+          as LPWSTR -- by value -- and WRITES THROUGH IT; Delphi takes the
+          array's address implicitly, so there is no `@` to notice either. Such
+          a parameter is neither a reliable read nor a reliable def, so it is
+          answered pmUnknown and keeps the conservative both-lists behaviour.
+          Measured: without this, that one call reported NameBuf as
+          used-before-assignment, at ERROR severity, on the line that fills it.
+
+          Matched on the WRITTEN type text, deliberately: these are RTL/Win32
+          spellings that no store lookup would categorise any better, and the
+          list is closed and short rather than a `starts with P` guess, which
+          would swallow ordinary project types like TPoint or PlanId. }
+        function LooksLikePointerType(const AType: string): Boolean;
+        const
+          PTRS: array[0..12] of string = (
+            'pointer', 'pchar', 'pansichar', 'pwidechar', 'pbyte', 'pword',
+            'lpstr', 'lpcstr', 'lpwstr', 'lpcwstr', 'lptstr', 'lpctstr', 'lpvoid');
+        var T: string; I: Integer;
+        begin
+          Result := False;
+          T := LowerCase(Trim(AType));
+          if T = '' then Exit;
+          if T[1] = '^' then Exit(True);   { ^T -- an explicit pointer type }
+          for I := 0 to High(PTRS) do
+            if T = PTRS[I] then Exit(True);
+        end;
+
         function ModeOf(const ASig: string; out AMode: TParamMode): Boolean;
         var PS: TArray<TParamPart>;
         begin
@@ -2072,6 +2100,7 @@ begin
           if      SameText(PS[AIndex].Modifier, 'var'  ) then AMode := pmVar
           else if SameText(PS[AIndex].Modifier, 'out'  ) then AMode := pmOut
           else if SameText(PS[AIndex].Modifier, 'const') then AMode := pmConst
+          else if LooksLikePointerType(PS[AIndex].TypeText) then AMode := pmUnknown
           else AMode := pmValue;
           Result := True;
         end;

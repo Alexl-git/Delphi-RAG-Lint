@@ -1398,27 +1398,25 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
             makes it a strict false-positive reduction that cannot manufacture a
             finding. }
           if (Idx >= 0) and (ACallDefs.IndexOf(Idx) < 0) then ACallDefs.Add(Idx);
-          { THE MIRROR-IMAGE FALSE NEGATIVE IS DELIBERATELY NOT CLOSED HERE.
+          { A BARE IDENTIFIER PASSED BY VALUE IS A READ. Stage 2 of
+            INBOX-used-before-assignment-false-positives, and it was BLOCKED on
+            `absolute` aliasing until that shipped: `Overlay: cardinal absolute
+            InVal` is assigned through its alias, and turning this into a read
+            reported all three MStreams.pas ReverseBytes overloads as false
+            ERRORS while the aliasing was unmodelled.
 
-            A bare identifier passed BY VALUE is a read, and recording it as one
-            is what would close the `Writeln(Y)` shape. Measured on ORM3 it adds
-            findings this rule cannot yet justify -- see the note. The blocking
-            one is `absolute`:
+            Recorded HERE because the walk below deliberately skips bare
+            identifiers. The possible-def above is still recorded and is NEVER
+            withdrawn -- "by value" does not mean "not written" in Delphi -- so
+            this adds a read without removing the protection a genuinely
+            out-writing callee relies on.
 
-              InVal  : single                 ;
-              Overlay: cardinal absolute InVal;
-              InVal:= Value;
-              Overlay:= ReverseBytes(Overlay);   <- reported, at ERROR severity
-
-            Overlay IS assigned -- through its alias, which the analysis does not
-            model. Today the bare-identifier-as-possible-def treatment masks that
-            gap; turning it into a read exposes it as a false ERROR. Closing the
-            false negative therefore requires modelling `absolute` FIRST, and is
-            filed separately rather than shipped on top of a known gap.
-
-            What remains below is one-directional: a KNOWN var/out parameter may
-            add a def, and nothing here can ever add a READ. So this change can
-            only ever REMOVE findings, never manufacture one. }
+            pmUnknown keeps the old silence, and that now includes every
+            POINTER-typed parameter: see LooksLikePointerType in FlowChecks,
+            where `GetTempFileName(..., NameBuf)` is the measured case. }
+          if (Idx >= 0) and ((Mode = pmValue) or (Mode = pmConst))
+             and (Arg.NodeType = 'identifier') and (AReads.IndexOf(Idx) < 0) then
+            AReads.Add(Idx);
           { still walk non-identifier args for reads of OTHER vars (indices etc.) }
           if Arg.NodeType <> 'identifier' then
           begin

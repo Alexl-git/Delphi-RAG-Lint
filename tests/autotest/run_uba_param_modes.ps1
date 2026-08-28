@@ -68,6 +68,7 @@ procedure FillIt(var pBuf: Integer);
 procedure OutIt(out pBuf: Integer);
 procedure ReadConst(const pBuf: Integer);
 procedure ReadVal(pBuf: Integer);
+procedure TakesPtr(pBuf: PChar);
 
 implementation
 
@@ -91,6 +92,11 @@ begin
   if pBuf = 0 then Exit;
 end;
 
+procedure TakesPtr(pBuf: PChar);
+begin
+  if pBuf = nil then Exit;
+end;
+
 end.
 '@
 
@@ -112,11 +118,18 @@ var
   AOut   : array[0..7] of Integer;
   AConst : array[0..7] of Integer;
   AVal   : array[0..7] of Integer;
+  YBare  : Integer;
+  YOk    : Integer;
+  PBuf   : array[0..7] of Char;
 begin
   FillIt(AVar[0]);
   OutIt(AOut[0]);
   ReadConst(AConst[0]);
   ReadVal(AVal[0]);
+  ReadVal(YBare);
+  YOk := 1;
+  ReadVal(YOk);
+  TakesPtr(PBuf);
 end;
 
 end.
@@ -151,6 +164,24 @@ try {
   Check 'C1 CONTROL a `const` parameter arg IS still reported' ($all -contains 'aconst') ($all -join ',')
   Check 'C2 CONTROL a value parameter arg IS still reported'   ($all -contains 'aval')   ($all -join ',')
   Check 'C3 VACUITY the run reported something at all' ([bool]$all) 'no findings -- the fixture is measuring nothing'
+
+  # ---- STAGE 2: a bare identifier passed BY VALUE is a READ. This closes the
+  #      mirror-image false negative, and it was BLOCKED on `absolute` aliasing
+  #      (see run_absolute_aliasing.ps1) -- without that, the MStreams.pas
+  #      ReverseBytes overloads reported as false ERRORS.
+  Check 'S1 a never-assigned local passed BY VALUE is now reported' `
+        ($all -contains 'ybare') ($all -join ',')
+  Check 'S2 CONTROL the same local ASSIGNED first is NOT reported' `
+        (-not ($all -contains 'yok')) ($all -join ',')
+
+  # ---- THE POINTER HAZARD. `GetTempFileName(PathBuf, 'mco', 0, NameBuf)`
+  #      declares its out-buffer as LPWSTR -- BY VALUE -- and writes through it;
+  #      Delphi takes the array's address implicitly so there is no `@` to
+  #      notice. A pointer-typed parameter is therefore neither a reliable read
+  #      nor a reliable def, and must stay silent. Measured: without this, that
+  #      one real call reported at ERROR severity on the line that fills it.
+  Check 'S3 a bare arg to a POINTER-typed value parameter stays silent' `
+        (-not ($all -contains 'pbuf')) ($all -join ',')
 
   # ---- THE STORE IS THE MECHANISM. With no --db there is no signature to
   #      consult, so all four must STILL be reported. This pins that the fix is
