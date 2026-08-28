@@ -19979,7 +19979,7 @@ begin
     pages used TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8), one of
     them commented as matching Save 'byte-for-byte'. Pressing OK in Tools >
     Options collapsed a 313-line manifest to one 5 KB line. Nothing failed.
-    They now share TManifestIO.WriteJsonAtomic, and these two assertions are
+    They now share DRagLint.Core.JsonFile.WriteJsonFileAtomic, and these two assertions are
     what stop it drifting back. }
   RawBytes:= TFile.ReadAllBytes(Path);
   if (Length(RawBytes) >= 3) and (RawBytes[0] = $EF) and (RawBytes[1] = $BB) and

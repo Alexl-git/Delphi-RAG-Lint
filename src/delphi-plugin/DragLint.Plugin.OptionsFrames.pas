@@ -193,7 +193,7 @@ uses
   , DRagLint.Project.Resolver
   , DragLint.Plugin.DockForm
   
-  , DRagLint.Index.Manifest   { TManifestIO.WriteJsonAtomic -- pretty, no BOM, atomic }
+  , DRagLint.Core.JsonFile    { WriteJsonFileAtomic -- pretty, no BOM, atomic }
   ;
 
 { Minimal .dfm resource for the BASE frame class (TDLPageFrame). TCustomFrame.Create
@@ -772,7 +772,7 @@ begin
       2026-08-27 it collapsed the 313-line manifest to a single 5 KB line.
       No data was lost, which is exactly why nobody noticed sooner.
       One writer now, in the unit that documents why. }
-    TManifestIO.WriteJsonAtomic(Path, Root);
+    WriteJsonFileAtomic(Path, Root);
   finally
     Root.Free;
   end; // try

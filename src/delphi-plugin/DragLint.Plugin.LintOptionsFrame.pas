@@ -205,7 +205,7 @@ uses
   , DRagLint.Lint.ConfigWriter
   , DragLint.Plugin.ExeResolver
   
-  , DRagLint.Index.Manifest   { TManifestIO.WriteJsonAtomic -- pretty, no BOM, atomic }
+  , DRagLint.Core.JsonFile    { WriteJsonFileAtomic -- pretty, no BOM, atomic }
   ;
 
 { ============================================================
@@ -1644,8 +1644,8 @@ begin
     Naming.AddPair('presets', NewArr);
 
     { Pretty + no BOM + atomic swap, via the one implementation that gets it
-      right -- see TManifestIO.WriteJsonAtomic. }
-    TManifestIO.WriteJsonAtomic(Path, Root);
+      right -- see DRagLint.Core.JsonFile.WriteJsonFileAtomic. }
+    WriteJsonFileAtomic(Path, Root);
   finally
     Root.Free;
   end; // try
@@ -1711,8 +1711,8 @@ begin
     Naming.AddPair('presets', NewArr);
 
     { Pretty + no BOM + atomic swap, via the one implementation that gets it
-      right -- see TManifestIO.WriteJsonAtomic. }
-    TManifestIO.WriteJsonAtomic(Path, Root);
+      right -- see DRagLint.Core.JsonFile.WriteJsonFileAtomic. }
+    WriteJsonFileAtomic(Path, Root);
   finally
     Root.Free;
   end; // try

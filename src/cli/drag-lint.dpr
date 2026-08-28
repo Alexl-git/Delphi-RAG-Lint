@@ -65,6 +65,7 @@ uses
   DRagLint.Core.Interfaces in '..\core\DRagLint.Core.Interfaces.pas',
   DRagLint.Wiring in '..\core\DRagLint.Wiring.pas',
   DRagLint.Core.Indexer in '..\core\DRagLint.Core.Indexer.pas',
+  DRagLint.Core.JsonFile in '..\core\DRagLint.Core.JsonFile.pas',
   DRagLint.Storage.Schema in '..\storage\DRagLint.Storage.Schema.pas',
   DRagLint.Storage.SQLite in '..\storage\DRagLint.Storage.SQLite.pas',
   DRagLint.Storage.FileMembership in '..\storage\DRagLint.Storage.FileMembership.pas',

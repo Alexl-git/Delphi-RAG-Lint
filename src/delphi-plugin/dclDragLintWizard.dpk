@@ -93,6 +93,7 @@ contains
   DragLint.Plugin.ProjectMenu in 'DragLint.Plugin.ProjectMenu.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.Index.Manifest in '..\index\DRagLint.Index.Manifest.pas',
+  DRagLint.Core.JsonFile in '..\core\DRagLint.Core.JsonFile.pas',
   DragLint.Plugin.OptionsFrames in 'DragLint.Plugin.OptionsFrames.pas' {DLPageFrame: TFrame},
   DragLint.Plugin.About in 'DragLint.Plugin.About.pas';
 

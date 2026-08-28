@@ -159,4 +159,39 @@
 #   byte-identical to the first run. Autodoc has a documented non-idempotency
 #   history, so a clean first run alone would not have been evidence.
 
-1.8.0-alpha|34d24ba997d045bac833c65be11a448a3e4bfb0fc81d28b6b04d9910a6d6ea98
+# 2026-08-27: hash updated WITHOUT a version bump, per the rule above.
+#   ONE file in the hashed surface changed -- src\index\DRagLint.Index.Manifest.pas,
+#   verified with `git diff --stat` over exactly the four hashed roots: 4
+#   insertions, 73 deletions, nothing else touched.
+#
+#   WHAT CHANGED: it is a MOVE, not a rewrite. The body of TManifestIO.Save --
+#   Format(2), TEncoding.UTF8.GetBytes, temp file plus MoveFileEx swap -- moved
+#   verbatim into the new src\core\DRagLint.Core.JsonFile.WriteJsonFileAtomic,
+#   and Save now calls it. Same algorithm, same bytes on disk, different unit.
+#
+#   WHY IT MOVED: the IDE plugin needed to share it. Three copies in the
+#   plugins options pages wrote Root.ToJSON through TEncoding.UTF8 instead --
+#   minified, with a BOM -- and pressing OK in Tools > Options collapsed the
+#   313-line drag-lint.json to a single 5 KB line. src\core is where it belongs:
+#   src\index is inside THIS hashed surface, and the plugins design-time
+#   package does not even compile against src\index (T64_lint_options_compile
+#   went red proving it).
+#
+#   WHY NO BUMP. The question this file asks is "does any STORED PARSE become
+#   stale?". This code serialises the CONFIG FILE. It never runs during a walk,
+#   it reads no source, and it cannot change what the parser sees in any byte
+#   sequence. Bumping would re-parse ~7,000 library files plus every project
+#   index to produce byte-identical symbols -- exactly the cost the
+#   DRAGLINT_VERSION / DRAGLINT_EXTRACTOR_VERSION split exists to avoid.
+#
+#   Same shape as the 2026-08-24 entry (a manifest WRITER under src\index), and
+#   the same warning: the failure mode of getting this wrong is SILENT. If a
+#   future edit to this file ever influences what is indexed, the version MUST
+#   move.
+#
+#   Pinned by `drag-lint selftest manifest-save-atomic`, which now asserts the
+#   written file carries no BOM and is not on one line -- both assertions were
+#   run against a deliberately regressed writer and each failed on its own
+#   defect before the fix was restored.
+
+1.8.0-alpha|9cd6be2f1525e46e134038ee78819cd9113f1f9902519421bb125fad2d2fca78

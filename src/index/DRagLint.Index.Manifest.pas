@@ -325,28 +325,6 @@ type
       /// </remarks>
       class procedure Save(const AManifest: TIndexManifest; const APath: string); static;
 
-      /// <summary>Writes a JSON document over a hand-maintained config file:
-      /// pretty-printed, UTF-8 with NO byte-order mark, swapped into place
-      /// atomically.</summary>
-      /// <param name="APath">The file to replace.</param>
-      /// <param name="ARoot">The document. The caller keeps ownership.</param>
-      /// <remarks>EXTRACTED SO THERE IS ONE OF THESE, NOT FOUR. Save had the
-      /// only correct implementation and three copies in the IDE plugins
-      /// options pages did
-      /// <c>TFile.WriteAllText(Path, Root.ToJSON, TEncoding.UTF8)</c> instead --
-      /// minified onto one line, and with a BOM. One of them even carried a
-      /// comment claiming it matched this routine "byte-for-byte", which was
-      /// the reverse of the truth.
-      /// <para>The damage is silent and only shows up outside drag-lint:
-      /// TFile.ReadAllText skips a BOM on the way back in, so the tool that
-      /// wrote it never notices, while jq, git diff and the human who
-      /// maintains the file all do. On 2026-08-27 opening Tools &gt; Options and
-      /// pressing OK collapsed a 313-line manifest to a single 5 KB line.</para>
-      /// <para>Not a plain write: see Saves own comment for why the temp-file
-      /// plus MoveFileEx swap is required rather than TFile.WriteAllText or
-      /// TFile.Replace.</para></remarks>
-      class procedure WriteJsonAtomic(const APath: string; ARoot: TJSONObject); static;
-
       /// <summary>Validate the manifest and return the first human-readable error,
       /// or '' if the manifest is valid.</summary>
       /// <param name="AManifest">Manifest to validate.</param>
@@ -616,7 +594,7 @@ function LoadDocComplexityMin: Integer;
 implementation
 
 uses
-  Winapi.Windows   { MoveFileEx / MOVEFILE_REPLACE_EXISTING -- TManifestIO.Save's atomic swap }
+  DRagLint.Core.JsonFile   { WriteJsonFileAtomic -- pretty, no BOM, atomic }
   , DRagLint.Core.Model
   ;
 
@@ -1234,58 +1212,11 @@ var
 begin
   Root:= ToJson(AManifest);
   try
-    WriteJsonAtomic(APath, Root);
+    { The one implementation lives in src\core so the IDE plugin can share it
+      without reaching into the extraction surface -- see that unit's header. }
+    WriteJsonFileAtomic(APath, Root);
   finally
     Root.Free;
-  end;
-end;
-
-class procedure TManifestIO.WriteJsonAtomic(const APath: string; ARoot: TJSONObject);
-var
-  JsonText: string;
-  TmpPath : string;
-begin
-  if ARoot = nil then Exit;
-  { Format(2), NOT ToJSON. This file is hand-maintained and lives in a git
-    repository; minifying it destroys both its readability and every future
-    diff of it, and no caller gains anything from the smaller bytes. }
-  JsonText:= ARoot.Format(2);
-  { Atomic write. migrate-dbs calls this once per section moved -- up to 27
-    times in one unattended run -- against the user's real, hand-maintained
-    manifest. A plain TFile.WriteAllText TRUNCATES APath before writing a
-    byte of the new content, so an interruption mid-write (a crash, a kill, a
-    power loss) would leave drag-lint.json truncated or empty, losing every
-    section's mapping, not just the one being saved right now. Write the full
-    new content to a sibling temp file first (nothing yet depends on it),
-    then swap it into place with ONE atomic filesystem operation: a
-    MoveFileEx rename with MOVEFILE_REPLACE_EXISTING, which either fully
-    succeeds or leaves the ORIGINAL file completely untouched -- there is no
-    observable half-written state either way, whether or not APath already
-    exists (the same call handles the very first save too). NOT TFile.Replace:
-    its Delphi wrapper unconditionally runs its backup-filename parameter
-    through TPath.GetFullPath, which raises EInOutArgumentException on an
-    empty string -- there is no way to ask it for "no backup" even though the
-    underlying Win32 ReplaceFile supports that directly (a NULL backup
-    pointer), so the wrapper cannot be used without leaving a stray .bak
-    file behind on every single save. MoveFileEx needs no backup at all. }
-  { B8 (this repo's own recorded fix, see DoLintAll): GetBytes, not
-    WriteAllText(..., TEncoding.UTF8). TEncoding.UTF8 carries a PREAMBLE, and
-    WriteAllText emits it, so a hand-maintained drag-lint.json a real user
-    edits -- and that other, non-Delphi tooling (jq, a strict JSON parser)
-    reads -- would open with EF BB BF at byte 0. TFile.ReadAllText silently
-    skips a BOM on the way back in, which is exactly why this went unnoticed
-    from inside drag-lint itself. GetBytes returns the same UTF-8 WITHOUT the
-    preamble: a manifest that needs a non-ASCII character (an accented path)
-    still round-trips as UTF-8, while the ordinary all-ASCII manifest stays
-    byte-for-byte plain ASCII, matching the file the user started with. }
-  TmpPath:= APath + '.tmp';
-  TFile.WriteAllBytes(TmpPath, TEncoding.UTF8.GetBytes(JsonText));
-  try
-    if not MoveFileEx(PChar(TmpPath), PChar(APath), MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
-      RaiseLastOSError;
-  except
-    if TFile.Exists(TmpPath) then TFile.Delete(TmpPath);
-    raise;
   end;
 end;
 
