@@ -7145,6 +7145,53 @@ begin
     end;
   end;
 
+  { ANCHOR DISCOVERY TO THE FILE, NOT THE CURRENT DIRECTORY.
+
+    The block above solves this for --project. Bare `lint <file>` had nothing
+    but the relative fallback below, which resolves against the CWD -- and the
+    IDE plugin spawns the engine with lpCurrentDirectory = nil (CreateProcessW,
+    LiveDiagnostics.pas:126), inheriting whatever directory the IDE happens to
+    sit in. So a project's disabled-rules and severity rulings governed lint-all
+    and reached the per-file runs the user actually sees only by luck.
+
+    THIS REPO SHIPPED THE WORKAROUND RATHER THAN THE FIX, which is how visible
+    it was: its own drag-lint-lint.json says "Pass with --config when linting
+    this repo from a neutral CWD (the pipeline runs from C:\TEMP, so the
+    auto-discovery of a CWD-local drag-lint-lint.json does not find this file)".
+
+    Walks up from the file to the drive root, checking the folder and then its
+    _D-RAG, exactly the precedence the --project branch uses. Under
+    --stand-in-for the anchor is the REAL path: a snapshot in %TEMP% would
+    otherwise walk up through the temp directory and find nothing, which is the
+    same silence in a new disguise. Backslash-normalised first -- ExtractFilePath
+    splits on '\' and ':' and not '/', the trap that made a forward-slash path
+    escape its own directory in T2.
+
+    Still ABOVE the CWD fallback, which is kept last so no existing invocation
+    changes behaviour unless a file-anchored config actually exists. }
+  if Path = '' then
+  begin
+    var Anchor: string := AArgs.StandInFor;
+    if Anchor = '' then Anchor:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
+    if Anchor <> '' then
+    begin
+      Anchor:= StringReplace(Anchor, '/', '\', [rfReplaceAll]);
+      var Dir: string;
+      if TDirectory.Exists(Anchor) then Dir:= IncludeTrailingPathDelimiter(TPath.GetFullPath(Anchor))
+      else Dir:= ExtractFilePath(TPath.GetFullPath(Anchor));
+      while Dir <> '' do
+      begin
+        var Cand: string:= TPath.Combine(Dir, 'drag-lint-lint.json');
+        if TFile.Exists(Cand) then begin Path:= Cand; Break; end;
+        Cand:= TPath.Combine(TPath.Combine(Dir, '_D-RAG'), 'drag-lint-lint.json');
+        if TFile.Exists(Cand) then begin Path:= Cand; Break; end;
+        var Parent: string:= ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
+        if (Parent = '') or SameText(Parent, Dir) then Break; { drive root reached }
+        Dir:= Parent;
+      end;
+    end;
+  end;
+
   if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
   Result:= TLintConfig.Load(Path, AArgs.Profile);
   if AArgs.Disable <> '' then Result.AddDisabled(AArgs.Disable.Split([',', ' ', ';']));
