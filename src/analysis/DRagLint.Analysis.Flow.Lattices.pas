@@ -1029,8 +1029,54 @@ var
   Sec: TTSNode;
   RV: TRoutineVar;
 
+  { The `absolute <ident>` target of a declVar, as a slot index in Tbl, or -1.
+
+    `Overlay: cardinal absolute InVal;` binds Overlay to InVal's STORAGE. They
+    are one cell: assigning either assigns both, reading either reads both. The
+    table used to record two unrelated locals, so an assignment through one was
+    invisible to the other -- and that is not a latent gap, it SHIPS false
+    findings in three rules at once (measured on ORM3's MStreams.pas):
+    used-before-assignment, overwrite-before-read ("dead store" on a store the
+    alias's target then reads) and write-only-local.
+
+    THE GRAMMAR WAS PROBED, NOT ASSUMED (tools\dumpnode) -- this repo has been
+    wrong about node names five times, and `kAbsolute` is one more instance of
+    the rule that KEYWORDS ARE NAMED NODES:
+
+        declVar: identifier 'Overlay' | ':' | type 'cardinal'
+                 | kAbsolute 'absolute' | identifier 'InVal' | ';'
+
+    So the clause is a plain child of declVar and this is an ANALYSIS fix, not a
+    grammar one: no extractor-version bump, no reindex.
+
+    Returns -1 when there is no `absolute`, or when its target is not something
+    this table knows -- a GLOBAL, or a unit-level var. Those keep today's
+    behaviour rather than being half-modelled. A target that IS in the table may
+    be a local or a PARAMETER, and a parameter is admitted deliberately: the
+    storage really is shared, and a parameter is assigned on entry, so aliasing
+    to it removes a false positive rather than creating a false negative. }
+  function AbsoluteTargetIdx(const ADeclVar: TTSNode; out ALimit: Integer): Integer;
+  var K: Integer; C, Abs_, Tgt: TTSNode;
+  begin
+    Result := -1;
+    Abs_ := Default(TTSNode); Tgt := Default(TTSNode);
+    for K := 0 to ADeclVar.ChildCount - 1 do
+    begin
+      C := ADeclVar.Child(K);
+      if C.NodeType = 'kAbsolute' then Abs_ := C
+      else if (not Abs_.IsNull) and Tgt.IsNull and (C.NodeType = 'identifier') then Tgt := C;
+    end;
+    if Abs_.IsNull then Exit;
+    { The declared NAMES stop at `absolute`, not only at the type. Without this
+      an untyped or unusually-shaped declaration would take the target itself
+      for a declared name. }
+    if Integer(Abs_.StartByte) < ALimit then ALimit := Integer(Abs_.StartByte);
+    if Tgt.IsNull then Exit;
+    Result := Tbl.IndexOf(LowerCase(NodeStr(Tgt, ASrc)));
+  end;
+
   procedure AddDeclVars(const ASection: TTSNode);
-  var I, J, TypeStart: Integer; DV, TypeNode, NameId: TTSNode; R: TRoutineVar;
+  var I, J, TypeStart, NameLimit, AbsIdx: Integer; DV, TypeNode, NameId: TTSNode; R: TRoutineVar;
   begin
     if ASection.IsNull then Exit;
     for I := 0 to ASection.NamedChildCount - 1 do
@@ -1040,10 +1086,12 @@ var
       TypeNode := DV.ChildByField('type');
       TypeStart := MaxInt;
       if not TypeNode.IsNull then TypeStart := Integer(TypeNode.StartByte);
+      NameLimit := TypeStart;
+      AbsIdx := AbsoluteTargetIdx(DV, NameLimit);
       for J := 0 to DV.NamedChildCount - 1 do
       begin
         NameId := DV.NamedChild(J);
-        if (NameId.NodeType = 'identifier') and (Integer(NameId.StartByte) < TypeStart) then
+        if (NameId.NodeType = 'identifier') and (Integer(NameId.StartByte) < NameLimit) then
         begin
           R := Default(TRoutineVar);
           R.Name := LowerCase(NodeStr(NameId, ASrc));
@@ -1052,7 +1100,10 @@ var
           R.TypeText := Trim(NodeStr(TypeNode, ASrc));
           R.DeclLine := Integer(NameId.StartPoint.Row) + 1;
           R.DeclCol  := Integer(NameId.StartPoint.Column) + 1;
-          Tbl.Add(R);
+          { ONE CELL, ONE SLOT. Aliasing rather than adding is what makes every
+            lattice alias-aware for free -- they all index by slot. Same
+            mechanism the routine's own name already uses to reach Result. }
+          if AbsIdx >= 0 then Tbl.Alias(R.Name, AbsIdx) else Tbl.Add(R);
         end;
       end;
     end;
