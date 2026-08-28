@@ -6092,17 +6092,48 @@ var
 
   function CountExits(const N: TTSNode): Integer;
   var
-    I: Integer;
-    T: string ;
+    I  : Integer;
+    T  : string ;
+    Ent: TTSNode;
+    C  : TTSNode;
+    ViaCall: Boolean;
   begin
     Result:= 0;
     if N.IsNull then Exit;
     if N.NodeType = 'defProc' then Exit; { nested routine counted separately }
+    ViaCall:= False;
     if N.NodeType = 'identifier' then T:= NodeStr(N)
-    else if N.NodeType = 'exprCall' then T:= NodeStr(N.ChildByField('entity'))
+    else if N.NodeType = 'exprCall' then
+    begin
+      Ent:= N.ChildByField('entity');
+      T  := NodeStr(Ent);
+      ViaCall:= True;
+    end
     else T:= '';
     if SameText(T, 'Exit') then Inc(Result);
-    for I:= 0 to N.ChildCount - 1 do Result:= Result + CountExits(N.Child(I));
+    for I:= 0 to N.ChildCount - 1 do
+    begin
+      C:= N.Child(I);
+      { THE DOUBLE COUNT. `Exit(Value)` parses as exprCall(entity: identifier
+        'Exit', args: ...). The arm above counts the CALL, and then this loop
+        used to descend into that same entity identifier -- whose text is also
+        'Exit' -- and count it a SECOND time. A bare `exit;` is a plain
+        identifier with no entity child, so it counted once, and the two forms
+        disagreed inside the same routine with nothing to show for it.
+
+        Measured before the fix: 3 x `Exit(False)` reported "6", so a routine in
+        the modern guard-clause style was judged against an effective threshold
+        of ~2.5 instead of 5 -- the rule fired hardest on the CLEANEST code.
+
+        The entity is skipped by BYTE RANGE rather than by testing the child's
+        text for 'Exit': a text test would also swallow a genuine second exit
+        that happened to sit inside this call's arguments (`Exit(F(Exit))` is
+        not legal, but `Exit(A[Ord(x)])` shows arguments do get walked), and the
+        args subtree must keep being counted. }
+      if ViaCall and (not Ent.IsNull)
+         and (C.StartByte = Ent.StartByte) and (C.EndByte = Ent.EndByte) then Continue;
+      Result:= Result + CountExits(C);
+    end;
   end;
 
   procedure Visit(const N: TTSNode);
