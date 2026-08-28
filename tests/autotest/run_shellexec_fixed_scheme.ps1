@@ -137,14 +137,38 @@ Check "obsidian:// via a local (line $lnSafeScheme)" (-not ($fired -contains $ln
 Check "https:// concatenated inline (line $lnSafeInline)" (-not ($fired -contains $lnSafeInline))
 
 Write-Host ''
-Write-Host 'Everything that can still choose the program MUST fire' -ForegroundColor Cyan
-Check "file:// + data (line $lnFileScheme) -- extension picks the program" ($fired -contains $lnFileScheme) `
-  'the reason this is scheme-aware and not "starts with a literal"'
-Check "a bare variable (line $lnBareVar)"           ($fired -contains $lnBareVar)
-Check "'cmd.exe /c ' + data (line $lnExeConcat) -- no scheme at all" ($fired -contains $lnExeConcat)
-Check "reassigned after a safe value (line $lnReassigned)" ($fired -contains $lnReassigned) `
-  'more than one assignment in the routine -- refuse to reason'
+Write-Host 'A runtime lpFile with NO command line is now SILENT (owner ruling 2026-08-27)' -ForegroundColor Cyan
 
+# THIS SECTION USED TO REQUIRE THESE THREE TO FIRE, and the reasoning was:
+# "everything that can still choose the program MUST fire" -- a runtime path can
+# name an executable (CWE-73/427) even when no arguments are appended.
+#
+# That reasoning was never refuted. The owner overruled it on cost: there is NO
+# AST difference between `PChar(FConfigService.DataFolder)` -- how every Delphi
+# program opens a folder in Explorer -- and `PChar(P)`. The rule therefore fired
+# `error` on the benign idiom everywhere, and a security rule that cries wolf on
+# an everyday call is one people switch off. Per the standing standard, a large
+# finding count IS the defect, and the fix belongs in the rule.
+#
+# WHAT IS GIVEN UP, recorded so nobody rediscovers it as a surprise: a
+# ShellExecute that opens an attacker-controlled PATH with a plain verb and no
+# parameters is no longer reported. What is NOT given up is on the next block --
+# anything that can actually carry a command line.
+Check "file:// + data (line $lnFileScheme) is now silent" (-not ($fired -contains $lnFileScheme)) `
+  'a runtime path with nil lpParameters carries no command line'
+Check "a bare variable (line $lnBareVar) is now silent"   (-not ($fired -contains $lnBareVar))
+Check "reassigned after a safe value (line $lnReassigned) is now silent" (-not ($fired -contains $lnReassigned)) `
+  'the scheme exemption no longer decides anything for lpFile'
+
+Write-Host ''
+Write-Host 'A COMMAND LINE still MUST fire -- this is the control on the block above' -ForegroundColor Cyan
+
+# Without this the section above is satisfied by a rule that reports nothing at
+# all. Unsafe_ExeConcat hides its arguments INSIDE lpFile (`cmd.exe /c ` + data),
+# which is exactly the shape nil-lpParameters cannot vouch for, and it is the one
+# case of the original four that survives the ruling.
+Check "'cmd.exe /c ' + data (line $lnExeConcat) STILL fires" ($fired -contains $lnExeConcat) `
+  'lpFile names an interpreter, so the arguments are inside it'
 Write-Host ''
 if ($script:Failed) { Write-Host 'run_shellexec_fixed_scheme: FAILED' -ForegroundColor Red; exit 1 }
 Write-Host 'run_shellexec_fixed_scheme: OK' -ForegroundColor Green

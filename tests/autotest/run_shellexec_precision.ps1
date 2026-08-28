@@ -99,27 +99,18 @@ $text -split "`n" | Where-Object { $_ -match 'unsafe-shellexecute|finding' } | F
 Write-Host ''
 Write-Host '-- check 1: an Explorer open with no parameters is not injection' -ForegroundColor Cyan
 
-# NOT silence -- `warning`. run_shellexec_fixed_scheme.ps1 already ruled, with a
-# fixture, that anything which can still CHOOSE THE PROGRAM must fire, and a bare
-# runtime lpFile is exactly that; there is no AST difference between a config
-# folder and an attacker's path. What was wrong was the SEVERITY and the CWE:
-# with nil parameters this is not command injection. So it stays a finding, and
-# says what is true of it.
+# SILENT. Owner ruling 2026-08-27: with nil (or literal) lpParameters and a
+# plain literal verb there is no command line, so CWE-78 cannot occur and the
+# finding was noise on the commonest ShellExecute idiom there is.
+#
+# This overturned the earlier decision in run_shellexec_fixed_scheme.ps1, whose
+# three "must fire" cases were rewritten to expect silence in the same change.
+# What is given up -- a runtime path can still name an executable (CWE-73) -- is
+# recorded there and in the rule itself, not buried here.
 foreach ($safe in 'SafeOpenFolder', 'SafeOpenFolderExplore', 'SafeOpenWithLiteralParams') {
   $ln = FlaggedLineOf $safe
-  Check "$safe is a WARNING, not a CWE-78 error" ((SeverityAt $ln) -eq 'warning') `
-    "line $ln -> '$(SeverityAt $ln)'"
+  Check "$safe is SILENT" (-not (IsFlagged $ln)) "line $ln -> '$(SeverityAt $ln)'"
 }
-# PER LINE, not across the whole output. The first version of this searched
-# the entire text for a CWE-73 message followed by a CWE-78 one -- which is
-# always true here, because the warnings and the errors are printed together.
-# It asserted nothing and failed anyway.
-$dgLine = ''
-foreach ($l in ($text -split "`n")) {
-  if ($l -match ('[\(:]' + (FlaggedLineOf 'SafeOpenFolder') + '[\):]')) { $dgLine = $l }
-}
-Check 'the downgraded message cites CWE-73, not CWE-78' `
-  (($dgLine -match 'CWE-73') -and ($dgLine -notmatch 'CWE-78')) $dgLine
 
 # ---------------------------------------------------------------------------
 # CHECK 2 -- POSITIVE CONTROL: the rule still fires on real injection
@@ -142,7 +133,7 @@ $ln = FlaggedLineOf 'UnsafeInterpreter'
 Check 'UnsafeInterpreter is an ERROR' ((SeverityAt $ln) -eq 'error') `
   "line $ln -- literal lpFile meant the old rule could not see this at all"
 Check 'and it says WHY, not the generic non-literal message' `
-  ($text -match 'command interpreter with runtime-built parameters') $text
+  ($text -match 'launches a command interpreter') $text
 
 # ---------------------------------------------------------------------------
 # CHECK 4 -- the totals, so a silent drift in either direction shows up
@@ -153,9 +144,9 @@ Write-Host '-- check 4: exact finding count' -ForegroundColor Cyan
 $n    = ([regex]::Matches($text, 'unsafe-shellexecute')).Count
 $nErr = ([regex]::Matches($text, '\[error\] unsafe-shellexecute')).Count
 $nWarn= ([regex]::Matches($text, '\[warning\] unsafe-shellexecute')).Count
-Check 'every call site is accounted for: 8 findings' ($n -eq 8) "got $n"
-Check '5 are errors (real injection)'   ($nErr  -eq 5) "got $nErr"
-Check '3 are warnings (path, not args)' ($nWarn -eq 3) "got $nWarn"
+Check 'exactly 5 findings -- 3 benign opens silent' ($n -eq 5) "got $n"
+Check 'all 5 are errors' ($nErr -eq 5) "got $nErr"
+Check 'and nothing is downgraded to a warning' ($nWarn -eq 0) "got $nWarn"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'SHELLEXEC PRECISION: FAIL' -ForegroundColor Red; exit 1 }

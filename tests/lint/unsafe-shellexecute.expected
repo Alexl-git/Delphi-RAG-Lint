@@ -1,5 +1,9 @@
-# WinExec arg0 + ShellExecute arg2 are non-literal commands (lines 11,12); Good (17,18) clean
+# WinExec arg0 is a whole command line, so a non-literal there is injection (line 11).
+# Line 12 -- ShellExecute(0, 'open', PChar(Cmd), nil, nil, ...) -- is SILENT since the
+# owner ruling of 2026-08-27: with nil lpParameters and a plain literal verb there is no
+# command line, so CWE-78 cannot occur. See run_shellexec_fixed_scheme.ps1 for what that
+# gives up, and run_shellexec_precision.ps1 for what still fires.
 unsafe-shellexecute 11
-unsafe-shellexecute 12
+!unsafe-shellexecute 12
 !unsafe-shellexecute 17
 !unsafe-shellexecute 18

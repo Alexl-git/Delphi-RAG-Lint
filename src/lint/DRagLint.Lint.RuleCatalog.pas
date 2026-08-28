@@ -200,7 +200,7 @@ begin
     B('abstract-method-instantiation', 'resource-lifetime', 'warning', 'TFoo.Create on a class with an unimplemented abstract method -- raises EAbstractError (store-backed)');
 
     { --- security --- }
-    B('unsafe-shellexecute',           'security', 'error',   'WinExec/ShellExecute/CreateProcess with a non-literal command');
+    B('unsafe-shellexecute',           'security', 'error',   'A command line built at runtime: WinExec/CreateProcess with a non-literal command, or ShellExecute with runtime parameters, a non-plain verb, or an interpreter as lpFile');
     B('path-traversal',                'security', 'warning', 'Concatenated path passed to a file API -- path traversal risk');
     B('weak-random-for-security',      'security', 'warning', 'A security-named variable is generated with System.Random (not a CSPRNG)');
     B('dfm-hardcoded-credential',      'security', 'warning', 'A credential-named DFM property (Password/Secret/ApiKey) holds a literal string');

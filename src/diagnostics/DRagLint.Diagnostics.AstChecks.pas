@@ -4885,75 +4885,71 @@ var
     Result:= (Txt = 'rundll32') or (Txt = 'rundll32.exe');
   end;
 
-  { True when this ShellExecute call cannot build a command line: the verb is a
-    literal, plain, non-elevating one AND lpParameters is nil or a literal. }
-  function ShellExecuteHasNoCommandLine(const AArgs, AProc: TTSNode): Boolean;
+  { Can this ShellExecute call carry a command line the caller controls?
+
+    THE ONE PREDICATE the rule now turns on for ShellExecute. Its three limbs
+    are the only ways a command line can exist; lpFile merely being runtime-
+    built is NOT one of them, which is the owner ruling of 2026-08-27 and the
+    whole reason this replaced the old literal test.
+
+    AInterp reports the interpreter limb so the message can name it, because
+    "cmd.exe with your data appended" and "runas on a variable" deserve
+    different sentences. }
+  function ShellExecuteIsInjectable(const AArgs, AProc: TTSNode;
+    out AInterp: Boolean): Boolean;
   const
     SAFE_VERBS: array[0..4] of string = ('open', 'explore', 'edit', 'print', 'find');
-    OP_IDX     = 1;  { lpOperation  }
-    FILE_IDX   = 2;  { lpFile       }
-    PARAM_IDX  = 3;  { lpParameters }
+    OP_IDX    = 1;  { lpOperation  }
+    FILE_IDX  = 2;  { lpFile       }
+    PARAM_IDX = 3;  { lpParameters }
   var
-    Op, Prm: TTSNode;
-    Verb   : string ;
-    V      : string ;
-    Ok     : Boolean;
+    Op, Prm : TTSNode;
+    Verb, V : string ;
+    VerbSafe: Boolean;
+    HasArgs : Boolean;
   begin
-    Result:= False;
+    AInterp:= False;
+    Result := False;
+    { Too few arguments to be the WinAPI ShellExecute -- say nothing rather
+      than index past the end and guess. }
     if AArgs.IsNull or (AArgs.NamedChildCount <= PARAM_IDX) then Exit;
 
-    { The verb must be a literal we recognise. A variable verb could be
-      'runas', so it is not suppressible. }
-    Op:= UnwrapCast(AArgs.NamedChild(OP_IDX));
-    if Op.IsNull or (Op.NodeType <> 'literalString') then Exit;
-    Verb:= LowerCase(UnquoteLiteral(LeftmostLiteralText(Op)));
-    Ok  := False;
-    for V in SAFE_VERBS do
-      if Verb = V then begin Ok:= True; Break; end;
-    if not Ok then Exit;
+    { LIMB ORDER IS ABOUT THE MESSAGE, not about correctness -- any limb alone
+      makes the call injectable. The interpreter check runs FIRST because it is
+      the most specific thing we can say; when it ran last, a `cmd.exe` call
+      that also had runtime parameters got the generic sentence and the reader
+      lost the actual diagnosis. }
 
-    { lpParameters must carry nothing runtime-built. nil is the common shape;
-      a literal is equally safe. }
-    Prm:= UnwrapCast(AArgs.NamedChild(PARAM_IDX));
-    if Prm.IsNull then Exit;
-    if not ((Prm.NodeType = 'literalString')
-            or SameText(Trim(NodeStr(Prm)), 'nil')) then Exit;
+    { 1. lpFile naming an INTERPRETER. This is why nil lpParameters proves
+         nothing on its own: `Cmd := 'cmd.exe /c ' + P` puts the arguments
+         INSIDE lpFile. The old rule -- which only asked whether lpFile was a
+         literal -- could not see `ShellExecute(0, 'open', 'cmd.exe',
+         PChar(Data), ...)` at all, because 'cmd.exe' IS a literal. }
+    if NamesAnInterpreter(AArgs.NamedChild(FILE_IDX), AProc) then
+    begin
+      AInterp:= True;
+      Exit(True);
+    end;
 
-    { ...and the thing being opened must not itself be a shell. }
-    if NamesAnInterpreter(AArgs.NamedChild(FILE_IDX), AProc) then Exit;
+    { 2. The verb. Only a LITERAL plain verb is provably harmless: `runas`
+         elevates, and a verb read from a variable could be anything. }
+    Op      := UnwrapCast(AArgs.NamedChild(OP_IDX));
+    VerbSafe:= False;
+    if (not Op.IsNull) and (Op.NodeType = 'literalString') then
+    begin
+      Verb:= LowerCase(UnquoteLiteral(LeftmostLiteralText(Op)));
+      for V in SAFE_VERBS do
+        if Verb = V then begin VerbSafe:= True; Break; end;
+    end;
+    if not VerbSafe then Exit(True);
 
-    Result:= True;
-  end;
-
-  { A FALSE NEGATIVE THE FIXTURE FOUND, not a refinement of the above.
-
-      ShellExecute(0, 'open', 'cmd.exe', PChar(pArgs), nil, SW_SHOWNORMAL);
-
-    is command injection in its purest form, and the rule NEVER flagged it:
-    it only ever inspected lpFile, and 'cmd.exe' is a string literal, so the
-    one call in the probe that most deserved an error was the one call that
-    got none. Narrowing the rule without this would have traded a false
-    positive for a false negative and called it progress.
-
-    Deliberately narrow: an interpreter AND runtime-built parameters. An
-    interpreter with fixed parameters is a hard-coded command, and runtime
-    parameters to a non-interpreter is argument-shaping, not injection --
-    flagging either would reintroduce the noise this change removes. }
-  function ShellExecuteRunsInterpreter(const AArgs, AProc: TTSNode): Boolean;
-  const
-    FILE_IDX  = 2;
-    PARAM_IDX = 3;
-  var
-    Prm: TTSNode;
-  begin
-    Result:= False;
-    if AArgs.IsNull or (AArgs.NamedChildCount <= PARAM_IDX) then Exit;
-    if not NamesAnInterpreter(AArgs.NamedChild(FILE_IDX), AProc) then Exit;
-    Prm:= UnwrapCast(AArgs.NamedChild(PARAM_IDX));
-    if Prm.IsNull then Exit;
-    { nil or a literal carries nothing the caller controls. }
-    if (Prm.NodeType = 'literalString') or SameText(Trim(NodeStr(Prm)), 'nil') then Exit;
-    Result:= True;
+    { 3. lpParameters. nil or a literal carries nothing the caller controls;
+         anything else IS a runtime-built command line. }
+    Prm    := UnwrapCast(AArgs.NamedChild(PARAM_IDX));
+    HasArgs:= (not Prm.IsNull)
+              and (Prm.NodeType <> 'literalString')
+              and (not SameText(Trim(NodeStr(Prm)), 'nil'));
+    if HasArgs then Exit(True);
   end;
 
   function CmdArgIndex(const ACallee: string; out AIdx: Integer): Boolean;
@@ -4970,7 +4966,6 @@ var
   var
     I, Idx      : Integer ;
     Flag, Interp: Boolean ;
-    Weak        : Boolean ;
     Ent, Args, A: TTSNode ;
     P           : TTSPoint;
     F           : TLintFinding;
@@ -4990,50 +4985,57 @@ var
         if (not Args.IsNull) and (Args.NamedChildCount > Idx) then
         begin
           A:= Args.NamedChild(Idx);
-          Flag:= (A.NodeType <> 'literalString') and (not ArgIsFixedSchemeUri(A, Cur));
           Interp:= False;
-          Weak  := False;
+
           if SameText(NodeStr(Ent), 'ShellExecute') then
           begin
-            { Suppress the benign open, then re-arm for the interpreter shape --
-              in that order, because 'cmd.exe' is a LITERAL lpFile and so was
-              never flagged in the first place. }
-            { DOWNGRADE, DO NOT SUPPRESS -- and that distinction resolves a
-              conflict between two positions that are each right.
+            { SHELLEXECUTE IS JUDGED ON WHETHER A COMMAND LINE CAN EXIST,
+              NOT ON WHETHER lpFile IS A LITERAL. Owner ruling 2026-08-27.
 
-              run_shellexec_fixed_scheme.ps1 already decided, deliberately and
-              with a fixture, that 'everything that can still choose the
-              program MUST fire' -- a bare runtime lpFile included. A first
-              attempt here SUPPRESSED that shape and broke all four of its
-              must-fire cases, because there is no AST difference between a
-              config folder and an attacker's path.
+              The old test -- "lpFile is not a string literal" -- fired `error`
+              on `ShellExecute(h, 'open', PChar(SomeFolder), nil, nil, ...)`,
+              which is how every Delphi program opens a folder in Explorer. With
+              lpParameters nil and a plain literal verb there is NO COMMAND LINE:
+              lpFile is one opaque path, nothing tokenises it, and CWE-78 cannot
+              occur. It is now SILENT.
 
-              With nil lpParameters and a plain literal verb, CWE-78 command
-              injection cannot occur, so `error` was wrong. But the call can
-              still pick WHICH PROGRAM runs from a runtime path -- CWE-73 --
-              so silence is wrong too. It stays a finding, at `warning`,
-              saying what is actually true of it.
+              WHAT THIS GIVES UP, stated plainly rather than discovered later.
+              tests\autotest\run_shellexec_fixed_scheme.ps1 previously required
+              three of these to fire -- a bare runtime path, a `file://` + data
+              URI, and a variable reassigned after a safe value -- on the
+              reasoning that a runtime path can still CHOOSE THE PROGRAM
+              (CWE-73/427). That reasoning is sound and is NOT refuted here; the
+              owner has ruled that the noise costs more than the signal, since
+              there is no AST difference between a config folder and an
+              attacker's path, and the rule fired on every benign open. Those
+              three cases were rewritten to expect silence, with this note.
 
-              The interpreter re-arm runs AFTER, because 'cmd.exe' is a
-              LITERAL lpFile and so was never flagged at all. }
-            if Flag and ShellExecuteHasNoCommandLine(Args, Cur) then Weak:= True;
-            if ShellExecuteRunsInterpreter(Args, Cur) then
-            begin
-              Flag  := True;
-              Interp:= True;
-              Weak  := False;
-            end;
-          end;
+              WHAT STILL FIRES, and why each one is a real command line:
+                * runtime-built lpParameters -- that IS a command line;
+                * a verb that is not a plain literal open/explore/edit/print/
+                  find -- `runas` elevates, and a variable verb is unknowable;
+                * lpFile naming an INTERPRETER -- `cmd.exe /c ` + data hides the
+                  arguments inside lpFile itself, so nil lpParameters proves
+                  nothing. This is the case the old rule MISSED entirely,
+                  because it only looked at whether lpFile was a literal. }
+            Flag:= ShellExecuteIsInjectable(Args, Cur, Interp);
+          end
+          else
+            { WinExec and CreateProcess take a whole COMMAND LINE in the argument
+              CmdArgIndex selects, so a non-literal there is injection by
+              construction. Unchanged. }
+            Flag:= (A.NodeType <> 'literalString') and (not ArgIsFixedSchemeUri(A, Cur));
+
           if Flag then
           begin
             P:= Ent.StartPoint;
             F:= Default(TLintFinding);
             F.RuleId  := 'unsafe-shellexecute';
-            if Weak then F.Severity:= 'warning' else F.Severity:= 'error';
-            if Weak then
-              F.Message := Format('%s opens a runtime-built path -- with no parameters this is not command injection, but the PATH still chooses which program runs (CWE-73). Validate it, or open a fixed location.', [NodeStr(Ent)])
-            else if Interp then
-              F.Message := Format('%s launches a command interpreter with runtime-built parameters -- this is command injection (CWE-78). Pass a fixed argument list, or launch the target program directly.', [NodeStr(Ent)])
+            F.Severity:= 'error';
+            if Interp then
+              F.Message := Format('%s launches a command interpreter -- whatever follows it is a command line, so this is command injection (CWE-78). Launch the target program directly instead.', [NodeStr(Ent)])
+            else if SameText(NodeStr(Ent), 'ShellExecute') then
+              F.Message := 'ShellExecute builds a command line at runtime -- a non-literal lpParameters, or a verb that is not a plain literal open/explore/edit/print/find (CWE-78). Pass fixed arguments, or use a plain open with no parameters.'
             else
               F.Message := Format('%s called with a non-literal command argument -- a runtime-built command path is an injection risk (CWE-78). Validate or use a fixed literal.', [NodeStr(Ent)]);
             F.FilePath:= AFile;
