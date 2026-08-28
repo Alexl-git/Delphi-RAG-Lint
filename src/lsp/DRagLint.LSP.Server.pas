@@ -17,6 +17,7 @@ uses
   , DRagLint.Core    .Encoding
   , DRagLint.Storage .SQLite
   , DRagLint.Parser  .Delphi13
+  , DRagLint.Core    .Indexer  { INBOX-lsp-hover-unindexed-file: TIndexer.IndexFile builds the ephemeral single-unit index }
   , DRagLint.Hover   .Renderer
   , DRagLint.Hover   .Returns
   , DRagLint.Resolver.TypeAt
@@ -95,10 +96,59 @@ type
       /// ISymbolStore does not expose its own path, and widening that interface
       /// for one caller-scoping rule would be the larger change.</remarks>
       FStorePaths  : TArray<string>      ;
+      { INBOX-lsp-hover-unindexed-file-resolves-library-symbol (2026-08-27).
+      An EPHEMERAL, single-unit index for a hovered file that NO configured
+      store owns -- a loose unit, another repo, anything open after Close All.
+
+      WHY IT HAS TO EXIST. ComputeHover takes the first store that has the
+      NAME, and the call-site safety net (TTypeAtResolver.Resolve) anchors to
+      the store that OWNS the hovered file. With no owner there is nothing to
+      anchor to, so hovering `Apply` in a loose file rendered
+      Bde.DBTables.TDataSetUpdateObject.Apply -- measured 0 hits in DataCopy's
+      index, 192 in library-Win64, and the file itself in neither. Confidently
+      wrong, with no wording anywhere saying the answer came from a different
+      program.
+
+      SCOPE IS ONE UNIT, and that is the owner's ruling, not an optimisation:
+      a loose file can sit in a directory of thousands, and hover must stay
+      interactive. The store is PREPENDED, never substituted, so every library
+      answer a loose file legitimately needs still arrives (guarded as NC1 in
+      run_lsp_hover_unindexed_file.ps1).
+
+      CACHE KEY is path + last-write time, so repeated hovers in the same file
+      cost one parse; evicted on didClose and on Destroy. It indexes what is
+      ON DISK -- TIndexer reads the file itself and knows nothing of
+      TLiveDocuments -- so symbols typed since the last save are not in it.
+      The live overlay still supplies the TEXT under the caret, which is the
+      half that decides which identifier was hovered. }
+      FEphemStore  : ISymbolStore        ;
+      FEphemFile   : string              ; { the one path FEphemStore covers }
+      FEphemStamp  : TDateTime           ; { its last-write time when indexed }
+      FEphemDbPath : string              ; { temp .sqlite to delete on eviction }
+      FEphemSeq    : Integer             ; { never reuse a name a dead handle may still hold }
       FStdIn       : THandleStream       ;
       FLinter      : TLinter             ;
       FInitialized : Boolean             ;
       FShuttingDown: Boolean             ;
+      /// <summary>Does any CONFIGURED store hold a files row for this path?</summary>
+      /// <remarks>The same probe TTypeAtResolver.Resolve uses to pick its
+      /// Primary store, run against the already-open stores. Deliberately NOT
+      /// DRagLint.Storage.FileMembership.DbContainsFile, which opens a second
+      /// connection per database and would put a file-open on the hover path
+      /// for the common, owned case.</remarks>
+      function  AnyStoreOwns(const APath: string): Boolean;
+      /// <summary>Release the ephemeral index and delete its temp database.</summary>
+      procedure DropEphemeralStore;
+      /// <summary>Index APath alone into a fresh ephemeral store.</summary>
+      /// <returns>True when the store now holds a files row for APath.</returns>
+      /// <remarks>Never raises: a failure leaves the caller with the ordinary
+      /// store list, i.e. the old behaviour. A wrong hover is a defect; a dead
+      /// server is a worse one.</remarks>
+      function  BuildEphemeralStore(const APath: string; AStamp: TDateTime): Boolean;
+      /// <summary>The store list to answer a request about APath with: FStores
+      /// unchanged when some store owns the file, else the ephemeral
+      /// single-unit store PREPENDED to FStores.</summary>
+      function  StoresForFile(const APath: string): TArray<ISymbolStore>;
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: nil;
       /// TJSONObject(Parsed).</returns>
       /// <remarks>
@@ -695,6 +745,7 @@ destructor TLSPServer.Destroy;
 begin
   FLinter.Free;
   FStdIn.Free;
+  DropEphemeralStore; { closes the ephemeral connection and removes its %TEMP% database }
   FStore:= nil;
   inherited;
 end;
@@ -1428,6 +1479,176 @@ begin
   else if Pos('protected', Vis) > 0 then Result:= 'protected ' + Result;
 end;
 
+{ ---- ephemeral single-unit index -------------------------------------------
+  INBOX-lsp-hover-unindexed-file-resolves-library-symbol. See the field block
+  on TLSPServer for the defect and the owner's ruling; only the mechanics are
+  here. Guarded by tests\autotest\run_lsp_hover_unindexed_file.ps1, which was
+  run RED first: CASE 1 and CASE 2 named FarAwayLib.TFarAwayThing.Apply while
+  PC1/PC2/NC1/NC2 passed. }
+
+function TLSPServer.AnyStoreOwns(const APath: string): Boolean;
+begin
+  Result:= False;
+  if APath = '' then Exit;
+  for var St in FStores do
+    if St.FindFileIdByPath(APath) > 0 then Exit(True);
+end; // function
+
+procedure TLSPServer.DropEphemeralStore;
+{ Releasing the interface closes the connection; the -wal/-shm companions are
+  WAL-mode siblings of the same database and go with it. Best-effort by design:
+  a file left behind in %TEMP% is a nuisance, an exception raised on didClose is
+  a broken session. }
+begin
+  FEphemStore:= nil;
+  FEphemFile := '';
+  FEphemStamp:= 0;
+  if FEphemDbPath = '' then Exit;
+  for var Suffix in TArray<string>.Create('', '-wal', '-shm') do
+    try
+      if TFile.Exists(FEphemDbPath + Suffix) then TFile.Delete(FEphemDbPath + Suffix);
+    except
+      { see above -- deliberately swallowed }
+    end;
+  FEphemDbPath:= '';
+end; // procedure
+
+function TLSPServer.BuildEphemeralStore(const APath: string; AStamp: TDateTime): Boolean;
+var
+  SavedOut: TTextRec;
+begin
+  Result:= False;
+  DropEphemeralStore;
+  Inc(FEphemSeq);
+  { The database goes to %TEMP%, never beside the user's source -- a stray
+    .sqlite dropped next to a file someone merely HOVERED would be a second
+    defect, and this repo has already paid for one of those
+    (stray-empty-index-on-retired-default-path). Named by pid + sequence so a
+    handle a previous attempt failed to release can never be reopened by
+    accident. Recorded on the field immediately, so the except below can
+    delete it. }
+  FEphemDbPath:= TPath.Combine(TPath.GetTempPath,
+    Format('drag-lint-lsp-ephem-%d-%d.sqlite', [GetCurrentProcessId, FEphemSeq]));
+  try
+    if TFile.Exists(FEphemDbPath) then TFile.Delete(FEphemDbPath);
+
+    var S: ISymbolStore:= TSQLiteSymbolStore.Create(FEphemDbPath);
+    S.Migrate;
+
+    { Delphi parser only. A .dfm carries no hover positions of its own and the
+      SQL parser would claim nothing here; both would only widen what this path
+      can fail at. }
+    var Idx: TIndexer:= TIndexer.Create(S, [TDelphi13Parser.Create]);
+    try
+      { TIndexer reports per-file progress with a BARE Writeln -- that is
+        System.Output, and in THIS process stdout IS the JSON-RPC transport
+        (SendMessage writes STD_OUTPUT_HANDLE directly). A single
+        '  <path> -> N symbols' line ahead of a Content-Length header
+        desynchronises the client for the rest of the session, which is a worse
+        failure than the hover this fixes. Redirect for the duration, exactly as
+        DoReconcileProject does for the same reason, and restore in the finally
+        so an exception cannot leak the redirect.
+
+        Editing Indexer.pas to take a quiet flag would be the tidier fix and is
+        FORBIDDEN here: that unit is inside the DRAGLINT_EXTRACTOR_VERSION hash
+        surface, so touching it re-parses every database on the machine.
+
+        run_lsp_hover_unindexed_file.ps1 asserts on the RAW stdout of the very
+        reply that builds the index (NC2), because a redirect that silently
+        stopped working would otherwise look exactly like success. }
+      try
+        Move(TTextRec(Output), SavedOut, SizeOf(TTextRec));
+        AssignFile(Output, 'NUL');
+        Rewrite(Output);
+        Idx.IndexFile(APath);
+      finally
+        { Guarded, unlike the CLI precedent: if Rewrite itself failed, Output is
+          assigned-but-not-open and Flush would raise from inside a finally --
+          losing the real error AND leaving stdout redirected. The Move has to
+          happen either way. }
+        try
+          Flush    (Output);
+          CloseFile(Output);
+        except
+          { NUL may never have opened }
+        end;
+        Move(SavedOut, TTextRec(Output), SizeOf(TTextRec));
+      end;
+    finally
+      Idx.Free;
+    end;
+
+    { The link passes an ordinary scan runs, MINUS ResolveCallTargets. Hover
+      needs declarations, uses and ancestry; call edges it does not, and
+      ResolveCallTargets is the one pass that would reach across into the
+      library index -- unbounded work on the hover path. One file, so these
+      three are microseconds. }
+    S.ResolveUnitUseTargets;
+    S.ResolveAncestry;
+    S.ResolveHelpers;
+
+    { EXISTENCE IS NOT SUFFICIENCY. A store that opened cleanly and holds
+      nothing answers 'not mine' for everything and would push the real answer
+      one place further away, so the ephemeral store is adopted only once it
+      demonstrably contains the file. }
+    if S.FindFileIdByPath(APath) <= 0 then
+    begin
+      S:= nil;
+      DropEphemeralStore;
+      Exit;
+    end;
+
+    FEphemStore:= S;
+    FEphemFile := APath;
+    FEphemStamp:= AStamp;
+    Result     := True;
+  except
+    on E: Exception do
+    begin
+      { Never fatal. The caller falls back to the ordinary store list, i.e. the
+        behaviour that shipped before this existed. stderr, never stdout. }
+      Writeln(ErrOutput, 'drag-lint LSP: ephemeral index failed for ', APath, ': ', E.Message);
+      DropEphemeralStore;
+    end;
+  end; // try
+end; // function
+
+function TLSPServer.StoresForFile(const APath: string): TArray<ISymbolStore>;
+var
+  Stamp: TDateTime;
+begin
+  Result:= FStores;
+  if APath = '' then Exit;
+  { The overwhelmingly common case: a file the project or library index owns.
+    Nothing below runs, and the request is answered exactly as before. }
+  if AnyStoreOwns(APath) then Exit;
+  if not TFile.Exists(APath) then Exit;
+
+  { Kept in step with TDelphi13Parser.FileExtensions, which is the authority.
+    Duplicated rather than read from a parser instance because constructing one
+    just to ask would be work on every unowned hover, including the ones that
+    then decline to index. }
+  var Ext: string:= LowerCase(ExtractFileExt(APath));
+  if (Ext <> '.pas') and (Ext <> '.dpr') and (Ext <> '.dpk') and (Ext <> '.inc') then Exit;
+
+  try
+    Stamp:= TFile.GetLastWriteTime(APath);
+  except
+    Exit;
+  end;
+
+  { Cache hit: same file, same last-write time. Repeated hovers in one unit --
+    which is what hovering actually looks like -- cost a single parse. }
+  if (FEphemStore = nil) or (not SameText(FEphemFile, APath)) or (FEphemStamp <> Stamp) then
+    if not BuildEphemeralStore(APath, Stamp) then Exit;
+
+  { PREPENDED, not substituted. TTypeAtResolver.Resolve picks as its Primary the
+    first store that owns the file, so this makes the anchor exist; every store
+    that answered before still answers, just behind it. }
+  Result:= TArray<ISymbolStore>.Create(FEphemStore) + FStores;
+end; // function
+
+
 function TLSPServer.ComputeHover(const AParams: TJSONObject; out AOut: THoverComputation): Boolean;
 var
   TextDoc : TJSONObject    ;
@@ -1442,6 +1663,7 @@ var
   Sym     : TSymbol        ;
   Doc     : TParsedDoc     ;
   Sb      : TStringBuilder ;
+  Stores  : TArray<ISymbolStore>;  { FStores, or the ephemeral single-unit store prepended -- see StoresForFile }
   OwnerFloorType: TSymbol  ;   // when set, the resolver found the LHS type but not the member -> render an honest inherited-member note
   HaveOwnerFloor: Boolean  ;
 begin
@@ -1490,17 +1712,26 @@ begin
     AOut.IntrinsicSig := IntrinsicSignature(Ident);
     Exit(True);
   end;
+  { INBOX-lsp-hover-unindexed-file-resolves-library-symbol: EVERY store lookup
+    from here on goes through Stores, not FStores. For a file some index owns
+    the two are the same array; for a loose file Stores carries an ephemeral
+    index of that one unit in front, which is what stops the loop below --
+    first store that has the NAME -- from handing back a library symbol
+    belonging to a different program. Built after the intrinsic check, so
+    hovering `Length` never triggers a parse. }
+  Stores:= StoresForFile(Path);
+
   { v0.40.3: hover returns the FIRST hit across stores in declared order
     (project DB before library DB, per CLI arg ordering). For multi-hit
     cases the user can use Find Usages to see all stores' results. }
   Symbols:= nil;
   var HitStore: ISymbolStore:= nil;
-  for var StIdx:= 0 to High(FStores) do
+  for var StIdx:= 0 to High(Stores) do
   begin
-    Symbols:= FStores[StIdx].FindSymbolsByExactName(Ident);
+    Symbols:= Stores[StIdx].FindSymbolsByExactName(Ident);
     if Length(Symbols) > 0 then
     begin
-      HitStore:= FStores[StIdx];
+      HitStore:= Stores[StIdx];
       Break;
     end;
   end;
@@ -1549,13 +1780,13 @@ begin
     honest note instead of the arbitrary Symbols[0]. }
   if not FoundDeclImpl then
   begin
-    var TAR:= TTypeAtResolver.Resolve(FStores, Path, Line + 1, Col + 1);
+    var TAR:= TTypeAtResolver.Resolve(Stores, Path, Line + 1, Col + 1);
     if TAR.HasResolved and (TAR.Resolved.Id > 0) and SameText(TAR.Resolved.Name, Ident) then
     begin
       Sel:= TAR.Resolved;
-      if (TAR.ResolvedStoreIndex >= 0) and (TAR.ResolvedStoreIndex <= High(FStores)) then
+      if (TAR.ResolvedStoreIndex >= 0) and (TAR.ResolvedStoreIndex <= High(Stores)) then
       begin
-        HitStore:= FStores[TAR.ResolvedStoreIndex];
+        HitStore:= Stores[TAR.ResolvedStoreIndex];
         Symbols := HitStore.FindSymbolsByExactName(Ident);
       end;
     end
@@ -1625,7 +1856,7 @@ begin
       { v0.40.8f: try to resolve the actual type at cursor first. If we
         can, narrow the candidate list to symbols on THAT type (else a
         common member like DataBinding lists every class that has one). }
-      var TAResult:= TTypeAtResolver.Resolve( FStores, Path, Line + 1, Col + 1);
+      var TAResult:= TTypeAtResolver.Resolve( Stores, Path, Line + 1, Col + 1);
 
       var Filtered: TArray<TSymbol>;
       SetLength(Filtered, 0);
@@ -2468,7 +2699,13 @@ begin
   if AParams = nil then Exit;
   TextDoc:= AParams.GetValue('textDocument') as TJSONObject;
   if TextDoc = nil then Exit;
-  TLiveDocuments.Remove(FileFromUri(TextDoc.GetValue('uri').Value));
+  var ClosedPath: string:= FileFromUri(TextDoc.GetValue('uri').Value);
+  TLiveDocuments.Remove(ClosedPath);
+  { INBOX-lsp-hover-unindexed-file: the ephemeral index exists only to answer
+    hovers in ONE file. Once that buffer is gone it is dead weight holding a
+    temp database open, so it is evicted with the overlay and for the same
+    reason. }
+  if (ClosedPath <> '') and SameText(ClosedPath, FEphemFile) then DropEphemeralStore;
 end; // procedure
 
 procedure TLSPServer.Run;
