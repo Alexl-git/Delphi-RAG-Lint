@@ -2193,7 +2193,8 @@ begin
                 builds many sections, and one mistyped path must not stop every
                 other index from refreshing. The section is failed instead
                 (Result := False below), which the caller already turns into a
-                non-zero process exit via AnyFailed. }
+                non-zero process exit -- and, since 2026-08-28, into a named
+                entry in the FAILED sections roll-up. See ReportFailedSections. }
               if not ScopeHasIndexableFile(Scope) then
               begin
                 DeadProjects:= DeadProjects + [Format('project file resolved no indexable source: %s', [F])];
@@ -2311,6 +2312,58 @@ begin
   end; // try
 end; // function
 
+{ ONE PLACE THAT DECIDES WHAT A FAILED RUN LOOKS LIKE, so the two driver loops
+  below cannot drift apart in what they report. They already have separate
+  bookkeeping and separate exit-code arithmetic; giving them separate wording
+  for the same event is how a summary ends up existing on one path only.
+
+  WHY A ROLL-UP AT ALL, when every failure is already announced. It is announced
+  ONCE, inline, at the moment it happens. `index --all` over the real manifest
+  builds 27 sections and prints thousands of lines, so a section that failed
+  early is off the top of the scrollback long before the run ends -- and the run
+  then finishes with an ordinary per-section trailer that looks like success.
+  Exit code 1 says SOMETHING failed and never says what, which leaves the
+  operator's last question -- "did anything fail, and which?" -- answerable only
+  by scrolling. On a scripted sweep nobody scrolls.
+
+  SILENT WHEN NOTHING FAILED, deliberately. A roll-up printed unconditionally is
+  one more line nobody reads, and it would make the loud case look exactly like
+  the quiet one. tests\autotest\run_index_all_failed_section_summary.ps1 pins
+  that as N2, alongside N1 -- that the list names only what actually failed.
+
+  NOT A BEHAVIOUR CHANGE. Both loops already continued past a failing section
+  and already returned 1; measured against the engine before this was written.
+  This adds the missing report, and the guard's C1/C2/C3 pin the continuing and
+  the exit code so the report cannot be bought by making a failure fatal. }
+function ReportFailedSections(const AFailed: TArray<string>; ATotal: Integer): Integer;
+begin
+  if Length(AFailed) = 0 then Exit(0);
+  { FLUSH STDOUT FIRST, and this is not defensive noise -- it was measured.
+    The per-section trailers go to Output and the roll-up to ErrOutput. When
+    stdout is a CONSOLE or a FILE the two interleave in real time and the
+    roll-up lands last, where it belongs. When stdout is a PIPE it becomes
+    fully buffered while stderr stays unbuffered, so the roll-up overtakes
+    trailers that have not been written yet and appears in the MIDDLE of the
+    log -- observed doing exactly that. A pipe is how a scripted sweep
+    captures this, which is the reader this line exists for. }
+  Flush(Output);
+  Writeln(ErrOutput, Format('FAILED sections (%d of %d): %s',
+                            [Length(AFailed), ATotal, string.Join(', ', AFailed)]));
+  Flush(ErrOutput);
+  Result:= 1;
+end;
+
+{ The section's name as the operator sees it EVERYWHERE ELSE: BuildPlanItem
+  suffixes the platform in exactly this shape, and a roll-up spelled differently
+  would not grep against the inline ERROR line it summarises. The suffix is also
+  what makes the list unambiguous -- two sections may share a Name and differ
+  only by Platform. }
+function SectionLabel(const AItem: TPlanSection): string;
+begin
+  Result:= AItem.Name;
+  if AItem.Platform <> '' then Result:= Result + ' [' + AItem.Platform + ']';
+end;
+
 // v0.45: index --all [--config <path>] [--dry-run [--json]] [--only <Secs>] [--platform <P>]
 // Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
 // validates it, resolves the build plan, optionally filters by --only / --platform,
@@ -2325,7 +2378,7 @@ var
   Plan      : TIndexPlan                                ;
   Resolver  : DRagLint.Project.Resolver.TProjectResolver;
   PlatFilter: TArray<string>                            ;
-  AnyFailed : Boolean                                   ;
+  FailedNames: TArray<string>                           ;
   i         : Integer                                   ;
 
   { --recompile used to be accepted here and silently ignored -- BuildPlanItem
@@ -2480,9 +2533,9 @@ begin
   // Sequential path (jobs <= 1): existing in-process build.
   if EffJobs <= 1 then
   begin
-    AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune) then AnyFailed:= True; end;
-    if AnyFailed then Result:= 1 else Result:= 0;
+    FailedNames:= nil;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
 
@@ -2492,9 +2545,9 @@ begin
   if AArgs.WorkspaceConfig = '' then
   begin
     Writeln(ErrOutput, 'NOTE: --jobs >1 requires --config <path>; running sequentially.');
-    AnyFailed:= False;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune) then AnyFailed:= True; end;
-    if AnyFailed then Result:= 1 else Result:= 0;
+    FailedNames:= nil;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
 
@@ -2503,7 +2556,6 @@ begin
   //                             --config "<cfg>" --jobs 1
   var SelfExe: string               ;
   var TotalSections: Integer;
-  var FailedCount  : Integer;
   var ProcHandles: array of THandle;
   var ProcItemIdx: array of Integer;
   var PoolCount : Integer;
@@ -2517,7 +2569,7 @@ begin
   var OkCount: Integer              ;
   SelfExe:= ParamStr(0);
   TotalSections:= NSections;
-  FailedCount  := 0;
+  FailedNames  := nil;
   SetLength(ProcHandles, TotalSections);
   SetLength(ProcItemIdx, TotalSections);
   PoolCount:= 0;
@@ -2537,7 +2589,11 @@ begin
         ExitCode:= 0;
         GetExitCodeProcess(ProcHandles[SlotDW], ExitCode);
         CloseHandle(ProcHandles[SlotDW]);
-        if ExitCode <> 0 then Inc(FailedCount);
+        { NAMED, not merely counted. ProcItemIdx has always tracked which plan
+          item each handle belongs to and was never once read; reading it here
+          is the whole cost of naming the failure. Read BEFORE the compaction
+          swap below, which overwrites this slot. }
+        if ExitCode <> 0 then FailedNames:= FailedNames + [SectionLabel(Plan.Items[ProcItemIdx[SlotDW]])];
         // Compact pool: swap finished slot with last entry.
         if SlotDW < DWORD(PoolCount) - 1 then begin ProcHandles[SlotDW]:= ProcHandles[PoolCount - 1]; ProcItemIdx[SlotDW]:= ProcItemIdx[PoolCount - 1]; end;
         Dec(PoolCount);
@@ -2574,7 +2630,7 @@ begin
       if not CreateProcessW(nil, @ChildCmdBuf[0], nil, nil, True { bInheritHandles }, 0 { dwCreationFlags }, nil, nil, SpawnSI, SpawnPI) then
       begin
         Writeln(ErrOutput, 'ERROR: failed to spawn child for section "', Plan.Items[i].Name, '": GetLastError=', GetLastError);
-        Inc(FailedCount);
+        FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])];
         Continue;
       end;
 
@@ -2594,7 +2650,7 @@ begin
       ExitCode:= 0;
       GetExitCodeProcess(ProcHandles[SlotDW], ExitCode);
       CloseHandle(ProcHandles[SlotDW]);
-      if ExitCode <> 0 then Inc(FailedCount);
+      if ExitCode <> 0 then FailedNames:= FailedNames + [SectionLabel(Plan.Items[ProcItemIdx[SlotDW]])];
       if SlotDW < DWORD(PoolCount) - 1 then begin ProcHandles[SlotDW]:= ProcHandles[PoolCount - 1]; ProcItemIdx[SlotDW]:= ProcItemIdx[PoolCount - 1]; end;
       Dec(PoolCount);
     end; // while
@@ -2605,10 +2661,13 @@ begin
     PoolCount:= 0;
   end; // try
 
-  OkCount:= TotalSections - FailedCount;
+  { Length(FailedNames) IS the failure count -- there is no second counter to
+    disagree with it. The two used to be separate, which is one `Inc` away from
+    a run that reports "27/27 sections OK" under a roll-up naming three. }
+  OkCount:= TotalSections - Length(FailedNames);
   Writeln(Format('parallel build: %d/%d sections OK (jobs=%d)', [OkCount, TotalSections, EffJobs]));
 
-  if FailedCount > 0 then Result:= 1 else Result:= 0;
+  Result:= ReportFailedSections(FailedNames, TotalSections);
 end; // function
 
 /// <summary>Resolves the DB path for an index operation. If --db was given
