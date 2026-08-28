@@ -18,14 +18,18 @@
   (4.2x on ORM3, 2026-08-17) but it cannot test a relaxed gate, because the gate
   it exercises was never closed.
 
-  -Mode Add is the shape the open item is about: file rows are DELETED, so those
+  -Mode Add is the shape the open item was about: file rows are DELETED, so those
   files are re-indexed as genuinely NEW and the run declares type names it never
-  withdrew. Today's gate DECLINES that, which is why running -Mode Add against
-  an unmodified build is expected to print *** VACUOUS ***. That vacuous banner
-  is the POSITIVE CONTROL: it proves the mode really produces the addition shape
-  and that the gate really is what stands in the way. Only with
-  -AllowAdditions (which sets DRAGLINT_SCOPED_RESOLVE_ADDITIONS on run A) does
-  the comparison become meaningful.
+  withdrew. SINCE 2026-08-28 THAT IS SCOPED BY DEFAULT, so -Mode Add on its own
+  is now the meaningful measurement rather than a vacuous one.
+
+  THE CONTROL MOVED WITH THE DEFAULT. It is now -AdditionsMode off, which sets
+  DRAGLINT_SCOPED_RESOLVE_ADDITIONS=0 and must print *** VACUOUS *** with a
+  decline naming the type-name gate. That is what proves the mode really does
+  produce the addition shape, and that the gate is really what the flip opened.
+  Run it whenever a -Mode Add result looks too good: an EQUIVALENT that came from
+  a delta the engine never saw as an addition would be indistinguishable
+  otherwise.
 
   METHOD
     1. Copy the subject DB twice (A and B) -- the real index is never written.
@@ -49,7 +53,8 @@
     pwsh -File tools\perf\scoped-resolve-ab.ps1 `
          -Dproj C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj `
          -DbPath C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite `
-         [-DeleteFiles 12] [-Mode Change|Add] [-AllowAdditions]
+         [-DeleteFiles 12] [-Mode Change|Add]
+         [-AdditionsMode default|permissive|off]
 #>
 [CmdletBinding()]
 param(
@@ -62,17 +67,19 @@ param(
   # Change = blank sha256 (files are CHANGED; today's gate already allows scoping).
   # Add    = delete the file rows (files are NEW; today's gate declines).
   [ValidateSet('Change','Add')][string]$Mode = 'Change',
-  # Sets DRAGLINT_SCOPED_RESOLVE_ADDITIONS on run A. Without it, -Mode Add is
-  # expected to be VACUOUS -- that is the control, not a failure.
-  [switch]$AllowAdditions,
-  # Which relaxation to measure.
-  #   widened    = the real behaviour: additions allowed, and the member names
-  #                reachable through each added type pulled into the scope.
+  # What run A does about type ADDITIONS.
+  #   default    = set NOTHING. This is the shipping path since 2026-08-28:
+  #                additions are allowed and the member names reachable through
+  #                each added type are pulled into the scope. Measuring it with
+  #                no variable set is the point -- a run that had to be switched
+  #                on would not be evidence about what users get.
   #   permissive = the widening switched OFF. KNOWN UNSOUND -- it drops inherited
-  #                edges (tests\autotest\pending_scoped_resolve_additions.ps1
-  #                pins exactly that). An instrument for showing the channel is
-  #                real, never a setting to run for real work.
-  [ValidateSet('widened','permissive')][string]$AdditionsMode = 'widened',
+  #                edges (tests\autotest\run_scoped_resolve_additions.ps1 pins
+  #                exactly that). An instrument for showing the channel is real,
+  #                never a setting to run for real work.
+  #   off        = the pre-flip behaviour, via the off switch. With -Mode Add
+  #                this is the VACUITY CONTROL and is expected to decline.
+  [ValidateSet('default','permissive','off')][string]$AdditionsMode = 'default',
   [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$Work = 'C:\TEMP\draglint_scoped_ab'
 )
@@ -177,13 +184,16 @@ function RunIndex([string]$Cfg, [string]$Log, [bool]$NoScoped, [string]$Addition
 
 Push-Location C:\TEMP
 try {
-  # 'widened' is the engine's DEFAULT for any non-empty value, so it is passed as
-  # '1' rather than as the word -- the engine only special-cases 'permissive'.
-  $aAdd   = if (-not $AllowAdditions)          { ''           }
-            elseif ($AdditionsMode -eq 'widened') { '1'        }
-            else                                  { $AdditionsMode }
-  $aLabel = if ($AllowAdditions) { "A: scoped allowed, DRAGLINT_SCOPED_RESOLVE_ADDITIONS=$AdditionsMode ..." }
-            else                 { 'A: scoped path allowed ...' }
+  # 'default' sets NOTHING, so run A exercises the shipping path rather than a
+  # variable nobody has in their environment. 'off' is spelled '0' because that
+  # is the value the docs tell an operator to set.
+  $aAdd   = switch ($AdditionsMode) {
+              'default'    { ''            }
+              'permissive' { 'permissive'  }
+              'off'        { '0'           }
+            }
+  $aLabel = if ($aAdd -ne '') { "A: scoped path allowed, DRAGLINT_SCOPED_RESOLVE_ADDITIONS=$aAdd ($AdditionsMode) ..." }
+            else              { 'A: scoped path allowed, no hatch set (the shipping default) ...' }
   Write-Host $aLabel -ForegroundColor Cyan
   $secA = RunIndex $cfgA (Join-Path $Work 'a.log') $false $aAdd
   Write-Host "B: DRAGLINT_NO_SCOPED_RESOLVE=1 (whole database) ..." -ForegroundColor Cyan
@@ -196,8 +206,8 @@ try {
 # EVERY file, blows the one-in-three limit, and declines scoping. Reindex the
 # subject DB once and re-run.
 #
-# ONE CASE WHERE VACUOUS IS THE POINT: -Mode Add without -AllowAdditions. There
-# the decline IS the result being measured, so it is reported as a control that
+# ONE CASE WHERE VACUOUS IS THE POINT: -Mode Add -AdditionsMode off. There the
+# decline IS the result being measured, so it is reported as a control that
 # PASSED -- but only when it declined for the type-name reason. A decline for
 # any other reason (stale fingerprint, the 1-in-3 limit) would look identical
 # from outside while proving something else entirely, which is the exact way a
@@ -206,7 +216,7 @@ $aLog     = Join-Path $Work 'a.log'
 $aScoped  = $null -ne (Select-String -Path $aLog -Pattern 'starting SCOPED pass' | Select-Object -First 1)
 $aWhyLine = (Select-String -Path $aLog -Pattern 'whole database because' | Select-Object -First 1)
 $aWhy     = if ($aWhyLine) { $aWhyLine.Line.Trim() } else { '' }
-$isControl = ($Mode -eq 'Add') -and (-not $AllowAdditions)
+$isControl = ($Mode -eq 'Add') -and ($AdditionsMode -eq 'off')
 
 if (-not $aScoped) {
   Write-Host ''
@@ -215,7 +225,7 @@ if (-not $aScoped) {
     if ($onTypeNames) {
       Write-Host '  CONTROL PASSED: run A declined scoping, and for the reason under test.' -ForegroundColor Green
       Write-Host ("      {0}" -f $aWhy) -ForegroundColor Green
-      Write-Host '      Re-run with -AllowAdditions to compare scoped against whole database.' -ForegroundColor Green
+      Write-Host '      Re-run without -AdditionsMode to compare scoped against whole database.' -ForegroundColor Green
     } else {
       Write-Host '  *** CONTROL INVALID: A declined, but NOT on the type-name gate. ***' -ForegroundColor Red
       Write-Host ("      {0}" -f $aWhy) -ForegroundColor Red
@@ -228,8 +238,8 @@ if (-not $aScoped) {
   }
 } elseif ($isControl) {
   Write-Host ''
-  Write-Host '  *** CONTROL FAILED: A took the SCOPED path with no -AllowAdditions. ***' -ForegroundColor Red
-  Write-Host '      Either the delta is not the addition shape, or the gate is already relaxed.' -ForegroundColor Red
+  Write-Host '  *** CONTROL FAILED: A took the SCOPED path under -AdditionsMode off. ***' -ForegroundColor Red
+  Write-Host '      Either the delta is not the addition shape, or the off switch is not being read.' -ForegroundColor Red
 }
 
 # --- 4. compare ------------------------------------------------------------

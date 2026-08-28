@@ -1,9 +1,9 @@
 <#
-  pending_scoped_resolve_additions.ps1 -- a run that ADDS type names may scope
-  the call-resolve, and must still produce the whole-database answer.
+  run_scoped_resolve_additions.ps1 -- a run that ADDS type names may scope the
+  call-resolve, and must still produce the whole-database answer.
 
   WHY THIS EXISTS, AND WHY IT IS NOT A CORPUS RUN.
-  tools\perf\scoped-resolve-ab.ps1 -Mode Add -AllowAdditions reports EQUIVALENT
+  tools\perf\scoped-resolve-ab.ps1 -Mode Add reports EQUIVALENT
   on ORM3: 12 added files, a 707-file index, 4x faster, byte-identical edges.
   That is evidence the relaxation is safe. It is not proof, and here it was
   actively misleading -- ORM3 does not contain the one shape that breaks it.
@@ -25,21 +25,35 @@
   names reachable through each added type -- its own and its bound ancestors' --
   into the scoped name set before the pass runs.
 
-  THIS SUITE RUNS BOTH POLARITIES, AND THAT IS THE POINT.
-    widened     (DRAGLINT_SCOPED_RESOLVE_ADDITIONS=1)          MUST match whole-DB
-    permissive  (DRAGLINT_SCOPED_RESOLVE_ADDITIONS=permissive) MUST NOT match
-  The second is the positive control. Without it, this file would keep passing if
+  THIS SUITE RUNS EVERY POLARITY, AND THAT IS THE POINT.
+    default     (NOTHING set)                                  MUST scope, MUST match whole-DB
+    permissive  (DRAGLINT_SCOPED_RESOLVE_ADDITIONS=permissive) MUST scope, MUST NOT match
+    off         (DRAGLINT_SCOPED_RESOLVE_ADDITIONS=0)          MUST DECLINE to the whole DB
+
+  THE DEFAULT RUN SETS NOTHING, and that is load-bearing rather than tidy. From
+  2026-08-24 to 2026-08-28 the relaxation existed but was hatched OFF, so a suite
+  that switched it on by hand proved the CODE worked while saying nothing about
+  what a user got. Asserting on the bare default is what pins the flip; if the
+  default ever reverts, the first Check below goes red.
+
+  permissive IS THE POSITIVE CONTROL. Without it, this file would keep passing if
   the widening were deleted, if the fixture stopped constructing the hazard, or
   if some unrelated change made both runs take the same path -- every one of
   which has happened to a guard in this repo before. A guard that cannot fail is
   not a guard.
 
+  off IS THE CONTROL FOR THE OFF SWITCH ITSELF. A hatch that silently stopped
+  being read would look exactly like a hatch nobody needed, right up to the day
+  someone reached for it to answer "is the scoping wrong?" -- which is the only
+  reason it exists. It must decline, and decline on the TYPE-NAME gate, not on
+  some incidental reason that happens to produce the same whole-DB pass.
+
   FIXTURE SIZE IS LOAD-BEARING. ScopedResolveIsSound declines when the changed
   set reaches a third of the corpus. Five base units plus one added keeps a
   one-file delta under the limit (1*3 < 6). Do not shrink the fixture.
 
-  Named pending_* so the battery skips it: it pins a hatch that is OFF by
-  default. Promote to run_* when the additions path becomes the default.
+  Was pending_* while the hatch was off by default; promoted 2026-08-28 with the
+  flip (PLAN-SESSION-44 T8).
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -142,8 +156,9 @@ end.
 
 $dbBase       = Join-Path $scratch 'base.sqlite'
 $dbWhole      = Join-Path $scratch 'whole.sqlite'
-$dbWidened    = Join-Path $scratch 'widened.sqlite'
+$dbDefault    = Join-Path $scratch 'default.sqlite'
 $dbPermissive = Join-Path $scratch 'permissive.sqlite'
+$dbOff        = Join-Path $scratch 'off.sqlite'
 
 $py = @'
 import sqlite3, sys, os
@@ -184,8 +199,9 @@ try {
   # 1. index WITHOUT uNew -- X.Ping cannot resolve yet
   & $exePath index $src --db $dbBase 2>&1 | Out-Null
   Copy-Item $dbBase $dbWhole      -Force
-  Copy-Item $dbBase $dbWidened    -Force
+  Copy-Item $dbBase $dbDefault    -Force
   Copy-Item $dbBase $dbPermissive -Force
+  Copy-Item $dbBase $dbOff        -Force
 
   # 2. ADD the new unit. Nothing else on disk changes.
   Write-Ascii (Join-Path $src 'uNew.pas') @'
@@ -206,20 +222,29 @@ end.
 '@
 
   $outWhole      = RunIndex $dbWhole      '1' ''
-  $outWidened    = RunIndex $dbWidened    ''  '1'
+  $outDefault    = RunIndex $dbDefault    ''  ''            # nothing set -- the shipping path
   $outPermissive = RunIndex $dbPermissive ''  'permissive'
+  $outOff        = RunIndex $dbOff        ''  '0'
 
   # --- CONTROLS: the three runs really did take the paths they claim --------
   Check 'CONTROL: whole-DB run took the WHOLE DB path' `
         ($outWhole -match 'WHOLE DB') $outWhole
-  Check 'CONTROL: widened run took the SCOPED path (the relaxation engaged)' `
-        ($outWidened -match 'affected call-site ref\(s\)') $outWidened
+  Check 'THE FLIP: with NOTHING set, an addition run takes the SCOPED path' `
+        ($outDefault -match 'affected call-site ref\(s\)') $outDefault
   Check 'CONTROL: permissive run took the SCOPED path too' `
         ($outPermissive -match 'affected call-site ref\(s\)') $outPermissive
+  # THE OFF SWITCH, and it must decline for the RIGHT reason. Matching only
+  # 'WHOLE DB' would also pass if the run declined on a stale fingerprint or the
+  # 1-in-3 limit, neither of which has anything to do with this hatch.
+  Check 'OFF SWITCH: =0 sends the same addition run to the WHOLE DB' `
+        ($outOff -match 'WHOLE DB') $outOff
+  Check 'OFF SWITCH: and it declines on the TYPE-NAME gate, not something else' `
+        ($outOff -match 'changed the set of declared type names') $outOff
 
   $dumpW = & python $pyf $dbWhole      2>&1 | Out-String
-  $dumpX = & python $pyf $dbWidened    2>&1 | Out-String
+  $dumpX = & python $pyf $dbDefault    2>&1 | Out-String
   $dumpP = & python $pyf $dbPermissive 2>&1 | Out-String
+  $dumpO = & python $pyf $dbOff        2>&1 | Out-String
 
   # THE HAZARD MUST EXIST BEFORE IT CAN BE COMPARED. Without this, a fixture
   # that failed to build the inherited-call shape passes vacuously.
@@ -230,11 +255,13 @@ end.
         (($dumpW -split "`r?`n" | Where-Object { $_ -match 'uConsumer' }) -join "`n")
 
   # --- THE FIX --------------------------------------------------------------
-  Check 'WIDENED addition-scoped resolve equals the whole-DB resolve' `
-        ($dumpX -ceq $dumpW) "widened=$($dumpX.Length) whole=$($dumpW.Length)"
+  Check 'DEFAULT addition-scoped resolve equals the whole-DB resolve' `
+        ($dumpX -ceq $dumpW) "default=$($dumpX.Length) whole=$($dumpW.Length)"
+  Check 'OFF SWITCH: its declined pass is byte-identical to the whole-DB pass' `
+        ($dumpO -ceq $dumpW) "off=$($dumpO.Length) whole=$($dumpW.Length)"
   if ($dumpX -cne $dumpW) {
     $a = ($dumpX -split "`r?`n" | Where-Object { $_ }); $b = ($dumpW -split "`r?`n" | Where-Object { $_ })
-    Write-Host '      in WHOLE-DB but MISSING from widened:' -ForegroundColor DarkGray
+    Write-Host '      in WHOLE-DB but MISSING from the default run:' -ForegroundColor DarkGray
     $b | Where-Object { $a -notcontains $_ } | Select-Object -First 10 |
       ForEach-Object { Write-Host "        $_" -ForegroundColor DarkGray }
   }

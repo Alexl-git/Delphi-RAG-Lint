@@ -258,11 +258,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ScopedResolveDeclineReason: string;
-      /// <summary>Reads DRAGLINT_SCOPED_RESOLVE_ADDITIONS once, lowercased:
-      /// '' = off (today's type-equality gate), 'permissive' = additions allowed
-      /// with the widening DISABLED (a test instrument, known unsound), anything
-      /// else = additions allowed and widened.</summary>
-      /// <returns>The lowercased hatch value, or '' when unset.</returns>
+      /// <summary>Reads DRAGLINT_SCOPED_RESOLVE_ADDITIONS once and normalises it
+      /// to one of three words: 'widened' = additions allowed and widened (the
+      /// DEFAULT, and what an UNSET variable gives), 'permissive' = additions
+      /// allowed with the widening DISABLED (a test instrument, known unsound),
+      /// 'off' = restore the type-count gate, which is also what an unrecognised
+      /// value gives.</summary>
+      /// <returns>'widened', 'permissive' or 'off' -- never the raw value.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: GetEnvironmentVariable, LowerCase</para>
@@ -4100,7 +4102,7 @@ end;
      precisely the case where the indirect channel provably cannot fire. A run
      that introduces or withdraws a type name falls back to the whole database.
 
-     4a. PURE ADDITIONS, under DRAGLINT_SCOPED_RESOLVE_ADDITIONS.
+     4a. PURE ADDITIONS -- ALLOWED BY DEFAULT SINCE 2026-08-28.
      Re-read point 4: it names TWO ways a name can change what it denotes -- a
      new declaration of that name, or an old one withdrawn. A run that only ADDS
      type names cannot do the second, so the withdrawal test stays fatal and the
@@ -4113,7 +4115,7 @@ end;
      is added and both the caller and TBase are untouched. TNew declares no
      members, so 'ping' never enters FScopeNames; the caller is not in
      FScopeFiles; nothing in the scoped set names that ref. The fixture is
-     tests\autotest\pending_scoped_resolve_additions.ps1.
+     tests\autotest\run_scoped_resolve_additions.ps1.
 
      Note what that says about corpus evidence: the same relaxation reported
      EQUIVALENT over a 12-file addition to ORM3 (707 files, 4x faster), because
@@ -4126,6 +4128,13 @@ end;
      the pass runs. That closes both this channel and the redeclaration one,
      because its anchor matches every declaration of the name rather than only
      the new one.
+
+     AND DRAGLINT_SCOPED_RESOLVE_ADDITIONS IS NOW THE OFF SWITCH, not the on
+     switch. Set it to 0/off/no/false to restore the count test and send an
+     addition run back to the whole database. It was hatched OFF from 2026-08-24
+     while the residual channel above was closed, demonstrated and measured; the
+     flip is dated 2026-08-28 and rests on the fixture named above plus a
+     -Mode Add corpus A/B on ORM3 run before and after it.
 
   5. ANYTHING THAT DELETES ROWS OUTSIDE OpenFileTx -- ClearAllFiles, a prune, an
      eviction -- sets FScopeWhole and ends the discussion. Those paths remove
@@ -4153,14 +4162,34 @@ end;
   hanging; it was working, silently, on a cost nobody had been told about.
 
   The fix is therefore DIAGNOSIS, not optimisation: say WHOLE DB and say why,
-  BEFORE the pass. Relaxing the gate for pure type ADDITIONS is a separate,
-  correctness-sensitive change with its own A/B hatch
-  (DRAGLINT_NO_SCOPED_RESOLVE) and must not be bundled with this. }
+  BEFORE the pass. The other half of that note -- letting a pure type ADDITION
+  scope at all -- was deliberately NOT bundled with this one: it is
+  correctness-sensitive, it was built and hatched separately, and it is point 4a
+  above. It is the default as of 2026-08-28. }
 { One reader for the additions hatch, so the gate and the widening cannot end up
-  disagreeing about what it said. }
+  disagreeing about what it said. It NORMALISES rather than handing back the raw
+  text: both callers compare against a fixed word, and there is exactly ONE place
+  where an environment string becomes a meaning.
+
+  UNSET IS 'widened'. The relaxation is what you get by NOT setting this; the
+  variable is the OFF switch (point 4a above).
+
+  AN UNRECOGNISED VALUE IS 'off', which is the conservative direction -- correct
+  but slow, never relaxed. Anyone who sets this variable at all is reaching for
+  the escape hatch, and a typo that silently left the relaxation ON would defeat
+  the only reason the hatch exists: answering "is the scoping wrong?" in one run
+  rather than a bisect. The recognised set is closed and small, so a value
+  outside it is a mistake, not a preference. }
 function TSQLiteSymbolStore.AdditionsHatch: string;
+var
+  V: string;
 begin
-  Result:= LowerCase(GetEnvironmentVariable('DRAGLINT_SCOPED_RESOLVE_ADDITIONS'));
+  V:= LowerCase(Trim(GetEnvironmentVariable('DRAGLINT_SCOPED_RESOLVE_ADDITIONS')));
+  if V = ''            then Exit('widened');
+  if V = 'permissive'  then Exit('permissive');
+  if (V = '1') or (V = 'on') or (V = 'yes') or (V = 'true') or (V = 'widened') then
+    Exit('widened');
+  Result:= 'off';
 end;
 
 function TSQLiteSymbolStore.ScopedResolveDeclineReason: string;
@@ -4202,12 +4231,14 @@ begin
   { Type-name equality, both directions. Count equality alone would let one type
     be swapped for another.
 
-    ADDITIONS HATCH -- see point 4a above. With it set, the count test is dropped
-    and additions are judged one by one instead; the WITHDRAWAL test below is
-    untouched either way, because a withdrawal is fatal in both modes. Off, the
-    two tests together still mean set equality and the addition loop has no work,
-    so the default path is byte-identical to what it was. }
-  AllowAdditions:= AdditionsHatch <> '';
+    ADDITIONS ARE ALLOWED BY DEFAULT -- see point 4a above. The count test is
+    dropped and additions are judged one by one instead, with
+    WidenScopeThroughAddedTypes closing the residual channel before the pass
+    runs. The WITHDRAWAL test below is untouched either way, because a withdrawal
+    is fatal in every mode. Under the off switch the two tests together still
+    mean set equality and the addition loop has no work, which is exactly the
+    pre-2026-08-28 behaviour. }
+  AllowAdditions:= AdditionsHatch <> 'off';
   if (not AllowAdditions) and (FScopeTypesBefore.Count <> FScopeTypesAfter.Count) then
     Exit(Format('this run changed the set of declared type names (%d before, %d after)',
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
@@ -4224,7 +4255,7 @@ end;
 { CLOSE THE RESIDUAL CHANNEL OF POINT 4a, by widening the scope rather than by
   refusing to scope.
 
-  DEMONSTRATED, not theorised -- tests\autotest\pending_scoped_resolve_additions:
+  DEMONSTRATED, not theorised -- tests\autotest\run_scoped_resolve_additions:
 
       uBase.pas      TBase declares Ping         (untouched)
       uConsumer.pas  X: TNew; X.Ping             (untouched)
@@ -4266,7 +4297,9 @@ begin
     channel open on purpose so a suite can prove it is really there -- a guard
     that can only ever pass is the failure mode this repo has been bitten by. It
     is not a setting anyone should run: under it the scoped pass is KNOWN to drop
-    edges. Default (any other non-empty value) widens. }
+    edges. Every other mode widens; under 'off' this still runs, but the addition
+    loop has no work, because the gate only admitted the run when the type-name
+    sets were equal. }
   if AdditionsHatch = 'permissive' then Exit;
   Added:= 0;
   Q:= TFDQuery.Create(nil);
