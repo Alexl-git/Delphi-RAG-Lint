@@ -4840,18 +4840,43 @@ var
       Result:= Copy(Result, 2, Length(Result) - 2);
   end;
 
-  function NamesAnInterpreter(const A0: TTSNode): Boolean;
+  function NamesAnInterpreter(const A0, AProc: TTSNode): Boolean;
   const
     SHELLS: array[0..8] of string = (
       'cmd', 'cmd.exe', 'command.com', 'powershell', 'powershell.exe',
       'pwsh', 'wscript', 'cscript', 'mshta');
   var
-    Txt: string;
-    Sh : string;
+    Txt : string ;
+    Sh  : string ;
+    P   : Integer;
+    A   : TTSNode;
+    Rhs : TTSNode;
+    Cnt : Integer;
   begin
     Result:= False;
-    Txt:= LowerCase(UnquoteLiteral(LeftmostLiteralText(UnwrapCast(A0))));
+    A:= UnwrapCast(A0);
+    Txt:= LowerCase(UnquoteLiteral(LeftmostLiteralText(A)));
+    { See through ONE local assignment, the same reasoning (and the same
+      refusal above one) ArgIsFixedSchemeUri already applies:
+      `Cmd := 'cmd.exe /c ' + P; ShellExecute(..., PChar(Cmd), ...)` hides
+      the interpreter behind a variable, and that is the shape a real
+      attacker-facing call actually has. }
+    if (Txt = '') and (not A.IsNull) and (A.NodeType = 'identifier')
+       and (not AProc.IsNull) then
+    begin
+      AsgnCount.Clear;
+      AsgnRhs  .Clear;
+      CollectAssignments(AProc);
+      if AsgnCount.TryGetValue(LowerCase(NodeStr(A)), Cnt) and (Cnt = 1)
+         and AsgnRhs.TryGetValue(LowerCase(NodeStr(A)), Rhs) then
+        Txt:= LowerCase(UnquoteLiteral(LeftmostLiteralText(Rhs)));
+    end;
     if Txt = '' then Exit;
+    { FIRST TOKEN, not the whole literal. `Cmd := 'cmd.exe /c ' + P` leaves
+      'cmd.exe /c ' as the leftmost literal; the program is the part before
+      the first space, and the rest is already its argument list. }
+    P:= Pos(' ', Txt);
+    if P > 0 then Txt:= Copy(Txt, 1, P - 1);
     Txt:= ExtractFileName(Txt);
     for Sh in SHELLS do
       if Txt = Sh then Exit(True);
@@ -4862,7 +4887,7 @@ var
 
   { True when this ShellExecute call cannot build a command line: the verb is a
     literal, plain, non-elevating one AND lpParameters is nil or a literal. }
-  function ShellExecuteHasNoCommandLine(const AArgs: TTSNode): Boolean;
+  function ShellExecuteHasNoCommandLine(const AArgs, AProc: TTSNode): Boolean;
   const
     SAFE_VERBS: array[0..4] of string = ('open', 'explore', 'edit', 'print', 'find');
     OP_IDX     = 1;  { lpOperation  }
@@ -4895,7 +4920,7 @@ var
             or SameText(Trim(NodeStr(Prm)), 'nil')) then Exit;
 
     { ...and the thing being opened must not itself be a shell. }
-    if NamesAnInterpreter(AArgs.NamedChild(FILE_IDX)) then Exit;
+    if NamesAnInterpreter(AArgs.NamedChild(FILE_IDX), AProc) then Exit;
 
     Result:= True;
   end;
@@ -4914,7 +4939,7 @@ var
     interpreter with fixed parameters is a hard-coded command, and runtime
     parameters to a non-interpreter is argument-shaping, not injection --
     flagging either would reintroduce the noise this change removes. }
-  function ShellExecuteRunsInterpreter(const AArgs: TTSNode): Boolean;
+  function ShellExecuteRunsInterpreter(const AArgs, AProc: TTSNode): Boolean;
   const
     FILE_IDX  = 2;
     PARAM_IDX = 3;
@@ -4923,7 +4948,7 @@ var
   begin
     Result:= False;
     if AArgs.IsNull or (AArgs.NamedChildCount <= PARAM_IDX) then Exit;
-    if not NamesAnInterpreter(AArgs.NamedChild(FILE_IDX)) then Exit;
+    if not NamesAnInterpreter(AArgs.NamedChild(FILE_IDX), AProc) then Exit;
     Prm:= UnwrapCast(AArgs.NamedChild(PARAM_IDX));
     if Prm.IsNull then Exit;
     { nil or a literal carries nothing the caller controls. }
@@ -4945,6 +4970,7 @@ var
   var
     I, Idx      : Integer ;
     Flag, Interp: Boolean ;
+    Weak        : Boolean ;
     Ent, Args, A: TTSNode ;
     P           : TTSPoint;
     F           : TLintFinding;
@@ -4966,16 +4992,36 @@ var
           A:= Args.NamedChild(Idx);
           Flag:= (A.NodeType <> 'literalString') and (not ArgIsFixedSchemeUri(A, Cur));
           Interp:= False;
+          Weak  := False;
           if SameText(NodeStr(Ent), 'ShellExecute') then
           begin
             { Suppress the benign open, then re-arm for the interpreter shape --
               in that order, because 'cmd.exe' is a LITERAL lpFile and so was
               never flagged in the first place. }
-            if Flag and ShellExecuteHasNoCommandLine(Args) then Flag:= False;
-            if ShellExecuteRunsInterpreter(Args) then
+            { DOWNGRADE, DO NOT SUPPRESS -- and that distinction resolves a
+              conflict between two positions that are each right.
+
+              run_shellexec_fixed_scheme.ps1 already decided, deliberately and
+              with a fixture, that 'everything that can still choose the
+              program MUST fire' -- a bare runtime lpFile included. A first
+              attempt here SUPPRESSED that shape and broke all four of its
+              must-fire cases, because there is no AST difference between a
+              config folder and an attacker's path.
+
+              With nil lpParameters and a plain literal verb, CWE-78 command
+              injection cannot occur, so `error` was wrong. But the call can
+              still pick WHICH PROGRAM runs from a runtime path -- CWE-73 --
+              so silence is wrong too. It stays a finding, at `warning`,
+              saying what is actually true of it.
+
+              The interpreter re-arm runs AFTER, because 'cmd.exe' is a
+              LITERAL lpFile and so was never flagged at all. }
+            if Flag and ShellExecuteHasNoCommandLine(Args, Cur) then Weak:= True;
+            if ShellExecuteRunsInterpreter(Args, Cur) then
             begin
               Flag  := True;
               Interp:= True;
+              Weak  := False;
             end;
           end;
           if Flag then
@@ -4983,8 +5029,10 @@ var
             P:= Ent.StartPoint;
             F:= Default(TLintFinding);
             F.RuleId  := 'unsafe-shellexecute';
-            F.Severity:= 'error';
-            if Interp then
+            if Weak then F.Severity:= 'warning' else F.Severity:= 'error';
+            if Weak then
+              F.Message := Format('%s opens a runtime-built path -- with no parameters this is not command injection, but the PATH still chooses which program runs (CWE-73). Validate it, or open a fixed location.', [NodeStr(Ent)])
+            else if Interp then
               F.Message := Format('%s launches a command interpreter with runtime-built parameters -- this is command injection (CWE-78). Pass a fixed argument list, or launch the target program directly.', [NodeStr(Ent)])
             else
               F.Message := Format('%s called with a non-literal command argument -- a runtime-built command path is an injection risk (CWE-78). Validate or use a fixed literal.', [NodeStr(Ent)]);
