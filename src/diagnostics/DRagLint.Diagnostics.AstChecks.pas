@@ -669,6 +669,13 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
+      /// <summary>Flags a destructive act gated on a file-existence check.</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per gated destructive call.</returns>
+      /// <remarks>FileExists/TFile.Exists answer False for ANY failure to stat, so
+      /// gating a truncate or a delete on one turns a transient fault into silent data
+      /// loss that still returns success. See INBOX-stat-gated-destructive-acts.</remarks>
+      class function CheckStatGatedDestructive(const AFile: string): TArray<TLintFinding>;
       class function CheckTooManyExitPoints(const AFile: string): TArray<TLintFinding>; overload;
       /// <summary>Flags routines exceeding AMaxExits Exit statements (configurable threshold).</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
@@ -6206,6 +6213,230 @@ begin
      or (K = 'kAnd') or (K = 'kOr') or (K = 'caseCase') then Inc(Result);
   for I:= 0 to N.ChildCount - 1 do Result:= Result + CyclomaticCountDecisions(N.Child(I));
 end;
+
+{ stat-gated-destructive -- INBOX-stat-gated-destructive-acts (from DataCopy).
+
+  THE DEFECT CLASS. FileExists / TFile.Exists return False for ANY failure to
+  stat -- a network blip, a permission change, a share dropping -- not only for
+  genuine absence. Cash that boolean as a destructive act and a transient fault
+  silently destroys data and returns success. Confirmed six times in one
+  codebase, once inside the RTL itself.
+
+  WHY A LINT RULE AND NOT A TEST, in the requester's words: the correct fix
+  REMOVES the stat from the decision, so a test that injects a fake FileExists
+  hooks nothing after the fix and degenerates into a trivial pass -- a test that
+  certifies its own bug. Only a rule fires at write time, on code not yet
+  written.
+
+  ARGUMENT EQUALITY IS DELIBERATELY NOT REQUIRED, and that is a CORRECTION to
+  the note, which asked for the destructive call to be "on the same path
+  expression X". Measured against its own headline instance:
+
+      if FileExists(F) then Append(TF) else Rewrite(TF);
+
+  the stat is on the PATH and the destructive call takes the TEXTFILE HANDLE, so
+  a same-argument matcher would have missed the very site the rule was requested
+  for. Precision comes instead from the destructive NAME SET being small and
+  specific, and from the whole match staying inside ONE statement.
+
+  NOT MATCHED, deliberately: the note's pattern 3 (`if Exists then Size :=
+  GetSize else Size := 0`, whose destructive consequence is a rollback hundreds
+  of lines later). Its harm is genuinely cross-statement, the note itself
+  declines dataflow, and a capture-site heuristic needs its own false-positive
+  measurement before it earns any severity. }
+class function TAstChecker.CheckStatGatedDestructive(const AFile: string): TArray<TLintFinding>;
+var
+  Src     : TBytes             ;
+  PF      : TParsedFile        ;
+  Findings: TList<TLintFinding>;
+
+  function NodeStr(const N: TTSNode): string;
+  var S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { The callee as written: `FileExists`, or the whole dotted `TFile.Exists`. }
+  function CalleeText(const ACall: TTSNode): string;
+  begin
+    Result:= '';
+    if ACall.IsNull or (ACall.NodeType <> 'exprCall') then Exit;
+    if ACall.ChildCount = 0 then Exit;
+    Result:= Trim(NodeStr(ACall.Child(0)));
+  end;
+
+  function IsExistenceName(const AName: string): Boolean;
+  begin
+    Result:= SameText(AName, 'FileExists'      ) or SameText(AName, 'TFile.Exists') or
+             SameText(AName, 'DirectoryExists' ) or SameText(AName, 'TDirectory.Exists');
+  end;
+
+  { Small and specific ON PURPOSE. `Rewrite` is CREATE_ALWAYS; the rest delete
+    or truncate. Anything wider -- every Free, every Clear -- turns this into
+    noise, on a rule whose requester asked for error severity. }
+  function IsDestructiveName(const AName: string): Boolean;
+  begin
+    Result:= SameText(AName, 'Rewrite'         ) or SameText(AName, 'DeleteFile') or
+             SameText(AName, 'TFile.Delete'    ) or SameText(AName, 'SafeDelete') or
+             SameText(AName, 'TruncateOutputTo');
+  end;
+
+  { The filename+append TStreamWriter overload, banned flat. Its RTL body is
+    `if not Append or not FileExists(Filename) then TFileStream.Create(...,
+    fmCreate)` -- the identical race one layer down, where no care at the call
+    site can reach it. Told apart from the safe Create(Stream, Encoding) form by
+    a BOOLEAN LITERAL as the second argument, which the stream overload -- whose
+    second argument is an encoding -- never has. }
+  function IsFilenameAppendWriter(const ACall: TTSNode): Boolean;
+  var Args: TTSNode; A1: string;
+  begin
+    Result:= False;
+    if not SameText(CalleeText(ACall), 'TStreamWriter.Create') then Exit;
+    Args:= ACall.ChildByField('args');
+    if Args.IsNull and (ACall.ChildCount > 2) then Args:= ACall.Child(2);
+    if Args.IsNull or (Args.NamedChildCount < 2) then Exit;
+    A1:= Trim(NodeStr(Args.NamedChild(1)));
+    { APPEND=TRUE ONLY. With False the caller is ASKING to create/truncate and
+      the RTL's internal FileExists cannot change the outcome; the race only
+      bites when append was requested and a failed stat silently turns it into
+      fmCreate. Measured: without this, DRagLint.CLI.pas:9295
+      `TStreamWriter.Create(AArgs.Output, False, TEncoding.UTF8)` -- a
+      deliberate create -- was reported. }
+    Result:= SameText(A1, 'True');
+  end;
+
+  { First matching call in the subtree. Does not descend into a nested routine,
+    whose statements are not part of this decision. }
+  function FindCall(const N: TTSNode; AWantExistence: Boolean): TTSNode;
+  var I: Integer; R: TTSNode; T: string;
+  begin
+    Result:= Default(TTSNode);
+    if N.IsNull or (N.NodeType = 'defProc') then Exit;
+    if N.NodeType = 'exprCall' then
+    begin
+      T:= CalleeText(N);
+      if AWantExistence and IsExistenceName(T) then Exit(N);
+      if (not AWantExistence) and IsDestructiveName(T) then Exit(N);
+    end;
+    for I:= 0 to N.ChildCount - 1 do
+    begin
+      R:= FindCall(N.Child(I), AWantExistence);
+      if not R.IsNull then Exit(R);
+    end;
+  end;
+
+  procedure Emit(const AAt: TTSNode; const AMsg: string);
+  var P: TTSPoint; F: TLintFinding;
+  begin
+    if AAt.IsNull then Exit;
+    P:= AAt.StartPoint;
+    F:= Default(TLintFinding);
+    F.RuleId  := 'stat-gated-destructive';
+    F.Severity:= 'warning';
+    F.Message := AMsg;
+    F.FilePath:= AFile;
+    F.StartLine:= Integer(P.Row) + 1;
+    F.StartCol := Integer(P.Column) + 1;
+    F.EndLine:= F.StartLine;
+    F.EndCol := F.StartCol + 1;
+    Findings.Add(F);
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I: Integer;
+    Cond, Branch, Ex, De: TTSNode;
+    Handled: Boolean;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    Handled:= False;
+
+    { Pattern 4 -- flow-free, so it is asked of every call node. }
+    if (N.NodeType = 'exprCall') and IsFilenameAppendWriter(N) then
+      Emit(N, 'TStreamWriter.Create(filename, append) decides internally with FileExists and ' +
+              'can truncate on a failed stat -- open the stream yourself and use the ' +
+              'Create(Stream, Encoding) overload.');
+
+    { Pattern 1 -- an existence check in the CONDITION, a destructive call in a
+      BRANCH. `if` (then only) and `ifElse` (then + else) are SEPARATE node
+      types in this grammar; handling only one of them was the obvious way to
+      half-implement this. }
+    if (N.NodeType = 'if') or (N.NodeType = 'ifElse') then
+    begin
+      Cond:= Default(TTSNode);
+      for I:= 0 to N.ChildCount - 1 do
+        if N.Child(I).NodeType = 'kThen' then Break
+        else if N.Child(I).NodeType <> 'kIf' then Cond:= N.Child(I);
+      Ex:= FindCall(Cond, True);
+      if not Ex.IsNull then
+        for I:= 0 to N.ChildCount - 1 do
+        begin
+          Branch:= N.Child(I);
+          if (Branch.NodeType = 'kIf') or (Branch.NodeType = 'kThen') or
+             (Branch.NodeType = 'kElse') then Continue;
+          if Branch.StartByte < Cond.EndByte then Continue; { the condition itself }
+          { SINGLE-STATEMENT BRANCHES ONLY, which is the note's own stated design
+            ("keeping the match within one statement is what makes this precise
+            rather than noisy") and is here because the wider form measured
+            noisy. DRagLint.CLI.pas:20433 redirects stdout to the null device --
+            `AssignFile(Output, 'NUL'); Rewrite(Output);` -- inside a try inside
+            a multi-statement branch, and got paired with an unrelated
+            TDirectory.Exists in the condition far above it. Rewriting the NUL
+            device destroys nothing.
+
+            KNOWN LIMITATION, named rather than hidden: `if Exists(F) then begin
+            TFile.Delete(F); end;` is a genuine instance and is NOT matched. The
+            block form is where an incidental destructive call is most likely to
+            be unrelated to the stat, and a false ERROR on correct code costs
+            more here than a missed one. }
+          if Branch.NodeType = 'block' then Continue;
+          De:= FindCall(Branch, False);
+          if not De.IsNull then
+          begin
+            Emit(De, Format('Destructive call %s is gated on %s -- a failed stat (a network blip, ' +
+                            'a permission change) answers False, takes this branch, destroys data ' +
+                            'and returns success. Act first and read the OS error instead.',
+                            [CalleeText(De), CalleeText(Ex)]));
+            Handled:= True;
+            Break;
+          end;
+        end;
+    end;
+
+    { Pattern 2 -- ONE expression carrying both, e.g.
+      `Result := (not TFile.Exists(X)) or SafeDelete(X, E);`
+      Skipped when the if arm above already reported, so a single site is never
+      counted twice. }
+    if (not Handled) and ((N.NodeType = 'assignment') or (N.NodeType = 'statement')) then
+    begin
+      Ex:= FindCall(N, True);
+      De:= FindCall(N, False);
+      if (not Ex.IsNull) and (not De.IsNull) then
+        Emit(De, Format('%s is short-circuited by %s in one expression -- a failed stat answers ' +
+                        'False, the destructive call never runs, and the result still reads as ' +
+                        'success.', [CalleeText(De), CalleeText(Ex)]));
+    end;
+
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end; // procedure
+
+begin
+  Result:= nil;
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
+  Findings:= TList<TLintFinding>.Create;
+  try
+    Visit(PF.Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Findings.Free;
+  end;
+end; // function
 
 class function TAstChecker.CyclomaticOf(const ABody: TTSNode): Integer;
 begin

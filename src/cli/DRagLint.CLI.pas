@@ -8604,6 +8604,7 @@ begin
       { v0.63: routine with more than 5 Exit statements }
       if (AArgs.Rule = '') or (AArgs.Rule = 'too-many-exit-points') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(
         EffPath, Cfg.ThresholdFor('too-many-exit-points', 5));
+      if (AArgs.Rule = '') or (AArgs.Rule = 'stat-gated-destructive') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckStatGatedDestructive(EffPath);
       { v0.63: cyclomatic complexity over 15 }
       if (AArgs.Rule = '') or (AArgs.Rule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(
         EffPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD));
@@ -12878,6 +12879,7 @@ begin
         ScanAdd(22, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath));
         ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
         ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath, Cfg.ThresholdFor('too-many-exit-points', 5)));
+        ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckStatGatedDestructive(PasPath)); { stat-gated-destructive: both verbs build their rule lists separately -- see the note at the top of DoLint }
         ScanAdd(25, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD)));
         ScanAdd(26, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD)));
         ScanAdd(27, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath))); { v12 (M1): cross-unit }

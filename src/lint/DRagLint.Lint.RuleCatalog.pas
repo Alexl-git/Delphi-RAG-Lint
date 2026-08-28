@@ -220,6 +220,12 @@ begin
     B('method-too-long',      'complexity', 'info', 'Routine body is too long', True, [MkParam('threshold','int',IntToStr(DEFAULT_METHOD_TOO_LONG))]);
     B('deep-nesting',         'complexity', 'info', 'Nesting is too deep', True, [MkParam('threshold','int','5')]);
     B('too-many-exit-points', 'complexity', 'info', 'Routine has too many Exit statements', True, [MkParam('threshold','int','5')]);
+    { WARNING, not error, on the requester's own pre-authorisation: they asked for
+      error and said to ship as a warning first if a corpus scan made that look
+      optimistic. Enabled by DEFAULT because the CLI runs it unconditionally --
+      a catalog that said 'off' while the engine fired would be two surfaces
+      disagreeing about the same input. }
+    B('stat-gated-destructive', 'bug-patterns', 'warning', 'Destructive act gated on a file-existence check (a failed stat answers False)', True, []);
     { v(2026-08-10): THE COMPLEXITY THRESHOLDS WERE FLAGGING THE MEDIAN.
       Measured across drag-lint's own corpus (94 files, 2,499 findings):
 
