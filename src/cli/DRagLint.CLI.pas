@@ -19098,6 +19098,28 @@ var
   P         : string                                    ;
   J         : TJSONArray                                ;
 begin
+  { A NAMED --config THAT IS NOT THERE IS AN ERROR, not an empty answer.
+
+    Checked once, here, because all three branches below (--in, --project, and
+    the bare list) load the manifest separately and only two of them would ever
+    have noticed. Measured 2026-08-28: `resolve-dbs --platform Win32 --config
+    <missing>` printed a BLANK LINE and exited 0 -- the bare branch swallows IO
+    errors into an empty list, and the empty list then falls back to AArgs.DbPath
+    which is itself ''. So the caller got one empty string that LOOKS like a path.
+
+    Why that is worse than it sounds: CLAUDE.md tells every session to resolve DB
+    paths with this command rather than guess them. An empty answer reads as "no
+    index covers this" and sends the reader to Grep -- the exact fallback the
+    index exists to remove, and the same failure this file already documents for
+    the --in branch. A typo in a scripted --config produced it silently.
+
+    Wording and exit code match DoIndexAll and DoSelfTestDbSelect, which both got
+    this right; this verb was the odd one out. }
+  if (AArgs.WorkspaceConfig <> '') and (not TFile.Exists(AArgs.WorkspaceConfig)) then
+  begin
+    Writeln(ErrOutput, 'ERROR: config file not found: ', AArgs.WorkspaceConfig);
+    Exit(2);
+  end;
   AllPaths:= nil;
 
   // --- --in <file>: what would a READER open, with this project active? ----
@@ -19329,9 +19351,19 @@ begin
         Resolver.Free;
       end;
     except
-      // Any manifest parse / IO error: empty list (do not crash).
-      Paths:= nil;
-      AllPaths:= nil;
+      { Any manifest parse / IO error: empty list, do not crash -- a consumer
+        asking "which DBs cover this?" should not die because the manifest is
+        malformed. But it must not be SILENT either: an empty list returned for a
+        reason is indistinguishable from an empty list that is the truth, and
+        this verb is what sessions are told to trust instead of guessing. The
+        missing-file case is caught up front now; this catches the rest. }
+      on E: Exception do
+      begin
+        Writeln(ErrOutput, Format('NOTE: no DBs resolved -- the manifest could not be read (%s: %s)',
+                                  [E.ClassName, E.Message]));
+        Paths   := nil;
+        AllPaths:= nil;
+      end;
     end; // try
 
     for P in AllPaths do
@@ -19345,8 +19377,12 @@ begin
           [P, TPath.GetFileNameWithoutExtension(P)]));
     end;
 
-    // Fallback: preserve pre-Task-9 default when no manifest is found.
-    if Length(Paths) = 0 then Paths:= [AArgs.DbPath];
+    { Fallback: preserve pre-Task-9 default when no manifest is found -- but only
+      when there is actually a path to fall back TO. AArgs.DbPath is '' unless
+      --db was given, so the unguarded form turned "nothing resolved" into a list
+      of ONE EMPTY STRING, which this verb then printed as a blank line and a
+      JSON [""]. A caller reading Result[0] got '' and opened nothing. }
+    if (Length(Paths) = 0) and (AArgs.DbPath <> '') then Paths:= [AArgs.DbPath];
   end; // else
 
   // --- Emit output ---------------------------------------------------------
