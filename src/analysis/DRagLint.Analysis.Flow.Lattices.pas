@@ -219,6 +219,40 @@ type
   /// </remarks>
   TRecordMethodDefPredicate = reference to function(const ATypeText, AMemberName: string): Boolean;
 
+  /// <summary>How a callee receives one parameter: by reference (var/out, so
+  /// passing a local DEFINES it) or by value (value/const, so passing a local
+  /// READS it). pmUnknown when the callee or that position cannot be
+  /// resolved.</summary>
+  /// <remarks>
+  /// pmUnknown is not a third policy -- it selects TODAY'S conservative
+  /// behaviour, in which the argument goes into BOTH lists. That is what makes
+  /// this change gap-free: an unresolvable callee cannot lose a true positive.
+  /// </remarks>
+  TParamMode = (pmUnknown, pmValue, pmConst, pmVar, pmOut);
+
+  /// <summary>Resolve the parameter mode at 0-based position AIndex of the
+  /// routine named ACalleeName.</summary>
+  /// <remarks>
+  /// Backs the used-before-assignment fix for SHAPE C
+  /// (INBOX-used-before-assignment-false-positives): `ReadFile(H, Buf[0], ...)`
+  /// reported Buf as used-before-assignment on the very line that FILLS it,
+  /// because an indexed argument takes the generic read walk while only a BARE
+  /// identifier was treated as a possible var/out def. Nothing SYNTACTIC
+  /// separates `ReadFile(H, Buf[0], ...)` from `Writeln(Arr[0])`, which must
+  /// keep firing -- only the callee's signature does, and it is already in the
+  /// index.
+  ///
+  /// It closes the mirror-image FALSE NEGATIVE at the same time, which is why
+  /// the two were fixed together: a bare identifier passed BY VALUE was recorded
+  /// as a possible def and never as a read, so a never-assigned local passed to
+  /// a value parameter reported nothing at all.
+  ///
+  /// Nil on every store-free caller (the bare `lint &lt;file>` path has no
+  /// ISymbolStore), and nil returns pmUnknown everywhere, so that path keeps
+  /// today's behaviour exactly.
+  /// </remarks>
+  TParamModeLookup = reference to function(const ACalleeName: string; AIndex: Integer): TParamMode;
+
   /// <summary>Forward must+may definite-assignment analysis.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -231,6 +265,11 @@ type
     FVars: TRoutineVarTable;
     FSrc : TBytes;
     FIsRecordMethodDef: TRecordMethodDefPredicate;
+    { Forwarded verbatim to every CollectReadsAndCallDefs call Transfer makes.
+      Deliberately NOT given to the liveness/escape/freed lattices: those back
+      other rules (dead-store, escape), and reclassifying a call argument there
+      would move findings this change has no evidence about. }
+    FParamMode: TParamModeLookup;
   public
     /// <summary><!-- drag-lint:auto -->----- TDefiniteAssignment -----</summary>
     /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
@@ -252,7 +291,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes;
-      const AIsRecordMethodDef: TRecordMethodDefPredicate = nil);
+      const AIsRecordMethodDef: TRecordMethodDefPredicate = nil;
+      const AParamMode: TParamModeLookup = nil);
     /// <returns><!-- drag-lint:auto -->TFlowDir -- Observed: fdForward.</returns>
     function Direction: TFlowDir;
     /// <returns><!-- drag-lint:auto type -->TDefAsgnVal</returns>
@@ -812,7 +852,8 @@ function LeftmostBaseVar(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVa
 /// </remarks>
 procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>;
-  const AIsRecordMethodDef: TRecordMethodDefPredicate = nil);
+  const AIsRecordMethodDef: TRecordMethodDefPredicate = nil;
+  const AParamMode: TParamModeLookup = nil);
 
 /// <summary>Index of the variable an `assignment` node defines as a WHOLE
 /// (its plain lhs), or -1 when the lhs is an indexed/qualified write (a[i] / x.f)
@@ -1192,10 +1233,12 @@ end;
 
 procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>;
-  const AIsRecordMethodDef: TRecordMethodDefPredicate = nil);
+  const AIsRecordMethodDef: TRecordMethodDefPredicate = nil;
+  const AParamMode: TParamModeLookup = nil);
 
   procedure Walk(const N: TTSNode; AAfterDot: Boolean);
-  var I, Idx: Integer; K: string; ArgsN, Arg, Lhs: TTSNode;
+  var I, Idx: Integer; K: string; ArgsN, Arg, Lhs, Ent: TTSNode;
+      CalleeNm: string; Mode: TParamMode;
   begin
     if N.IsNull then Exit;
     K := N.NodeType;
@@ -1262,14 +1305,69 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
     if K = 'exprCall' then
     begin
       ArgsN := N.ChildByField('args');
+      { The callee's bare name, for the parameter-mode lookup. Same derivation as
+        CollectCallArgs: only a bare-identifier entity is resolvable by name, so
+        a method call (exprDot entity) yields '' and every argument then keeps
+        the pmUnknown/conservative path. }
+      Ent := N.ChildByField('entity');
+      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then
+        CalleeNm := Trim(NodeStr(Ent, ASrc))
+      else CalleeNm := '';
       if not ArgsN.IsNull then
         for I := 0 to ArgsN.NamedChildCount - 1 do
         begin
           Arg := ArgsN.NamedChild(I);
+          { WHAT THE CALLEE DOES WITH THIS ARGUMENT, when it can be known.
+            var/out -> passing a local DEFINES it. value/const -> READS it.
+            pmUnknown -> both, which is what this code did for every argument
+            before the signature was consulted. See TParamModeLookup. }
+          Mode := pmUnknown;
+          if Assigned(AParamMode) and (CalleeNm <> '') then Mode := AParamMode(CalleeNm, I);
           { the arg's base var may be assigned by the callee (var/out param, e.g.
-            SetLength(Result.Must,..) / SetLength(arr,..)) -> a possible def }
+            SetLength(Result.Must,..) / SetLength(arr,..)) -> a possible def.
+            NOT recorded when the signature says the parameter is by value: that
+            is the half that was manufacturing shape C's false positives. }
           Idx := LeftmostBaseVar(Arg, ASrc, AVars);
+          { THE POSSIBLE-DEF IS NEVER WITHDRAWN, not even when the signature says
+            "by value". This is the SAFE DIRECTION and it was established by
+            measurement, after the unsafe one was tried and rejected.
+
+            "By value" does not mean "not written" in Delphi, because a by-value
+            POINTER parameter is the standard Win32 out-buffer idiom. Two cases
+            from the ORM3 A/B, both reported at the line that FILLS the buffer:
+
+              GetTempFileName(PathBuf, 'mco', 0, NameBuf)   lpTempFileName: LPWSTR
+              RtlCaptureStackBackTrace(0, N, @Frames[0], nil)   a plain Pointer
+
+            The second is caught by IsAddrOfExpr; the FIRST is not, because
+            Delphi takes the array's address implicitly and there is no `@` to
+            see. There is no syntactic signal, and the signature actively
+            misleads. So this change only ever ADDS certainty (a KNOWN var/out
+            withdraws a spurious READ, below) and never removes a def -- which
+            makes it a strict false-positive reduction that cannot manufacture a
+            finding. }
           if (Idx >= 0) and (ACallDefs.IndexOf(Idx) < 0) then ACallDefs.Add(Idx);
+          { THE MIRROR-IMAGE FALSE NEGATIVE IS DELIBERATELY NOT CLOSED HERE.
+
+            A bare identifier passed BY VALUE is a read, and recording it as one
+            is what would close the `Writeln(Y)` shape. Measured on ORM3 it adds
+            findings this rule cannot yet justify -- see the note. The blocking
+            one is `absolute`:
+
+              InVal  : single                 ;
+              Overlay: cardinal absolute InVal;
+              InVal:= Value;
+              Overlay:= ReverseBytes(Overlay);   <- reported, at ERROR severity
+
+            Overlay IS assigned -- through its alias, which the analysis does not
+            model. Today the bare-identifier-as-possible-def treatment masks that
+            gap; turning it into a read exposes it as a false ERROR. Closing the
+            false negative therefore requires modelling `absolute` FIRST, and is
+            filed separately rather than shipped on top of a known gap.
+
+            What remains below is one-directional: a KNOWN var/out parameter may
+            add a def, and nothing here can ever add a READ. So this change can
+            only ever REMOVE findings, never manufacture one. }
           { still walk non-identifier args for reads of OTHER vars (indices etc.) }
           if Arg.NodeType <> 'identifier' then
           begin
@@ -1292,7 +1390,17 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
               keep firing. }
             var BaseWasRead: Boolean := (Idx >= 0) and (AReads.IndexOf(Idx) >= 0);
             Walk(Arg, False);
-            if (Idx >= 0) and (not BaseWasRead) and IsAddrOfExpr(Arg) then
+            { SHAPE C. `ReadFile(H, Buf[0], ...)`: the walk above put Buf in
+              AReads because `Buf[0]` is not a bare identifier, and FlowChecks
+              tests reads against the state BEFORE this item's own CallDefs
+              apply -- so Buf reported used-before-assignment on the line that
+              fills it. When the signature SAYS the parameter is var/out, the
+              base is being written, not read, exactly as for `@X`. The
+              BaseWasRead guard is unchanged: only a read this walk introduced
+              is withdrawn, so an earlier genuine read of X in the same item
+              survives. }
+            if (Idx >= 0) and (not BaseWasRead)
+               and (IsAddrOfExpr(Arg) or (Mode = pmVar) or (Mode = pmOut)) then
             begin
               var RP: Integer := AReads.IndexOf(Idx);
               if RP >= 0 then AReads.Delete(RP);
@@ -1357,8 +1465,12 @@ end;
 { ----- TDefiniteAssignment ----- }
 
 constructor TDefiniteAssignment.Create(AVars: TRoutineVarTable; const ASrc: TBytes;
-  const AIsRecordMethodDef: TRecordMethodDefPredicate);
-begin inherited Create; FVars := AVars; FSrc := ASrc; FIsRecordMethodDef := AIsRecordMethodDef; end;
+  const AIsRecordMethodDef: TRecordMethodDefPredicate; const AParamMode: TParamModeLookup);
+begin
+  inherited Create;
+  FVars := AVars; FSrc := ASrc;
+  FIsRecordMethodDef := AIsRecordMethodDef; FParamMode := AParamMode;
+end;
 
 function TDefiniteAssignment.Direction: TFlowDir; begin Result := fdForward; end;
 
@@ -1414,7 +1526,7 @@ begin
       if It.Node.NodeType = 'assignment' then
       begin
         { reads on the rhs happen BEFORE the def of the lhs }
-        CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef);
+        CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef, FParamMode);
         { a var passed to a call (or @x) may be a var/out param the callee assigns
           (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
         for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;
@@ -1424,7 +1536,7 @@ begin
       end
       else
       begin
-        CollectReadsAndCallDefs(It.Node, FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef);
+        CollectReadsAndCallDefs(It.Node, FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef, FParamMode);
         { a var passed to a call (or @x) may be a var/out param the callee assigns
           (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
         for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;

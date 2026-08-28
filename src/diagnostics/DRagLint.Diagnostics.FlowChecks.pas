@@ -18,7 +18,13 @@ uses
   DRagLint.Diagnostics.ParseCache,
   DRagLint.Analysis.Cfg,
   DRagLint.Analysis.DataFlow,
-  DRagLint.Analysis.Flow.Lattices;
+  DRagLint.Analysis.Flow.Lattices,
+  { ParseSignatureParams. A LEAF unit -- it uses only DRagLint.Core.Model -- so
+    consuming it here introduces no layering inversion despite its src\cli home.
+    Reused rather than reimplemented: it already splits on TOP-LEVEL semicolons
+    and expands `a, b: Integer` into one part per name, which is exactly what a
+    POSITIONAL lookup needs and is where a hand-rolled split would go wrong. }
+  DRagLint.Hover.Renderer;
 
 type
   /// <summary>Flow-sensitive checks over a single file's routines.</summary>
@@ -1305,6 +1311,8 @@ var
   OwnCache: TDictionary<string, Boolean>;
   OwnsOracle: TCallArgOwns;
   RecMethodDef: TRecordMethodDefPredicate;
+  ParamMode   : TParamModeLookup;
+  ParamModeCache: TDictionary<string, TParamMode>;
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
   var F: TLintFinding;
@@ -1343,7 +1351,7 @@ var
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
     try
       if Cfg.Skipped or (Vars.Count = 0) then Exit;
-      Ana := TDefiniteAssignment.Create(Vars, PF.Src, RecMethodDef);
+      Ana := TDefiniteAssignment.Create(Vars, PF.Src, RecMethodDef, ParamMode);
       if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, Ana, AIn, AOut) then Exit;
 
       Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
@@ -1361,9 +1369,9 @@ var
             It := Cfg.Blocks[B].Items[I];
             Reads.Clear; CallDefs.Clear;
             if It.Node.NodeType = 'assignment' then
-              CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs, RecMethodDef)
+              CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode)
             else
-              CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef);
+              CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode);
             { flag reads of unmanaged locals not yet must-assigned (skip opaque with-bodies) }
             { Left-to-right sequencing inside this item's own and/or chains, so
               `Supports(.., V) and V.Method` and
@@ -2023,6 +2031,134 @@ begin
       end
   else
     RecMethodDef := nil;
+
+  { SHAPE C (INBOX-used-before-assignment-false-positives): what the callee does
+    with an argument, read off its signature.
+
+    AMBIGUITY IS ANSWERED WITH pmUnknown, NOT WITH THE FIRST MATCH. A bare name
+    can hit several overloads and several unrelated homonyms; if they do not
+    AGREE on the mode at this position, there is no fact here and the
+    conservative both-lists behaviour is the correct answer. Picking the first
+    row would be a guess dressed as a signature lookup -- and this rule is
+    error-severity, so a guess that says "by value" manufactures a false
+    positive on the line that fills the buffer.
+
+    Intrinsics are asked FIRST, from the table that already exists: SetLength,
+    Inc and Dec really are var parameters, and they are the commonest by-
+    reference calls in this corpus. NOTE that `Writeln` is NOT in that table, so
+    the `Writeln(Y)` false negative named in the note is NOT closed by this
+    change -- only its resolvable equivalents are. Said plainly rather than
+    left to be discovered.
+
+    Cached per (name, index): a routine body calls the same handful of routines
+    repeatedly, and each miss is a store query. }
+  if AStore <> nil then
+    ParamMode :=
+      function(const ACalleeName: string; AIndex: Integer): TParamMode
+      var
+        Key, Sig: string;
+        Syms: TArray<TSymbol>;
+        Parts: TArray<TParamPart>;
+        M, Seen: TParamMode;
+        Any: Boolean;
+        I: Integer;
+
+        function ModeOf(const ASig: string; out AMode: TParamMode): Boolean;
+        var PS: TArray<TParamPart>;
+        begin
+          Result := False; AMode := pmUnknown;
+          PS := ParseSignatureParams(ASig);
+          if (AIndex < 0) or (AIndex > High(PS)) then Exit;
+          if      SameText(PS[AIndex].Modifier, 'var'  ) then AMode := pmVar
+          else if SameText(PS[AIndex].Modifier, 'out'  ) then AMode := pmOut
+          else if SameText(PS[AIndex].Modifier, 'const') then AMode := pmConst
+          else AMode := pmValue;
+          Result := True;
+        end;
+
+      begin
+        Result := pmUnknown;
+        if ACalleeName = '' then Exit;
+        Key := LowerCase(ACalleeName) + '#' + IntToStr(AIndex);
+        if ParamModeCache.TryGetValue(Key, Result) then Exit;
+        try
+          { INTRINSICS ANSWER ONLY IN THE var/out DIRECTION, and that restriction
+            was bought with a corpus A/B, not reasoned out.
+
+            IntrinsicSignature is documented as being "for display". Read as a
+            dataflow oracle it is WRONG in the by-value direction: `SizeOf(X)`
+            is declared `SizeOf(X)` with no modifier, which parses as a value
+            parameter -- but SizeOf is a COMPILE-TIME TYPE QUERY and does not
+            read X at all. The same holds for TypeInfo, High and Low.
+
+            Measured on ORM3 before this restriction: treating those as reads
+            added 402 findings at error severity, and the two sampled by hand
+            were both false --
+              FillChar(StartupInfo, SizeOf(StartupInfo), 0)
+              GetSystemDirectory(path, SizeOf(path))
+            i.e. it reported the buffer as used-before-assignment on the very
+            line that ZEROES it, which is the exact defect shape this whole
+            change exists to remove.
+
+            So an intrinsic may say "by reference" (SetLength, Inc, Dec really
+            do write their argument) and may never say "by value". }
+          Sig := IntrinsicSignature(ACalleeName);
+          if Sig <> '' then
+          begin
+            if not ModeOf(Sig, Result) then Result := pmUnknown;
+            if (Result <> pmVar) and (Result <> pmOut) then Result := pmUnknown;
+            Exit;
+          end;
+          { THE PROJECT INDEX FIRST, THE LIBRARY INDEX ONLY IF IT SAYS NOTHING.
+            Shape C's own example is `ReadFile(H, Buf[0], ...)`, whose `var
+            Buffer` lives in library-<platform>.sqlite and NOWHERE in a project
+            index -- so a project-only lookup answers pmUnknown and the defect
+            the note filed stays exactly as it was. Measured: with the library
+            store not consulted, ORM3 showed ZERO removals.
+
+            Order matters and is not arbitrary. A project routine that shadows
+            an RTL name is the one the call site means, so the project answers
+            first; the library is consulted only where the project is silent,
+            which is the same precedence CLAUDE.md states for the authoritative
+            set (project + platform library, in that order). }
+          Syms := AStore.FindSymbolsByExactName(ACalleeName);
+          if (Length(Syms) = 0) and (ALibStore <> nil) then
+            Syms := ALibStore.FindSymbolsByExactName(ACalleeName);
+          Any := False; Seen := pmUnknown;
+          for I := 0 to High(Syms) do
+          begin
+            { ONLY A FREE ROUTINE MAY ANSWER A BARE-NAME CALL. A bare `Foo(...)`
+              resolves to a free routine or to a method of the ENCLOSING class;
+              it can never reach an unrelated class's method. Allowing methods
+              made this a NAME MATCH rather than a resolution, which is the
+              mechanism CLAUDE.md warns about, and the A/B caught it:
+
+                New(Data)   matched PDFlibSmartAccess.TSmartPDFWriter.New
+                                    (Const Version: AnsiString) -> "const" -> READ
+                Move(P, N, SizeOf(N)) matched PDFlibStruct.TPDFArray.Move
+                                    (Index, NewPos: Integer)   -> value  -> READ
+
+              Both are RTL routines absent from this index and from
+              IntrinsicSignature, and an unrelated PDF library answered for
+              them -- reporting the buffer as used-before-assignment on the line
+              that ALLOCATES it. Note the "all matches must agree" rule did NOT
+              save this: there was exactly ONE match and it was the wrong one.
+              Agreement is not resolution. }
+            if not (Syms[I].Kind in [skProcedure, skFunction]) then Continue;
+            if Syms[I].Signature = '' then Continue;
+            if not ModeOf(Syms[I].Signature, M) then Continue;
+            if not Any then begin Seen := M; Any := True; end
+            else if M <> Seen then begin Seen := pmUnknown; Break; end;
+          end;
+          if Any then Result := Seen else Result := pmUnknown;
+        finally
+          ParamModeCache.AddOrSetValue(Key, Result);
+        end;
+      end
+  else
+    ParamMode := nil;
+
+  ParamModeCache := TDictionary<string, TParamMode>.Create;
   try
     Procs := CfgFindProcs(PF.Tree.RootNode);
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);
@@ -2030,6 +2166,7 @@ begin
   finally
     Findings.Free;
     OwnCache.Free;
+    ParamModeCache.Free;
   end;
 end;
 
