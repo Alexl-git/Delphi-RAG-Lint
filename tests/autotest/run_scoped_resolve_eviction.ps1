@@ -233,7 +233,7 @@ $pyf = Join-Path $scratch 'dump.py'
 Write-Ascii $pyf $py
 
 # One eviction run. Returns the console text so the announce line can be read.
-function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped) {
+function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped, [string]$Removals) {
   $dir = Join-Path $scratch $Tag
   Build-Corpus $dir
   $db = Join-Path $scratch "$Tag.sqlite"
@@ -244,10 +244,15 @@ function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped) {
   # with "recorded no file writes" and every case below would be vacuous.
   [System.IO.File]::SetLastWriteTime((Join-Path $dir 'uFill1.pas'), (Get-Date))
 
-  Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE -ErrorAction SilentlyContinue
-  if ($NoScoped) { $env:DRAGLINT_NO_SCOPED_RESOLVE = $NoScoped }
+  Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE      -ErrorAction SilentlyContinue
+  Remove-Item Env:\DRAGLINT_SCOPED_RESOLVE_REMOVALS -ErrorAction SilentlyContinue
+  if ($NoScoped) { $env:DRAGLINT_NO_SCOPED_RESOLVE      = $NoScoped }
+  if ($Removals) { $env:DRAGLINT_SCOPED_RESOLVE_REMOVALS = $Removals }
   try   { $out = & $exePath index $dir --db $db 2>&1 | Out-String }
-  finally { Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE -ErrorAction SilentlyContinue }
+  finally {
+    Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE      -ErrorAction SilentlyContinue
+    Remove-Item Env:\DRAGLINT_SCOPED_RESOLVE_REMOVALS -ErrorAction SilentlyContinue
+  }
 
   return [pscustomobject]@{
     Out    = $out
@@ -260,28 +265,66 @@ function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped) {
 Push-Location C:\TEMP
 try {
   # ---- C1 / C2: evicting a TYPE-declaring unit -----------------------------
+  # FLIPPED 2026-08-28 (session 46). This case used to assert "still goes
+  # WHOLE-DB, and the reason comes from the TYPE gate". That was the CORRECT
+  # assertion while the withdrawal channel was open: a withdrawn type can change
+  # what an untouched ref in an untouched file resolves to, so declining was the
+  # only sound answer. WidenScopeThroughRemovedTypes now closes that channel by
+  # widening instead of declining, so the eviction SCOPES -- and C1, which was
+  # the regression guard here, becomes the correctness claim.
   Write-Host ''
   Write-Host 'C1/C2: evict a unit that DECLARES A TYPE' -ForegroundColor Cyan
-  $t = Run-Eviction 'typed' 'uDoomed.pas' $null
+  $t = Run-Eviction 'typed' 'uDoomed.pas' $null $null
+  $announce = ($t.Out -split "`n" | Where-Object { $_ -match 'resolve: calls\s+\.\.\. whole database because|starting (SCOPED|WHOLE-DB)' }) -join ' / '
   Check 'C1 the stale X.Ping edge is gone' `
     (-not ($t.Edges -match 'uConsumer\.pas\|.*\|Ping\|')) `
     "edges:`n$($t.Edges)"
-  $announce = ($t.Out -split "`n" | Where-Object { $_ -match 'resolve: calls\s+\.\.\. whole database because|starting (SCOPED|WHOLE-DB)' }) -join ' / '
-  Check 'C2 it still goes WHOLE-DB' ($t.Out -match 'starting WHOLE-DB pass') $announce
-  # The reason must now come from the TYPE gate, not from a blunt file count.
-  # Either of its two clauses is correct, and which one fires is an ordering
-  # detail: the count test (Before vs After) sits ABOVE the withdrawal-by-name
-  # test, so an eviction that withdraws a type trips the count first. Asserting
-  # the by-name wording alone made this case fail against a CORRECT build --
-  # the repo lesson about a guard failing on right code, met again.
-  # (And PowerShell has no brace comments: a Pascal-style { } block here parsed
-  #  the '<>' inside it as a redirection operator and killed the whole file.)
-  Check 'C2 and the reason comes from the TYPE gate' `
-    (($t.Out -match 'withdrew the declared type name') -or ($t.Out -match 'changed the set of declared type names')) $announce
-  Check 'C2 and NOT from the old blunt eviction latch' `
+  # C1 IS AN ABSENCE, so it passes just as happily against an empty edge set --
+  # a widening that broke the pass outright would look identical from here.
+  Check 'C1 VACUITY: that same run still produced edges' `
+    ($t.Edges -match 'EDGE\|') 'the typed-eviction run produced NO edges at all'
+  Check 'C2 it now takes the SCOPED pass' ($t.Out -match 'starting SCOPED pass') $announce
+  Check 'C2 and it is NOT declining on the type gate any more' `
+    (-not (($t.Out -match 'withdrew the declared type name') -or ($t.Out -match 'changed the set of declared type names'))) $announce
+  Check 'C2 and NOT on the old blunt eviction latch' `
     (-not ($t.Out -match 'pruned or evicted')) $announce
-  Check 'C2 and NOT from the 1-in-3 size limit (the fixture would be too small)' `
+  Check 'C2 and NOT on the 1-in-3 size limit (the fixture would be too small)' `
     (-not ($t.Out -match 'scoping limit')) $announce
+
+  # ---- C2p: THE POLARITY CONTROL, and the only reason C1 means anything -----
+  # 'permissive' admits the scoped run but switches the widening OFF, leaving
+  # the residual channel open on purpose. The stale edge MUST come back. Without
+  # this, C1 would pass just as well if the widening were deleted and the edge
+  # happened to be dropped for some unrelated reason.
+  Write-Host ''
+  Write-Host 'C2p: permissive -- the channel is real and the guard can fail' -ForegroundColor Cyan
+  $tp = Run-Eviction 'typed_perm' 'uDoomed.pas' $null 'permissive'
+  Check 'C2p permissive still takes the SCOPED pass' `
+    ($tp.Out -match 'starting SCOPED pass') `
+    (($tp.Out -split "`n" | Where-Object { $_ -match 'starting' }) -join ' / ')
+  Check 'C2p and WITHOUT the widening the stale X.Ping edge SURVIVES' `
+    ($tp.Edges -match 'uConsumer\.pas\|.*\|Ping\|') `
+    "the channel did not reproduce -- C1 above proves nothing:`n$($tp.Edges)"
+
+  # ---- C2o: the off switch restores the pre-2026-08-28 answer --------------
+  # A hatch that quietly stopped being read would look exactly like a hatch
+  # nobody needed, right up to the day someone reached for it. It must decline,
+  # AND decline on the TYPE gate -- matching only 'WHOLE DB' would also pass on
+  # a stale fingerprint or the 1-in-3 limit, neither of which is this hatch.
+  Write-Host ''
+  Write-Host 'C2o: off -- the escape hatch still works' -ForegroundColor Cyan
+  $to = Run-Eviction 'typed_off' 'uDoomed.pas' $null 'off'
+  Check 'C2o off goes WHOLE-DB' ($to.Out -match 'starting WHOLE-DB pass') `
+    (($to.Out -split "`n" | Where-Object { $_ -match 'starting' }) -join ' / ')
+  Check 'C2o and declines on the TYPE gate specifically' `
+    (($to.Out -match 'withdrew the declared type name') -or ($to.Out -match 'changed the set of declared type names')) `
+    (($to.Out -split "`n" | Where-Object { $_ -match 'whole database because' }) -join ' / ')
+  Check 'C2o and the whole-DB answer is still correct' `
+    (-not ($to.Edges -match 'uConsumer\.pas\|.*\|Ping\|')) "edges:`n$($to.Edges)"
+  # THE EQUIVALENCE THAT MATTERS: widened and off must agree on the RESULT and
+  # differ only in cost. This is the oracle for the whole relaxation.
+  Check 'C2o ORACLE: widened and off produce IDENTICAL edge sets' `
+    ($t.Edges -eq $to.Edges) "widened:`n$($t.Edges)`n`noff:`n$($to.Edges)"
 
   # ---- C3 / C4 / C5: evicting a unit with NO type declaration --------------
   Write-Host ''

@@ -203,6 +203,14 @@ type
       FScopeFiles            : TDictionary<Int64 , Boolean>;
       FScopeNames            : TDictionary<string, Boolean>;
       FScopeTypesBefore      : TDictionary<string, Boolean>;
+      { The ancestor NAMES of every type declared in a file this run removed or
+        rewrote, captured BEFORE the delete because that is the only moment the
+        heritage rows still exist. Keyed by the lowercased type name. Read only
+        by WidenScopeThroughRemovedTypes, and only for the names that turn out
+        to be withdrawn. Names, not symbol ids: a rewritten file's symbols are
+        deleted and re-inserted with NEW ids, so a stashed id can dangle, while
+        a name survives and is what the widening query already selects on. }
+      FScopeTypeAncestors    : TDictionary<string, TArray<string>>;
       FScopeTypesAfter       : TDictionary<string, Boolean>;
       FScopeWhole            : Boolean;
       { WHY the latch above was set, in operator-readable words, recorded AT the
@@ -298,6 +306,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure WidenScopeThroughAddedTypes;
+      /// <summary>Mirror of WidenScopeThroughAddedTypes for type names this run WITHDREW.</summary>
+      /// <remarks>Reads FScopeTypeAncestors, captured before the delete by NoteScopeRemoval;
+      /// the withdrawn type's own rows no longer exist by the time this runs.</remarks>
+      procedure WidenScopeThroughRemovedTypes;
+      /// <summary>Normalised escape hatch for the withdrawal relaxation: widened|permissive|off.</summary>
+      function RemovalsHatch: string;
       /// <summary>Materializes the recorded scope into connection-local temp
       /// tables; returns the `refs` predicate that selects the affected rows.</summary>
       /// <returns><!-- drag-lint:auto type -->string</returns>
@@ -2677,6 +2691,7 @@ begin
   FScopeFiles      := TDictionary<Int64 , Boolean>.Create;
   FScopeNames      := TDictionary<string, Boolean>.Create;
   FScopeTypesBefore:= TDictionary<string, Boolean>.Create;
+  FScopeTypeAncestors:= TDictionary<string, TArray<string>>.Create;
   FScopeTypesAfter := TDictionary<string, Boolean>.Create;
   FScopeWhole      := False;
   FScopeWholeWhy   := '';
@@ -2771,6 +2786,7 @@ begin
   FScopeFiles.Free;
   FScopeNames.Free;
   FScopeTypesBefore.Free;
+  FScopeTypeAncestors.Free;
   FScopeTypesAfter.Free;
   FLateAncCache.Free;
   FQInsertFile.Free;
@@ -4192,6 +4208,31 @@ begin
   Result:= 'off';
 end;
 
+{ THE MIRROR OF AdditionsHatch, and a SEPARATE variable on purpose.
+
+  Additions and withdrawals are two different relaxations closed by two
+  different widenings, and the whole point of an escape hatch here is to answer
+  "is the scoping wrong, and which half?" in one run instead of a bisect. One
+  shared variable would force an operator to switch off both to test either.
+
+  Same three normalised words, same defaults, for the same reasons written on
+  AdditionsHatch: UNSET IS 'widened' (the relaxation is what you get by not
+  setting this), an UNRECOGNISED value is 'off' (conservative -- correct but
+  slow, never relaxed), and 'permissive' switches the widening off while still
+  admitting the run, which is the instrument that lets a suite prove the
+  residual channel is really there. 'permissive' is never a shipping value. }
+function TSQLiteSymbolStore.RemovalsHatch: string;
+var
+  V: string;
+begin
+  V:= LowerCase(Trim(GetEnvironmentVariable('DRAGLINT_SCOPED_RESOLVE_REMOVALS')));
+  if V = ''            then Exit('widened');
+  if V = 'permissive'  then Exit('permissive');
+  if (V = '1') or (V = 'on') or (V = 'yes') or (V = 'true') or (V = 'widened') then
+    Exit('widened');
+  Result:= 'off';
+end;
+
 function TSQLiteSymbolStore.ScopedResolveDeclineReason: string;
 var
   N             : string ;
@@ -4242,9 +4283,17 @@ begin
   if (not AllowAdditions) and (FScopeTypesBefore.Count <> FScopeTypesAfter.Count) then
     Exit(Format('this run changed the set of declared type names (%d before, %d after)',
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
-  for N in FScopeTypesBefore.Keys do
-    if not FScopeTypesAfter.ContainsKey(N) then
-      Exit(Format('this run withdrew the declared type name %s', [N]));
+  { WITHDRAWALS ARE ALLOWED BY DEFAULT as of 2026-08-28, the mirror of the
+    additions relaxation above and closed the same way -- by WIDENING the scope
+    rather than by refusing to scope it. WidenScopeThroughRemovedTypes pulls the
+    members reachable through each withdrawn type's ancestors into the scoped
+    set before the pass runs; see its header for why the ancestors are the whole
+    of the channel. Under the off switch this stays fatal, which together with
+    the count test above is exactly the pre-2026-08-28 behaviour. }
+  if RemovalsHatch = 'off' then
+    for N in FScopeTypesBefore.Keys do
+      if not FScopeTypesAfter.ContainsKey(N) then
+        Exit(Format('this run withdrew the declared type name %s', [N]));
   { Nothing further to test. What makes an addition safe is not another gate but
     WidenScopeThroughAddedTypes, which puts the newly reachable member names into
     the scoped set before the pass runs -- see its header. 'permissive' is the
@@ -4348,6 +4397,105 @@ begin
                       [Added, FScopeTypesAfter.Count - FScopeTypesBefore.Count]));
 end; // procedure
 
+{ CLOSE THE WITHDRAWAL CHANNEL, the exact mirror of WidenScopeThroughAddedTypes.
+
+  DEMONSTRATED, not theorised -- tests\autotest\run_scoped_resolve_eviction:
+
+      uBase.pas      TBase declares Ping         (untouched)
+      uConsumer.pas  X: TDoomed; X.Ping          (untouched)
+      uDoomed.pas    TDoomed = class(TBase)      (EVICTED by the run)
+
+  The whole-database pass correctly DROPS `X.Ping`; an unwidened scoped pass
+  leaves it, pointing at a method reached through a type that no longer exists.
+  TDoomed declares no members, so 'ping' never enters FScopeNames through
+  NoteScopeRemoval's symbol loop, and uConsumer is not in FScopeFiles. A stale
+  edge is worse than a missing one: it renders real, plausible code from a type
+  that is gone.
+
+  WHY THE ANCESTORS ARE THE WHOLE CHANNEL. Every member the doomed file itself
+  declared is already in FScopeNames -- NoteScopeRemoval adds every symbol name
+  in the file. So the only member a withdrawal can strip from reach is one
+  declared ELSEWHERE that the doomed type bridged to, and the only bridge this
+  engine builds is inheritance (probed: a type ALIAS yields no edge at all, and
+  a helper declares its members in its own file). Collecting the members of the
+  withdrawn type's ancestors, transitively, is therefore sufficient -- and it is
+  name-keyed, the form MaterializeResolveScope selects on.
+
+  THE ONE STRUCTURAL DIFFERENCE FROM THE ADDITIONS SIDE, and the reason this is
+  not simply the same routine with the set difference reversed: an ADDED type's
+  rows exist when the widening runs, so its ancestors can be looked up here. A
+  WITHDRAWN type's rows are gone -- deleted, with its type_ancestors rows taken
+  by CASCADE. Its heritage must therefore have been captured BEFORE the delete,
+  which NoteScopeRemoval does into FScopeTypeAncestors. This routine only walks
+  UP from the ancestor NAMES it stashed, and every one of those names belongs to
+  a type in some OTHER file, which is still there.
+
+  COST is one recursive query per stashed ancestor of a WITHDRAWN type -- zero on
+  an ordinary re-index, where the types come straight back. }
+procedure TSQLiteSymbolStore.WidenScopeThroughRemovedTypes;
+var
+  Q      : TFDQuery;
+  N      : string  ;
+  Anc    : string  ;
+  Ancs   : TArray<string>;
+  Added  : Integer ;
+  Types  : Integer ;
+begin
+  if FScopeWhole then Exit;
+  { The instrument, exactly as on the additions side: 'permissive' admits the
+    run but leaves the channel open, so a guard can fail. Under 'off' the gate
+    never admitted a withdrawal in the first place, so this has no work. }
+  if RemovalsHatch = 'permissive' then Exit;
+  Added:= 0; Types:= 0;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { The SAME anchor-and-climb query as WidenScopeThroughAddedTypes, against
+      the ANCESTOR name rather than the type's own -- the withdrawn type is
+      gone, its ancestor is not. UNION (not UNION ALL) terminates on a cyclic
+      heritage row; the kind list is IsTypeDeclaringKind's, in SQL. }
+    Q.SQL.Add('WITH RECURSIVE chain(sid) AS (');
+    Q.SQL.Add('  SELECT id FROM symbols');
+    Q.SQL.Add('   WHERE name = :n COLLATE NOCASE');
+    Q.SQL.Add('     AND kind IN (''class'', ''interface'', ''record'', ''type'', ''enum'', ''form'')');
+    Q.SQL.Add('  UNION');
+    Q.SQL.Add('  SELECT ta.ancestor_symbol_id FROM type_ancestors ta');
+    Q.SQL.Add('    JOIN chain ON ta.symbol_id = chain.sid');
+    Q.SQL.Add('   WHERE ta.ancestor_symbol_id IS NOT NULL');
+    Q.SQL.Add(')');
+    Q.SQL.Add('SELECT DISTINCT s.name FROM symbols s JOIN chain ON s.parent_id = chain.sid');
+    Q.ParamByName('n').DataType:= ftString;
+    Q.Prepare;
+    for N in FScopeTypesBefore.Keys do
+    begin
+      if FScopeTypesAfter.ContainsKey(N) then Continue; { not a withdrawal }
+      if not FScopeTypeAncestors.TryGetValue(N, Ancs) then Continue; { declared nothing to inherit from }
+      Inc(Types);
+      for Anc in Ancs do
+      begin
+        if Q.Active then Q.Close;
+        Q.ParamByName('n').AsString:= Anc;
+        Q.Open;
+        while not Q.Eof do
+        begin
+          var Lc:= LowerCase(Q.Fields[0].AsString);
+          if (Lc <> '') and not FScopeNames.ContainsKey(Lc) then
+          begin
+            FScopeNames.AddOrSetValue(Lc, True);
+            Inc(Added);
+          end;
+          Q.Next;
+        end;
+      end;
+    end;
+  finally
+    Q.Free;
+  end; // try
+  if Added > 0 then
+    ResolveLog(Format('calls      ... +%d inherited member name(s) in scope, from %d withdrawn type name(s)',
+                      [Added, Types]));
+end; // procedure
+
 { Puts FScopeFiles / FScopeNames into two connection-local temp tables and
   returns the predicate over `refs` that selects everything the scoped
   call-target pass must re-resolve.
@@ -4440,6 +4588,7 @@ begin
     FScopeFiles      .Clear;
     FScopeNames      .Clear;
     FScopeTypesBefore.Clear;
+    FScopeTypeAncestors.Clear;
     FScopeTypesAfter .Clear;
     Exit;
   end;
@@ -4458,6 +4607,44 @@ begin
       begin
         FScopeNames.AddOrSetValue(Lc, True);
         if IsTypeDeclaringKind(FKind.AsString) then FScopeTypesBefore.AddOrSetValue(Lc, True);
+      end;
+      Q.Next;
+    end;
+    Q.Close;
+    { THE ONE MOMENT THE HERITAGE STILL EXISTS. A withdrawn type takes its
+      symbols row -- and, by CASCADE, its type_ancestors rows -- with it, so by
+      the time WidenScopeThroughRemovedTypes runs there is nothing left to ask
+      "what did this type inherit from". Captured here for every type in the
+      file; only the ones that turn out WITHDRAWN are ever read, so a plain
+      re-index of a file whose types come straight back pays one indexed query
+      and nothing else.
+
+      Only type_ancestors is consulted, and that is sufficient rather than
+      merely convenient. Every member DECLARED in this file already entered
+      FScopeNames in the loop above, so the only member a withdrawal can strip
+      from reach is one declared ELSEWHERE that this file's type bridged to --
+      which is inheritance. Probed 2026-08-28: a type ALIAS is not such a bridge
+      (`TAliased = TBase; X: TAliased; X.Ping` resolves to NO edge at all in this
+      engine, against `certain` for the class-inheritance control), so there is
+      no alias edge that a withdrawal could leave stale; and a class/record
+      HELPER declares its members IN its own file, so those names are already in
+      FScopeNames by the plain loop. }
+    Q.SQL.Text:= 'SELECT s.name, ta.ancestor_name FROM symbols s ' +
+                 'JOIN type_ancestors ta ON ta.symbol_id = s.id ' +
+                 'WHERE s.file_id = :f AND ta.ancestor_name <> ''''';
+    Q.ParamByName('f').AsLargeInt:= AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      var TLc:= LowerCase(Q.Fields[0].AsString);
+      var Anc:= Q.Fields[1].AsString;
+      if (TLc <> '') and (Anc <> '') then
+      begin
+        var Existing: TArray<string>;
+        if not FScopeTypeAncestors.TryGetValue(TLc, Existing) then Existing:= nil;
+        SetLength(Existing, Length(Existing) + 1);
+        Existing[High(Existing)]:= Anc;
+        FScopeTypeAncestors.AddOrSetValue(TLc, Existing);
       end;
       Q.Next;
     end;
@@ -9240,6 +9427,7 @@ begin
   { WIDEN BEFORE MATERIALISING. MaterializeResolveScope copies FScopeNames into
     a temp table, so a name added after it would never reach the predicate. }
   if Scoped then WidenScopeThroughAddedTypes;
+  if Scoped then WidenScopeThroughRemovedTypes;
   if Scoped then ScopeWhere:= MaterializeResolveScope
   else ScopeWhere:= '';
   TClear  := ResolveSecs(T0);
