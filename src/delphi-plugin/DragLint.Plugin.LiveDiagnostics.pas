@@ -206,7 +206,29 @@ begin
   if (LintTarget = '') or not FileExists(LintTarget) then LintTarget:= ACtx.FilePath;
   if LintTarget = '' then Exit;
   Cmd:= Format('"%s" lint "%s"', [ACtx.ExePath, LintTarget]);
-  LiveLog(Format('lint: exe=%s target=%s', [ACtx.ExePath, LintTarget]));
+  { THE SNAPSHOT MUST STAND IN FOR THE REAL FILE, AND THE RUN MUST HAVE A DB.
+
+    Both halves of this were missing and together they are why the gutter and
+    `lint-all` disagree. The engine decides which index covers a file by asking
+    whether the DB CONTAINS that path; LintTarget above is usually
+    %TEMP%\drag-lint-live-<tick>.pas, which no index contains, so the store was
+    dropped and every store-backed check silently degraded -- measured
+    `[flowdb] ... db= store=False fid=0`. On this project's own source that
+    manufactured 20 of 23 red used-before-assignment marks, because a record
+    local defined by its own Init call cannot be told from a nil dereference
+    without the index.
+
+    ManifestDbForFile is asked about ACtx.FilePath, the REAL file: the snapshot
+    is in no manifest section, so asking about it would answer '' every time. An
+    unresolved DB degrades to exactly the previous behaviour rather than
+    failing -- an editor buffer in an unindexed folder must still be linted. }
+  if (ACtx.FilePath <> '') and not SameText(LintTarget, ACtx.FilePath) then
+    Cmd:= Cmd + Format(' --stand-in-for "%s"', [ACtx.FilePath]);
+  var LiveDb: string := '';
+  if ACtx.FilePath <> '' then LiveDb:= ManifestDbForFile(ACtx.FilePath);
+  if LiveDb <> '' then Cmd:= Cmd + Format(' --db "%s"', [LiveDb]);
+  LiveLog(Format('lint: exe=%s target=%s standin=%s db=%s',
+    [ACtx.ExePath, LintTarget, ACtx.FilePath, LiveDb]));
   if not RunCapture(Cmd, Output, 8000) then
   begin
     LiveLog('lint: RunCapture FAILED (engine not found / timeout?)');

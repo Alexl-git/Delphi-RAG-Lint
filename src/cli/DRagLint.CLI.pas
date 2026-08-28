@@ -291,6 +291,15 @@ type
     // narrows the fixable set; unset = no filter. Default FixLine:=0, FixRule:=''.
     FixLine      : Integer; // --fix-line <L> (1-based; 0 = all lines)
     FixRule      : string ; // --fix-rule <id> ('' = all rules)
+    { --stand-in-for <realpath>: analyse THIS file's text, but answer as though
+      it were <realpath>. The IDE lints an unsaved buffer by writing a snapshot
+      to %TEMP%\drag-lint-live-<tick>.pas; every question that is really about
+      IDENTITY rather than text -- which index contains me, what is my file id,
+      does my unit name match my file name, which drag-lint-lint.json owns me,
+      what path do I report -- must be asked about the real file, or the answer
+      is about a temp file nobody has. Measured before it was built:
+      `[flowdb] eff=C:\TEMP\drag-lint-live-...pas db= store=False fid=0`. }
+    StandInFor   : string ; // --stand-in-for <realpath> ('' = the target is itself)
     RemoveUnused : Boolean; // --remove-unused (uses-fix: also comment unused)
     // v0.27: generate-test + format
     TestFramework: string; // --framework dunitx|dunit (default 'dunitx')
@@ -546,6 +555,10 @@ begin
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess]');
+  Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)');
+  Writeln('                               [--stand-in-for <realpath>]  (analyse <path>''s TEXT as though it were <realpath>:');
+  Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
+  Writeln('                               unit-name and the reported path)');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint  --file <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--apply]   (AUTOFIX one file)');
   Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes nothing.');
@@ -1185,6 +1198,7 @@ begin
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting (lint --fix)
     else if (A = '--fix-line') and (i < ParamCount) then begin Inc(i); Result.FixLine:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--fix-rule') and (i < ParamCount) then begin Inc(i); Result.FixRule:= ParamStr(i); end
+    else if (A = '--stand-in-for') and (i < ParamCount) then begin Inc(i); Result.StandInFor:= ParamStr(i); end
     else if A = '--include-private' then Result.IncludePrivate:= True
     else if (A = '--target') and (i < ParamCount) then begin Inc(i); Result.Target:= ParamStr(i); end
     else if (A = '--add-project') and (i < ParamCount) then begin Inc(i); Result.AddProjectName:= ParamStr(i); end
@@ -8361,6 +8375,84 @@ begin
     the fix path. }
   EffPath:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
   if (EffPath = '') and (AArgs.ProjectPath = '') then begin Writeln('ERROR: lint requires a <path> or --project <file.dproj>'); Exit (2 ); end;
+  { --stand-in-for: analyse the snapshot's TEXT under the REAL file's IDENTITY.
+
+    The IDE lints an unsaved buffer by writing %TEMP%\drag-lint-live-<tick>.pas
+    and linting that. Every question that is about identity rather than text
+    then answers about a temp file nobody has: which index contains me (the
+    measured `[flowdb] ... db= store=False fid=0`), what is my file id, does my
+    unit name match my file name, and which path do I report.
+
+    THE TEXT IS MATERIALISED UNDER THE REAL BASE NAME rather than teaching each
+    checker a second path. unit-name-matches-file compares the unit name to the
+    file's base name, so a snapshot called drag-lint-live-1787955386000.pas
+    would report EVERY unsaved buffer as misnamed -- a brand-new false positive
+    introduced by the change meant to remove false positives. One copy fixes
+    that and every other name-derived check at once, with no checker signature
+    churn and no second notion of "the path" for them to disagree about.
+
+    The directory is per-PROCESS and the file keeps the real base name, so the
+    same buffer reuses one path instead of growing TEMP without bound, and two
+    engines running at once cannot collide on it. }
+  var StandInLogical: string := '';
+  if (AArgs.StandInFor <> '') and (EffPath <> '') then
+  begin
+    StandInLogical:= AArgs.StandInFor;
+    try
+      var SiDir: string := IncludeTrailingPathDelimiter(
+        TPath.Combine(TPath.GetTempPath, Format('drag-lint-standin-%d', [GetCurrentProcessId])));
+      if not TDirectory.Exists(SiDir) then TDirectory.CreateDirectory(SiDir);
+      { BACKSLASH-NORMALISE BEFORE ExtractFileName, AND THIS IS NOT A STYLE FIX.
+
+        ExtractFileName splits on PathDelim and DriveDelim -- '\' and ':' -- and
+        NOT on '/'. Handed the perfectly ordinary
+        `C:/Projects/DataCopy/Tests/X.pas`, it finds the last ':' at index 2 and
+        returns `/Projects/DataCopy/Tests/X.pas`: a ROOTED path. TPath.Combine
+        then yields that rooted path instead of joining, and TFile.Copy writes
+        it -- driveless, so Windows resolves it against the current drive --
+        straight back over C:\Projects\DataCopy\Tests\X.pas. THE USER'S SOURCE
+        FILE. Caught in the T2 A/B on 2026-08-28 by an mtime that had no
+        business moving; the content happened to be byte-identical, so nothing
+        was lost and nothing would have warned. }
+      var SiFile: string := TPath.Combine(SiDir,
+        ExtractFileName(StringReplace(StandInLogical, '/', '\', [rfReplaceAll])));
+      { STRUCTURAL GUARD, deliberately kept even though the line above now
+        computes the name correctly. A defect whose failure mode is "silently
+        overwrite a source file" does not get to rely on one function behaving;
+        the write is confined to the temp directory by CHECKING, so any future
+        path shape that fools the split fails the lint instead of the tree. }
+      if not StartsText(SiDir, ExpandFileName(SiFile)) then
+        raise Exception.CreateFmt(
+          'stand-in materialisation would write outside %s (computed %s) -- refusing', [SiDir, SiFile]);
+      if not SameText(SiFile, EffPath) then TFile.Copy(EffPath, SiFile, True);
+      { THE SIBLING .dfm TRAVELS WITH IT. `Only analyse form units -- a sibling
+        .dfm is the authoritative signal` (AstChecks.pas:4336-4337), so a unit
+        materialised alone is not a form unit any more and global-form-variable
+        goes quiet on every form. Found by the A/B, which lost exactly one
+        finding on DataCopy's uMainZeissCopy.pas and nothing else.
+
+        Known and deliberate limitation, recorded rather than hidden: include
+        directives are resolved RELATIVE to the analysed file and are not copied,
+        so a unit whose includes live beside it parses differently here. That is
+        not a regression -- the IDE was already linting a bare %TEMP% snapshot
+        with no siblings at all -- but it is the reason this is a stand-in and
+        not the real thing. }
+      var SiDfmSrc: string := ChangeFileExt(StringReplace(StandInLogical, '/', '\', [rfReplaceAll]), '.dfm');
+      if TFile.Exists(SiDfmSrc) then
+        TFile.Copy(SiDfmSrc, ChangeFileExt(SiFile, '.dfm'), True);
+      EffPath:= SiFile;
+    except
+      { A failed materialisation must never fail the lint. Fall back to
+        analysing the snapshot where it lies: the identity questions below still
+        use the real path, so only the base-name-derived checks degrade. }
+      on E: Exception do
+      begin
+        if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
+          Writeln(ErrOutput, '[standin] materialisation skipped: ' + E.Message);
+        StandInLogical:= AArgs.StandInFor;
+      end;
+    end;
+  end;
   { KNOWN-RULE VALIDATION COMES FROM THE CATALOG, NOT A HAND-KEPT LIST.
     This was ~40 lines of "and (AArgs.Rule <> '<id>')" naming the BUILT-IN rules
     only, plus a second copy of the same list inside the error message. The 56
@@ -8583,7 +8675,13 @@ begin
         So ask every candidate the only question that matters: do you contain
         THIS file? DbContainsFile is the same probe `resolve-dbs --in` uses, so
         this verb and that diagnostic now answer with one index by construction. }
-      var FlowAbs  : string := ExpandFileName(EffPath);
+      { IDENTITY, not text. Under --stand-in-for these two differ: the text is
+        the materialised snapshot, the identity is the real file the index knows
+        about. Asking membership about the snapshot is what produced
+        `store=False fid=0` and silently dropped the store for every unsaved
+        buffer the IDE ever linted. }
+      var FlowIdent: string := IfThen(StandInLogical <> '', StandInLogical, EffPath);
+      var FlowAbs  : string := ExpandFileName(FlowIdent);
       var FlowDb   : string := '';
       if TFile.Exists(AArgs.DbPath) and DbContainsFile(AArgs.DbPath, FlowAbs) then
         FlowDb:= AArgs.DbPath;
@@ -8606,8 +8704,8 @@ begin
             `src/cli/DRagLint.CLI.pas` reported 20. Try the path as given first,
             since a caller that already passes the store's own canonical form
             (lint-all does) must not pay an ExpandFileName per file. }
-          FlowFid:= FlowStore.FindFileIdByPath(EffPath);
-          if FlowFid <= 0 then FlowFid:= FlowStore.FindFileIdByPath(ExpandFileName(EffPath));
+          FlowFid:= FlowStore.FindFileIdByPath(FlowIdent);
+          if FlowFid <= 0 then FlowFid:= FlowStore.FindFileIdByPath(ExpandFileName(FlowIdent));
           if FlowFid <= 0 then begin FlowStore:= nil; FlowFid:= 0; end;
         end;
       end;
@@ -8616,8 +8714,8 @@ begin
         this line is what turned four rebuild-and-guess cycles into one run.
         stderr, so it cannot corrupt --format json|sarif. }
       if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
-        Writeln(ErrOutput, Format('[flowdb] eff=%s db=%s store=%s fid=%d',
-          [EffPath, FlowDb, BoolToStr(FlowStore <> nil, True), FlowFid]));
+        Writeln(ErrOutput, Format('[flowdb] eff=%s ident=%s db=%s store=%s fid=%d',
+          [EffPath, FlowIdent, FlowDb, BoolToStr(FlowStore <> nil, True), FlowFid]));
       { The platform library store, which lint-all passes to TFlowChecker and
         this verb passed as a bare nil. It answers what a project index cannot
         -- ownership questions such as "does this constructed type descend from
@@ -8861,6 +8959,29 @@ begin
       'drag-lint: note: `lint <file>` runs per-file rules only. Whole-run rules ' +
       '(project-wide checks, review-marker-unused/stale) need `lint-all` and are ' +
       'NOT reported here -- a 0 above does not mean they are clean.');
+
+  { REPORT THE REAL PATH. Every finding so far names the materialised snapshot,
+    which exists only inside this process's temp directory. A consumer -- the
+    IDE above all -- maps a diagnostic back to the buffer the user is looking at
+    BY PATH, so a snapshot path lands the mark nowhere. Rewriting at this single
+    output seam is why no checker had to learn what a stand-in is.
+
+    The guard asserts that NO output line names the snapshot, because a
+    half-applied rewrite reads as correct in a spot check and quietly puts marks
+    in the wrong file. }
+  if StandInLogical <> '' then
+    for var SiI: Integer := 0 to High(Findings) do
+    begin
+      if SameText(Findings[SiI].FilePath, EffPath) then Findings[SiI].FilePath:= StandInLogical;
+      { THE MESSAGE CARRIES PATHS TOO, and rewriting only FilePath is the kind of
+        half-fix that reads as correct. duplicate-code says "also at <path>:<line>"
+        (CloneChecks.pas:300) and that path is the ANALYSED one, so a stand-in run
+        pointed the reader at a temp file that is deleted moments later. It was
+        found by the A/B, not by review: the finding COUNTS matched exactly and
+        only a byte comparison showed the second path differing. }
+      if (Pos(EffPath, Findings[SiI].Message) > 0) then
+        Findings[SiI].Message:= StringReplace(Findings[SiI].Message, EffPath, StandInLogical, [rfReplaceAll]);
+    end;
 
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,

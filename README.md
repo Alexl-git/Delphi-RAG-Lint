@@ -545,7 +545,8 @@ enabled by default, 22 with an auto-fix.**
 | Command | What it does | Notable flags |
 |---|---|---|
 | [`rules`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/rules) | List the rule catalog | `--json`, `--category <name>` |
-| `lint <path>` | Run built-in + external `.scm` rules on a file/folder (no index needed) | `--rule <id>`, `--disable id1,id2`, `--json` |
+| `lint <path>` | Run built-in + external `.scm` rules on a file/folder (no index needed). Pass `--db <index>` and the store-backed checks join in -- exact type resolution, cross-unit virtual-in-constructor, and the exception-ancestry half of `type-name-prefix`. Without a store those degrade conservatively, which is why an editor buffer linted with no `--db` can show findings `lint-all` does not | `--rule <id>`, `--disable id1,id2`, `--json`, `--db <index.sqlite>` |
+| `lint <snapshot> --stand-in-for <realpath>` | Analyse `<snapshot>`'s **text** under `<realpath>`'s **identity**. For editors that lint an unsaved buffer by writing it to a temp file: store membership, file id, `unit-name-matches-file` and the reported path all answer for the real file, so a temp path no longer defeats the index | Used by the IDE plugin's live diagnostics |
 | `lint --file <f> --fix [--fix-line <L> --fix-rule <id>] [--apply]` | **Autofix one file.** Without `--apply` it is a dry run: reports what it would change, writes nothing. `--fix-line`+`--fix-rule` narrow to one finding; omit both to apply every fixable finding. Only rules with `"fixable": true` are ever applied | This is what the Structure form's right-click **Fix it** / **Fix all in unit** run |
 | `lint --project <dproj>` | One project-scoped rule (e.g. `unit-not-in-dpr`) | `--rule` |
 | [`lint-project`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-project) `--db <db>` | Project-wide structural rules -- god-class, circular-uses, layering-violation, unused-public-symbol, and more | `--rule <id>`, `--layers <f.json>` |
