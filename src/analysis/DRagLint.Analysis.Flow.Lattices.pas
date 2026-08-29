@@ -183,6 +183,16 @@ type
     class function Build(const AProc: TTSNode; const ASrc: TBytes): TRoutineVarTable;
   end;
 
+  /// <summary>Raised by the DRAGLINT_VERIFY_GEN self-check when the memoised
+  /// block gen-set disagrees with a direct transfer.</summary>
+  /// <remarks>
+  /// Never raised in normal operation. It fires only when TDefiniteAssignment
+  /// .Transfer has stopped being gen-only -- the property the memoisation rests
+  /// on -- which is a code change, not a data condition. See the remarks on
+  /// GenOf.
+  /// </remarks>
+  EDefAsgnGenMismatch = class(Exception);
+
   /// <summary>Definite-assignment lattice value: `Must`[i] = var i assigned on
   /// EVERY path here; `May`[i] = on SOME path.</summary>
   /// <remarks>
@@ -270,6 +280,15 @@ type
       other rules (dead-store, escape), and reclassifying a call argument there
       would move findings this change has no evidence about. }
     FParamMode: TParamModeLookup;
+    { PER-BLOCK GEN-SET MEMO, keyed by TCfgBlock.Index. One entry per block of
+      the ONE CFG this instance serves (TDefiniteAssignment is constructed fresh
+      per routine, immediately before its solve), so block indices cannot
+      collide across routines. }
+    FGen: TArray<TDefAsgnVal>;
+    FGenValid: TArray<Boolean>;
+    function EmptyVal: TDefAsgnVal;
+    function TransferDirect(const ABlock: TCfgBlock; const AIn: TDefAsgnVal): TDefAsgnVal;
+    function GenOf(const ABlock: TCfgBlock): TDefAsgnVal;
   public
     /// <summary><!-- drag-lint:auto -->----- TDefiniteAssignment -----</summary>
     /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
@@ -1513,6 +1532,38 @@ end;
 
 { ----- TDefiniteAssignment ----- }
 
+{ DRAGLINT_VERIFY_GEN turns on the gen-set self-check in Transfer.
+
+    1      -- check, and raise EDefAsgnGenMismatch on a disagreement.
+    break  -- check, AND deliberately corrupt the checked value so the check
+              MUST fire. This is the self-check's POSITIVE CONTROL.
+
+  `break` exists because a verifier that has never been observed to fail is
+  indistinguishable from one that is not wired up, and this repo has shipped
+  exactly that mistake more than once -- a guard passing by comparing two empty
+  sets, a scrub whose mismatch branch returned its raw input and so never ran at
+  all. There is no way to plant a fault from OUTSIDE this unit (the property
+  under test is a property of this source file), so the fault injection lives
+  here, behind a value nobody sets by accident, and run_defasgn_gen_memo.ps1
+  asserts that it does fail.
+
+  Read once and cached: the check is the expensive part, not the env lookup. }
+var
+  GVerifyGen: Integer = -1;   { -1 unread | 0 off | 1 check | 2 check + inject }
+
+function VerifyGenMode: Integer;
+var V: string;
+begin
+  if GVerifyGen < 0 then
+  begin
+    V := LowerCase(GetEnvironmentVariable('DRAGLINT_VERIFY_GEN'));
+    if V = 'break' then GVerifyGen := 2
+    else if V = '1' then GVerifyGen := 1
+    else GVerifyGen := 0;
+  end;
+  Result := GVerifyGen;
+end;
+
 constructor TDefiniteAssignment.Create(AVars: TRoutineVarTable; const ASrc: TBytes;
   const AIsRecordMethodDef: TRecordMethodDefPredicate; const AParamMode: TParamModeLookup);
 begin
@@ -1558,7 +1609,24 @@ begin
   end;
 end;
 
-function TDefiniteAssignment.Transfer(const ABlock: TCfgBlock; const AIn: TDefAsgnVal): TDefAsgnVal;
+{ THE ORIGINAL TRANSFER, unchanged, and now called at most ONCE PER BLOCK.
+
+  MEASURED, session 47. TDefiniteAssignment ran 59.44 s of a 240 s lint-all with
+  Transfer at 99.7% of it and blocks re-visited 2.880 times each -- so 65% of
+  this walk was recomputing a value that could not have changed. (TEscape sits
+  at 1.156 visits/block, which is why the same treatment is NOT applied there:
+  it would win 13%, and its transfer is not gen-only anyway.)
+
+  WHY THE MEMO IS SOUND, stated so the next editor can check it in one read:
+  after the initial copy of AIn, EVERY write below is `:= True`. Nothing is ever
+  cleared, and the SET of indices written depends only on ABlock, FVars, FSrc,
+  FIsRecordMethodDef and FParamMode -- never on AIn. So
+  Transfer(B, In) = In OR Gen(B), with Gen(B) = TransferDirect(B, all-False).
+
+  IF YOU ADD A `:= False` HERE, OR MAKE A WRITE DEPEND ON AIn, THE MEMO IS
+  WRONG. Set DRAGLINT_VERIFY_GEN=1 and the mismatch raises instead of silently
+  producing a wrong fixpoint; run_defasgn_gen_memo.ps1 does exactly that. }
+function TDefiniteAssignment.TransferDirect(const ABlock: TCfgBlock; const AIn: TDefAsgnVal): TDefAsgnVal;
 var
   I, J, Tgt, Idx: Integer; It: TCfgItem; Reads, CallDefs: TList<Integer>;
 begin
@@ -1601,6 +1669,62 @@ begin
     end;
   finally
     Reads.Free; CallDefs.Free;
+  end;
+end;
+
+function TDefiniteAssignment.EmptyVal: TDefAsgnVal;
+var I: Integer;
+begin
+  { NOT Bottom: Bottom's Must is all-TRUE (intersection identity). The gen-set
+    seed has to be all-FALSE in BOTH fields or Gen would come back saturated. }
+  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := False; Result.May[I] := False; end;
+end;
+
+function TDefiniteAssignment.GenOf(const ABlock: TCfgBlock): TDefAsgnVal;
+begin
+  if ABlock.Index >= Length(FGen) then
+  begin
+    SetLength(FGen, ABlock.Index + 1);
+    SetLength(FGenValid, ABlock.Index + 1);
+  end;
+  if not FGenValid[ABlock.Index] then
+  begin
+    FGen[ABlock.Index] := TransferDirect(ABlock, EmptyVal);
+    FGenValid[ABlock.Index] := True;
+  end;
+  Result := FGen[ABlock.Index];
+end;
+
+function TDefiniteAssignment.Transfer(const ABlock: TCfgBlock; const AIn: TDefAsgnVal): TDefAsgnVal;
+var I: Integer; G, Direct: TDefAsgnVal;
+begin
+  G := GenOf(ABlock);
+  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do
+  begin
+    Result.Must[I] := AIn.Must[I] or G.Must[I];
+    Result.May[I]  := AIn.May[I]  or G.May[I];
+  end;
+  { SELF-CHECK, off by default. The memo's soundness is a property of the code
+    above TransferDirect, not of the data, so it cannot be established by any
+    corpus A/B -- only by re-deriving the answer and comparing. Gated because it
+    costs exactly what the memo saves. }
+  if VerifyGenMode > 0 then
+  begin
+    { Fault injection perturbs the CHECKED value, not the gen-set: flipping a
+      gen bit can be absorbed (if AIn already carries it the two sides still
+      agree, so the control would pass vacuously on some blocks). Flipping the
+      result is unconditionally observable whenever the routine has a variable
+      at all. }
+    if (VerifyGenMode = 2) and (FVars.Count > 0) then
+      Result.May[0] := not Result.May[0];
+    Direct := TransferDirect(ABlock, AIn);
+    if not Equals(Direct, Result) then
+      raise EDefAsgnGenMismatch.CreateFmt(
+        'block %d: memoised gen-set disagrees with a direct transfer -- ' +
+        'TDefiniteAssignment.Transfer is no longer gen-only, so the memo in ' +
+        'GenOf is unsound. See the remarks above TransferDirect.', [ABlock.Index]);
   end;
 end;
 
