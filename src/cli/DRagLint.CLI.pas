@@ -137,6 +137,7 @@ uses
   , DRagLint.Diagnostics.CloneChecks
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Diagnostics.FlowChecks
+  , DRagLint.Analysis   .DataFlow  { DataFlowStats -- the solver iteration counters }
   , DRagLint.Workspace  .Config
   , DRagLint.Index      .Manifest
   , DRagLint.Index      .ManifestWrite
@@ -13352,6 +13353,38 @@ begin
             [DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseName(FP),
              DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP),
              100 * DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP) / FlowSum]));
+    end;
+    { SOLVER ITERATION COUNTERS -- INBOX-flowchecker-is-half-of-lint-all.
+      The two solves are 71.8% of FlowChecker, and the fix that note proposed
+      was a reverse-postorder worklist seed. That pays only if blocks are
+      actually RE-visited, so `per block` below is the refutation test rather
+      than the assumption: at ~1.00 there is no iteration to remove and the cost
+      is per-visit lattice work, which the Transfer line then locates. Printed
+      even when the ratio is boring -- a measurement that only appears when it
+      supports the hypothesis is not a measurement. }
+    var DFS: TDataFlowStats:= DataFlowStats;
+    if DFS.Solves > 0 then
+    begin
+      Writeln(ErrOutput, Format('      %-26s %8.2f s  (%d solve(s), %d block(s), %d visit(s) = %.3f per block)',
+        ['of which solver', DFS.SolveSeconds, DFS.Solves, DFS.Blocks, DFS.Visits,
+         DFS.Visits / Max(Int64(1), DFS.Blocks)]));
+      Writeln(ErrOutput, Format('        %-24s %8.2f s  (%d call(s), %.4f ms/call, %5.1f%% of the solver)',
+        ['of which Transfer', DFS.TransferSeconds, DFS.Transfers,
+         DFS.TransferSeconds * 1000 / Max(Int64(1), DFS.Transfers),
+         100 * DFS.TransferSeconds / Max(0.000001, DFS.SolveSeconds)]));
+      Writeln(ErrOutput, Format('        %-24s %8.2f s  (Join x%d, Equals x%d, re-enqueue x%d)',
+        ['of which Join+Equals+queue', DFS.SolveSeconds - DFS.TransferSeconds,
+         DFS.Joins, DFS.Comparisons, DFS.Reenqueues]));
+      Writeln(ErrOutput, Format('        %-24s %.3f per block over %d block(s) in one routine',
+        ['worst single solve', DFS.WorstRatio, DFS.WorstBlocks]));
+      { PER-LATTICE, because the aggregate cannot decide the fix. Memoising a
+        gen-only transfer pays in proportion to THAT lattice's own re-visit
+        ratio; a pooled 2.388 is equally consistent with one lattice at 1.0 and
+        another at 6.0. Sorted by cost, so the row that matters is first. }
+      for var LS in DataFlowLatticeStats do
+        Writeln(ErrOutput, Format('        %-24s %8.2f s  (%.3f visit(s)/block, Transfer %5.1f%%, %d solve(s))',
+          [LS.Name, LS.SolveSeconds, LS.Visits / Max(Int64(1), LS.Blocks),
+           100 * LS.TransferSeconds / Max(0.000001, LS.SolveSeconds), LS.Solves]));
     end;
     Writeln(ErrOutput, Format('    %-28s %8.2f s', ['(sum of the slots above)', (ScanTot + GScanAppend) / TStopwatch.Frequency]));
     { SESSION 36 (P3): the .scm half broken down PER RULE. The aggregate is the
