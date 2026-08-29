@@ -1410,6 +1410,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetAllFileIds: TArray<Int64>                                                  ;
+      /// <summary>Implements ISymbolStore.GetAllFileStamps.</summary>
+      function GetAllFileStamps: TArray<TFileStamp>                                          ;
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TReference&gt; -- Observed:
       /// List.ToArray.</returns>
@@ -3818,6 +3820,31 @@ begin
   finally
     Q.Free;
     L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetAllFileStamps: TArray<TFileStamp>;
+var Q: TFDQuery; L: TList<TFileStamp>; R: TFileStamp;
+begin
+  L:= TList<TFileStamp>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { One scan, both columns. The freshness sweep runs on ordinary commands, so
+      its cost has to be independent of how many files the index holds. }
+    Q.SQL.Text:= 'SELECT path, mtime_unix FROM files';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R.Path     := Q.Fields[0].AsString;
+      R.MTimeUnix:= Q.Fields[1].AsLargeInt;
+      L.Add(R);
+      Q.Next;
+    end;
+    Q.Close;
+    Result:= L.ToArray;
+  finally
+    Q.Free; L.Free;
   end;
 end; // function
 

@@ -194,4 +194,42 @@
 #   run against a deliberately regressed writer and each failed on its own
 #   defect before the fix was restored.
 
-1.8.0-alpha|9cd6be2f1525e46e134038ee78819cd9113f1f9902519421bb125fad2d2fca78
+# 2026-08-28: hash updated WITHOUT a version bump, per the rule above.
+#   ONE new file in the hashed surface: src\index\DRagLint.Index.Freshness.pas.
+#   Nothing else under the four roots changed (the session also touched
+#   Core.Model, Core.Interfaces, Storage.SQLite, CLI, Analysis.DataFlow and
+#   Flow.Lattices -- none of which is hashed).
+#
+#   WHAT IT IS: the freshness sweep for the 2026-08-13 owner ruling. It reads
+#   files.path / files.mtime_unix out of an EXISTING index and stats the disk,
+#   to print a stderr note when the index no longer describes the source.
+#
+#   WHY NO BUMP. The question is "does any STORED PARSE become stale?". This
+#   code reads an index; it never writes one. It sees no source bytes, it holds
+#   no parser, and -- unlike the 2026-08-26 Closure entries, which had to argue
+#   about closure MEMBERSHIP -- it plays no part in deciding which files are
+#   reached either. There is no mechanism by which it can change what is
+#   extracted from any byte sequence.
+#
+#   "IT NEVER RUNS DURING A WALK" WAS VERIFIED, NOT ASSERTED, because that is
+#   the only load-bearing claim here:
+#     - statically: NoteIndexFreshnessOnce has exactly three call sites --
+#       OpenReadOnlyStore, DoLintAll, DoLintProject. DoIndex and BuildPlanItem
+#       reach none of them (grep count 0); the index path constructs its own
+#       TSQLiteSymbolStore directly.
+#     - empirically: indexed a one-unit fixture, modified it so the DB was
+#       genuinely stale, re-ran `index` -- NO note. If the probe were reachable
+#       from a walk it would have fired there.
+#
+#   Same shape as the 2026-08-24 entry (ManifestWrite.pas) and the 2026-08-27
+#   entry (JsonFile move): a src\index file inside the hashed surface that takes
+#   no part in extraction. Bumping would re-parse ~7,000 library files plus
+#   every project index to produce byte-identical symbols.
+#
+#   The same warning as those entries, and it is not boilerplate: the failure
+#   mode of getting this wrong is SILENT. If a future edit to this file ever
+#   influences what is indexed, the version MUST move.
+#
+#   Pinned by tests\autotest\run_index_freshness.ps1.
+
+1.8.0-alpha|d861dfee88b2d31dc2a930ca7c6b73902155d3bd1aa675abe90a8c36fad1fd69

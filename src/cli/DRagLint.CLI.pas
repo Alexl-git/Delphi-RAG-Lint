@@ -148,6 +148,7 @@ uses
   , DRagLint.Index      .Plan
   , DRagLint.Index      .DbSelect
   , DRagLint.Index      .Drift
+  , DRagLint.Index      .Freshness { ProbeIndexFreshness -- the 2026-08-13 staleness ruling }
   , DRagLint.Index      .Coverage
   , DRagLint.Index      .CallResolver
   , DRagLint.Wiring
@@ -1497,10 +1498,44 @@ end; // procedure
 // merely to sharpen an analysis (rather than because the user asked for the
 // index) has no business printing anything, so it passes True and simply gets
 // AOk=False when the schema is behind.
+{ Once per process, and that is the whole noise-control strategy. A command may
+  open the primary index, a library index and several extra stores; saying the
+  same thing about each of them would train the reader to skip the line. The
+  FIRST store a command opens is the one it is actually asking about.
+
+  WHERE THIS IS CALLED FROM, AND WHERE IT IS NOT -- stated because the obvious
+  reading of "it lives in OpenReadOnlyStore" is WRONG and cost a red test to
+  find out. OpenReadOnlyStore has 51 callers, but the CLI ALSO constructs
+  TSQLiteSymbolStore directly in 44 places, and `lint-all` is one of them -- so
+  putting the probe in the helper alone left the single most important command
+  silent while every assertion around it passed vacuously.
+
+  Covered today: OpenReadOnlyStore (query, context, hover, find-unit, per-file
+  lint, ...), DoLintAll, DoLintProject. NOT covered: the other direct
+  constructions, most of which are write paths or self-tests where a staleness
+  note would be noise or actively wrong (the indexer is ABOUT to fix the
+  staleness).
+
+  Deliberately not made universal by hooking TSQLiteSymbolStore.Create: that
+  would make src\storage depend on src\index, and it would fire during indexing.
+  Universal coverage is also exactly the ruling's open "where does the gate
+  live" question, which is the owner's to answer, not a side effect of this. }
+var GFreshnessNoted: Boolean = False;
+
+procedure NoteIndexFreshnessOnce(const AStore: ISymbolStore; const ADbPath: string);
+var Note: string;
+begin
+  if GFreshnessNoted or (AStore = nil) then Exit;
+  GFreshnessNoted:= True;
+  Note:= FreshnessNote(ProbeIndexFreshness(AStore), ADbPath);
+  if Note <> '' then Writeln(ErrOutput, Note);
+end;
+
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
 var
   Found   : Integer;
   Expected: Integer;
+  Note    : string ;
 begin
   Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
   if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
@@ -1510,6 +1545,21 @@ begin
     if not AQuiet then
       Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected]));
   end;
+  { INDEX FRESHNESS -- the 2026-08-13 owner ruling, warn-only half.
+    "A stale DB is not authoritative; the answer is to rescan, not to report."
+    Until now nothing said so: a session in THIS repo watched type-name-prefix
+    fire on a minutes-old exception class purely because the index had not seen
+    it yet, and the finding was plausible, confident and wrong.
+
+    ErrOutput, NOT Writeln -- deliberately unlike the schema line four lines
+    above, which goes to stdout and would corrupt --format sarif (that is why
+    callers pass AQuiet at all). A note on stderr is safe on every output path,
+    so it is not gated on AQuiet.
+
+    Advisory only: no finding, no exit code, no stdout. The ruling's open
+    questions -- refuse vs warn vs auto-reindex, and whether the gate lives here
+    or per-command -- stay open, and a warning cannot pre-empt them. }
+  if AOk then NoteIndexFreshnessOnce(Result, ADbPath);
 end;
 
 // WRITABLE open (same schema-current guard as OpenReadOnlyStore). Used by
@@ -3074,6 +3124,14 @@ procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
 begin
   AStore.SetMetaValue(INDEXER_FP_KEY,
                       IndexerFingerprint(AStore, APreprocess, APlatform));
+  { The freshness stamp rides the fingerprint's guarantee rather than getting a
+    site of its own: BOTH are written only after a walk that ran to completion,
+    so an interrupted run leaves both untouched and the next run still knows it
+    must look. Stamped separately from the per-file mtimes because it answers a
+    different question -- "was this DB ever completed by an engine that records
+    freshness at all" -- which is what lets a pre-upgrade index report UNKNOWN
+    instead of being judged against evidence it never stored. }
+  AStore.SetMetaValue(INDEXED_AT_KEY, IntToStr(DateTimeToUnix(Now, False)));
 end;
 
 { v21: opens --library-db paths as read-only extra stores for cross-DB call
@@ -13075,6 +13133,7 @@ begin
   Prof.Phase('open+migrate store');
   Store:= TSQLiteSymbolStore.Create(ProjectDb);
   Store.Migrate;
+  NoteIndexFreshnessOnce(Store, ProjectDb);
   { The library store, opened ONCE per run (it is ~2.2 GB) and consulted for
     symbols a project index cannot contain -- today, whether a constructed type
     descends from TComponent, which is how object-leak tells an owned VCL
@@ -13723,6 +13782,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath])); Exit(2); end;
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
+  NoteIndexFreshnessOnce(Store, AArgs.DbPath);
   { v0.80 review fix: repeated-type-switch is OFF by default (medium name-based FP --
     see .superpowers/sdd/v080-task-4-report.md). Route through FinalizeAndOutput below
     so the DefDisabled + ShouldKeep filter actually applies to lint-project output

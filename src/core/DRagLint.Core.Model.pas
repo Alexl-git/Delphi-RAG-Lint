@@ -813,6 +813,25 @@ type
     RawBlock : string ;
   end;
 
+  /// <summary>One indexed file's identity for a FRESHNESS comparison: the path
+  /// exactly as stored, and the mtime recorded when that file was parsed.</summary>
+  /// <remarks>
+  /// Exists so a freshness sweep costs ONE query instead of two per file.
+  /// GetAllFileIds + GetFilePath + GetFileMTime is the same information at
+  /// 2N round trips, which is fine for a hundred-file project index and not
+  /// fine for a library index of several thousand -- and a check that gets
+  /// skipped because it is slow protects nothing.
+  ///
+  /// A projection of columns that already exist: no table, no column, so
+  /// neither DRAGLINT_EXTRACTOR_VERSION nor SCHEMA_VERSION moves for it.
+  /// </remarks>
+  TFileStamp = record
+    /// <summary>Path in the canonical stored form (see NormalizeStoredPath).</summary>
+    Path     : string;
+    /// <summary>files.mtime_unix as recorded at parse time.</summary>
+    MTimeUnix: Int64 ;
+  end;
+
   // v0.18: resolved caller entry for a context bundle (FilePath pre-resolved
   // from FileId so renderers don't need a store callback).
   /// <summary><!-- drag-lint:auto -->v0.18: resolved caller entry for a context bundle

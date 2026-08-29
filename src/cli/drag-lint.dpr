@@ -133,6 +133,7 @@ uses
   DRagLint.Index.Plan in '..\index\DRagLint.Index.Plan.pas',
   DRagLint.Index.DbSelect in '..\index\DRagLint.Index.DbSelect.pas',
   DRagLint.Index.Drift in '..\index\DRagLint.Index.Drift.pas',
+  DRagLint.Index.Freshness in '..\index\DRagLint.Index.Freshness.pas',
   DRagLint.Index.Coverage in '..\index\DRagLint.Index.Coverage.pas',
   DRagLint.Report.Deps in '..\report\DRagLint.Report.Deps.pas',
   DRagLint.Report.RCallTree in '..\report\DRagLint.Report.RCallTree.pas',

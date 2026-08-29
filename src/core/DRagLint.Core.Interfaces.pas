@@ -462,6 +462,14 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetAllFileIds: TArray<Int64>                                                  ; { v0.43: for cycles / cross-file scans }
+    /// <summary>Path + recorded mtime for every indexed file, in ONE query.</summary>
+    /// <returns>One entry per row of `files`, unordered. Empty for an empty index.</returns>
+    /// <remarks>Backs the index-freshness sweep. Deliberately NOT built from
+    /// GetAllFileIds + GetFilePath + GetFileMTime: that is 2N round trips, and a
+    /// freshness check that is too slow to run on every command is a check that
+    /// does not run. Says nothing about whether the files still exist on disk --
+    /// that is the caller's comparison to make.</remarks>
+    function GetAllFileStamps: TArray<TFileStamp>                                          ;
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
