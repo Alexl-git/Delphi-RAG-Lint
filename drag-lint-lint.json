@@ -1,8 +1,13 @@
 {
   "_comment": [
-    "drag-lint's lint config for its OWN source. Pass with --config when linting",
-    "this repo from a neutral CWD (the pipeline runs from C:\\TEMP, so the",
-    "auto-discovery of a CWD-local drag-lint-lint.json does not find this file).",
+    "drag-lint's lint config for its OWN source.",
+    "",
+    "IT NO LONGER NEEDS --config. This used to say: pass with --config when",
+    "linting this repo from a neutral CWD, because auto-discovery only looked",
+    "in the CWD and the pipeline runs from C:\\TEMP. That stopped being true on",
+    "2026-08-28: lint-all now anchors config discovery to the --db path and",
+    "walks up, so src\\cli\\_D-RAG\\drag-lint.sqlite reaches this file at the repo",
+    "root from any working directory. An explicit --config still wins.",
     "",
     "exclude_paths: third_party\\delphi-tree-sitter is VENDORED UPSTREAM code. It",
     "is in the index because it is part of the .dproj compile closure and symbol",

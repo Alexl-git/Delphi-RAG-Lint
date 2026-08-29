@@ -7263,6 +7263,34 @@ begin
   begin
     var Anchor: string := AArgs.StandInFor;
     if Anchor = '' then Anchor:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
+    { ...AND THE --db PATH, which is the only anchor `lint-all` has.
+
+      T3 anchored the per-file verb to its file and stopped there. `lint-all
+      --db <db>` names no file and no project, so it fell straight through to
+      the CWD fallback -- and then a project's own drag-lint-lint.json governed
+      the run only when the operator happened to be standing in that project's
+      directory.
+
+      MEASURED, not reasoned: same --db, same source, same binary, cwd the only
+      difference -- `magic-literal` (enabled by the project's config) fires from
+      the project directory and does NOT fire from C:\TEMP. Which is exactly how
+      it was found: the per-file verb reported 12 rule ids that lint-all did
+      not, on ORM3, and the first reading was that the per-file verb was
+      over-reporting. It was not. lint-all was reading the WRONG CONFIG, and
+      every rule in the gap is in ORM3's own `enabled` list.
+
+      This is not a hypothetical invocation. The battery runs from C:\TEMP on
+      purpose, and CLAUDE.md tells every session to invoke the engine by full
+      path from wherever it stands.
+
+      The DB path is a reliable anchor because the layout is fixed:
+      <project folder>\_D-RAG\<name>.sqlite. The walk-up below therefore needs
+      NO new logic -- it checks a folder and then its _D-RAG at each level, so
+      starting inside _D-RAG finds the project's config one level up.
+
+      LAST among the anchors, and still above the CWD fallback: an invocation
+      that already names a file or a project keeps that more specific answer. }
+    if Anchor = '' then Anchor:= AArgs.DbPath;
     if Anchor <> '' then
     begin
       Anchor:= StringReplace(Anchor, '/', '\', [rfReplaceAll]);

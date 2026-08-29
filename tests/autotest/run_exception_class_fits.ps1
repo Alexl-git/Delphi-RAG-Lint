@@ -53,8 +53,11 @@
 
     1  with the exceptions unit configured, the near-duplicate reports EInvoiceNotFound
     2  a message matching nothing says so explicitly, and names NO class
-    3  POSITIVE CONTROL: with NO config key, the message is the plain rule text,
-       byte-identical to today -- the default path must not change at all
+    3  POSITIVE CONTROL: with no `exceptions` KEY, the message is the plain rule
+       text, byte-identical to today -- a project that never opted in must not
+       change at all. Expressed with an explicit key-less --config, NOT by
+       omitting --config: since 2026-08-28 lint-all discovers a config from the
+       --db path, so omitting the flag no longer means "unconfigured".
     4  POSITIVE CONTROL: the multi-line raise is still FOUND (a line-oriented
        implementation silently drops it, and a dropped finding reads as "clean")
 
@@ -192,10 +195,29 @@ try {
         (@($lines).Count -ge 3) `
         "a line-oriented implementation drops it, and a dropped finding reads as 'clean'"
 
-  # --- WITHOUT it: today's behaviour, unchanged ----------------------------
-  $noCfg     = (& $exePath lint-all --db $db --quiet 2>&1 | Out-String)
+  # --- WITHOUT the exceptions key: today's behaviour, unchanged ------------
+  # THIS USED TO OMIT --config ENTIRELY, and that stopped meaning "no config"
+  # on 2026-08-28: lint-all now anchors config discovery to the --db path
+  # (<project>\_D-RAG\<name>.sqlite -> walk up), so a bare run FINDS the
+  # fixture's own drag-lint-lint.json sitting in $scratch. Both runs were then
+  # configured, both were enriched, and this control started failing -- against
+  # an engine that had just been FIXED.
+  #
+  # Before that fix, a project's config governed a lint-all run only when the
+  # operator happened to be standing in that project's directory. Measured on
+  # ORM3: the per-file verb reported 12 rule ids lint-all did not, every one of
+  # them in ORM3's own `enabled` list.
+  #
+  # So the control is expressed against the thing it was always about -- the
+  # ABSENCE OF THE `exceptions` KEY, not the absence of a file. An explicit
+  # --config with no such key is the strongest form: it holds whatever the
+  # discovery rules do next, and an implementation that enriches every run still
+  # fails it, which is the load-bearing property named at the top of this file.
+  $noExcCfg = Join-Path $scratch 'no-exceptions-lint.json'
+  '{ "_comment": "deliberately carries no exceptions key" }' | Set-Content $noExcCfg -Encoding ascii
+  $noCfg     = (& $exePath lint-all --db $db --config $noExcCfg --quiet 2>&1 | Out-String)
   $noCfgLine = [string](@(BareRaiseLines $noCfg) | Select-Object -First 1)
-  Check '3. POSITIVE CONTROL: with NO config key the message is the plain rule text' `
+  Check '3. POSITIVE CONTROL: with no exceptions KEY the message is the plain rule text' `
         (($noCfgLine -match 'raise a specific subclass') -and ($noCfgLine -notmatch 'EInvoiceNotFound') -and ($noCfgLine -notmatch '(?i)no existing exception class')) `
         'a project that never opted in must see byte-identical output'
 
