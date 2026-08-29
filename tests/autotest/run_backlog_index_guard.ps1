@@ -103,6 +103,60 @@ if (Test-Path $idx) {
     Check "INBOX-INDEX total matches the enumeration ($rTot)"   ($sTot  -eq $rTot)  "index says $sTot, on disk $rTot"
     Check "INBOX-INDEX open count matches ($rOpen)"             ($sOpen -eq $rOpen) "index says $sOpen, on disk $rOpen"
     Check "INBOX-INDEX retired count matches ($rRet)"           ($sRet  -eq $rRet)  "index says $sRet, on disk $rRet"
+
+    # ---- and now the numbers a HUMAN actually reads --------------------------
+    # Session 47: the dl:counts comment above was RIGHT (27/8/138) while the two
+    # visible headings said "25 notes on disk, 6 of them open" and "19 open
+    # notes", and a third line inside the status table said open=6. Nothing
+    # failed, because this guard only ever read the invisible comment -- which is
+    # this repo's own "silence is the failure mode", reproduced inside the guard
+    # written to prevent it. A count nobody can see being right is not the point;
+    # the headline is what a planning pass reads.
+    #
+    # The patterns are deliberately STRICT. If someone rewords a heading the
+    # guard fails and they update it -- that is cheaper than a heading that
+    # drifts silently for another six sessions.
+    $iNotes = @($notes).Count          # INBOX-*.md minus the index itself
+    if ($ihead -match '(?m)^#\s+BACKLOG INDEX\s+--\s+(\d+)\s+notes on disk,\s+(\d+)\s+of them\s+`open`') {
+      Check "the BACKLOG INDEX headline states the real total ($rTot)"  ([int]$Matches[1] -eq $rTot) `
+            ("headline says $($Matches[1]), on disk $rTot")
+      Check "the BACKLOG INDEX headline states the real open count ($rOpen)" ([int]$Matches[2] -eq $rOpen) `
+            ("headline says $($Matches[2]), on disk $rOpen")
+    } else {
+      Check 'the BACKLOG INDEX headline states its counts in a checkable form' $false `
+            'expected: # BACKLOG INDEX -- N notes on disk, M of them `open`'
+    }
+    if ($ihead -match '(?m)^#\s+INBOX index\s+--\s+(\d+)\s+notes,\s+(\d+)\s+of them\s+`open`') {
+      Check "the INBOX index headline states the real note count ($iNotes)" ([int]$Matches[1] -eq $iNotes) `
+            ("headline says $($Matches[1]), on disk $iNotes")
+      Check "the INBOX index headline states the real open count ($rOpen)"  ([int]$Matches[2] -eq $rOpen) `
+            ("headline says $($Matches[2]), on disk $rOpen")
+    } else {
+      Check 'the INBOX index headline states its counts in a checkable form' $false `
+            'expected: # INBOX index -- N notes, M of them `open`'
+    }
+
+    # ---- the status table is a third copy of the same numbers ----------------
+    # It said open=6 while the comment said 8. Every row is checked, not just
+    # the one that happened to be wrong -- a guard that checks only the observed
+    # failure is how the NEXT row drifts.
+    $tableRows = 0; $tableBad = @()
+    foreach ($v in $VALID) {
+      # The table is inside a BLOCKQUOTE, so every row starts "> |", not "|".
+      # Written as ^\| first; that matched nothing and the row count silently
+      # read 0, which the $tableRows -eq $VALID.Count clause below is there to
+      # catch -- a regex that matches nothing must FAIL, not pass vacuously.
+      $rx = '(?m)^>?\s*\|\s*`' + [regex]::Escape($v) + '`\s*\|[^|]*\|\s*(\d+)\s*\|'
+      if ($ihead -match $rx) {
+        $tableRows++
+        if ([int]$Matches[1] -ne $byStatus[$v]) { $tableBad += ("{0}: table {1}, on disk {2}" -f $v, $Matches[1], $byStatus[$v]) }
+      }
+    }
+    $tableDetail = if ($tableRows -ne $VALID.Count) {
+      "only $tableRows of $($VALID.Count) status rows matched in the table"
+    } else { $tableBad -join '; ' }
+    Check "the status table's per-status counts match ($tableRows row(s) checked)" `
+          (($tableBad.Count -eq 0) -and ($tableRows -eq $VALID.Count)) $tableDetail
   } else {
     Check 'INBOX-INDEX.md carries a dl:counts line' $false `
           'expected: <!-- dl:counts total=N open=N retired=N --> so the counts can be CHECKED rather than trusted'
