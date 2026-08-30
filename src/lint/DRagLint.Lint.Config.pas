@@ -7,6 +7,23 @@ uses
   System.Masks, { IsPathExcluded's glob match }
   DRagLint.Core.Model;
 
+const
+  /// <summary>The exceptions unit assumed when an "exceptions" block is present
+  /// but names no unit.</summary>
+  /// <remarks>
+  /// <para>Owner ruling 2026-08-29: *"create a simple unit, say
+  /// uExceptionDefinitions.pas -- the name is in the default settings as
+  /// default"*. So writing the block is enough; naming the unit is optional.</para>
+  /// <para>An ABSENT block still means OFF, and that is deliberate rather than a
+  /// half-measure. Defaulting the NAME is not the same as defaulting the
+  /// FEATURE: the enrichment costs an extra AST walk on every linted file, and
+  /// ExceptionsUnit's own contract says the unconfigured case must stay
+  /// genuinely free -- the walk is skipped, not filtered. Turning it on for
+  /// every project on the box would tax all of them to serve the one that opted
+  /// in.</para>
+  /// </remarks>
+  DEFAULT_EXCEPTIONS_UNIT = 'uExceptionDefinitions';
+
 type
   /// <summary>Configurable naming conventions read from the drag-lint-lint.json
   /// "naming" block. Empty-string prefixes disable that prefix check; empty
@@ -605,7 +622,8 @@ begin
   if AObj.GetValue('exceptions') is TJSONObject then
   begin
     var ExcObj: TJSONObject:= AObj.GetValue('exceptions') as TJSONObject;
-    if ExcObj.GetValue('unit') <> nil then ExceptionsUnit:= ExcObj.GetValue('unit').Value;
+    if ExcObj.GetValue('unit') <> nil then ExceptionsUnit:= ExcObj.GetValue('unit').Value
+    else ExceptionsUnit:= DEFAULT_EXCEPTIONS_UNIT;
   end;
 end;
 

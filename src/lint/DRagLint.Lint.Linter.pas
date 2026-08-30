@@ -17,6 +17,7 @@ uses
   , DRagLint.Parser.Delphi13
   , DRagLint.Lint  .QueryRules
   , DRagLint.Lint  .ReviewMarker { REVIEW_MARK -- a tool-written marker is not a hand-written inline comment }
+  , DRagLint.Lint  .ExceptionNaming { stage 3: the message -> class-name derivation }
   ;
 
 type
@@ -52,7 +53,18 @@ type
     Line    : Integer;
     Col     : Integer;
     Msg     : string ; { the bare raise's static message, NORMALIZED }
+    Raw     : string ; { the SAME message, VERBATIM -- see below      }
   end;
+  { THE KEY AND THE NAME NEED DIFFERENT INPUTS, and conflating them was a
+    real defect here, not a hypothetical. Msg is normalized: lowercased,
+    punctuation replaced by spaces, stopwords dropped -- exactly right for
+    deciding whether two messages are THE SAME ERROR. Feed that to the class
+    NAMER and every distinction it depends on has already been destroyed:
+    casing (EConvertsidtostringsidFailed), the colon that marks a context
+    prefix (ETblueprint4ModelAssignactivefieldvalue), and the apostrophe in
+    can't. So the site carries BOTH, and DeriveExceptionClassName takes Raw.
+    The key stays maximally discriminating; the name is cosmetic and its
+    collisions are settled by a numeric suffix. }
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -585,7 +597,19 @@ end; // procedure
   Casing and punctuation go; a short stopword list goes. Deliberately NOT
   stemming: 'found'/'finding' surviving as different keys costs a duplicate
   suggestion, while over-stemming silently merges two genuinely different errors
-  onto one class, and a wrong merge is the expensive direction here. }
+  onto one class, and a wrong merge is the expensive direction here.
+
+  2026-08-30 -- FORMAT SPECIFIERS NOW GO TOO, and until this was fixed THE
+  NOTE'S OWN MOTIVATING PAIR DID NOT COLLAPSE. The 2026-08-16 measurement
+  recorded exactly one collapsing pair on ORM3,
+
+      'LookupAccountName failed: '     and     'LookupAccountName failed: %s'
+
+  and they did not share a key: replacing non-alphanumerics with spaces left the
+  's' of '%s' standing as a word. So the one case the whole normalizer was
+  justified by was the one it missed, silently, because nothing compares the two
+  keys unless a raise site happens to produce both. A specifier is runtime data
+  by definition and can never be part of the identity of a message. }
 function NormalizeExcMessage(const AMsg: string): string;
 const
   STOPWORDS: array[0..10] of string =
@@ -598,6 +622,28 @@ var
   Skip : Boolean       ;
 begin
   T:= LowerCase(AMsg);
+  { blank out %-specifiers and #NN control parts BEFORE the character sweep --
+    afterwards '%s' is already two spaces and an 's', indistinguishable from a
+    real word }
+  I:= 1;
+  while I <= Length(T) do
+  begin
+    if T[I] = '%' then
+    begin
+      T[I]:= ' '; Inc(I);
+      while (I <= Length(T)) and CharInSet(T[I], ['-', '.', '0'..'9', '*']) do
+      begin T[I]:= ' '; Inc(I); end;
+      if (I <= Length(T)) and CharInSet(T[I], ['a'..'z']) then
+      begin T[I]:= ' '; Inc(I); end;
+    end
+    else if T[I] = '#' then
+    begin
+      T[I]:= ' '; Inc(I);
+      while (I <= Length(T)) and CharInSet(T[I], ['0'..'9']) do
+      begin T[I]:= ' '; Inc(I); end;
+    end
+    else Inc(I);
+  end;
   for I:= 1 to Length(T) do
     if not CharInSet(T[I], ['a'..'z', '0'..'9']) then T[I]:= ' ';
   Parts:= T.Split([' '], TStringSplitOptions.ExcludeEmpty);
@@ -1011,6 +1057,7 @@ begin
             Site.Line    := Integer(ANode.StartPoint.row   ) + 1;
             Site.Col     := Integer(ANode.StartPoint.column) + 1;
             Site.Msg     := Msg;
+            Site.Raw     := UnquotePascalString(FirstLiteralString(Args));
             FExcSites:= FExcSites + [Site];
           end
           else if Msg <> '' then
@@ -1029,20 +1076,43 @@ end;
 
 procedure TLinter.EnrichExceptionFindings(var AFindings: TArray<TLintFinding>);
 var
-  I, J, K: Integer;
-  Key, Cls: string;
+  I, J, K  : Integer       ;
+  Key, Cls : string        ;
+  Raw      : string        ;
+  Gen      : string        ;
+  Taken    : TArray<string>;
+  Assigned : TDictionary<string, string>;
 begin
   if FExcUnit = '' then Exit;
+  { Names already spoken for. Seeded with every exception class the harvest
+    found, so a generated name can never shadow one that already exists, and
+    grown as names are handed out so two messages in one run cannot collide. }
+  SetLength(Taken, 0);
+  for K:= 0 to High(FExcCand) do
+    if FExcCand[K].ClsName <> '' then Taken:= Taken + [FExcCand[K].ClsName];
+  { KEY -> the name already handed out for it. Without this the SAME message
+    at N sites gets N DIFFERENT names: the corpus run produced
+    EPlanSetOnHUBScreen10 and ESublotTablePointingToWrongRecord10 because
+    those messages are raised from ten places each, and every repeat
+    collided with the name given to the previous one. A numeric suffix must
+    separate DIFFERENT messages that collide on a name, never the same
+    message from itself -- one message is one class, which is the entire
+    premise of the feature. Not reachable by the fixture, which has eight
+    distinct messages and no repeats; only the corpus showed it. }
+  Assigned:= TDictionary<string, string>.Create;
+  try
   for I:= 0 to High(AFindings) do
   begin
     if AFindings[I].RuleId <> 'raise-bare-exception' then Continue;
     Key:= '';
+    Raw:= '';
     for J:= 0 to High(FExcSites) do
       if (FExcSites[J].Line = AFindings[I].StartLine) and
          (FExcSites[J].Col  = AFindings[I].StartCol ) and
          SameText(FExcSites[J].FilePath, AFindings[I].FilePath) then
       begin
         Key:= FExcSites[J].Msg;
+        Raw:= FExcSites[J].Raw;
         Break;
       end;
     Cls:= '';
@@ -1053,8 +1123,38 @@ begin
       AFindings[I].Message:= AFindings[I].Message +
         Format(' %s already covers this message -- raise it instead.', [Cls])
     else
-      AFindings[I].Message:= AFindings[I].Message +
-        Format(' No existing exception class covers this message -- add one to %s.', [FExcUnit]);
+    begin
+      { STAGE 3: name the class that WOULD be generated, rather than telling the
+        reader to invent one. "add one to X" is advice they still have to do the
+        hard part of; a name they can paste is advice they can act on, which is
+        this rule's whole reason for existing.
+
+        Gen is '' when the message has no nameable words -- a bare variable, or
+        a pure control string. Such a site is SKIPPED BY THE NAMER, NOT BY THE
+        RULE: the finding still fires, it just falls back to the old text.
+        Inventing EDontKnow for a contentless message would be the same failure
+        this rule was written to fix, wearing a class name. }
+      if not Assigned.TryGetValue(Key, Gen) then
+      begin
+        Gen:= UniqueExceptionClassName(DeriveExceptionClassName(Raw), Taken);
+        if Gen <> '' then
+        begin
+          Taken:= Taken + [Gen];
+          Assigned.Add(Key, Gen);
+        end;
+      end;
+      if Gen <> '' then
+      begin
+        AFindings[I].Message:= AFindings[I].Message +
+          Format(' No existing exception class covers this message -- add %s to %s.', [Gen, FExcUnit]);
+      end
+      else
+        AFindings[I].Message:= AFindings[I].Message +
+          Format(' No existing exception class covers this message -- add one to %s.', [FExcUnit]);
+    end;
+  end;
+  finally
+    Assigned.Free;
   end;
 end;
 

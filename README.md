@@ -796,10 +796,15 @@ Party > drag-lint, each backed by `INTAAddInOptions`. **All plugin settings
 value, click OK, and the next hover / lint / index action picks it up (no IDE
 restart needed). Reopen them anytime via **drag-lint > drag-lint Options...**.
 `drag-lint-lint.json` also accepts `"exceptions": { "unit": "MyApp.Exceptions" }`.
-With it set, `raise-bare-exception` names the existing exception class whose
-message already covers each bare `raise Exception.Create(...)` -- matched on the
-normalized message text, so `'Invoice not found'` and `'Invoice was not found'`
-resolve to the same class -- or says none exists. Omit it and the rule's output
+The `unit` key is optional and defaults to `uExceptionDefinitions`, so
+`"exceptions": { }` is enough to turn the feature on; omitting the BLOCK is what
+leaves it off. With it set, `raise-bare-exception` names the existing exception
+class whose message already covers each bare `raise Exception.Create(...)` --
+matched on the normalized message text, so `'Invoice not found'` and
+`'Invoice was not found'` resolve to the same class -- or, when none exists,
+derives and names the class that SHOULD be added (`EInvoiceNotFound`), so the
+advice is something you can paste rather than something you still have to invent.
+Omit it and the rule's output
 is unchanged.
 
 Per-project lint rules (`drag-lint-lint.json`) are edited from the drag-lint

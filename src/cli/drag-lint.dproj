@@ -131,6 +131,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.Baseline.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.QueryRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Linter.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.ExceptionNaming.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.Parse.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>

@@ -87,6 +87,7 @@ uses
   DRagLint.Lint.Baseline in '..\lint\DRagLint.Lint.Baseline.pas',
   DRagLint.Lint.QueryRules in '..\lint\DRagLint.Lint.QueryRules.pas',
   DRagLint.Lint.Linter in '..\lint\DRagLint.Lint.Linter.pas',
+  DRagLint.Lint.ExceptionNaming in '..\lint\DRagLint.Lint.ExceptionNaming.pas',
   DRagLint.Lint.ProjectChecks in '..\lint\DRagLint.Lint.ProjectChecks.pas',
   DRagLint.Lint.ProjectChecks.Parse in '..\lint\DRagLint.Lint.ProjectChecks.Parse.pas',
   DRagLint.Lint.ProjectRules in '..\lint\DRagLint.Lint.ProjectRules.pas',

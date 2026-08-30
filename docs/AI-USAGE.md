@@ -632,9 +632,27 @@ stops saying *"raise a specific subclass"* and starts naming **which** one:
 { "exceptions": { "unit": "MyApp.Exceptions" } }
 ```
 
+The `unit` key is **optional** -- it defaults to `uExceptionDefinitions`, so
+`{ "exceptions": { } }` turns the feature on. Omitting the **block** is the off
+switch, and that asymmetry is deliberate: the enrichment costs an extra AST walk
+per linted file, so a project that never opted in must pay nothing.
+
 Each finding then reports either `EInvoiceNotFound already covers this message
--- raise it instead.` or `No existing exception class covers this message -- add
-one to MyApp.Exceptions.`
+-- raise it instead.` or, when nothing covers it, the class that SHOULD exist:
+`No existing exception class covers this message -- add EDiskQuotaExceeded to
+MyApp.Exceptions.`
+
+The generated name is derived from the message text and is **stable**: the same
+message always yields the same name, and one message is one class no matter how
+many sites raise it. Two DIFFERENT messages that would collide on a name are
+separated by a numeric suffix. Runtime data never reaches a name -- format
+specifiers and control-string parts are stripped -- and a leading
+`TSomeClass.SomeMethod:` or `TSomeClass.SomeMethod ERROR` context prefix is
+dropped, so a message that names its own call site does not put the whole call
+path in the type name. A message with no nameable words (a bare variable, or a
+pure control string) is **skipped by the namer, not by the rule**: the finding
+still fires with the plain text, because inventing a name for a contentless
+message would be the same unactionable advice this rule exists to fix.
 
 A class's "message" is the literal at its own `raise` sites -- a declaration
 carries no message -- and matching is **normalized** (casing, punctuation and a
