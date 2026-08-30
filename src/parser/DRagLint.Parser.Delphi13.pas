@@ -392,6 +392,37 @@ procedure EmitExpressionIdentReads(const ANode: TTSNode; const AState: TWalkStat
     if (not N.IsNull) and (N.NodeType = 'identifier') then AState.EmitRef('read', NodeText(N, AState.Source), N);
   end;
 
+  { `with A, B do` is ONE node carrying REPEATED `entity:` fields, and
+    ChildByField returns the FIRST match only -- so entities 2..n were dropped.
+    Measured on a fixture against the 1.8.0-alpha build: `with A, B do` emitted
+    a ref for A and none for B.
+
+    WHY NOT ASK FOR THE FIELD NAME PER CHILD: the Delphi wrapper does not bind
+    ts_node_field_name_for_child (it appears only inside a comment in
+    TreeSitterLib.pas), so the repeated fields are not addressable by name. Ask
+    the grammar's SHAPE instead. Every entity precedes `kDo`, and the body after
+    it is always wrapped in a node of its own -- even a bare parameterless call
+    is `body: (statement (identifier))`, never a direct identifier child -- so
+    stopping at `kDo` cannot reach anything but entities.
+
+    ONLY A BARE IDENTIFIER WAS EVER LOST. A non-identifier entity such as
+    `with A, TFoo(FList[0]) do` is its own node and ordinary Walk recursion
+    already reaches it; that is pinned as a GREEN control in
+    testsutotestun_with_and_external_refs.ps1, so a "helpful" widening here
+    that emitted it a second time would fail there rather than pass quietly. }
+  procedure ReadWithEntities;
+  var
+    i: Integer;
+    C: TTSNode;
+  begin
+    for i:= 0 to ANode.ChildCount - 1 do
+    begin
+      C:= ANode.Child(i);
+      if C.NodeType = 'kDo' then Break;
+      if C.NodeType = 'identifier' then AState.EmitRef('read', NodeText(C, AState.Source), C);
+    end;
+  end;
+
   { For the slots the grammar leaves UNNAMED -- a case selector, a parenthesised
     or bracketed expression, a case label -- where there is no field to ask for. }
   procedure ReadAllDirectIdents;
@@ -425,12 +456,22 @@ begin
   end
   else if NT = 'exprSubscript' then ReadField('entity')    // A[i]  -- args recurse as exprArgs
   else if (NT = 'if') or (NT = 'while') or (NT = 'repeat') then ReadField('condition')
-  else if NT = 'with'    then ReadField('entity')
+  else if NT = 'with'    then ReadWithEntities            // ALL entity slots, not just the first
   else if NT = 'foreach' then ReadField('iterable')        // `for X in Coll` -- Coll only;
                                                            // the iterator is written, not read
   else if NT = 'raise'   then ReadField('exception')
   else if NT = 'for'     then ReadField('end')             // the bound; `start` is an assignment
-  else if (NT = 'exprParens') or (NT = 'exprBrackets') or (NT = 'case') or (NT = 'caseLabel') then
+  { `procExternal` is the `external <libexpr> [name <expr>]` directive, and its
+    shape is (dumptree) `(procExternal (kExternal) (identifier) (kName)
+    (identifier))` -- BOTH expressions are UNNAMED POSITIONAL children, so there
+    is no field to ask for and ReadAllDirectIdents is exactly the right tool: it
+    keeps identifiers and skips the kExternal/kName keyword nodes. The string
+    form `(procExternal (kExternal) (literalString))` correctly yields nothing.
+    Live case this was costing: CLIENT\BASICSF.pas:65 `external user32` had zero
+    ref rows while the lines around it carried type_use refs, which made
+    BASICSF -> BASICS look like a globals-only uses edge. }
+  else if (NT = 'exprParens') or (NT = 'exprBrackets') or (NT = 'case') or (NT = 'caseLabel')
+       or (NT = 'procExternal') then
     ReadAllDirectIdents;
 end; // procedure
 

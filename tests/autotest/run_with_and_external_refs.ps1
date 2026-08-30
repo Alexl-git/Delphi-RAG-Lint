@@ -90,6 +90,7 @@ implementation
 var
   EntityOne       : TBoxA;
   EntityTwo       : TBoxB;
+  SlotTwoOnly     : TBoxB;
   HolderArr       : array [0..3] of Integer;
   PlainGlobal     : Integer;
   DeadBranchGlobal: Integer;
@@ -104,7 +105,7 @@ procedure Drive;
 var
   L: Integer;
 begin
-  with EntityOne, EntityTwo do
+  with EntityOne, SlotTwoOnly do
     L:= AlphaA + BetaB;
   with EntityOne do
     L:= AlphaA;

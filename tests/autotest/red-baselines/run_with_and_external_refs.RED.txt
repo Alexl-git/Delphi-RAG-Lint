@@ -1,5 +1,17 @@
-RED baseline recorded against extractor 1.8.0-alpha (the UNFIXED build).
-Expected: 3 FAIL (the hazards), all controls PASS.
+RED baseline, re-recorded by RUNNING THE SNAPSHOT ENGINE (extractor 1.8.0-alpha)
+rather than by running before the fix. Same fixture, both engines:
+    1.8.0-alpha -> 3 FAIL (A1 slot 2, A2 name-expr, A2 libexpr), controls PASS
+    1.9.0-alpha -> all 16 PASS
+That pairing is the positive control, and it is why this file was regenerated.
+
+THE FIRST VERSION OF THIS BASELINE WAS PARTLY BOGUS. A patch to the runner
+half-applied -- single-line replacements landed, the two MULTI-LINE ones did
+not, because the pattern used 
+ against a CRLF file. The fixture therefore
+never declared SlotTwoOnly at all, so the A1 assertion read 0 no matter what
+the parser did: an assertion that cannot pass is not a test, and it was RED
+for the wrong reason. Verify a patch by grepping the RESULT, not by trusting
+the script's exit code.
 
 A1 -- with entity slots
   [FAIL] HAZARD: bare identifier in entity slot 2 is recorded refs=0  -- SlotTwoOnly appears ONLY in the entity-2 slot
