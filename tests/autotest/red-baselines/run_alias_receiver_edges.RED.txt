@@ -1,0 +1,27 @@
+RED baseline recorded against extractor 1.8.0-alpha (the UNFIXED build).
+Expected: 5 FAIL (2 call_edges + 3 type_ancestors), controls PASS.
+CAVEAT, stated so it is not misread later: the IMPOSTOR guard passes today
+vacuously -- nothing resolves at all, so nothing can resolve WRONGLY. It only
+becomes load-bearing once the fix makes edges appear. Same for find-callers,
+which matches by NAME and is already green; neither is evidence of a fix.
+
+call_edges
+  [FAIL] HAZARD: alias-typed receiver resolves to the base method edges=0
+  [FAIL] HAZARD: and it resolves with confidence certain confidence=
+  [PASS] CONTROL: inheritance-typed receiver resolves edges=1  -- green TODAY; breaking this is a restructure, not a fix
+  [PASS] CONTROL: and with confidence certain confidence=certain
+  [PASS] CONTROL: a direct call on an unrelated class resolves edges=1
+
+IMPOSTOR GUARD -- a fix must not resolve by name alone
+  [PASS] the alias-typed call does NOT bind the impostor Ping edges=0
+
+type_ancestors shape
+  [FAIL] HAZARD: the alias has exactly ONE ancestor row rows=0
+  [FAIL] HAZARD: at ordinal 0 ordinal=-1
+  [FAIL] HAZARD: naming the alias target ancestor_name=
+  [PASS] CONTROL: a real descendant still has its row rows=1  -- alias rows must be purely ADDITIVE
+
+find-callers (user-facing; a NAME match, not a resolution)
+  [PASS] find-callers Ping lists the alias-typed site 
+
+FAIL

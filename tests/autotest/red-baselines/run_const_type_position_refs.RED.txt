@@ -1,0 +1,34 @@
+RED baseline recorded against extractor 1.8.0-alpha (the UNFIXED build).
+Expected: 12 FAIL (8 B1 hazards + 4 B2 hazards), 8 controls PASS.
+
+B1 -- a const in a TYPE POSITION emits a read
+  [FAIL] HAZARD: array bound in a type decl refs=0
+  [FAIL] HAZARD: array bound in a RECORD field refs=0
+  [FAIL] HAZARD: array bound in a CLASS field refs=0
+  [FAIL] HAZARD: array bound in a typed var refs=0
+  [FAIL] HAZARD: string [N] length refs=0
+  [FAIL] HAZARD: subrange bound refs=0
+  [FAIL] HAZARD: expression bound, lhs refs=0
+  [FAIL] HAZARD: expression bound, rhs refs=0
+
+B1 controls -- these are GREEN today and must stay green
+  [PASS] CONTROL: const in another const initialiser refs=1
+  [PASS] CONTROL: ordinary expression read refs=1
+  [PASS] CONTROL: case label refs=1
+
+B2 -- an array element/index TYPE emits a type_use
+  [FAIL] HAZARD: element type under declType refs=0
+  [FAIL] HAZARD: element type under declVar refs=0
+  [FAIL] HAZARD: array INDEX type name refs=0
+  [FAIL] the new element-type ref is a type_use type_use refs=0
+
+B2 DOUBLE-EMIT guard -- fields already emit; they must not emit twice
+  [PASS] CONTROL: element type under a record FIELD is emitted refs=1
+  [PASS] and is emitted EXACTLY ONCE refs=1, a 2 here is the register-E1 duplicate-span shape
+
+The call universe was not widened (T3i)
+  [PASS] a type-position const read is kind=read call refs=0
+  [PASS] a string [N] length is not a call site call refs=0
+  [PASS] an element type is not a call site call refs=0
+
+FAIL

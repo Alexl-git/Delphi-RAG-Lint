@@ -1,0 +1,27 @@
+RED baseline recorded against extractor 1.8.0-alpha (the UNFIXED build).
+Expected: 3 FAIL (the hazards), all controls PASS.
+
+A1 -- with entity slots
+  [FAIL] HAZARD: bare identifier in entity slot 2 is recorded refs=0  -- SlotTwoOnly appears ONLY in the entity-2 slot
+  [PASS] CONTROL: that name IS otherwise reachable (EntityTwo, read in MakeBox) refs=1
+  [PASS] CONTROL: entity slot 1 is recorded refs=3
+  [PASS] CONTROL: entity slot 1 is not DOUBLE-emitted refs=3, expected exactly 3 (three with-statements name it)
+  [PASS] CONTROL: subscript entity in slot 2 already recurses refs=1  -- green TODAY; pins the measured recursion claim
+  [PASS] CONTROL: call entity in slot 1 already recurses refs=1
+  [PASS] CONTROL: a global read outside any with is recorded refs=1
+
+A2 -- the external directive
+  [FAIL] HAZARD: the name-expression const is recorded refs=0  -- ExtProcName appears NOWHERE else, so 0 means unwalked
+  [FAIL] HAZARD: the library-expression const is recorded refs=1  -- 1 is the ordinary Length() read alone; the external site is the 2nd
+  [PASS] CONTROL: the same const read normally IS recorded refs=1
+
+The call universe was not widened (T3i)
+  [PASS] external libexpr const is not a call site call refs=0
+  [PASS] external name const is not a call site call refs=0
+  [PASS] a with-entity is not a call site call refs=0
+
+Dead-IFDEF pin (this batch must not "fix" blanked branches)
+  [PASS] an identifier in a never-taken branch yields NO ref refs=0
+  [PASS] CONTROL: the same shape in the TAKEN branch fires refs=1
+
+FAIL
