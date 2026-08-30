@@ -1,5 +1,10 @@
-RED baseline recorded against extractor 1.8.0-alpha (the UNFIXED build).
-Expected: 12 FAIL (8 B1 hazards + 4 B2 hazards), 8 controls PASS.
+RED baseline, recorded by RUNNING THE SNAPSHOT ENGINE (extractor 1.8.0-alpha).
+Same fixture, both engines:
+    1.8.0-alpha -> 12 FAIL (8 B1 hazards + 4 B2 hazards), 8 controls PASS
+    1.9.0-alpha -> all 20 PASS
+The load-bearing control is TElemField == 1 (not >= 1): record/class fields
+already emitted their element type, so a recursion applied too broadly would
+emit a SECOND type_use at an identical span -- the register-E1 shape.
 
 B1 -- a const in a TYPE POSITION emits a read
   [FAIL] HAZARD: array bound in a type decl refs=0

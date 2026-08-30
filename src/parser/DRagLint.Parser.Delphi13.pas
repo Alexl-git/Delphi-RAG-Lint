@@ -470,8 +470,21 @@ begin
     Live case this was costing: CLIENT\BASICSF.pas:65 `external user32` had zero
     ref rows while the lines around it carried type_use refs, which made
     BASICSF -> BASICS look like a globals-only uses edge. }
+  { TYPE POSITIONS (member B1). A const used in a type position emitted NOTHING,
+    so `usages` reported reads: 0 for a const that is very much in use. Measured
+    cost, once: Z14_MAXLotGroups was deleted from ORM3's Z19b5.pas on a clean
+    refs pre-check and the build broke E2003 plus two cascades. An index
+    answering "no rows" is not "no uses", and a DELETION gate is exactly where
+    that difference bites. Shapes, dumped before coding:
+        array bound / subrange via range   (range (literalNumber) (identifier))
+        string [N]                         (declString (kString) (identifier))
+        subrange type decl                 (subrangeType (identifier))
+    An EXPRESSION bound -- `array [1..CA*CB]` -- is (range .. (exprBinary ..)),
+    which needs nothing here: the exprBinary arm above already reads lhs/rhs once
+    Walk reaches it, which is what member B2's recursion arranges. }
   else if (NT = 'exprParens') or (NT = 'exprBrackets') or (NT = 'case') or (NT = 'caseLabel')
-       or (NT = 'procExternal') then
+       or (NT = 'procExternal')
+       or (NT = 'range') or (NT = 'declString') or (NT = 'subrangeType') then
     ReadAllDirectIdents;
 end; // procedure
 
@@ -1906,7 +1919,28 @@ begin
     { LAST. Everything above has declined, so this claims only shapes that
       produced NO row at all -- measured: a plain alias to a KEYWORD target
       (`= string`), a subrange, an array type and a set type. See its header. }
-    if TryWalkOtherTypeDecl(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
+    if TryWalkOtherTypeDecl(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then
+    begin
+      { MEMBER B2. Every handler above Exits, and this one did too, so the type
+        SUBTREE was never walked -- which is why `TArr = array [0..C] of TElem`
+        emitted neither a read for C nor a type_use for TElem, while the SAME
+        array written as a record/class FIELD emitted the element type (declField
+        recurses on purpose, see its own comment below).
+
+        WHY RECURSING HERE CANNOT DOUBLE-EMIT, and why it must stay scoped to
+        THIS handler: TryWalkOtherTypeDecl is the last-chance walker and claims,
+        by its own header, only "shapes that produced NO row at all" -- a plain
+        alias to a keyword target, a subrange, an array type, a set type. There
+        is nothing already emitted for it to duplicate. Recursing after
+        TryWalkClassOrRecord / TryWalkEnum / TryWalkAlias instead WOULD duplicate
+        what they emitted, at an identical span, which is the register-E1 shape
+        that once made every resolved call also look unverified. The runner's
+        TElemField assertion (exactly 1, not >= 1) is the guard on that. }
+      for i:= 0 to ANode.NamedChildCount - 1 do
+        if ANode.NamedChild(i).NodeType <> 'identifier' then   // skip the alias NAME
+          Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+      Exit;
+    end;
     // Nothing claimed it and it has no `type:` wrapper at all -- fall through
     // to the default recurse.
   end;
@@ -2031,7 +2065,20 @@ begin
     if not VTypeField.IsNull then
     begin
       var VTyperef:= FindNamedChildOfType(VTypeField, 'typeref');
-      if not VTyperef.IsNull then EmitTypeUseReference(VTyperef, AState);
+      if not VTyperef.IsNull then EmitTypeUseReference(VTyperef, AState)
+      else
+        { MEMBER B2, the declVar half. FindNamedChildOfType looks only at DIRECT
+          named children, so for `GArr: array [0..C] of TElem` it saw declArray,
+          found no typeref, and stopped -- leaving the element type AND the const
+          in the bound with no ref at all. Walk the subtree instead, which
+          reaches the nested typeref (type_use) and the range/declString/
+          subrangeType handlers (read).
+
+          The `else` is load-bearing: for a plain `X: TFoo` the branch above
+          already emitted, and walking as well would emit a SECOND type_use at
+          the identical span. }
+        for i:= 0 to VTypeField.NamedChildCount - 1 do
+          Walk(VTypeField.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     end;
     for i:= 0 to ANode.NamedChildCount - 1 do
     begin
@@ -2265,6 +2312,18 @@ begin
 
   // Type reference: emits a kind='type_use' reference and keeps walking
   // (typerefs can be nested in generic args).
+  { `array [TSomeEnum] of X` -- the INDEX type is a BARE identifier child of
+    declArray, not a typeref (dumped: `(declArray (kArray) (identifier) (kOf)
+    (type (typeref (identifier))))`), so no handler ever saw it. It names a TYPE,
+    so the kind is type_use and the emitter is EmitTypeExprRefs, NOT the 'read'
+    path B1 uses. `set of X` needs nothing -- its element already is a typeref.
+    Deliberately does NOT Exit: the range and the element type below it still
+    need the default recursion. }
+  if NodeType = 'declArray' then
+    for i:= 0 to ANode.NamedChildCount - 1 do
+      if ANode.NamedChild(i).NodeType = 'identifier' then
+        EmitTypeExprRefs(ANode.NamedChild(i), AState, 0);
+
   if NodeType = 'typeref' then
   begin
     EmitTypeUseReference(ANode, AState);
