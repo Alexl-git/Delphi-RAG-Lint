@@ -129,13 +129,59 @@ end;
 end.
 '@
 
+# global-only-uses-edge is the THIRD shape, added 2026-08-30, and it is the one
+# that most needed covering here: it is anchored at the READING unit, so unlike
+# doc-drift and unused-public-symbol the vendored file has to be the CONSUMER
+# for the exclusion to bite at all.
+Write-Ascii (Join-Path $app 'uGlob.pas') @'
+unit uGlob;
+interface
+var
+  gTheOnlyLink: Boolean;
+implementation
+end.
+'@
+
+Write-Ascii (Join-Path $vendor 'uVendorReader.pas') @'
+unit uVendorReader;
+interface
+uses uGlob;
+function VendorReads: Boolean;
+implementation
+function VendorReads: Boolean;
+begin
+  Result:= gTheOnlyLink;
+end;
+end.
+'@
+
+# The owned twin: identical shape, inside ownRoots and NOT excluded, so it is
+# the live control for the new rule specifically.
+Write-Ascii (Join-Path $app 'uAppReader.pas') @'
+unit uAppReader;
+interface
+uses uGlob;
+function AppReads: Boolean;
+implementation
+function AppReads: Boolean;
+begin
+  Result:= gTheOnlyLink;
+end;
+end.
+'@
+
 Write-Ascii (Join-Path $app 'App.dpr') @'
 program App;
 uses
   uApp in 'uApp.pas',
+  uGlob in 'uGlob.pas',
+  uAppReader in 'uAppReader.pas',
+  uVendorReader in '..\third_party\uVendorReader.pas',
   uVendor in '..\third_party\uVendor.pas';
 begin
   Writeln(AppDo('x'));
+  Writeln(AppReads);
+  Writeln(VendorReads);
 end.
 '@
 
@@ -145,8 +191,8 @@ end.
 Write-Ascii (Join-Path $drag 'drag-lint-project.json') '{ "ownRoots": [".."] }'
 $cfgOn  = Join-Path $repo 'drag-lint-lint.json'
 $cfgOff = Join-Path $repo 'drag-lint-lint-noexclude.json'
-Write-Ascii $cfgOn  '{ "exclude_paths": ["*\\third_party\\*"] }'
-Write-Ascii $cfgOff '{ "exclude_paths": [] }'
+Write-Ascii $cfgOn  '{ "exclude_paths": ["*\\third_party\\*"], "enabled": ["global-only-uses-edge"] }'
+Write-Ascii $cfgOff '{ "exclude_paths": [], "enabled": ["global-only-uses-edge"] }'
 
 $db    = Join-Path $drag 'app.sqlite'
 $proj  = Join-Path $app 'App.dpr'
@@ -200,6 +246,21 @@ Check 'no finding is reported against an excluded path' `
 Check 'the run still says what it skipped' `
   ($oOn -match 'skipped by exclude_paths') `
   (($oOn -split "`r?`n" | Where-Object { $_ -match 'exclude_paths' } | Select-Object -First 1))
+
+Write-Host ''
+Write-Host 'BY NAME: global-only-uses-edge obeys the same filter' -ForegroundColor Cyan
+# Named explicitly rather than left to the generic counts above. A project-wide
+# rule added later inherits this filter only because the pass is generic -- but
+# nothing PROVES it for a given rule until that rule is asserted by id, and
+# project-wide rules bypassed this filter entirely until 59612f1.
+Check 'POSITIVE CONTROL: the vendored reader reports it when NOT excluded' `
+  (@(Vendor-Findings $outOff | Where-Object { $_ -match 'global-only-uses-edge' }).Count -gt 0) `
+  'if this is 0 the assertion below proves nothing'
+Check 'no global-only-uses-edge survives against an excluded path' `
+  (@(Vendor-Findings $outOn | Where-Object { $_ -match 'global-only-uses-edge' }).Count -eq 0)
+Check 'LIVE CONTROL: the owned reader still reports it in the same run' `
+  (@(Get-Content $outOn | Where-Object { $_ -match 'uAppReader' -and $_ -match 'global-only-uses-edge' }).Count -gt 0) `
+  'otherwise the rule was simply off and the check above is empty'
 
 Write-Host ''
 Write-Host 'LIVE CONTROL: the owned file is still reported in the SAME run' -ForegroundColor Cyan

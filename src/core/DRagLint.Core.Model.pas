@@ -603,6 +603,20 @@ type
     EndCol   : Integer        ;
   end;
 
+  // One 'global-only' uses edge: ReaderFileId depends on DeclFileId for
+  // NOTHING but the named interface-section global variable(s), so injecting
+  // or relocating them deletes the edge. Produced by
+  // ISymbolStore.FindGlobalOnlyUsesEdges; consumed by global-only-uses-edge.
+  // GlobalNames arrives comma-separated and in UNSPECIFIED order (SQLite's
+  // GROUP_CONCAT gives no ordering guarantee) -- the rule sorts before it
+  // renders, because an unstable message is an unstable diff.
+  TGlobalOnlyEdge = record
+    ReaderFileId: Int64  ;
+    DeclFileId  : Int64  ;
+    GlobalNames : string ;
+    GlobalCount : Integer;
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), declaration (DRagLint.Hover.Renderer.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), declaration (DRagLint.Core.Interfaces.pas) (+28 more)</para>

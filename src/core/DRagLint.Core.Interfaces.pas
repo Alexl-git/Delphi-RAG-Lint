@@ -767,6 +767,22 @@ type
     /// </remarks>
     function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
     function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
+    /// <summary>Unit pairs whose ONLY dependency link is one or more interface-section
+    /// global variables -- injecting or relocating them deletes the uses edge.</summary>
+    /// <returns>One row per (reader, declarer) pair; empty when none or on a pre-v13 DB.</returns>
+    /// <remarks>
+    /// The approved di-globals shape (owner ruling 2026-08-30). NOT 'flag global reads',
+    /// which was refuted at 1,987 client / 745 server reads; this asks the narrower
+    /// decoupling question and measures 8 / 29 / 0 on ORM3 server / client / this repo.
+    /// Reference rows carry symbol_id NULL, so the join is BY NAME. Two mitigations keep
+    /// that honest, both biased to UNDER-count: a name declared in more than one file is
+    /// discarded as ambiguous rather than guessed at, and a name the reading unit also
+    /// declares is discarded because it would shadow. A pair must additionally exist in
+    /// unit_uses, so the rule can never advise deleting an edge that is not there.
+    /// Sub-second on a 144 MB index (measured 0.92 s), but it is a full refs scan --
+    /// call it only when the rule is actually enabled.
+    /// </remarks>
+    function FindGlobalOnlyUsesEdges: TArray<TGlobalOnlyEdge>;
     /// <summary>The GUI framework this index's own code actually writes in its
     /// `uses` clauses -- the leading namespace segment ('Vcl' or 'FMX', the
     /// pair being DRagLint.Core.Model.IsGuiFrameworkPrefix's to name), or ''

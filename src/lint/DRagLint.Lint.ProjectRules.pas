@@ -12,6 +12,7 @@ interface
 uses
   System.SysUtils
   , System.Classes
+  , System.StrUtils { StartsText / ContainsText -- the .dfm text scan in global-only-uses-edge }
   , System.IOUtils
   , System.JSON
   , System.Diagnostics { TStopwatch -- DRAGLINT_PROFILE per-rule attribution in Run }
@@ -83,7 +84,8 @@ type
     /// </remarks>
     class function Run(const AStore: ISymbolStore; const ARuleId: string = '';
                        const ASiblingStore: TSiblingStoreResolver = nil;
-                       const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
+                       const ALibraryStore: ISymbolStore = nil;
+                       const AOptInRules: TArray<string> = nil): TArray<TLintFinding>;
     /// <summary>Flags forbidden cross-layer 'uses' edges per a layer-config JSON file.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
     /// <param name="AConfigPath">Path to a layers JSON file (see remarks); missing/invalid -> no findings.</param>
@@ -477,6 +479,237 @@ begin
   end;
 end; // function
 
+/// <summary>Flags a unit pair whose ONLY dependency link is one or more
+/// interface-section global variables -- injecting or RELOCATING them deletes
+/// the uses edge.</summary>
+/// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
+/// <returns>'global-only-uses-edge' findings, one per (reader, declarer) pair,
+/// ordered by how few globals carry the edge (one is the strongest); empty if none.</returns>
+/// <remarks>
+/// The approved di-globals shape (owner ruling 2026-08-30). The rejected shape was
+/// "flag global reads", refuted on measurement at 1,987 reads on ORM3 client and 745
+/// on server -- a census, not a defect report. This asks the narrower decoupling
+/// question and measures 8 pairs on ORM3 server, 29 on client, 0 on this repo, with
+/// 24 of the 37 carried by a SINGLE global. Specification:
+/// docs\probe-di-globals-uses-edges.py.
+///
+/// THE ADVICE SAYS "INJECT OR RELOCATE" AND THAT WORDING IS LOAD-BEARING. The
+/// strongest measured case is uStyles.SkipRefresh: twelve units depend on a
+/// 1,139-line unit for one Boolean. The cure is to MOVE the variable to a small
+/// unit; telling that author to wire up a container would be worse advice than
+/// saying nothing.
+///
+/// Severity stays 'info' even when nothing demotes it: this is a design opinion
+/// about coupling, not a defect, and the reader may have reasons the index cannot
+/// see. The DFM check below is one such reason made visible.
+/// Never raises. The heavy lifting is one SQL statement -- see
+/// ISymbolStore.FindGlobalOnlyUsesEdges.
+/// </remarks>
+function CollectGlobalOnlyUsesEdges(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>;
+
+  { The declaring unit's DFM ROOT OBJECT name ('dmStyles' for uStyles.dfm), or ''
+    when the unit has no .dfm. Read from the FILE, not the index, and that is a
+    deliberate choice rather than an oversight: measured 2026-08-30, DFM
+    references in the index are event-bindings only -- 1,154 rows on ORM3 client,
+    ZERO of which name dmStyles -- while the DFM TEXT carries the cross-form
+    component links in 18 of that project's .dfm files. Asking the index here
+    would return "no link" for every case this check exists to catch. }
+  function DfmRootObject(const AUnitPath: string): string;
+  var
+    Dfm, Line: string;
+    SL       : TStringList;
+    I, C     : Integer;
+  begin
+    Result:= '';
+    Dfm:= ChangeFileExt(AUnitPath, '.dfm');
+    if not TFile.Exists(Dfm) then Exit;
+    SL:= TStringList.Create;
+    try
+      try
+        SL.LoadFromFile(Dfm);
+      except
+        { A .dfm that cannot be read demotes nothing. Silently: this runs on a
+          handful of findings and a read error here is not the user's question. }
+        Exit;
+      end;
+      for I:= 0 to SL.Count - 1 do
+      begin
+        Line:= Trim(SL[I]);
+        if not StartsText('object ', Line) then Continue;
+        Line:= Trim(Copy(Line, 8, MaxInt));
+        C:= Pos(':', Line);
+        if C > 1 then Result:= Trim(Copy(Line, 1, C - 1));
+        Exit; { the ROOT object is the first one; nested objects are components }
+      end;
+    finally
+      SL.Free;
+    end;
+  end;
+
+  { True when the reading unit's own .dfm names the declaring unit's root object,
+    i.e. the two forms are wired together AT DESIGN TIME and breaking the uses
+    edge in code would not actually break the dependency -- the DFM re-creates it.
+    Matches '<Root>.' so that a component reference (dmStyles.styLabel11Normal)
+    counts and the bare word in a caption does not. }
+  function DfmReferencesRoot(const AReaderPath, ARoot: string): Boolean;
+  var
+    Dfm, Txt: string;
+  begin
+    Result:= False;
+    if ARoot = '' then Exit;
+    Dfm:= ChangeFileExt(AReaderPath, '.dfm');
+    if not TFile.Exists(Dfm) then Exit;
+    try
+      Txt:= TFile.ReadAllText(Dfm);
+    except
+      Exit;
+    end;
+    Result:= ContainsText(Txt, ARoot + '.');
+  end;
+
+  { The unit's own declared name ('uStyles'), falling back to the file stem when
+    the unit symbol is missing -- a .dpr has no unit symbol and DOES appear as a
+    reader (Micronite2027.dpr -> BASICS.PAS is one of the measured pairs). }
+  function UnitNameOf(const APath: string): string;
+  var
+    S: TSymbol;
+  begin
+    for S in AStore.FindSymbolsByFile(APath) do
+      if S.Kind = skUnit then
+      begin
+        Result:= S.QualifiedName;
+        if Result = '' then Result:= S.Name;
+        if Result <> '' then Exit;
+      end;
+    Result:= TPath.GetFileNameWithoutExtension(APath);
+  end;
+
+  { Anchor the finding at the `uses` entry that names the declaring unit, not at
+    line 1 of the reader. The edge IS that line -- it is what the reader deletes
+    when they act on the advice -- so pointing anywhere else makes the finding
+    harder to act on than the grep it replaces. Falls back to 1:1. }
+  procedure AnchorAtUses(const AReaderFid: Int64; const ADeclUnit: string;
+                         var ALine, ACol: Integer);
+  var
+    U   : TUnitUse;
+    Stem: string  ;
+  begin
+    ALine:= 1; ACol:= 1;
+    Stem:= LowerCase(ADeclUnit);
+    if LastDelimiter('.', Stem) > 0 then
+      Stem:= Copy(Stem, LastDelimiter('.', Stem) + 1, MaxInt);
+    for U in AStore.GetUnitUsesForFile(AReaderFid) do
+    begin
+      var N: string:= LowerCase(U.UnitName);
+      if LastDelimiter('.', N) > 0 then N:= Copy(N, LastDelimiter('.', N) + 1, MaxInt);
+      if N = Stem then
+      begin
+        ALine:= U.StartLine; ACol:= U.StartCol;
+        Exit;
+      end;
+    end;
+  end;
+
+  { SQLite's GROUP_CONCAT gives NO ordering guarantee, so the names arrive in
+    whatever order the aggregate happened to visit. Rendering that straight into
+    the message makes the same finding differ between runs, which turns a report
+    diff into noise and a golden file into a coin flip. }
+  function SortedNames(const ACsv: string): string;
+  var
+    SL: TStringList;
+  begin
+    SL:= TStringList.Create;
+    try
+      SL.CaseSensitive:= False;
+      SL.Delimiter    := ',';
+      SL.StrictDelimiter:= True;
+      SL.DelimitedText:= ACsv;
+      SL.Sort;
+      Result:= '';
+      for var I: Integer:= 0 to SL.Count - 1 do
+      begin
+        if Trim(SL[I]) = '' then Continue;
+        if Result <> '' then Result:= Result + ', ';
+        Result:= Result + Trim(SL[I]);
+      end;
+    finally
+      SL.Free;
+    end;
+  end;
+
+var
+  E             : TGlobalOnlyEdge;
+  ReaderPath    : string         ;
+  DeclPath      : string         ;
+  DeclUnit      : string         ;
+  ReaderUnit    : string         ;
+  Names         : string         ;
+  Root          : string         ;
+  Ln, Cl        : Integer        ;
+  F             : TLintFinding   ;
+  RootCache     : TDictionary<string, string>;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  Findings := TList<TLintFinding>.Create;
+  { One .dfm read per DECLARING unit, not per finding: the measured shape is
+    many readers of one declarer (24 of 37 pairs, and twelve of them uStyles). }
+  RootCache:= TDictionary<string, string>.Create;
+  try
+    for E in AStore.FindGlobalOnlyUsesEdges do
+    begin
+      ReaderPath:= AStore.GetFilePath(E.ReaderFileId);
+      DeclPath  := AStore.GetFilePath(E.DeclFileId  );
+      if (ReaderPath = '') or (DeclPath = '') then Continue;
+      ReaderUnit:= UnitNameOf(ReaderPath);
+      DeclUnit  := UnitNameOf(DeclPath  );
+      Names     := SortedNames(E.GlobalNames);
+      if Names = '' then Continue;
+
+      if not RootCache.TryGetValue(DeclPath, Root) then
+      begin
+        Root:= DfmRootObject(DeclPath);
+        RootCache.Add(DeclPath, Root);
+      end;
+
+      AnchorAtUses(E.ReaderFileId, DeclUnit, Ln, Cl);
+
+      F:= Default(TLintFinding);
+      F.RuleId  := 'global-only-uses-edge';
+      F.Severity:= 'info';
+      F.FilePath:= ReaderPath;
+      F.StartLine:= Ln; F.StartCol:= Cl;
+      F.EndLine  := Ln; F.EndCol  := Cl + Length(DeclUnit);
+      if E.GlobalCount = 1 then
+        F.Message:= Format(
+          '%s depends on %s for nothing but the global variable %s -- injecting or ' +
+          'relocating it deletes this uses edge',
+          [ReaderUnit, DeclUnit, Names])
+      else
+        F.Message:= Format(
+          '%s depends on %s for nothing but %d global variables (%s) -- injecting or ' +
+          'relocating them deletes this uses edge',
+          [ReaderUnit, DeclUnit, E.GlobalCount, Names]);
+      { The DEMOTION the note demands. Without it the rule tells the reader to
+        break a dependency their .dfm silently puts back at design time, and the
+        advice is not merely useless -- following it produces a unit that no
+        longer compiles once the form is opened in the IDE. }
+      if DfmReferencesRoot(ReaderPath, Root) then
+        F.Message:= F.Message +
+          Format(' (NOTE: %s references %s, so the DFM re-creates this dependency at ' +
+                 'design time -- the uses edge cannot simply be deleted)',
+                 [TPath.GetFileName(ChangeFileExt(ReaderPath, '.dfm')), Root]);
+      Findings.Add(F);
+    end;
+    Result:= Findings.ToArray;
+  finally
+    RootCache.Free;
+    Findings .Free;
+  end;
+end; // function
+
 /// <summary>Deliverable C (enum-helper-generator milestone): flags an enum `TX` whose
 /// `record helper for TX` / `class helper for TX` (via the first-class type_helpers
 /// edge, v15) is declared in a DIFFERENT unit than TX itself -- a co-location
@@ -781,7 +1014,8 @@ begin
 end; // function
 
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
-  const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore): TArray<TLintFinding>;
+  const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
+  const AOptInRules: TArray<string>): TArray<TLintFinding>;
 var
   Findings      : TList<TLintFinding>         ;
   FileIds       : TArray<Int64>               ;
@@ -821,6 +1055,7 @@ var
     against SQL queries that cost orders of magnitude more. }
   Prof          : Boolean;
   TCirc, TEnum, TRts, TUuiu, TGod, TUpub, TUpriv, TAccess, TOuter: Int64;
+  TGlob: Int64;
   { "Referenced at all?" as two sets, built with one scan each instead of two
     queries per symbol. See IsReferenced. }
   RefdIds       : TDictionary<Int64 , Boolean>;
@@ -829,6 +1064,22 @@ var
   function WantRule(const AId: string): Boolean;
   begin
     Result:= (ARuleId = '') or (ARuleId = AId);
+  end;
+
+  { Opt-in gate for a rule that is BOTH DefaultEnabled=False and expensive.
+    WantRule answers "did --rule ask for it"; this answers "did the config turn
+    it on". They are different questions and only the pair is safe. Without the
+    second one, EVERY default lint-all runs the rule and the config filter
+    downstream throws the findings away -- 0.92 s of full refs scan on ORM3
+    client, permanently invisible because the printed output stays correct.
+    An explicit `--rule <id>` counts as opting in: asking for a rule by name and
+    getting silence would be the worse failure. }
+  function OptedIn(const AId: string): Boolean;
+  begin
+    if ARuleId = AId then Exit(True);
+    for var S: string in AOptInRules do
+      if SameText(S, AId) then Exit(True);
+    Result:= False;
   end;
 
   { Not inlined: a nested routine that reads an outer-scope variable cannot be
@@ -1027,6 +1278,7 @@ begin
   RefdNames  := TDictionary<string, Boolean>      .Create;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
+  TGlob:= 0;
   try
     { Built only for the rules that need them -- on a large index these are two
       scans of the whole refs table, which is pure waste for a --rule run that
@@ -1042,6 +1294,13 @@ begin
     if WantRule('circular-uses') then
       for var Cf in CollectCircularUses(AStore) do Findings.Add(Cf);
     Inc(TCirc, Tick - T0); T0:= Tick;
+
+    { global-only-uses-edge: whole-refs-graph pass (not per-file), and the ONE
+      rule here that is gated on OptedIn as well as WantRule -- see the gate's
+      own comment for why both are needed. }
+    if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
+      for var Gf in CollectGlobalOnlyUsesEdges(AStore) do Findings.Add(Gf);
+    Inc(TGlob, Tick - T0); T0:= Tick;
 
     { enum-helper-separate-units (Task 7, enum-helper-generator milestone):
       whole-DB helper-edge pass (not per-file). ON by default -- do NOT add
@@ -1314,6 +1573,7 @@ begin
     begin
       Writeln(ErrOutput, '  PROJECT-RULES BREAKDOWN');
       ProfLine('circular-uses'             , TCirc  );
+      ProfLine('global-only-uses-edge'     , TGlob  );
       ProfLine('enum-helper-separate-units', TEnum  );
       ProfLine('repeated-type-switch'      , TRts   );
       ProfLine('unused-unit-in-uses'       , TUuiu  );

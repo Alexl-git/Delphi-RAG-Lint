@@ -1610,6 +1610,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
+      function FindGlobalOnlyUsesEdges: TArray<TGlobalOnlyEdge>;
       /// <summary><!-- drag-lint:auto -->A TIE RETURNS ''. Measured on the real consumers
       /// there is no tie to speak of (DataCopy 25 Vcl / 0 FMX, YADF 18 / 0), but a
       /// project that genuinely writes both has no single framework to prefer, and
@@ -8612,6 +8613,113 @@ begin
     end; // try
     Result:= List.ToArray;
   finally
+    List.Free;
+  end; // try
+end; // function
+
+{ The approved di-globals shape (owner ruling 2026-08-30). The interface doc
+  carries the definition and the two under-counting mitigations; what follows is
+  why this is ONE statement rather than four queries stitched together in Delphi.
+
+  The intermediate sets are large and only their JOIN is small: `decl` groups the
+  entire symbols table and `pr` is every cross-file name-resolved reference in the
+  index. Materialising either one in Delphi is a multi-million-row round trip to
+  answer a question whose answer is 8 rows. Timed at 0.48 s on a 58 MB index,
+  1.21 s on 144 MB and 0.27 s on this repo.
+
+  A .dfm DECLARES NOTHING, AND THAT EXCLUSION IS LOAD-BEARING -- DO NOT SIMPLIFY
+  THE files JOIN AWAY. Every published component of a form is indexed TWICE: as a
+  `field` in the .pas and as a `component` in the sibling .dfm, and the root object
+  as a `var` plus a `form`. Counting distinct FILES therefore marks every form
+  member ambiguous, and the ambiguity mitigation then DISCARDS it -- which does not
+  merely lose a name, it loses a SECOND LINK. Measured 2026-08-30 on ORM3 client:
+  without this clause, EIGHT forms that each execute
+  `cxGrid1DBTableView1.Styles.Header:= dmStyles.styGridHeaderBold` reported as
+  depending on uStyles for nothing but SkipRefresh. Acting on that advice deletes a
+  uses edge the next compile needs.
+
+  The probe this rule ports (docs\probe-di-globals-uses-edges.py) has the same
+  defect, so the numbers it was approved on were 29 on client where the truth is
+  21. Server (8) and the non-DI control (0) are unchanged, having no forms in play.
+
+  Excluding .dfm from the DECLARATION universe is true on its own terms rather than
+  a convenient patch: a .dfm restates what its .pas declares and never introduces a
+  name. The alternative -- keying declarations by UNIT (path minus extension) -- is
+  equivalent and was measured at OVER TEN MINUTES, because the string expression on
+  path defeats the index on refs.name_text.
+
+  It is still a full refs scan, so it is called only when the rule is enabled --
+  see TProjectLintRules.Run's opt-in gate. An off-by-default rule that costs a
+  second on every lint-all is a regression whether or not anyone reads its output. }
+function TSQLiteSymbolStore.FindGlobalOnlyUsesEdges: TArray<TGlobalOnlyEdge>;
+const
+  SQL =
+    'WITH decl AS (' +
+    '  SELECT LOWER(s.name) AS n, COUNT(DISTINCT s.file_id) AS nfiles, MIN(s.file_id) AS fid' +
+    '  FROM symbols s JOIN files f ON f.id = s.file_id' +
+    '  WHERE s.name IS NOT NULL AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''' +
+    '  GROUP BY LOWER(s.name)), ' +
+    'uniq AS (SELECT n, fid FROM decl WHERE nfiles = 1), ' +
+    'glob AS (' +
+    '  SELECT DISTINCT LOWER(s.name) AS n FROM symbols s' +
+    '  LEFT JOIN symbols p ON p.id = s.parent_id' +
+    '  WHERE s.kind = ''var'' AND s.section = ''interface'' AND s.name IS NOT NULL' +
+    '    AND (s.parent_id IS NULL OR p.kind IN (''unit'', ''program''))' +
+    '    AND LOWER(s.name) IN (SELECT n FROM uniq)), ' +
+    'pr AS (' +
+    '  SELECT r.file_id AS a, u.fid AS b, u.n AS n,' +
+    '         CASE WHEN u.n IN (SELECT n FROM glob) THEN 1 ELSE 0 END AS isglob' +
+    '  FROM refs r JOIN uniq u ON u.n = LOWER(r.name_text)' +
+    '  JOIN files f ON f.id = r.file_id' +
+    '  WHERE r.name_text IS NOT NULL AND u.fid <> r.file_id' +
+    '    AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''), ' +
+    'agg AS (' +
+    '  SELECT a, b, SUM(isglob) AS ng, SUM(1 - isglob) AS nother,' +
+    '         COUNT(DISTINCT CASE WHEN isglob = 1 THEN n END) AS ngn,' +
+    '         GROUP_CONCAT(DISTINCT CASE WHEN isglob = 1 THEN n END) AS names' +
+    '  FROM pr GROUP BY a, b) ' +
+    'SELECT a, b, ngn, names FROM agg ' +
+    'WHERE ng > 0 AND nother = 0 ' +
+    '  AND EXISTS (SELECT 1 FROM unit_uses uu' +
+    '              WHERE uu.file_id = agg.a AND uu.target_file_id = agg.b) ' +
+    'ORDER BY ngn, a, b';
+var
+  Q   : TFDQuery                ;
+  List: TList<TGlobalOnlyEdge>  ;
+  E   : TGlobalOnlyEdge         ;
+begin
+  Result:= nil;
+  List:= TList<TGlobalOnlyEdge>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := SQL;
+    try
+      Q.Open;
+    except
+      { An index predating unit_uses.target_file_id answers nothing rather than
+        taking lint-all down with it. That reports "no edges", which is
+        indistinguishable from a project that genuinely has none -- tolerable
+        ONLY because the rule is opt-in, so a silent empty result is read by
+        someone who deliberately asked the question and can re-index. }
+      Exit;
+    end;
+    try
+      while not Q.Eof do
+      begin
+        E.ReaderFileId:= Q.FieldByName('a'    ).AsLargeInt;
+        E.DeclFileId  := Q.FieldByName('b'    ).AsLargeInt;
+        E.GlobalCount := Q.FieldByName('ngn'  ).AsInteger ;
+        E.GlobalNames := Q.FieldByName('names').AsString  ;
+        List.Add(E);
+        Q.Next;
+      end;
+    finally
+      Q.Close;
+    end; // try
+    Result:= List.ToArray;
+  finally
+    Q.Free;
     List.Free;
   end; // try
 end; // function

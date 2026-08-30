@@ -600,7 +600,7 @@ begin
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
-  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch] [--layers <f.json>] [--json]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
@@ -13324,8 +13324,17 @@ begin
   var SibKeep : TList<ISymbolStore>:= TList<ISymbolStore>.Create;
   var SibOwned: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
   try
+    { Rules gated INSIDE Run rather than filtered after it. The list is
+      deliberately not "every off-by-default project rule": a rule earns a place
+      here only by being expensive enough that running-then-discarding is itself
+      the defect. global-only-uses-edge is a full refs scan (0.92 s on ORM3
+      client), and the post-hoc config filter downstream would have hidden that
+      cost perfectly -- the report stays correct, it just quietly costs a second. }
+    var OptIn: TArray<string>:= nil;
+    if Cfg.ShouldKeep('global-only-uses-edge', True) then
+      OptIn:= OptIn + ['global-only-uses-edge'];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
-      Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore);
+      Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
     { LibStore is the platform library index, already open above for the
       ownership/DCU checks. unused-unit-in-uses needs it because a PROJECT
       store cannot see System.IniFiles: without it the rule's own
@@ -13646,8 +13655,17 @@ begin
   var SibKeep2 : TList<ISymbolStore>:= TList<ISymbolStore>.Create;
   var SibOwned2: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
   try
+    { The same opt-in gate DoLintAll applies. `--rule <id>` already counts as
+      opting in (see OptedIn), so this only covers the no-rule run -- but if the
+      two entry points disagreed here, `lint-project` with a config that enables
+      the rule would silently report nothing, which is precisely the divergence
+      the sibling-resolver comment above exists to prevent. }
+    var OptIn2: TArray<string>:= nil;
+    if LoadLintConfig(AArgs).ShouldKeep('global-only-uses-edge', True) then
+      OptIn2:= OptIn2 + ['global-only-uses-edge'];
     Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
-      Store, AArgs.Rule, MakeSiblingStoreResolver(AArgs, SibKeep2, SibOwned2));
+      Store, AArgs.Rule, MakeSiblingStoreResolver(AArgs, SibKeep2, SibOwned2),
+      nil, OptIn2);
   finally
     SibKeep2 .Free;
     SibOwned2.Free;

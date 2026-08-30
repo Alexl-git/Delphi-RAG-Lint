@@ -348,6 +348,7 @@ begin
     B('layering-violation',    'project-wide', 'warning', 'Unit dependency crosses an architectural layer');
     B('interface-reference-cycle','project-wide','warning','Interface reference cycle (ARC leak)');
     B('circular-uses',         'project-wide', 'warning', 'Circular unit dependency (a uses-graph cycle among project units)');
+    B('global-only-uses-edge', 'project-wide', 'info',    'A global variable is the ONLY link from one unit to another -- injecting or relocating it deletes the uses edge', False); { OFF by default -- a design opinion about coupling, not a defect, and it is a full refs scan (0.92 s on a 144 MB index), so it is gated on OptedIn in TProjectLintRules.Run rather than merely filtered afterwards. Opt in via "enabled" }
     B('enum-helper-separate-units', 'project-wide', 'warning', 'Enum helper (record/class helper) is declared in a different unit than its target enum -- consider co-locating'); { ON by default (explicit user decision, enum-helper-generator milestone 2026-07-07) -- diverges from the recent OFF-by-default convention for advisory rules; whole-DB helper edge (type_helpers, v15) via ISymbolStore.FindHelpersOfTypeSymbol (symbol-identity match, Task 9b), no heritage string-parsing }
 
     { --- documentation (ADF milestone) --- }

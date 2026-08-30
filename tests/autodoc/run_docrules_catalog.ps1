@@ -128,11 +128,13 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # source that already carried a stacked pair. Hence a FILE-level scan, and hence a
 # fifth documentation-category rule rather than another doc-drift signal.
 # 2026-08-28: 119 -> 120 with the addition of stat-gated-destructive
+# 2026-08-30: 120 -> 121 with the addition of global-only-uses-edge (the
+#             approved di-globals shape; project-wide, info, OFF by default)
 # (INBOX-stat-gated-destructive-acts, a bug-patterns builtin). The count is
 # pinned deliberately -- a builtin appearing or vanishing unnoticed is exactly
 # what this line exists to catch -- so it is UPDATED with the change that moves
 # it, never relaxed to a range.
-Assert ("built-in rule count = 120 (118 + doc-orphan-block + stat-gated-destructive); got {0}" -f $builtins.Count) ($builtins.Count -eq 120)
+Assert ("built-in rule count = 121 (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge); got {0}" -f $builtins.Count) ($builtins.Count -eq 121)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)
