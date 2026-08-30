@@ -1750,14 +1750,38 @@ var
                     distinction the analysis actually computes. }
                   if CurMay[RIx] then
                   begin
-                    { A recognised witness-flag pairing drops ONE step, to info,
-                      and says which flag -- it is not suppressed, because the
-                      pairing cannot be proved (WitnessFlagForRead). The `must`
+                    { A recognised witness-flag pairing says POSSIBLE and names the
+                      flag. It is not suppressed, because the pairing cannot be
+                      PROVED (WitnessFlagForRead is a recogniser, not a proof --
+                      see its header for the three counter-examples). The `must`
                       arm below is untouched: tiering a CERTAIN unassigned read
-                      would be demoting knowledge, not uncertainty. }
+                      would be demoting knowledge, not uncertainty.
+
+                      OWNER RULING 2026-08-30, and it is what dissolved a real
+                      deadlock. The rule's author refused to WIDEN THE SUPPRESSION,
+                      because every omitted clause of the pairing argument silently
+                      hides a true positive on an error-severity rule. That
+                      objection is about SUPPRESSION. The owner authorised a
+                      different move: where the pairing cannot be proven, do not
+                      suppress and do not call it an error -- say POSSIBLE. Nothing
+                      is hidden, so the author's failure direction is never entered.
+
+                      SEVERITY IS 'warning', NOT 'info', AND THAT IS A DELIBERATE
+                      RAISE of a behaviour session 41 had tiered to info. It is the
+                      owner's literal word, and it also cures a live wart:
+                      Index.Manifest.pas reported the SAME variables in the SAME
+                      routine at warning (986/987/990) and info (1014/1015). One
+                      severity for the whole middle row ends that.
+
+                      The severity no longer distinguishes this case from the plain
+                      may-case below -- both are warning -- so THE MESSAGE is now
+                      the discriminator, and run_witness_flag_tiering.ps1 asserts on
+                      it rather than on the level. Do not "tidy" the two messages
+                      together; naming the flag is what makes the finding checkable
+                      in seconds instead of minutes. }
                     if WitnessFlag <> '' then
-                      Emit('used-before-assignment', 'info',
-                        Format('Local "%s" may be used before it is assigned -- the read is guarded by "%s", ' +
+                      Emit('used-before-assignment', 'warning',
+                        Format('POSSIBLE use before assignment: local "%s" is read under guard "%s", ' +
                                'which looks like a witness flag set where "%s" is assigned. Verify that pairing: ' +
                                'the flag must itself be initialised, never set except beside an assignment to "%s", ' +
                                'and never set from a nested routine.',

@@ -1,4 +1,15 @@
-# Guard: a witness-flag-guarded read is TIERED DOWN, never suppressed.
+# Guard: a witness-flag-guarded read says POSSIBLE, never suppressed.
+#
+# OWNER RULING 2026-08-30 changed the middle row from info to WARNING with a
+# 'POSSIBLE use before assignment' message. That is a deliberate severity RAISE
+# of what session 41 tiered to info -- see the emit site in FlowChecks.pas.
+#
+# IT ALSO MOVED WHAT THIS GUARD CAN ASSERT ON. The witness case and the plain
+# may-case are now BOTH warning, so severity no longer separates them and an
+# assertion on the level alone would pass with the recogniser deleted. The
+# discriminator is THE MESSAGE: the witness case says POSSIBLE and names the
+# flag, the plain case says neither. Both halves are asserted below, because
+# checking only the first would pass if EVERY finding said POSSIBLE.
 #
 #     if C then begin X := ..; HaveX := True; end;
 #     ...
@@ -135,7 +146,8 @@ Write-Host ''
 Write-Host 'THE TIERING' -ForegroundColor Cyan
 $wit = RowFor 'XW'
 Check 'the witness-flag read is STILL REPORTED (not suppressed)' ($wit.Count -eq 1) ("rows=" + ($wit | ConvertTo-Json -Compress))
-Check 'the witness-flag read is tiered down to info' (($wit.Count -eq 1) -and ($wit[0].Sev -eq 'info')) ("sev=" + ($wit | ForEach-Object { $_.Sev }))
+Check 'the witness-flag read says POSSIBLE, at warning' (($wit.Count -eq 1) -and ($wit[0].Sev -eq 'warning') -and ($wit[0].Msg -match 'POSSIBLE use before assignment')) ("sev=" + ($wit | ForEach-Object { $_.Sev }) + " msg=" + ($wit | ForEach-Object { $_.Msg }))
+Check 'the PLAIN may-case does NOT say POSSIBLE' (($plain.Count -eq 1) -and ($plain[0].Msg -notmatch 'POSSIBLE')) ("msg=" + ($plain | ForEach-Object { $_.Msg }))
 Check 'and its message NAMES the flag, so the pairing can be checked' (($wit.Count -eq 1) -and ($wit[0].Msg -match 'HaveXW')) ("msg=" + ($wit | ForEach-Object { $_.Msg }))
 
 Write-Host ''
