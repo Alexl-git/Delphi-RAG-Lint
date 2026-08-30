@@ -8783,6 +8783,8 @@ begin
         or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'unsafe-typecast-without-is') or (AArgs.Rule = 'exhaustive-enum-case') or (AArgs.Rule = 'lossy-cast')
         or (AArgs.Rule = 'nativeint-truncation') or (AArgs.Rule = 'abstract-method-instantiation') or (AArgs.Rule = 'length-zero-compare')
         or (AArgs.Rule = 'interface-object-mixing') then
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(EffPath, FlowStore, FlowLibStore, FlowFid) do
+          if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
@@ -13157,6 +13159,10 @@ begin
         ScanAdd(26, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD)));
         ScanAdd(27, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath))); { v12 (M1): cross-unit }
         ScanAdd(28, DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore)); { M2: flow checks, store-exact managed types, ownership via library store }
+        { with-hides-outer-symbol: the SAME library store, and it is not
+          optional here -- the owner's own case (Width/Height on a form)
+          lives on TCustomForm, which no project index can resolve. }
+        ScanAdd(29, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(PasPath, Store, LibStore, Store.FindFileIdByPath(PasPath)));
         { v0.68: naming-convention prefix rules (store-optional; enables exception-ancestry sub-check) }
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         ScanMark(29);
@@ -16225,6 +16231,10 @@ begin
   if Store <> nil then TcFid:= Store.FindFileIdByPath(AArgs.Target);
   Findings:= Findings + TAstChecker.CheckTypeAware           (AArgs.Target, Store, TcFid);
   Findings:= Findings + TAstChecker.CheckVirtualInConstructor(AArgs.Target, Store, TcFid); { v12 (M1) }
+  { No library store on this path (check-ast takes one --db), so the ancestry
+    bridge is absent and the rule reports FEWER findings here than lint-all
+    does. Documented degradation, never a wrong answer. }
+  Findings:= Findings + TAstChecker.CheckWithHiding          (AArgs.Target, Store, nil, TcFid);
   Findings:= Findings + DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(AArgs.Target, Store, TcFid, nil); { M2: flow checks }
   DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
 

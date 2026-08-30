@@ -14,6 +14,7 @@ uses
   , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Refactor.TextEdit
+  , System.StrUtils { ContainsText -- visibility test in CheckWithHiding }
   ;
 
 type
@@ -469,6 +470,22 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
+      /// <summary>Flags a bare identifier inside a `with` body that binds to a
+      /// member of the with-target while an OUTER scope declares the same name --
+      /// the silent misbinding the compiler never warns about.</summary>
+      /// <param name="AFile">Source file to parse; must exist.</param>
+      /// <param name="AStore">Project symbol store; nil yields no findings (the
+      /// rule cannot prove either side without it).</param>
+      /// <param name="ALibStore">Platform library store, or nil. Without it the
+      /// VCL half of an ancestry walk is invisible, so the rule reports FEWER
+      /// findings -- never wrong ones.</param>
+      /// <param name="AFileId">The file's id in AStore; 0 is tolerated.</param>
+      /// <returns>'with-hides-outer-symbol' findings, one per identifier per
+      /// with-body, at the first use site; empty when nothing is provable.</returns>
+      /// <remarks>Never raises. Silence is the answer to every doubt -- see the
+      /// implementation's own header for the four things that buy silence.</remarks>
+      class function CheckWithHiding(const AFile: string; const AStore: ISymbolStore;
+        const ALibStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
       class function CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
       /// <summary>Flags a value-returning FUNCTION that also mutates observable state
       /// (a Command-Query Separation violation, Fowler): a query that is also a command.
@@ -4350,6 +4367,432 @@ begin
     Findings.Free;
   end;
 end; // function
+
+type
+  { One layer of an active `with` stack, for CheckWithHiding below. Declared at
+    unit level rather than inside the routine because TList<T> instantiated on a
+    routine-LOCAL type is exactly the shape that trips E2506. }
+  TWithLayer = record
+    EntityText: string     ; // the entity as written -- 'FPanel', 'X as TFoo'
+    TypeName  : string     ; // its resolved type, '' when it did not resolve
+    Surface   : TStringList; // member names of that type; nil when unresolved
+  end;
+
+{ with-hides-outer-symbol (owner request 2026-08-30). Inside `with`, a bare
+  `Height` or `Width` silently binds to the with-target instead of the form the
+  author meant, and the compiler says nothing. The owner asked for it in those
+  words, having spent a long time on exactly that bug months earlier.
+
+  IT SHIPS ENABLED AND NOISY, ON THE OWNER'S EXPLICIT RULING: "Even 1 out of 100
+  might be really useful." The plan's volume gate (kill above 300 findings) was
+  WITHDRAWN by him. What was NOT withdrawn is the PRECISION gate, and the two
+  are different failures: he accepted noise, not wrong findings. So every
+  silencer below stays.
+
+  FOUR THINGS BUY SILENCE, and each is a decision rather than a shortcut:
+   1. The with-target's type does not resolve -> nothing. No surface, no claim.
+   2. The name is not a member of any layer -> nothing. It is an ordinary
+      identifier that happens to live in a with body.
+   3. No OUTER declaration of the name is provable -> nothing. Both halves must
+      be real or the finding is a guess.
+   4. The name is a member of TObject -> nothing, on BOTH sides. Free,
+      ClassName and ToString are members of everything, so counting them would
+      make every `with` in the codebase a finding.
+
+  DEVIATION FROM THE PLAN TEXT, recorded because it is deliberate: the plan says
+  Self's side counts "methods only". Its OWN worked example is
+  `it hides TfrmReport.Width (inherited from TCustomForm)` -- and Width is a
+  PROPERTY, not a method. Methods-only would have missed the example the rule
+  was specified from, and with it the owner's actual bug. Fields, properties and
+  methods all count, on both sides.
+
+  Resolution is INNERMOST-FIRST, matching Delphi: `with A, B do` makes B inner,
+  and a nested `with` stacks on top. }
+class function TAstChecker.CheckWithHiding(const AFile: string; const AStore: ISymbolStore;
+  const ALibStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
+const
+  { The floor. Also resolved from the stores when they carry TObject, but
+    hardcoded as well so the floor exists even against an index that does not --
+    a missing floor turns every with body into findings, and this list only ever
+    SILENCES, so a stale entry costs a finding rather than inventing one. }
+  CObjectMembers: array[0..24] of string = (
+    'Free', 'Create', 'Destroy', 'ClassName', 'ClassType', 'ClassParent',
+    'ClassInfo', 'InstanceSize', 'InheritsFrom', 'ToString', 'Equals',
+    'GetHashCode', 'DisposeOf', 'FieldAddress', 'GetInterface',
+    'GetInterfaceEntry', 'GetInterfaceTable', 'UnitName', 'QualifiedClassName',
+    'SafeCallException', 'AfterConstruction', 'BeforeDestruction', 'Dispatch',
+    'DefaultHandler', 'NewInstance');
+var
+  Src        : TBytes             ;
+  PF         : TParsedFile        ;
+  Findings   : TList<TLintFinding>;
+  SurfaceMemo: TObjectDictionary<string, TStringList>;
+  Floor      : TStringList        ;
+
+  function NodeStr(const ANode: TTSNode): string;
+  var B: TBytes;
+  begin
+    if ANode.IsNull or (ANode.StartByte >= ANode.EndByte) then Exit('');
+    SetLength(B, Integer(ANode.EndByte) - Integer(ANode.StartByte));
+    Move(Src[ANode.StartByte], B[0], Length(B));
+    Result:= TEncoding.UTF8.GetString(B);
+  end;
+
+  { Every member name of AClassName and of its whole ancestry, across the project
+    store and then the library store. nil when no class of that name exists in
+    either -- which is silencer 1, and the reason this returns nil rather than an
+    empty list. Memoized: lint-all visits thousands of with statements. }
+  function SurfaceOf(const AClassName: string): TStringList;
+  var
+    Key  : string     ;
+    L    : TStringList;
+    Found: Boolean    ;
+
+    procedure AddMembersFrom(const S: ISymbolStore; ASymId: Int64);
+    begin
+      for var M: TSymbol in S.FindAllChildSymbols(ASymId) do
+      begin
+        if M.Name = '' then Continue;
+        if not (M.Kind in [skMethod, skProcedure, skFunction, skConstructor,
+                           skDestructor, skProperty, skField]) then Continue;
+        { A private member of a type declared in ANOTHER unit is not visible
+          here, so it can neither hide nor be hidden. }
+        if (M.FileId <> AFileId) and ContainsText(M.Modifiers, 'private') then Continue;
+        if L.IndexOf(M.Name) < 0 then L.Add(M.Name);
+      end;
+    end;
+
+    procedure Harvest(const S: ISymbolStore; const AName: string; ADepth: Integer);
+    begin
+      if (S = nil) or (ADepth > 8) or (Trim(AName) = '') then Exit;
+      for var Sy: TSymbol in S.FindSymbolsByExactName(AName) do
+      begin
+        if Sy.Kind <> skClass then Continue;
+        Found:= True;
+        AddMembersFrom(S, Sy.Id);
+        for var Anc: TTypeAncestor in S.GetTransitiveAncestors(Sy.Id) do
+          if (Anc.SymbolId > 0) and SameText(Anc.Kind, 'class') then
+            AddMembersFrom(S, Anc.SymbolId)
+          else if (ALibStore <> nil) and (S <> ALibStore) then
+            { THE ANCESTRY BRIDGE. A project class descends TForm, which the
+              project index cannot resolve; the climb continues by NAME in the
+              library index. Without it every VCL-derived form has a surface of
+              only its own members, and the owner's Width/Height case -- which
+              lives on TCustomForm -- is invisible. }
+            Harvest(ALibStore, Anc.Name, ADepth + 1);
+      end;
+    end;
+
+  begin
+    Result:= nil;
+    Key:= LowerCase(Trim(AClassName));
+    if Key = '' then Exit;
+    if SurfaceMemo.TryGetValue(Key, L) then Exit(L);
+    L:= TStringList.Create;
+    L.CaseSensitive:= False;
+    Found:= False;
+    Harvest(AStore   , Trim(AClassName), 0);
+    Harvest(ALibStore, Trim(AClassName), 0);
+    if not Found then
+    begin
+      L.Free;
+      SurfaceMemo.AddOrSetValue(Key, nil);
+      Exit(nil);
+    end;
+    SurfaceMemo.AddOrSetValue(Key, L);
+    Result:= L;
+  end;
+
+  { A bare type name, or '' when the text is anything else -- an array, a
+    pointer, a generic instantiation. Silencer 1 again: no bare name, no
+    surface, no finding. }
+  function BareTypeName(const AText: string): string;
+  var I: Integer;
+  begin
+    Result:= Trim(AText);
+    if Result = '' then Exit;
+    for I:= 1 to Length(Result) do
+      if not CharInSet(Result[I], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) then Exit('');
+  end;
+
+  procedure CheckProc(const ADefProc: TTSNode);
+  var
+    LocalNames: TDictionary<string, Boolean>;   { locals + params, lowercased }
+    LocalTypes: TDictionary<string, string> ;   { name -> declared type text }
+    SelfClass : string                      ;
+    Layers    : TList<TWithLayer>               ;
+    Reported  : TDictionary<string, Boolean>;
+
+    procedure CollectDecls(const N: TTSNode);
+    var TypeN: TTSNode; TB: Integer; TName: string;
+    begin
+      if N.IsNull then Exit;
+      if (N.NodeType = 'declArg') or (N.NodeType = 'declVar') then
+      begin
+        TypeN:= N.ChildByField('type');
+        TB:= -1;
+        TName:= '';
+        if not TypeN.IsNull then
+        begin
+          TB   := Integer(TypeN.StartByte);
+          TName:= BareTypeName(NodeStr(TypeN));
+        end;
+        for var I: Integer:= 0 to N.NamedChildCount - 1 do
+        begin
+          var C: TTSNode:= N.NamedChild(I);
+          if C.NodeType <> 'identifier' then Continue;
+          { names precede the type node in `A, B: T` }
+          if (TB >= 0) and (Integer(C.StartByte) >= TB) then Continue;
+          var Nm: string:= LowerCase(NodeStr(C));
+          if Nm = '' then Continue;
+          LocalNames.AddOrSetValue(Nm, True);
+          if TName <> '' then LocalTypes.AddOrSetValue(Nm, TName);
+        end;
+        Exit;
+      end;
+      for var I: Integer:= 0 to N.NamedChildCount - 1 do
+      begin
+        if N.NamedChild(I).NodeType = 'defProc' then Continue; { own scope }
+        CollectDecls(N.NamedChild(I));
+      end;
+    end;
+
+    { The type a with-entity denotes, or '' for silence. Deliberately narrow: a
+      routine local or parameter, a field of the enclosing class, an `as` cast,
+      or a constructor call. Anything else is not worth a guess -- and the
+      per-ROUTINE decl map matters, not a file-wide one: a same-named local in
+      another routine must not decide this routine's type. }
+    function EntityType(const E: TTSNode): string;
+    var Nm: string;
+    begin
+      Result:= '';
+      if E.IsNull then Exit;
+      if E.NodeType = 'identifier' then
+      begin
+        Nm:= LowerCase(NodeStr(E));
+        if LocalTypes.TryGetValue(Nm, Result) then Exit;
+        if (SelfClass <> '') and (AStore <> nil) then
+          for var Sy: TSymbol in AStore.FindSymbolsByExactName(SelfClass) do
+          begin
+            if Sy.Kind <> skClass then Continue;
+            for var M: TSymbol in AStore.FindAllChildSymbols(Sy.Id) do
+              if (M.Kind = skField) and SameText(M.Name, NodeStr(E)) then
+                Exit(BareTypeName(M.Signature));
+          end;
+        Exit('');
+      end;
+      if E.NodeType = 'exprBinary' then
+      begin
+        var Op: TTSNode:= E.ChildByField('operator');
+        if (not Op.IsNull) and SameText(Trim(NodeStr(Op)), 'as') then
+          Exit(BareTypeName(NodeStr(E.ChildByField('rhs'))));
+        Exit('');
+      end;
+      if E.NodeType = 'exprDot' then
+      begin
+        var R: TTSNode:= E.ChildByField('rhs');
+        if (not R.IsNull) and SameText(Trim(NodeStr(R)), 'Create') then
+          Exit(BareTypeName(NodeStr(E.ChildByField('lhs'))));
+        Exit('');
+      end;
+      if E.NodeType = 'exprCall' then
+        Exit(EntityType(E.ChildByField('entity')));
+    end;
+
+    procedure Consider(const N: TTSNode);
+    var
+      Nm : string ;
+      Win: Integer;
+      Hid: string ;
+      I  : Integer;
+    begin
+      if Layers.Count = 0 then Exit;
+      Nm:= Trim(NodeStr(N));
+      if Nm = '' then Exit;
+      if Floor.IndexOf(Nm) >= 0 then Exit;                      { silencer 4 }
+
+      Win:= -1;
+      for I:= Layers.Count - 1 downto 0 do                      { innermost first }
+        if (Layers[I].Surface <> nil) and (Layers[I].Surface.IndexOf(Nm) >= 0) then
+        begin
+          Win:= I;
+          Break;
+        end;
+      if Win < 0 then Exit;                                     { silencer 2 }
+
+      Hid:= '';
+      for I:= Win - 1 downto 0 do
+        if (Layers[I].Surface <> nil) and (Layers[I].Surface.IndexOf(Nm) >= 0) then
+        begin
+          Hid:= Format('the outer with layer ''%s'' (%s)',
+                       [Layers[I].EntityText, Layers[I].TypeName]);
+          Break;
+        end;
+      if (Hid = '') and LocalNames.ContainsKey(LowerCase(Nm)) then
+        Hid:= 'this routine''s own local or parameter';
+      if (Hid = '') and (SelfClass <> '') then
+      begin
+        var SelfSurface: TStringList:= SurfaceOf(SelfClass);
+        if (SelfSurface <> nil) and (SelfSurface.IndexOf(Nm) >= 0) then
+          if SameText(Layers[Win].TypeName, SelfClass) then
+            { THE Assign/AssignTo SHAPE, and it needs its own sentence. When the
+              with-target is another instance of the class we are already inside,
+              'TmcFoo.ID hides TmcFoo.ID' reads like a defect in this rule -- and
+              a reader who concludes that stops reading the rest. The hazard is
+              real and is about INSTANCES, not types: measured 2026-08-30, every
+              generated `Assign`/`AssignTo` in ORM3 written as
+              `with Source as TmcFoo do fID := ID` assigns Source's property to
+              Source's own field and copies NOTHING. }
+            Hid:= Format('Self.%s -- the with-target is a DIFFERENT instance of %s, ' +
+                         'so this copies nothing', [Nm, SelfClass])
+          else
+            Hid:= Format('%s.%s', [SelfClass, Nm]);
+      end;
+      if Hid = '' then Exit;                                    { silencer 3 }
+
+      { ONE finding per identifier per with body, at the first use site. The
+        depth is part of the key so an inner with reporting the same name is a
+        different, and genuinely different, finding. }
+      var K: string:= LowerCase(Nm) + '@' + IntToStr(Layers.Count);
+      if Reported.ContainsKey(K) then Exit;
+      Reported.AddOrSetValue(K, True);
+
+      var P: TTSPoint:= N.StartPoint;
+      var F: TLintFinding:= Default(TLintFinding);
+      F.RuleId   := 'with-hides-outer-symbol';
+      F.Severity := 'warning';
+      F.FilePath := AFile;
+      F.StartLine:= Integer(P.Row   ) + 1;
+      F.StartCol := Integer(P.Column) + 1;
+      F.EndLine  := F.StartLine;
+      F.EndCol   := F.StartCol + Length(Nm);
+      F.Message  := Format(
+        '''%s'' binds to %s.%s via ''with %s do''; it hides %s. Qualify it explicitly.',
+        [Nm, Layers[Win].TypeName, Nm, Layers[Win].EntityText, Hid]);
+      Findings.Add(F);
+    end;
+
+    { One walker, self-recursive. A `with` pushes its layers, walks its body and
+      pops them; nested withs therefore stack naturally. Called on the whole
+      routine body, so identifiers outside any `with` are visited too -- they
+      cost one Layers.Count test each and can never produce a finding. }
+    procedure WalkBody(const N: TTSNode);
+    var
+      Body : TTSNode;
+      Added: Integer;
+      Lay  : TWithLayer;
+    begin
+      if N.IsNull then Exit;
+      if N.NodeType = 'defProc' then Exit;          { nested routine, own scope }
+
+      if N.NodeType = 'with' then
+      begin
+        Body := N.ChildByField('body');
+        Added:= 0;
+        { The entities are every named child EXCEPT the body. `with A, B do` is
+          ONE with node with REPEATED 'entity' fields, so ChildByField('entity')
+          would see only A -- the same single-field trap that costs the indexer
+          its refs for entities 2..n. }
+        for var I: Integer:= 0 to N.NamedChildCount - 1 do
+        begin
+          var C: TTSNode:= N.NamedChild(I);
+          if (not Body.IsNull) and (C.StartByte = Body.StartByte)
+                               and (C.EndByte   = Body.EndByte  ) then Continue;
+          Lay.EntityText:= Trim(NodeStr(C));
+          Lay.TypeName  := EntityType(C);
+          if Lay.TypeName = '' then Lay.Surface:= nil
+          else Lay.Surface:= SurfaceOf(Lay.TypeName);
+          Layers.Add(Lay);
+          Inc(Added);
+        end;
+        try
+          WalkBody(Body);
+        finally
+          for var K: Integer:= 1 to Added do Layers.Delete(Layers.Count - 1);
+        end;
+        Exit;
+      end;
+
+      if N.NodeType = 'identifier' then
+      begin
+        Consider(N);
+        Exit;
+      end;
+
+      if N.NodeType = 'exprDot' then
+      begin
+        { The rhs NAMES A MEMBER of the lhs. It is already qualified -- it is
+          exactly what this rule tells people to write -- so it is never a
+          finding. Its arguments still are, when it is a call. }
+        WalkBody(N.ChildByField('lhs'));
+        var R: TTSNode:= N.ChildByField('rhs');
+        if (not R.IsNull) and (R.NodeType <> 'identifier') then WalkBody(R);
+        Exit;
+      end;
+
+      for var I: Integer:= 0 to N.NamedChildCount - 1 do WalkBody(N.NamedChild(I));
+    end;
+
+  var
+    Hdr, Nm, Body: TTSNode;
+  begin
+    LocalNames:= TDictionary<string, Boolean>.Create;
+    LocalTypes:= TDictionary<string, string> .Create;
+    Layers    := TList<TWithLayer>               .Create;
+    Reported  := TDictionary<string, Boolean>.Create;
+    try
+      CollectDecls(ADefProc);
+      SelfClass:= '';
+      Hdr:= ADefProc.ChildByField('header');
+      if not Hdr.IsNull then
+      begin
+        Nm:= Hdr.ChildByField('name');
+        if (not Nm.IsNull) and (Nm.NodeType = 'genericDot') then
+          SelfClass:= Trim(NodeStr(Nm.ChildByField('lhs')));
+      end;
+      Body:= ADefProc.ChildByField('body');
+      if Body.IsNull then Exit;
+      WalkBody(Body);
+    finally
+      Reported  .Free;
+      Layers    .Free;
+      LocalTypes.Free;
+      LocalNames.Free;
+    end;
+  end;
+
+  procedure VisitProcs(const N: TTSNode);
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'defProc' then CheckProc(N);
+    for var I: Integer:= 0 to N.NamedChildCount - 1 do VisitProcs(N.NamedChild(I));
+  end;
+
+begin
+  Result:= nil;
+  if AStore = nil then Exit;              { neither half is provable without it }
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
+  Findings   := TList<TLintFinding>.Create;
+  SurfaceMemo:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  Floor      := TStringList.Create;
+  try
+    Floor.CaseSensitive:= False;
+    for var S: string in CObjectMembers do Floor.Add(S);
+    { and whatever the indexes actually say TObject carries, on top }
+    var TObj: TStringList:= SurfaceOf('TObject');
+    if TObj <> nil then
+      for var I: Integer:= 0 to TObj.Count - 1 do
+        if Floor.IndexOf(TObj[I]) < 0 then Floor.Add(TObj[I]);
+    VisitProcs(PF.Tree.RootNode);
+    Result:= Findings.ToArray;
+  finally
+    Floor      .Free;
+    SurfaceMemo.Free;
+    Findings   .Free;
+  end;
+end;
 
 class function TAstChecker.CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
 var

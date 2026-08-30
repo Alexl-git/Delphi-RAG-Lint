@@ -130,11 +130,30 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # 2026-08-28: 119 -> 120 with the addition of stat-gated-destructive
 # 2026-08-30: 120 -> 121 with the addition of global-only-uses-edge (the
 #             approved di-globals shape; project-wide, info, OFF by default)
+# 2026-08-30 (b): 121 -> 123, from the coupling-census pair --
+#             `duplicate-global-decl` (project-wide, warning, ON: the same
+#             interface-level const or var name declared in two units, where
+#             which one compiles depends on uses order) and
+#             `uses-global-census` (project-wide, info, OFF by default: how
+#             many of a used unit's globals this unit actually draws).
+#             THIS ASSERTION CAUGHT BOTH on the first battery run after they
+#             landed, which is the tripwire working: run_docs_sync_guard
+#             polices the README/wiki counts and `rules --json` totals, but the
+#             BUILT-IN split lives only here, so the two rule commits bumped
+#             every documented number and still missed this one.
+# 2026-08-30 (c): 123 -> 124, from `with-hides-outer-symbol` (bug-patterns,
+#             warning, ON by default on the owner's explicit ruling). Measured
+#             before it shipped: 8,241 findings on ORM3 server and 8,278 on
+#             client, 0 on this repo, and a 30-site hand sample found every one
+#             real -- they are one systematic defect, not noise. Every generated
+#             `Assign`/`AssignTo` in ORM3 is written
+#             `with Source as TmcFoo do fID := ID`, where BOTH names bind to
+#             Source, so the method copies nothing.
 # (INBOX-stat-gated-destructive-acts, a bug-patterns builtin). The count is
 # pinned deliberately -- a builtin appearing or vanishing unnoticed is exactly
 # what this line exists to catch -- so it is UPDATED with the change that moves
 # it, never relaxed to a range.
-Assert ("built-in rule count = 121 (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge); got {0}" -f $builtins.Count) ($builtins.Count -eq 121)
+Assert ("built-in rule count = 124 (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol); got {0}" -f $builtins.Count) ($builtins.Count -eq 124)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)
