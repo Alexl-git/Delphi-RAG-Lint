@@ -78,6 +78,8 @@ foreach ($d in @($repo, $app, $vendor, $drag)) { New-Item -ItemType Directory $d
 Write-Ascii (Join-Path $vendor 'uVendor.pas') @'
 unit uVendor;
 interface
+const
+  CVendDup = 7;
 /// <summary>Vendored upstream binding; not ours to restyle.</summary>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -107,6 +109,8 @@ Write-Ascii (Join-Path $app 'uApp.pas') @'
 unit uApp;
 interface
 uses uVendor;
+const
+  CAppDup = 9;
 /// <summary>Ours, and deliberately stale.</summary>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -145,6 +149,8 @@ end.
 Write-Ascii (Join-Path $vendor 'uVendorReader.pas') @'
 unit uVendorReader;
 interface
+const
+  CVendDup = 7;
 uses uGlob;
 function VendorReads: Boolean;
 implementation
@@ -161,6 +167,8 @@ Write-Ascii (Join-Path $app 'uAppReader.pas') @'
 unit uAppReader;
 interface
 uses uGlob;
+const
+  CAppDup = 9;
 function AppReads: Boolean;
 implementation
 function AppReads: Boolean;
@@ -260,6 +268,22 @@ Check 'no global-only-uses-edge survives against an excluded path' `
   (@(Vendor-Findings $outOn | Where-Object { $_ -match 'global-only-uses-edge' }).Count -eq 0)
 Check 'LIVE CONTROL: the owned reader still reports it in the same run' `
   (@(Get-Content $outOn | Where-Object { $_ -match 'uAppReader' -and $_ -match 'global-only-uses-edge' }).Count -gt 0) `
+  'otherwise the rule was simply off and the check above is empty'
+
+Write-Host ''
+Write-Host 'BY NAME: duplicate-global-decl obeys the same filter' -ForegroundColor Cyan
+# Same reasoning as the block above, and it needs its own fixture rather than
+# riding on that one: this rule is anchored at the FIRST declaring site in
+# (path, line) order, so a pair straddling the boundary would be filtered or
+# kept by an accident of sort order. CVendDup has BOTH sites inside
+# third_party\; CAppDup has both sites owned.
+Check 'POSITIVE CONTROL: the vendored pair reports it when NOT excluded' `
+  (@(Vendor-Findings $outOff | Where-Object { $_ -match 'duplicate-global-decl' }).Count -gt 0) `
+  'if this is 0 the assertion below proves nothing'
+Check 'no duplicate-global-decl survives against an excluded path' `
+  (@(Vendor-Findings $outOn | Where-Object { $_ -match 'duplicate-global-decl' }).Count -eq 0)
+Check 'LIVE CONTROL: the owned pair still reports it in the same run' `
+  (@(Get-Content $outOn | Where-Object { $_ -match 'CAppDup' -and $_ -match 'duplicate-global-decl' }).Count -gt 0) `
   'otherwise the rule was simply off and the check above is empty'
 
 Write-Host ''

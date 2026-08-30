@@ -28,7 +28,7 @@ drag-lint lint --file <path.pas> --fix --apply
 Without `--apply` the command is a DRY RUN: it reports what it would fix
 and writes nothing. Always dry-run first.
 
-Only rules marked fixable are applied; 22 of the 175 rules are fixable
+Only rules marked fixable are applied; 22 of the 176 rules are fixable
 (`drag-lint rules --json` reports a `fixable` field per rule).
 
 ## What it needs

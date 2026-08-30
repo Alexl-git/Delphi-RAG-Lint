@@ -508,6 +508,163 @@ type
     BadFields  : string ; // up to 5 offending 'name (Type)', for the message
   end;
 
+/// <summary>Flags a const or var NAME declared at interface unit level in two
+/// or more units -- which declaration compiles depends on uses order.</summary>
+/// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
+/// <returns>'duplicate-global-decl' findings, one per NAME (not per site),
+/// anchored at the first declaring site in (path, line) order; empty if none.</returns>
+/// <remarks>
+/// Requested by the owner 2026-08-30, verbatim: "Const declared in 2 different
+/// units is often my mistake. I don't know why it is not a syntax error." It is
+/// not an error because Delphi resolves an unqualified name through the uses
+/// clause in REVERSE order, current unit first -- so adding or merely
+/// REORDERING a uses entry silently changes which declaration compiles, with no
+/// diagnostic at all.
+///
+/// REPORTED ALWAYS, NOT ONLY WHEN THE VALUES DIFFER, and that is a measurement
+/// rather than a preference: all 11 real findings on ORM3 are byte-identical
+/// after normalization, so a differ-only rule would ship SILENT on the exact
+/// corpus that motivated the request. Two identical copies are still a hazard --
+/// a uses reorder swaps which one you get, and they are identical only UNTIL
+/// someone edits one of them. Differing declarations are strictly worse, so
+/// they escalate the MESSAGE and not the severity.
+///
+/// THE COMPARISON IS NORMALIZED (lowercased, whitespace runs collapsed), and
+/// that too came from the corpus: raw string comparison calls ORM3's
+/// tbltdistrcount a difference on 'integer' against 'Integer'. Reporting a case
+/// difference as a semantic one would teach the reader to distrust the
+/// escalation, which costs more than the finding is worth.
+///
+/// Measured 2026-08-30: 11 findings on ORM3 server, 11 on client, 0 on this
+/// repo, at 0.02 / 0.05 / 0.01 s. Symbols-only -- no refs join -- so unlike the
+/// sibling global-only-uses-edge it needs no OptedIn gate and ships enabled.
+///
+/// KNOWN CAVEAT: the finding is anchored at ONE site, so if that file is
+/// excluded by exclude_paths or ownership while its twin is owned, the finding
+/// vanishes with it. Accepted for v1 -- per-site findings would report the same
+/// name twice. Duplicates against the LIBRARY index (re-declaring an RTL name)
+/// are a deliberate non-goal here; TProjectLintRules.Run already receives the
+/// library store, so a future tier can join against it.
+/// Never raises. See ISymbolStore.FindDuplicateGlobalDecls.
+/// </remarks>
+function CollectDuplicateGlobalDecls(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>;
+
+  { Lowercased with every whitespace run collapsed to one space. See the
+    tbltdistrcount note above -- this is the difference between an escalation
+    the reader believes and one they learn to ignore. }
+  function NormSig(const AText: string): string;
+  var
+    I   : Integer;
+    Gap : Boolean;
+  begin
+    Result:= '';
+    Gap   := False;
+    for I:= 1 to Length(AText) do
+      if CharInSet(AText[I], [' ', #9, #13, #10]) then
+        Gap:= True
+      else
+      begin
+        if Gap and (Result <> '') then Result:= Result + ' ';
+        Gap   := False;
+        Result:= Result + AText[I];
+      end;
+    Result:= LowerCase(Result);
+  end;
+
+var
+  Rows    : TArray<TDuplicateDeclSite>;
+  I, J, K : Integer                   ;
+  Paths   : TArray<string>            ;
+  Sites   : string                    ;
+  Kinds   : string                    ;
+  Sigs    : string                    ;
+  Differ  : Boolean                   ;
+  NFiles  : Integer                   ;
+  F       : TLintFinding              ;
+  Seen    : TDictionary<string, Boolean>;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  Rows:= AStore.FindDuplicateGlobalDecls;
+  if Length(Rows) = 0 then Exit;
+  Findings:= TList<TLintFinding>.Create;
+  Seen    := TDictionary<string, Boolean>.Create;
+  try
+    I:= 0;
+    while I < Length(Rows) do
+    begin
+      { Rows arrive ordered by lowercased name, so one group is one contiguous
+        run -- no dictionary of groups, and no dependence on GROUP_CONCAT
+        ordering, which SQLite does not guarantee. }
+      J:= I;
+      while (J < Length(Rows)) and SameText(Rows[J].Name, Rows[I].Name) do Inc(J);
+
+      Paths := nil;
+      Sites := '';
+      Kinds := '';
+      Sigs  := '';
+      Differ:= False;
+      Seen.Clear;
+      for K:= I to J - 1 do
+      begin
+        var SitePath: string:= AStore.GetFilePath(Rows[K].FileId);
+        if SitePath = '' then Continue;
+        if not Seen.ContainsKey(LowerCase(SitePath)) then
+        begin
+          Seen.Add(LowerCase(SitePath), True);
+          Paths:= Paths + [SitePath];
+        end;
+        if Sites <> '' then Sites:= Sites + ', ';
+        Sites:= Sites + Format('%s:%d', [SitePath, Rows[K].StartLine]);
+        if not ContainsText(Kinds, Rows[K].Kind) then
+        begin
+          if Kinds <> '' then Kinds:= Kinds + '/';
+          Kinds:= Kinds + Rows[K].Kind;
+        end;
+        if NormSig(Rows[K].Signature) <> NormSig(Rows[I].Signature) then Differ:= True;
+        if Sigs <> '' then Sigs:= Sigs + ' vs ';
+        Sigs:= Sigs + Trim(Rows[K].Signature);
+      end;
+      NFiles:= Length(Paths);
+
+      { Two sites in the SAME file are not the hazard this rule names -- the
+        store already requires two distinct files, but a name declared twice in
+        one unit would otherwise slip through the row loop above. }
+      if NFiles >= 2 then
+      begin
+        F:= Default(TLintFinding);
+        F.RuleId   := 'duplicate-global-decl';
+        F.Severity := 'warning';
+        F.FilePath := AStore.GetFilePath(Rows[I].FileId);
+        F.StartLine:= Rows[I].StartLine;
+        F.StartCol := Rows[I].StartCol;
+        if F.StartCol <= 0 then F.StartCol:= 1;
+        F.EndLine  := Rows[I].StartLine;
+        F.EndCol   := F.StartCol + Length(Rows[I].Name);
+        if Differ then
+          F.Message:= Format(
+            '%s is declared at interface level in %d units as %s (%s) -- THE DECLARATIONS ' +
+            'DIFFER (%s), so which one compiles depends on uses order',
+            [Rows[I].Name, NFiles, Kinds, Sites, Sigs])
+        else
+          F.Message:= Format(
+            '%s is declared at interface level in %d units as %s (%s) -- the declarations ' +
+            'are identical; delete one and re-point the uses',
+            [Rows[I].Name, NFiles, Kinds, Sites]);
+        Findings.Add(F);
+      end;
+
+      I:= J;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Seen    .Free;
+    Findings.Free;
+  end;
+end; // function
+
 /// <summary>Flags a unit pair whose ONLY dependency link is one or more
 /// interface-section global variables -- RELOCATING them deletes the uses edge
 /// (and INJECTING them, when every one is interface-typed).</summary>
@@ -1425,6 +1582,7 @@ var
   Prof          : Boolean;
   TCirc, TEnum, TRts, TUuiu, TGod, TUpub, TUpriv, TAccess, TOuter: Int64;
   TGlob: Int64;
+  TDupD: Int64;
   { "Referenced at all?" as two sets, built with one scan each instead of two
     queries per symbol. See IsReferenced. }
   RefdIds       : TDictionary<Int64 , Boolean>;
@@ -1647,7 +1805,7 @@ begin
   RefdNames  := TDictionary<string, Boolean>      .Create;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
-  TGlob:= 0;
+  TGlob:= 0; TDupD:= 0;
   try
     { Built only for the rules that need them -- on a large index these are two
       scans of the whole refs table, which is pure waste for a --rule run that
@@ -1670,6 +1828,14 @@ begin
     if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
       for var Gf in CollectGlobalOnlyUsesEdges(AStore, ALibraryStore) do Findings.Add(Gf);
     Inc(TGlob, Tick - T0); T0:= Tick;
+
+    { duplicate-global-decl: whole-symbols pass (not per-file). ON by default
+      and NOT OptedIn-gated -- 0.05 s on the 144 MB client index, symbols only,
+      no refs join, so running it and discarding it is not the defect the
+      sibling's gate exists to prevent. }
+    if WantRule('duplicate-global-decl') then
+      for var Df in CollectDuplicateGlobalDecls(AStore) do Findings.Add(Df);
+    Inc(TDupD, Tick - T0); T0:= Tick;
 
     { enum-helper-separate-units (Task 7, enum-helper-generator milestone):
       whole-DB helper-edge pass (not per-file). ON by default -- do NOT add
@@ -1943,6 +2109,7 @@ begin
       Writeln(ErrOutput, '  PROJECT-RULES BREAKDOWN');
       ProfLine('circular-uses'             , TCirc  );
       ProfLine('global-only-uses-edge'     , TGlob  );
+      ProfLine('duplicate-global-decl'     , TDupD  );
       ProfLine('enum-helper-separate-units', TEnum  );
       ProfLine('repeated-type-switch'      , TRts   );
       ProfLine('unused-unit-in-uses'       , TUuiu  );

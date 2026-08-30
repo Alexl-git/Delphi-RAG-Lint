@@ -617,6 +617,27 @@ type
   // registered and resolved, a Boolean cannot. It is deliberately ALL and not
   // ANY -- injecting the interface half of a mixed edge leaves the other
   // global carrying it, so the edge survives and the advice would be false.
+  // One DECLARING SITE of a name that is declared at interface unit level in
+  // two or more indexed units. Rows arrive one per SITE, ordered by
+  // (lower(name), lower(path), start_line), so the rule groups them in Delphi:
+  // the whole result set is 22 rows on ORM3 and grouping in SQL would buy
+  // nothing but a GROUP_CONCAT whose order is not guaranteed.
+  //
+  // Signature carries the DECLARATION TEXT INCLUDING THE INITIALIZER
+  // ('Integer = 15', a whole TColor array), which is what makes the
+  // identical-vs-differing verdict a query-time read rather than a re-parse.
+  // Compare it NORMALIZED -- lowercased, whitespace runs collapsed: raw
+  // comparison calls ORM3's tbltdistrcount a difference on 'integer' versus
+  // 'Integer', and a case difference is not a semantic one.
+  TDuplicateDeclSite = record
+    Name     : string ;
+    Kind     : string ; // 'const' | 'var'
+    FileId   : Int64  ;
+    StartLine: Integer;
+    StartCol : Integer;
+    Signature: string ;
+  end;
+
   TGlobalOnlyEdge = record
     ReaderFileId    : Int64  ;
     DeclFileId      : Int64  ;

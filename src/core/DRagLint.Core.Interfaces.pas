@@ -784,6 +784,19 @@ type
     /// call it only when the rule is actually enabled.
     /// </remarks>
     function FindGlobalOnlyUsesEdges: TArray<TGlobalOnlyEdge>;
+
+    /// <summary>Every DECLARING SITE of an interface-section, unit-level const
+    /// or var name that is declared in two or more indexed units -- the
+    /// hazard being that Delphi resolves the unqualified name through the uses
+    /// clause in reverse order, so reordering a uses entry silently changes
+    /// which declaration compiles.</summary>
+    /// <returns>Site rows ordered by (lower(name), lower(path), start_line) so
+    /// the caller can group by name in one pass; empty when the project has no
+    /// duplicates. Never raises.</returns>
+    /// <remarks>Backs the 'duplicate-global-decl' rule. Symbols-only -- it does
+    /// not join refs, so it costs 0.05 s on a 144 MB index and needs no opt-in
+    /// gate.</remarks>
+    function FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
     /// <summary>The GUI framework this index's own code actually writes in its
     /// `uses` clauses -- the leading namespace segment ('Vcl' or 'FMX', the
     /// pair being DRagLint.Core.Model.IsGuiFrameworkPrefix's to name), or ''

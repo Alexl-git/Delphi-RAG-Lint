@@ -1611,6 +1611,7 @@ type
       /// </remarks>
       function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
       function FindGlobalOnlyUsesEdges: TArray<TGlobalOnlyEdge>;
+      function FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
       /// <summary><!-- drag-lint:auto -->A TIE RETURNS ''. Measured on the real consumers
       /// there is no tie to speak of (DataCopy 25 Vcl / 0 FMX, YADF 18 / 0), but a
       /// project that genuinely writes both has no single framework to prefer, and
@@ -8659,6 +8660,92 @@ end; // function
   It is still a full refs scan, so it is called only when the rule is enabled --
   see TProjectLintRules.Run's opt-in gate. An off-by-default rule that costs a
   second on every lint-all is a regression whether or not anyone reads its output. }
+{ Why the same four predicates appear twice: the HAVING pass has to count
+  DISTINCT FILES per name, and the site pass has to return the rows. Expressing
+  that as one windowed query is possible and slower -- this shape is 0.05 s on
+  the 144 MB client index and 0.01 s on this repo, symbols-only, no refs join.
+
+  THE PARENT GATE IS LOAD-BEARING, not tidiness. Without it every class const
+  named Count, Version or Max collides with every other one, and the rule turns
+  into a census of the language's most ordinary identifiers. The same gate the
+  sibling global-only-uses-edge query uses, for the same reason.
+
+  THE '- copy' CLAUSE CURRENTLY REMOVES NOTHING and is kept anyway. Measured
+  2026-08-30: all three re-indexed DBs contain zero '- Copy' files, so the rule
+  scores 11/11/0 with or without it. But an Explorer copy of one unit would
+  otherwise fabricate a duplicate of EVERY unit-level name that unit declares --
+  a whole screen of findings from one stray file. It is pinned by a fixture
+  rather than by the corpus, because the corpus cannot currently prove it.
+
+  The .dfm exclusion is DEFENSIVE here rather than load-bearing: verified today
+  that .dfm files carry only 'component' and 'form' kind symbols, so the kind
+  gate already excludes them. Kept because the invariant belongs to the indexer,
+  not to this rule. }
+function TSQLiteSymbolStore.FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
+const
+  CGate =
+    '  s.kind IN (''const'', ''var'') AND s.section = ''interface'' AND s.name IS NOT NULL' +
+    '  AND (s.parent_id IS NULL OR p.kind IN (''unit'', ''program''))' +
+    '  AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''' +
+    '  AND LOWER(f.path) NOT LIKE ''%- copy%'' ';
+  SQL =
+    'WITH dup AS (' +
+    '  SELECT LOWER(s.name) AS n' +
+    '  FROM symbols s JOIN files f ON f.id = s.file_id' +
+    '  LEFT JOIN symbols p ON p.id = s.parent_id' +
+    '  WHERE ' + CGate +
+    '  GROUP BY LOWER(s.name)' +
+    '  HAVING COUNT(DISTINCT s.file_id) >= 2) ' +
+    'SELECT s.name AS nm, s.kind AS kd, s.file_id AS fid, s.start_line AS ln,' +
+    '       s.start_col AS cl, s.signature AS sg' +
+    '  FROM symbols s JOIN files f ON f.id = s.file_id' +
+    '  LEFT JOIN symbols p ON p.id = s.parent_id' +
+    '  WHERE ' + CGate +
+    '    AND LOWER(s.name) IN (SELECT n FROM dup) ' +
+    'ORDER BY LOWER(s.name), LOWER(f.path), s.start_line';
+var
+  Q   : TFDQuery                   ;
+  List: TList<TDuplicateDeclSite>  ;
+  D   : TDuplicateDeclSite         ;
+begin
+  Result:= nil;
+  List:= TList<TDuplicateDeclSite>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := SQL;
+    try
+      Q.Open;
+    except
+      { An index too old to answer reports nothing rather than taking lint-all
+        down. Unlike the sibling rule this one is ON by default, so a silent
+        empty result is NOT read by someone who deliberately asked -- which is
+        why every column it touches (kind, section, parent_id, signature,
+        start_col) was verified present in current DBs before it shipped. }
+      Exit;
+    end;
+    try
+      while not Q.Eof do
+      begin
+        D.Name     := Q.FieldByName('nm' ).AsString  ;
+        D.Kind     := Q.FieldByName('kd' ).AsString  ;
+        D.FileId   := Q.FieldByName('fid').AsLargeInt;
+        D.StartLine:= Q.FieldByName('ln' ).AsInteger ;
+        D.StartCol := Q.FieldByName('cl' ).AsInteger ;
+        D.Signature:= Q.FieldByName('sg' ).AsString  ;
+        List.Add(D);
+        Q.Next;
+      end;
+    finally
+      Q.Close;
+    end; // try
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
 function TSQLiteSymbolStore.FindGlobalOnlyUsesEdges: TArray<TGlobalOnlyEdge>;
 const
   SQL =
