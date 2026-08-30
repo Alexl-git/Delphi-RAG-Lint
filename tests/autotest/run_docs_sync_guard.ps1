@@ -106,9 +106,13 @@
     junk (`db`, `params`, `bodyLen` -- JSON format strings, not verbs) and a real
     verb appearing there means the source scan missed it.
 
-  PROBING IS NOT FREE, AND ONE VERB PROVES IT
+  PROBING IS NOT FREE, AND ONE VERB PROVED IT
   -------------------------------------------
-  `scan-all` with no arguments walks UP from the CWD for a .drag-lint.json, finds
+  RETIRED 2026-08-30 -- `scan-all` no longer exists, and this paragraph is kept
+  because the HAZARD it describes outlived the verb. `index --all` reads the
+  same manifest and writes the same databases, so the $NeverProbe rule below is
+  unchanged. The retired verb's own behaviour, for the record:
+  `scan-all` with no arguments walked UP from the CWD for a .drag-lint.json, found
   C:\Projects\.drag-lint.json -- which still carries a live `scan` block naming
   ten project roots -- and starts indexing them. The battery runs every runner
   with CWD = the repo root ON PURPOSE (run_battery.ps1:404), i.e. inside
@@ -183,8 +187,10 @@ Write-Host '-- check 1: verbs' -ForegroundColor Cyan
 
 # Verbs the CLI accepts but deliberately does NOT advertise. Every one is a
 # self-test or a diagnostic entry point that exists FOR THE BATTERY, not for a
-# user: eight of the nine are invoked by runners under tests\ (the ninth,
-# scan-all, prints its own DEPRECATED banner). This is not a backlog to be
+# user: every one is invoked by a runner under tests\. (It used to read "eight of
+# the nine", the ninth being scan-all, which advertised its own DEPRECATED
+# banner instead; that verb was RETIRED 2026-08-30 -- deprecated since v0.45,
+# zero callers anywhere on the box.) This is not a backlog to be
 # cleared -- it is the line between the product's surface and its test harness.
 # ASSERTED below, both directions: an entry that is no longer accepted is stale
 # and must be deleted, and an entry that HAS since been documented is stale too.
@@ -197,17 +203,15 @@ $UndocumentedOnPurpose = [ordered]@{
   'dump-pp-eval'        = 'diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.'
   'resolve-uses'        = 'diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.'
   'convert-reemit'      = 'internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\.'
-  'scan-all'            = 'DEPRECATED and superseded by `index --all` -- the engine says so itself on every invocation. Documenting it would advertise the path the manifest replaced.'
 }
 
 # Never probed, whatever a harvest turns up. A documentation check must not have
-# side effects, and these four do: `index`/`scan-all` write databases (scan-all
-# with no args indexes ten project roots from C:\Projects\.drag-lint.json when
-# the CWD is inside C:\Projects, which is where the battery runs runners), and
+# side effects, and these do: `index` writes databases (`index --all` builds every
+# section of the manifest, and the battery runs runners with CWD inside
+# C:\Projects, where a manifest is discoverable), and
 # `serve`/`lsp` are stdin protocol servers that would sit until the timeout.
 $NeverProbe = [ordered]@{
   'index'    = 'writes/updates a .sqlite index'
-  'scan-all' = 'indexes every project root in the walked-up .drag-lint.json scan block'
   'serve'    = 'MCP stdio server -- blocks on stdin'
   'lsp'      = 'LSP stdio server -- blocks on stdin'
 }

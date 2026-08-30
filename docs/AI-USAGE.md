@@ -503,8 +503,7 @@ An AI rarely needs them; listed so the set is complete, not silently omitted:
 `contrast-selftest`, `selftest`, `bench-context`, `dump-refs`,
 `dump-call-edges`, `ambiguous-calls`, `purge-locals`, `preprocess-file`,
 `pp-profile`, `dump-pp-lex`, `dump-pp-eval`, `fb-snapshot`, `link-orm`,
-`ghost-check`, `ghost-recover`, `scan-all` (from-scratch rebuild driven by
-`.drag-lint.json`).
+`ghost-check`, `ghost-recover`.
 
 ---
 
