@@ -270,6 +270,27 @@ function CfgFindProcs(const ARoot: TTSNode): TArray<TTSNode>;
 /// </remarks>
 function IsValuedExit(const ANode: TTSNode; const ASrc: TBytes): Boolean;
 
+/// <summary>The leading identifier of a <c>statement</c> node, lowercased, or
+/// '' when the statement does not begin with one.</summary>
+/// <param name="ANode">The statement node to inspect.</param>
+/// <param name="ASrc">Source bytes backing the node.</param>
+/// <returns>'exit', 'break', 'continue', 'halt', any other leading identifier,
+/// or '' when the statement does not start with a plain identifier.</returns>
+/// <remarks>
+/// <para>EXPORTED so that the ONE definition serves every caller. Its
+/// implementation comment records why the obvious version is wrong (a statement
+/// node includes its terminating semicolon, so comparing whole text against
+/// 'exit' is always false, and 'exit(0)' never resembles 'exit' at all); a
+/// second hand-rolled copy elsewhere would re-derive exactly that bug, which is
+/// what IsValuedExit above already had to be fixed for.</para>
+/// <para>Callers outside the CFG use it to ask whether a block of statements
+/// FALLS THROUGH -- see OverwrittenInsideFollowingTry in
+/// DRagLint.Diagnostics.FlowChecks, where an except handler ending in
+/// <c>Continue</c> means the code after the try is unreachable on the exception
+/// path.</para>
+/// </remarks>
+function StatementKeyword(const ANode: TTSNode; const ASrc: TBytes): string;
+
 implementation
 
 function NodeStr(const N: TTSNode; const ASrc: TBytes): string;

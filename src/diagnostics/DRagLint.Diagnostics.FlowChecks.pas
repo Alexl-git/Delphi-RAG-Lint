@@ -1142,8 +1142,9 @@ end;
   is to stop reporting near a `try`. A store before a try whose handler never
   names it STILL FIRES, and the guard test asserts exactly that.
 
-  SHAPE F -- PROPOSED, MEASURED, AND REJECTED BY OWNER RULING (2026-08-26).
-  Do not re-derive this; the full history is
+  SHAPE F -- PROPOSED 2026-08-26, REJECTED 2026-08-26, and the rejection was
+  REVERSED BY THE OWNER ON 2026-08-29. It is IMPLEMENTED, in
+  OverwrittenInsideFollowingTry below. Do not re-derive this; the full history is
   docs\INBOX-Done\INBOX-dead-store-overwritten-inside-following-try.md.
 
   The proposal (OverwrittenInsideFollowingTry): also protect a store whose only
@@ -1163,31 +1164,38 @@ end;
   and the read is uninitialised. Implemented, it took overwrite-before-read on
   this repo from 29 to 25.
 
-  WHY IT WAS REJECTED, HONESTLY: the argument has real force -- it is the same
-  handler-edge reasoning this very comment relies on -- but it proves too much.
-  The pretry guard's UnrelatedTry positive control is structurally IDENTICAL to
-  the fixture above (store, following try whose body overwrites it, handler
-  that never names it, read after), and it asserts the finding MUST fire; its
-  own comment calls it what separates the sound predicate ("the handler uses
-  it") from the cheap one ("a try follows"). There is no sound syntactic
-  predicate that separates the two -- "the overwrite is the first statement of
-  the try body" does not, because a call in that position can raise first --
-  so any such predicate protects both or neither, and protecting both IS the
-  cheap version banned two paragraphs up. Applied consistently, the exception-
-  path argument even indicts the control's own store: delete its Val := 1 and
-  its Writeln(Val) prints garbage whenever the try raises. That tension is
-  real and stands unrefuted. The owner ruled: keep reporting these, keep the
-  control exactly as written, and accept that on the exception-path reading
-  some reported stores are live.
+  WHY IT WAS FIRST REJECTED, AND WHY THAT ARGUMENT DID NOT SURVIVE: the
+  objection was that it proves too much. The pretry guard's UnrelatedTry
+  positive control was structurally IDENTICAL to the fixture above (store,
+  following try whose body overwrites it, handler that never names it, read
+  after) and asserted the finding MUST fire. There is no sound syntactic
+  predicate separating the two -- "the overwrite is the first statement of the
+  try body" does not, because a call in that position can raise first -- so any
+  such predicate protects both or neither. The 2026-08-26 ruling took that as a
+  reason to protect NEITHER.
 
-  ONE DISTINCTION A FUTURE REVISIT MUST NOT LOSE: the exception-path argument
-  is specific to try..EXCEPT. With an except handler and no re-raise,
-  execution continues past the try's end, so a read after the try CAN observe
-  the pre-try store on the exception path. Under try..FINALLY the exception
-  propagates onward and the statements after the try are UNREACHABLE on that
-  path, so the pre-try store really IS dead there. Any restored
-  OverwrittenInsideFollowingTry that treats the two alike is wrong from the
-  start: shape F, if ever accepted, is an except-only rule. }
+  What settled it is that the same note already recorded the other horn:
+  applied consistently, the exception-path argument indicts the control's OWN
+  store too -- delete UnrelatedTry's Val := 1 and its Writeln(Val) prints
+  garbage whenever the try raises. So "protects both or neither" was never a
+  tie. One side of it asserted something false about the control's own fixture.
+
+  OWNER RULING 2026-08-29, REVERSING 2026-08-26: "We really do not know where
+  the exception might strike, so lets not report it." Both are protected. The
+  UnrelatedTry control was accordingly rewritten to expect SILENCE, and
+  replaced as a control by its try..FINALLY twin, which has teeth for the
+  reason in the next paragraph. Neither guard was edited to make a build green:
+  the assertion changed because the ruling changed, and the file says so.
+
+  THE DISTINCTION THAT CARRIES THE WHOLE THING, established 2026-08-26 and
+  still load-bearing: the exception-path argument is specific to try..EXCEPT.
+  With an except handler and no re-raise, execution continues past the try's
+  end, so a read after the try CAN observe the pre-try store on the exception
+  path. Under try..FINALLY the exception propagates onward and the statements
+  after the try are UNREACHABLE on that path, so the pre-try store really IS
+  dead there and MUST still be reported. OverwrittenInsideFollowingTry is
+  therefore EXCEPT-ONLY, and run_dead_store_overwritten_in_try.ps1's
+  TryFinallyTwin control exists to fail the moment that stops being true. }
 function ProtectedByFollowingTry(const AAsg: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
 var
   Cur, C: TTSNode;
@@ -1232,6 +1240,216 @@ begin
       S := LowerCase(NodeStr(C, ASrc));
       if ContainsWholeIdent(S, Nm) then Exit(True);
     end;
+  end;
+end;
+
+{ SHAPE F, per the owner ruling of 2026-08-29 that reversed 2026-08-26. The
+  derivation, both rulings and the reason the first did not survive are in
+  ProtectedByFollowingTry's comment block above; this comment states only the
+  predicate and why each conjunct is load-bearing.
+
+      X := nil;                 <- NOT reported
+      try
+        X := TObject.Create;    <- the only overwrite, INSIDE the try body
+      except
+        Writeln('boom');        <- handler never mentions X
+      end;
+      R := X;                   <- X read AFTER the try
+
+  ProtectedByFollowingTry does not cover this: it requires the HANDLER to
+  mention the name, and here the protection comes from where the OVERWRITE
+  sits. The two are disjuncts, not alternatives.
+
+  FOUR CONJUNCTS, and dropping any one of them turns this into the cheap
+  "stop reporting near a try" fix that is the banned failure mode for this whole
+  rule family. Each has a positive control in
+  tests\autotest\run_dead_store_overwritten_in_try.ps1:
+
+  1. THE HANDLER IS `except`, NOT `finally` (control: TryFinallyTwin). Under
+     try..finally the exception propagates and the post-try code is unreachable
+     on that path, so the pre-try store really is dead and must keep firing.
+     This is the distinction the 2026-08-26 ruling ordered a revisit not to
+     lose, and it is the only reason shape F is defensible at all.
+  2. THE TRY BODY OVERWRITES THE NAME (control: implicit -- no body write means
+     the store was never the one liveness killed here).
+  3. THE NAME IS READ AFTER THE TRY (control: NeverReadAfterTry). With no
+     post-try read there is no exception path that can OBSERVE the pre-try
+     store, so there is nothing for it to protect and it is a genuine dead
+     store.
+  4. THE HANDLER FALLS THROUGH (control: HandlerContinues). Conjunct 1 is
+     really a special case of this one: what makes try..finally different is
+     that control does not reach the code after the try on the exception path.
+     An `except Continue; end` or `except Exit; end` has exactly that property
+     while still being an except, so the post-try read is unreachable there too
+     and the pre-try store is genuinely dead.
+
+     THIS CONJUNCT WAS NOT IN THE ORIGINAL PROPOSAL, and it was not derived from
+     the note. It was MEASURED: with conjuncts 1-3 alone, this repo went 31 ->
+     28, and one of the three silenced findings was
+     DRagLint.Lint.RuleCatalog.pas:459 --
+
+         Raw := '';
+         try Raw := TFile.ReadAllText(F, TEncoding.UTF8); except Continue; end;
+         Root := TJSONObject.ParseJSONValue(Raw);
+
+     -- where `Continue` means ParseJSONValue is never reached on the exception
+     path and `Raw := ''` really is dead. Silencing it was a FALSE NEGATIVE
+     introduced by the fix, and it is the reason a corpus delta must be read
+     site by site rather than counted.
+
+     DELIBERATELY ONLY UNCONDITIONAL TRANSFERS, at the top level of the handler.
+     `except if X then Exit; end` still falls through on the other branch, so it
+     stays protected -- silence is the direction the 2026-08-29 ruling asks for
+     wherever the answer is genuinely unknown, and this is precisely such a
+     case. StatementKeyword is REUSED from Cfg rather than re-rolled here: its
+     own header records that comparing a statement's whole text against 'exit'
+     is always false, because the node includes its semicolon.
+
+  THE RUN, as in ProtectedByFollowingTry: several inits before one shared try is
+  the common form, so consecutive sibling assignments are skipped to reach it.
+
+  SCOPE, deliberately narrow: the post-try read is looked for among FOLLOWING
+  SIBLINGS in the same statement list, not in enclosing blocks. A read further
+  out is not found and the store still fires. That is the FP-safe direction for
+  a rule whose advice, when wrong, tells the reader to delete a line that makes
+  an exception path safe -- under-protecting costs a finding, over-protecting
+  costs the rule its teeth. }
+function OverwrittenInsideFollowingTry(const AAsg: TTSNode; const AName: string;
+  const ASrc: TBytes): Boolean;
+var
+  Cur, C, Nxt: TTSNode;
+  Nm, S      : string ;
+  I          : Integer;
+  Guard      : Integer;
+  SeenHandler: Boolean;
+  IsExcept   : Boolean;
+  BodyWrites : Boolean;
+  FallsThru  : Boolean;
+
+  { A single statement can arrive wrapped in a `statement` node -- the same
+    wrapper the dangling-else fix had to unwrap in Cfg.pas.EmitStmt. }
+  function Unwrap(const N: TTSNode): TTSNode;
+  begin
+    Result := N;
+    if (not Result.IsNull) and (Result.NodeType = 'statement')
+       and (Result.NamedChildCount = 1) then Result := Result.NamedChild(0);
+  end;
+
+  { True when ANode holds an UNCONDITIONAL transfer out of the handler, so
+    control never reaches the code after the try on the exception path.
+    Conjunct 4. A bare `raise` (re-raise) counts; so do exit/break/continue/halt,
+    spelled via Cfg.StatementKeyword so the semicolon trap stays fixed in one
+    place.
+
+    THE HANDLER'S STATEMENT LIST IS A `statements` NODE (plural), CONFIRMED BY
+    DUMPING THE TREE. The first cut of this function only unwrapped `statement`
+    (singular) and so never looked inside; StatementKeyword returned '' for the
+    wrapper, conjunct 4 never fired once, and the HandlerContinues control
+    stayed red against a build that was supposed to fix it. Recursing into
+    `statements` is what makes each of the list's statements top-level.
+
+    A conditional transfer is deliberately NOT counted: `except if X then Exit;`
+    leaves an `ifElse`/`if` node here, whose leading child is a keyword rather
+    than an identifier, so StatementKeyword yields '' and the handler is treated
+    as falling through. That is the silence direction the 2026-08-29 ruling asks
+    for wherever the answer is genuinely unknown. }
+  function HasTopLevelTransfer(const ANode: TTSNode): Boolean;
+  var
+    N: TTSNode;
+    J: Integer;
+    K: string ;
+  begin
+    Result := False;
+    N := Unwrap(ANode);
+    if N.IsNull then Exit;
+    if N.NodeType = 'statements' then
+    begin
+      for J := 0 to N.NamedChildCount - 1 do
+        if HasTopLevelTransfer(N.NamedChild(J)) then Exit(True);
+      Exit;
+    end;
+    if N.NodeType = 'raise' then Exit(True);
+    K := StatementKeyword(N, ASrc);
+    { a bare `exit;` can arrive unwrapped as the identifier itself }
+    if (K = '') and (N.NodeType = 'identifier') then
+      K := LowerCase(Trim(NodeStr(N, ASrc)));
+    Result := (K = 'exit') or (K = 'break') or (K = 'continue') or (K = 'halt');
+  end;
+
+  { True when ANode's subtree assigns to Nm as a WHOLE variable. Reads the
+    assignment's lhs field rather than the node text, so `Other := X.Count`
+    is not mistaken for a write to X. }
+  function SubtreeAssignsName(const ANode: TTSNode): Boolean;
+  var
+    J  : Integer;
+    Lhs: TTSNode;
+  begin
+    Result := False;
+    if ANode.IsNull then Exit;
+    if ANode.NodeType = 'assignment' then
+    begin
+      Lhs := ANode.ChildByField('lhs');
+      if (not Lhs.IsNull)
+         and (LowerCase(Trim(NodeStr(Lhs, ASrc))) = Nm) then Exit(True);
+    end;
+    for J := 0 to ANode.NamedChildCount - 1 do
+      if SubtreeAssignsName(ANode.NamedChild(J)) then Exit(True);
+  end;
+
+begin
+  Result := False;
+  Nm := LowerCase(Trim(AName));
+  if Nm = '' then Exit;
+
+  { skip the run of sibling inits to reach the shared try }
+  Cur   := Unwrap(AAsg.NextNamedSibling);
+  Guard := 0;
+  while (not Cur.IsNull) and (Cur.NodeType = 'assignment') and (Guard < 64) do
+  begin
+    Cur := Unwrap(Cur.NextNamedSibling);
+    Inc(Guard);
+  end;
+  if Cur.IsNull or (Cur.NodeType <> 'try') then Exit;
+
+  { conjuncts 1 and 2, in one pass over the try's children. KEYWORDS ARE NAMED
+    NODES in this grammar, so the body/handler split is found by watching for
+    the keyword, not by a field lookup. }
+  SeenHandler := False;
+  IsExcept    := False;
+  BodyWrites  := False;
+  FallsThru   := True;
+  for I := 0 to Cur.ChildCount - 1 do
+  begin
+    C := Cur.Child(I);
+    if C.NodeType = 'kExcept' then
+    begin
+      SeenHandler := True;
+      IsExcept    := True;
+    end
+    else if C.NodeType = 'kFinally' then
+      SeenHandler := True
+    else if not SeenHandler then
+    begin
+      if SubtreeAssignsName(C) then BodyWrites := True;
+    end
+    else
+    begin
+      { handler section: conjunct 4 }
+      if C.NodeType = 'kEnd' then Break;
+      if HasTopLevelTransfer(C) then FallsThru := False;
+    end;
+  end;
+  if (not IsExcept) or (not BodyWrites) or (not FallsThru) then Exit;
+
+  { conjunct 3: the name is read after the try }
+  Nxt   := Unwrap(Cur.NextNamedSibling);
+  Guard := 0;
+  while (not Nxt.IsNull) and (Guard < 512) do
+  begin
+    S := LowerCase(NodeStr(Nxt, ASrc));
+    if ContainsWholeIdent(S, Nm) then Exit(True);
+    Nxt := Unwrap(Nxt.NextNamedSibling);
+    Inc(Guard);
   end;
 end;
 
@@ -1284,18 +1502,26 @@ end;
 /// <param name="AStore">Symbol store for type resolution; may be nil.</param>
 /// <param name="AFileId">File id scoping the resolution (0 when no store).</param>
 /// <returns>True when the store must NOT be reported as a dead store.</returns>
-/// <remarks>Names the one thing ProtectedByFollowingTry and ReleasesInterfaceRef
-/// have in common, which is the whole reason both exist: liveness models a store
-/// as producing a VALUE, and in Delphi a store can also produce an OBSERVABLE
-/// EFFECT -- making an exception path safe, or dropping the last reference to an
-/// interface and running its destructor. Both were reported as false positives
-/// whose advice, followed, breaks working code. A third shape belongs here, not
-/// in a fifth conjunct at the call site.</remarks>
+/// <remarks>
+/// <para>Names the one thing these three disjuncts have in common, which is the
+/// whole reason all of them exist: liveness models a store as producing a VALUE,
+/// and in Delphi a store can also produce an OBSERVABLE EFFECT -- making an
+/// exception path safe, or dropping the last reference to an interface and
+/// running its destructor. Each was reported as a false positive whose advice,
+/// followed, breaks working code. A fourth shape belongs here, not in a further
+/// conjunct at the call site.</para>
+/// <para>The two try-shaped disjuncts are NOT alternatives and neither subsumes
+/// the other: ProtectedByFollowingTry asks whether the HANDLER mentions the
+/// name, OverwrittenInsideFollowingTry asks whether the OVERWRITE sits inside
+/// the try BODY with a read after it. The second is except-only; the first is
+/// not, because a finally that frees the variable reads it either way.</para>
+/// </remarks>
 function StoreHasEffectLivenessCannotSee(const AAsg: TTSNode;
   const AName, ATypeText: string; const ASrc: TBytes;
   const AStore: ISymbolStore; AFileId: Int64): Boolean;
 begin
   Result := ProtectedByFollowingTry(AAsg, AName, ASrc)
+         or OverwrittenInsideFollowingTry(AAsg, AName, ASrc)
          or ReleasesInterfaceRef(AAsg, ASrc, ATypeText, AStore, AFileId);
 end;
 

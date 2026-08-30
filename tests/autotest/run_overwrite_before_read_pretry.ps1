@@ -35,6 +35,46 @@
       variable MUST still fire. This is what separates the sound predicate
       ("the handler uses it") from the cheap one ("a try follows").
   Without both, every assertion above would pass with the rule disabled.
+
+  ------------------------------------------------------------------------------
+  2026-08-29 -- UnrelatedTry WAS RESHAPED, AND A CASE IT USED TO COVER NOW
+  ASSERTS THE OPPOSITE. Read this before concluding the control was weakened to
+  get a build green; it was not, and the sequence matters.
+
+  UnrelatedTry was originally written as:
+
+      Val := 1;
+      try
+        Val := Length(F);      <- the overwrite, INSIDE the try body
+        Other := TStringList.Create;
+        Other.Free;
+      except
+        Writeln('failed');     <- handler never mentions Val
+      end;
+      Writeln(Val);            <- Val read AFTER the try
+
+  That is SHAPE F, and this file asserted the finding MUST fire on it. On
+  2026-08-26 that assertion is what caused shape F to be rejected: the two
+  fixtures were structurally identical and only the owner could choose. The
+  owner chose REJECT, and this control stayed as written.
+
+  ON 2026-08-29 THE OWNER REVERSED THAT RULING -- "We really do not know where
+  the exception might strike, so lets not report it." Shape F shipped
+  (OverwrittenInsideFollowingTry in FlowChecks.pas), so the old body must now be
+  SILENT. Both halves of the flip are written down rather than deleted:
+
+    * OverwrittenInBodyNowSilent -- the ORIGINAL UnrelatedTry body, verbatim,
+      now asserting SILENCE. The case that forced the 2026-08-26 ruling is kept
+      in the file that used to assert the opposite, so the reversal is visible
+      at the point it applies instead of only in a retired note.
+    * UnrelatedTry -- RESHAPED so its overwrite sits ABOVE the try rather than
+      inside it. Shape F therefore cannot reach it, and it STILL FIRES -- which
+      means it still separates "the handler uses it" from "a try follows",
+      which is the one job this control has ever had. It kept its teeth; it did
+      not keep the disputed case.
+
+  The finally-twin control that gives shape F ITS teeth lives with shape F, in
+  run_dead_store_overwritten_in_try.ps1, not here.
 #>
 [CmdletBinding()]
 param(
@@ -62,6 +102,7 @@ procedure ProtectedSingle(const F: string);
 procedure ProtectedMulti(const F: string);
 procedure GenuineDead(const F: string);
 procedure UnrelatedTry(const F: string);
+procedure OverwrittenInBodyNowSilent(const F: string);
 implementation
 uses System.SysUtils, System.Classes;
 
@@ -119,8 +160,34 @@ begin
 end;
 
 { POSITIVE CONTROL 2 -- a store before a try whose handler never MENTIONS Val.
-  MUST fire: this is what separates "the handler uses it" from "a try follows". }
+  MUST fire: this is what separates "the handler uses it" from "a try follows".
+
+  RESHAPED 2026-08-29: the overwrite (Val := Length(F)) sits ABOVE the try, not
+  inside it, so shape F cannot reach this case and the control keeps its teeth.
+  Val := 1 is still a store BEFORE a try -- ProtectedByFollowingTry skips the run
+  of sibling assignments to find it -- so flattening that guard to "a try
+  follows" still turns this red, which is the whole point. }
 procedure UnrelatedTry(const F: string);
+var
+  Val  : Integer;
+  Other: TStringList;
+begin
+  Val := 1;
+  Val := Length(F);
+  try
+    Other := TStringList.Create;
+    Other.Free;
+  except
+    Writeln('failed');
+  end;
+  Writeln(Val);
+end;
+
+{ THE CASE THAT FORCED THE 2026-08-26 RULING, kept verbatim and now asserting the
+  OPPOSITE. This is the original UnrelatedTry body: overwrite inside the try
+  body, handler silent about Val, Val read after the try. Shape F. The owner
+  reversed the ruling on 2026-08-29, so it MUST NOW BE SILENT. }
+procedure OverwrittenInBodyNowSilent(const F: string);
 var
   Val  : Integer;
   Other: TStringList;
@@ -150,8 +217,8 @@ function Impl-Row([string]$Name) {
   ($src | Select-String -Pattern ("procedure {0}(const F: string);" -f $Name) -SimpleMatch | Select-Object -Last 1).LineNumber
 }
 $rows = [ordered]@{}
-foreach ($n in @('ProtectedSingle','ProtectedMulti','GenuineDead','UnrelatedTry')) { $rows[$n] = Impl-Row $n }
-if (@($rows.Values | Sort-Object -Unique).Count -ne 4) {
+foreach ($n in @('ProtectedSingle','ProtectedMulti','GenuineDead','UnrelatedTry','OverwrittenInBodyNowSilent')) { $rows[$n] = Impl-Row $n }
+if (@($rows.Values | Sort-Object -Unique).Count -ne 5) {
   Write-Host "FATAL: anchors collapsed: $($rows.Values -join ',')" -ForegroundColor Red; exit 2
 }
 Write-Host ("  anchors: " + (($rows.Keys | ForEach-Object { "$_=$($rows[$_])" }) -join ' ')) -ForegroundColor DarkGray
@@ -176,6 +243,8 @@ Check 'ProtectedSingle: the nil-init before try..except is NOT reported' `
   ((Rows-In 'ProtectedSingle') -eq '') "rows=$(Rows-In 'ProtectedSingle')"
 Check 'ProtectedMulti: NONE of the five inits before one shared try is reported' `
   ((Rows-In 'ProtectedMulti') -eq '') "rows=$(Rows-In 'ProtectedMulti')"
+Check 'OverwrittenInBodyNowSilent: shape F, silent since the 2026-08-29 reversal' `
+  ((Rows-In 'OverwrittenInBodyNowSilent') -eq '') "rows=$(Rows-In 'OverwrittenInBodyNowSilent')"
 
 Write-Host ''
 Write-Host 'POSITIVE CONTROLS -- the rule must still work' -ForegroundColor Cyan
