@@ -194,13 +194,19 @@ unit uStyleB;
 interface
 uses System.Classes;
 type
+  TFixStyle = class(TComponent)
+  end;
   TdmFix = class(TDataModule)
-    styThing: TComponent;
+    styThing: TFixStyle;
+    procedure DoThing(Sender: TObject);
   end;
 var
   dmFix       : TdmFix;
   gSkipRefresh: Boolean;
 implementation
+procedure TdmFix.DoThing(Sender: TObject);
+begin
+end;
 end.
 '@
 
@@ -208,7 +214,7 @@ Emit 'uStyleB.dfm' @'
 object dmFix: TdmFix
   Height = 200
   Width = 300
-  object styThing: TComponent
+  object styThing: TFixStyle
   end
 end
 '@
@@ -337,6 +343,204 @@ end;
 end.
 '@
 
+# --- CLASSIFIED DFM DEMOTION (owner ruling 2026-08-30) --------------------
+# The demotion is a BLESSING -- it tells the reader "this design-time link is
+# legitimate". A blessing needs positive evidence, so it is now conditional on
+# WHAT the referenced datamodule member is, decided by ANCESTRY rather than by
+# a list of type names. The four pairs below are the four ways that decision
+# can go wrong, and every one of them DEMOTES under the pre-ruling build.
+#
+# Every fixture type roots at TDataSet / TComponent by NAME, neither of which
+# this fixture index declares, so the classification is proved with no library
+# store attached.
+
+# DATA: the referenced member is a dataset -> the coupling IS the finding.
+Emit 'uDataB.pas' @'
+unit uDataB;
+interface
+uses System.Classes;
+type
+  TFixQueryB = class(TDataSet)
+  end;
+  TdmData = class(TDataModule)
+    qryThing: TFixQueryB;
+  end;
+var
+  dmData    : TdmData;
+  gOnlyData : Boolean;
+implementation
+end.
+'@
+
+Emit 'uDataB.dfm' @'
+object dmData: TdmData
+  Height = 200
+  Width = 300
+  object qryThing: TFixQueryB
+  end
+end
+'@
+
+Emit 'uDataReader.pas' @'
+unit uDataReader;
+interface
+uses System.Classes, Vcl.Forms, uDataB;
+type
+  TfrmDataReader = class(TForm)
+  end;
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gOnlyData then
+    Exit;
+end;
+end.
+'@
+
+Emit 'uDataReader.dfm' @'
+object frmDataReader: TfrmDataReader
+  Caption = 'Data'
+  DataSource = dmData.qryThing
+end
+'@
+
+# MIXED: the reader touches only the STYLE, but the module also holds a
+# dataset. Worst case wins -- binding to it at design time forces the whole
+# module's construction order onto this form, whichever member was sampled.
+Emit 'uMixedB.pas' @'
+unit uMixedB;
+interface
+uses System.Classes;
+type
+  TFixStyleM = class(TComponent)
+  end;
+  TFixQueryM = class(TDataSet)
+  end;
+  TdmMixed = class(TDataModule)
+    styOther: TFixStyleM;
+    qryOther: TFixQueryM;
+  end;
+var
+  dmMixed  : TdmMixed;
+  gMixOnly : Boolean;
+implementation
+end.
+'@
+
+Emit 'uMixedB.dfm' @'
+object dmMixed: TdmMixed
+  Height = 200
+  Width = 300
+  object styOther: TFixStyleM
+  end
+  object qryOther: TFixQueryM
+  end
+end
+'@
+
+Emit 'uMixedReader.pas' @'
+unit uMixedReader;
+interface
+uses System.Classes, Vcl.Forms, uMixedB;
+type
+  TfrmMixedReader = class(TForm)
+  end;
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gMixOnly then
+    Exit;
+end;
+end.
+'@
+
+Emit 'uMixedReader.dfm' @'
+object frmMixedReader: TfrmMixedReader
+  Caption = 'Mixed'
+  StyleRef = dmMixed.styOther
+end
+'@
+
+# METHOD: a cross-form .dfm reference to a METHOD is an event binding, which is
+# behaviour by definition. Its twin is the resource pair itself -- TdmFix now
+# HAS a method and uDfmReader must go on demoting, or "a method makes the
+# module behavioural" would have made the demotion arm dead code (measured: the
+# canonical resource datamodule TdmStyles declares 7 methods).
+Emit 'uMethodReader.pas' @'
+unit uMethodReader;
+interface
+uses System.Classes, Vcl.Forms, uStyleB;
+type
+  TfrmMethodReader = class(TForm)
+  end;
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gSkipRefresh then
+    Exit;
+end;
+end.
+'@
+
+Emit 'uMethodReader.dfm' @'
+object frmMethodReader: TfrmMethodReader
+  Caption = 'Method'
+  OnFoo = dmFix.DoThing
+end
+'@
+
+# UNRESOLVED: TVaporware is declared nowhere. Absence is not evidence, so it
+# classifies as behavioural and the finding keeps its full strength -- the
+# direction that also makes a missing or stale library store safe.
+Emit 'uUnresB.pas' @'
+unit uUnresB;
+interface
+uses System.Classes;
+type
+  TdmUnres = class(TDataModule)
+    mystery: TVaporware;
+  end;
+var
+  dmUnres    : TdmUnres;
+  gUnresOnly : Boolean;
+implementation
+end.
+'@
+
+Emit 'uUnresB.dfm' @'
+object dmUnres: TdmUnres
+  Height = 200
+  Width = 300
+end
+'@
+
+Emit 'uUnresReader.pas' @'
+unit uUnresReader;
+interface
+uses System.Classes, Vcl.Forms, uUnresB;
+type
+  TfrmUnresReader = class(TForm)
+  end;
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gUnresOnly then
+    Exit;
+end;
+end.
+'@
+
+Emit 'uUnresReader.dfm' @'
+object frmUnresReader: TfrmUnresReader
+  Caption = 'Unres'
+  Mystery = dmUnres.mystery
+end
+'@
+
 # --- configs ---------------------------------------------------------------
 # The rule ships DefaultEnabled=False, so "on" means an explicit opt-in.
 $cfgOn  = Join-Path $WorkDir 'on.json'
@@ -430,6 +634,32 @@ Check 'the twin WITHOUT a .dfm link is reported' ($plain.Count -eq 1) `
 Check 'and carries NO design-time annotation' `
   (-not (($plain -join ' ') -match 'design time')) `
   'otherwise the annotation is unconditional and proves nothing'
+
+Write-Host ''
+Write-Host 'DEMOTION IS CLASSIFIED -- resource blesses, behaviour does not' -ForegroundColor Cyan
+$dat = EdgeFor 'uDataReader.pas'
+$mix = EdgeFor 'uMixedReader.pas'
+$mth = EdgeFor 'uMethodReader.pas'
+$unr = EdgeFor 'uUnresReader.pas'
+foreach ($case in @(
+    @{ n = 'DATA       (member is a TDataSet descendant)'; v = $dat },
+    @{ n = 'MIXED      (module also holds a dataset)'    ; v = $mix },
+    @{ n = 'METHOD     (event binding, not a resource)'  ; v = $mth },
+    @{ n = 'UNRESOLVED (type declared nowhere)'          ; v = $unr })) {
+  # The presence half is the positive control: a bare "no annotation" check
+  # also passes when the rule is switched off entirely.
+  Check ($case.n + ' is still reported') ($case.v.Count -eq 1) `
+    ('got ' + $case.v.Count + ' line(s)')
+  Check ($case.n + ' is NOT demoted') `
+    (-not ((($case.v) -join ' ') -match 'design time')) `
+    'RED means the demotion went unconditional again -- it would bless a data coupling'
+}
+Check 'the behavioural note names the cure (a container), not deletion' `
+  (($dat -join ' ') -match 'container') `
+  'silence would hide that deleting the edge breaks the form in the IDE'
+Check 'QUESTION 4 PIN: a datamodule that merely HAS a method still demotes' `
+  (($dfm -join ' ') -match 'design time') `
+  'TdmFix now declares DoThing; counting methods would make the demotion arm dead code'
 
 Write-Host ''
 Write-Host 'OFF SWITCH' -ForegroundColor Cyan

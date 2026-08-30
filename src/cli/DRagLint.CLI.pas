@@ -13626,6 +13626,7 @@ end; // function
 function DoLintProject(const AArgs: TArgs): Integer;
 var
   Store      : ISymbolStore         ;
+  ProjLibStore: ISymbolStore        ;
   Findings   : TArray<TLintFinding> ;
   DefDisabled: TArray<string>       ;
 begin
@@ -13663,9 +13664,33 @@ begin
     var OptIn2: TArray<string>:= nil;
     if LoadLintConfig(AArgs).ShouldKeep('global-only-uses-edge', True) then
       OptIn2:= OptIn2 + ['global-only-uses-edge'];
+    { The platform library index, opened the same lazy, NEVER-MIGRATE,
+      warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
+      was a real divergence rather than a tidiness point: global-only-uses-edge
+      classifies a datamodule member by climbing its ancestry, and a project
+      store alone cannot resolve TFDQuery down to TDataSet. Without this,
+      lint-project would answer the demotion question "unresolved" where
+      lint-all answers "behavioural" -- the two entry points disagreeing about
+      whether an edge is blessed, which is exactly what the sibling-resolver
+      comment above exists to prevent. Never migrate it: running schema
+      migrations as a side effect of linting takes a write lock on gigabytes of
+      someone else's data. }
+    ProjLibStore:= nil;
+    var ProjLibDb: string:= ResolveLibraryDb(AArgs);
+    if (ProjLibDb <> '') and TFile.Exists(ProjLibDb) then
+      try
+        ProjLibStore:= TSQLiteSymbolStore.Create(ProjLibDb);
+      except
+        on E: Exception do
+        begin
+          ProjLibStore:= nil;
+          EmitStatusLine(AArgs, Format('WARNING: failed to open library store %s: %s -- ' +
+            'datamodule member classification degrades to project-only.', [ProjLibDb, E.Message]));
+        end;
+      end;
     Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, AArgs.Rule, MakeSiblingStoreResolver(AArgs, SibKeep2, SibOwned2),
-      nil, OptIn2);
+      ProjLibStore, OptIn2);
   finally
     SibKeep2 .Free;
     SibOwned2.Free;

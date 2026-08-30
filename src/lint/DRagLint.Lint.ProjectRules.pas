@@ -12,7 +12,7 @@ interface
 uses
   System.SysUtils
   , System.Classes
-  , System.StrUtils { StartsText / ContainsText -- the .dfm text scan in global-only-uses-edge }
+  , System.StrUtils { StartsText / PosEx -- the .dfm text scan in global-only-uses-edge }
   , System.IOUtils
   , System.JSON
   , System.Diagnostics { TStopwatch -- DRAGLINT_PROFILE per-rule attribution in Run }
@@ -479,6 +479,35 @@ begin
   end;
 end; // function
 
+type
+  { How a datamodule member is classified for the global-only-uses-edge DFM
+    demotion (owner ruling 2026-08-30). Decided by ANCESTRY, never by a list of
+    member names -- the owner's words: "Objects like TFDQuery should be traced
+    down to TDataSet or TDataSource, etc to verify what they are. Sometimes
+    there might be non-obvious classes."
+
+    mcUnresolved is treated exactly like mcBehavioural everywhere, and that is
+    the whole point of keeping it a separate value: the demotion is a BLESSING
+    ("this design-time link is legitimate"), and a blessing needs positive
+    evidence. Softening advice on a type we could not even find would be
+    manufacturing confidence out of absence. The two failure directions are not
+    symmetric -- wrongly NOT demoting leaves a true finding whose note is merely
+    missing, while wrongly demoting tells the reader a data coupling is fine. It
+    also makes a degraded run safe: no library store, or a stale one, yields
+    FEWER demotions rather than wrong ones. }
+  TMemberClass = (mcResource, mcBehavioural, mcUnresolved);
+
+  { Everything the demotion needs to know about ONE declaring unit's .dfm,
+    computed once per declaring unit because the measured shape is many readers
+    of one declarer (24 of 37 pairs, twelve of them uStyles). }
+  TDeclDfm = record
+    Root       : string ; // root object name  -- 'dmStyles'
+    RootClass  : string ; // root class name   -- 'TdmStyles'
+    RootClassId: Int64  ; // 0 when that class is not declared in the .pas
+    ModuleOK   : Boolean; // the root class declares NO non-resource FIELD
+    BadFields  : string ; // up to 5 offending 'name (Type)', for the message
+  end;
+
 /// <summary>Flags a unit pair whose ONLY dependency link is one or more
 /// interface-section global variables -- RELOCATING them deletes the uses edge
 /// (and INJECTING them, when every one is interface-typed).</summary>
@@ -510,13 +539,114 @@ end; // function
 ///
 /// Severity stays 'info' even when nothing demotes it: this is a design opinion
 /// about coupling, not a defect, and the reader may have reasons the index cannot
-/// see. The DFM check below is one such reason made visible.
+/// see. The DFM check below is one such reason made visible -- but only when the
+/// referenced member is a RESOURCE. Owner ruling 2026-08-30: a form binding to a
+/// datamodule's TcxStyle or TImageList at design time is legitimate and the edge
+/// is blessed; a form binding to its TFDQuery or an event handler is the finding,
+/// because that coupling forces construction order and blocks testing, and its
+/// cure is an interface resolved through the container rather than a deleted
+/// uses line. A MIXED datamodule -- one holding both -- is the worst case and is
+/// never blessed, which is the ruling taken literally: the construction-order
+/// argument is about the MODULE, not about whichever member this reader sampled.
 /// Never raises. The heavy lifting is one SQL statement -- see
 /// ISymbolStore.FindGlobalOnlyUsesEdges.
 /// </remarks>
-function CollectGlobalOnlyUsesEdges(const AStore: ISymbolStore): TArray<TLintFinding>;
+function CollectGlobalOnlyUsesEdges(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
+const
+  { Ancestry does the work; this only names where the climb STOPS. Verified
+    2026-08-30 by query against library-Win64.sqlite rather than assumed:
+    TFDQuery reaches TDataSet in five hops (TFDCustomQuery -> TFDRdbmsDataSet ->
+    TFDAdaptedDataSet -> TFDDataSet); TDataSource does NOT descend TDataSet and
+    needs its own root; and TFDTransaction reaches NEITHER TDataSet nor
+    TCustomConnection, so without TFDCustomTransaction here a
+    `Transaction = dmMain.trX` binding would classify as a resource and be
+    blessed. Known gap accepted for first ship: IBX's TIBTransaction descends
+    only TComponent. ORM3 is FireDAC. }
+  CBehaviouralRoots: array[0..3] of string =
+    ('TDataSet', 'TDataSource', 'TCustomConnection', 'TFDCustomTransaction');
 var
-  Findings: TList<TLintFinding>;
+  Findings   : TList<TLintFinding>            ;
+  TypeMemo   : TDictionary<string, TMemberClass>;
+  RootCache  : TDictionary<string, TDeclDfm>  ;
+  MemberCache: TObjectDictionary<string, TDictionary<string, TSymbol>>;
+
+  function IsBehaviouralRoot(const AName: string): Boolean;
+  begin
+    for var R: string in CBehaviouralRoots do
+      if SameText(R, AName) then Exit(True);
+    Result:= False;
+  end;
+
+  { The ancestor-NAME closure of AName, across the project store and then the
+    library store. Returns True when at least one CLASS declaration of AName was
+    found anywhere -- which is how the caller tells "resolved and benign" from
+    "never found" -- and sets ABehav when any name in the closure is one of the
+    roots above.
+
+    Matching on the NAME means an UNRESOLVED ancestor leaf still classifies, and
+    that is deliberate: it keeps the guard fixtures library-independent (a bare
+    `TFixQuery = class(TDataSet)` classifies behavioural with no library store
+    attached) and it is also the cross-store hop that takes a project-declared
+    `TMyQuery = class(TFDQuery)` down to TDataSet -- the project index cannot
+    resolve TFDQuery, so the climb continues in the library index by name. }
+  function Climb(const AName: string; ADepth: Integer; var ABehav: Boolean): Boolean;
+  var
+    Idx: Integer     ;
+    S  : ISymbolStore;
+    Sy : TSymbol     ;
+    A  : TTypeAncestor;
+  begin
+    Result:= False;
+    if (ADepth > 8) or (Trim(AName) = '') then Exit;
+    if IsBehaviouralRoot(AName) then
+    begin
+      ABehav:= True;
+      Exit(True);
+    end;
+    for Idx:= 0 to 1 do
+    begin
+      if Idx = 0 then S:= AStore else S:= ALibStore;
+      if S = nil then Continue;
+      for Sy in S.FindSymbolsByExactName(AName) do
+      begin
+        if Sy.Kind <> skClass then Continue;
+        Result:= True;
+        for A in S.GetTransitiveAncestors(Sy.Id) do
+        begin
+          if IsBehaviouralRoot(A.Name) then
+          begin
+            ABehav:= True;
+            Exit(True);
+          end;
+          if (not A.Resolved) and (ALibStore <> nil) and (Idx = 0) then
+            if Climb(A.Name, ADepth + 1, ABehav) then
+            begin
+              Result:= True;
+              if ABehav then Exit(True);
+            end;
+        end;
+      end;
+    end;
+  end;
+
+  { Run-level memo. A project has a handful of distinct member types and this is
+    reached only for findings whose reader .dfm actually names the declaring
+    root -- zero sites on ORM3 client today. }
+  function ClassifyType(const ATypeName: string): TMemberClass;
+  var
+    Key  : string ;
+    Behav: Boolean;
+  begin
+    Key:= LowerCase(Trim(ATypeName));
+    if Key = '' then Exit(mcUnresolved);
+    if TypeMemo.TryGetValue(Key, Result) then Exit;
+    Behav := False;
+    if Climb(Trim(ATypeName), 0, Behav) then
+      if Behav then Result:= mcBehavioural else Result:= mcResource
+    else
+      Result:= mcUnresolved;
+    TypeMemo.AddOrSetValue(Key, Result);
+  end;
 
   { The declaring unit's DFM ROOT OBJECT name ('dmStyles' for uStyles.dfm), or ''
     when the unit has no .dfm. Read from the FILE, not the index, and that is a
@@ -525,13 +655,13 @@ var
     ZERO of which name dmStyles -- while the DFM TEXT carries the cross-form
     component links in 18 of that project's .dfm files. Asking the index here
     would return "no link" for every case this check exists to catch. }
-  function DfmRootObject(const AUnitPath: string): string;
+  procedure DfmRootObject(const AUnitPath: string; out ARoot, ARootClass: string);
   var
     Dfm, Line: string;
     SL       : TStringList;
     I, C     : Integer;
   begin
-    Result:= '';
+    ARoot:= ''; ARootClass:= '';
     Dfm:= ChangeFileExt(AUnitPath, '.dfm');
     if not TFile.Exists(Dfm) then Exit;
     SL:= TStringList.Create;
@@ -549,7 +679,14 @@ var
         if not StartsText('object ', Line) then Continue;
         Line:= Trim(Copy(Line, 8, MaxInt));
         C:= Pos(':', Line);
-        if C > 1 then Result:= Trim(Copy(Line, 1, C - 1));
+        if C > 1 then
+        begin
+          { 'object dmStyles: TdmStyles' -- the CLASS is on the same line the
+            root name is parsed from, so it costs nothing extra and is what
+            lets the member lookup below resolve against a real declaration. }
+          ARoot     := Trim(Copy(Line, 1, C - 1));
+          ARootClass:= Trim(Copy(Line, C + 1, MaxInt));
+        end;
         Exit; { the ROOT object is the first one; nested objects are components }
       end;
     finally
@@ -557,25 +694,180 @@ var
     end;
   end;
 
-  { True when the reading unit's own .dfm names the declaring unit's root object,
-    i.e. the two forms are wired together AT DESIGN TIME and breaking the uses
-    edge in code would not actually break the dependency -- the DFM re-creates it.
-    Matches '<Root>.' so that a component reference (dmStyles.styLabel11Normal)
-    counts and the bare word in a caption does not. }
-  function DfmReferencesRoot(const AReaderPath, ARoot: string): Boolean;
+  { A .dfm line with every single-quoted run blanked out. Without this a CAPTION
+    reading 'see dmStyles.Header for details' is indistinguishable from a real
+    component binding -- a latent false demotion in the substring test this
+    replaces, and one that only gets worse now that the member name is extracted
+    and classified. A doubled quote toggles twice and is blanked either way. }
+  function StripQuoted(const ALine: string): string;
   var
-    Dfm, Txt: string;
+    InStr: Boolean;
+    I    : Integer;
   begin
-    Result:= False;
+    Result:= ALine;
+    InStr := False;
+    for I:= 1 to Length(Result) do
+      if Result[I] = '''' then
+      begin
+        InStr    := not InStr;
+        Result[I]:= ' ';
+      end
+      else if InStr then
+        Result[I]:= ' ';
+  end;
+
+  { The DISTINCT member names the reading unit's own .dfm binds on the declaring
+    unit's root object -- 'styThing' for `StyleRef = dmFix.styThing`. Empty when
+    there is no design-time link at all, which is the same answer the old
+    substring test gave and produces no note either way.
+
+    Still a TEXT scan of the .dfm, and still for the reason recorded above: the
+    index carries DFM references as event-bindings only, so asking it here
+    returns "no link" for every case this check exists to catch. What changed is
+    that the answer is now the member NAMES rather than a yes/no, because the
+    ruling turns on WHICH member is bound. }
+  function DfmReferencedMembers(const AReaderPath, ARoot: string): TArray<string>;
+  var
+    SL, Names: TStringList;
+    Dfm, Line: string     ;
+    Lo       : string     ;
+    I, P, Q, E: Integer   ;
+  begin
+    Result:= nil;
     if ARoot = '' then Exit;
     Dfm:= ChangeFileExt(AReaderPath, '.dfm');
     if not TFile.Exists(Dfm) then Exit;
+    SL   := TStringList.Create;
+    Names:= TStringList.Create;
     try
-      Txt:= TFile.ReadAllText(Dfm);
-    except
-      Exit;
+      try
+        SL.LoadFromFile(Dfm);
+      except
+        { A .dfm that cannot be read -- a binary TPF0 form included -- yields no
+          members, exactly as it yielded no match before. }
+        Exit;
+      end;
+      Names.CaseSensitive:= False;
+      Names.Sorted       := True;
+      Names.Duplicates   := dupIgnore;
+      Lo:= LowerCase(ARoot) + '.';
+      for I:= 0 to SL.Count - 1 do
+      begin
+        Line:= StripQuoted(SL[I]);
+        P   := 1;
+        while True do
+        begin
+          Q:= PosEx(Lo, LowerCase(Line), P);
+          if Q = 0 then Break;
+          P:= Q + Length(Lo);
+          { 'FdmFix.x' is not a reference to dmFix. }
+          if (Q > 1) and CharInSet(Line[Q - 1], ['A'..'Z', 'a'..'z', '0'..'9', '_']) then
+            Continue;
+          E:= P;
+          while (E <= Length(Line)) and
+                CharInSet(Line[E], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(E);
+          if E > P then Names.Add(Copy(Line, P, E - P));
+        end;
+      end;
+      for I:= 0 to Names.Count - 1 do Result:= Result + [Names[I]];
+    finally
+      Names.Free;
+      SL   .Free;
     end;
-    Result:= ContainsText(Txt, ARoot + '.');
+  end;
+
+  { The declaring unit's root object, its class, and the MODULE-level verdict,
+    computed once per declaring unit. ModuleOK is the owner's mixed-datamodule
+    ruling taken literally: a module that also holds datasets forces the whole
+    data machinery's construction order onto every form that binds to it, so it
+    is never blessed however benign the member this reader happened to touch.
+
+    FIELDS ONLY, and that is the answer to "does a method make a module
+    behavioural". It does not: TdmStyles -- the canonical resource datamodule,
+    the one the demotion exists for -- declares seven methods (DataModuleCreate,
+    Timer1Timer, PrintScreenToPrinter, ...), so counting them would mean no real
+    datamodule ever demotes and the whole arm would be dead code. A method
+    REFERENCED from the reader's .dfm is behavioural; a method merely EXISTING
+    on the module is not. }
+  function DeclInfo(const ADeclPath: string): TDeclDfm;
+  var
+    S     : TSymbol ;
+    Kids  : TDictionary<string, TSymbol>;
+    Cls   : TMemberClass;
+    NBad  : Integer ;
+    TypeTx: string  ;
+  begin
+    if RootCache.TryGetValue(ADeclPath, Result) then Exit;
+    Result:= Default(TDeclDfm);
+    DfmRootObject(ADeclPath, Result.Root, Result.RootClass);
+    Kids:= TDictionary<string, TSymbol>.Create;
+    MemberCache.AddOrSetValue(ADeclPath, Kids);
+    if Result.Root <> '' then
+    begin
+      { Prefer the class declared in the DECLARING unit itself; a same-named
+        class elsewhere is not this .dfm's root. }
+      for S in AStore.FindSymbolsByFile(ADeclPath) do
+        if (S.Kind = skClass) and SameText(S.Name, Result.RootClass) then
+        begin
+          Result.RootClassId:= S.Id;
+          Break;
+        end;
+      if Result.RootClassId <> 0 then
+      begin
+        NBad:= 0;
+        Result.ModuleOK:= True;
+        for S in AStore.FindSymbolsByFile(ADeclPath) do
+        begin
+          if S.ParentId <> Result.RootClassId then Continue;
+          Kids.AddOrSetValue(LowerCase(S.Name), S);
+          if S.Kind <> skField then Continue;
+          Cls:= ClassifyType(S.Signature);
+          if Cls = mcResource then Continue;
+          Result.ModuleOK:= False;
+          Inc(NBad);
+          if NBad <= 5 then
+          begin
+            TypeTx:= Trim(S.Signature);
+            if TypeTx = '' then TypeTx:= 'unknown type';
+            if Result.BadFields <> '' then Result.BadFields:= Result.BadFields + ', ';
+            Result.BadFields:= Result.BadFields + Format('%s (%s)', [S.Name, TypeTx]);
+          end;
+        end;
+        if NBad > 5 then Result.BadFields:= Result.BadFields + Format(', +%d more', [NBad - 5]);
+      end;
+    end;
+    RootCache.Add(ADeclPath, Result);
+  end;
+
+  { One member of the declaring unit's root class. Not found on the class ->
+    mcUnresolved: inherited members from visual datamodule inheritance are rare,
+    and absence is not evidence in the safe direction. }
+  function ClassifyMember(const ADeclPath: string; const AInfo: TDeclDfm;
+                          const AMember: string; out ATypeText: string): TMemberClass;
+  var
+    Kids: TDictionary<string, TSymbol>;
+    S   : TSymbol;
+  begin
+    ATypeText:= 'unknown';
+    Result   := mcUnresolved;
+    if AInfo.RootClassId = 0 then Exit;
+    if not MemberCache.TryGetValue(ADeclPath, Kids) then Exit;
+    if not Kids.TryGetValue(LowerCase(AMember), S) then Exit;
+    case S.Kind of
+      skMethod, skProcedure, skFunction, skConstructor, skDestructor:
+        begin
+          { A cross-form .dfm reference to a METHOD is an event binding
+            (`OnGetText = dmX.HandleGetText`) -- behaviour by definition. }
+          ATypeText:= 'method';
+          Result   := mcBehavioural;
+        end;
+      skField, skProperty:
+        begin
+          ATypeText:= Trim(S.Signature);
+          if ATypeText = '' then ATypeText:= 'unknown type';
+          Result   := ClassifyType(S.Signature);
+        end;
+    end;
   end;
 
   { The unit's own declared name ('uStyles'), falling back to the file stem when
@@ -655,17 +947,25 @@ var
   DeclUnit      : string         ;
   ReaderUnit    : string         ;
   Names         : string         ;
-  Root          : string         ;
+  Info          : TDeclDfm       ;
+  Members       : TArray<string> ;
+  Bad           : string         ;
+  NBad          : Integer        ;
+  MemTx         : string         ;
+  MemCls        : TMemberClass   ;
+  AllResource   : Boolean        ;
   Ln, Cl        : Integer        ;
   F             : TLintFinding   ;
-  RootCache     : TDictionary<string, string>;
 begin
   Result:= nil;
   if AStore = nil then Exit;
   Findings := TList<TLintFinding>.Create;
-  { One .dfm read per DECLARING unit, not per finding: the measured shape is
-    many readers of one declarer (24 of 37 pairs, and twelve of them uStyles). }
-  RootCache:= TDictionary<string, string>.Create;
+  { One .dfm read and one classification per DECLARING unit, not per finding:
+    the measured shape is many readers of one declarer (24 of 37 pairs, and
+    twelve of them uStyles). }
+  RootCache  := TDictionary<string, TDeclDfm>.Create;
+  TypeMemo   := TDictionary<string, TMemberClass>.Create;
+  MemberCache:= TObjectDictionary<string, TDictionary<string, TSymbol>>.Create([doOwnsValues]);
   try
     for E in AStore.FindGlobalOnlyUsesEdges do
     begin
@@ -677,11 +977,7 @@ begin
       Names     := SortedNames(E.GlobalNames);
       if Names = '' then Continue;
 
-      if not RootCache.TryGetValue(DeclPath, Root) then
-      begin
-        Root:= DfmRootObject(DeclPath);
-        RootCache.Add(DeclPath, Root);
-      end;
+      Info:= DeclInfo(DeclPath);
 
       AnchorAtUses(E.ReaderFileId, DeclUnit, Ln, Cl);
 
@@ -715,21 +1011,71 @@ begin
             '%s depends on %s for nothing but %d global variables (%s) -- relocating ' +
             'them deletes this uses edge',
             [ReaderUnit, DeclUnit, E.GlobalCount, Names]);
-      { The DEMOTION the note demands. Without it the rule tells the reader to
-        break a dependency their .dfm silently puts back at design time, and the
-        advice is not merely useless -- following it produces a unit that no
-        longer compiles once the form is opened in the IDE. }
-      if DfmReferencesRoot(ReaderPath, Root) then
-        F.Message:= F.Message +
-          Format(' (NOTE: %s references %s, so the DFM re-creates this dependency at ' +
-                 'design time -- the uses edge cannot simply be deleted)',
-                 [TPath.GetFileName(ChangeFileExt(ReaderPath, '.dfm')), Root]);
+      { THE DEMOTION, NOW CONDITIONAL. Without any demotion the rule tells the
+        reader to break a dependency their .dfm silently puts back at design
+        time, and the advice is not merely useless -- following it produces a
+        unit that no longer compiles once the form is opened in the IDE. But an
+        UNCONDITIONAL demotion is the opposite error: it blesses a form wired to
+        a datamodule's datasets, which is exactly the coupling this rule exists
+        to name. Both gates must pass before the edge is blessed. }
+      Members:= DfmReferencedMembers(ReaderPath, Info.Root);
+      if Length(Members) > 0 then
+      begin
+        AllResource:= True;
+        Bad := '';
+        NBad:= 0;
+        for var M: string in Members do
+        begin
+          MemCls:= ClassifyMember(DeclPath, Info, M, MemTx);
+          if MemCls = mcResource then Continue;
+          AllResource:= False;
+          Inc(NBad);
+          if NBad <= 5 then
+          begin
+            if Bad <> '' then Bad:= Bad + ', ';
+            Bad:= Bad + Format('%s (%s)', [M, MemTx]);
+          end;
+        end;
+        if NBad > 5 then Bad:= Bad + Format(', +%d more', [NBad - 5]);
+
+        if AllResource and Info.ModuleOK then
+          { GATE 1 and GATE 2 both pass: every bound member is a resource and the
+            module holds nothing else. This is the case the demotion was written
+            for, and its wording is unchanged. }
+          F.Message:= F.Message +
+            Format(' (NOTE: %s references %s, so the DFM re-creates this dependency at ' +
+                   'design time -- the uses edge cannot simply be deleted)',
+                   [TPath.GetFileName(ChangeFileExt(ReaderPath, '.dfm')), Info.Root])
+        else if not AllResource then
+          { GATE 1 fails: the reader binds behaviour or something unidentifiable.
+            The finding keeps full strength and says what to do instead, because
+            plain silence here would hide that naively deleting the uses line
+            still breaks the form in the IDE. }
+          F.Message:= F.Message +
+            Format(' (NOTE: %s binds %s of %s -- behavioural/data member(s); this coupling ' +
+                   'forces construction order and blocks testing -- the cure is an interface ' +
+                   'resolved through the container, not deleting the uses edge)',
+                   [TPath.GetFileName(ChangeFileExt(ReaderPath, '.dfm')), Bad, Info.Root])
+        else
+          { GATE 2 fails: this reader only took a resource, but the module is
+            MIXED. Worst case wins -- binding to it at all forces the whole
+            module's construction order onto this form. }
+          F.Message:= F.Message +
+            Format(' (NOTE: %s binds %s, whose class %s also declares behavioural/data ' +
+                   'field(s) (%s) -- the whole module''s construction order is forced onto ' +
+                   'this form; the cure is an interface resolved through the container, not ' +
+                   'deleting the uses edge)',
+                   [TPath.GetFileName(ChangeFileExt(ReaderPath, '.dfm')), Info.Root,
+                    Info.RootClass, Info.BadFields]);
+      end;
       Findings.Add(F);
     end;
     Result:= Findings.ToArray;
   finally
-    RootCache.Free;
-    Findings .Free;
+    MemberCache.Free;
+    TypeMemo   .Free;
+    RootCache  .Free;
+    Findings   .Free;
   end;
 end; // function
 
@@ -1322,7 +1668,7 @@ begin
       rule here that is gated on OptedIn as well as WantRule -- see the gate's
       own comment for why both are needed. }
     if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
-      for var Gf in CollectGlobalOnlyUsesEdges(AStore) do Findings.Add(Gf);
+      for var Gf in CollectGlobalOnlyUsesEdges(AStore, ALibraryStore) do Findings.Add(Gf);
     Inc(TGlob, Tick - T0); T0:= Tick;
 
     { enum-helper-separate-units (Task 7, enum-helper-generator milestone):
