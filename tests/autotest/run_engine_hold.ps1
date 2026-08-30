@@ -1,3 +1,12 @@
+# dl:serial: manipulates the MACHINE-WIDE ide-release sentinel
+#   (%LOCALAPPDATA%\drag-lint\engine-hold) -- one per-user file, not a per-test
+#   one -- and asserts on `ide-release --status` around it, so a concurrent
+#   sibling that takes or clears the hold flips this runner's answer. Its
+#   staging-recovery case is also timing-windowed (hold the target, sleep 3,
+#   release mid-retry, expect 'staging blocked' within 40s), which CPU
+#   contention perturbs. FOUND BY THE -Jobs 8 A/B, not by the census: the
+#   census asked only whether a runner writes the staged EXE (none does), and
+#   this runner's shared state is a DIFFERENT global it never looked at.
 <#
   run_engine_hold.ps1 -- `drag-lint ide-release` and the staging recovery.
 

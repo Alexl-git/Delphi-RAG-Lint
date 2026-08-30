@@ -101,7 +101,43 @@ param(
   # killed with its whole process tree, because an orphaned drag-lint.exe holds a
   # .sqlite lock that fails the NEXT runner too. Raise this again only with a
   # measured standalone time for the runner that needed it.
+  #
+  # RE-MEASURED 2026-08-30, and the 194.1 s above is STALE: in a full serial
+  # battery tests\lint\run_lint_tests.ps1 took **261.2 s**, i.e. 87% of this
+  # budget on an otherwise quiet box. See $effectiveTimeout below for what that
+  # means under -Jobs.
   [int]$TimeoutSec = 300,
+
+  # How many runners to execute concurrently. DEFAULT 1 -- the serial path is
+  # byte-for-byte the loop this driver has always used, and stays the reference
+  # every green claim in this repo is measured against.
+  #
+  # WHAT MADE THIS SAFE was a census, and the census REFUTED the note that asked
+  # for it (INBOX-battery-is-single-threaded-on-a-9-thread-box). That note said
+  # "Eight runners WRITE the shared staged exe, and those are the whole
+  # quarantine", naming run_smoke / run_wiring / run_formsmap among them.
+  # Measured 2026-08-30: **ZERO runners write it.** Every one of those eight
+  # mentions `build_draglint_win64.bat` in a COMMENT or a Write-Host advice
+  # string, or copies the tree-sitter DLLs OUT of dll-win64 into its own scratch
+  # dir -- a read. run_engine_hold does take an exclusive `FileShare.None` lock,
+  # but on its own $tmp\target.exe, not on the shared engine. The census that
+  # produced the eight could not tell code from prose, which is the failure mode
+  # this repo has logged repeatedly.
+  #
+  # BUT THE CENSUS WAS NOT SUFFICIENT EITHER, and the A/B is what proved it.
+  # "No runner writes the staged exe" is true and was the wrong question to stop
+  # at. run_engine_hold shares a DIFFERENT global -- the machine-wide ide-release
+  # sentinel under %LOCALAPPDATA% -- which the census never looked for, and it
+  # failed under -Jobs 8 while passing serially. A census can only clear the
+  # hazard it was written to look for; only the A/B finds the one nobody thought
+  # of. That is why -Jobs stays opt-in.
+  #
+  # So the quarantine is what the A/B and the documented evidence say it is, and
+  # each quarantined runner states its own reason in its header via
+  # `# dl:serial:`. The marker lives in the RUNNER, not in a list here, because
+  # "I cannot share a machine" is a property of the runner; a driver-side list
+  # would drift the first time someone adds a new one.
+  [int]$Jobs = 1,
 
   # Enumerate and print the set, run nothing.
   [switch]$List,
@@ -390,11 +426,159 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 Write-Host ("  logs: {0}" -f $LogDir)
 Write-Host ''
 
+# --- Serial quarantine ------------------------------------------------------
+# A runner opts OUT of concurrency by carrying a dl:serial marker in its header
+# (see tests\README.md for the spelling). Read here, from the runner, so the
+# reason travels with the file.
+#
+# THE PATTERN IS ANCHORED TO LINE START, and that is not cosmetic. Unanchored, it
+# matched the marker where run_battery_jobs_guard.ps1 merely QUOTES it while
+# explaining what it is -- so the guard whose whole purpose is to pin "a text
+# scan cannot tell code from prose" was itself silently quarantined by exactly
+# that mistake. Caught by the second -Jobs A/B, which listed it in the serial
+# set with "<reason>` in its first 60 lines." as its stated reason.
+#
+# Only consulted when -Jobs > 1. At the default the whole set is serial anyway,
+# and reading the marker would be a behaviour difference for no gain.
+function SerialReason([string]$path) {
+  foreach ($ln in (Get-Content -LiteralPath $path -TotalCount 60 -ErrorAction SilentlyContinue)) {
+    $m = [regex]::Match($ln, '^\s*#\s*dl:serial:\s*(.+?)\s*$')
+    if ($m.Success) { return $m.Groups[1].Value }
+  }
+  return ''
+}
+
+# --- The per-runner budget is not load-independent ---------------------------
+# MEASURED, not assumed. tests\lint\run_lint_tests.ps1 takes 261.2 s in a full
+# SERIAL battery -- 87% of the 300 s budget with the box otherwise idle. Under
+# `-Jobs 8` it exceeded 300 s and was killed as a TIMEOUT, which is the one
+# thing a concurrency option must not do: manufacture a red that says nothing
+# about the code.
+#
+# So the budget scales with concurrency. A runner sharing 8 ways with 7 siblings
+# legitimately takes longer, and this does NOT weaken hang detection -- a
+# genuinely hung runner never completes at whatever the budget is, while a slow
+# one completes and reports honestly.
+#
+# x2, not xJobs: the contention is for CPU and disk, not a linear queue, and a
+# budget that grows to 40 minutes at -Jobs 8 would let a real hang sit there for
+# most of an hour. If a runner still times out under -Jobs, the answer is its
+# measured standalone time, not another multiplier.
+$effectiveTimeout = $(if ($Jobs -gt 1) { $TimeoutSec * 2 } else { $TimeoutSec })
+
 # --- Run ------------------------------------------------------------------
 $results = New-Object System.Collections.Generic.List[object]
-$i = 0
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
+# One runner's execution, identical in both paths. Returns the result object.
+# EXTRACTED, NOT DUPLICATED: a serial and a parallel copy of this would be two
+# definitions of what "PASS" means, and this repo has been bitten by exactly
+# that shape (ResolveIndexProfile deriving the platform default privately).
+#
+# HELD AS TEXT, not as a scriptblock, because `ForEach-Object -Parallel` REFUSES
+# a scriptblock passed through `$using:` -- "Passed-in script block variables are
+# not supported ... and can result in undefined behavior". Each side compiles it
+# with [scriptblock]::Create, so there is still exactly one definition.
+$RunOneText = @'
+  param($FullName, $Rel, $LogDir, $RepoRoot, $TimeoutSec)
+
+  $logFile = Join-Path $LogDir (($Rel -replace '[\\/]', '__') + '.log')
+  $rsw = [System.Diagnostics.Stopwatch]::StartNew()
+  $proc = Start-Process -FilePath 'pwsh' `
+            -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $FullName) `
+            -WorkingDirectory $RepoRoot -PassThru `
+            -RedirectStandardOutput $logFile -RedirectStandardError ($logFile + '.err') `
+            -WindowStyle Hidden
+  $state = ''
+  $code  = $null
+  if ($proc.WaitForExit($TimeoutSec * 1000)) {
+    $code  = $proc.ExitCode
+    $state = $(if ($code -eq 0) { 'PASS' } else { 'FAIL' })
+  } else {
+    $state = 'TIMEOUT'
+    # Kill the whole tree -- runners spawn drag-lint.exe children, and an
+    # orphaned one holds a .sqlite lock that fails the NEXT runner too.
+    try { $proc.Kill($true) } catch { }
+  }
+  $rsw.Stop()
+  [pscustomobject]@{
+    Runner = $Rel; State = $state; ExitCode = $code
+    Seconds = [math]::Round($rsw.Elapsed.TotalSeconds, 1); Log = $logFile
+  }
+'@
+$RunOne = [scriptblock]::Create($RunOneText)
+
+if ($Jobs -gt 1) {
+  # --- Parallel phase, then the quarantine serially -------------------------
+  $parallelSet = @()
+  $serialSet   = @()
+  foreach ($r in $kept) {
+    $why = SerialReason $r.FullName
+    if ($why -ne '') { $serialSet += [pscustomobject]@{ File = $r; Why = $why } }
+    else             { $parallelSet += $r }
+  }
+
+  Write-Host ''
+  Write-Host ("=== -Jobs {0}: {1} concurrent, {2} quarantined serial ===" -f `
+              $Jobs, $parallelSet.Count, $serialSet.Count) -ForegroundColor Cyan
+  foreach ($s in $serialSet) {
+    Write-Host ("      serial: {0,-56} {1}" -f (RelPath $s.File.FullName), $s.Why) -ForegroundColor DarkGray
+  }
+  Write-Host ''
+
+  $bag = [System.Collections.Concurrent.ConcurrentBag[object]]::new()
+  $parallelSet | ForEach-Object -ThrottleLimit $Jobs -Parallel {
+    $res = & ([scriptblock]::Create($using:RunOneText)) `
+             $_.FullName `
+             ($_.FullName.Substring(($using:repoRoot).Length + 1).Replace('\', '/')) `
+             $using:LogDir $using:repoRoot $using:effectiveTimeout
+    ($using:bag).Add($res)
+    $colour = @{ PASS = 'Green'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$res.State]
+    Write-Host ("  {0,-7} {1} ({2:N1}s)" -f $res.State, $res.Runner, $res.Seconds) -ForegroundColor $colour
+  }
+  foreach ($res in $bag) { $results.Add($res) }
+
+  $j = 0
+  foreach ($s in $serialSet) {
+    $j++
+    $rel = RelPath $s.File.FullName
+    Write-Host ("[serial {0,2}/{1}] {2} ... " -f $j, $serialSet.Count, $rel) -NoNewline
+    $res = & $RunOne $s.File.FullName $rel $LogDir $repoRoot $effectiveTimeout
+    $colour = @{ PASS = 'Green'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$res.State]
+    Write-Host ("{0} ({1:N1}s)" -f $res.State, $res.Seconds) -ForegroundColor $colour
+    $results.Add($res)
+  }
+
+  # Order the report the way the serial path would, so two runs diff cleanly.
+  $ordered = New-Object System.Collections.Generic.List[object]
+  $byName  = @{}
+  foreach ($res in $results) { $byName[$res.Runner] = $res }
+  foreach ($r in $kept) {
+    $rel = RelPath $r.FullName
+    if ($byName.ContainsKey($rel)) { $ordered.Add($byName[$rel]) }
+  }
+  # A runner whose result never arrived is a DROPPED result, not a pass. Say so
+  # loudly rather than letting the denominator quietly shrink -- "existence is
+  # not sufficiency" has cost this repo twice.
+  if ($ordered.Count -ne $kept.Count) {
+    Write-Host ('  !! {0} runner(s) produced NO result under -Jobs {1}. This is a' -f `
+                ($kept.Count - $ordered.Count), $Jobs) -ForegroundColor Red
+    Write-Host '  !! driver defect, not a test failure. Re-run with -Jobs 1.' -ForegroundColor Red
+    foreach ($r in $kept) {
+      $rel = RelPath $r.FullName
+      if (-not $byName.ContainsKey($rel)) {
+        $ordered.Add([pscustomobject]@{
+          Runner = $rel; State = 'FAIL'; ExitCode = $null; Seconds = 0
+          Log = '(no result -- dropped by the parallel driver)'
+        })
+      }
+    }
+  }
+  $results = $ordered
+}
+else {
+
+$i = 0
 foreach ($r in $kept) {
   $i++
   $rel = RelPath $r.FullName
@@ -444,6 +628,8 @@ foreach ($r in $kept) {
     Runner = $rel; State = $state; ExitCode = $code
     Seconds = [math]::Round($rsw.Elapsed.TotalSeconds, 1); Log = $logFile
   })
+}
+
 }
 $sw.Stop()
 

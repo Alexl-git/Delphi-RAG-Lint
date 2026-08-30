@@ -1,3 +1,9 @@
+# dl:serial: LSP proxy family. These spawn and reap DelphiLSP/LspStub children and have
+#   been observed interfering with EACH OTHER while strictly SERIALISED (three
+#   battery runs, exactly one of two adjacent proxy guards failing each time,
+#   never both, never the same one; root cause fixed in 41b0004 -- the child
+#   was identified by process NAME across the whole machine). A bug class that
+#   survives serialisation gets worse under concurrency, not better.
 <#
   run_lsp_proxy_lifecycle_guard.ps1 -- `drag-lint lsp --proxy` must never leave
   its DelphiLSP child running, and must not outlive the client that spawned it.

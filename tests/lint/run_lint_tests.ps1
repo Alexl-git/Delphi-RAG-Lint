@@ -1,3 +1,12 @@
+# dl:serial: re-stages the SHARED engine rules directory. It copies rules\*.scm /
+#   *.json into <exeDir>\rules -- the same directory every other runner READS
+#   its rule catalogue from -- so while this copy is in flight a concurrent
+#   sibling can load a half-written or briefly-locked rule file. FOUND BY THE
+#   SECOND -Jobs 8 A/B: run_store_tests failed its circular-uses case while
+#   passing serially and in the first parallel run. The staging is redundant
+#   under the battery (the driver stages the same files before the first
+#   runner starts) but is needed when the runner is invoked standalone, so it
+#   is quarantined rather than deleted.
 <#
   run_lint_tests.ps1 -- TDD harness for drag-lint lint rules (external .scm + built-ins).
 

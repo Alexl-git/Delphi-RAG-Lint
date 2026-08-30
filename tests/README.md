@@ -8,15 +8,45 @@ That is the whole definition. It is enumerated dynamically by
 [`tests/run_battery.ps1`](run_battery.ps1); there is no list to keep in sync.
 
 ```
-pwsh -File tests\run_battery.ps1                    # the battery (default: everything)
+pwsh -File tests\run_battery.ps1                    # the battery (default: everything, serial)
 pwsh -File tests\run_battery.ps1 -List              # enumerate only, run nothing
 pwsh -File tests\run_battery.ps1 -Include autodoc   # a subset, for a fast inner loop
-pwsh -File tests\run_battery.ps1 -TimeoutSec 300    # per-runner budget (default 180s)
+pwsh -File tests\run_battery.ps1 -TimeoutSec 300    # per-runner budget (default 300s)
+pwsh -File tests\run_battery.ps1 -Jobs 8            # run concurrently (default 1 = serial)
 ```
 
 The driver prints the denominator it enumerated **before** it runs anything, plus a
 per-suite breakdown, so a shrinking battery is visible instead of silent. It exits 0
 only when every enumerated runner passed.
+
+### `-Jobs N` and the serial quarantine
+
+**The default is 1, and the serial path is byte-for-byte the loop the driver has
+always used.** It stays the reference every green claim in this repo is measured
+against; `-Jobs` is opt-in until it has earned more.
+
+A runner that cannot share a machine opts out by carrying `# dl:serial: <reason>`
+in its first 60 lines. The marker lives in the RUNNER, not in a list in the
+driver, because "I cannot run concurrently" is a property of the runner -- a
+driver-side list would drift the first time someone added one.
+`tests\autotest\run_battery_jobs_guard.ps1` fails if an `lsp_proxy` runner loses
+its marker, or if the quarantine empties because the regex stopped matching.
+
+Today the quarantine is exactly the three LSP proxy guards, which are documented
+to have interfered with **each other while strictly serialised**.
+
+**It is NOT "the runners that write the shared staged exe".** The note that asked
+for `-Jobs` said eight runners write
+`third_party\dll-win64\drag-lint.exe` and named them. Measured 2026-08-30: **zero
+do.** Every one was a mention of `build_draglint_win64.bat` in a block comment or
+a `Write-Host` advice string, or a `Copy-Item` pulling the tree-sitter DLLs *out*
+of `dll-win64` into the runner's own scratch dir. The guard asserts that premise,
+so if a runner ever does start staging the engine, it goes red rather than the
+battery going quietly flaky.
+
+When comparing a parallel run to a serial one, **compare the pass/fail SET, not
+the count.** A parallel run that reports the same number while a *different*
+runner failed is not equivalence.
 
 ### The count is not written down here, on purpose
 
