@@ -383,6 +383,8 @@ uses
   ;
 
 constructor TMCPServer.Create(const ADbPaths: TArray<string>);
+var
+  I: Integer;
 begin
   inherited Create;
   FDbPaths:= ADbPaths;
@@ -392,6 +394,27 @@ begin
   begin
     FStore:= TSQLiteSymbolStore.Create(FDbPaths[0]);
     FStore.Migrate;
+  end;
+  { SAY SO. Every --db after the first is accepted, held in FDbPaths, and never
+    opened -- so `serve --db A --db B` answers every question from A while
+    looking, from the caller's side, exactly like a server that searched both.
+    An MCP client asking "who calls X" then gets a confident, complete-looking
+    answer computed over half its configured corpus: a wrong answer that renders
+    as a plausible one, which is the same class as the stale-index hazard this
+    repo already records. The difference is that here the engine has everything
+    it needs to warn and simply did not.
+
+    The ignored DBs are NAMED, not counted: a warning that does not say WHICH is
+    one the reader cannot act on. stderr, so it cannot corrupt the JSON-RPC
+    stream on stdout. }
+  if Length(FDbPaths) > 1 then
+  begin
+    Writeln(ErrOutput, Format(
+      'drag-lint serve: WARNING -- %d databases were given but only the FIRST is used (%s).',
+      [Length(FDbPaths), FDbPaths[0]]));
+    for I:= 1 to High(FDbPaths) do
+      Writeln(ErrOutput, '  ignored: ' + FDbPaths[I]);
+    Flush(ErrOutput);
   end;
   FLinter:= TLinter.Create;
 end;

@@ -40,8 +40,11 @@ project folder -- still live under `C:\Projects\.drag-lint\`:
 Run `drag-lint resolve-dbs --platform <p>` for the authoritative list, or
 `resolve-dbs --project <x.dproj>` / `--in <x.pas>` to resolve one target.
 
-> **Multi-DB:** `query` accepts repeated `--db`. Whether `serve` honours more than
-> one has **not been verified** -- assume one DB per server entry until it is.
+> **Multi-DB:** `query` accepts repeated `--db`. **`serve` does NOT** -- verified
+> 2026-08-30. It accepts repeated `--db`, opens only the FIRST, and answers every
+> request from that one. Since 2026-08-30 it says so: passing more than one
+> prints a warning to stderr naming each ignored database. Use one DB per server
+> entry.
 
 ## VS Code
 
