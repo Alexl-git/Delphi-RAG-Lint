@@ -1,0 +1,5 @@
+refs            A=148178   B=148285    removed=0      added=107     growth=+0.07%
+call_edges      A=6224     B=6224      removed=0      added=0       growth=+0.00%
+type_ancestors  A=22       B=29        removed=0      added=7       growth=+31.82%
+
+VERDICT: clean (additive only)
