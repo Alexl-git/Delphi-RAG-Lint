@@ -1,9 +1,5 @@
 <#
-  PENDING -- named `pending_*` so the battery's `run_*.ps1` discovery does NOT
-  pick it up, exactly as pending_exception_class_fits.ps1 was. RED BY DESIGN
-  until the generator lands. RENAME TO run_* IN THE SAME COMMIT THAT LANDS IT.
-
-  pending_exception_class_naming.ps1 -- STAGE 3, part 1: deriving a class NAME
+  run_exception_class_naming.ps1 -- STAGE 3, part 1: deriving a class NAME
   from a raise message.
 
   THE OWNER RULINGS THIS ENCODES
