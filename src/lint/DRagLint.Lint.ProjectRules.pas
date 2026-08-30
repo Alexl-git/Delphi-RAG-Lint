@@ -13,6 +13,7 @@ uses
   System.SysUtils
   , System.Classes
   , System.StrUtils { StartsText / PosEx -- the .dfm text scan in global-only-uses-edge }
+  , DRagLint.Lint.ReviewMarker { MarkerBearingLines -- which // is reached in code state }
   , System.IOUtils
   , System.JSON
   , System.Diagnostics { TStopwatch -- DRAGLINT_PROFILE per-rule attribution in Run }
@@ -479,6 +480,93 @@ begin
   end;
 end; // function
 
+{ Shared by the two uses-edge rules below (global-only-uses-edge and
+  uses-global-census). Hoisted out of the first one when the second arrived:
+  two copies of "which uses line is this edge" would be two places to get the
+  dotted-name fallback wrong, and the anchor is the whole point of both
+  findings -- it is the line the reader deletes or acknowledges. }
+
+{ The unit's own declared name ('uStyles'), falling back to the file stem when
+  the unit symbol is missing -- a .dpr has no unit symbol and DOES appear as a
+  reader (Micronite2027.dpr -> BASICS.PAS is one of the measured pairs). }
+function ProjUnitNameOf(const AStore: ISymbolStore; const APath: string): string;
+var
+  S: TSymbol;
+begin
+  for S in AStore.FindSymbolsByFile(APath) do
+    if S.Kind = skUnit then
+    begin
+      Result:= S.QualifiedName;
+      if Result = '' then Result:= S.Name;
+      if Result <> '' then Exit;
+    end;
+  Result:= TPath.GetFileNameWithoutExtension(APath);
+end;
+
+{ Anchor the finding at the `uses` entry that names the declaring unit, not at
+  line 1 of the reader. The edge IS that line -- it is what the reader deletes
+  when they act on the advice, and where the census acknowledgement goes -- so
+  pointing anywhere else makes the finding harder to act on than the grep it
+  replaces. Falls back to 1:1. }
+procedure ProjAnchorAtUsesIn(const AUses: TArray<TUnitUse>; const ADeclUnit: string;
+                             var ALine, ACol: Integer);
+var
+  U   : TUnitUse;
+  Stem: string  ;
+begin
+  ALine:= 1; ACol:= 1;
+  Stem:= LowerCase(ADeclUnit);
+  if LastDelimiter('.', Stem) > 0 then
+    Stem:= Copy(Stem, LastDelimiter('.', Stem) + 1, MaxInt);
+  for U in AUses do
+  begin
+    var N: string:= LowerCase(U.UnitName);
+    if LastDelimiter('.', N) > 0 then N:= Copy(N, LastDelimiter('.', N) + 1, MaxInt);
+    if N = Stem then
+    begin
+      ALine:= U.StartLine; ACol:= U.StartCol;
+      Exit;
+    end;
+  end;
+end;
+
+{ The one-shot form. A caller that anchors MANY edges into the same reader
+  should fetch the entries once and call ProjAnchorAtUsesIn instead -- the
+  census does, because one query per edge measured 0.45 s of its own runtime on
+  the 158-edge client index. }
+procedure ProjAnchorAtUses(const AStore: ISymbolStore; const AReaderFid: Int64;
+                           const ADeclUnit: string; var ALine, ACol: Integer);
+begin
+  ProjAnchorAtUsesIn(AStore.GetUnitUsesForFile(AReaderFid), ADeclUnit, ALine, ACol);
+end;
+
+{ SQLite's GROUP_CONCAT gives NO ordering guarantee, so the names arrive in
+  whatever order the aggregate happened to visit. Rendering that straight into
+  the message makes the same finding differ between runs, which turns a report
+  diff into noise and a golden file into a coin flip. }
+function ProjSortedNames(const ACsv: string): string;
+var
+  SL: TStringList;
+begin
+  SL:= TStringList.Create;
+  try
+    SL.CaseSensitive:= False;
+    SL.Delimiter    := ',';
+    SL.StrictDelimiter:= True;
+    SL.DelimitedText:= ACsv;
+    SL.Sort;
+    Result:= '';
+    for var I: Integer:= 0 to SL.Count - 1 do
+    begin
+      if Trim(SL[I]) = '' then Continue;
+      if Result <> '' then Result:= Result + ', ';
+      Result:= Result + Trim(SL[I]);
+    end;
+  finally
+    SL.Free;
+  end;
+end;
+
 type
   { How a datamodule member is classified for the global-only-uses-edge DFM
     demotion (owner ruling 2026-08-30). Decided by ANCESTRY, never by a list of
@@ -507,6 +595,304 @@ type
     ModuleOK   : Boolean; // the root class declares NO non-resource FIELD
     BadFields  : string ; // up to 5 offending 'name (Type)', for the message
   end;
+
+/// <summary>Counts how many of a used unit's globals and consts the reading
+/// unit actually draws, so a strongly coupled pair can be seen and
+/// acknowledged.</summary>
+/// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
+/// <returns>'uses-global-census' findings -- one per weighed uses edge, plus one
+/// per STALE acknowledgement comment; empty if none.</returns>
+/// <remarks>
+/// Owner request 2026-08-30, verbatim: "Can we give an info message on each
+/// mentioning: N variables and M consts from unit uAAA. This can be suppressed,
+/// say in uses by a comment `//dl: uAAA: ignore-global-count`. Such a comment
+/// would show that uAAA is strongly coupled with this unit and must go together
+/// when separated for a test."
+///
+/// SEPARATE FROM global-only-uses-edge ON PURPOSE. That rule asks whether an
+/// edge can be DELETED and carries machinery this one must not inherit -- the
+/// DFM demotion, the relocate-or-inject advice, the no-other-links claim. This
+/// one asks how HEAVY the edge is, and is structurally safer for it: the
+/// ambiguity mitigation that gives the sibling its false positives can only
+/// UNDER-count here, because the census makes no only-link claim.
+///
+/// REFERENCED names, not everything the target exports. What a unit exports is
+/// a property of that unit alone -- the same number on every edge into it -- so
+/// it cannot rank edges or justify acknowledging one over another, which is the
+/// owner's stated purpose. Every name in the message is one the reader can grep
+/// for in their own file.
+///
+/// THE ACKNOWLEDGEMENT NAMES THE UNIT, and that is load-bearing rather than
+/// decorative. A plain line-bound `dl:ok` on `uses uP1, uP2, uP3;` would
+/// suppress all three edges with one marker; the unit name makes the record
+/// specific, and it is also the owner's own sketch. Grammar:
+///     // dl:census-ok &lt;unit&gt;[, &lt;unit&gt;...] [-- reason]
+/// Placement: trailing on a uses-entry line naming that unit, or alone on the
+/// line immediately above it. Nothing else suppresses -- a free-floating
+/// comment elsewhere in the file can only be reported stale.
+///
+/// A STALE ACKNOWLEDGEMENT IS A FINDING OF ITS OWN, under this same rule id.
+/// Naming a unit that is not in the uses clause, or one this file draws nothing
+/// from, is exactly the documentation drift the docs-sync guard exists to
+/// prevent, one level down -- and an acknowledgement nobody re-checks is worse
+/// than none, because it reads as a decision that was made on purpose.
+///
+/// KNOWN LIMIT, stated rather than left to be discovered: stale comments are
+/// found only in files that have at least one census edge. Scanning every file
+/// in the project for a tag would cost a whole-corpus text pass for a rule that
+/// is off by default, and a file with no census edge at all is the one place a
+/// stale acknowledgement does no harm.
+///
+/// KNOWN UNDER-COUNT: docs\INBOX-refs-missing-inside-with-and-external.md
+/// depresses both counts (`with A, B do` drops entities after the first, and
+/// the `external &lt;libexpr&gt;` position is unwalked). Biased low, which for an
+/// info census is tolerable; the extractor-side fix belongs to that note.
+///
+/// Measured 2026-08-30: 37 edges on ORM3 server, 158 on client, 24 on this
+/// repo; heaviest is VARINSP -> BASICS at 7 vars + 39 consts, and 117 of the
+/// 158 client edges carry only one or two names. Full refs scan (1.26 s on the
+/// 144 MB index), so it is gated on OptedIn as well as WantRule.
+/// Never raises. See ISymbolStore.FindUsesGlobalCensus.
+/// </remarks>
+function CollectUsesGlobalCensus(const AStore: ISymbolStore): TArray<TLintFinding>;
+const
+  CTag      = 'dl:census-ok';
+  CNameCap  = 12; { the heaviest measured edge carries 46 -- a 46-name line is noise }
+var
+  Findings : TList<TLintFinding>;
+  Edges    : TArray<TUsesCensusEdge>;
+  AckOf    : TDictionary<string, Boolean>;  { '<fid>|<stem>' -> placed acknowledgement }
+  CensusOf : TDictionary<string, Boolean>;  { '<fid>|<stem>' -> this reader draws from it }
+  UnitOf   : TDictionary<string, string> ;  { path -> declared unit name }
+  UsesOf   : TDictionary<Int64, TArray<TUnitUse>>;  { reader fid -> its uses entries }
+
+  { Both passes want the same entries: the acknowledgement pass to decide
+    placement, the emit pass to anchor. Fetched once per reader. }
+  function UsesCached(const AFid: Int64): TArray<TUnitUse>;
+  begin
+    if UsesOf.TryGetValue(AFid, Result) then Exit;
+    Result:= AStore.GetUnitUsesForFile(AFid);
+    UsesOf.AddOrSetValue(AFid, Result);
+  end;
+
+  { ProjUnitNameOf runs a per-file symbol scan, and this rule asks it THREE
+    times per edge (census key, declaring unit, reading unit). Unmemoized that
+    measured 4.5 s on the 158-edge ORM3 client against a 1.26 s store query --
+    the rule spending most of its time re-deriving names it had already
+    derived. Paths repeat heavily by construction: the heavy edges are many
+    readers of a few providers. }
+  function UnitNameCached(const APath: string): string;
+  begin
+    if UnitOf.TryGetValue(APath, Result) then Exit;
+    Result:= ProjUnitNameOf(AStore, APath);
+    UnitOf.AddOrSetValue(APath, Result);
+  end;
+
+  { The last dotted segment, lowercased -- 'sysutils' for 'System.SysUtils'. Both
+    sides of every unit-name comparison go through this, so an acknowledgement
+    written short still matches an entry written long. }
+  function Stem(const AName: string): string;
+  begin
+    Result:= LowerCase(Trim(AName));
+    if LastDelimiter('.', Result) > 0 then
+      Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
+  end;
+
+  function Key(const AFid: Int64; const AUnit: string): string;
+  begin
+    Result:= IntToStr(AFid) + '|' + Stem(AUnit);
+  end;
+
+  { Names, sorted and capped. Returns '' when the list is empty. }
+  function Rendered(const ACsv: string; out ACount: Integer): string;
+  var
+    SL: TStringList;
+    I : Integer;
+  begin
+    Result:= ''; ACount:= 0;
+    SL:= TStringList.Create;
+    try
+      SL.CaseSensitive:= False;
+      SL.Delimiter:= ','; SL.StrictDelimiter:= True;
+      SL.DelimitedText:= ACsv;
+      SL.Sort;
+      for I:= 0 to SL.Count - 1 do
+        if Trim(SL[I]) <> '' then Inc(ACount);
+      var Shown: Integer:= 0;
+      for I:= 0 to SL.Count - 1 do
+      begin
+        if Trim(SL[I]) = '' then Continue;
+        if Shown >= CNameCap then Break;
+        if Result <> '' then Result:= Result + ', ';
+        Result:= Result + Trim(SL[I]);
+        Inc(Shown);
+      end;
+      if ACount > Shown then
+        Result:= Result + Format(' and %d more', [ACount - Shown]);
+    finally
+      SL.Free;
+    end;
+  end;
+
+var
+  E        : TUsesCensusEdge;
+  Fid      : Int64          ;
+  ReaderIds: TList<Int64>   ;
+  F        : TLintFinding   ;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  Edges:= AStore.FindUsesGlobalCensus;
+  if Length(Edges) = 0 then Exit;
+
+  Findings := TList<TLintFinding>.Create;
+  AckOf    := TDictionary<string, Boolean>.Create;
+  CensusOf := TDictionary<string, Boolean>.Create;
+  UnitOf   := TDictionary<string, string> .Create;
+  UsesOf   := TDictionary<Int64, TArray<TUnitUse>>.Create;
+  ReaderIds:= TList<Int64>.Create;
+  try
+    for E in Edges do
+    begin
+      var DPath: string:= AStore.GetFilePath(E.DeclFileId);
+      if DPath <> '' then
+        CensusOf.AddOrSetValue(Key(E.ReaderFileId, UnitNameCached(DPath)), True);
+      if not ReaderIds.Contains(E.ReaderFileId) then ReaderIds.Add(E.ReaderFileId);
+    end;
+
+    { --- the acknowledgement pass, once per READER, not once per finding ---
+      Only files that carry at least one census edge are opened; see the KNOWN
+      LIMIT in the remarks. }
+    for Fid in ReaderIds do
+    begin
+      var RPath: string:= AStore.GetFilePath(Fid);
+      if (RPath = '') or (not TFile.Exists(RPath)) then Continue;
+      var SL: TStringList:= TStringList.Create;
+      try
+        try
+          SL.LoadFromFile(RPath);
+        except
+          Continue; { unreadable source acknowledges nothing and reports nothing }
+        end;
+        var Lines: TArray<string>:= SL.ToStringArray;
+        { A REAL marker is always in a comment, so "ignore comments" is not the
+          test -- the discriminator is WHICH comment. MarkerBearingLines answers
+          that across the whole file, which a per-line test cannot: an unclosed
+          brace from an earlier line is invisible from inside one line. Reused
+          rather than re-derived, because it was written after this exact class
+          of defect reported two findings on the unit defining the syntax. }
+        var Bearing: TArray<Boolean>:=
+          DRagLint.Lint.ReviewMarker.TReviewMarkers.MarkerBearingLines(Lines);
+        var UsesOfReader: TArray<TUnitUse>:= UsesCached(Fid);
+
+        for var I: Integer:= 0 to Length(Lines) - 1 do
+        begin
+          if (I >= Length(Bearing)) or (not Bearing[I]) then Continue;
+          var P: Integer:= Pos(LowerCase(CTag), LowerCase(Lines[I]));
+          if P = 0 then Continue;
+          var L: Integer:= I + 1;                       { 1-based source line }
+          var Rest: string:= Copy(Lines[I], P + Length(CTag), MaxInt);
+          var D: Integer:= Pos('--', Rest);
+          if D > 0 then Rest:= Copy(Rest, 1, D - 1);     { drop the free-text reason }
+          var Alone: Boolean:= StartsText('//', Trim(Lines[I]));
+
+          var Toks: TStringList:= TStringList.Create;
+          try
+            Toks.Delimiter:= ','; Toks.StrictDelimiter:= True;
+            Toks.DelimitedText:= Rest;
+            for var T: Integer:= 0 to Toks.Count - 1 do
+            begin
+              var Named: string:= Trim(Toks[T]);
+              { The tag may be followed by ':' in the owner's sketch spelling. }
+              while (Named <> '') and CharInSet(Named[1], [':', ';']) do
+                Named:= Trim(Copy(Named, 2, MaxInt));
+              if Named = '' then Continue;
+
+              var InUses: Boolean:= False;
+              var Placed: Boolean:= False;
+              for var U: TUnitUse in UsesOfReader do
+                if Stem(U.UnitName) = Stem(Named) then
+                begin
+                  InUses:= True;
+                  { Trailing on the entry's own line, or alone on the line
+                    directly above it. Anything else records the intent but does
+                    not suppress -- see the remarks. }
+                  if (U.StartLine = L) or ((U.StartLine = L + 1) and Alone) then
+                    Placed:= True;
+                end;
+
+              if Placed then AckOf.AddOrSetValue(Key(Fid, Named), True);
+
+              if (not InUses) or (not CensusOf.ContainsKey(Key(Fid, Named))) then
+              begin
+                F:= Default(TLintFinding);
+                F.RuleId   := 'uses-global-census';
+                F.Severity := 'info';
+                F.FilePath := RPath;
+                F.StartLine:= L; F.StartCol:= P;
+                F.EndLine  := L; F.EndCol  := P + Length(CTag);
+                var Why: string;
+                if not InUses then
+                  Why:= 'it is not in this unit''s uses clause'
+                else
+                  Why:= 'this unit draws no globals or consts from it';
+                F.Message:= Format(
+                  '%s names %s, but %s -- remove or update the acknowledgement',
+                  [CTag, Named, Why]);
+                Findings.Add(F);
+              end;
+            end;
+          finally
+            Toks.Free;
+          end;
+        end;
+      finally
+        SL.Free;
+      end;
+    end;
+
+    { --- the census itself --- }
+    for E in Edges do
+    begin
+      var ReaderPath: string:= AStore.GetFilePath(E.ReaderFileId);
+      var DeclPath  : string:= AStore.GetFilePath(E.DeclFileId  );
+      if (ReaderPath = '') or (DeclPath = '') then Continue;
+      var DeclUnit  : string:= UnitNameCached(DeclPath  );
+      var ReaderUnit: string:= UnitNameCached(ReaderPath);
+      if AckOf.ContainsKey(Key(E.ReaderFileId, DeclUnit)) then Continue;
+
+      var NV, NC: Integer;
+      var VNames: string:= Rendered(E.VarNames  , NV);
+      var CNames: string:= Rendered(E.ConstNames, NC);
+      var All   : string:= VNames;
+      if (All <> '') and (CNames <> '') then All:= All + ', ';
+      All:= All + CNames;
+
+      var Ln, Cl: Integer;
+      ProjAnchorAtUsesIn(UsesCached(E.ReaderFileId), DeclUnit, Ln, Cl);
+
+      F:= Default(TLintFinding);
+      F.RuleId   := 'uses-global-census';
+      F.Severity := 'info';
+      F.FilePath := ReaderPath;
+      F.StartLine:= Ln; F.StartCol:= Cl;
+      F.EndLine  := Ln; F.EndCol  := Cl + Length(DeclUnit);
+      F.Message  := Format(
+        '%s references %d variable(s) and %d const(s) from %s: %s -- acknowledge a ' +
+        'travels-together pair with // %s %s',
+        [ReaderUnit, NV, NC, DeclUnit, All, CTag, DeclUnit]);
+      Findings.Add(F);
+    end;
+    Result:= Findings.ToArray;
+  finally
+    ReaderIds.Free;
+    UsesOf   .Free;
+    UnitOf   .Free;
+    CensusOf .Free;
+    AckOf    .Free;
+    Findings .Free;
+  end;
+end; // function
 
 /// <summary>Flags a const or var NAME declared at interface unit level in two
 /// or more units -- which declaration compiles depends on uses order.</summary>
@@ -1027,76 +1413,6 @@ var
     end;
   end;
 
-  { The unit's own declared name ('uStyles'), falling back to the file stem when
-    the unit symbol is missing -- a .dpr has no unit symbol and DOES appear as a
-    reader (Micronite2027.dpr -> BASICS.PAS is one of the measured pairs). }
-  function UnitNameOf(const APath: string): string;
-  var
-    S: TSymbol;
-  begin
-    for S in AStore.FindSymbolsByFile(APath) do
-      if S.Kind = skUnit then
-      begin
-        Result:= S.QualifiedName;
-        if Result = '' then Result:= S.Name;
-        if Result <> '' then Exit;
-      end;
-    Result:= TPath.GetFileNameWithoutExtension(APath);
-  end;
-
-  { Anchor the finding at the `uses` entry that names the declaring unit, not at
-    line 1 of the reader. The edge IS that line -- it is what the reader deletes
-    when they act on the advice -- so pointing anywhere else makes the finding
-    harder to act on than the grep it replaces. Falls back to 1:1. }
-  procedure AnchorAtUses(const AReaderFid: Int64; const ADeclUnit: string;
-                         var ALine, ACol: Integer);
-  var
-    U   : TUnitUse;
-    Stem: string  ;
-  begin
-    ALine:= 1; ACol:= 1;
-    Stem:= LowerCase(ADeclUnit);
-    if LastDelimiter('.', Stem) > 0 then
-      Stem:= Copy(Stem, LastDelimiter('.', Stem) + 1, MaxInt);
-    for U in AStore.GetUnitUsesForFile(AReaderFid) do
-    begin
-      var N: string:= LowerCase(U.UnitName);
-      if LastDelimiter('.', N) > 0 then N:= Copy(N, LastDelimiter('.', N) + 1, MaxInt);
-      if N = Stem then
-      begin
-        ALine:= U.StartLine; ACol:= U.StartCol;
-        Exit;
-      end;
-    end;
-  end;
-
-  { SQLite's GROUP_CONCAT gives NO ordering guarantee, so the names arrive in
-    whatever order the aggregate happened to visit. Rendering that straight into
-    the message makes the same finding differ between runs, which turns a report
-    diff into noise and a golden file into a coin flip. }
-  function SortedNames(const ACsv: string): string;
-  var
-    SL: TStringList;
-  begin
-    SL:= TStringList.Create;
-    try
-      SL.CaseSensitive:= False;
-      SL.Delimiter    := ',';
-      SL.StrictDelimiter:= True;
-      SL.DelimitedText:= ACsv;
-      SL.Sort;
-      Result:= '';
-      for var I: Integer:= 0 to SL.Count - 1 do
-      begin
-        if Trim(SL[I]) = '' then Continue;
-        if Result <> '' then Result:= Result + ', ';
-        Result:= Result + Trim(SL[I]);
-      end;
-    finally
-      SL.Free;
-    end;
-  end;
-
 var
   E             : TGlobalOnlyEdge;
   ReaderPath    : string         ;
@@ -1129,14 +1445,14 @@ begin
       ReaderPath:= AStore.GetFilePath(E.ReaderFileId);
       DeclPath  := AStore.GetFilePath(E.DeclFileId  );
       if (ReaderPath = '') or (DeclPath = '') then Continue;
-      ReaderUnit:= UnitNameOf(ReaderPath);
-      DeclUnit  := UnitNameOf(DeclPath  );
-      Names     := SortedNames(E.GlobalNames);
+      ReaderUnit:= ProjUnitNameOf(AStore, ReaderPath);
+      DeclUnit  := ProjUnitNameOf(AStore, DeclPath  );
+      Names     := ProjSortedNames(E.GlobalNames);
       if Names = '' then Continue;
 
       Info:= DeclInfo(DeclPath);
 
-      AnchorAtUses(E.ReaderFileId, DeclUnit, Ln, Cl);
+      ProjAnchorAtUses(AStore, E.ReaderFileId, DeclUnit, Ln, Cl);
 
       F:= Default(TLintFinding);
       F.RuleId  := 'global-only-uses-edge';
@@ -1583,6 +1899,7 @@ var
   TCirc, TEnum, TRts, TUuiu, TGod, TUpub, TUpriv, TAccess, TOuter: Int64;
   TGlob: Int64;
   TDupD: Int64;
+  TCens: Int64;
   { "Referenced at all?" as two sets, built with one scan each instead of two
     queries per symbol. See IsReferenced. }
   RefdIds       : TDictionary<Int64 , Boolean>;
@@ -1805,7 +2122,7 @@ begin
   RefdNames  := TDictionary<string, Boolean>      .Create;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
-  TGlob:= 0; TDupD:= 0;
+  TGlob:= 0; TDupD:= 0; TCens:= 0;
   try
     { Built only for the rules that need them -- on a large index these are two
       scans of the whole refs table, which is pure waste for a --rule run that
@@ -1836,6 +2153,14 @@ begin
     if WantRule('duplicate-global-decl') then
       for var Df in CollectDuplicateGlobalDecls(AStore) do Findings.Add(Df);
     Inc(TDupD, Tick - T0); T0:= Tick;
+
+    { uses-global-census: whole-refs-graph pass, OFF by default and gated on
+      OptedIn for the same reason as global-only-uses-edge -- 1.26 s on the
+      144 MB client index, which a post-hoc config filter would have hidden
+      perfectly while still charging for it. }
+    if WantRule('uses-global-census') and OptedIn('uses-global-census') then
+      for var Cf in CollectUsesGlobalCensus(AStore) do Findings.Add(Cf);
+    Inc(TCens, Tick - T0); T0:= Tick;
 
     { enum-helper-separate-units (Task 7, enum-helper-generator milestone):
       whole-DB helper-edge pass (not per-file). ON by default -- do NOT add
@@ -2110,6 +2435,7 @@ begin
       ProfLine('circular-uses'             , TCirc  );
       ProfLine('global-only-uses-edge'     , TGlob  );
       ProfLine('duplicate-global-decl'     , TDupD  );
+      ProfLine('uses-global-census'        , TCens  );
       ProfLine('enum-helper-separate-units', TEnum  );
       ProfLine('repeated-type-switch'      , TRts   );
       ProfLine('unused-unit-in-uses'       , TUuiu  );

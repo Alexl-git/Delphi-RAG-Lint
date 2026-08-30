@@ -539,7 +539,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 
 #### Lint
 
-**176 rules across 16 categories -- 122 built-in + 54 external `.scm`, 151
+**177 rules across 16 categories -- 123 built-in + 54 external `.scm`, 151
 enabled by default, 22 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -691,10 +691,10 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (176 rules)
+### Lint rule pack (177 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.7.0-alpha: **176 rules across 16 categories -- 122
+external `.scm`). As of v1.7.0-alpha: **177 rules across 16 categories -- 123
 built-in and 54 external `.scm`, 151 enabled by default, and 22 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 

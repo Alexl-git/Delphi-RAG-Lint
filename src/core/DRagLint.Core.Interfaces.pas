@@ -797,6 +797,16 @@ type
     /// not join refs, so it costs 0.05 s on a 144 MB index and needs no opt-in
     /// gate.</remarks>
     function FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
+
+    /// <summary>For every resolved uses edge, how many DISTINCT unambiguous
+    /// interface-section unit-level vars and consts of the target the reader
+    /// actually references -- the coupling census.</summary>
+    /// <returns>One row per (reader, target) pair that draws at least one such
+    /// name, heaviest first; empty when none. Never raises.</returns>
+    /// <remarks>Backs the 'uses-global-census' rule. Same full-refs-scan cost
+    /// class as FindGlobalOnlyUsesEdges (1.26 s on a 144 MB index), so its
+    /// caller is gated on OptedIn rather than filtered afterwards.</remarks>
+    function FindUsesGlobalCensus: TArray<TUsesCensusEdge>;
     /// <summary>The GUI framework this index's own code actually writes in its
     /// `uses` clauses -- the leading namespace segment ('Vcl' or 'FMX', the
     /// pair being DRagLint.Core.Model.IsGuiFrameworkPrefix's to name), or ''

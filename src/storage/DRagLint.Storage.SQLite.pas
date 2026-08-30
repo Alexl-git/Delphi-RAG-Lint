@@ -1612,6 +1612,7 @@ type
       function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
       function FindGlobalOnlyUsesEdges: TArray<TGlobalOnlyEdge>;
       function FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
+      function FindUsesGlobalCensus: TArray<TUsesCensusEdge>;
       /// <summary><!-- drag-lint:auto -->A TIE RETURNS ''. Measured on the real consumers
       /// there is no tie to speak of (DataCopy 25 Vcl / 0 FMX, YADF 18 / 0), but a
       /// project that genuinely writes both has no single framework to prefer, and
@@ -8681,6 +8682,118 @@ end; // function
   that .dfm files carry only 'component' and 'form' kind symbols, so the kind
   gate already excludes them. Kept because the invariant belongs to the indexer,
   not to this rule. }
+{ FindGlobalOnlyUsesEdges' statement with the ONLY-LINK clause removed and
+  consts admitted. Everything else is carried over deliberately rather than
+  re-derived, and two pieces are load-bearing in exactly the same way:
+
+  THE .dfm EXCLUSION IN THE DECLARATION UNIVERSE. Every published component of a
+  form is indexed twice -- a `field` in the .pas and a `component` in the .dfm --
+  so counting distinct FILES without it marks every form member ambiguous and
+  the uniq gate discards it. There the loss fabricated findings; here it can
+  only UNDER-count, which is the safe direction for a census but still wrong.
+
+  THE unit_uses CONJUNCT IS MANDATORY, and here it is not a formality. The
+  finding is ANCHORED at a uses line, so a pair with no uses line has nowhere to
+  go. Measured 2026-08-30: it removes 44 name-join pairs on the ORM3 client
+  (202 -> 158), where on the sibling rule it removed none.
+
+  THE SHAPE OF `pr` IS NOT A STYLE CHOICE -- IT IS THE ONLY ONE THAT IS FAST
+  THROUGH FIREDAC. The obvious form joins one `glob` CTE carrying the kind
+  (`JOIN glob g ON g.n = u.n`), and through Python's SQLite 3.50 that is the
+  FASTER of the two: 0.44 s on the server index against 0.80 s for the shape
+  below. Through the engine's own SQLite it is a catastrophe -- measured
+  49.6 s on that same index, 100x, reproducible, while the client index stayed
+  near 1 s. Two CTE membership tests in a CASE, which is exactly what the
+  sibling FindGlobalOnlyUsesEdges does, plan well on both.
+
+  The lesson, recorded because it cost a rewrite: a query timed in a probe is
+  not the query that ships. This one was planned against 0.43 s measured in
+  Python and had to be re-shaped once it was run through FireDAC.
+
+  Measured through the ENGINE after the re-shape. Full refs scan, hence the
+  OptedIn gate on the caller. }
+function TSQLiteSymbolStore.FindUsesGlobalCensus: TArray<TUsesCensusEdge>;
+const
+  SQL =
+    'WITH decl AS (' +
+    '  SELECT LOWER(s.name) AS n, COUNT(DISTINCT s.file_id) AS nfiles, MIN(s.file_id) AS fid' +
+    '  FROM symbols s JOIN files f ON f.id = s.file_id' +
+    '  WHERE s.name IS NOT NULL AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''' +
+    '  GROUP BY LOWER(s.name)), ' +
+    'uniq AS (SELECT n, fid FROM decl WHERE nfiles = 1), ' +
+    'gv AS (' +
+    '  SELECT DISTINCT LOWER(s.name) AS n FROM symbols s' +
+    '  LEFT JOIN symbols p ON p.id = s.parent_id' +
+    '  WHERE s.kind = ''var'' AND s.section = ''interface'' AND s.name IS NOT NULL' +
+    '    AND (s.parent_id IS NULL OR p.kind IN (''unit'', ''program''))' +
+    '    AND LOWER(s.name) IN (SELECT n FROM uniq)), ' +
+    'gc AS (' +
+    '  SELECT DISTINCT LOWER(s.name) AS n FROM symbols s' +
+    '  LEFT JOIN symbols p ON p.id = s.parent_id' +
+    '  WHERE s.kind = ''const'' AND s.section = ''interface'' AND s.name IS NOT NULL' +
+    '    AND (s.parent_id IS NULL OR p.kind IN (''unit'', ''program''))' +
+    '    AND LOWER(s.name) IN (SELECT n FROM uniq)), ' +
+    'pr AS (' +
+    '  SELECT r.file_id AS a, u.fid AS b, u.n AS n,' +
+    '         CASE WHEN u.n IN (SELECT n FROM gv) THEN 1 ELSE 0 END AS isv,' +
+    '         CASE WHEN u.n IN (SELECT n FROM gc) THEN 1 ELSE 0 END AS isc' +
+    '  FROM refs r JOIN uniq u ON u.n = LOWER(r.name_text)' +
+    '  JOIN files f ON f.id = r.file_id' +
+    '  WHERE r.name_text IS NOT NULL AND u.fid <> r.file_id' +
+    '    AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''), ' +
+    'agg AS (' +
+    '  SELECT a, b,' +
+    '         COUNT(DISTINCT CASE WHEN isv = 1 THEN n END) AS nv,' +
+    '         COUNT(DISTINCT CASE WHEN isc = 1 THEN n END) AS nc,' +
+    '         GROUP_CONCAT(DISTINCT CASE WHEN isv = 1 THEN n END) AS vn,' +
+    '         GROUP_CONCAT(DISTINCT CASE WHEN isc = 1 THEN n END) AS cn' +
+    '  FROM pr GROUP BY a, b) ' +
+    'SELECT a, b, nv, nc, vn, cn FROM agg ' +
+    'WHERE (nv + nc) > 0 ' +
+    '  AND EXISTS (SELECT 1 FROM unit_uses uu' +
+    '              WHERE uu.file_id = agg.a AND uu.target_file_id = agg.b) ' +
+    'ORDER BY (nv + nc) DESC, a, b';
+var
+  Q   : TFDQuery              ;
+  List: TList<TUsesCensusEdge>;
+  E   : TUsesCensusEdge       ;
+begin
+  Result:= nil;
+  List:= TList<TUsesCensusEdge>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := SQL;
+    try
+      Q.Open;
+    except
+      { An index predating unit_uses.target_file_id answers nothing rather than
+        failing the run -- tolerable only because the rule is opt-in, so an
+        empty result is read by someone who deliberately asked and can reindex. }
+      Exit;
+    end;
+    try
+      while not Q.Eof do
+      begin
+        E.ReaderFileId:= Q.FieldByName('a' ).AsLargeInt;
+        E.DeclFileId  := Q.FieldByName('b' ).AsLargeInt;
+        E.VarCount    := Q.FieldByName('nv').AsInteger ;
+        E.ConstCount  := Q.FieldByName('nc').AsInteger ;
+        E.VarNames    := Q.FieldByName('vn').AsString  ;
+        E.ConstNames  := Q.FieldByName('cn').AsString  ;
+        List.Add(E);
+        Q.Next;
+      end;
+    finally
+      Q.Close;
+    end; // try
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
 function TSQLiteSymbolStore.FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
 const
   CGate =

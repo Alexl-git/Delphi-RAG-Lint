@@ -617,6 +617,28 @@ type
   // registered and resolved, a Boolean cannot. It is deliberately ALL and not
   // ANY -- injecting the interface half of a mixed edge leaves the other
   // global carrying it, so the edge survives and the advice would be false.
+  // One uses edge weighed by how many of the target's globals the reader
+  // actually touches -- the coupling census. Sibling of TGlobalOnlyEdge and
+  // deliberately NOT the same question: that one asks whether the edge can be
+  // DELETED, this one asks how heavy it is, and makes no only-link claim.
+  //
+  // Counts are REFERENCED names, not everything B exports. What B exports is a
+  // property of B alone -- the same number on every edge into B -- so it cannot
+  // rank edges or justify acknowledging one over another, which is the owner's
+  // stated purpose ("must go together when separated for a test").
+  //
+  // Names arrive comma-separated and UNORDERED (GROUP_CONCAT gives no ordering
+  // guarantee); the rule sorts before rendering, because an unstable message is
+  // an unstable diff.
+  TUsesCensusEdge = record
+    ReaderFileId: Int64  ;
+    DeclFileId  : Int64  ;
+    VarCount    : Integer;
+    ConstCount  : Integer;
+    VarNames    : string ;
+    ConstNames  : string ;
+  end;
+
   // One DECLARING SITE of a name that is declared at interface unit level in
   // two or more indexed units. Rows arrive one per SITE, ordered by
   // (lower(name), lower(path), start_line), so the rule groups them in Delphi:

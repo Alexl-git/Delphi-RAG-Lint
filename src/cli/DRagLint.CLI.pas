@@ -600,7 +600,7 @@ begin
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
-  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge] [--layers <f.json>] [--json]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
@@ -13333,6 +13333,8 @@ begin
     var OptIn: TArray<string>:= nil;
     if Cfg.ShouldKeep('global-only-uses-edge', True) then
       OptIn:= OptIn + ['global-only-uses-edge'];
+    if Cfg.ShouldKeep('uses-global-census', True) then
+      OptIn:= OptIn + ['uses-global-census'];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
     { LibStore is the platform library index, already open above for the
@@ -13664,6 +13666,8 @@ begin
     var OptIn2: TArray<string>:= nil;
     if LoadLintConfig(AArgs).ShouldKeep('global-only-uses-edge', True) then
       OptIn2:= OptIn2 + ['global-only-uses-edge'];
+    if LoadLintConfig(AArgs).ShouldKeep('uses-global-census', True) then
+      OptIn2:= OptIn2 + ['uses-global-census'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge

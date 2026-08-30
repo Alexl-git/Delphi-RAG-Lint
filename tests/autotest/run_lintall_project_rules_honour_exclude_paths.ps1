@@ -199,8 +199,8 @@ end.
 Write-Ascii (Join-Path $drag 'drag-lint-project.json') '{ "ownRoots": [".."] }'
 $cfgOn  = Join-Path $repo 'drag-lint-lint.json'
 $cfgOff = Join-Path $repo 'drag-lint-lint-noexclude.json'
-Write-Ascii $cfgOn  '{ "exclude_paths": ["*\\third_party\\*"], "enabled": ["global-only-uses-edge"] }'
-Write-Ascii $cfgOff '{ "exclude_paths": [], "enabled": ["global-only-uses-edge"] }'
+Write-Ascii $cfgOn  '{ "exclude_paths": ["*\\third_party\\*"], "enabled": ["global-only-uses-edge", "uses-global-census"] }'
+Write-Ascii $cfgOff '{ "exclude_paths": [], "enabled": ["global-only-uses-edge", "uses-global-census"] }'
 
 $db    = Join-Path $drag 'app.sqlite'
 $proj  = Join-Path $app 'App.dpr'
@@ -284,6 +284,19 @@ Check 'no duplicate-global-decl survives against an excluded path' `
   (@(Vendor-Findings $outOn | Where-Object { $_ -match 'duplicate-global-decl' }).Count -eq 0)
 Check 'LIVE CONTROL: the owned pair still reports it in the same run' `
   (@(Get-Content $outOn | Where-Object { $_ -match 'CAppDup' -and $_ -match 'duplicate-global-decl' }).Count -gt 0) `
+  'otherwise the rule was simply off and the check above is empty'
+
+Write-Host ''
+Write-Host 'BY NAME: uses-global-census obeys the same filter' -ForegroundColor Cyan
+# The census anchors at the READER's uses line, so the vendored READER is what
+# has to disappear -- uVendorReader draws gTheOnlyLink from uGlob.
+Check 'POSITIVE CONTROL: the vendored reader reports it when NOT excluded' `
+  (@(Vendor-Findings $outOff | Where-Object { $_ -match 'uses-global-census' }).Count -gt 0) `
+  'if this is 0 the assertion below proves nothing'
+Check 'no uses-global-census survives against an excluded path' `
+  (@(Vendor-Findings $outOn | Where-Object { $_ -match 'uses-global-census' }).Count -eq 0)
+Check 'LIVE CONTROL: the owned reader still reports it in the same run' `
+  (@(Get-Content $outOn | Where-Object { $_ -match 'uAppReader' -and $_ -match 'uses-global-census' }).Count -gt 0) `
   'otherwise the rule was simply off and the check above is empty'
 
 Write-Host ''
