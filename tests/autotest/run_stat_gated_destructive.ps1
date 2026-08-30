@@ -30,6 +30,18 @@
       with an unrelated TDirectory.Exists far above. Rewriting NUL destroys
       nothing. N6 pins that limitation deliberately.
 
+  PATTERN 3 IS RETIRED, BY MEASUREMENT (2026-08-30). The note's third confirmed
+  instance was `if TFile.Exists(F) then size := TFile.GetSize(F) else size := 0`
+  with the captured 0 cashed as "delete the whole file" hundreds of lines later.
+  It was deferred at ship because the harm is CROSS-STATEMENT and the note
+  declines dataflow; the capture-site heuristic proposed instead was told to
+  earn its own false-positive measurement first. It did not: population 0 in
+  1,240 first-party units across four corpora, and BOTH ORM3 indexes contain
+  zero size-call occurrences of any kind, which is exhaustive rather than a
+  sample. The 7 sites any practical matcher could reach were read by hand and
+  every one is benign. N7 below pins that decision -- see
+  docs\PLAN-stat-gated-pattern-3.md and docs\INBOX-Done\.
+
   CORPUS SCAN, before severity was fixed: DataCopy 4, ORM3 5, this repo 10,
   YADF 0 -- and every survivor inspected is the canonical
   `if TFile.Exists(X) then TFile.Delete(X)`. Shipped at WARNING on the
@@ -133,6 +145,19 @@ begin
   end;
 end;
 
+// N7 is the RETIREMENT PIN, not an ordinary negative. This is pattern 3
+// verbatim -- the note's own confirmed instance 3. It is silent because the
+// rule deliberately does not model it, and its positive control is P5, which
+// shares the identical existence condition and DOES fire. A matcher widened
+// until N7 speaks therefore fails here rather than passing quietly, and a
+// rule that has died fails P5 and VACUITY instead.
+procedure N7_SizeCaptureIsNotDestructive(const F: string);
+var
+  Size: Int64;
+begin
+  if TFile.Exists(F) then Size := TFile.GetSize(F) else Size := 0;
+end;
+
 end.
 '@
 
@@ -159,7 +184,7 @@ try {
   foreach ($r in @('P1_AppendElseRewrite','P2_ShortCircuit','P4_FilenameAppendWriter','P5_ExistsThenDelete')) {
     Check "P  $r FIRES" ($fired -contains $r) ($fired -join ',')
   }
-  foreach ($r in @('N1_ExistsThenRead','N2_GuardClause','N3_ActAndReadError','N4_CreateNotAppend','N5_StreamOverload','N6_BlockBranch')) {
+  foreach ($r in @('N1_ExistsThenRead','N2_GuardClause','N3_ActAndReadError','N4_CreateNotAppend','N5_StreamOverload','N6_BlockBranch','N7_SizeCaptureIsNotDestructive')) {
     Check "N  $r is SILENT" (-not ($fired -contains $r)) ($fired -join ',')
   }
 
