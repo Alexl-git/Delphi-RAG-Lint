@@ -408,7 +408,7 @@ procedure EmitExpressionIdentReads(const ANode: TTSNode; const AState: TWalkStat
     ONLY A BARE IDENTIFIER WAS EVER LOST. A non-identifier entity such as
     `with A, TFoo(FList[0]) do` is its own node and ordinary Walk recursion
     already reaches it; that is pinned as a GREEN control in
-    testsutotestun_with_and_external_refs.ps1, so a "helpful" widening here
+    tests\autotest\run_with_and_external_refs.ps1, so a "helpful" widening here
     that emitted it a second time would fail there rather than pass quietly. }
   procedure ReadWithEntities;
   var
@@ -1156,6 +1156,7 @@ var
   TypeName    : string ;
   QName       : string ;
   Target      : string ;
+  Her         : string ;
 begin
   Result:= False;
   TypeWrapNode:= ADeclTypeNode.ChildByField('type');
@@ -1170,7 +1171,39 @@ begin
   Target:= Trim(NodeText(RefNode, AState.Source));
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
+  { MEMBER C. Also carry the target into HERITAGE, so ResolveAncestry can build
+    the ordinal-0 type_ancestors row that lets CallResolver climb from an
+    alias-typed receiver to the real method. Measured before: `TAliased = TBase;
+    X: TAliased; X.Ping` produced ZERO call edges, so find-callers on Ping
+    omitted the site -- and absence reads as "nothing calls this", the dangerous
+    answer.
+
+    THE PARSER HALF ALONE DOES NOTHING, and the originating note is wrong to
+    imply otherwise: ResolveAncestry's SOURCE select filtered
+    kind IN ('class','interface'), so an alias's heritage was never split into
+    rows. Both halves ship together (Storage.SQLite.pas, the same commit).
+
+    v1 SCOPE IS THE MEASURED REPRO: a BARE named target only. A generic
+    instantiation (`TFoo = TBar<Integer>`), a qualified name and a strong alias
+    (`= type TBase`, which TryWalkStrongAlias claims before this) are left with
+    empty heritage rather than guessed at -- NormalizeAncestorName /
+    SplitHeritageList were never exercised on those shapes, and a wrong ancestor
+    row is worse than none: it would bind calls to the wrong method silently.
+    SIGNATURE IS UNCHANGED and still carries the full target text, so
+    ResolveTypeCategory keeps chasing `type TMyFloat = Double;` exactly as
+    before. }
+  Her:= '';
+  if (Target <> '') and CharInSet(Target[1], ['A'..'Z', 'a'..'z', '_']) then
+  begin
+    Her:= Target;
+    for var ci:= 2 to Length(Target) do
+      if not CharInSet(Target[ci], ['A'..'Z', 'a'..'z', '0'..'9', '_']) then
+      begin
+        Her:= '';   // qualified, generic or otherwise not a bare name -- out of v1 scope
+        Break;
+      end;
+  end;
+  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', Her);
   Result:= True;
 end; // function
 

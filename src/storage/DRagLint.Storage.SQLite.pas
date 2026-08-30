@@ -5048,8 +5048,33 @@ end;
 
 function TSQLiteSymbolStore.GetTypeCandidates: TArray<TSymbol>;
 { v14 (D5): every class/interface/record symbol, minimally populated (id,
-  file_id, kind, name). Mirrors ResolveAncestry's candidate query, plus 'record'
-  so record-typed receivers resolve. Backs TCallResolver's name-candidate map. }
+  file_id, kind, name). Backs TCallResolver's name-candidate map.
+
+  MEMBER C adds 'type' -- and this query NO LONGER mirrors ResolveAncestry's
+  candidate query, which is deliberate and is the thing to understand before
+  editing either one. They answer different questions:
+
+    ResolveAncestry candidates  "what does this ANCESTOR NAME refer to"
+                                -> only ever a class or an interface
+    GetTypeCandidates           "what type is this RECEIVER"
+                                -> may be an alias, because `X: TAliased;
+                                   X.Ping` types X to the alias symbol, whose
+                                   ancestor row (ordinal 0, the bare target)
+                                   then carries the climb to the real method
+
+  Member C needed THREE layers, not the two its plan and INBOX note described:
+  the parser filling heritage, ResolveAncestry admitting the alias kind as a
+  SOURCE, and this candidate query. With only the first two, type_ancestors held
+  a perfectly correct alias row that nothing ever looked up, because
+  ResolveTypeNameToSymbol could not turn `TAliased` into a symbol id at all.
+
+  THE RISK THIS CARRIES, stated because it is not visible from here: a wider
+  candidate map can make a name AMBIGUOUS that used to be unique, and
+  ResolveTypeNameToSymbol declines when ambiguous. That direction LOSES edges
+  rather than inventing them, which is the safe way to be wrong, but it is still
+  a regression -- the batch's A/B kill condition is 0 removed edges, and
+  tests\autotest\run_alias_receiver_edges.ps1 keeps an inheritance control
+  green for the local case. }
 var
   Q   : TFDQuery      ;
   List: TList<TSymbol>;
@@ -5060,7 +5085,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT id, file_id, kind, name FROM symbols ' +
-                   'WHERE kind IN (''class'',''interface'',''record'')';
+                   'WHERE kind IN (''class'',''interface'',''record'',''type'')';
     Q.Open;
     while not Q.Eof do
     begin
@@ -7486,7 +7511,11 @@ var
 
   // True when a class/interface candidate is a forward-declaration stub
   // ('TFoo = class;' -- empty heritage, single line). Type aliases are never
-  // stubs (their target lives in Signature, heritage is legitimately empty).
+  // stubs, and the KIND GUARD below is what guarantees it -- no longer the
+  // emptiness of their heritage. Since member C a plain alias carries its bare
+  // target in heritage as well as in Signature, so the old reasoning ("heritage
+  // is legitimately empty") is now FALSE; the test is sound only because
+  // skTypeAlias is not in the kind set.
   function IsStub(const S: TSymbol): Boolean;
   begin
     Result:= (S.Kind in [skClass, skInterface]) and
@@ -9456,8 +9485,23 @@ begin
                       'VALUES (:sid, :ord, :an, :ak, :asid, :afid)';
     QIns.Params.ParamByName('asid').DataType:= ftLargeint;
     QIns.Params.ParamByName('afid').DataType:= ftLargeint;
+    { MEMBER C: 'type' joins the SOURCE set so a plain type alias's heritage --
+      which the parser now fills with the bare target name -- becomes an
+      ordinal-0 type_ancestors row, and CallResolver's existing climb resolves a
+      call on an alias-typed receiver without any further change.
+
+      SOURCE set only, deliberately NOT the CANDIDATE set in step 1 above. The
+      candidate set answers "what does this ancestor NAME refer to", and an
+      ancestor is still only ever a class or an interface; widening it would let
+      `TDer = class(TAliased)` bind to the alias symbol instead of the class it
+      names. The two sets are different questions and this changes exactly one.
+
+      Bounded by construction: the parser sets alias heritage only for a BARE
+      named target, so generics, qualified names and strong aliases contribute
+      no rows at all. Census at the time of writing -- 20 such aliases on ORM3
+      CLIENT, 2 on SERVER, 3 in this repo. }
     Q.SQL.Text:= 'SELECT id, file_id, heritage FROM symbols ' +
-                 'WHERE kind IN (''class'',''interface'') AND heritage IS NOT NULL AND heritage <> ''''';
+                 'WHERE kind IN (''class'',''interface'',''type'') AND heritage IS NOT NULL AND heritage <> ''''';
     FConn.StartTransaction;
     try
       FConn.ExecSQL('DELETE FROM type_ancestors');

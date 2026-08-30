@@ -1,9 +1,20 @@
-RED baseline recorded against extractor 1.8.0-alpha (the UNFIXED build).
-Expected: 5 FAIL (2 call_edges + 3 type_ancestors), controls PASS.
-CAVEAT, stated so it is not misread later: the IMPOSTOR guard passes today
-vacuously -- nothing resolves at all, so nothing can resolve WRONGLY. It only
-becomes load-bearing once the fix makes edges appear. Same for find-callers,
-which matches by NAME and is already green; neither is evidence of a fix.
+RED baseline, recorded by RUNNING THE SNAPSHOT ENGINE (extractor 1.8.0-alpha).
+    1.8.0-alpha -> 5 FAIL (2 call_edges + 3 type_ancestors), controls PASS
+    1.9.0-alpha -> all 11 PASS
+
+CAVEAT ON THE OLD RUN, so it is not misread: the IMPOSTOR guard and
+find-callers both PASS here vacuously -- nothing resolved at all, so nothing
+could resolve WRONGLY, and find-callers matches by NAME rather than by
+resolution. They only become load-bearing once edges exist, which is the
+state the new engine is in.
+
+MEMBER C NEEDED THREE LAYERS, not the two its plan described. With the parser
+and ResolveAncestry halves alone, type_ancestors held a perfectly correct
+alias row that NOTHING LOOKED UP: GetTypeCandidates filtered receiver-type
+candidates to class/interface/record, so ResolveTypeNameToSymbol could not
+turn TAliased into a symbol id in the first place. The intermediate state --
+ancestors green, edges still red -- is recorded because it is the whole
+reason the third layer was found rather than assumed.
 
 call_edges
   [FAIL] HAZARD: alias-typed receiver resolves to the base method edges=0
