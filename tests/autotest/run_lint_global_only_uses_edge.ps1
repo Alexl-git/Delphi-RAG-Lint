@@ -91,10 +91,14 @@ type
   public
     procedure Poke;
   end;
+  IBService = interface
+    procedure Ping;
+  end;
 var
   gOnlyLink : Boolean;
   gShadowed : Integer;
   gAmbig    : Integer;
+  gService  : IBService;
 procedure BHelper;
 implementation
 procedure TBThing.Poke;
@@ -294,6 +298,45 @@ object frmCodeLink: TfrmCodeLink
 end
 '@
 
+# INTERFACE ARM (owner ruling 2026-08-30). The carrying global's declared TYPE
+# is the discriminator: an interface CAN be registered and resolved, so here --
+# and only here -- the advice is allowed to say "inject". Resolution is against
+# the index (kind='interface'), never a name heuristic: ORM3's two real cases
+# are ImcSTATIONS and ImcOPTRLIST, and "I followed by an upper-case letter"
+# misses both.
+Emit 'uIfaceReader.pas' @'
+unit uIfaceReader;
+interface
+uses uGlobalsB;
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gService = nil then
+    Exit;
+end;
+end.
+'@
+
+# MIXED control. Injecting only the interface-typed half leaves the OTHER
+# global carrying the edge, so the edge does not go away and the advice must
+# not claim it does. Relocation is the only cure that works for the pair.
+Emit 'uMixedReader.pas' @'
+unit uMixedReader;
+interface
+uses uGlobalsB;
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gOnlyLink then
+    Exit;
+  if gService = nil then
+    Exit;
+end;
+end.
+'@
+
 # --- configs ---------------------------------------------------------------
 # The rule ships DefaultEnabled=False, so "on" means an explicit opt-in.
 $cfgOn  = Join-Path $WorkDir 'on.json'
@@ -339,6 +382,26 @@ Check 'the finding names the carrying global' `
 Check 'the advice offers RELOCATING, not only injecting' `
   (($a -join ' ') -match 'relocat') `
   'SkipRefresh is fixed by moving the variable, not by a container'
+
+Write-Host ''
+Write-Host 'DI WORDING -- the carrying global TYPE decides it' -ForegroundColor Cyan
+$ifc = EdgeFor 'uIfaceReader.pas'
+$mix = EdgeFor 'uMixedReader.pas'
+Check 'a Boolean-carried edge NEVER says inject' `
+  (-not (($a -join ' ') -match 'inject')) `
+  'you cannot register a Boolean in a container; relocation is the only cure'
+Check 'INTERFACE ARM: the interface-carried edge is reported' ($ifc.Count -eq 1) `
+  ("got " + $ifc.Count + " line(s)")
+Check 'and it names the type as the reason injection applies' `
+  (($ifc -join ' ') -match 'interface-typed') `
+  'RED means the arm is unconditional wording again, not a type decision'
+Check 'and it does offer injecting' `
+  (($ifc -join ' ') -match 'inject') ''
+Check 'MIXED: one interface + one Boolean is reported' ($mix.Count -eq 1) `
+  ("got " + $mix.Count + " line(s)")
+Check 'and MIXED does NOT say inject' `
+  (-not (($mix -join ' ') -match 'inject')) `
+  'injecting only the interface half leaves the Boolean carrying the edge'
 
 Write-Host ''
 Write-Host 'CONTROLS -- each one is a way the rule can be wrong' -ForegroundColor Cyan

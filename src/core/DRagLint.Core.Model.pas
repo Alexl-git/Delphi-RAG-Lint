@@ -604,17 +604,25 @@ type
   end;
 
   // One 'global-only' uses edge: ReaderFileId depends on DeclFileId for
-  // NOTHING but the named interface-section global variable(s), so injecting
-  // or relocating them deletes the edge. Produced by
+  // NOTHING but the named interface-section global variable(s), so RELOCATING
+  // them deletes the edge. Produced by
   // ISymbolStore.FindGlobalOnlyUsesEdges; consumed by global-only-uses-edge.
   // GlobalNames arrives comma-separated and in UNSPECIFIED order (SQLite's
   // GROUP_CONCAT gives no ordering guarantee) -- the rule sorts before it
   // renders, because an unstable message is an unstable diff.
+  //
+  // AllInterfaceTyped is TRUE only when EVERY carrying global's declared type
+  // resolves, in this index, to a symbol of kind 'interface'. It is the sole
+  // licence to say "inject" (owner ruling 2026-08-30): an interface can be
+  // registered and resolved, a Boolean cannot. It is deliberately ALL and not
+  // ANY -- injecting the interface half of a mixed edge leaves the other
+  // global carrying it, so the edge survives and the advice would be false.
   TGlobalOnlyEdge = record
-    ReaderFileId: Int64  ;
-    DeclFileId  : Int64  ;
-    GlobalNames : string ;
-    GlobalCount : Integer;
+    ReaderFileId    : Int64  ;
+    DeclFileId      : Int64  ;
+    GlobalNames     : string ;
+    GlobalCount     : Integer;
+    AllInterfaceTyped: Boolean;
   end;
 
   /// <remarks>

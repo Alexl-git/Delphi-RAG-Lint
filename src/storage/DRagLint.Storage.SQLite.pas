@@ -8648,6 +8648,14 @@ end; // function
   equivalent and was measured at OVER TEN MINUTES, because the string expression on
   path defeats the index on refs.name_text.
 
+  THE INTERFACE ARM RESOLVES THE TYPE, IT DOES NOT GUESS IT. `ifn` is every
+  interface name in the index and `glob` left-joins each global's signature
+  against it, because the obvious shortcut -- "starts with I followed by an
+  upper-case letter" -- is wrong on the only two real cases this project has:
+  ImcSTATIONS and ImcOPTRLIST both continue in lower case. A type the index does
+  not hold (Boolean, THandle) simply does not match, which is the safe
+  direction: it costs an injection suggestion, never invents one.
+
   It is still a full refs scan, so it is called only when the rule is enabled --
   see TProjectLintRules.Run's opt-in gate. An off-by-default rule that costs a
   second on every lint-all is a regression whether or not anyone reads its output. }
@@ -8660,25 +8668,35 @@ const
     '  WHERE s.name IS NOT NULL AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''' +
     '  GROUP BY LOWER(s.name)), ' +
     'uniq AS (SELECT n, fid FROM decl WHERE nfiles = 1), ' +
+    'ifn AS (' +
+    '  SELECT DISTINCT LOWER(i.name) AS tn FROM symbols i' +
+    '  WHERE i.kind = ''interface'' AND i.name IS NOT NULL), ' +
     'glob AS (' +
-    '  SELECT DISTINCT LOWER(s.name) AS n FROM symbols s' +
+    '  SELECT LOWER(s.name) AS n,' +
+    '         MAX(CASE WHEN ifn.tn IS NULL THEN 0 ELSE 1 END) AS isiface' +
+    '  FROM symbols s' +
     '  LEFT JOIN symbols p ON p.id = s.parent_id' +
+    '  LEFT JOIN ifn ON ifn.tn = LOWER(TRIM(s.signature))' +
     '  WHERE s.kind = ''var'' AND s.section = ''interface'' AND s.name IS NOT NULL' +
     '    AND (s.parent_id IS NULL OR p.kind IN (''unit'', ''program''))' +
-    '    AND LOWER(s.name) IN (SELECT n FROM uniq)), ' +
+    '    AND LOWER(s.name) IN (SELECT n FROM uniq)' +
+    '  GROUP BY LOWER(s.name)), ' +
     'pr AS (' +
     '  SELECT r.file_id AS a, u.fid AS b, u.n AS n,' +
-    '         CASE WHEN u.n IN (SELECT n FROM glob) THEN 1 ELSE 0 END AS isglob' +
+    '         CASE WHEN g.n IS NULL THEN 0 ELSE 1 END AS isglob,' +
+    '         g.isiface AS isiface' +
     '  FROM refs r JOIN uniq u ON u.n = LOWER(r.name_text)' +
+    '  LEFT JOIN glob g ON g.n = u.n' +
     '  JOIN files f ON f.id = r.file_id' +
     '  WHERE r.name_text IS NOT NULL AND u.fid <> r.file_id' +
     '    AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''), ' +
     'agg AS (' +
     '  SELECT a, b, SUM(isglob) AS ng, SUM(1 - isglob) AS nother,' +
     '         COUNT(DISTINCT CASE WHEN isglob = 1 THEN n END) AS ngn,' +
-    '         GROUP_CONCAT(DISTINCT CASE WHEN isglob = 1 THEN n END) AS names' +
+    '         GROUP_CONCAT(DISTINCT CASE WHEN isglob = 1 THEN n END) AS names,' +
+    '         MIN(CASE WHEN isglob = 1 THEN isiface END) AS alliface' +
     '  FROM pr GROUP BY a, b) ' +
-    'SELECT a, b, ngn, names FROM agg ' +
+    'SELECT a, b, ngn, names, alliface FROM agg ' +
     'WHERE ng > 0 AND nother = 0 ' +
     '  AND EXISTS (SELECT 1 FROM unit_uses uu' +
     '              WHERE uu.file_id = agg.a AND uu.target_file_id = agg.b) ' +
@@ -8711,6 +8729,11 @@ begin
         E.DeclFileId  := Q.FieldByName('b'    ).AsLargeInt;
         E.GlobalCount := Q.FieldByName('ngn'  ).AsInteger ;
         E.GlobalNames := Q.FieldByName('names').AsString  ;
+        { MIN over the carrying globals only, so 1 means EVERY one of them is
+          interface-typed. A NULL cannot arrive here (the outer WHERE demands
+          ng > 0), but AsInteger would render it 0 anyway -- which is the safe
+          direction: no interface claim, no injection advice. }
+        E.AllInterfaceTyped:= Q.FieldByName('alliface').AsInteger = 1;
         List.Add(E);
         Q.Next;
       end;

@@ -480,8 +480,8 @@ begin
 end; // function
 
 /// <summary>Flags a unit pair whose ONLY dependency link is one or more
-/// interface-section global variables -- injecting or RELOCATING them deletes
-/// the uses edge.</summary>
+/// interface-section global variables -- RELOCATING them deletes the uses edge
+/// (and INJECTING them, when every one is interface-typed).</summary>
 /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
 /// <returns>'global-only-uses-edge' findings, one per (reader, declarer) pair,
 /// ordered by how few globals carry the edge (one is the strongest); empty if none.</returns>
@@ -493,11 +493,20 @@ end; // function
 /// 24 of the 37 carried by a SINGLE global. Specification:
 /// docs\probe-di-globals-uses-edges.py.
 ///
-/// THE ADVICE SAYS "INJECT OR RELOCATE" AND THAT WORDING IS LOAD-BEARING. The
-/// strongest measured case is uStyles.SkipRefresh: twelve units depend on a
-/// 1,139-line unit for one Boolean. The cure is to MOVE the variable to a small
-/// unit; telling that author to wire up a container would be worse advice than
-/// saying nothing.
+/// THE DEFAULT ADVICE IS "RELOCATE", AND ONLY A TYPE BUYS THE WORD "INJECT"
+/// (owner ruling 2026-08-30, tightening the earlier unconditional "inject or
+/// relocate"). The strongest measured case is uStyles.SkipRefresh: twelve units
+/// depend on a 1,139-line unit for one Boolean. The cure is to MOVE the
+/// variable to a small unit; telling that author to wire up a container is
+/// worse advice than saying nothing, because a Boolean cannot be registered and
+/// resolved. When every carrying global IS interface-typed, injection genuinely
+/// is a cure and the message says so -- measured 2026-08-30 on ORM3 client, 5
+/// of the 21 edges (MyStation/ImcSTATIONS, MyOperator/ImcOPTRLIST,
+/// CSVHelper/IMicroniteCSVFolderOperation), 2 mixed, 14 neither.
+///
+/// The test is ALL and not ANY: on a mixed edge, injecting the interface half
+/// leaves the remaining global carrying the edge, so the edge does not go away
+/// and the sentence would be false. See TGlobalOnlyEdge.AllInterfaceTyped.
 ///
 /// Severity stays 'info' even when nothing demotes it: this is a design opinion
 /// about coupling, not a defect, and the reader may have reasons the index cannot
@@ -682,16 +691,30 @@ begin
       F.FilePath:= ReaderPath;
       F.StartLine:= Ln; F.StartCol:= Cl;
       F.EndLine  := Ln; F.EndCol  := Cl + Length(DeclUnit);
+      { THE CURE CLAUSE IS CHOSEN BY THE CARRYING GLOBAL'S TYPE, and only an
+        interface earns the word "inject" -- see the remarks above. }
       if E.GlobalCount = 1 then
-        F.Message:= Format(
-          '%s depends on %s for nothing but the global variable %s -- injecting or ' +
-          'relocating it deletes this uses edge',
-          [ReaderUnit, DeclUnit, Names])
+        if E.AllInterfaceTyped then
+          F.Message:= Format(
+            '%s depends on %s for nothing but the global variable %s -- it is ' +
+            'interface-typed, so injecting or relocating it deletes this uses edge',
+            [ReaderUnit, DeclUnit, Names])
+        else
+          F.Message:= Format(
+            '%s depends on %s for nothing but the global variable %s -- relocating ' +
+            'it deletes this uses edge',
+            [ReaderUnit, DeclUnit, Names])
       else
-        F.Message:= Format(
-          '%s depends on %s for nothing but %d global variables (%s) -- injecting or ' +
-          'relocating them deletes this uses edge',
-          [ReaderUnit, DeclUnit, E.GlobalCount, Names]);
+        if E.AllInterfaceTyped then
+          F.Message:= Format(
+            '%s depends on %s for nothing but %d global variables (%s) -- they are ' +
+            'interface-typed, so injecting or relocating them deletes this uses edge',
+            [ReaderUnit, DeclUnit, E.GlobalCount, Names])
+        else
+          F.Message:= Format(
+            '%s depends on %s for nothing but %d global variables (%s) -- relocating ' +
+            'them deletes this uses edge',
+            [ReaderUnit, DeclUnit, E.GlobalCount, Names]);
       { The DEMOTION the note demands. Without it the rule tells the reader to
         break a dependency their .dfm silently puts back at design time, and the
         advice is not merely useless -- following it produces a unit that no

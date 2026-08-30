@@ -768,7 +768,8 @@ type
     function GetUnitUsesForFile(AFileId: Int64): TArray<TUnitUse>          ;
     function FindUsersOfUnit(const AUnitNameNorm: string): TArray<TUnitUse>;
     /// <summary>Unit pairs whose ONLY dependency link is one or more interface-section
-    /// global variables -- injecting or relocating them deletes the uses edge.</summary>
+    /// global variables -- relocating them deletes the uses edge (and injecting
+    /// them, when every one of them is interface-typed).</summary>
     /// <returns>One row per (reader, declarer) pair; empty when none or on a pre-v13 DB.</returns>
     /// <remarks>
     /// The approved di-globals shape (owner ruling 2026-08-30). NOT 'flag global reads',
