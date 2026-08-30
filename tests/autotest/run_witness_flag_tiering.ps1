@@ -1,4 +1,10 @@
-# Guard: a witness-flag-guarded read says POSSIBLE, never suppressed.
+# Guard: an UNPROVABLE witness-flag pairing says POSSIBLE, never suppressed.
+#
+# SCOPE, since 2026-08-30: this guard owns the MIDDLE row of the ladder only.
+# The top row -- a pairing that can be PROVEN, which IS silenced -- belongs to
+# run_uba_witness_pairing_proven.ps1. PWitness below is deliberately built so the
+# pairing cannot be proven; it was the provable shape until the proof shipped,
+# and it went silent the moment that landed.
 #
 # OWNER RULING 2026-08-30 changed the middle row from info to WARNING with a
 # 'POSSIBLE use before assignment' message. That is a deliberate severity RAISE
@@ -75,13 +81,13 @@ unit uWitness;
 
 interface
 
-procedure PWitness(Cond: Boolean);
+procedure PWitness(Cond, Retry: Boolean);
 procedure PPlain(Cond, Other: Boolean);
 procedure PDefinite;
 
 implementation
 
-procedure PWitness(Cond: Boolean);
+procedure PWitness(Cond, Retry: Boolean);
 var
   XW    : Integer;
   RW    : Integer;
@@ -94,6 +100,13 @@ begin
     XW     := 1;
     HaveXW := True;
   end;
+  { DELIBERATELY UNPROVABLE -- do not "simplify" this line away. It is
+    counter-example 2 verbatim: a non-literal write that no ":= True" site scan
+    can see. Without it the pairing is PROVABLE, WitnessPairingProven drops the
+    finding, and this guard -- whose whole subject is the MIDDLE row -- has
+    nothing left to assert. See run_uba_witness_pairing_proven.ps1 for the
+    provable shape. }
+  HaveXW := HaveXW or Retry;
   if HaveXW then RW := XW;
   Writeln(RW);
 end;

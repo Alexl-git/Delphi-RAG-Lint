@@ -910,6 +910,215 @@ begin
   end;
 end;
 
+{ True only when the pairing WitnessFlagForRead RECOGNISED can also be PROVEN,
+  which is the one condition under which the finding may be dropped entirely --
+  the top row of the owner's ladder (2026-08-30).
+
+  READ WitnessFlagForRead'S HEADER FIRST. It ends with "IT MUST NEVER BE USED TO
+  SUPPRESS", and that is still true: it is a recogniser, and its three Pascal
+  counter-examples are pairings of exactly the recognised shape where the
+  variable is genuinely unassigned. This function exists to answer the strictly
+  stronger question those counter-examples pose, and every clause it omits
+  SILENTLY HIDES A TRUE POSITIVE. Clauses may be added here; none may be
+  removed without a fixture pair proving the case is still caught.
+
+  Clauses 3, 4 and 5 live here. Clauses 1 (the flag is a routine LOCAL, never a
+  var/out parameter -- a caller can set a var param, so no in-routine scan can
+  bound it) and 2 (the flag is must-assigned where it is read, which is
+  counter-example 1: an uninitialised flag is stack garbage and can read True)
+  are checked at the call site, because both are already computed there -- the
+  var table knows the kind and the same must-lattice that found the finding
+  knows the flag.
+
+  Clause 6 of the design -- the read is dominated by the flag -- holds by
+  construction rather than by test: this is only ever called after
+  CollectThenGuards returned the flag as a THEN-guard of the read, which IS
+  domination for that form. If CollectThenGuards is ever widened to early-exit
+  or conjunction guards, that widening must re-establish domination or this
+  becomes unsound.
+
+  THE WALK IS OVER THE BODY BLOCK, NOT THE defProc. The var section declares the
+  flag, and a declaration is neither an assignment nor an if-condition, so
+  walking the whole routine would refuse every proof on the declaration itself.
+  No body block -> no proof, which is the safe direction. }
+function WitnessPairingProven(const ARoutine: TTSNode; const ASrc: TBytes;
+  const AVar, AFlag: string): Boolean;
+var
+  Ok         : Boolean;
+  SawTrueSite: Boolean;
+
+  { Nearest enclosing `block`, bounded, stopping at the routine. Same shape as
+    WitnessFlagForRead's local of the same name. }
+  function EnclosingBlock(const N: TTSNode): TTSNode;
+  var
+    Cur: TTSNode;
+    Hop: Integer;
+  begin
+    Result := Default(TTSNode);
+    Cur    := N;
+    Hop    := 0;
+    while (not Cur.IsNull) and (Hop < 64) do
+    begin
+      if Cur.NodeType = 'block' then Exit(Cur);
+      if Cur.StartByte = ARoutine.StartByte then Break;
+      Cur := Cur.Parent;
+      Inc(Hop);
+    end;
+  end;
+
+  { CLAUSE 5's test: does ABlock contain `AName := ..` as a DIRECT statement?
+    Direct is the point -- an assignment buried inside a further `if` in the same
+    block is conditional, so it does not pair with an unconditional flag set. }
+  function BlockDirectlyAssigns(const ABlock: TTSNode; const AName: string): Boolean;
+  var
+    I  : Integer;
+    C  : TTSNode;
+    Lhs: TTSNode;
+  begin
+    Result := False;
+    if ABlock.IsNull then Exit;
+    for I := 0 to ABlock.ChildCount - 1 do
+    begin
+      C := ABlock.Child(I);
+      if C.NodeType <> 'assignment' then Continue;
+      Lhs := C.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier')
+         and SameText(Trim(NodeStr(Lhs, ASrc)), AName) then Exit(True);
+    end;
+  end;
+
+  { Any mention of the flag at all, used for the nested-routine clause. }
+  function MentionsFlag(const N: TTSNode): Boolean;
+  var
+    I: Integer;
+  begin
+    Result := False;
+    if N.IsNull then Exit;
+    if (N.NodeType = 'identifier') and SameText(Trim(NodeStr(N, ASrc)), AFlag) then
+      Exit(True);
+    for I := 0 to N.ChildCount - 1 do
+      if MentionsFlag(N.Child(I)) then Exit(True);
+  end;
+
+  { Any nested `defProc` under N that mentions the flag. N is a child of the
+    routine other than its body block -- in practice the declaration section. }
+  function NestedRoutineMentionsFlag(const N: TTSNode): Boolean;
+  var
+    I: Integer;
+  begin
+    Result := False;
+    if N.IsNull then Exit;
+    if (N.NodeType = 'defProc') and (N.StartByte <> ARoutine.StartByte) then
+      Exit(MentionsFlag(N));
+    for I := 0 to N.ChildCount - 1 do
+      if NestedRoutineMentionsFlag(N.Child(I)) then Exit(True);
+  end;
+
+  procedure Walk(const N: TTSNode);
+  var
+    I       : Integer;
+    Par     : TTSNode;
+    Lhs, Rhs: TTSNode;
+    PT, RhsT: string ;
+  begin
+    if (not Ok) or N.IsNull then Exit;
+    { CLAUSE 4. A nested routine is a `defProc` that is not the one under
+      analysis -- the same boundary TCfg.CollectProcs uses (Cfg.pas:438). "The
+      same block" has no meaning across it, so ANY mention of the flag inside
+      one refuses the proof rather than trying to reason about it. }
+    if (N.NodeType = 'defProc') and (N.StartByte <> ARoutine.StartByte) then
+    begin
+      if MentionsFlag(N) then Ok := False;
+      Exit;
+    end;
+    if (N.NodeType = 'identifier') and SameText(Trim(NodeStr(N, ASrc)), AFlag) then
+    begin
+      Par := N.Parent;
+      if Par.IsNull then begin Ok := False; Exit; end;
+      if Par.NodeType = 'assignment' then
+      begin
+        Lhs := Par.ChildByField('lhs');
+        Rhs := Par.ChildByField('rhs');
+        if (not Lhs.IsNull) and (Lhs.StartByte = N.StartByte) then
+        begin
+          { CLAUSE 3: every write is a True/False LITERAL. }
+          if Rhs.IsNull then Ok := False
+          else
+          begin
+            RhsT := Trim(NodeStr(Rhs, ASrc));
+            if SameText(RhsT, 'True') then
+            begin
+              SawTrueSite := True;
+              { CLAUSE 5: this site must sit beside an assignment of the
+                variable. ONE stray site breaks the pairing however many
+                well-formed ones surround it. }
+              if not BlockDirectlyAssigns(EnclosingBlock(Par), AVar) then Ok := False;
+            end
+            else if not SameText(RhsT, 'False') then
+              Ok := False;   { counter-example 2: `HaveX := HaveX or Retry` }
+          end;
+        end
+        else
+          { the flag read on the RHS of a write to something else -- not a form
+            this proof reasons about. }
+          Ok := False;
+      end
+      else
+      begin
+        { The only other position tolerated is the flag standing ALONE as an
+          if-condition, which is what made it a recognised guard in the first
+          place. Everything else -- a call argument (which could define it
+          through a var parameter), a compound expression, a with, a case --
+          is refused rather than analysed. Over-strict here costs a silence;
+          under-strict costs a hidden true positive. }
+        PT := Par.NodeType;
+        if (PT <> 'if') and (PT <> 'exprIf') and (PT <> 'ifElse') then Ok := False;
+      end;
+      if not Ok then Exit;
+    end;
+    for I := 0 to N.ChildCount - 1 do
+    begin
+      Walk(N.Child(I));
+      if not Ok then Exit;
+    end;
+  end;
+
+var
+  Body: TTSNode;
+  I   : Integer ;
+begin
+  Result := False;
+  if ARoutine.IsNull or (AVar = '') or (AFlag = '') then Exit;
+  Body := Default(TTSNode);
+  for I := ARoutine.ChildCount - 1 downto 0 do
+    if ARoutine.Child(I).NodeType = 'block' then
+    begin
+      Body := ARoutine.Child(I);
+      Break;
+    end;
+  if Body.IsNull then Exit;
+  Ok          := True;
+  SawTrueSite := False;
+  { CLAUSE 4 IS CHECKED OVER THE WHOLE ROUTINE, NOT THE BODY. A nested routine
+    is declared in the DECLARATION section, before `begin` -- so it is a SIBLING
+    of the body block, not a descendant, and the body walk below can never see
+    one. Found by the fixture pair, which silenced the nested-routine
+    counter-example while every other clause behaved: the walk's own defProc
+    branch was unreachable in the position that matters. }
+  for I := 0 to ARoutine.ChildCount - 1 do
+    if ARoutine.Child(I).StartByte <> Body.StartByte then
+      if NestedRoutineMentionsFlag(ARoutine.Child(I)) then
+      begin
+        Ok := False;
+        Break;
+      end;
+  if Ok then Walk(Body);
+  { SawTrueSite guards the vacuous case: a flag with no `:= True` site at all
+    was never a pairing, and "no counter-evidence found" must not read as
+    proof. }
+  Result := Ok and SawTrueSite;
+end;
+
 function ContainsAtIdentBoundary(const S, AWhat: string): Boolean;
 var P: Integer; Ch: Char;
 begin
@@ -1716,7 +1925,8 @@ var
                     correlation can excuse, so the warning arm is deliberately
                     left alone: this can downgrade noise, never hide a certain
                     use-before-assignment. }
-                  var WitnessFlag: string := '';
+                  var WitnessFlag  : string  := '';
+                  var WitnessProven: Boolean := False;
                   if CurMay[RIx] then
                   begin
                     var Guards: TList<string> := TList<string>.Create;
@@ -1733,11 +1943,31 @@ var
                           rule out turning this into a `Continue`. }
                         WitnessFlag := WitnessFlagForRead(Cfg.RoutineNode, Cfg.RoutineNode,
                              PF.Src, V.Name, Integer(It.Node.StartByte), Guards);
+                        { THE LADDER'S TOP ROW. A pairing that can be PROVEN is
+                          dropped; one that is merely recognised is not. Clauses 1
+                          and 2 are tested here because both are already computed:
+                          the var table knows the flag is a routine LOCAL rather
+                          than a var/out parameter a caller could have set, and
+                          CurMust -- the same lattice that produced this finding --
+                          knows whether the flag is itself assigned on every path
+                          reaching the read. That second test IS counter-example 1:
+                          an uninitialised flag is stack garbage and can read True. }
+                        if WitnessFlag <> '' then
+                        begin
+                          var FIx: Integer := Vars.IndexOf(LowerCase(WitnessFlag));
+                          if (FIx >= 0) and (Vars.Get(FIx).Kind = vkLocal) and CurMust[FIx]
+                             and WitnessPairingProven(Cfg.RoutineNode, PF.Src, V.Name, WitnessFlag) then
+                            WitnessProven := True;
+                        end;
                       end;
                     finally
                       Guards.Free;
                     end;
                   end;
+                  { Proven -> the finding is dropped. This is the ONLY suppression
+                    the witness-flag path performs, and it is reached only when all
+                    five clauses hold; see WitnessPairingProven. }
+                  if WitnessProven then Continue;
                   { OWNER RULING 2026-08-26: raise this rule to error. Reading an
                     unassigned local is a defect, not advice, and it sat at info/
                     warning where nobody saw it.
