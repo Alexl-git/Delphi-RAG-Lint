@@ -92,6 +92,11 @@ docs/INBOX-*
 docs/INBOX-Done/*
 docs/OPEN-ITEMS.md
 docs/RESUME-*
+# DESIGN-* is the written output of an owner-gated decision and is referenced
+# only from an INBOX note, which is itself local-only. They also quote customer
+# source verbatim -- the exception-naming design carries 82 ORM3 message
+# strings -- so they belong in this block, not in the published docs set.
+docs/DESIGN-*
 docs/wiki-featuremap.tsv
 
 # MSBuild regenerates circular-demo's .res on every build even though the .dpr
