@@ -292,6 +292,8 @@ begin
   Writeln('  drag-lint-switch --kill-orphans                kill stray DelphiLSP / DelphiLSPMCPServer processes');
   Writeln('');
   Writeln('  --exe <path>      with --delphi --on: the server executable to register');
+  Writeln('  --params <args>   with --delphi --on: the command line the IDE launches it with');
+  Writeln('                    (e.g. "lsp --proxy"); default empty');
   Writeln('  --backup-dir <d>  where --off writes its .reg backup (default: %TEMP%)');
   Writeln('  --reg-root <key>  HKCU subkey holding the entries (testing only; defaults to');
   Writeln('                    Software\Embarcadero\BDS\' + BDS_VER + '\LSP\UserDefined)');
@@ -346,6 +348,7 @@ var
   I         : Integer;
   A         : string ;
   ExePath   : string ;
+  Params    : string ;
   BackupDir : string ;
   BackupPath: string ;
   Killed    : Integer;
@@ -355,6 +358,7 @@ begin
   Target   := tgBoth  ;
   ExePath  := ''      ;
   BackupDir:= ''      ;
+  Params   := ''      ;
   try
     I:= 1;
     while I <= ParamCount do
@@ -367,6 +371,7 @@ begin
       else if A = '--off'          then Action:= acOff
       else if A = '--kill-orphans' then Action:= acKillOrphans
       else if (A = '--exe') and (I < ParamCount) then begin Inc(I); ExePath  := ParamStr(I); end
+      else if (A = '--params') and (I < ParamCount) then begin Inc(I); Params   := ParamStr(I); end
       else if (A = '--backup-dir') and (I < ParamCount) then begin Inc(I); BackupDir:= ParamStr(I); end
       else if (A = '--reg-root') and (I < ParamCount) then begin Inc(I); GRegLspRoot:= ParamStr(I); end
       else if (A = '--help') or (A = '-h') or (A = '/?') then begin Banner; Halt(EXIT_OK); end
@@ -484,7 +489,13 @@ begin
             Writeln('       Registering a missing executable makes the IDE retry it forever.');
             Halt(EXIT_FAILED);
           end;
-          if not CreateEntry(ExePath, '', 'pascal', 15000) then
+          { Params, not ''. CreateEntry has always WRITTEN this value and the
+            parser could never SUPPLY it, so every registration this tool made
+            launched the server with an empty command line. Survivable for the
+            plain LSP; fatal for the merge proxy, which is selected BY a
+            parameter -- the IDE would have got a server that never enters proxy
+            mode, and it would have read as the proxy failing. }
+          if not CreateEntry(ExePath, Params, 'pascal', 15000) then
           begin
             Writeln('ERROR: could not write the registry entry');
             Halt(EXIT_FAILED);
