@@ -44,8 +44,12 @@
                   it exists in the .pas AND the .dfm, and counting distinct FILES
                   makes it look ambiguous and discards it. Cost eight false
                   positives on ORM3 client before it was caught.
-    OFF SWITCH    the rule is DefaultEnabled=False; an un-enabling config must
-                  produce nothing.
+    OFF SWITCH    the rule is ON by default (e989ce4, 2026-08-30), so an
+                  explicit `"disabled"` entry must produce nothing AND an empty
+                  config must still report. Both halves are needed: this section
+                  asserted the OLD default for six hours after the flip and
+                  nobody saw it, because the battery that would have caught it
+                  never ran.
 
   POSITIVE CONTROL ON THE OFF SWITCH: the "off" run must still produce OTHER
   findings. A silent run because lint-all failed, the DB was empty, or the
@@ -88,7 +92,10 @@ unit uGlobalsB;
 interface
 type
   TBThing = class
+  private
+    FCount: Integer;
   public
+    constructor Create;
     procedure Poke;
   end;
   IBService = interface
@@ -99,12 +106,43 @@ var
   gShadowed : Integer;
   gAmbig    : Integer;
   gService  : IBService;
-procedure BHelper;
+procedure BHelper(Sender: TObject);
+procedure RefreshView;
+procedure ResetAll;
+procedure SharedHelper;
 implementation
+constructor TBThing.Create;
+begin
+  FCount:= 0;
+end;
 procedure TBThing.Poke;
 begin
 end;
-procedure BHelper;
+procedure BHelper(Sender: TObject);
+begin
+end;
+procedure RefreshView;
+begin
+end;
+procedure ResetAll;
+begin
+end;
+procedure SharedHelper;
+begin
+end;
+end.
+'@
+
+# A third unit declaring SharedHelper, so that name leaves the `uniq` set and
+# the generator stops counting it as a link. That is what makes the E-KILL case
+# a CANDIDATE at all -- without it the shipped query already kills the pair and
+# the case would prove nothing about rule E.
+Emit 'uOtherDecl.pas' @'
+unit uOtherDecl;
+interface
+procedure SharedHelper;
+implementation
+procedure SharedHelper;
 begin
 end;
 end.
@@ -327,8 +365,16 @@ end.
 # MIXED control. Injecting only the interface-typed half leaves the OTHER
 # global carrying the edge, so the edge does not go away and the advice must
 # not claim it does. Relocation is the only cure that works for the pair.
-Emit 'uMixedReader.pas' @'
-unit uMixedReader;
+#
+# 2026-08-31: THIS FIXTURE DID NOT EXIST. It was called uMixedReader.pas, and so
+# is the DFM mixed-datamodule reader emitted ~110 lines below -- Emit does an
+# unconditional WriteAllText, so the later one silently overwrote this one. Both
+# assertion groups then read the same DFM pair, and `MIXED does NOT say inject`
+# passed for the wrong reason: gMixOnly is a Boolean, so there was nothing to
+# inject and nothing being tested. The AllInterfaceTyped "ALL, not ANY" control
+# was dead. Renamed, with its own $ifmix, so both are live.
+Emit 'uIfaceMixedReader.pas' @'
+unit uIfaceMixedReader;
 interface
 uses uGlobalsB;
 procedure DoWork;
@@ -339,6 +385,193 @@ begin
     Exit;
   if gService = nil then
     Exit;
+end;
+end.
+'@
+
+# --- RULE E (owner ruling 2026-08-30) -------------------------------------
+# Each reader below reads gOnlyLink, so the pair is a CANDIDATE; then it makes
+# ONE more reference to uGlobalsB that rule E must judge. Every collision name
+# is declared in TWO files on purpose: a name unique to uGlobalsB never leaves
+# the generator's `uniq` set, so the pair would die for a reason unrelated to
+# the thing under test.
+
+# E-KILL. SharedHelper is genuinely importable from uGlobalsB, referenced BARE,
+# and not declared here -- a real second link. uOtherDecl also declares it, so
+# the generator cannot see it. THE ONLY CASE THAT IS RED AGAINST THE PRE-RULE-E
+# BUILD, and therefore the only positive control the suite has.
+Emit 'uEKillReader.pas' @'
+unit uEKillReader;
+interface
+uses uGlobalsB;
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gOnlyLink then
+    Exit;
+  SharedHelper;
+end;
+end.
+'@
+
+# CTOR: `Create` is TBThing's constructor -- a class member, so `uses uGlobalsB`
+# cannot hand it to anyone. This Create belongs to TLocalThing.
+Emit 'uCtorReader.pas' @'
+unit uCtorReader;
+interface
+uses uGlobalsB;
+type
+  TLocalThing = class
+  public
+    constructor Create;
+  end;
+procedure DoWork;
+implementation
+constructor TLocalThing.Create;
+begin
+end;
+procedure DoWork;
+var
+  L: TLocalThing;
+begin
+  if gOnlyLink then
+    Exit;
+  L:= TLocalThing.Create;
+  L.Free;
+end;
+end.
+'@
+
+# FIELD: FCount is a private field of TBThing, and this unit's own class has one
+# spelled the same.
+Emit 'uFieldReader.pas' @'
+unit uFieldReader;
+interface
+uses uGlobalsB;
+type
+  TLocalCounter = class
+  private
+    FCount: Integer;
+  public
+    procedure Bump;
+  end;
+procedure DoWork;
+implementation
+procedure TLocalCounter.Bump;
+begin
+  FCount:= FCount + 1;
+end;
+procedure DoWork;
+begin
+  if gOnlyLink then
+    Exit;
+end;
+end.
+'@
+
+# MEMBER METHOD: Poke is a method of TBThing. Named uMemberMethodReader and NOT
+# uMethodReader -- that name is already taken by the DFM event-binding case
+# below, and reusing it would repeat the exact overwrite bug fixed above.
+Emit 'uMemberMethodReader.pas' @'
+unit uMemberMethodReader;
+interface
+uses uGlobalsB;
+type
+  TLocalPoker = class
+  public
+    procedure Poke;
+  end;
+procedure DoWork;
+implementation
+procedure TLocalPoker.Poke;
+begin
+end;
+procedure DoWork;
+var
+  L: TLocalPoker;
+begin
+  if gOnlyLink then
+    Exit;
+  L:= TLocalPoker.Create;
+  try
+    L.Poke;
+  finally
+    L.Free;
+  end;
+end;
+end.
+'@
+
+# PARAM: Sender is a PARAMETER of uGlobalsB.BHelper. A parameter of a routine
+# inside B is not something `uses B` can bring into scope.
+Emit 'uParamReader.pas' @'
+unit uParamReader;
+interface
+uses uGlobalsB;
+procedure Click(Sender: TObject);
+implementation
+procedure Click(Sender: TObject);
+begin
+  if gOnlyLink then
+    Exit;
+  if Sender = nil then
+    Exit;
+end;
+end.
+'@
+
+# WRONG RECEIVER: RefreshView IS importable from uGlobalsB, but this reference
+# is FGrid.RefreshView -- a member of TLocalGrid. Rule D, which matches the
+# importable surface by NAME alone, kills this pair. E keeps it, and this is the
+# case that goes red if anyone reduces E back to a name join.
+Emit 'uRecvReader.pas' @'
+unit uRecvReader;
+interface
+uses uGlobalsB;
+type
+  TLocalGrid = class
+  public
+    procedure RefreshView;
+  end;
+procedure DoWork;
+implementation
+procedure TLocalGrid.RefreshView;
+begin
+end;
+procedure DoWork;
+var
+  FGrid: TLocalGrid;
+begin
+  if gOnlyLink then
+    Exit;
+  FGrid:= TLocalGrid.Create;
+  try
+    FGrid.RefreshView;
+  finally
+    FGrid.Free;
+  end;
+end;
+end.
+'@
+
+# SELF-DECLARED: ResetAll is importable from uGlobalsB and called BARE -- but
+# this unit declares its own. A name the reader declares cannot be an import.
+Emit 'uSelfReader.pas' @'
+unit uSelfReader;
+interface
+uses uGlobalsB;
+procedure ResetAll;
+procedure DoWork;
+implementation
+procedure ResetAll;
+begin
+end;
+procedure DoWork;
+begin
+  if gOnlyLink then
+    Exit;
+  ResetAll;
 end;
 end.
 '@
@@ -542,12 +775,25 @@ end
 '@
 
 # --- configs ---------------------------------------------------------------
-# The rule ships DefaultEnabled=False, so "on" means an explicit opt-in.
+# THE DEFAULT FLIPPED ON 2026-08-30 (e989ce4) AND THIS SECTION DID NOT FOLLOW.
+# The rule used to ship DefaultEnabled=False, so "off" was an EMPTY config and
+# the guard asserted silence from it. e989ce4 made global-only-uses-edge ON by
+# default -- `ShouldKeep(id, False)` now means "keep unless explicitly disabled"
+# -- without touching this file, so the assertion started failing at 19:05 that
+# evening. It went unnoticed because the battery scheduled for that night never
+# reached the runners: the AFTER-baseline capture died first.
+#
+# So "off" is now an explicit DISABLE, and the empty config becomes a THIRD run
+# that pins the new default. Without that third run, flipping the default back
+# by accident would leave this whole section green.
 $cfgOn  = Join-Path $WorkDir 'on.json'
 $cfgOff = Join-Path $WorkDir 'off.json'
+$cfgDef = Join-Path $WorkDir 'default.json'
 [System.IO.File]::WriteAllText($cfgOn,  '{ "enabled": [ "global-only-uses-edge" ] }',
                                [System.Text.Encoding]::ASCII)
-[System.IO.File]::WriteAllText($cfgOff, '{ }', [System.Text.Encoding]::ASCII)
+[System.IO.File]::WriteAllText($cfgOff, '{ "disabled": [ "global-only-uses-edge" ] }',
+                               [System.Text.Encoding]::ASCII)
+[System.IO.File]::WriteAllText($cfgDef, '{ }', [System.Text.Encoding]::ASCII)
 
 # --- index -----------------------------------------------------------------
 $manifest = Join-Path $WorkDir 'manifest.drag-lint.json'
@@ -566,6 +812,7 @@ try {
   }
   $onOut  = & $Exe lint-all --db $db --config $cfgOn  --quiet 2>&1 | Out-String
   $offOut = & $Exe lint-all --db $db --config $cfgOff --quiet 2>&1 | Out-String
+  $defOut = & $Exe lint-all --db $db --config $cfgDef --quiet 2>&1 | Out-String
 } finally { Pop-Location }
 
 # One finding line per pair; anchored in the READING unit.
@@ -589,8 +836,8 @@ Check 'the advice offers RELOCATING, not only injecting' `
 
 Write-Host ''
 Write-Host 'DI WORDING -- the carrying global TYPE decides it' -ForegroundColor Cyan
-$ifc = EdgeFor 'uIfaceReader.pas'
-$mix = EdgeFor 'uMixedReader.pas'
+$ifc   = EdgeFor 'uIfaceReader.pas'
+$ifmix = EdgeFor 'uIfaceMixedReader.pas'
 Check 'a Boolean-carried edge NEVER says inject' `
   (-not (($a -join ' ') -match 'inject')) `
   'you cannot register a Boolean in a container; relocation is the only cure'
@@ -601,10 +848,10 @@ Check 'and it names the type as the reason injection applies' `
   'RED means the arm is unconditional wording again, not a type decision'
 Check 'and it does offer injecting' `
   (($ifc -join ' ') -match 'inject') ''
-Check 'MIXED: one interface + one Boolean is reported' ($mix.Count -eq 1) `
-  ("got " + $mix.Count + " line(s)")
+Check 'MIXED: one interface + one Boolean is reported' ($ifmix.Count -eq 1) `
+  ("got " + $ifmix.Count + " line(s)")
 Check 'and MIXED does NOT say inject' `
-  (-not (($mix -join ' ') -match 'inject')) `
+  (-not (($ifmix -join ' ') -match 'inject')) `
   'injecting only the interface half leaves the Boolean carrying the edge'
 
 Write-Host ''
@@ -619,6 +866,44 @@ Check 'AMBIGUITY: the name is declared in a third unit -> SILENT' `
 Check 'CODE LINK: a form MEMBER touched in code -> SILENT' `
   ((EdgeFor 'uCodeLinkReader.pas').Count -eq 0) `
   'RED means .dfm files are counted as declarations again'
+
+Write-Host ''
+Write-Host 'RULE E -- the second-link test asks WHICH symbol, not just the name' -ForegroundColor Cyan
+# WHAT IS RED AGAINST WHAT, stated because the plan got this wrong and a reader
+# who believes the plan will mis-diagnose a failure here.
+#
+# Rule E is a FILTER over the candidates the shipped query generates. It can
+# only ever REMOVE a pair -- never resurrect one the generator already killed --
+# so only a case where the OLD build reports and E must be silent can be red
+# against the pre-E build. There is exactly one, and it is E-KILL.
+#
+# The other six are regression controls against the two REJECTED corrections:
+#   * CTOR / FIELD / MEMBER METHOD / PARAM go red against option C, which
+#     matched a reader's refs against EVERY symbol in the used unit. C deleted
+#     varnames -> uStyles, the example the whole design was sold on.
+#   * WRONG RECEIVER and SELF-DECLARED go red against option D, which narrowed
+#     C's universe to the importable surface but still joined by NAME alone.
+#
+# Drop E-KILL and this entire section passes with rule E switched off. That is
+# why it is here.
+Check 'E-KILL: a real importable second link on an ambiguous name -> SILENT' `
+  ((EdgeFor 'uEKillReader.pas').Count -eq 0) `
+  'the ONLY positive control for rule E -- red here means the probe never ran'
+Check 'CTOR: the used unit''s constructor is not an import -> reported' `
+  ((EdgeFor 'uCtorReader.pas').Count -eq 1) `
+  'uses B cannot hand you B''s constructor; this Create is TLocalThing''s'
+Check 'FIELD: a class field of the used unit -> reported' `
+  ((EdgeFor 'uFieldReader.pas').Count -eq 1) ''
+Check 'MEMBER METHOD: a method of the used unit''s class -> reported' `
+  ((EdgeFor 'uMemberMethodReader.pas').Count -eq 1) ''
+Check 'PARAM: a parameter of a routine in the used unit -> reported' `
+  ((EdgeFor 'uParamReader.pas').Count -eq 1) ''
+Check 'WRONG RECEIVER: FGrid.RefreshView is TLocalGrid''s -> reported' `
+  ((EdgeFor 'uRecvReader.pas').Count -eq 1) `
+  'RED means E was reduced back to a bare name join over the importable surface'
+Check 'SELF-DECLARED: the reader declares ResetAll itself -> reported' `
+  ((EdgeFor 'uSelfReader.pas').Count -eq 1) `
+  'a name the reader declares cannot be an import of the used unit'
 
 Write-Host ''
 Write-Host 'DFM DEMOTION -- the design-time dependency the index cannot see' -ForegroundColor Cyan
@@ -663,11 +948,14 @@ Check 'QUESTION 4 PIN: a datamodule that merely HAS a method still demotes' `
 
 Write-Host ''
 Write-Host 'OFF SWITCH' -ForegroundColor Cyan
-Check 'DefaultEnabled=False: an un-enabling config reports nothing' `
+Check 'an explicit "disabled" entry reports nothing' `
   (-not ($offOut -match 'global-only-uses-edge')) ''
 Check 'POSITIVE CONTROL: the off run still produced other findings' `
   ($offOut -match ':\d+:\d+') `
   'a silent run would pass the check above for the wrong reason'
+Check 'ON BY DEFAULT: an EMPTY config still reports the rule' `
+  ($defOut -match 'global-only-uses-edge') `
+  'owner ruling 2026-08-30 (e989ce4). Without this the off-switch check above passes when the default silently flips back'
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

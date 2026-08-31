@@ -64,10 +64,22 @@ type
   public
     const CMember = 3;
   end;
+  TDupArr = array [1 .. 10] of Integer;
+  TDupRec = record
+    X: Integer;
+  end;
 var
   gDup     : Integer;
   gImplOnly: Integer;
+procedure DupProc;
+procedure Register;
 implementation
+procedure DupProc;
+begin
+end;
+procedure Register;
+begin
+end;
 end.
 '@
 
@@ -86,13 +98,41 @@ type
   public
     const CMember = 4;
   end;
+  TDupArr = array [1 .. 20] of Integer;
+  TDupRec = record
+    X: Integer;
+  end;
 var
   gDup: Integer;
+procedure DupProc;
+procedure Register;
 implementation
 const
   gImplOnly = 1;
+procedure DupProc;
+begin
+end;
+procedure Register;
+begin
+end;
 end.
 '@
+
+# --- THE CAP. Eight units declaring one name, so the message must stop
+#     enumerating and say how many it elided. Widening the rule to routines on
+#     2026-08-31 produced a real finding that printed 134 absolute paths in a
+#     single message; a report line nobody can read is the same defect as a
+#     rule that floods, it just arrives as one row instead of many.
+foreach ($i in 1..8) {
+  Emit "uMany$i.pas" @"
+unit uMany$i;
+interface
+const
+  CManySites = $i;
+implementation
+end.
+"@
+}
 
 # --- COPY control. An Explorer copy of a unit would otherwise fabricate a
 #     duplicate of EVERY unit-level name it contains. Measured 2026-08-30: the
@@ -187,6 +227,41 @@ Check 'CLASS MEMBER: a class const of the same name -> SILENT' `
 Check 'COPY: a - Copy.pas twin fabricates no duplicates' `
   ((DupFor 'CCopyOnly').Count -eq 0) `
   'and CDup above is the positive control for this same run'
+
+Write-Host ''
+Write-Host 'KINDS -- uses order decides a TYPE exactly as it decides a var' -ForegroundColor Cyan
+# The gate was ('const','var') until 2026-08-31. The owner's report was about
+# importing a global TYPE that already existed elsewhere, and the rule's own
+# message -- "which one compiles depends on uses order" -- is exactly as true of
+# a type, a record or a routine. Measured on ORM3 before widening: the rule saw
+# 10 of 28 duplicated interface names on CLIENT and 10 of 26 on SERVER.
+$dupArr  = DupFor 'TDupArr'
+$dupRec  = DupFor 'TDupRec'
+$dupProc = DupFor 'DupProc'
+Check 'TYPE: a duplicated array type is reported' ($dupArr.Count -eq 1) `
+  ("got " + $dupArr.Count)
+Check 'and a DIFFERING type declaration still escalates' `
+  (($dupArr -join ' ') -match 'DECLARATIONS DIFFER') `
+  'array [1..10] vs array [1..20] is the ORM3 TARecTDistr shape -- 500 vs 100'
+Check 'RECORD: a duplicated record is reported' ($dupRec.Count -eq 1) `
+  ("got " + $dupRec.Count)
+Check 'ROUTINE: a duplicated top-level procedure is reported' ($dupProc.Count -eq 1) `
+  ("got " + $dupProc.Count)
+
+Write-Host ''
+Write-Host 'CONTROLS FOR THE WIDENING -- what it must NOT do' -ForegroundColor Cyan
+Check 'REGISTER: Delphi''s registration protocol name -> SILENT' `
+  ((DupFor 'Register').Count -eq 0) `
+  'every design-time unit must declare `procedure Register`; ORM3 has 134 of them'
+$many = DupFor 'CManySites'
+Check 'CAP: a name in 8 units is reported once' ($many.Count -eq 1) `
+  ("got " + $many.Count)
+Check 'and the message ELIDES the tail instead of printing every site' `
+  (($many -join ' ') -match 'and \d+ more') `
+  'RED means one finding can render an unreadable wall of paths again'
+Check 'and it still states the true unit count' `
+  (($many -join ' ') -match 'in 8 units') `
+  'the cap must shorten the ENUMERATION, never the count the reader acts on'
 
 Write-Host ''
 Write-Host 'OFF SWITCH' -ForegroundColor Cyan

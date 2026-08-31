@@ -94,12 +94,20 @@ type
     class procedure Clear;
   end;
 
-function tree_sitter_delphi13: PTSLanguage; cdecl; external 'tree-sitter-delphi13';
-
 implementation
 
 uses
   System.IOUtils, DRagLint.Core.Encoding;
+
+{ DECLARED HERE, NOT IN THE INTERFACE, and that is the point rather than a
+  tidiness preference. DRagLint.Parser.Delphi13 already exports this same
+  external import from ITS interface, so exporting it here too meant any unit
+  that used both got whichever came last in its uses clause -- the exact
+  uses-order hazard duplicate-global-decl exists to report, in our own tree.
+  Surfaced 2026-08-31 when that rule was widened past ('const','var').
+  DRagLint.Diagnostics.AstChecks already declares it in its implementation for
+  the same reason; this now matches. Only TAstParseCache.Get uses it. }
+function tree_sitter_delphi13: PTSLanguage; cdecl; external 'tree-sitter-delphi13';
 
 class function TAstParseCache.Get(const AFile: string): TParsedFile;
 var

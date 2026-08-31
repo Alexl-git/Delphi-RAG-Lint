@@ -934,6 +934,12 @@ end; // function
 /// Never raises. See ISymbolStore.FindDuplicateGlobalDecls.
 /// </remarks>
 function CollectDuplicateGlobalDecls(const AStore: ISymbolStore): TArray<TLintFinding>;
+const
+  { How many declaration sites the message enumerates before it says "and N
+    more". Six fits a report line and still shows enough to act on; the real
+    duplicates measured on ORM3 carry two or three sites, so the cap only ever
+    engages on the pathological cases it exists for. }
+  CMaxDupSitesShown = 6;
 var
   Findings: TList<TLintFinding>;
 
@@ -993,6 +999,14 @@ begin
       Sigs  := '';
       Differ:= False;
       Seen.Clear;
+      { THE ENUMERATION IS CAPPED, and the cap is not cosmetic. A finding is one
+        line a human reads in a report; widening the rule to routines (2026-08-31)
+        produced a single finding whose message listed 134 absolute paths, which
+        is unreadable and is the same disease as a rule that floods -- it just
+        arrives as one row instead of many. Differ is still computed over EVERY
+        row, so capping the display cannot change the verdict, only its length. }
+      var Shown : Integer:= 0;
+      var Elided: Integer:= 0;
       for K:= I to J - 1 do
       begin
         var SitePath: string:= AStore.GetFilePath(Rows[K].FileId);
@@ -1002,17 +1016,25 @@ begin
           Seen.Add(LowerCase(SitePath), True);
           Paths:= Paths + [SitePath];
         end;
-        if Sites <> '' then Sites:= Sites + ', ';
-        Sites:= Sites + Format('%s:%d', [SitePath, Rows[K].StartLine]);
+        if Shown < CMaxDupSitesShown then
+        begin
+          if Sites <> '' then Sites:= Sites + ', ';
+          Sites:= Sites + Format('%s:%d', [SitePath, Rows[K].StartLine]);
+          if Sigs <> '' then Sigs:= Sigs + ' vs ';
+          Sigs:= Sigs + Trim(Rows[K].Signature);
+          Inc(Shown);
+        end
+        else
+          Inc(Elided);
         if not ContainsText(Kinds, Rows[K].Kind) then
         begin
           if Kinds <> '' then Kinds:= Kinds + '/';
           Kinds:= Kinds + Rows[K].Kind;
         end;
         if NormSig(Rows[K].Signature) <> NormSig(Rows[I].Signature) then Differ:= True;
-        if Sigs <> '' then Sigs:= Sigs + ' vs ';
-        Sigs:= Sigs + Trim(Rows[K].Signature);
       end;
+      if Elided > 0 then
+        Sites:= Sites + Format(', and %d more', [Elided]);
       NFiles:= Length(Paths);
 
       { Two sites in the SAME file are not the hazard this rule names -- the

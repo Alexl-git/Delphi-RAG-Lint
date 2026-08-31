@@ -8835,10 +8835,48 @@ end; // function
 
 function TSQLiteSymbolStore.FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
 const
+  { KINDS: everything `uses` can put into scope under one name, not just data.
+    It was ('const','var') until 2026-08-31, which answered a third of the
+    question the rule's own message asks -- "which one compiles depends on uses
+    order" is exactly as true of a TYPE as of a var, and the owner's report was
+    about importing a global TYPE that already existed elsewhere.
+
+    Measured before widening, per corpus, on names declared at interface level
+    in 2+ units (ORM3 CLIENT / SERVER):
+
+        type  9/8    const 7/7    record 6/5    var 3/3
+        procedure 1/1    function 1/1    enum 1/0
+        class, interface: 0/0
+
+    So the rule saw 10 of 28 (CLIENT) and 10 of 26 (SERVER). Widening roughly
+    triples its reach and cannot flood -- the whole population is 28 names on a
+    707-file project.
+
+    ENUM MEMBERS ARE DELIBERATELY NOT HERE. `p.kind IN ('unit','program')`
+    keeps them out, because a member's parent is its enum type. Two units
+    declaring an enum member spelled the same IS a real uses-order hazard, and a
+    bigger one -- but it is a different population that has not been measured,
+    and shipping it unmeasured is how a rule floods. Separate question.
+
+    `Register` IS EXCLUDED BY NAME, and it is the reason routines could not just
+    be waved in. `procedure Register;` is Delphi's design-time component
+    registration protocol: the IDE looks it up by that exact name, so EVERY
+    registering unit must declare one. On ORM3 CLIENT it is declared in 134
+    units -- one finding whose message listed 134 paths. It is not a uses-order
+    hazard either, because the IDE calls it per package, never by bare name from
+    user code. This is a protocol name, in the same class as Create.
+
+    THE MEASUREMENT THAT MISSED IT, recorded so the next widening does better:
+    the pre-flight count grouped by NAME and reported "procedure: 1", which read
+    as harmless. The message renders SITES, and that one name carried 134 of
+    them. Count what the output will contain, not what the GROUP BY returns. }
   CGate =
-    '  s.kind IN (''const'', ''var'') AND s.section = ''interface'' AND s.name IS NOT NULL' +
+    '  s.kind IN (''const'', ''var'', ''type'', ''record'', ''class'',' +
+    '             ''interface'', ''enum'', ''procedure'', ''function'')' +
+    '  AND s.section = ''interface'' AND s.name IS NOT NULL' +
     '  AND (s.parent_id IS NULL OR p.kind IN (''unit'', ''program''))' +
     '  AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''' +
+    '  AND LOWER(s.name) <> ''register''' +
     '  AND LOWER(f.path) NOT LIKE ''%- copy%'' ';
   SQL =
     'WITH dup AS (' +
@@ -8940,14 +8978,106 @@ const
     '  AND EXISTS (SELECT 1 FROM unit_uses uu' +
     '              WHERE uu.file_id = agg.a AND uu.target_file_id = agg.b) ' +
     'ORDER BY ngn, a, b';
+
+  { RULE E's universe: what `uses B` can actually hand you -- interface section,
+    top level, or an enum member (classic Delphi imports those unqualified). A
+    constructor, a record field, a method or a parameter of B is NOT importable,
+    so A's `Create` matching B's `Create` is a name collision, not a dependency.
+    Of 91,423 symbols on ORM3 client only 3,463 interface symbols are top level;
+    the rest are members, which is why the distinction is worth making. }
+  CUniverseOfB =
+    'SELECT LOWER(s.name) FROM symbols s' +
+    '  LEFT JOIN symbols p ON p.id = s.parent_id' +
+    ' WHERE s.file_id = :b AND s.name IS NOT NULL AND s.section = ''interface''' +
+    '   AND (s.parent_id IS NULL OR p.kind IN (''unit'', ''program'', ''enum''))';
+  CSecondLink =
+    'SELECT DISTINCT LOWER(r.name_text) AS n FROM refs r' +
+    ' WHERE r.file_id = :a AND r.name_text IS NOT NULL' +
+    '   AND LOWER(r.name_text) IN (' + CUniverseOfB + ')' +
+    '   AND (r.receiver_text IS NULL OR LENGTH(TRIM(r.receiver_text)) = 0' +
+    '        OR LOWER(TRIM(r.receiver_text)) = LOWER(:bunit))' +
+    '   AND LOWER(r.name_text) NOT IN (' +
+    '         SELECT LOWER(s2.name) FROM symbols s2' +
+    '          WHERE s2.file_id = r.file_id AND s2.name IS NOT NULL)';
 var
-  Q   : TFDQuery                ;
-  List: TList<TGlobalOnlyEdge>  ;
-  E   : TGlobalOnlyEdge         ;
+  Q    : TFDQuery                ;
+  Probe: TFDQuery                ;
+  List : TList<TGlobalOnlyEdge>  ;
+  Kept : TList<TGlobalOnlyEdge>  ;
+  E    : TGlobalOnlyEdge         ;
+  Sift : Boolean                 ;
+
+  { TRUE when A references something of B that is NOT one of the carrying
+    globals -- i.e. the edge is not global-only after all and the candidate dies.
+
+    WHY PER-CANDIDATE. Joining refs against all of B's declarations answers a
+    question about ~19 pairs by fanning the join out over the whole corpus:
+    measured 2026-08-30, 14.3 s (ORM3 server) / 26.3 s (client) against 0.60 s /
+    1.53 s for the generator above. Asked once per candidate it is +0.06 s /
+    +0.11 s. Two other shapes were measured and REJECTED, so do not "optimise"
+    into them: a correlated EXISTS per ref row re-scans B's symbols for every row
+    (148 ms per candidate, and it is the shape that made the correction look
+    unaffordable), and ONE batched statement over a temp table of candidates
+    plans straight back into that correlated form and ran 125x slower than this
+    loop. The IN (list-subquery) form materialises B's name set once.
+
+    WHY IT IS NOT A BARE NAME JOIN (owner ruling 2026-08-30). Three conjuncts,
+    each refuted as optional against real source:
+      1. IMPORTABLE ONLY -- see CUniverseOfB. Dropping it kills GLBLOAD ->
+         MSCTYPES on `create`, SmallBatch100Final -> BASICS on `value`, and
+         varnames -> uStyles on create/dxprinter/handleexception/sender, the
+         last being the very example this design was sold on.
+      2. RECEIVER DISCIPLINE -- `refs.receiver_text` says what a qualified ref
+         hangs off: varnames' `Create` has receiver TVarNamesViewModel and its
+         `HandleException` has receiver Application, so neither is uStyles'. Any
+         receiver that is not B's own unit name makes the ref a member of THAT
+         type.
+      3. SELF-DECLARATION -- varnames declares its own `Sender` (a parameter)
+         and its own `dxPrinter` (a field). A name A declares is not an import.
+
+    This is identity, not a name join, and it needs no rescan. It also corrects
+    the record that identity was unavailable because refs.symbol_id is NULL
+    everywhere (INBOX-refs-symbol-id-never-populated.md): symbol_id is not the
+    only identity column -- receiver_text plus the enclosing declaration decide
+    about 91% of refs today. }
+  function HasSecondLink(const AEdge: TGlobalOnlyEdge): Boolean;
+  var
+    Carriers: TDictionary<string, Boolean>;
+    Nm      : string                      ;
+  begin
+    Result  := False;
+    Carriers:= TDictionary<string, Boolean>.Create;
+    try
+      for Nm in AEdge.GlobalNames.Split([',']) do
+        if Trim(Nm) <> '' then Carriers.AddOrSetValue(LowerCase(Trim(Nm)), True);
+      Probe.ParamByName('a').AsLargeInt:= AEdge.ReaderFileId;
+      Probe.ParamByName('b').AsLargeInt:= AEdge.DeclFileId  ;
+      { B's own unit name is its file STEM -- the identity a `uses` clause
+        writes -- so conjunct 2 compares stems, never paths. }
+      Probe.ParamByName('bunit').AsString:=
+        ChangeFileExt(ExtractFileName(GetFilePath(AEdge.DeclFileId)), '');
+      Probe.Open;
+      try
+        while not Probe.Eof do
+        begin
+          Nm:= LowerCase(Trim(Probe.Fields[0].AsString));
+          if (Nm <> '') and not Carriers.ContainsKey(Nm) then Exit(True);
+          Probe.Next;
+        end;
+      finally
+        Probe.Close;
+      end;
+    finally
+      Carriers.Free;
+    end;
+  end;
+
 begin
   Result:= nil;
-  List:= TList<TGlobalOnlyEdge>.Create;
-  Q   := TFDQuery.Create(nil);
+  List  := TList<TGlobalOnlyEdge>.Create;
+  Kept  := TList<TGlobalOnlyEdge>.Create;
+  Q     := TFDQuery.Create(nil);
+  Probe := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
     Q.SQL.Text  := SQL;
@@ -8979,10 +9109,42 @@ begin
     finally
       Q.Close;
     end; // try
-    Result:= List.ToArray;
+
+    { RULE E, applied to the candidates the statement above generated.
+
+      THE GENERATOR IS UNCHANGED ON PURPOSE. Every existing control in
+      tests\autotest\run_lint_global_only_uses_edge.ps1 -- SECOND LINK, SHADOW,
+      AMBIGUITY, CODE LINK -- is enforced by that SQL, not by this probe, and E
+      is a FILTER over its output: it can only ever remove a pair, never
+      resurrect one the generator killed. Measured on ORM3: 19 candidates -> 16
+      findings (client), 7 -> 6 (server), 0 -> 0 (this repo).
+
+      Sift is switched off by the FIRST probe that raises, so an index too old
+      to carry refs.receiver_text degrades to the unfiltered candidate set --
+      the set this rule shipped with -- instead of raising out of lint-all. That
+      fallback is a strict SUPERSET, so its only effect is to re-admit the false
+      positives E exists to remove, and the guard's E-KILL case is the positive
+      control that fails the moment the probe stops running on a current index.
+      Without that case the whole suite passes with rule E switched off. }
+    Probe.Connection:= FConn;
+    Probe.SQL.Text  := CSecondLink;
+    Sift            := True;
+    for E in List do
+    begin
+      if Sift then
+        try
+          if HasSecondLink(E) then Continue;
+        except
+          Sift:= False;
+        end;
+      Kept.Add(E);
+    end;
+    Result:= Kept.ToArray;
   finally
-    Q.Free;
-    List.Free;
+    Probe.Free;
+    Q    .Free;
+    Kept .Free;
+    List .Free;
   end; // try
 end; // function
 
