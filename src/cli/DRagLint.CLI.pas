@@ -3010,7 +3010,32 @@ begin
   GScanPrev:= M;
 end;
 
-const INDEXER_FP_KEY = 'indexer_fingerprint';
+const INDEXER_FP_KEY  = 'indexer_fingerprint';
+const RESOLVER_FP_KEY = 'resolver_fingerprint';
+
+{ The identity of what this build DERIVES from parses it already holds --
+  call_edges, type_ancestors, type_helpers, unit_uses targets.
+
+  SEPARATE FROM THE INDEXER FINGERPRINT ON PURPOSE. That one answers "would this
+  build PARSE differently?" and a mismatch costs a ~5 hour re-parse of every
+  index. This one answers "would it DERIVE different edges?" and a mismatch
+  costs a re-resolve measured in minutes -- `index --resolve-only`. Conflating
+  them is what left 42 resolve-write commits, one every 2.2 days, moving nothing
+  at all while indexes went quietly stale.
+
+  IT CARRIES NO PLATFORM OR PREPROCESS TOKEN, and that is not an oversight: the
+  resolve pass consumes symbols and refs that are already in the database, so
+  the platform that produced them is the INDEXER's question and is already
+  recorded there. Adding it here would invalidate on a change that cannot alter
+  a derived edge. The schema is included because a schema migration can change
+  the shape of the very tables this pass writes. }
+function ResolverFingerprint(const AStore: ISymbolStore): string;
+var
+  Found, Expected: Integer;
+begin
+  AStore.IsSchemaCurrent(Found, Expected);
+  Result:= Format('r=%s;schema=%d', [DRAGLINT_RESOLVER_VERSION, Expected]);
+end;
 
 function IndexerFingerprint(const AStore: ISymbolStore; APreprocess: Boolean; const APlatform: string): string;
 var
@@ -3133,6 +3158,10 @@ begin
     freshness at all" -- which is what lets a pre-upgrade index report UNKNOWN
     instead of being judged against evidence it never stored. }
   AStore.SetMetaValue(INDEXED_AT_KEY, IntToStr(DateTimeToUnix(Now, False)));
+  { The RESOLVER stamp rides the same guarantee, and for the same reason: it is
+    written only after a run whose resolve pass completed. See
+    ResolverFingerprint for why it is separate from the indexer one. }
+  AStore.SetMetaValue(RESOLVER_FP_KEY, ResolverFingerprint(AStore));
 end;
 
 { v21: opens --library-db paths as read-only extra stores for cross-DB call
@@ -3261,6 +3290,29 @@ begin
   { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
     even when every byte on disk is identical. }
   ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform);
+
+  { RESOLVER STALENESS -- the sibling question, asked separately because its
+    remedy is minutes rather than the ~5 hours a reparse costs.
+
+    THE INCIDENT THIS EXISTS FOR, 2026-08-30: the post-reindex sequence re-ran
+    all 31 project sections specifically so they would pick up an enum-candidate
+    resolve fix. `resolve: calls` executed in THREE of them. Incremental scope is
+    decided by CHANGED FILES, and a changed resolver is not a changed file -- so
+    the manual workaround for the missing stamp was defeated by exactly the thing
+    the stamp exists to catch, and nothing said so.
+
+    GRANDFATHERED like the indexer fingerprint: a DB with no stored value adopts
+    the current one silently rather than forcing a mass re-resolve of every index
+    on this build's first run. Protection begins at the next resolve. }
+  var ResolverStale: Boolean:= False;
+  var PrevResolverFp: string:= Store.GetMetaValue(RESOLVER_FP_KEY);
+  var CurResolverFp : string:= ResolverFingerprint(Store);
+  if (PrevResolverFp <> '') and (PrevResolverFp <> CurResolverFp) then
+  begin
+    ResolverStale:= True;
+    Writeln(Format('Resolver changed since this DB was resolved (%s -> %s): re-deriving every edge.',
+                   [PrevResolverFp, CurResolverFp]));
+  end;
 
   { v0.42: cross-dictionary dedup -- exclude any subtree the caller says is
     already covered by another index (library / active-project DB). }
@@ -3613,8 +3665,13 @@ begin
       after it, leaving `find-callers --resolved` silently answering nothing.
       CallEdgesNeedRebuild is two LIMIT 1 probes and is False on a healthy
       index, so the guard this sits inside keeps its 2,252s-to-17s saving. }
+    { ResolverStale joins the other terms rather than replacing any of them: it
+      is the one that fires when NOTHING on disk changed but the code that
+      derives edges did. Without it the skip message below -- "no file changed,
+      so every call edge already holds" -- is false in exactly the case nobody
+      can see. }
     if (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
-       (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild then
+       (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or ResolverStale then
       Store.ResolveCallTargets(OpenLibraryStores(AArgs)) { v14 (D5) + v21 cross-DB }
     else
       Writeln('resolve: calls skipped -- no file changed, so every call edge already holds.');
