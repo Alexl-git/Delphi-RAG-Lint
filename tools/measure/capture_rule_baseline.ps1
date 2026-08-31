@@ -85,11 +85,29 @@ foreach ($c in $corpora) {
  $passes = if ($MeasureOffRules) { @('default','enabled-watch') } else { @('default') }
  foreach ($pass in $passes) {
   $raw = Join-Path $OutDir "lintall_$($c.key)_$($pass)_$Tag.json"
+  $rawErr = "$raw.err"
   Write-Host "lint-all $($c.key) ($Tag) ..." -ForegroundColor Cyan
+  # STDERR GOES TO ITS OWN FILE. It used to be merged with `2>&1`, and that
+  # corrupted the AFTER capture on 2026-08-31: the engine's stderr is unbuffered
+  # while its stdout is block-buffered when redirected, so where a diagnostic
+  # interleaves depends on when stdout's buffer happens to flush. ORM3 SERVER
+  # emits 63 `duplicate-code: skipped a N-window hash bucket` lines; in the
+  # BEFORE run 61 landed above the array and 2 below it, and in the AFTER run
+  # the SAME two landed INSIDE an object, between "end_col" and "message".
+  # ConvertFrom-Json then failed on the hyphen in `duplicate-code` --
+  # "Invalid JavaScript property identifier character: -" -- and the sequence
+  # stopped at step 3 with no CSV, no prediction diff and no battery.
+  #
+  # Note what made it expensive: the SAME command had worked hours earlier on
+  # the SAME corpus, so it read as something the reindex had changed. It was a
+  # race that had always been there. The two other engine calls in this script
+  # (`rules --json`, `sql --query`) already discard stderr; only this one merged
+  # it. Keeping it in a sibling .err file rather than `2>$null` means a genuine
+  # engine failure is still readable afterwards.
   if ($pass -eq 'default') {
-    & $Exe lint-all --db $c.db --json --quiet 2>&1 | Set-Content $raw -Encoding ascii
+    & $Exe lint-all --db $c.db --json --quiet 2> $rawErr | Set-Content $raw -Encoding ascii
   } else {
-    & $Exe lint-all --db $c.db --json --quiet --enable $WatchOff 2>&1 | Set-Content $raw -Encoding ascii
+    & $Exe lint-all --db $c.db --json --quiet --enable $WatchOff 2> $rawErr | Set-Content $raw -Encoding ascii
   }
 
   # COUNT FROM THE JSON `rule` FIELD, never from the text renderer. An earlier
