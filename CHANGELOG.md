@@ -3,6 +3,83 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.9.0-alpha -- 2026-08-31
+
+**The release where three checks stopped asking for things the caller could not
+do.** Every change below came from a downstream project that MEASURED rather
+than asserted, and the version number moved specifically so those reports stay
+unambiguous: v1.8.0-alpha was never tagged, but it had already been quoted in
+bug reports, and reusing the string for a materially different binary would make
+"which build were you on?" unanswerable.
+
+**No schema change, no extractor change.** `SCHEMA_VERSION` 21 and
+`DRAGLINT_EXTRACTOR_VERSION` 1.9.0-alpha are both untouched, so **no index
+re-parses** because of this release.
+
+### An absent resolver stamp is stale
+
+A grandfather clause treated a database with no `resolver_fingerprint` as
+current, on the reasoning that "protection begins at the next resolve". There is
+no next resolve -- the run writes the stamp on its way out, so every later run
+matches. It did not defer protection, it cancelled it for every index predating
+the stamp.
+
+Measured: `index --all` across 31 project sections printed
+`resolve: calls skipped` **25 times**, ran the calls pass **0 times**, and
+stamped all 31 as current. Forcing the pass afterwards on one of them took
+`refs.symbol_id` from **4,522 to 28,011**.
+
+**The miss was self-concealing, so upgrading is not enough.** Once the stamp is
+written no build can tell the pass never ran. Any index touched by v1.8.0-alpha
+must be repaired with **`index --all --resolve-only`** -- which is also fixed
+here, because `--all` accepted the flag and silently dropped it.
+
+### Rules that could not be satisfied
+
+* **`unsafe-shellexecute` on `CreateProcess` was unsatisfiable.** It tested only
+  whether `lpCommandLine` was a literal and never looked at
+  `lpApplicationName`, while advising "use a fixed literal" at severity ERROR --
+  advice unavailable to any caller passing a path. The rule now turns on whether
+  a **shell** interprets the line: a non-nil `lpApplicationName` is ordinary
+  argument passing and is silent; a nil one still reports, and names the
+  interpreter when there is one. Real injection still fires, with an achievable
+  remedy in the message.
+* **`method-pascalcase` flooded xUnit suites** -- 330 findings on one test
+  project, 71% of its report. `Subject_does_the_thing` is not a style lapse when
+  the runner prints the method name. Now exempt on DUnitX-attributed methods
+  (`Test`, `TestCase`, `Setup`, `TearDown`, ...), scoped by the **attribute**
+  rather than by the project so casing lapses in test *helpers* are still
+  reported.
+* **`unused-unit-in-uses` is `info`, not `warning`** -- interim. The reporting
+  project commented out 23 candidates and compiled: 20 safe, **1 broke the
+  compile** (`TStringHelper` methods are declared in `System.SysUtils` and the
+  unit named no other symbol from it), **2 built clean and were unsafe at
+  runtime** (EurekaLog units working through `initialization`; removing the
+  call-stack provider yields crash reports with empty stacks). Wrong ~13% of the
+  time toward breaking the product is not a warning. Downgraded rather than
+  suppressed -- the 20 true positives are real -- and the message now names all
+  three blind spots. It returns to `warning` once type-helper calls resolve to
+  their declaring unit and a DFM-instantiated class counts as a use of the unit
+  that registers it.
+
+Together these took that project's test-suite report from **463 findings to
+133**.
+
+### Known, and deliberately not changed here
+
+* `hardcoded-absolute-path` still fires on fixture literals that nothing opens
+  (73 findings). The fix is dataflow to a filesystem operand, not a test-project
+  exemption.
+* A `dl:ok` marker on a **wrapped** statement lands one line below the finding,
+  so the site reports twice and the marker is called dead. Accepted; it belongs
+  in the marker matcher, where it fixes every rule at once.
+* **Flow analysis has no CFG edge from a statement to its enclosing `except`**,
+  so an initialiser read only by the handler looks like a dead store. Acting on
+  that advice introduces a crash, because Delphi does not zero locals. A
+  severity downgrade was proposed and declined: the rule is correct in shape, so
+  demoting it would hide true positives in exactly the code where a dead store
+  is most likely to be real. The missing edge is the fix.
+
 ## v1.8.0-alpha -- 2026-08-31
 
 **The release where the linter learned to ask what a dependency actually is.**
