@@ -31,6 +31,38 @@ finds plugin defects, and it is the half a reindex cannot help with.
 
 ---
 
+## EVERY PATH IN THIS PLAN IS ABSOLUTE, ON PURPOSE
+
+No step assumes a working directory, and no step uses a bare `drag-lint`. This
+machine sets `NoDefaultCurrentDirectoryInExePath`, so a bare name resolves off
+PATH to a **different, older binary** -- that once reported 33,626 findings
+against a real 14,764 and read as a catastrophic regression.
+
+Copy these once; every command below uses them verbatim.
+
+| what | full path |
+|---|---|
+| engine | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` |
+| engine build script | `C:\Projects\Delphi-RAG-lint\build\build_draglint_win64.bat` |
+| VS Code engine refresh | `C:\Projects\Delphi-RAG-lint\tools\refresh-vscode-engine.ps1` |
+| VS Code private engine | `C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine\drag-lint.exe` |
+| plugin BPL | `C:\Projects\Delphi-RAG-lint\third_party\dll-win32\dclDragLintWizard.bpl` |
+| engine config | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.json` |
+| plugin log | `C:\Users\alexanderl\AppData\Local\Temp\drag-lint-plugin.log` |
+| library index (Win64) | `C:\Projects\.drag-lint\library-Win64.sqlite` |
+| DataCopy index | `C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite` |
+| ORM3 CLIENT index | `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite` |
+| ORM3 CLIENT project | `C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj` |
+| DataCopy project | `C:\Projects\DataCopy\DataCopy.dproj` |
+
+**Never guess an index path.** Ask:
+
+```
+C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe resolve-dbs --project C:\Projects\DataCopy\DataCopy.dproj
+```
+
+---
+
 ## Part 0 -- Preconditions
 
 - [ ] **0.1 Engine version.** Full path -- this machine has
@@ -47,18 +79,18 @@ finds plugin defects, and it is the half a reindex cannot help with.
 
 - [ ] **0.3 VS Code no longer holds the engine.**
       `dragLint.serverPath` is now set to a private copy at
-      `%LOCALAPPDATA%\drag-lint-vscode-engine\`. **This takes effect only after a
+      `C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine\`. **This takes effect only after a
       VS Code restart.** Verify after restarting it:
       ```powershell
       Get-CimInstance Win32_Process -Filter "Name='drag-lint.exe'" |
         Select-Object ProcessId, ExecutablePath
       ```
       Any `lsp --stdio` whose parent is `Code` must point at
-      `AppData\Local\drag-lint-vscode-engine`, **not** at `third_party\dll-win64`.
+      `C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine`, **not** at `C:\Projects\Delphi-RAG-lint\third_party\dll-win64`.
 
       > That private copy is a SECOND DEPLOYMENT and goes stale. After any engine
       > build you want VS Code to reflect:
-      > `pwsh -File tools\refresh-vscode-engine.ps1 -Kill`
+      > `pwsh -File C:\Projects\Delphi-RAG-lint\tools\refresh-vscode-engine.ps1 -Kill`
 
 - [ ] **0.4 Open ORM3** `CLIENT\Micronite2027.dproj` and a unit with real code.
 
@@ -77,7 +109,7 @@ finds plugin defects, and it is the half a reindex cannot help with.
       |---|---|
       | Plugin (BPL) | `v1.1.0-alpha` + today's build time |
       | Engine | `1.9.0-alpha`, today, platform `Win64` |
-      | Engine exe | `...\third_party\dll-win64\drag-lint.exe` |
+      | Engine exe | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` |
       | tree-sitter | `delphi13 <v> / dfm <v>` |
       | Graph viewer | `present, built <date>` |
 
@@ -89,16 +121,17 @@ finds plugin defects, and it is the half a reindex cannot help with.
       reading **`drag-lint (!)`** means the LSP is down; About says why.
 
 - [ ] **1.4 Indexes in use.** Paths must be the per-project `_D-RAG` ones
-      (`...\CLIENT\_D-RAG\Micronite2027.sqlite`) plus
+      (`C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite`, or for DataCopy
+      `C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite`) plus
       `C:\Projects\.drag-lint\library-Win64.sqlite`. Anything under a shared
-      `.drag-lint\<Repo>-<Project>.sqlite` is a **stale config** -- that layout
+      `C:\Projects\.drag-lint\<Repo>-<Project>.sqlite` is a **stale config** -- that layout
       was retired.
 
 - [ ] **1.5 DO NOT EXPECT THE ABOUT WINDOW TO SHOW STALENESS. IT CANNOT.**
 
       This step said the opposite when first written, and that was wrong -- it
       would have had you file a false bug report. Corrected 2026-08-31 16:20
-      after reading `DragLint.Plugin.Diagnose.pas`, whose header states a
+      after reading `C:\Projects\Delphi-RAG-lint\src\delphi-plugin\DragLint.Plugin.Diagnose.pas`, whose header states a
       load-bearing performance contract: *"nothing here may COUNT rows or open a
       database ... Index facts below come from the FILE"*.
 
@@ -112,7 +145,7 @@ finds plugin defects, and it is the half a reindex cannot help with.
       **The freshness report exists, but on the CLI, not in this window.** To ask
       the real question:
       ```
-      third_party\dll-win64\drag-lint.exe query --name <AnySymbol> --db <the .sqlite>
+      C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe query --name <AnySymbol> --db <full path to the .sqlite>
       ```
       and read **stderr**, which now carries both answers -- the parse-side note
       and, new in this build, a separate resolver line.
@@ -131,7 +164,7 @@ finds plugin defects, and it is the half a reindex cannot help with.
 ## 2. The engine can be rebuilt with the IDE open
 
 - [ ] **2.1** Leave the IDE open with a project loaded. Run
-      `build\build_draglint_win64.bat`.
+      `C:\Projects\Delphi-RAG-lint\build\build_draglint_win64.bat`.
 - [ ] **2.2** It must **succeed, including staging**. The status strip shows
       `drag-lint: engine released for a rebuild (Ns left)`.
 - [ ] **2.3** Afterwards, hover a symbol and confirm the LSP came back.
@@ -198,7 +231,7 @@ finds plugin defects, and it is the half a reindex cannot help with.
 ## 7. Options page and process hygiene
 
 - [ ] **7.1** *drag-lint Options...*, change a setting, close. Then open
-      `third_party\dll-win64\drag-lint.json`: **indented, readable, no BOM.**
+      `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.json`: **indented, readable, no BOM.**
 - [ ] **7.2** Work for a few minutes; the `drag-lint.exe` count in Task Manager
       must not climb.
 - [ ] **7.3** *About > Open Plugin Log* -- Find Usages should be answered over
