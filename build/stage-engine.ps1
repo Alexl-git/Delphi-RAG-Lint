@@ -119,6 +119,40 @@ if (Test-Path -LiteralPath $FreshExe) {
   }
 }
 
+# 1b -- REFUSE TO KILL AN INDEXING RUN. A holder whose command line is an
+# `index` invocation is not an editor waiting to respawn: it is a scan that can
+# be hours deep, and a full `index --all` after an extractor bump is a FIVE HOUR
+# job. Killing one to save a twelve-second build trades the expensive thing for
+# the cheap one.
+#
+# This happened, which is why the guard exists: on 2026-08-30 a routine rebuild
+# during the 1.9.0-alpha reindex hit this path, "recovered" in 3 attempts, and
+# destroyed the run -- the build reported success and nothing mentioned the
+# reindex at all. The banner's "they are resumable, killing them is safe" is
+# true of the WORKERS and false of the intent.
+#
+# Deliberately NOT overridable by a flag. A build that wants the exe staged
+# during an index run should wait, or run against src\cli\Win64\Debug\ --
+# every autotest runner takes -Exe, so nothing actually needs the deploy.
+$indexers = @($holders | Where-Object { $_.CommandLine -match '(^|\s)index(\s|$)' })
+if ($indexers.Count -gt 0) {
+  Write-Host ''
+  Write-Host 'drag-lint: REFUSING to stage -- an INDEXING run holds the engine.' -ForegroundColor Red
+  foreach ($h in $indexers) {
+    Write-Host ("  PID {0}  {1}" -f $h.ProcessId, $h.CommandLine) -ForegroundColor Red
+  }
+  Write-Host ''
+  Write-Host '  Killing these would discard the scan, which after an extractor bump is'
+  Write-Host '  a ~5 hour job. The compile ABOVE this succeeded; only the deploy is'
+  Write-Host '  refused. Either wait for the index run to finish, or test against the'
+  Write-Host '  build that already exists and is not held:'
+  Write-Host ''
+  Write-Host ("    {0}" -f $FreshExe) -ForegroundColor Cyan
+  Write-Host ''
+  Write-Host '  (every tests/autotest runner takes -Exe, so no deploy is needed to run them)'
+  exit 3
+}
+
 # 2 -- now the holders can be stopped without immediately coming back.
 foreach ($h in $holders) {
   try { Stop-Process -Id $h.ProcessId -Force -ErrorAction Stop; Write-Host ("  stopped PID {0}" -f $h.ProcessId) }

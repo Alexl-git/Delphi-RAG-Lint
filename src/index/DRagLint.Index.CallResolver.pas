@@ -1305,6 +1305,35 @@ var
   Kids   : TList<TSymbol>;
   S      : TSymbol       ;
   A      : TTypeAncestor ;
+
+  { Methods contributed by a record/class HELPER registered for AForTypeId.
+    The store already has the edges -- `type_helpers` is populated by the
+    resolve pass -- and this resolver simply never asked for them: before this,
+    the unit contained no reference to type_helpers at all, so EVERY helper call
+    in every index resolved to nothing.
+
+    Measured cost of that, on the live indexes: 1,029 helper-member call refs in
+    this repo's own index resolved 0; ORM3 CLIENT 18 of 1,644; SERVER 18 of
+    1,745. `ChildByField` alone was 523 refs and 0 edges, which made
+    find-callers answer "nothing calls this" for a method used on nearly every
+    line of the parser. }
+  procedure AddHelperMethods(AForTypeId: Int64);
+  var
+    HE: THelperEdge     ;
+    HK: TList<TSymbol>  ;
+    HS: TSymbol         ;
+  begin
+    if AForTypeId <= 0 then Exit;
+    for HE in FStore.FindHelpersOfTypeSymbol(AForTypeId) do
+    begin
+      if HE.HelperSymbolId <= 0 then Continue;
+      HK:= ChildrenOf(HE.HelperSymbolId);
+      if HK = nil then Continue;
+      for HS in HK do
+        if (HS.Kind in METHOD_KINDS) and SameText(HS.Name, AMethodName) then Matches.Add(HS);
+    end;
+  end;
+
 begin
   Result     := 0;
   AConfidence:= '';
@@ -1328,6 +1357,41 @@ begin
       if Kids = nil then Continue;
       for S in Kids do
         if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
+    end;
+
+    { 3. HELPER methods -- but ONLY when steps 1 and 2 found nothing.
+
+      Delphi's real rule is that a helper method HIDES a same-named method of
+      the type it helps, so a full implementation would give the helper
+      PRECEDENCE. This deliberately does not: it consults helpers only as a
+      fallback.
+
+      Why the weaker rule is the right v1. Adding helper matches unconditionally
+      would put a second candidate alongside an already-resolved one, and
+      PickFromMatches reads two candidates as AMBIGUOUS -- so a call that
+      resolves today would stop resolving, or drop confidence. That is a
+      REMOVED edge, which is the one outcome a resolution change must never
+      produce. As a fallback it is additive by construction: every edge that
+      existed before still exists, unchanged.
+
+      The measured population needs nothing more -- the helper-backed calls that
+      resolve to nothing today (TTSNodeHelper.ChildByField and friends) are
+      methods the underlying type does NOT declare, so steps 1 and 2 are empty
+      for them anyway. The hiding case is real Delphi but is not what is broken;
+      it can be taken separately, with its own fixture, if it ever shows up. }
+    if Matches.Count = 0 then
+    begin
+      AddHelperMethods(ATypeSymbolId);
+      { A helper for an ANCESTOR is in scope for a descendant-typed receiver
+        too, and this is also the path that makes an ALIAS-typed receiver work:
+        member C of the extractor batch gives the alias an ordinal-0 ancestor
+        row pointing at the real type, and the helper hangs off that. The two
+        fixes are coupled -- member C produced 0 new edges on three corpora
+        precisely because the aliases people call methods through are
+        helper-backed. }
+      if Matches.Count = 0 then
+        for A in FStore.GetTransitiveAncestors(ATypeSymbolId) do
+          if A.Resolved and (A.SymbolId > 0) then AddHelperMethods(A.SymbolId);
     end;
 
     Result:= PickFromMatches(Matches, AArgCount, AArgsKnown, AConfidence);

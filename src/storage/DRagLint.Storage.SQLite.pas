@@ -9408,8 +9408,26 @@ begin
       candidate's DECLARING UNIT from it (DeclaringUnitOfQName) for rules 2
       and 3. Without it every candidate looks unit-less and both rules go
       silent. }
+    { 'record' joins the CANDIDATE set as of 2026-08-30, and the reason is
+      specific: since member C an ALIAS is an ancestry SOURCE, and an alias's
+      "ancestor" is its TARGET, which may perfectly well be a record --
+      `TTSNode = TSNode` in this repo's own tree-sitter binding is exactly that.
+      With records excluded the row was written UNRESOLVED (ancestor_kind '?',
+      ancestor_symbol_id NULL), so nothing downstream could climb it and the
+      alias fix silently bought nothing.
+
+      This does NOT widen the set to 'type'. That would let `TDer = class(TFoo)`
+      bind TFoo to an ALIAS symbol rather than the class it names, which is a
+      different and wrong claim. Records are legitimate ancestry targets for an
+      alias; aliases are not legitimate targets for anything.
+
+      The residual risk is a class and a record sharing one name in scope. That
+      resolves the way every other ambiguity here does -- PickAncestorCandidateByScope
+      declines, and a decline is written as ancestor_kind '?', i.e. exactly the
+      behaviour that existed before. It cannot invent a wrong binding, only fail
+      to make one. }
     Q.SQL.Text:= 'SELECT id, file_id, kind, name, qualified_name, heritage, start_line, end_line ' +
-                 'FROM symbols WHERE kind IN (''class'',''interface'')';
+                 'FROM symbols WHERE kind IN (''class'',''interface'',''record'')';
     Q.Open;
     while not Q.Eof do
     begin
