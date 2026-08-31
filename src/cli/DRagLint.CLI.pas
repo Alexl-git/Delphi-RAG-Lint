@@ -655,7 +655,9 @@ begin
   Writeln('  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (asks a running Delphi IDE plugin to STOP its drag-lint.exe children and not respawn them, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Writes a sentinel -- the plugin acts on its next status tick, so wait for the lock before staging)');
   Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
-  Writeln('  drag-lint info [--json]                              (engine self-info: version, build date, MIT, tree-sitter + capabilities; read-only)');
+  Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
+  Writeln('                               each --db adds an `indexes` entry: stored fingerprints, indexer_stale / resolver_stale, a verdict');
+  Writeln('                               (current | resolve-owed | reparse-owed | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
@@ -12064,6 +12066,26 @@ begin
       JRoot.AddPair('schema', 'info/1');
       JRoot.AddPair('name', 'drag-lint');
       JRoot.AddPair('version', VERSION);
+      { THE OTHER TWO VERSIONS, because `version` alone cannot answer the
+        question anybody actually has about an index.
+
+        ADDITIVE to schema info/1, like dll_delphi13/dll_dfm before them.
+
+        WHY THEY BELONG HERE. The IDE's About window already shells out to this
+        verb, so the channel exists and is already used -- what it lacked was
+        anything to COMPARE a database against. A DB stores
+        `indexer_fingerprint` and `resolver_fingerprint`; the plugin cannot read
+        them (it links no SQLite, see DRagLint.Plugin.DbProbe, which is pure
+        path math) and, more importantly, it has no business KNOWING them:
+        PLUGIN_VERSION is deliberately independent of both constants, and
+        collapsing them into one number is the drift the three-way split exists
+        to prevent.
+
+        So the engine reports what it is, the engine reads what the database
+        says, and the plugin compares two strings it was handed. That keeps the
+        knowledge where it is generated. }
+      JRoot.AddPair('extractor_version', DRAGLINT_EXTRACTOR_VERSION);
+      JRoot.AddPair('resolver_version' , DRAGLINT_RESOLVER_VERSION );
       JRoot.AddPair('build_date', BuildDate);
       JRoot.AddPair('license', 'MIT');
       JRoot.AddPair('description', 'symbol-aware index + RAG + lint for Delphi/Pascal');
@@ -12082,6 +12104,84 @@ begin
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
+
+      { `info --db <path>` (repeatable): per-index staleness, so a caller that
+        already has a connection to this engine can ask the question in ONE
+        spawn instead of learning SQLite.
+
+        THE VERDICT IS COMPUTED HERE, NOT BY THE CALLER. Handing back two
+        fingerprint strings and letting each consumer compare them is how the
+        comparison drifts -- an absent stamp is the case that has already been
+        got wrong once, in the engine itself, where `PrevRfp <> ''` treated a
+        missing resolver stamp as fresh and cancelled the whole feature. The
+        rule is stated once, here: MISSING IS STALE.
+
+        The two remedies are priced differently and the verdict says which,
+        because conflating them is the mistake this reports on -- a re-parse is
+        hours, a re-resolve is minutes.
+
+        CHEAP BY CONSTRUCTION: two keyed lookups in schema_meta, read-only, no
+        COUNT. That matters because the IDE's About window has a stated contract
+        against counting rows -- and the measurement it cites (38 s) belongs to
+        `schema --format json`, which counts every table, while an indexed
+        lookup on the same 3 GB file is 0.5 s. Counting is what was forbidden;
+        this does not count. }
+      if Length(AArgs.DbPaths) > 0 then
+      begin
+        var JIdx: TJSONArray:= TJSONArray.Create;
+        for var DbP: string in AArgs.DbPaths do
+        begin
+          var JOne: TJSONObject:= TJSONObject.Create;
+          JOne.AddPair('path', DbP);
+          if not TFile.Exists(DbP) then
+          begin
+            JOne.AddPair('present', TJSONBool.Create(False));
+            JOne.AddPair('verdict', 'missing');
+          end
+          else
+          begin
+            JOne.AddPair('present', TJSONBool.Create(True));
+            var Ok: Boolean;
+            var St: ISymbolStore:= OpenReadOnlyStore(DbP, Ok, {AQuiet=}True);
+            if (not Ok) or (St = nil) then
+            begin
+              JOne.AddPair('verdict', 'unreadable');
+            end
+            else
+            begin
+              var PrevIfp: string:= St.GetMetaValue(INDEXER_FP_KEY );
+              var PrevRfp: string:= St.GetMetaValue(RESOLVER_FP_KEY);
+              var CurRfp : string:= ResolverFingerprint(St);
+              JOne.AddPair('indexer_fingerprint' , PrevIfp);
+              JOne.AddPair('resolver_fingerprint', PrevRfp);
+              JOne.AddPair('extractor_expected'  , DRAGLINT_EXTRACTOR_VERSION);
+              JOne.AddPair('resolver_expected'   , CurRfp);
+              { The stored indexer fingerprint is a compound
+                `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is
+                compared, because platform and preprocess differences are
+                legitimate per-index facts, not staleness. }
+              var IdxStale: Boolean:= (PrevIfp = '')
+                or (Pos('v=' + DRAGLINT_EXTRACTOR_VERSION + ';', PrevIfp) <> 1);
+              var ResStale: Boolean:= (PrevRfp = '') or (PrevRfp <> CurRfp);
+              JOne.AddPair('indexer_stale' , TJSONBool.Create(IdxStale));
+              JOne.AddPair('resolver_stale', TJSONBool.Create(ResStale));
+              if IdxStale then
+                JOne.AddPair('verdict', 'reparse-owed')
+              else if ResStale then
+                JOne.AddPair('verdict', 'resolve-owed')
+              else
+                JOne.AddPair('verdict', 'current');
+              if IdxStale then
+                JOne.AddPair('remedy', 'index <dir> --db <db>   (a re-parse: hours across the box)')
+              else if ResStale then
+                JOne.AddPair('remedy', 'index <dir> --db <db> --resolve-only   (minutes, no parse becomes wrong)');
+            end;
+          end;
+          JIdx.AddElement(JOne);
+        end;
+        JRoot.AddPair('indexes', JIdx);
+      end;
+
       Writeln(JRoot.ToJSON);
     finally
       JRoot.Free;
