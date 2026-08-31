@@ -14,7 +14,26 @@ $rep = Join-Path $env:TEMP 'draglint_ownroots_report.txt'
 
 # 1. Bare run: vendor\ is outside the declared roots, so it is skipped and named.
 $bare = & $Exe lint-all --db $db --output $rep --quiet 2>&1 | Out-String
-Check 'scan excludes vendor'   ($bare -notmatch 'Vendor\.pas')
+# ANCHORED, not MENTIONED. This asserted `-notmatch 'Vendor\.pas'` until
+# 2026-08-31, which conflated two different things: ownRoots governs which files
+# are REPORTED ON, never which files a message may name.
+#
+# duplicate-global-decl was widened past ('const','var') that day and now sees
+# `RunReport`, declared in both proj\App.pas and vendor\Vendor.pas. The finding
+# is anchored in App.pas -- owned code, correctly reported -- and its message
+# names the vendor path because a duplicate-declaration finding that will not
+# say WHERE the other declaration lives is useless. Suppressing it would make
+# the message read "declared in 2 units" and name only one of them.
+#
+# So the check now asserts the property it always meant: no finding is ANCHORED
+# in a skipped root. A finding line begins `<path>:<line>:<col>`, so anchoring
+# is testable exactly rather than by substring.
+$anchoredInVendor = @($bare -split "`r?`n" | Where-Object { $_ -match '^[^\s]*\\vendor\\[^:]+:\d+:\d+' })
+Check 'scan excludes vendor'   ($anchoredInVendor.Count -eq 0) `
+  ($(if ($anchoredInVendor.Count) { $anchoredInVendor[0] } else { 'no finding anchored under vendor\' }))
+Check 'POSITIVE CONTROL: the bare run produced findings at all' `
+  ($bare -match '^[^\s]+:\d+:\d+' -or (Test-Path $rep)) `
+  'a silent run would satisfy the exclusion check for the wrong reason'
 Check 'skip line present'      ($bare -match "outside the project's own roots skipped")
 Check 'skip NAMES the root'    ($bare -match 'vendor')
 Check 'declared root included' ((Get-Content $rep -Raw) -match 'Shared\.pas|App\.pas')

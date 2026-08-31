@@ -562,6 +562,62 @@ var
     for I:= 0 to N.NamedChildCount - 1 do CollectAddrTaken(N.NamedChild(I));
   end;
 
+  { THE TREE CANNOT SEE A REGISTRATION INSIDE A DEAD BRANCH, and one of the four
+    real registrations this suppression exists for is exactly that shape
+    (EExtraExceptionInfo.pas:533; pinned as case A4 of
+    run_unused_param_addr_taken.ps1).
+
+    That case regressed on 2026-08-30 in f1a7973, which made the lint walk
+    preprocess: dead branches are now BLANKED to spaces before parsing, so
+    `Register2(@Handler2)` inside an inactive $IFDEF is no longer in the tree
+    at all. (No braces around that directive on purpose -- a brace-directive
+    inside a brace comment ends the comment at ITS OWN closing brace and turns
+    the rest of this block into garbage code. It corrupted this very edit once.)
+    Reading RawSrc for node TEXT would not have helped -- the node does
+    not exist. The guard's own header had predicted the requirement in detail
+    ("the symbol store has no ref for it ... but the raw parse does see it"),
+    and it stopped being true when the raw parse stopped being what we parse.
+
+    Recovered from the bytes the preprocessor blanked, which are exactly the
+    positions where RawSrc and Src differ -- the preprocessor is offset-
+    preserving by construction, so the buffers are the same length and
+    comparable index by index. The length check is not defensive noise: if that
+    invariant ever breaks, this must decline rather than mis-index.
+
+    ONLY THE `@Name` SHAPE IS RECOVERED, deliberately. In blanked text a BARE
+    identifier is indistinguishable from any other word -- including one inside
+    a comment or a string literal -- so recovering `Register1(Pred1)` from a
+    dead branch would suppress unused-parameter for every parameter sharing a
+    name with anything written there. `@` is a specific enough anchor to trust;
+    a bare word is not. A bare-name registration inside a dead branch therefore
+    still reports, and that is the honest trade rather than an oversight. }
+  procedure CollectAddrTakenFromDeadBranches(const ALive, ARaw: TBytes);
+  var
+    I, J  : Integer;
+    Nm    : string ;
+    DotPos: Integer;
+  begin
+    if Length(ALive) <> Length(ARaw) then Exit;
+    I:= 0;
+    while I < Length(ARaw) do
+      if (ARaw[I] = Ord('@')) and (ALive[I] <> ARaw[I]) then
+      begin
+        J:= I + 1;
+        while (J < Length(ARaw))
+              and (AnsiChar(ARaw[J]) in ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do Inc(J);
+        if J > I + 1 then
+        begin
+          Nm    := LowerCase(TEncoding.UTF8.GetString(ARaw, I + 1, J - I - 1));
+          DotPos:= LastDelimiter('.', Nm);
+          if DotPos > 0 then Nm:= Copy(Nm, DotPos + 1, MaxInt);
+          if Nm <> '' then AddrTaken.AddOrSetValue(Nm, True);
+        end;
+        I:= J;
+      end
+      else
+        Inc(I);
+  end;
+
   { Collect the bare (unqualified, lower-cased) names of every routine declared
     in THIS unit that is a FUNCTION -- its declProc header carries a return-type
     'type' field (grammar: 'function Foo(...): T'). Both interface-section
@@ -2501,6 +2557,8 @@ begin
     CollectLocalFunctions(PF.Tree.RootNode);
     { Pass 1c: collect routines handed somewhere as values, for unused-parameter. }
     CollectAddrTaken(PF.Tree.RootNode);
+    { Pass 1c-bis: and the ones the preprocessor blanked out of the tree. }
+    CollectAddrTakenFromDeadBranches(PF.Src, PF.RawSrc);
     { Pass 2: walk defProc bodies, ifElse, exprParens, comments, exprCall. }
     Visit(PF.Tree.RootNode);
     { Pass 3: referenced-never-set field def-use. }

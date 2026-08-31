@@ -253,11 +253,25 @@ end.
 '@
 
 # --- configs ---------------------------------------------------------------
+# THE DEFAULT FLIPPED ON 2026-08-30 (e989ce4) AND THIS SECTION DID NOT FOLLOW --
+# the same defect, in the same commit, as the one fixed in
+# run_lint_global_only_uses_edge.ps1. That commit turned BOTH rules ON by
+# default (`ShouldKeep(id, False)` = keep unless explicitly disabled) and
+# touched neither guard, so both went red at 19:05 that evening and nobody saw
+# it: the battery scheduled for that night never reached the runners, because
+# the AFTER-baseline capture died first.
+#
+# "Off" is therefore an explicit DISABLE now, and the empty config becomes a
+# THIRD run that pins the new default. Without that third run, an accidental
+# flip back would leave this whole section green.
 $cfgOn  = Join-Path $WorkDir 'on.json'
 $cfgOff = Join-Path $WorkDir 'off.json'
+$cfgDef = Join-Path $WorkDir 'default.json'
 [System.IO.File]::WriteAllText($cfgOn,  '{ "enabled": [ "uses-global-census" ] }',
                                [System.Text.Encoding]::ASCII)
-[System.IO.File]::WriteAllText($cfgOff, '{ }', [System.Text.Encoding]::ASCII)
+[System.IO.File]::WriteAllText($cfgOff, '{ "disabled": [ "uses-global-census" ] }',
+                               [System.Text.Encoding]::ASCII)
+[System.IO.File]::WriteAllText($cfgDef, '{ }', [System.Text.Encoding]::ASCII)
 
 # --- index -----------------------------------------------------------------
 $manifest = Join-Path $WorkDir 'manifest.drag-lint.json'
@@ -276,6 +290,7 @@ try {
   }
   $onOut  = & $Exe lint-all --db $db --config $cfgOn  --quiet 2>&1 | Out-String
   $offOut = & $Exe lint-all --db $db --config $cfgOff --quiet 2>&1 | Out-String
+  $defOut = & $Exe lint-all --db $db --config $cfgDef --quiet 2>&1 | Out-String
 } finally { Pop-Location }
 
 $lines = @($onOut -split "`r?`n" | Where-Object { $_ -match 'uses-global-census' })
@@ -352,8 +367,11 @@ Check 'a name declared in two units is attributed to neither -> SILENT' `
 
 Write-Host ''
 Write-Host 'OPT-IN GATE' -ForegroundColor Cyan
-Check 'DefaultEnabled=False: an un-enabling config reports nothing' `
+Check 'an explicit "disabled" entry reports nothing' `
   (-not ($offOut -match 'uses-global-census')) ''
+Check 'ON BY DEFAULT: an EMPTY config still reports the rule' `
+  ($defOut -match 'uses-global-census') `
+  'owner ruling 2026-08-30 (e989ce4). Without this the off-switch check above passes when the default silently flips back'
 Check 'POSITIVE CONTROL: the off run still produced other findings' `
   ($offOut -match ':\d+:\d+') `
   'a silent run would pass the check above for the wrong reason'
