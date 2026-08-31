@@ -8056,6 +8056,22 @@ var
   Cls      : string                      ;
   UsesDone : TStringList                 ;
   Skip     : TStringList                 ;
+  { ONE TStringList per FILE, not per finding. VARINSP.PAS is 915 KB with 59
+    raise sites, and re-reading plus re-splitting it once per finding meant 59
+    reads of that file and 59 rebuilds of a ~28,000-entry list to answer 59
+    questions about single lines. BuildAutofixEdits next door already caches
+    this way; this is the same pattern, not a new idea. }
+  LineCache: TObjectDictionary<string, TStringList>;
+
+  function LinesFor(const APath: string): TStringList;
+  begin
+    if not LineCache.TryGetValue(APath, Result) then
+    begin
+      Result:= TStringList.Create;
+      Result.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+      LineCache.Add(APath, Result);
+    end;
+  end;
 
   { The exact-class tests that narrowing would break. Lowercased, whitespace
     squeezed, so `ClassType=Exception` and `ClassType = Exception` both hit. }
@@ -8151,7 +8167,8 @@ begin
   UsesDone:= TStringList.Create;
   Skip    := TStringList.Create;
   Map     := TDictionary<string, string>.Create;
-  Lines   := TStringList.Create;
+  { Lines is now an ALIAS into LineCache, never owned here -- see LinesFor. }
+  LineCache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
   Linter  := DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
   try
     Files.Duplicates:= dupIgnore; Files.Sorted:= True; Files.CaseSensitive:= False;
@@ -8175,7 +8192,7 @@ begin
       if not TFile.Exists(F.FilePath) then Continue;
       if Skip.IndexOf(F.FilePath) >= 0 then Continue;
 
-      Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(F.FilePath));
+      Lines:= LinesFor(F.FilePath);
       if FileTestsExactException(Lines.Text) then
       begin
         Skip.Add(F.FilePath);
@@ -8243,7 +8260,10 @@ begin
     end;
   finally
     Linter.Free;
-    Lines.Free;
+    { LineCache owns every list LinesFor handed out, including whatever Lines
+      currently aliases, so Lines must NOT be freed here -- that would be a
+      double free the moment doOwnsValues did its job. }
+    LineCache.Free;
     Map.Free;
     Skip.Free;
     UsesDone.Free;
