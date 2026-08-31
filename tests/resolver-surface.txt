@@ -1,0 +1,100 @@
+# The RESOLVE surface, for tests\autotest\run_resolver_version_guard.ps1.
+#
+# Format, one entry per line:
+#     <repo-relative path>::<RoutineName>      a single top-level routine
+#     <repo-relative path>::*                  the whole file
+#     EXCLUDE <routinename>                    classified as NOT resolve, with
+#                                              a reason in a comment above it
+#
+# WHY BY FUNCTION AND NOT BY DIRECTORY. The resolve pass straddles two trees:
+# src\index\DRagLint.Index.CallResolver.pas and the writers in
+# src\storage\DRagLint.Storage.SQLite.pas. No line through the directory tree
+# separates "would this build PARSE differently?" from "would it DERIVE
+# different edges?", which is exactly why one stamp got both wrong in opposite
+# directions -- src\index over-billed a 5-hour re-parse for 19 resolve-only
+# commits, src\storage under-billed 42 of them and went silently stale.
+#
+# DERIVED FROM WHAT EACH ROUTINE WRITES, then closed over the callees the
+# autodoc `<para>Calls:</para>` facts already record. NOT from a name regex:
+# the churn probe that PRICED this problem used one and says in its own source
+# that it is "deliberately generous".
+#
+#   ResolveUnitUseTargets -> unit_uses.target_file_id
+#   ResolveAncestry       -> type_ancestors
+#   ResolveHelpers        -> type_helpers
+#   ResolveCallTargets    -> call_edges, refs.receiver_text/external_target
+
+src/index/DRagLint.Index.CallResolver.pas::*
+
+# The four writers.
+src/storage/DRagLint.Storage.SQLite.pas::ResolveUnitUseTargets
+src/storage/DRagLint.Storage.SQLite.pas::ResolveAncestry
+src/storage/DRagLint.Storage.SQLite.pas::ResolveHelpers
+src/storage/DRagLint.Storage.SQLite.pas::ResolveCallTargets
+
+# What ResolveCallTargets calls (autodoc facts, not inference).
+src/storage/DRagLint.Storage.SQLite.pas::UpsertCallEdge
+src/storage/DRagLint.Storage.SQLite.pas::ClearCallEdges
+src/storage/DRagLint.Storage.SQLite.pas::ScopedResolveIsSound
+src/storage/DRagLint.Storage.SQLite.pas::WidenScopeThroughAddedTypes
+
+# The candidate set and type resolution the writers depend on. A change here
+# changes what gets WRITTEN, so it is resolve surface even though none of these
+# writes anything itself.
+src/storage/DRagLint.Storage.SQLite.pas::GetTypeCandidates
+src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeNameToClass
+src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeSymbolId
+src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeCategory
+src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeCategoryDepth
+
+# What ResolveAncestry and ResolveHelpers call.
+src/storage/DRagLint.Storage.SQLite.pas::NormalizeAncestorName
+src/storage/DRagLint.Storage.SQLite.pas::PickAncestorCandidateByScope
+src/storage/DRagLint.Storage.SQLite.pas::SplitHeritageList
+
+# Scope selection. These decide WHICH refs the calls pass rewrites, so a change
+# here changes what ends up stored even though neither writes anything itself.
+# The drift check surfaced them; they were not in the first hand-written list,
+# which is the argument for having the check.
+src/storage/DRagLint.Storage.SQLite.pas::ScopedResolveDeclineReason
+src/storage/DRagLint.Storage.SQLite.pas::MaterializeResolveScope
+src/storage/DRagLint.Storage.SQLite.pas::TypeCandidateIds
+
+# ---------------------------------------------------------------------------
+# EXCLUSIONS. Each is a routine whose NAME matches the resolve vocabulary and
+# which is deliberately NOT part of the surface. The guard fails on a
+# vocabulary-matching routine that is in neither list, so "someone forgot"
+# becomes a failure instead of silence -- but the regex only ever flags drift,
+# it never defines the surface.
+
+# Logging and timing. They are on the call list and change nothing that is
+# stored. Including them would bump the stamp for a changed log line, which is
+# precisely the over-billing this split exists to end.
+EXCLUDE resolvelog
+EXCLUDE resolvesecs
+
+# Query-side READERS. A reader cannot make stored data stale -- it consumes the
+# derived tables, it does not produce them. Every one of these is reached from
+# `query`, the doc engine or the IDE, never from a walk.
+EXCLUDE findhelpersoftype
+EXCLUDE findhelpersoftypesymbol
+EXCLUDE readhelperedges
+EXCLUDE findresolvedcallers
+EXCLUDE findunresolvednamecallers
+EXCLUDE getcalledgesfromsymbol
+EXCLUDE countcalledges
+EXCLUDE dumpallcalledges
+EXCLUDE finddiresolvesites
+EXCLUDE finddiunresolved
+
+# Asks whether call_edges must be rebuilt; it reads state and answers, and the
+# answer is acted on by ResolveCallTargets, which IS in the surface.
+EXCLUDE calledgesneedrebuild
+
+# A path lookup that merely happens to be spelled Resolve*. This is the exact
+# false positive a name regex produces, kept here as the worked example.
+EXCLUDE resolvefileidtolerant
+
+# Resolves a type at a CURSOR for the LSP. Despite living under src\resolver it
+# takes no part in the index resolve pass and writes nothing.
+EXCLUDE resolvetypeat

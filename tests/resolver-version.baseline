@@ -1,0 +1,36 @@
+# Baseline for tests\autotest\run_resolver_version_guard.ps1
+#
+# <DRAGLINT_RESOLVER_VERSION>|<sha256 of the resolve surface>
+#
+# The resolve surface is the set of routines listed in tests\resolver-surface.txt
+# -- the code that DERIVES call_edges, type_ancestors, type_helpers and
+# unit_uses targets from parses the index already holds. Change any of it and
+# this guard fails until DRAGLINT_RESOLVER_VERSION is bumped, because every
+# existing index would otherwise keep edges from the OLD resolver.
+#
+# THE REMEDY IS CHEAP, and that is the whole point of a second stamp. A bump of
+# DRAGLINT_EXTRACTOR_VERSION costs a ~5 hour re-parse of every database; a bump
+# of THIS one costs a re-resolve measured in minutes. They were conflated until
+# 2026-08-31, which over-billed 19 commits under src\index and under-billed 42
+# under src\storage -- the latter going silently stale, one every 2.2 days.
+#
+# EXACTLY ONE ACTIVE LINE. The sibling extractor baseline was APPENDED to rather
+# than replaced on 2026-08-26 and its guard, which reads only the first active
+# line, became structurally incapable of failing for five days. This guard
+# asserts its own baseline's shape for that reason. Move superseded lines into
+# `#` history below.
+#
+# To update: bump the constant in src\core\DRagLint.Core.Model.pas, re-run the
+# guard, paste the line it prints. If a change genuinely cannot affect what is
+# derived, update the hash WITHOUT bumping and say why here -- the same
+# discipline the extractor baseline uses, and the same warning: the failure mode
+# of getting it wrong is SILENT.
+#
+# 2026-08-31: created. Seeded at 1.0.0-alpha rather than mirroring the extractor
+#   version, because this stamp has its own history from here and pretending it
+#   shares the extractor's past would be false. Existing indexes carry no
+#   resolver_fingerprint at all and are grandfathered by the same rule the
+#   indexer fingerprint uses -- an absent stamp adopts the current one silently
+#   rather than forcing a mass re-resolve on first run.
+
+1.0.0-alpha|ae753fb79518fac5b932d8e9f6d78fc0fce625248ae44c846ac4ae6a57b805be

@@ -55,6 +55,30 @@ const
   /// </remarks>
   DRAGLINT_EXTRACTOR_VERSION = '1.9.0-alpha';
 
+  /// <summary>The identity of what this build DERIVES from parses it already
+  /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
+  /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
+  /// <remarks>
+  /// WHY A SECOND STAMP. The extractor version answers "would this build PARSE a
+  /// byte sequence differently?", and a bump costs a ~5 hour re-parse of every
+  /// index. The resolve pass asks a different question -- "would this build
+  /// derive different EDGES from parses it already has?" -- and its remedy is
+  /// measured in minutes. One stamp cannot answer both, and measured against
+  /// real history it got both wrong in opposite directions:
+  /// <para>src\index\DRagLint.Index.CallResolver.pas sits INSIDE the extractor
+  /// hash, so 19 resolve-only commits each demanded a full re-parse.</para>
+  /// <para>src\storage's resolve writers sit OUTSIDE it: 42 resolve-write
+  /// commits, one every 2.2 days, moved nothing and left indexes silently
+  /// stale.</para>
+  /// The defect is not theoretical. On 2026-08-30 the post-reindex sequence ran
+  /// all 31 project sections specifically to pick up an enum-candidate resolve
+  /// fix, and the calls resolve executed in THREE of them -- incremental scope
+  /// is decided by changed FILES, and a changed resolver is not a changed file.
+  /// <para>The surface is scoped BY FUNCTION, in tests\resolver-surface.txt, and
+  /// guarded by tests\autotest\run_resolver_version_guard.ps1.</para>
+  /// </remarks>
+  DRAGLINT_RESOLVER_VERSION = '1.0.0-alpha';
+
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>
