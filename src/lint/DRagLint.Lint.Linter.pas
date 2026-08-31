@@ -18,6 +18,7 @@ uses
   , DRagLint.Lint  .QueryRules
   , DRagLint.Lint  .ReviewMarker { REVIEW_MARK -- a tool-written marker is not a hand-written inline comment }
   , DRagLint.Lint  .ExceptionNaming { stage 3: the message -> class-name derivation }
+  , DRagLint.Diagnostics.ParseCache { ApplyPreprocess -- ONE transform shared with the AST checks }
   ;
 
 type
@@ -912,6 +913,13 @@ begin
     // parse/slice pipeline (both assume UTF-8). This is the direct lint/lint-all
     // path; without it a valid CP1252 file (SOFTWID class) errored here.
     Source:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFilePath));
+    { Same preprocessing the AST checks now get, through the SAME call, so the
+      two lint entry points cannot drift into disagreeing about which branches
+      are live. TLinter builds its own parser (see the note below), which is
+      exactly why this has to be applied here as well and not only in
+      TAstParseCache. Offsets are preserved, so every finding's line/col below
+      stays valid; a disabled or failing preprocess returns the bytes unchanged. }
+    Source:= TAstParseCache.ApplyPreprocess(Source, AFilePath);
     { Pick the grammar by extension: .dfm -> DFM grammar, everything else -> Pascal.
       Parsing a .dfm with the Pascal grammar produced a spurious parser-error per
       set-literal/root object (see CollectDfmParseErrors). }

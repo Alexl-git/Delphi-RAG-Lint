@@ -3,7 +3,8 @@ unit DRagLint.Diagnostics.ParseCache;
 interface
 
 uses
-  System.SysUtils, System.Generics.Collections, TreeSitter, TreeSitterLib;
+  System.SysUtils, System.Generics.Collections, TreeSitter, TreeSitterLib,
+  DRagLint.Preprocess, DRagLint.Preprocess.Types;
 
 type
   /// <summary>One parsed source file: raw bytes + the tree-sitter tree. The owning
@@ -15,8 +16,17 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TParsedFile = record
-    Src : TBytes;
-    Tree: TTSTree;
+    { What the parser saw and what every AST rule slices. Since the lint walk
+      started preprocessing, this is the PREPROCESSED text: dead branches and
+      the directives themselves are blanked to spaces. }
+    Src   : TBytes;
+    { The bytes as they are ON DISK. Kept because blanking removes the
+      DIRECTIVES, so any check that reads directive TEXT out of the source --
+      CheckSyntaxErrors.BuildConditionalRanges is the one that does -- must read
+      this and not Src, or it sees no conditionals at all. Offsets are identical
+      between the two: the preprocessor is offset-preserving by construction. }
+    RawSrc: TBytes;
+    Tree  : TTSTree;
   end;
 
   /// <summary>Process-wide parse-once cache so the many TAstChecker rules reuse one
@@ -32,7 +42,29 @@ type
   TAstParseCache = class
   strict private
     class var FMap: TDictionary<string, TParsedFile>;
+    class var FPreprocess: Boolean;
+    class var FProfile   : TDefineProfile;
+    class var FProfileSet: Boolean;
   public
+    /// <summary>Enables the same preprocessing the INDEX side already does, so the
+    /// lint walk stops reporting findings inside branches the compiler never sees.</summary>
+    /// <param name="AEnabled">False restores raw-byte parsing (what --no-preprocess asks for).</param>
+    /// <param name="AProfile">The define profile; resolve it the way the indexer does.</param>
+    /// <remarks>
+    /// Mirrors TIndexer.SetPreprocess. Call BEFORE the first Get for a file --
+    /// entries are memoized, so flipping this mid-run leaves earlier files parsed
+    /// the old way. The CLI sets it once per verb, before any walking starts.
+    /// </remarks>
+    class procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+    /// <summary>Applies the configured preprocessing to AUtf8, or returns it unchanged.</summary>
+    /// <remarks>
+    /// ONE transform and ONE fail-open path, shared by this cache and by
+    /// TLinter -- which deliberately builds its own parser and would otherwise
+    /// need a second copy of the same logic. Two copies is how the two lint
+    /// entry points would drift into disagreeing about which branches are live,
+    /// which is the defect this whole change exists to close.
+    /// </remarks>
+    class function ApplyPreprocess(const AUtf8: TBytes; const AFile: string): TBytes;
     /// <summary>Returns the parse-once result for AFile: its raw bytes and tree-sitter tree,
     /// parsing and memoizing on the first call and returning the cached entry thereafter.</summary>
     /// <param name="AFile">Path to the source file; resolved to a normalized full path used as the cache key.</param>
@@ -86,7 +118,28 @@ begin
     // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 up front.
     // PF.Src is fed to tree-sitter below AND sliced by every AST rule
     // downstream (all assume UTF-8), so transcoding here fixes them all.
-    PF.Src:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));
+    PF.RawSrc:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));
+    PF.Src   := PF.RawSrc;
+    { THE LINT WALK NOW PREPROCESSES, and before this it never did -- not "with
+      the wrong defines", but not at all: Preprocess had three production
+      callers and every one was on the index side. So `lint` parsed raw bytes
+      and reported code the compiler never compiles. Measured: 592 findings,
+      3.7% of ORM3 SERVER's entire lint-all, from ONE file whose 7,074-line body
+      sits inside a never-defined IFDEF.
+
+      It also fixes the OPPOSITE and more dangerous direction. The grammar
+      handles IFDEF/ELSE itself and unconditionally keeps the FIRST
+      branch, so a TAKEN ELSE branch was never linted at all -- silently, with no
+      count anywhere going up to say so.
+
+      FAIL-OPEN, matching the indexer (Indexer.pas:948): if preprocessing
+      throws, parse the RAW bytes. Findings are kept. The safe direction here is
+      noise, never silent suppression.
+
+      Offsets are preserved by construction -- the preprocessor blanks to spaces
+      rather than deleting -- so every finding's line/col stays valid and no
+      caller needs remapping. }
+    PF.Src:= ApplyPreprocess(PF.RawSrc, AFile);
     Parser:= TTSParser.Create;
     try
       Parser.Language:= tree_sitter_delphi13;
@@ -106,6 +159,36 @@ begin
   end;
   FMap.Add(Key, PF);
   Result:= PF;
+end;
+
+class function TAstParseCache.ApplyPreprocess(const AUtf8: TBytes; const AFile: string): TBytes;
+begin
+  Result:= AUtf8;
+  if not (FPreprocess and FProfileSet) then Exit;
+  try
+    var PpOpts: TPPOptions:= TPPOptionsDefault;
+    PpOpts.Profile    := FProfile;
+    PpOpts.IncludeMode:= 'defines-only';
+    PpOpts.BaseDir    := TPath.GetDirectoryName(AFile);
+    Result:= Preprocess(AUtf8, PpOpts);
+  except
+    { FAIL-OPEN, matching the indexer (Indexer.pas:948). If preprocessing throws,
+      lint the RAW bytes: findings are KEPT. The safe direction here is noise,
+      never silent suppression -- a swallowed exception that dropped a file's
+      findings would be invisible, and no count anywhere would move. }
+    on E: Exception do Result:= AUtf8;
+  end;
+end;
+
+class procedure TAstParseCache.SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+begin
+  FPreprocess:= AEnabled;
+  FProfile   := AProfile;
+  FProfileSet:= True;
+  { Entries already parsed keep the treatment they were parsed under, so a
+    caller that flips this mid-walk gets a mixture. Clearing here would be worse
+    -- it would silently discard trees other rules still hold. The contract is
+    "set it before the first Get", and the CLI does. }
 end;
 
 class procedure TAstParseCache.Clear;

@@ -464,7 +464,7 @@ type
     // PP-Task-7: pp-profile define-profile resolver diagnostic verb
     PpDproj      : string     ; // --dproj <file.dproj>  the project whose config defines to resolve
     // PP-Task-9: index-time preprocessing. Preprocessing is ON by default in the
-    // index verbs (per-config {$IFDEF} resolution before parsing); --no-preprocess
+    // index AND lint verbs (per-config conditional resolution before parsing); --no-preprocess
     // reverts to the prior raw all-branch behaviour.
     NoPreprocess : Boolean    ; // --no-preprocess  disable the in-process directive preprocessor for this index run
     // Task 5: create-enum-helper CLI verb (--qname reuses QName; --db/--apply/
@@ -601,7 +601,7 @@ begin
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census] [--layers <f.json>] [--json]');
-  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party]');
+  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
   Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
@@ -8344,6 +8344,22 @@ var
   EffPath     : string                      ;
   Store       : ISymbolStore                ;
 begin
+  { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
+    uses (Indexer.SetPreprocess above does exactly this call). Before this, the
+    lint walk never preprocessed at ALL -- Preprocess had three production
+    callers and every one was on the index side -- so `lint` reported findings
+    in code the compiler never sees: 592 of them, 3.7% of ORM3 SERVER's whole
+    lint-all, from a single file inside a never-defined IFDEF.
+
+    `--no-preprocess` was already parsed here and then IGNORED, which is why the
+    note measured identical counts with and without it. It now means something
+    on this verb.
+
+    When no dproj is resolvable (an ad-hoc `lint <path>`), ResolveIndexProfile
+    returns the platform built-ins -- the same answer the indexer would give for
+    the same input, which is the point: two entry points, one decision. }
+  TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
+    ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   DefDisabled:= nil;
   { AutoFix Chunk 1: accept --file <F> as an alias for the positional <path>.
     The AutoFix spec's fix contract and the IDE spawn (Task 7) both invoke
@@ -12929,6 +12945,22 @@ var
   ScopeSet : TDictionary<string, Boolean>;
   Prof     : TLintPhaseProfiler          ;
 begin
+  { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
+    uses (Indexer.SetPreprocess above does exactly this call). Before this, the
+    lint walk never preprocessed at ALL -- Preprocess had three production
+    callers and every one was on the index side -- so `lint` reported findings
+    in code the compiler never sees: 592 of them, 3.7% of ORM3 SERVER's whole
+    lint-all, from a single file inside a never-defined IFDEF.
+
+    `--no-preprocess` was already parsed here and then IGNORED, which is why the
+    note measured identical counts with and without it. It now means something
+    on this verb.
+
+    When no dproj is resolvable (an ad-hoc `lint <path>`), ResolveIndexProfile
+    returns the platform built-ins -- the same answer the indexer would give for
+    the same input, which is the point: two entry points, one decision. }
+  TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
+    ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   { Resolve DBs: first existing = project index (ResolveConsumerDbs promotes
     --project's own index to the front, so this is that project's store).
 

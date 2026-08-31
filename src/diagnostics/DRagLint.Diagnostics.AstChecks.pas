@@ -1435,7 +1435,14 @@ begin
   Result:= nil;
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
-  Src:= PF.Src;
+  { RawSrc, NOT Src -- this is the one check that reads DIRECTIVE TEXT out of
+    the source, and since the lint walk started preprocessing, Src has had the
+    directives themselves blanked to spaces. Reading Src here would make HasCond
+    false for every file and BuildConditionalRanges would find no regions at
+    all, silently disabling the conditional-aware half of the syntax check.
+    Offsets are identical between the two buffers, so the ranges it builds still
+    line up with the tree's error nodes. }
+  Src:= PF.RawSrc;
   // Hoist the directive scan: decode once, reuse HasCond in both Visit and
   // BuildConditionalRanges (was re-decoded per error node = O(N)).
   SrcUp:= AnsiUpperCase(TEncoding.UTF8.GetString(Src));
