@@ -27,7 +27,11 @@
 param(
   [Parameter(Mandatory)][ValidateSet('before','after')][string]$Tag,
   [string]$Exe = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string]$OutDir = 'C:\TEMP\claude\c--Projects-Delphi-RAG-lint\f4374ad8-1700-45f4-9237-81dac7d7805d\scratchpad\baseline'
+  [string]$OutDir = 'C:\TEMP\draglint-extractor-batch-2026-08-30\baseline',
+  # Measure the still-off rules' VOLUME. That is a SEPARATE question from the
+  # reindex comparison and a slow one (missing-doc / magic-literal on ORM3), so
+  # it is opt-in and deliberately not part of the before/after pair.
+  [switch]$MeasureOffRules
 )
 $ErrorActionPreference = 'Stop'
 New-Item -ItemType Directory -Force $OutDir | Out-Null
@@ -37,6 +41,30 @@ $corpora = @(
   @{ key='client'; db='C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite' },
   @{ key='server'; db='C:\Projects\DB\ORM3\SERVER\_D-RAG\MicroniteMW1Service.sqlite' }
 )
+
+# RULES THAT ARE OFF BY DEFAULT AND MUST STILL BE TRACKED. `lint-all` does not
+# run these, so a default-only capture records NOTHING for them -- and a missing
+# row reads as "unchanged", which is the silent kind of wrong.
+#
+# This started as just the master plan's two primary predictions
+# (global-only-uses-edge, uses-global-census); omitting them would have gutted
+# the comparison while looking complete. Both are now ON by default (owner's
+# ruling 2026-08-30), so they arrive through the DEFAULT pass instead, and this
+# list is the 18 that remain off.
+#
+# It doubles as the VOLUME MEASUREMENT behind the standing question "should this
+# rule ship on?". The house standard is every rule on unless it would flood, and
+# the owner's own rule is that a finding count in the thousands IS the defect --
+# so the decision needs numbers per corpus, not an opinion. These rows supply
+# them.
+$WatchOff = @(
+  'exhaustive-enum-case','string-equality-comparison','unsafe-typecast-without-is',
+  'commented-out-code','function-result-ignored','missing-doc','default-encoding-io',
+  'boolean-flag-parameter','loop-control-flag','magic-literal','middle-man',
+  'mutable-global-variable','public-writable-field','repeated-type-switch',
+  'separate-query-from-modifier','split-variable','interface-object-mixing',
+  'multiple-statements-per-line'
+) -join ','
 
 # The engine's own rule catalogue, so a rule ADDED or RENAMED between the two
 # runs is visible rather than silently read as a count change.
@@ -49,11 +77,20 @@ foreach ($c in $corpora) {
   # The indexer fingerprint is recorded WITH the counts. Without it a later
   # reader cannot tell which side of the reindex a number came from -- and that
   # is the whole question this file answers.
-  $fp = (& $Exe sql --query "SELECT value FROM schema_meta WHERE key='indexer_fingerprint'" --db $c.db 2>$null | Out-String).Trim()
+  # Pull the fingerprint out by PATTERN, not by trusting the row renderer: `sql`
+  # prints a column header and a rule line around the value.
+  $fpRaw = (& $Exe sql --query "SELECT value FROM schema_meta WHERE key='indexer_fingerprint'" --db $c.db 2>$null | Out-String)
+  $fp = if ($fpRaw -match '(v=[^;\s]+;schema=\d+[^\s]*)') { $Matches[1] } else { 'UNKNOWN' }
 
-  $raw = Join-Path $OutDir "lintall_$($c.key)_$Tag.json"
+ $passes = if ($MeasureOffRules) { @('default','enabled-watch') } else { @('default') }
+ foreach ($pass in $passes) {
+  $raw = Join-Path $OutDir "lintall_$($c.key)_$($pass)_$Tag.json"
   Write-Host "lint-all $($c.key) ($Tag) ..." -ForegroundColor Cyan
-  & $Exe lint-all --db $c.db --json --quiet 2>&1 | Set-Content $raw -Encoding ascii
+  if ($pass -eq 'default') {
+    & $Exe lint-all --db $c.db --json --quiet 2>&1 | Set-Content $raw -Encoding ascii
+  } else {
+    & $Exe lint-all --db $c.db --json --quiet --enable $WatchOff 2>&1 | Set-Content $raw -Encoding ascii
+  }
 
   # COUNT FROM THE JSON `rule` FIELD, never from the text renderer. An earlier
   # draft regex-matched kebab-case tokens per line, which also matches ordinary
@@ -62,23 +99,37 @@ foreach ($c in $corpora) {
   #
   # The engine prints a banner before the array (an FTS5 probe line, a scanning
   # line), so skip to the first '['.
+  # The engine prints a banner BEFORE the array and a summary AFTER it, so take
+  # the span from the first '[' to the LAST ']'. Slicing only from the first '['
+  # leaves the trailing summary attached and ConvertFrom-Json rejects the whole
+  # document ("Additional text encountered after finished reading JSON content").
   $txt = Get-Content $raw -Raw
   $i   = $txt.IndexOf('[')
-  if ($i -lt 0) { Write-Host "  $($c.key): NO JSON ARRAY -- lint-all failed?" -ForegroundColor Red; continue }
-  $findings = $txt.Substring($i) | ConvertFrom-Json
+  $j   = $txt.LastIndexOf(']')
+  if ($i -lt 0 -or $j -le $i) {
+    Write-Host "  $($c.key): NO JSON ARRAY -- lint-all failed?" -ForegroundColor Red; continue
+  }
+  $findings = $txt.Substring($i, $j - $i + 1) | ConvertFrom-Json
 
   $counts = @{}
   foreach ($f in $findings) {
     if (-not $f.rule) { continue }
     if ($counts.ContainsKey($f.rule)) { $counts[$f.rule]++ } else { $counts[$f.rule] = 1 }
   }
-  foreach ($k in ($counts.Keys | Sort-Object)) {
-    $summary += [pscustomobject]@{ corpus=$c.key; rule=$k; count=$counts[$k]; fingerprint=$fp }
+  # The enabled-watch pass re-runs EVERY default rule too, so keep only the
+  # watch-list rules from it -- otherwise every rule would appear twice and the
+  # __TOTAL__ rows would double-count.
+  $keep = if ($pass -eq 'default') { $counts.Keys } else { $counts.Keys | Where-Object { $WatchOff.Split(',') -contains $_ } }
+  foreach ($k in ($keep | Sort-Object)) {
+    $summary += [pscustomobject]@{ corpus=$c.key; pass=$pass; rule=$k; count=$counts[$k]; fingerprint=$fp }
   }
   # Total is recorded too: a rule that vanishes entirely has NO row above, and a
   # missing row reads as "unchanged" unless the totals disagree.
-  $summary += [pscustomobject]@{ corpus=$c.key; rule='__TOTAL__'; count=$findings.Count; fingerprint=$fp }
-  Write-Host ("  $($c.key): $($counts.Count) distinct rule id(s), fingerprint $fp")
+  if ($pass -eq 'default') {
+    $summary += [pscustomobject]@{ corpus=$c.key; pass=$pass; rule='__TOTAL__'; count=$findings.Count; fingerprint=$fp }
+  }
+  Write-Host ("  $($c.key) [$pass]: $($counts.Count) distinct rule id(s), fingerprint $fp")
+ }
 }
 
 # FAIL LOUDLY ON AN EMPTY RESULT. This file is the BEFORE half of a comparison

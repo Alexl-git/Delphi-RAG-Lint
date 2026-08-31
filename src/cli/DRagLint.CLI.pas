@@ -13330,16 +13330,23 @@ begin
   var SibKeep : TList<ISymbolStore>:= TList<ISymbolStore>.Create;
   var SibOwned: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
   try
-    { Rules gated INSIDE Run rather than filtered after it. The list is
-      deliberately not "every off-by-default project rule": a rule earns a place
-      here only by being expensive enough that running-then-discarding is itself
-      the defect. global-only-uses-edge is a full refs scan (0.92 s on ORM3
+    { Rules gated INSIDE Run rather than filtered after it. A rule earns a place
+      here by being EXPENSIVE enough that running-then-discarding is itself the
+      defect -- global-only-uses-edge is a full refs scan (0.92 s on ORM3
       client), and the post-hoc config filter downstream would have hidden that
-      cost perfectly -- the report stays correct, it just quietly costs a second. }
+      cost perfectly: the report stays correct, it just quietly costs a second.
+
+      NOTE the second argument flipped to False on 2026-08-30. This list used to
+      be "the off-by-default expensive rules"; both members are now ON by
+      default (owner's ruling -- every rule on unless it would flood), so the
+      gate's job changed from "opt in" to "let a user's explicit disable still
+      skip the expensive scan". Cost and default state are INDEPENDENT axes, and
+      conflating them is what would put an expensive rule back behind an opt-in
+      nobody sets. }
     var OptIn: TArray<string>:= nil;
-    if Cfg.ShouldKeep('global-only-uses-edge', True) then
+    if Cfg.ShouldKeep('global-only-uses-edge', False) then
       OptIn:= OptIn + ['global-only-uses-edge'];
-    if Cfg.ShouldKeep('uses-global-census', True) then
+    if Cfg.ShouldKeep('uses-global-census', False) then
       OptIn:= OptIn + ['uses-global-census'];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
@@ -13670,9 +13677,9 @@ begin
       the rule would silently report nothing, which is precisely the divergence
       the sibling-resolver comment above exists to prevent. }
     var OptIn2: TArray<string>:= nil;
-    if LoadLintConfig(AArgs).ShouldKeep('global-only-uses-edge', True) then
+    if LoadLintConfig(AArgs).ShouldKeep('global-only-uses-edge', False) then
       OptIn2:= OptIn2 + ['global-only-uses-edge'];
-    if LoadLintConfig(AArgs).ShouldKeep('uses-global-census', True) then
+    if LoadLintConfig(AArgs).ShouldKeep('uses-global-census', False) then
       OptIn2:= OptIn2 + ['uses-global-census'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that

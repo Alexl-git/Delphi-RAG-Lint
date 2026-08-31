@@ -141,6 +141,12 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 #             polices the README/wiki counts and `rules --json` totals, but the
 #             BUILT-IN split lives only here, so the two rule commits bumped
 #             every documented number and still missed this one.
+# 2026-08-30 (d): count UNCHANGED at 124, but `global-only-uses-edge` and
+#             `uses-global-census` flipped OFF -> ON by default on the owner's
+#             ruling that every rule ships on unless it would flood. Logged here
+#             because this file is the only place the BUILT-IN split is pinned,
+#             and a default-state change is exactly the kind of thing that moves
+#             finding counts without moving any documented number.
 # 2026-08-30 (c): 123 -> 124, from `with-hides-outer-symbol` (bug-patterns,
 #             warning, ON by default on the owner's explicit ruling). Measured
 #             before it shipped: 8,241 findings on ORM3 server and 8,278 on
