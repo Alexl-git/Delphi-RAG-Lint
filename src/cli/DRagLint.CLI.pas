@@ -612,7 +612,7 @@ begin
   Writeln('                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.');
   Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
   Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
-  Writeln('  drag-lint exceptions-sync    [--db <file.sqlite>] [--config <lint.json>] [--apply]   (materialise the project''s derived exception classes)');
+  Writeln('  drag-lint exceptions-sync    [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project''s derived exception classes)');
   Writeln('                               Harvests every bare `raise Exception.Create(''literal'')` in the project and declares one class per');
   Writeln('                               DISTINCT message inside a drag-lint:auto managed block in the exceptions unit. DRY RUN WITHOUT --apply.');
   Writeln('                               Opt in with an "exceptions" block in drag-lint-lint.json -- an empty one is enough; key "unit" names');
@@ -13403,6 +13403,24 @@ begin
     and not a crash. Same reasoning as lint-all naming what it skipped. }
   if Cfg.ExceptionsUnit = '' then
   begin
+    { --json still gets a DOCUMENT here. An early exit that prints prose in json
+      mode is the shape that breaks a caller: it parses fine right up to the one
+      case it most needs to detect. }
+    if AArgs.AsJson or SameText(AArgs.Format, 'json') then
+    begin
+      var JOff: TJSONObject:= TJSONObject.Create;
+      try
+        JOff.AddPair('configured', TJSONBool.Create(False));
+        JOff.AddPair('applied'   , TJSONBool.Create(False));
+        JOff.AddPair('changed'   , TJSONBool.Create(False));
+        JOff.AddPair('added'     , TJSONArray.Create);
+        JOff.AddPair('reason', 'no "exceptions" block in the lint config -- the feature is off');
+        Writeln(JOff.Format(2));
+      finally
+        JOff.Free;
+      end;
+      Exit(0);
+    end;
     Writeln('exceptions-sync: this project has no "exceptions" block in its lint config, so the feature is off.');
     Writeln('exceptions-sync: add one to drag-lint-lint.json to opt in. An empty block is enough, and names');
     Writeln('exceptions-sync: the unit ' + DEFAULT_EXCEPTIONS_UNIT + ' by default.');
@@ -13520,31 +13538,85 @@ begin
     end;
     Plan.Changed:= Created or (Plan.NewText <> UnitText);
 
-    Writeln(Format('exceptions-sync: %d file(s) scanned, %d bare raise site(s), %d class(es) already declared.',
+    { --json emits ONE document on stdout and nothing else. Every prose line
+      below is routed through EmitStatusLine, which sends it to stderr in that
+      mode -- the same discipline lint-all's banner already follows, and for the
+      same reason: a status line printed beside the document makes it unparseable
+      (docs\INBOX-lint-all-json-stdout-banner.md). }
+    var WantJson: Boolean:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+
+    { An anonymous method, not a nested procedure: Delphi allows inline VAR
+      inside a statement block but not an inline routine declaration. }
+    var Report: TProc<string>:=
+      procedure (AText: string)
+      begin
+        if WantJson then Writeln(ErrOutput, AText) else Writeln(AText);
+      end;
+
+    Report(Format('exceptions-sync: %d file(s) scanned, %d bare raise site(s), %d class(es) already declared.',
       [Length(FilePaths), Length(Linter.ExcSites), Length(Plan.Existing)]));
     if Plan.Covered > 0 then
-      Writeln(Format('exceptions-sync: %d site(s) already covered by an existing class.', [Plan.Covered]));
+      Report(Format('exceptions-sync: %d site(s) already covered by an existing class.', [Plan.Covered]));
     if Plan.Duplicate > 0 then
-      Writeln(Format('exceptions-sync: %d site(s) repeat a message another site already names.', [Plan.Duplicate]));
+      Report(Format('exceptions-sync: %d site(s) repeat a message another site already names.', [Plan.Duplicate]));
     if Plan.Skipped > 0 then
-      Writeln(Format('exceptions-sync: %d site(s) skipped -- no static message to name a class from.', [Plan.Skipped]));
+      Report(Format('exceptions-sync: %d site(s) skipped -- no static message to name a class from.', [Plan.Skipped]));
     for I:= 0 to High(Plan.Added) do
-      Writeln(Format('  + %s  // %s', [Plan.Added[I].Name, Plan.Added[I].RawMsg]));
+      Report(Format('  + %s  // %s', [Plan.Added[I].Name, Plan.Added[I].RawMsg]));
+
+    { WRITE FIRST, then report. The document states what HAPPENED, so `applied`
+      must not be decided before the write it describes. }
+    var DidWrite: Boolean:= False;
+    if Plan.Changed and AArgs.Apply then
+    begin
+      TDirectory.CreateDirectory(ExtractFilePath(UnitPath));
+      TFile.WriteAllText(UnitPath, Plan.NewText, TEncoding.ANSI);
+      DidWrite:= True;
+    end;
+
+    if WantJson then
+    begin
+      var JRoot: TJSONObject:= TJSONObject.Create;
+      try
+        JRoot.AddPair('unit', UnitPath);
+        JRoot.AddPair('root', Cfg.ExceptionsRoot);
+        JRoot.AddPair('created', TJSONBool.Create(Created and DidWrite));
+        JRoot.AddPair('applied', TJSONBool.Create(DidWrite));
+        JRoot.AddPair('changed', TJSONBool.Create(Plan.Changed));
+        JRoot.AddPair('filesScanned', TJSONNumber.Create(Length(FilePaths)));
+        JRoot.AddPair('sites'       , TJSONNumber.Create(Length(Linter.ExcSites)));
+        JRoot.AddPair('existing'    , TJSONNumber.Create(Length(Plan.Existing)));
+        JRoot.AddPair('covered'     , TJSONNumber.Create(Plan.Covered));
+        JRoot.AddPair('duplicate'   , TJSONNumber.Create(Plan.Duplicate));
+        JRoot.AddPair('skipped'     , TJSONNumber.Create(Plan.Skipped));
+        var JAdd: TJSONArray:= TJSONArray.Create;
+        for I:= 0 to High(Plan.Added) do
+        begin
+          var JE: TJSONObject:= TJSONObject.Create;
+          JE.AddPair('name'   , Plan.Added[I].Name  );
+          JE.AddPair('message', Plan.Added[I].RawMsg);
+          JAdd.AddElement(JE);
+        end;
+        JRoot.AddPair('added', JAdd);
+        Writeln(JRoot.Format(2));
+      finally
+        JRoot.Free;
+      end;
+      Exit(0);
+    end;
 
     if not Plan.Changed then
     begin
       Writeln('exceptions-sync: 0 new classes -- ' + UnitPath + ' is already up to date.');
       Exit(0);
     end;
-    if not AArgs.Apply then
+    if not DidWrite then
     begin
       Writeln(Format('exceptions-sync: DRY RUN -- %d class(es) would be added to %s. Nothing was written.',
         [Length(Plan.Added), UnitPath]));
       Writeln('exceptions-sync: re-run with --apply to write it.');
       Exit(0);
     end;
-    TDirectory.CreateDirectory(ExtractFilePath(UnitPath));
-    TFile.WriteAllText(UnitPath, Plan.NewText, TEncoding.ANSI);
     if Created then Writeln('exceptions-sync: CREATED ' + UnitPath)
     else            Writeln('exceptions-sync: updated ' + UnitPath);
     Writeln(Format('exceptions-sync: %d class(es) added. The index is now stale for that file -- reindex before linting.',

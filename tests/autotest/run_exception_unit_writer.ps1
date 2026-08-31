@@ -74,6 +74,9 @@
                     exceptions unit's uses clause. The CREATION path always did
                     this; the SPLICE path did not, and ORM3 could not show it,
                     because its root is declared in the file being written.
+   14 JSON          --json emits ONE document on stdout, the prose goes to
+                    stderr, the counts account for every site, and the
+                    UNCONFIGURED case emits a document rather than prose.
    11 LINT-CLEAN    the generated unit parses AND lints to zero. This repo's
                     global rule holds tool-written code to the same standard as
                     hand-written code, and nothing else pins it. Must run after
@@ -565,6 +568,57 @@ $uBaseCount = @([regex]::Matches($defsD2, '(?m)^\s*uBase\s*,')).Count
 Check 'ROOT: a second run does not add uBase twice' `
   (($uBaseCount -le 1) -and ($hD1 -eq (TreeHash $projD)) -and $sD2.Ran) `
   ("uBase entries: " + $uBaseCount)
+
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host 'CONTROL 14 -- --json emits ONE document and nothing else' -ForegroundColor Cyan
+# The failure this guards is not "the JSON is wrong", it is "a status line was
+# printed beside it", which makes the document unparseable for the caller that
+# asked for it. lint-all already learned that one
+# (docs\INBOX-lint-all-json-stdout-banner.md); this keeps the new verb from
+# relearning it.
+# Separate the streams with real redirection, not `2>&1 1>$null` -- that idiom
+# does NOT yield stderr-only in PowerShell and made this control fail against a
+# build whose stderr routing was already correct.
+$jOut = Join-Path $WorkDir 'json.out'
+$jErr = Join-Path $WorkDir 'json.err'
+$oOut = Join-Path $WorkDir 'jsonoff.out'
+$null = Start-Process -FilePath $Exe -ArgumentList 'exceptions-sync','--db',$dbA,'--config',$cfgOn,'--json' `
+         -WorkingDirectory 'C:\TEMP' -Wait -NoNewWindow -PassThru `
+         -RedirectStandardOutput $jOut -RedirectStandardError $jErr
+$null = Start-Process -FilePath $Exe -ArgumentList 'exceptions-sync','--db',$dbA,'--config',$cfgOff,'--json' `
+         -WorkingDirectory 'C:\TEMP' -Wait -NoNewWindow -PassThru `
+         -RedirectStandardOutput $oOut -RedirectStandardError (Join-Path $WorkDir 'jsonoff.err')
+$jsonOut = [System.IO.File]::ReadAllText($jOut)
+$jsonErr = [System.IO.File]::ReadAllText($jErr)
+$offJson = [System.IO.File]::ReadAllText($oOut)
+$parsed = $null
+try { $parsed = $jsonOut | ConvertFrom-Json } catch { $parsed = $null }
+Check 'JSON: stdout parses as one document' ($null -ne $parsed) `
+  ("stdout began: " + ($jsonOut -split "`n" | Select-Object -First 1))
+Check 'JSON: no prose leaked onto stdout' `
+  (-not ($jsonOut -match '(?m)^exceptions-sync:')) `
+  'a status line beside the document is what makes it unparseable'
+Check 'JSON: the prose went to stderr instead' `
+  ($jsonErr -match 'exceptions-sync:') `
+  'routing it to stderr is the point -- dropping it would be worse than leaking it'
+if ($null -ne $parsed) {
+  # The counts must ACCOUNT for every harvested site. A document whose numbers
+  # do not add up is worse than no document: it looks authoritative.
+  $sum = [int]$parsed.covered + [int]$parsed.duplicate + [int]$parsed.skipped + @($parsed.added).Count
+  Check 'JSON: covered + duplicate + skipped + added == sites' `
+    ($sum -eq [int]$parsed.sites) `
+    ("$sum vs sites=" + $parsed.sites)
+  Check 'JSON: it names the unit it would write' `
+    ($parsed.unit -match 'uExceptionDefinitions\.pas$') ("unit=" + $parsed.unit)
+  Check 'JSON: a dry run reports applied=false' `
+    ($parsed.applied -eq $false) 'without --apply nothing was written, and the document must say so'
+}
+$offParsed = $null
+try { $offParsed = $offJson | ConvertFrom-Json } catch { $offParsed = $null }
+Check 'JSON: UNCONFIGURED still emits a DOCUMENT, not prose' `
+  (($null -ne $offParsed) -and ($offParsed.configured -eq $false)) `
+  'an early exit that prints prose in json mode breaks the caller at the one case it most needs to detect'
 
 # ---------------------------------------------------------------------------
 Write-Host ''
