@@ -142,18 +142,52 @@ C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe resolve-dbs --pr
       is at `v=1.9.0-alpha` against a current `1.10.0-alpha`, with no resolver
       stamp at all, and the window called it `[ok]`.
 
-      **The freshness report exists, but on the CLI, not in this window.** To ask
-      the real question:
-      ```
-      C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe query --name <AnySymbol> --db <full path to the .sqlite>
-      ```
-      and read **stderr**, which now carries both answers -- the parse-side note
-      and, new in this build, a separate resolver line.
+      **ASK THE ENGINE INSTEAD -- it answers this directly as of v1.9.0-alpha.**
+      Copy this line exactly; it names both of DataCopy's indexes and needs no
+      working directory:
 
-      - [ ] Run that against your ACTIVE PROJECT's index and record what it says.
-      - [ ] Run it against `C:\Projects\.drag-lint\library-Win64.sqlite`. Before
-            the evening reindex this SHOULD report staleness. Silence there is
-            the defect worth reporting.
+      ```
+      C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe info --json --db C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite --db C:\Projects\.drag-lint\library-Win64.sqlite
+      ```
+
+      For the ORM3 client instead, swap the first `--db` for
+      `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite`.
+
+      **Prefer PowerShell, which will format it for you:**
+
+      ```powershell
+      $exe = "C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe"
+      $r = & $exe info --json `
+             --db "C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite" `
+             --db "C:\Projects\.drag-lint\library-Win64.sqlite" 2>$null | ConvertFrom-Json
+      "engine {0}   extractor {1}   resolver {2}" -f $r.version, $r.extractor_version, $r.resolver_version
+      $r.indexes | Format-Table path, verdict, indexer_stale, resolver_stale -AutoSize
+      ```
+
+      **What you should see BEFORE the evening reindex** -- measured on this
+      machine at 17:05 today, so this is a recorded expectation, not a guess:
+
+      | index | verdict |
+      |---|---|
+      | `C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite` | `current` |
+      | `C:\Projects\.drag-lint\library-Win64.sqlite` | `reparse-owed` |
+
+      `DataCopy` is already current because it was re-indexed at 15:34, after the
+      extractor bump. The library index is one extractor version behind and
+      carries **no resolver stamp at all**.
+
+      - [ ] **Record the verdict for each index.**
+      - [ ] **The library index must NOT say `current` before the reindex.** If it
+            does, that is the defect worth reporting -- a stamp claiming
+            freshness the pass never earned is exactly what went wrong earlier
+            today, and it is self-concealing once written.
+      - [ ] **AFTER the evening reindex, re-run the same line.** Every row must
+            read `current`. Anything still `reparse-owed` means a section failed;
+            anything `resolve-owed` means the resolve half did not run.
+
+      > The verdicts distinguish **`reparse-owed`** (hours) from
+      > **`resolve-owed`** (minutes) on purpose. Treating the cheap one as the
+      > expensive one is how a re-resolve gets deferred indefinitely.
 
       > Filed as a gap: the About window is the one screen built to stop a stale
       > index answering confidently -- its own header says so -- and it is blind
