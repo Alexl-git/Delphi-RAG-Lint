@@ -25,7 +25,9 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory)][ValidateSet('before','after')][string]$Tag,
+  # 'mid' is the OLD engine against the NEW indexes -- the reading that makes
+  # before/after interpretable. See post_reindex_sequence.ps1's header.
+  [Parameter(Mandatory)][ValidateSet('before','mid','after')][string]$Tag,
   [string]$Exe = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
   [string]$OutDir = 'C:\TEMP\draglint-extractor-batch-2026-08-30\baseline',
   # Measure the still-off rules' VOLUME. That is a SEPARATE question from the
