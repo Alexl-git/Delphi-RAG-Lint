@@ -67,6 +67,9 @@
                     ONE class. Pins the already-shipped NormalizeExcMessage
                     amendment (the one pair on ORM3 that justified the whole
                     normalizer and that the normalizer originally missed).
+   12 WHITESPACE    a message with leading/trailing spaces survives its own
+                    read-back. Found on ORM3 by the --apply kill condition, not
+                    here -- every message in this fixture had been tidy.
    11 LINT-CLEAN    the generated unit parses AND lints to zero. This repo's
                     global rule holds tool-written code to the same standard as
                     hand-written code, and nothing else pins it. Must run after
@@ -158,6 +161,11 @@ begin
   raise Exception.Create('Set }brace{ and ''quoted'' text');
 end;
 
+procedure PaddedMessage;
+begin
+  raise Exception.Create('  Padded message needs trimming   ');
+end;
+
 procedure LookupByName;
 begin
   raise Exception.Create('LookupAccountName failed for %s');
@@ -175,7 +183,7 @@ end;
 
 procedure RunAll(const M: string);
 begin
-  ChannelSetup; OrderThisItem; OrderThatCustomer; HostileMessage;
+  ChannelSetup; OrderThisItem; OrderThatCustomer; HostileMessage; PaddedMessage;
   LookupByName; LookupById; NoLiteral(M);
 end;
 
@@ -324,6 +332,20 @@ Check 'HOSTILE: doubled quotes are unescaped exactly once' `
 Check 'HOSTILE: its declaration is still one legal line' `
   ($block1 -match '(?m)^\s*E[A-Za-z0-9]+\s*=\s*class\([^)]*\);\s*//.*\}brace\{') ''
 
+# WHITESPACE ROUND-TRIP -- found on ORM3, NOT by this fixture, which is why it
+# is now here. The comment is written from the message VERBATIM but read back
+# with Trim(), so a message ending in a space was written long on run 1 and
+# re-rendered short on run 2: `exceptions-sync --apply` twice in a row rewrote
+# CommonExceptions.pas while reporting `0 class(es) added` (9504 -> 9493 bytes,
+# 11 of 78 messages affected). The file was STABLE from run 2 on, so this is a
+# one-time churn -- and a one-time churn is still a tool editing source it was
+# asked not to change. Fixed by trimming at WRITE time so the first write is
+# already canonical. IDEMPOTENCE above is what actually catches a regression;
+# this pins the reason.
+Check 'WHITESPACE: the padded message is stored trimmed' `
+  ($block1 -match '(?m)^  EPaddedMessageNeedsTrimming = class\([^)]*\); // Padded message needs trimming?$') `
+  'written verbatim, it would not survive its own read-back'
+
 # 10 -- the specifier-only pair collapses.
 $lookup = @([regex]::Matches($block1, '(?m)^\s*(E[A-Za-z0-9]*Lookup[A-Za-z0-9]*)\s*=\s*class\(') |
             ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
@@ -423,10 +445,11 @@ Check 'SKIP: the no-literal raise is NOT rewritten' `
 # and by one that emitted a class for M with a junk comment. Six is the exact
 # number of distinct literal messages in the fixture after control 3's append
 # and control 10's collapse: Data Channel, three Order variants, the hostile
-# message, and the ONE Lookup class the %s/%d pair folded into.
+# message, the padded message, and the ONE Lookup class the %s/%d pair
+# folded into.
 $declCount = @([regex]::Matches($block4, '(?m)^\s*E[A-Za-z0-9]+\s*=\s*class\(')).Count
-Check 'SKIP: the unit holds exactly 6 classes -- one per distinct literal' `
-  ($declCount -eq 6) ("declared: " + $declCount + " (the no-literal raise must contribute none)")
+Check 'SKIP: the unit holds exactly 7 classes -- one per distinct literal' `
+  ($declCount -eq 7) ("declared: " + $declCount + " (the no-literal raise must contribute none)")
 Push-Location C:\TEMP
 try { $lintOut = & $Exe lint-all --db $dbA --config $cfgOn --quiet 2>&1 | Out-String }
 finally { Pop-Location }

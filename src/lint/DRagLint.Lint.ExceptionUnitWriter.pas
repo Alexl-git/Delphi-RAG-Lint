@@ -228,9 +228,13 @@ begin
   try
     SB.Append(#13#10);
     SB.Append('type'); SB.Append(#13#10);
+    { Trim again at the RENDER, not because PlanExceptionEntries forgets, but
+      because AEntries also carries entries PARSED back out of an existing
+      block -- including one a human hand-edited. Rendering those verbatim
+      would reintroduce exactly the churn the plan-side trim removes. }
     for I:= 0 to High(AEntries) do
       SB.Append(Format('  %s = class(%s); // %s'#13#10,
-                       [AEntries[I].Name, Root, AEntries[I].RawMsg]));
+                       [AEntries[I].Name, Root, Trim(AEntries[I].RawMsg)]));
     Result:= SB.ToString;
   finally
     SB.Free;
@@ -303,7 +307,18 @@ begin
           N:= UniqueExceptionClassName(Base, Taken);
         end;
       E.Name  := N;
-      E.RawMsg:= ASites[I].Raw;
+      { TRIMMED, and this is not cosmetic -- it is what makes the write
+        IDEMPOTENT. The comment is written from the message and read back
+        with Trim(), so a message with leading or trailing spaces would be
+        written long and re-rendered short on the very next run: measured on
+        ORM3 2026-08-31, `exceptions-sync --apply` twice rewrote
+        CommonExceptions.pas (9504 -> 9493 bytes) while correctly reporting
+        `0 class(es) added`, because 11 of 78 harvested messages ended in a
+        space. Canonicalising HERE means the first write already equals what
+        the reader will produce. The KEY is unaffected either way --
+        NormalizeExcMessage maps non-alphanumerics to spaces and splits -- so
+        this cannot orphan an existing binding. }
+      E.RawMsg:= Trim(ASites[I].Raw);
       E.Key   := ASites[I].Msg;
       APlan.Added:= APlan.Added + [E];
       Taken:= Taken + [N];

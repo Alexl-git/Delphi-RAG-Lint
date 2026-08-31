@@ -55,8 +55,16 @@ try {
   # source of truth for both this catalogue flag and what --fix will attempt, so
   # a rule appearing or vanishing from it silently is exactly what this catches.
   # Bump it here, in the same commit that changes the list, and say why: 21 -> 22
-  # on 2026-08-16 (+local-field-prefix).
+  # on 2026-08-16 (+local-field-prefix); 22 -> 23 on 2026-08-31
+  # (+raise-bare-exception).
+  #
+  # raise-bare-exception is STORE-BACKED, like doc-drift and the naming rules:
+  # it has no BuildAutofixEdits branch, because the class name it substitutes is
+  # read out of the exceptions unit's managed block and a pure-text builder could
+  # not know it. Its edits come from BuildExceptionRewriteEdits, appended in
+  # FinalizeAndOutput. Guarded by tests/autotest/run_exception_unit_writer.ps1.
+  Check 'raise-bare-exception fixable=true' ($byId['raise-bare-exception'].fixable -eq $true)
   $fixableCount = ($obj.rules | Where-Object { $_.fixable -eq $true }).Count
-  Check 'exactly 22 fixable rules' ($fixableCount -eq 22) "got $fixableCount"
+  Check 'exactly 23 fixable rules' ($fixableCount -eq 23) "got $fixableCount"
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
