@@ -18,12 +18,19 @@
   not a member of any layer, no provable outer declaration, and the TObject
   floor.
 
-  KNOWN COVERAGE LIMIT, stated rather than discovered later: this guard indexes
-  ONE project and passes no library store, so the CROSS-STORE half of the
-  ancestry bridge (a project form descending TCustomForm) is not exercised here.
-  The in-project ancestry walk IS -- TDerivedForm below inherits Width from a
-  base class declared in another fixture unit. The cross-store hop is covered by
-  the corpus measurement recorded in the plan, not by this runner.
+  COVERAGE, and the limit that USED to be here is now closed. Two ancestry paths
+  are exercised: the IN-PROJECT walk (TDerivedForm inherits Width from a base
+  class in another fixture unit) and, since `lint` gained --library-db, the
+  CROSS-STORE hop -- TBridgeForm descends TFakeVclForm, which is indexed into a
+  SEPARATE library database the project index cannot see. That hop is what makes
+  the owner's own reported case work at all, since Width and Height live on
+  TCustomForm and no project index carries it.
+
+  It was previously covered by a corpus measurement and by nothing in the
+  battery. A corpus measurement is not a regression test: it is not re-run on
+  every change, it depends on someone else's source tree, and it cannot fail
+  RED. If the bridge broke, every guard stayed green and ORM3 quietly lost the
+  findings the rule exists for.
 
   Run from a NEUTRAL CWD, pwsh 7.
 #>
@@ -51,6 +58,30 @@ function Emit([string]$name, [string]$text) {
   [System.IO.File]::WriteAllText((Join-Path $srcDir $name),
     (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), [System.Text.Encoding]::ASCII)
 }
+
+# The FAKE LIBRARY lives in its own directory and its own index, because the
+# whole point of the bridge case is an ancestor the PROJECT index cannot see.
+# Put it under src\ and the project index would resolve it in-process, and the
+# assertion would pass without the bridge existing at all.
+$libDir = Join-Path $WorkDir 'lib'
+New-Item -ItemType Directory $libDir | Out-Null
+function EmitLib([string]$name, [string]$text) {
+  [System.IO.File]::WriteAllText((Join-Path $libDir $name),
+    (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), [System.Text.Encoding]::ASCII)
+}
+
+EmitLib 'uWhFakeVcl.pas' @'
+unit uWhFakeVcl;
+interface
+type
+  TFakeVclForm = class
+  public
+    Width : Integer;
+    Height: Integer;
+  end;
+implementation
+end.
+'@
 
 # --- the types every case draws on -----------------------------------------
 Emit 'uWhTypes.pas' @'
@@ -202,14 +233,38 @@ end;
 end.
 '@
 
+# BRIDGE: the ancestor is in the LIBRARY index, not this one. Width is
+# reachable only by the cross-store hop, which is exactly what --library-db
+# makes testable.
+Emit 'uWhBridge.pas' @'
+unit uWhBridge;
+interface
+uses
+  uWhFakeVcl, uWhTypes;
+type
+  TBridgeForm = class(TFakeVclForm)
+  public
+    FPanel: TWhPanel;
+    procedure Go;
+  end;
+implementation
+procedure TBridgeForm.Go;
+begin
+  with FPanel do
+    Width:= 1;
+end;
+end.
+'@
+
 # --- index -----------------------------------------------------------------
 $manifest = Join-Path $WorkDir 'manifest.drag-lint.json'
 $mtext = '{' + [char]10 +
   '  "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 1 },' + [char]10 +
-  '  "indexes": { "outDir": "out", "sections": [ { "name": "SecWh", "db": "wh.sqlite", "include": ["src"] } ] }' + [char]10 +
+  '  "indexes": { "outDir": "out", "sections": [ { "name": "SecWh", "db": "wh.sqlite", "include": ["src"] }, { "name": "SecWhLib", "db": "whlib.sqlite", "include": ["lib"] } ] }' + [char]10 +
   '}'
 [System.IO.File]::WriteAllText($manifest, $mtext, [System.Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'out\wh.sqlite'
+$libDb = Join-Path $WorkDir 'out\whlib.sqlite'
 
 $cfgOff = Join-Path $WorkDir 'off.json'
 [System.IO.File]::WriteAllText($cfgOff, '{ "disabled": [ "with-hides-outer-symbol" ] }',
@@ -218,11 +273,16 @@ $cfgOff = Join-Path $WorkDir 'off.json'
 Push-Location C:\TEMP
 try {
   & $Exe index --all --config $manifest --only SecWh --jobs 1 2>&1 | Out-Null
+  & $Exe index --all --config $manifest --only SecWhLib --jobs 1 2>&1 | Out-Null
   if (-not (Test-Path $db)) {
     Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2
   }
   $onOut  = & $Exe lint-all --db $db --quiet 2>&1 | Out-String
   $offOut = & $Exe lint-all --db $db --config $cfgOff --quiet 2>&1 | Out-String
+  # The BRIDGE pair -- same file, same index, the ONLY difference is the flag.
+  $bridgeSrc  = Join-Path $srcDir 'uWhBridge.pas'
+  $bridgeWith = & $Exe lint $bridgeSrc --db $db --library-db $libDb --quiet 2>&1 | Out-String
+  $bridgeNone = & $Exe lint $bridgeSrc --db $db --quiet 2>&1 | Out-String
 } finally { Pop-Location }
 
 $lines = @($onOut -split "`r?`n" | Where-Object { $_ -match 'with-hides-outer-symbol' })
@@ -288,6 +348,29 @@ Check 'a disabling config reports nothing' `
 Check 'POSITIVE CONTROL: the off run still produced other findings' `
   ($offOut -match ':\d+:\d+') `
   'a silent run would pass the check above for the wrong reason'
+
+Write-Host ''
+Write-Host 'CROSS-STORE BRIDGE (--library-db)' -ForegroundColor Cyan
+# TBridgeForm descends TFakeVclForm, which lives ONLY in the library index. So
+# `Width` inside `with FPanel do` is reachable only if the ancestry climb
+# crosses stores. Before this flag that hop was covered by a corpus measurement
+# and by NOTHING that runs in the battery -- and a corpus measurement cannot
+# fail red, depends on someone else's source tree, and is not re-run on change.
+Check 'WITH --library-db: the cross-store ancestor is reached' `
+  ($bridgeWith -match 'with-hides-outer-symbol') `
+  'TBridgeForm inherits Width from TFakeVclForm, which only the library index has'
+
+# THE LOAD-BEARING ONE. Without it, assertion above would pass just as well with
+# the bridge hard-wired or the ancestor accidentally in the project index -- and
+# it also pins the DEGRADATION mode, so a future change that starts guessing
+# instead of declining fails here rather than shipping.
+Check 'WITHOUT it: the same file, same index, degrades to SILENT' `
+  (-not ($bridgeNone -match 'with-hides-outer-symbol')) `
+  'if this fires too, the ancestor was resolvable without the library store and the pair proves nothing'
+
+Check 'POSITIVE CONTROL: the no-library run still linted the file' `
+  ($bridgeNone -match 'uWhBridge') `
+  'a run that produced NO output at all would satisfy the silence check for the wrong reason'
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

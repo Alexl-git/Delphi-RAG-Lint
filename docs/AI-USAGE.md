@@ -432,7 +432,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 | Verb | What it does |
 |------|--------------|
 | `rules` | list every lint rule (`--category`, `--json`; marks `fixable`) |
-| `lint <path>` | lint a file/dir (`--rule`, `--disable`, `--fix`; see 4b). Add `--db <index>` to enable the store-backed checks -- without it type resolution and exception ancestry degrade conservatively |
+| `lint <path>` | lint a file/dir (`--rule`, `--disable`, `--fix`; see 4b). Add `--db <index>` to enable the store-backed checks -- without it type resolution and exception ancestry degrade conservatively. `--library-db <lib.sqlite>` overrides the manifest-resolved library index (the cross-store hop that lets a project class reach `TCustomForm`); absent, it resolves as before |
 | `lint <f> --db <db> --project-rules` | adds per-file `doc-drift`/`missing-doc`; off by default (per-decl cost can exceed the IDE's 8s budget) |
 | `lint <snap> --stand-in-for <real>` | lint a temp snapshot of an unsaved buffer as though it were `<real>`: store membership, file id, unit-name check and reported path all use the real path |
 | `lint --project P.dproj` | project-level rules (e.g. `unit-not-in-dpr`) |

@@ -584,7 +584,7 @@ begin
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
-  Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess]');
+  Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]');
   Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)');
   Writeln('                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:');
   Writeln('                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE''s 8s budget)');
@@ -778,6 +778,7 @@ function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
   direction, and BuildProjectFileScope is defined some 3,000 lines below it. }
 function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>; forward;
 function ResolveLibraryDb  (const AArgs: TArgs): string        ; forward;
+function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
 function MakeSiblingStoreResolver(const AArgs: TArgs;
   const AKeepAlive: TList<ISymbolStore>;
@@ -8725,7 +8726,7 @@ begin
       var FlowLibStore: ISymbolStore := nil;
       if FlowStore <> nil then
       begin
-        var FlowLibDb: string := ResolveLibraryDb(AArgs);
+        var FlowLibDb: string := LintLibraryDb(AArgs);
         if (FlowLibDb <> '') and TFile.Exists(FlowLibDb) then
           try
             FlowLibStore:= TSQLiteSymbolStore.Create(FlowLibDb);
@@ -8939,7 +8940,7 @@ begin
                      FlowStore, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore) do
             if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
               Findings:= Findings + [F];
-          for F in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(FlowStore, ResolveLibraryDb(AArgs)) do
+          for F in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(FlowStore, LintLibraryDb(AArgs)) do
             if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
               Findings:= Findings + [F];
           for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, '') do
@@ -19395,6 +19396,32 @@ end; // function
   Divergence here would be invisible: the run would open a project index for one
   platform beside a library index for another, and every cross-DB answer would be
   quietly wrong rather than missing. }
+{ The library index `lint` should consult: an EXPLICIT --library-db wins over
+  the manifest+platform resolution.
+
+  Why the flag exists at all, and it is not a convenience. `with-hides-outer-symbol`,
+  TFlowChecker and the DFM member classification all resolve a member surface
+  across TWO stores, and the cross-store hop is the interesting half -- a project
+  class descends TForm, the PROJECT index cannot resolve TForm, and the climb
+  continues by name in the LIBRARY index. That bridge is what makes the owner's
+  own reported case work, since Width and Height live on TCustomForm, which no
+  project index carries.
+
+  Before this flag, that bridge was covered by a CORPUS MEASUREMENT and by
+  nothing that runs in the battery. A corpus measurement is not a regression
+  test: it is not re-run on every change, it depends on someone else's source
+  tree, and it cannot fail RED. If the bridge broke silently, every guard stayed
+  green and ORM3 quietly lost the findings the rule was built for.
+
+  Repeatable on `index`; `lint` takes the FIRST only. A second library store
+  would raise "which one wins" questions that the tested paths do not have, and
+  inventing an answer here would be inventing behaviour nothing asked for. }
+function LintLibraryDb(const AArgs: TArgs): string;
+begin
+  if Length(AArgs.LibraryDbs) > 0 then Result:= AArgs.LibraryDbs[0]
+  else Result:= ResolveLibraryDb(AArgs);
+end;
+
 function ResolveLibraryDb(const AArgs: TArgs): string;
 var
   Manifest : TIndexManifest                            ;
