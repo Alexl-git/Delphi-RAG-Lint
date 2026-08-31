@@ -85,7 +85,27 @@ if (-not (Test-Path $baseline)) {
   Write-Host "   -> $baseline"
   Check 'baseline exists' $false 'first run: write the line above into the baseline file'
 } else {
-  $stored = (Get-Content $baseline | Where-Object { $_ -and -not $_.StartsWith('#') } | Select-Object -First 1).Trim()
+  # EXACTLY ONE ACTIVE LINE, asserted before anything is compared.
+  #
+  # On 2026-08-26 the 1.9.0-alpha line was APPENDED rather than replacing the
+  # 1.8.0-alpha one. This reads only the first, so it went on comparing against
+  # a superseded version whose hash could never match again -- and because the
+  # stored version could no longer equal the declared one, every run took the
+  # "changed AND bumped" branch no matter what changed. The guard was
+  # structurally incapable of failing for five days, over exactly the invariant
+  # whose failure mode is silent: stale parses that answer confidently with
+  # fewer results.
+  #
+  # Nothing detected it, because a permanently green guard produces no signal.
+  # So the baseline's SHAPE is now part of what is checked.
+  $active = @(Get-Content $baseline | Where-Object { $_ -and -not $_.Trim().StartsWith('#') })
+  Check 'baseline carries exactly ONE active line' ($active.Count -eq 1) `
+    "$($active.Count) found -- an appended line silently disarms this guard"
+  if ($active.Count -ne 1) {
+    Write-Host '   Keep ONE `<version>|<hash>` line; move superseded ones to `#` history.' -ForegroundColor Yellow
+    Write-Host 'FAIL' -ForegroundColor Red; exit 1
+  }
+  $stored = $active[0].Trim()
   $sv, $sh = $stored -split '\|', 2
 
   if ($sh -eq $hash) {

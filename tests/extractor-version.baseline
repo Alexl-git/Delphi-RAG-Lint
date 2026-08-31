@@ -232,5 +232,22 @@
 #
 #   Pinned by tests\autotest\run_index_freshness.ps1.
 
-1.8.0-alpha|d861dfee88b2d31dc2a930ca7c6b73902155d3bd1aa675abe90a8c36fad1fd69
+# 2026-08-31: THE 1.9.0 LINE WAS APPENDED, NOT SUBSTITUTED, AND THAT MADE THIS
+#   GUARD PERMANENTLY GREEN. It reads only the FIRST active line
+#   (`Select-Object -First 1`), so it kept comparing against
+#   1.8.0-alpha|d861dfee... while the declared version was already 1.9.0-alpha
+#   and the real surface hash was bc6dd9b4... Every run therefore landed in the
+#   "extraction changed AND the version was bumped" branch -- REGARDLESS of what
+#   changed -- because the stored version could no longer equal the declared
+#   one. The assertion this file exists for, "extraction changed but
+#   DRAGLINT_EXTRACTOR_VERSION did NOT", became unreachable, and so did the
+#   whole DEFER-UNTIL mechanism.
+#
+#   It was found by reading, not by failing, which is the point: a guard in this
+#   state reports success forever. The superseded line is kept here as history
+#   and the guard now FAILS when more than one active line is present, so an
+#   append cannot silently disarm it again.
+#
+#   Superseded: 1.8.0-alpha|d861dfee88b2d31dc2a930ca7c6b73902155d3bd1aa675abe90a8c36fad1fd69
+
 1.9.0-alpha|bc6dd9b413ef1b005214c677d85cf1b1f5877e43a4be8c32ba56f123beb89465
