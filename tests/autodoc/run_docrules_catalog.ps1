@@ -141,6 +141,15 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 #             polices the README/wiki counts and `rules --json` totals, but the
 #             BUILT-IN split lives only here, so the two rule commits bumped
 #             every documented number and still missed this one.
+# 2026-08-31: 124 -> 125, from `review-marker-malformed` (review-markers,
+#             hint, ON). A `dl:ok` naming something that is not a rule id used
+#             to hit a bare `Continue` in the reporter, so it suppressed nothing
+#             AND was reported by nothing -- 11 such markers in a real project
+#             with 11 findings still firing and zero unused hints. THIS
+#             ASSERTION CAUGHT THE NEW RULE on the first battery after it
+#             landed, which is again the tripwire working: rules --json, the
+#             README and six wiki pages were all updated, and the BUILT-IN
+#             split is pinned only here.
 # 2026-08-30 (d): count UNCHANGED at 124, but `global-only-uses-edge` and
 #             `uses-global-census` flipped OFF -> ON by default on the owner's
 #             ruling that every rule ships on unless it would flood. Logged here
@@ -159,7 +168,7 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # pinned deliberately -- a builtin appearing or vanishing unnoticed is exactly
 # what this line exists to catch -- so it is UPDATED with the change that moves
 # it, never relaxed to a range.
-Assert ("built-in rule count = 124 (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol); got {0}" -f $builtins.Count) ($builtins.Count -eq 124)
+Assert ("built-in rule count = 125 (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed); got {0}" -f $builtins.Count) ($builtins.Count -eq 125)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)
