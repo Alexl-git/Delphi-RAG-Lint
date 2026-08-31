@@ -725,7 +725,7 @@ documented subset that never reaches them.
 | Rule id | Severity | Description |
 |---------|----------|-------------|
 | `global-only-uses-edge` | info | A global variable is the ONLY link from one unit to another -- relocating it (or injecting it, when it is interface-typed) deletes the `uses` edge |
-| `uses-global-census` | info | How many of a used unit's globals and consts this unit actually draws -- acknowledge a travels-together pair with `// dl:census-ok <unit>` |
+| `uses-global-census` | info | How many of a used unit's globals and consts this unit actually draws, **against how many that unit declares** -- 7 of 9 is a unit that travels with you, 7 of 206 is one you are dragging in for almost nothing. Acknowledge a travels-together pair with `// dl:unit <unit> accepted` |
 | `duplicate-global-decl` | warning | The same name declared at interface level in two or more units -- const, var, type, record, class, interface, enum or routine -- so which one compiles depends on `uses` order |
 | `with-hides-outer-symbol` | warning | A bare name inside a `with` body binds to the with-target while an outer scope declares the same name -- the compiler never warns |
 | `stat-gated-destructive` | warning | Destructive act gated on a file-existence check (a failed stat answers False) |

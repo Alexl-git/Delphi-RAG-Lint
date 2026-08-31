@@ -204,6 +204,107 @@ implementation
 end.
 '@
 
+# --- DFM EXCLUSION (owner ruling 2026-08-31) ------------------------------
+# A used unit that HAS a .dfm is skipped UNLESS its root object is a
+# datamodule: a form opened from a button cannot be injected without fighting
+# RAD, so the finding is advice nobody can act on. A datamodule usually can be
+# resolved through a container, so it stays reportable.
+#
+# BOTH halves are needed here. A fixture with only the form case would pass with
+# the exclusion written as "skip anything with a .dfm", which would have killed
+# the canonical real case -- uStyles is a datamodule carrying 26 of ORM3
+# CLIENT's edges, and an exclusion that removed the best case would be the wrong
+# rule.
+Emit 'uFormProv.pas' @'
+unit uFormProv;
+interface
+uses System.Classes, Vcl.Forms;
+type
+  TfrmProv = class(TForm)
+  end;
+var
+  gFormGlobal: Boolean;
+implementation
+end.
+'@
+
+Emit 'uFormProv.dfm' @'
+object frmProv: TfrmProv
+  Caption = ''Prov''
+  object edtOne: TEdit
+  end
+end
+'@
+
+Emit 'uFormReader.pas' @'
+unit uFormReader;
+interface
+uses uFormProv;
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gFormGlobal then
+    Exit;
+end;
+end.
+'@
+
+Emit 'uDmProv.pas' @'
+unit uDmProv;
+interface
+uses System.Classes;
+type
+  TdmProv = class(TDataModule)
+  end;
+var
+  gDmGlobal: Boolean;
+  gDmOther : Integer;
+implementation
+end.
+'@
+
+Emit 'uDmProv.dfm' @'
+object dmProv: TdmProv
+  Height = 200
+  Width = 300
+  object qryOne: TComponent
+  end
+  object qryTwo: TComponent
+  end
+end
+'@
+
+Emit 'uDmReader.pas' @'
+unit uDmReader;
+interface
+uses uDmProv;
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gDmGlobal then
+    Exit;
+end;
+end.
+'@
+
+# ACK in the owner's spelling: `// dl:unit <unit> accepted`.
+Emit 'uAckUnitWord.pas' @'
+unit uAckUnitWord;
+interface
+uses
+  uProvider;  // dl:unit uProvider accepted
+procedure DoWork;
+implementation
+procedure DoWork;
+begin
+  if gProvOne then
+    Exit;
+end;
+end.
+'@
+
 Emit 'uStaleZero.pas' @'
 unit uStaleZero;
 interface
@@ -315,6 +416,41 @@ Check 'and it names all three drawn symbols' `
 Check 'and it is anchored at the uses line, not line 1' `
   (($pos -join ' ') -match 'uReaderPos\.pas:3:') `
   'the uses entry IS the edge -- it is what gets acknowledged'
+
+Write-Host ''
+Write-Host 'WHAT IS DRAWN, AGAINST WHAT IS THERE (owner request 2026-08-31)' -ForegroundColor Cyan
+# The drawn counts alone cannot answer "consolidate, inject, or leave": 2 of 2
+# is a unit that travels with you, 2 of 200 is one you are dragging in for
+# almost nothing. uProvider declares exactly 2 vars and 1 const, so the totals
+# must equal the drawn counts HERE -- which is why the ratio is also pinned on
+# a provider that declares more than is drawn (uDmProv below).
+Check 'the message states what the used unit DECLARES' `
+  (($pos -join ' ') -match 'of the 2 and 1 that uProvider declares') `
+  (($pos -join ' '))
+
+Write-Host ''
+Write-Host 'DFM EXCLUSION -- a form cannot be injected, a datamodule can' -ForegroundColor Cyan
+$formEdge = CensusIn 'uFormReader.pas'
+$dmEdge   = CensusIn 'uDmReader.pas'
+Check 'FORM provider -> SILENT' ($formEdge.Count -eq 0) `
+  ("got " + $formEdge.Count + " -- a form opened from a button cannot be injected")
+Check 'DATAMODULE provider -> still reported' ($dmEdge.Count -eq 1) `
+  ("got " + $dmEdge.Count + " -- uStyles is a datamodule and carries 26 of ORM3 CLIENT's edges")
+Check 'and the datamodule edge names its DFM object count' `
+  (($dmEdge -join ' ') -match 'plus 2 DFM object\(s\)') `
+  (($dmEdge -join ' '))
+Check 'and it shows the ratio -- 1 var drawn of the 2 declared' `
+  (($dmEdge -join ' ') -match 'of the 2 and 0 that uDmProv declares') `
+  (($dmEdge -join ' '))
+
+Write-Host ''
+Write-Host 'ACKNOWLEDGEMENT -- the owner spelling, beside the original' -ForegroundColor Cyan
+Check '// dl:unit <unit> accepted -> suppressed' `
+  ((CensusIn 'uAckUnitWord.pas').Count -eq 0) `
+  'RED means the new spelling the MESSAGE now advertises does not actually work'
+Check 'POSITIVE CONTROL: the old dl:census-ok spelling still suppresses' `
+  ((CensusIn 'uAckTrail.pas').Count -eq 0) `
+  'an acknowledgement already written must not stop working because the wording changed'
 Check 'ZERO CENSUS: a reader that draws only a TYPE is silent' `
   ((CensusIn 'uReaderType.pas').Count -eq 0) `
   'no globals drawn means there is no coupling to report'
@@ -334,11 +470,18 @@ Check 'POSITIVE CONTROL: the unacknowledged reader still reports in the same run
 Write-Host ''
 Write-Host 'MULTI-ENTRY LINE -- the unit name is load-bearing' -ForegroundColor Cyan
 $multi = CensusIn 'uMulti.pas'
+# MATCHED ON THE CURRENT WORDING. These two said 'from uP1' / 'from uP2' until
+# 2026-08-31, when the message changed to "... of the N and M that <unit>
+# declares". The uP2 check then went red honestly -- but the uP1 check above it
+# went GREEN VACUOUSLY, because no message contains "from" any more and a
+# negative match on absent text always succeeds. A negative assertion whose
+# pattern has drifted is the worse half of the pair: it reports success while
+# testing nothing.
 Check 'the acknowledged unit uP1 is suppressed' `
-  (-not (($multi -join ' ') -match 'from uP1')) `
+  (-not (($multi -join ' ') -match 'that uP1 declares')) `
   'RED means the marker is line-bound and took both edges with it'
 Check 'and uP2 on the SAME line is still reported' `
-  (($multi -join ' ') -match 'from uP2') `
+  (($multi -join ' ') -match 'that uP2 declares') `
   'RED means the acknowledgement suppressed more than it named'
 
 Write-Host ''

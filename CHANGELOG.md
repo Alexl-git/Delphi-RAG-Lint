@@ -65,7 +65,7 @@ none -- 361 new rows on ORM3 CLIENT, 116 on SERVER, 107 on the self-index.
 | rule | question it asks |
 |---|---|
 | `global-only-uses-edge` | is an interface-section global the ONLY reason A depends on B? Then relocating it deletes the uses edge. |
-| `uses-global-census` | how HEAVY is a uses edge -- how many of B's globals does A actually touch? Deliberately not the same question as the one above. |
+| `uses-global-census` | how HEAVY is a uses edge -- how many of B's globals does A actually touch, out of how many B declares? Deliberately not the same question as the one above. |
 | `duplicate-global-decl` | the same name declared at interface level in two units -- const, var, type, record, class, interface, enum or routine -- so which one compiles depends on uses order. |
 | `with-hides-outer-symbol` | a `with` block silently shadowing an outer name. Found ORM3 `Assign` methods that copy nothing. |
 | `stat-gated-destructive` | requested by DataCopy: a destructive act gated on a stat that can go stale between the check and the act. |
@@ -90,6 +90,26 @@ design-time registration protocol, declared in 134 ORM3 units, and the finding
 listed all 134 paths in one message. And the site enumeration is now capped at
 six with an "and N more" tail: a report line nobody can read is the same defect
 as a rule that floods, it just arrives as one row instead of many.
+
+**`uses-global-census` now states the RATIO, and skips forms.** It said how many
+globals a reader draws; it now also says how many the used unit declares, plus
+its DFM object count. Neither number alone answers "consolidate, inject, or
+leave it": 7 of 9 is a unit that travels with you, 7 of 206 is one you are
+dragging in for almost nothing.
+
+A used unit that has a `.dfm` is now skipped **unless its root object descends
+from `TDataModule`**. A form opened from a button cannot be injected without
+fighting RAD -- the designer and the DFM both assume the concrete class -- so
+reporting it is advice nobody can act on; a datamodule usually can be resolved
+through a container. That needed an ancestry climb rather than a name test: the
+DFM root's stored signature is its own class, and 0 of 61 roots on ORM3 CLIENT
+contain "datamodule". Measured before shipping -- 61 roots, exactly 2
+datamodules, and `uStyles` is one, so the canonical 26-edge case survives while
+~43 plain-form edges go quiet (161 -> 118 on CLIENT).
+
+The acknowledgement is now `// dl:unit <unit> accepted`, which reads better in a
+uses clause; `// dl:census-ok <unit>` keeps working, because an acknowledgement
+someone has already written must not stop working when the wording improves.
 
 ### Performance
 

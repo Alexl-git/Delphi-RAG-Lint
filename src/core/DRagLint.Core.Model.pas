@@ -637,6 +637,27 @@ type
     ConstCount  : Integer;
     VarNames    : string ;
     ConstNames  : string ;
+    { WHAT THE USED UNIT CONTAINS, added 2026-08-31 on the owner's request, as
+      against the four fields above -- which say what the READER draws. The
+      earlier note here argued a total "cannot rank edges or justify
+      acknowledging one over another", and that is still true: it is the same
+      number on every edge into B. But ranking was never the only question. The
+      owner's is "consolidate, inject, or leave as is", and "you use 7 of
+      BASICS's 143" decides that where either number alone does not.
+      DeclDfmObjects is the .dfm object count -- NOT part of DeclVarTotal, since
+      DFM components are published fields of the form CLASS, not unit-level
+      globals. }
+    DeclVarTotal  : Integer;
+    DeclConstTotal: Integer;
+    DeclDfmObjects: Integer;
+    { The DFM root object's class, '' when the used unit has no .dfm. The rule
+      skips a unit that HAS one unless this class descends from TDataModule --
+      owner ruling: a form you open from a button cannot be injected without
+      fighting RAD, so reporting it is noise, while a datamodule usually can be.
+      Measured on ORM3 CLIENT: 61 DFM roots, exactly 2 datamodules -- and
+      uStyles is one of them, so the canonical 26-finding case survives the
+      exclusion while ~43 plain-form edges go quiet. }
+    DeclDfmRootClass: string;
   end;
 
   // One DECLARING SITE of a name that is declared at interface unit level in

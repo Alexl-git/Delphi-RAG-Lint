@@ -8787,7 +8787,49 @@ const
     '         GROUP_CONCAT(DISTINCT CASE WHEN isv = 1 THEN n END) AS vn,' +
     '         GROUP_CONCAT(DISTINCT CASE WHEN isc = 1 THEN n END) AS cn' +
     '  FROM pr GROUP BY a, b) ' +
-    'SELECT a, b, nv, nc, vn, cn FROM agg ' +
+    { WHAT THE USED UNIT CONTAINS -- the owner's addition, 2026-08-31. The four
+      aggregates above say what the READER draws; these say what is there to
+      draw from, and the decision "consolidate / inject / leave" needs both.
+      Same gate as duplicate-global-decl's: interface section, top level, and
+      never a .dfm -- so this counts unit-level globals, not the published
+      component fields of a form class. }
+    ', tot AS (' +
+    '  SELECT s.file_id AS fid,' +
+    '         COUNT(DISTINCT CASE WHEN s.kind = ''var''   THEN LOWER(s.name) END) AS tv,' +
+    '         COUNT(DISTINCT CASE WHEN s.kind = ''const'' THEN LOWER(s.name) END) AS tc' +
+    '  FROM symbols s' +
+    '  LEFT JOIN symbols p ON p.id = s.parent_id' +
+    '  JOIN files f ON f.id = s.file_id' +
+    '  WHERE s.name IS NOT NULL AND s.section = ''interface''' +
+    '    AND s.kind IN (''var'', ''const'')' +
+    '    AND (s.parent_id IS NULL OR p.kind IN (''unit'', ''program''))' +
+    '    AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''' +
+    '  GROUP BY s.file_id), ' +
+    { The sibling .dfm, matched by STEM. Two facts come from it: how many objects
+      it holds, and what its ROOT object's class is -- the latter decides the
+      form-vs-datamodule exclusion, which cannot be done here because it needs an
+      ancestry climb (type_ancestors stores the declared heritage list, not a
+      transitive closure -- TdmStyles has exactly one row, TDataModule). So the
+      class NAME travels out and the Pascal side climbs it. }
+    'dfmc AS (' +
+    '  SELECT LOWER(SUBSTR(f.path, 1, LENGTH(f.path) - 4)) AS stem, COUNT(*) AS ncomp' +
+    '  FROM symbols s JOIN files f ON f.id = s.file_id' +
+    '  WHERE s.kind = ''component'' AND LOWER(SUBSTR(f.path, -4)) = ''.dfm''' +
+    '  GROUP BY stem), ' +
+    'dfmr AS (' +
+    '  SELECT LOWER(SUBSTR(f.path, 1, LENGTH(f.path) - 4)) AS stem,' +
+    '         MIN(s.signature) AS cls' +
+    '  FROM symbols s JOIN files f ON f.id = s.file_id' +
+    '  WHERE s.kind = ''form'' AND LOWER(SUBSTR(f.path, -4)) = ''.dfm''' +
+    '  GROUP BY stem) ' +
+    'SELECT a, b, nv, nc, vn, cn,' +
+    '       COALESCE(t.tv, 0) AS tv, COALESCE(t.tc, 0) AS tc,' +
+    '       COALESCE(dc.ncomp, 0) AS ndfm, COALESCE(dr.cls, '''') AS dfmcls ' +
+    'FROM agg ' +
+    'LEFT JOIN tot  t  ON t.fid = agg.b ' +
+    'LEFT JOIN files bf ON bf.id = agg.b ' +
+    'LEFT JOIN dfmc dc ON dc.stem = LOWER(SUBSTR(bf.path, 1, LENGTH(bf.path) - 4)) ' +
+    'LEFT JOIN dfmr dr ON dr.stem = LOWER(SUBSTR(bf.path, 1, LENGTH(bf.path) - 4)) ' +
     'WHERE (nv + nc) > 0 ' +
     '  AND EXISTS (SELECT 1 FROM unit_uses uu' +
     '              WHERE uu.file_id = agg.a AND uu.target_file_id = agg.b) ' +
@@ -8820,6 +8862,12 @@ begin
         E.ConstCount  := Q.FieldByName('nc').AsInteger ;
         E.VarNames    := Q.FieldByName('vn').AsString  ;
         E.ConstNames  := Q.FieldByName('cn').AsString  ;
+        { COALESCEd in SQL, so a used unit with no globals of a kind, or no
+          sibling .dfm, arrives as 0 / '' rather than NULL. }
+        E.DeclVarTotal    := Q.FieldByName('tv'    ).AsInteger;
+        E.DeclConstTotal  := Q.FieldByName('tc'    ).AsInteger;
+        E.DeclDfmObjects  := Q.FieldByName('ndfm'  ).AsInteger;
+        E.DeclDfmRootClass:= Q.FieldByName('dfmcls').AsString ;
         List.Add(E);
         Q.Next;
       end;

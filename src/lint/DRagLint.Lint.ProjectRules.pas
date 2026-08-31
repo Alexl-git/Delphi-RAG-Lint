@@ -657,6 +657,11 @@ type
 function CollectUsesGlobalCensus(const AStore: ISymbolStore): TArray<TLintFinding>;
 const
   CTag      = 'dl:census-ok';
+  { The owner's spelling, 2026-08-31: `// dl:unit <unit> accepted`, which reads
+    better sitting in a uses clause and is what the message now advertises. BOTH
+    are accepted and always will be -- an acknowledgement someone has already
+    written must not stop working because the wording improved. }
+  CTagUnit  = 'dl:unit';
   CNameCap  = 12; { the heaviest measured edge carries 46 -- a 46-name line is noise }
 var
   Findings : TList<TLintFinding>;
@@ -739,6 +744,35 @@ var
   Fid      : Int64          ;
   ReaderIds: TList<Int64>   ;
   F        : TLintFinding   ;
+
+  { Does a .dfm root class descend from TDataModule?
+
+    A NAME test cannot answer this, and that was measured rather than assumed:
+    the root object's stored signature is its OWN class (TfrmAssignGroups,
+    TdmStyles), and 0 of 61 DFM roots on ORM3 CLIENT contain the string
+    'datamodule'. Nor can SQL answer it: type_ancestors holds the DECLARED
+    heritage list, not a transitive closure -- TdmStyles has exactly one row,
+    TDataModule -- so a form deriving from a project base form needs a climb.
+    Depth-capped at 8 like the sibling rule's Climb, which also stops the
+    self-referential case rather than trusting the data not to contain one. }
+  function IsDataModuleClass(const AName: string; ADepth: Integer): Boolean;
+  begin
+    Result:= False;
+    if (ADepth > 8) or (Trim(AName) = '') then Exit;
+    if SameText(Trim(AName), 'TDataModule') then Exit(True);
+    for var Sy: TSymbol in AStore.FindSymbolsByExactName(Trim(AName)) do
+    begin
+      if Sy.Kind <> skClass then Continue;
+      for var A: TTypeAncestor in AStore.GetTransitiveAncestors(Sy.Id) do
+      begin
+        if SameText(A.Name, 'TDataModule') then Exit(True);
+        { An UNRESOLVED leaf is where the project index stops and the class was
+          declared elsewhere; climbing it by name is the only way across. }
+        if (not A.Resolved) and IsDataModuleClass(A.Name, ADepth + 1) then Exit(True);
+      end;
+    end;
+  end;
+
 begin
   Result:= nil;
   if AStore = nil then Exit;
@@ -788,10 +822,16 @@ begin
         for var I: Integer:= 0 to Length(Lines) - 1 do
         begin
           if (I >= Length(Bearing)) or (not Bearing[I]) then Continue;
-          var P: Integer:= Pos(LowerCase(CTag), LowerCase(Lines[I]));
+          var Tag: string := CTag;
+          var P  : Integer:= Pos(LowerCase(CTag), LowerCase(Lines[I]));
+          if P = 0 then
+          begin
+            Tag:= CTagUnit;
+            P  := Pos(LowerCase(CTagUnit), LowerCase(Lines[I]));
+          end;
           if P = 0 then Continue;
           var L: Integer:= I + 1;                       { 1-based source line }
-          var Rest: string:= Copy(Lines[I], P + Length(CTag), MaxInt);
+          var Rest: string:= Copy(Lines[I], P + Length(Tag), MaxInt);
           var D: Integer:= Pos('--', Rest);
           if D > 0 then Rest:= Copy(Rest, 1, D - 1);     { drop the free-text reason }
           var Alone: Boolean:= StartsText('//', Trim(Lines[I]));
@@ -806,6 +846,12 @@ begin
               { The tag may be followed by ':' in the owner's sketch spelling. }
               while (Named <> '') and CharInSet(Named[1], [':', ';']) do
                 Named:= Trim(Copy(Named, 2, MaxInt));
+              { `dl:unit UUU accepted` -- drop the trailing keyword so the name
+                compares equal to the unit. Harmless for the census-ok spelling,
+                which never carries it. }
+              var SpPos: Integer:= LastDelimiter(' ', Named);
+              if (SpPos > 0) and SameText(Trim(Copy(Named, SpPos + 1, MaxInt)), 'accepted') then
+                Named:= Trim(Copy(Named, 1, SpPos - 1));
               if Named = '' then Continue;
 
               var InUses: Boolean:= False;
@@ -861,6 +907,24 @@ begin
       var ReaderUnit: string:= UnitNameCached(ReaderPath);
       if AckOf.ContainsKey(Key(E.ReaderFileId, DeclUnit)) then Continue;
 
+      { OWNER RULING 2026-08-31: a used unit that HAS a .dfm is skipped unless
+        its root object is a datamodule.
+
+        The reasoning is the owner's and it is about what the reader can DO with
+        the finding. A form opened from a button cannot be injected without
+        fighting RAD -- the designer, the DFM and double-click-to-add-handler
+        all assume the concrete class -- so telling someone their form depends
+        on another form's unit is advice they cannot act on. A datamodule
+        usually CAN be resolved through a container, so it stays reportable.
+
+        Measured before shipping: 61 DFM roots on ORM3 CLIENT, exactly 2
+        datamodules, and uStyles is one of them -- so the canonical case this
+        whole design was built around (26 findings, the SkipRefresh story)
+        survives the exclusion while ~43 plain-form edges go quiet. An
+        exclusion that removed the best case would have been the wrong rule. }
+      if (E.DeclDfmRootClass <> '') and (not IsDataModuleClass(E.DeclDfmRootClass, 0)) then
+        Continue;
+
       var NV, NC: Integer;
       var VNames: string:= Rendered(E.VarNames  , NV);
       var CNames: string:= Rendered(E.ConstNames, NC);
@@ -877,10 +941,20 @@ begin
       F.FilePath := ReaderPath;
       F.StartLine:= Ln; F.StartCol:= Cl;
       F.EndLine  := Ln; F.EndCol  := Cl + Length(DeclUnit);
+      { WHAT IS DRAWN, AGAINST WHAT IS THERE. The counts above say how much of
+        the used unit this reader touches; the two after "that %s declares" say
+        how much there is. Neither alone answers the owner's question -- 7 of 9
+        is a unit that travels with you, 7 of 143 is a unit you are dragging in
+        for almost nothing -- and the decision to consolidate, inject, or leave
+        it alone is the reader's to make from that ratio. }
+      var DfmNote: string:= '';
+      if E.DeclDfmObjects > 0 then
+        DfmNote:= Format(' plus %d DFM object(s)', [E.DeclDfmObjects]);
       F.Message  := Format(
-        '%s references %d variable(s) and %d const(s) from %s: %s -- acknowledge a ' +
-        'travels-together pair with // %s %s',
-        [ReaderUnit, NV, NC, DeclUnit, All, CTag, DeclUnit]);
+        '%s references %d variable(s) and %d const(s) of the %d and %d that %s ' +
+        'declares%s: %s -- acknowledge a travels-together pair with // %s %s accepted',
+        [ReaderUnit, NV, NC, E.DeclVarTotal, E.DeclConstTotal, DeclUnit, DfmNote,
+         All, CTagUnit, DeclUnit]);
       Findings.Add(F);
     end;
     Result:= Findings.ToArray;
