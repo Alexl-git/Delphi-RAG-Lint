@@ -5084,8 +5084,18 @@ begin
   Q   := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
+    { 'enum' joined 2026-08-30, measured rather than guessed. An enum-typed
+      receiver could not be TYPED at all, so its HELPER was never consulted --
+      and on ORM3 CLIENT 16 of 22 helper targets are enums, which is why the
+      helper fix moved that corpus from 18/1644 resolved to 18/1644 while it
+      moved this repo's own index from 0 to 829 of 1059.
+
+      `TMyEnum.ToString` is an everyday Delphi idiom, and a method call on an
+      enum-typed receiver can ONLY be a helper method -- an enum declares none
+      of its own. So this is precise, not a widening: it admits exactly the
+      receivers whose calls were unresolvable by construction. }
     Q.SQL.Text  := 'SELECT id, file_id, kind, name FROM symbols ' +
-                   'WHERE kind IN (''class'',''interface'',''record'',''type'')';
+                   'WHERE kind IN (''class'',''interface'',''record'',''type'',''enum'')';
     Q.Open;
     while not Q.Eof do
     begin

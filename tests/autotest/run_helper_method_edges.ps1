@@ -64,6 +64,10 @@ type
 
   TAliasW = TWidget;
 
+  { Enum helpers are a everyday Delphi idiom (TMyEnum.ToString), and on ORM3
+    CLIENT 16 of 22 helper targets are enums. }
+  TMood = (moCalm, moCross);
+
 implementation
 
 end.
@@ -82,10 +86,19 @@ type
     procedure Poke;
   end;
 
+  TMoodHelper = record helper for TMood
+    function Describe: string;
+  end;
+
 implementation
 
 procedure TWidgetHelper.Poke;
 begin
+end;
+
+function TMoodHelper.Describe: string;
+begin
+  result:= '';
 end;
 
 end.
@@ -123,6 +136,7 @@ interface
 procedure CallViaHelper;
 procedure CallViaAliasHelper;
 procedure CallOrdinaryMethod;
+procedure CallViaEnumHelper;
 
 implementation
 
@@ -148,6 +162,13 @@ var
   O: TOtherThing;
 begin
   O.OrdinaryCall;
+end;
+
+procedure CallViaEnumHelper;
+var
+  M: TMood;
+begin
+  M.Describe;
 end;
 
 end.
@@ -191,6 +212,7 @@ out['plain_to_impostor']  = edges('CallViaHelper', IMPOST)
 out['alias_to_helper']    = edges('CallViaAliasHelper', HELPER)
 out['alias_to_impostor']  = edges('CallViaAliasHelper', IMPOST)
 out['ordinary_resolves']  = edges('CallOrdinaryMethod', ORDIN)
+out['enum_to_helper']     = edges('CallViaEnumHelper', 'uhelperh.tmoodhelper.describe')
 out['ordinary_conf']      = conf('CallOrdinaryMethod', ORDIN)
 
 out['helper_rows'] = c.execute("SELECT COUNT(*) FROM type_helpers").fetchone()[0]
@@ -210,6 +232,10 @@ Check 'HAZARD: and with confidence certain'          ($r.plain_conf -eq 'certain
 Write-Host ''
 Write-Host 'Case 2 -- helper reached THROUGH an alias (the coupling with member C)' -ForegroundColor Cyan
 Check 'HAZARD: X.Poke on an alias-typed receiver resolves' ($r.alias_to_helper -ge 1) "edges=$($r.alias_to_helper)  -- needs BOTH the alias ancestor row and the helper lookup"
+
+Write-Host ''
+Write-Host 'Case 3 -- helper on an ENUM (16 of 22 helper targets on ORM3 CLIENT)' -ForegroundColor Cyan
+Check 'HAZARD: M.Describe on an enum-typed receiver resolves' ($r.enum_to_helper -ge 1) "edges=$($r.enum_to_helper)  -- an enum-typed receiver could not be TYPED at all, so the helper was never consulted"
 
 Write-Host ''
 Write-Host 'IMPOSTOR GUARD -- a fix must not resolve by name alone' -ForegroundColor Cyan
