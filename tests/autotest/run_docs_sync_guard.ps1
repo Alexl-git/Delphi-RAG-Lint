@@ -142,12 +142,18 @@
   verb must classify REAL and a synthetic token must classify NOT-A-VERB, or
   check 1's probe half is declared broken rather than passed.
 
-  SCOPE DECISION, flagged rather than left implicit: check 2 polices the TOTAL
-  and the FIXABLE count only. README.md:453 and INSTALL.md:78 also state "16
-  categories", "119 built-in and 54 external" and "149 enabled by default"; those
-  are equally checkable against `rules --json` and are NOT checked here, because
-  the rule as given named total and fixable. Recorded so a future reader widens
-  it knowingly instead of assuming the omission was considered.
+  SCOPE, and it was WIDENED on 2026-08-31 for cause. Check 2 originally policed
+  the TOTAL and the FIXABLE count only, and recorded that "N enabled by default"
+  was equally checkable but deliberately unchecked. That omission then did
+  exactly what an unchecked claim does: README.md carried "152 enabled by
+  default" in one paragraph and "154 enabled by default" in another, against a
+  live 154, and this guard passed every run. So DEFAULT-ON is now checked too.
+
+  Still NOT checked: "16 categories" and "124 built-in and 54 external". Both are
+  derivable from `rules --json` (category is a field; source is built-in vs .scm),
+  and the only reason they are out is that nothing has yet gone wrong with them.
+  That is the same reason the default-on count was out, so treat this paragraph
+  as a standing invitation rather than a settled decision.
 
   Exit code: 0 on full pass, 1 on any failure.
 
@@ -330,18 +336,20 @@ foreach ($k in $NeverProbe.Keys) {
 Write-Host ''
 Write-Host '-- check 2: rule counts' -ForegroundColor Cyan
 
-$total = 0; $fixable = 0
+$total = 0; $fixable = 0; $defaultOn = 0
 try {
-  $cat     = (& $Exe rules --json 2>$null | Out-String) | ConvertFrom-Json
-  $total   = [int]$cat.summary.total
-  $fixable = @($cat.rules | Where-Object { $_.fixable }).Count
+  $cat       = (& $Exe rules --json 2>$null | Out-String) | ConvertFrom-Json
+  $total     = [int]$cat.summary.total
+  $fixable   = @($cat.rules | Where-Object { $_.fixable }).Count
+  $defaultOn = @($cat.rules | Where-Object { $_.default_enabled }).Count
 } catch {
   Check 'rules --json parsed' $false $_.Exception.Message
 }
 # Non-emptiness control again: total=0 would make every stated count "wrong" in
 # a way that looks like a docs bug, and fixable=0 would silently excuse every
 # fixable claim. Assert the catalog is real before comparing anything to it.
-Check 'live rule catalog read' (($total -gt 0) -and ($fixable -gt 0)) "total=$total fixable=$fixable"
+Check 'live rule catalog read' (($total -gt 0) -and ($fixable -gt 0) -and ($defaultOn -gt 0)) `
+  "total=$total fixable=$fixable defaultOn=$defaultOn"
 
 # 2026-08-17: docs\wiki\ joined this scan. It was README/INSTALL only, which left
 # every wiki page's rule count unpoliced -- and pages DO state them (Fix-it.md
@@ -353,42 +361,87 @@ $countDocs = @(
                 Get-ChildItem -LiteralPath (Join-Path $Repo 'docs\wiki') -Filter '*.md' -File -ErrorAction SilentlyContinue |
                   ForEach-Object { $_.FullName }
               ) | Where-Object { Test-Path -LiteralPath $_ }
+# WHOLE-FILE, NOT LINE BY LINE -- and that is the fix for the bug this check
+# was widened to catch. The 152/154 drift lived at README.md:543-544, where the
+# NUMBER and the words 'enabled by default' sit on DIFFERENT LINES because the
+# paragraph wraps. A per-line scan cannot see that claim at all, so the count
+# was unpoliced in the one place it was actually wrong -- and a probe that
+# broke it stayed GREEN (observed 2026-08-31, README saying 999 and this guard
+# passing). The same blind spot applied to 'N rules' and 'N fixable'.
+#
+# Newlines are replaced with SPACES rather than stripped, so every character
+# offset is preserved 1:1 and a match index still maps back to a real line
+# number. Report the line the claim STARTS on.
 $badCount = New-Object System.Collections.Generic.List[string]
 $seenCount = 0
 foreach ($d in $countDocs) {
-  $rel = $d.Substring($Repo.Length + 1)
-  $n = 0
-  foreach ($line in (Get-Content -LiteralPath $d)) {
-    $n++
-    # "N rules" -- an exact claim, must equal the live total.
-    foreach ($m in [regex]::Matches($line, '\b(\d{2,4})\s+rules\b')) {
-      $seenCount++
-      if ([int]$m.Groups[1].Value -ne $total) {
-        $badCount.Add(("{0}:{1}: says '{2} rules', live total is {3}" -f $rel, $n, $m.Groups[1].Value, $total))
-      }
+  $rel  = $d.Substring($Repo.Length + 1)
+  $raw  = Get-Content -LiteralPath $d -Raw
+  if ($null -eq $raw) { continue }
+  $flat = $raw -replace '[\r\n]', ' '
+  if ($flat.Length -ne $raw.Length) {
+    # Never silently scan a mis-aligned string: the line numbers would be
+    # wrong and every report would point at the wrong place.
+    Check ('offset-preserving flatten for ' + $rel) $false 'newline replacement changed the length'
+    continue
+  }
+  function LineOf([int]$idx) { return ([regex]::Matches($raw.Substring(0, $idx), "`n").Count + 1) }
+
+  # "N rules" -- an exact claim, must equal the live total.
+  foreach ($m in [regex]::Matches($flat, '\b(\d{2,4})\s+rules\b')) {
+    $seenCount++
+    if ([int]$m.Groups[1].Value -ne $total) {
+      $badCount.Add(("{0}:{1}: says '{2} rules', live total is {3}" -f $rel, (LineOf $m.Index), $m.Groups[1].Value, $total))
     }
-    # "N+ rules" -- a floor claim. Only an OVERSTATEMENT is wrong.
-    foreach ($m in [regex]::Matches($line, '\b(\d{2,4})\+\s*rules\b')) {
-      $seenCount++
-      if ([int]$m.Groups[1].Value -gt $total) {
-        $badCount.Add(("{0}:{1}: says '{2}+ rules', live total is only {3}" -f $rel, $n, $m.Groups[1].Value, $total))
-      }
+  }
+  # "N+ rules" -- a floor, so only a claim ABOVE the live total is wrong.
+  foreach ($m in [regex]::Matches($flat, '\b(\d{2,4})\+\s+rules\b')) {
+    $seenCount++
+    if ([int]$m.Groups[1].Value -gt $total) {
+      $badCount.Add(("{0}:{1}: says '{2}+ rules', live total is only {3}" -f $rel, (LineOf $m.Index), $m.Groups[1].Value, $total))
     }
-    # "N with an auto-fix" / "N fixable" -- must equal the live fixable count.
-    # \d{1,4}, NOT the \d{2,4} the two patterns above use. The fixable count is
-    # plausibly a single digit (it was 22 when this was written, and a rule pack
-    # that loses autofixes shrinks toward 0), and \d{2,4} made a one-digit claim
-    # INVISIBLE rather than wrong -- caught by a positive control that broke the
-    # count to 9 and watched this check stay silent. A two-digit floor is fine
-    # for "N rules", where a genuine claim of "9 rules" would be absurd.
-    foreach ($m in [regex]::Matches($line, '\b(\d{1,4})\s+(?:with an auto-fix|with auto-fix|autofixable|fixable)\b')) {
-      $seenCount++
-      if ([int]$m.Groups[1].Value -ne $fixable) {
-        $badCount.Add(("{0}:{1}: claims {2} fixable, live fixable is {3}" -f $rel, $n, $m.Groups[1].Value, $fixable))
-      }
+  }
+  # "N with an auto-fix" / "N fixable" -- must equal the live fixable count.
+  # \d{1,4}, NOT the \d{2,4} the two patterns above use. The fixable count is
+  # plausibly a single digit (it was 22 when this was written, and a rule pack
+  # that loses autofixes shrinks toward 0), and \d{2,4} made a one-digit claim
+  # INVISIBLE rather than wrong -- caught by a positive control that broke the
+  # count to 9 and watched this check stay silent. A two-digit floor is fine
+  # for "N rules", where a genuine claim of "9 rules" would be absurd.
+  foreach ($m in [regex]::Matches($flat, '\b(\d{1,4})\s+(?:with an auto-fix|with auto-fix|autofixable|fixable)\b')) {
+    $seenCount++
+    if ([int]$m.Groups[1].Value -ne $fixable) {
+      $badCount.Add(("{0}:{1}: claims {2} fixable, live fixable is {3}" -f $rel, (LineOf $m.Index), $m.Groups[1].Value, $fixable))
+    }
+  }
+  # "N enabled by default". Added 2026-08-31 after README.md said both 152 and
+  # 154 in the same file, against a live 154, while this guard passed every run.
+  foreach ($m in [regex]::Matches($flat, '\b(\d{1,4})\s+enabled by default\b')) {
+    $seenCount++
+    if ([int]$m.Groups[1].Value -ne $defaultOn) {
+      $badCount.Add(("{0}:{1}: claims {2} enabled by default, live default-on is {3}" -f $rel, (LineOf $m.Index), $m.Groups[1].Value, $defaultOn))
     }
   }
 }
+
+# SELF-TEST, because every pattern above was silently matching nothing at some
+# point in this guard's life. Assert each one finds at least one live claim:
+# a pattern that matches zero documents is indistinguishable from a clean tree.
+$patternHits = [ordered]@{}
+foreach ($pat in @(
+      @{ n = 'N rules';           r = '\b(\d{2,4})\s+rules\b' },
+      @{ n = 'N fixable';         r = '\b(\d{1,4})\s+(?:with an auto-fix|with auto-fix|autofixable|fixable)\b' },
+      @{ n = 'N enabled by default'; r = '\b(\d{1,4})\s+enabled by default\b' })) {
+  $hits = 0
+  foreach ($d in $countDocs) {
+    $raw2 = Get-Content -LiteralPath $d -Raw
+    if ($null -eq $raw2) { continue }
+    $hits += [regex]::Matches(($raw2 -replace '[\r\n]', ' '), $pat.r).Count
+  }
+  $patternHits[$pat.n] = $hits
+  Check ('claim pattern is live: ' + $pat.n) ($hits -gt 0) "$hits match(es) across $($countDocs.Count) doc(s)"
+}
+
 Check 'rule-count claims located' ($seenCount -gt 0) "($seenCount claim(s) in README.md + INSTALL.md)"
 Check 'every stated rule count matches the live catalog' ($badCount.Count -eq 0) "($($badCount.Count) mismatch(es))"
 foreach ($x in $badCount) { Write-Host "        $x" -ForegroundColor Red }

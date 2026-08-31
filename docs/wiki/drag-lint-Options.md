@@ -29,4 +29,4 @@ database.
 ## Example
 Illustrative only: opening drag-lint > drag-lint Options... shows the
 full 178-rule catalog, grouped by its 16 categories, with a toggle per
-rule and a marker for which of the 22 fixable rules have an auto-fix.
+rule and a marker for which of the 23 fixable rules have an auto-fix.

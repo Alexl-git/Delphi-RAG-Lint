@@ -98,6 +98,7 @@ uses
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .DocRules
   , DRagLint.Lint   .SharedUnit
+  , DRagLint.Lint   .ExceptionUnitWriter { exceptions-sync: the managed block in the exceptions unit }
   , DRagLint.Project.Resolver
   , DRagLint.Project.Members
   , DRagLint.Project.Coherence
@@ -611,6 +612,15 @@ begin
   Writeln('                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.');
   Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
   Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
+  Writeln('  drag-lint exceptions-sync    [--db <file.sqlite>] [--config <lint.json>] [--apply]   (materialise the project''s derived exception classes)');
+  Writeln('                               Harvests every bare `raise Exception.Create(''literal'')` in the project and declares one class per');
+  Writeln('                               DISTINCT message inside a drag-lint:auto managed block in the exceptions unit. DRY RUN WITHOUT --apply.');
+  Writeln('                               Opt in with an "exceptions" block in drag-lint-lint.json -- an empty one is enough; key "unit" names');
+  Writeln('                               the unit (default uExceptionDefinitions, created if absent) and key "root" the ancestor (default Exception).');
+  Writeln('                               Each declaration carries its message in a same-line // comment, and THAT COMMENT IS THE KEY: rename a');
+  Writeln('                               generated class freely, but edit its comment and the next run adds a second class for the old message.');
+  Writeln('                               It is a VERB and not a --fix because its input is project-wide and its output is one file; the CALL-SITE');
+  Writeln('                               rewrite is the fix-it half and lives on `lint <file> --fix --fix-rule raise-bare-exception [--apply]`.');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>]');
   Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>]: relay in front of RAD Studio''s DelphiLSP,');
@@ -7283,13 +7293,17 @@ end;
   BuildAutofixEdits (kept in lockstep; a guard test asserts they agree).
   EXCEPTION: store-backed fixes (doc-drift, missing-doc, method-pascalcase,
   local-var-casing, const-casing, field-name-prefix, param-name-prefix,
-  type-name-prefix) are fixable but have NO BuildAutofixEdits branch --
+  type-name-prefix, raise-bare-exception) are fixable but have NO
+  BuildAutofixEdits branch --
   doc-drift/missing-doc edits come from TDocumenter.BuildFor and the naming
   re-casing/prefix-adding edits come from DRagLint.Refactor.NamingFix.Build-
   NamingFixEdits (the rename engine), both via a store-backed append in
-  FinalizeAndOutput, not from the pure-text edit builder. }
+  FinalizeAndOutput, not from the pure-text edit builder.
+  raise-bare-exception joins them: its replacement class NAME is read out of
+  the exceptions unit's managed block, so a pure-text builder could not know
+  it -- BuildExceptionRewriteEdits supplies those edits the same way. }
 const
-  FIXABLE_RULE_IDS: array[0..21] of string = (
+  FIXABLE_RULE_IDS: array[0..22] of string = (
     'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
     'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc',
     'method-pascalcase', 'local-var-casing', 'const-casing',
@@ -7297,7 +7311,11 @@ const
     'nil-comparison', 'uppercase-compare', 'uppercase-compare-always-false', 'unused-local',
     { local-field-prefix: strips an F prefix off a LOCAL. Safest rename in the
       family -- single-routine scope, so no call site can be affected. }
-    'local-field-prefix');
+    'local-field-prefix',
+    { raise-bare-exception: `raise Exception.Create('x')` -> the generated
+      class for that message, plus the uses entry. Gated on exceptions-sync
+      having run, and it SKIPS any file that tests the class exactly. }
+    'raise-bare-exception');
 
 function IsFixableRule(const ARuleId: string): Boolean;
 var
@@ -7991,6 +8009,248 @@ end; // procedure
   doc-fix paths below must render under the SAME options the checker graded
   under, and "which --db is extra" is defined relative to the primary -- see
   OpenExtraStoresExcept. '' keeps the historical AArgs.DbPath behaviour. }
+{ PART (B) of exception-class-unit stage 3: the CALL-SITE rewrite.
+
+  `raise Exception.Create('...')` -> `raise EDerived.Create('...')`, plus the
+  exceptions unit in the rewritten file's uses clause.
+
+  THIS half IS a fix-it, and that is the whole reason it lives here rather than
+  in `exceptions-sync`. Owner ruling 2026-08-30: a fix-it is per-finding,
+  per-file, at a cursor, which is exactly what an LSP code action is -- so the
+  rewrite stays on `lint --fix` and stays reachable from the IDE, while the unit
+  WRITER, whose input is project-wide and whose output is one file, became its
+  own verb.
+
+  IT NEVER DERIVES A NAME. The map is read out of the exceptions unit's managed
+  block, so the class this names is the one actually declared -- including a
+  human's rename of a mediocre generated name. Re-deriving here would produce
+  the ORIGINAL name and emit a reference to a class that no longer exists, and
+  it would compile-break the project rather than fail visibly. That is why
+  `exceptions-sync` must have been run first, and why saying so is the whole
+  content of the note when the unit is missing.
+
+  THE HANDLER-REDIRECTION HAZARD, and why a whole FILE is skipped for it.
+  Narrowing a raise from exactly-Exception is safe for handlers: every
+  `on E: Exception` still matches, and no more specific handler can lose a raise
+  it was already receiving. What is NOT safe is code that tests the class
+  EXACTLY -- `E.ClassType = Exception`, `E.ClassNameIs('Exception')` -- because
+  that stops being true the moment the raise is narrowed. Those tests can sit
+  anywhere in the unit relative to the raise, so the conservative unit of skip
+  is the file, and the skip is REPORTED rather than silent. }
+function BuildExceptionRewriteEdits(const AArgs: TArgs; const AStore: ISymbolStore;
+  const AFindings: TArray<TLintFinding>; out AFixed: Integer;
+  out ANotes: TArray<string>): TArray<TTextEdit>;
+var
+  Cfg      : TLintConfig                 ;
+  Linter   : DRagLint.Lint.Linter.TLinter;
+  Files    : TStringList                 ;
+  Map      : TDictionary<string, string> ;
+  UnitPath : string                      ;
+  Entries  : TArray<TExcEntry>           ;
+  I, J, K  : Integer                     ;
+  F        : TLintFinding                ;
+  E        : TTextEdit                   ;
+  Lines    : TStringList                 ;
+  Ln, Low  : string                      ;
+  P        : Integer                     ;
+  Cls      : string                      ;
+  UsesDone : TStringList                 ;
+  Skip     : TStringList                 ;
+
+  { The exact-class tests that narrowing would break. Lowercased, whitespace
+    squeezed, so `ClassType=Exception` and `ClassType = Exception` both hit. }
+  function FileTestsExactException(const AText: string): Boolean;
+  var T: string;
+  begin
+    T:= LowerCase(AText);
+    while Pos('  ', T) > 0 do T:= StringReplace(T, '  ', ' ', [rfReplaceAll]);
+    T:= StringReplace(T, ' = ', '=', [rfReplaceAll]);
+    T:= StringReplace(T, '= ' , '=', [rfReplaceAll]);
+    T:= StringReplace(T, ' =' , '=', [rfReplaceAll]);
+    Result:= (Pos('classtype=exception', T) > 0) or
+             (Pos('classnameis(''exception'')', T) > 0);
+  end;
+
+  { Insert AUnit into the implementation uses clause, as ONE edit. Returns False
+    when the unit is already there or no uses clause can be found -- in both
+    cases adding nothing is the correct outcome, so neither is an error. }
+  function BuildUsesEdit(const APath, AUnit: string; ALines: TStringList; out AEdit: TTextEdit): Boolean;
+  var
+    M, ImplAt, UsesAt: Integer;
+    T                : string ;
+  begin
+    Result:= False;
+    ImplAt:= -1;
+    for M:= 0 to ALines.Count - 1 do
+      if SameText(Trim(ALines[M]), 'implementation') then begin ImplAt:= M; Break; end;
+    { the raises are in the implementation, so that is the clause to extend; a
+      unit with no implementation section falls back to the interface one }
+    UsesAt:= -1;
+    for M:= Max(ImplAt, 0) to ALines.Count - 1 do
+    begin
+      T:= LowerCase(Trim(ALines[M]));
+      if (T = 'uses') or T.StartsWith('uses ') then begin UsesAt:= M; Break; end;
+    end;
+    if (UsesAt < 0) and (ImplAt >= 0) then
+      for M:= 0 to ALines.Count - 1 do
+      begin
+        T:= LowerCase(Trim(ALines[M]));
+        if (T = 'uses') or T.StartsWith('uses ') then begin UsesAt:= M; Break; end;
+      end;
+    if UsesAt < 0 then Exit;
+    AEdit:= Default(TTextEdit);
+    AEdit.FilePath:= APath;
+    if SameText(Trim(ALines[UsesAt]), 'uses') then
+    begin
+      AEdit.Kind   := tekInsertLines;
+      AEdit.Line   := UsesAt + 1;          { 1-based: insert AFTER the 'uses' line }
+      AEdit.Text   := '  ' + AUnit + ',';
+    end
+    else
+    begin
+      { 'uses A, B;' -- inject immediately after the keyword, which keeps the
+        edit to one line and cannot disturb a continuation line below it }
+      AEdit.Kind:= tekInsertInLine;
+      AEdit.Line:= UsesAt + 1;
+      AEdit.Col := Pos('uses', LowerCase(ALines[UsesAt])) + 4;
+      AEdit.Text:= ' ' + AUnit + ',';
+    end;
+    Result:= True;
+  end;
+
+begin
+  Result:= nil;
+  AFixed:= 0;
+  ANotes:= nil;
+  Cfg:= LoadLintConfig(AArgs);
+  if Cfg.ExceptionsUnit = '' then Exit;
+  if AStore = nil then Exit;
+
+  { Locate the exceptions unit through the index, the same way the writer does. }
+  UnitPath:= '';
+  for var Fid: Int64 in AStore.GetAllFileIds do
+  begin
+    var P2: string:= AStore.GetFilePath(Fid);
+    if SameText(TPath.GetFileNameWithoutExtension(P2), Cfg.ExceptionsUnit) and TFile.Exists(P2) then
+      begin UnitPath:= P2; Break; end;
+  end;
+  if UnitPath = '' then
+  begin
+    ANotes:= ANotes + [Format('raise-bare-exception: %s.pas is not in this index, so no class names are known yet. ' +
+      'Run `drag-lint exceptions-sync --db <db> --apply` first, reindex, then re-run this fix.', [Cfg.ExceptionsUnit])];
+    Exit;
+  end;
+  Entries:= ParseExceptionBlock(TFile.ReadAllText(UnitPath, TEncoding.ANSI));
+  if Length(Entries) = 0 then
+  begin
+    ANotes:= ANotes + [Format('raise-bare-exception: %s declares no generated classes yet -- run `exceptions-sync --apply` first.', [UnitPath])];
+    Exit;
+  end;
+
+  Files   := TStringList.Create;
+  UsesDone:= TStringList.Create;
+  Skip    := TStringList.Create;
+  Map     := TDictionary<string, string>.Create;
+  Lines   := TStringList.Create;
+  Linter  := DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
+  try
+    Files.Duplicates:= dupIgnore; Files.Sorted:= True; Files.CaseSensitive:= False;
+    UsesDone.Duplicates:= dupIgnore; UsesDone.Sorted:= True; UsesDone.CaseSensitive:= False;
+    Skip.Duplicates:= dupIgnore; Skip.Sorted:= True; Skip.CaseSensitive:= False;
+    for I:= 0 to High(Entries) do
+      if (Entries[I].Key <> '') and (not Map.ContainsKey(Entries[I].Key)) then
+        Map.Add(Entries[I].Key, Entries[I].Name);
+
+    for F in AFindings do
+      if SameText(F.RuleId, 'raise-bare-exception') and TFile.Exists(F.FilePath) then
+        Files.Add(F.FilePath);
+    if Files.Count = 0 then Exit;
+
+    Linter.ExceptionsUnit:= Cfg.ExceptionsUnit;
+    for I:= 0 to Files.Count - 1 do Linter.HarvestFile(Files[I]);
+
+    for F in AFindings do
+    begin
+      if not SameText(F.RuleId, 'raise-bare-exception') then Continue;
+      if not TFile.Exists(F.FilePath) then Continue;
+      if Skip.IndexOf(F.FilePath) >= 0 then Continue;
+
+      Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(F.FilePath));
+      if FileTestsExactException(Lines.Text) then
+      begin
+        Skip.Add(F.FilePath);
+        ANotes:= ANotes + [Format('raise-bare-exception: SKIPPED %s -- it tests the exception class exactly ' +
+          '(ClassType = Exception / ClassNameIs), which narrowing a raise would break.', [ExtractFileName(F.FilePath)])];
+        Continue;
+      end;
+
+      { the harvested site for THIS finding: same file, same raise position }
+      Cls:= '';
+      for J:= 0 to High(Linter.ExcSites) do
+        if (Linter.ExcSites[J].Line = F.StartLine) and (Linter.ExcSites[J].Col = F.StartCol) and
+           SameText(Linter.ExcSites[J].FilePath, F.FilePath) then
+        begin
+          if Linter.ExcSites[J].Msg <> '' then Map.TryGetValue(Linter.ExcSites[J].Msg, Cls);
+          Break;
+        end;
+      { no literal, or a message nothing declares yet -- leave the site alone.
+        Inventing a name here is the expensive failure: it would name a class
+        that does not exist. }
+      if Cls = '' then Continue;
+
+      if (F.StartLine < 1) or (F.StartLine > Lines.Count) then Continue;
+      Ln := Lines[F.StartLine - 1];
+      Low:= LowerCase(Ln);
+      { the `Exception` token to replace is the one that opens the raise, so
+        search FORWARD from the raise keyword and require the dot -- a bare
+        `Exception` elsewhere on the line is not a constructor call }
+      P:= PosEx('exception.', Low, Max(F.StartCol, 1));
+      if P <= 0 then Continue;
+      { and it must be a whole identifier, not the tail of EMyException. }
+      if (P > 1) and CharInSet(Ln[P - 1], ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Continue;
+
+      E:= Default(TTextEdit);
+      E.FilePath  := F.FilePath;
+      E.Kind      := tekReplaceInLine;
+      E.Line      := F.StartLine;
+      E.Col       := P;
+      E.EndCol    := P + Length('Exception');
+      E.Text      := Cls;
+      { the stale-position guard the applier already honours: if the file moved
+        under us, the span no longer reads 'Exception' and the edit is dropped
+        rather than corrupting a line }
+      E.ExpectText:= 'Exception';
+      Result:= Result + [E];
+      Inc(AFixed);
+
+      if UsesDone.IndexOf(F.FilePath) < 0 then
+      begin
+        UsesDone.Add(F.FilePath);
+        K:= -1;
+        for J:= 0 to Lines.Count - 1 do
+        begin
+          Low:= LowerCase(Lines[J]);
+          if (Pos(LowerCase(Cfg.ExceptionsUnit), Low) > 0) and
+             ((Pos('uses', Low) > 0) or (Trim(Lines[J]).StartsWith(Cfg.ExceptionsUnit, True))) then
+            begin K:= J; Break; end;
+        end;
+        if K < 0 then
+        begin
+          var UE: TTextEdit;
+          if BuildUsesEdit(F.FilePath, Cfg.ExceptionsUnit, Lines, UE) then Result:= Result + [UE];
+        end;
+      end;
+    end;
+  finally
+    Linter.Free;
+    Lines.Free;
+    Map.Free;
+    Skip.Free;
+    UsesDone.Free;
+    Files.Free;
+  end;
+end;
+
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''): Integer;
@@ -8244,6 +8504,35 @@ begin
           Writeln(ErrOutput, Format('drag-lint: warning: naming autofix skipped %d edit(s) whose recorded position no longer holds '
             + 'the identifier being renamed -- the index is stale for the target file(s). Nothing was written at those sites; '
             + 'reindex (drag-lint index <dir> --db <db>) and re-run.', [NFSkipped]));
+      end;
+    end;
+
+    { PART (B): the raise-bare-exception CALL-SITE rewrite. Store-backed like
+      doc-drift above -- it must read the exceptions unit's managed block to
+      learn what each message's class is actually CALLED, so it cannot come out
+      of the pure-text BuildAutofixEdits. Targeted, so it inherits the ownership
+      and --project filters exactly as the doc-drift edits do. }
+    begin
+      var WantExcFix: Boolean:= False;
+      for F in Targeted do
+        if SameText(F.RuleId, 'raise-bare-exception') then begin WantExcFix:= True; Break; end;
+      if WantExcFix then
+      begin
+        var ExcCount: Integer            := 0  ;
+        var ExcNotes: TArray<string>     := nil;
+        var ExcEdits: TArray<TTextEdit>  := BuildExceptionRewriteEdits(AArgs, AStore, Targeted, ExcCount, ExcNotes);
+        if Length(ExcEdits) > 0 then
+        begin
+          Edits:= Edits + ExcEdits;
+          { ExcCount counts REWRITTEN SITES, not edits: the uses-clause insertion
+            rides along once per file and is not a finding anyone fixed. Counting
+            edits instead would inflate the summary by one per file. }
+          Inc(FixCount, ExcCount);
+        end;
+        { Say why nothing happened. The two common cases -- exceptions-sync has
+          not been run, and a file skipped for testing the class exactly -- are
+          both indistinguishable from "the fix is broken" if reported as silence. }
+        for var N: string in ExcNotes do Writeln(ErrOutput, 'drag-lint: ' + N);
       end;
     end;
 
@@ -13043,6 +13332,198 @@ end; // procedure
 // --project scopes BOTH passes to that project's compile closure.
 // Exit 1 if any findings, 0 if none, 2 on usage error (including a --project
 // that resolves to no source files at all).
+{ `exceptions-sync` -- materialise the project's derived exception classes.
+
+  OWNER RULING 2026-08-30 (session 52), option (iii): this is a VERB, not a
+  fix-it. The reasoning is the owner's and is better than the one the plan
+  argued: "fix-it is an IDE command", and an IDE fix-it is per-finding,
+  per-file, at a cursor. This reads the WHOLE project's harvested messages and
+  writes ONE unit, which is not that shape. The call-site rewrite is the part
+  that genuinely is a fix-it, and it stayed in `lint --fix`.
+
+  It walks the project the way lint-all does -- same DB resolution, same config,
+  same ownRoots scope, same exclude_paths -- and then runs NO rules:
+  TLinter.HarvestFile parses and harvests, nothing else. Reusing DoLintAll
+  instead would execute 114 tree-sitter queries and every AST check per file to
+  produce findings this verb discards.
+
+  DRY RUN IS THE DEFAULT. --apply is what writes, and both paths build the same
+  TExcSyncPlan, so the preview cannot disagree with the write. }
+function DoExceptionsSync(const AArgs: TArgs): Integer;
+var
+  Dbs      : TArray<string>              ;
+  ProjectDb: string                      ;
+  Store    : ISymbolStore                ;
+  LibStore : ISymbolStore                ;
+  Linter   : DRagLint.Lint.Linter.TLinter;
+  Fid      : Int64                       ;
+  PasPath  : string                      ;
+  FilePaths: TArray<string>              ;
+  UnitPath : string                      ;
+  UnitText : string                      ;
+  Plan     : TExcSyncPlan                ;
+  All      : TArray<TExcEntry>           ;
+  RootUnit : string                      ;
+  Created  : Boolean                     ;
+  I        : Integer                     ;
+begin
+  Dbs:= ResolveConsumerDbs(AArgs);
+  ProjectDb:= '';
+  for var D in Dbs do
+    if TFile.Exists(D) then begin ProjectDb:= D; Break; end;
+  if ProjectDb = '' then
+  begin
+    EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.');
+    Exit(2);
+  end;
+
+  var Cfg: TLintConfig:= LoadLintConfig(AArgs);
+  { The OFF switch, and it must be LOUD rather than a silent exit 0: a user who
+    ran this expecting a unit and got nothing needs to be told it is the config
+    and not a crash. Same reasoning as lint-all naming what it skipped. }
+  if Cfg.ExceptionsUnit = '' then
+  begin
+    Writeln('exceptions-sync: this project has no "exceptions" block in its lint config, so the feature is off.');
+    Writeln('exceptions-sync: add one to drag-lint-lint.json to opt in. An empty block is enough, and names');
+    Writeln('exceptions-sync: the unit ' + DEFAULT_EXCEPTIONS_UNIT + ' by default.');
+    Exit(0);
+  end;
+
+  Store:= TSQLiteSymbolStore.Create(ProjectDb);
+  Store.Migrate;
+  NoteIndexFreshnessOnce(Store, ProjectDb);
+  LibStore:= nil;
+  var LibDb: string:= ResolveLibraryDb(AArgs);
+  if (LibDb <> '') and TFile.Exists(LibDb) then
+    try LibStore:= TSQLiteSymbolStore.Create(LibDb); except LibStore:= nil; end;
+
+  var Own: TOwnRoots:= TOwnRoots.Load(LintAnchorDir(AArgs, ProjectDb));
+  if Own.Error <> '' then begin EmitStatusLine(AArgs, 'ERROR: ' + Own.Error); Exit(2); end;
+
+  { Same scope decisions as lint-all, in the same order: exclude_paths first,
+    then ownership. A vendored tree's raise messages are not this project's
+    exception classes, and generating classes for them would be the same
+    category error as reporting lint findings on them. }
+  FilePaths:= nil;
+  UnitPath := '';
+  for Fid in Store.GetAllFileIds do
+  begin
+    PasPath:= Store.GetFilePath(Fid);
+    if not (SameText(ExtractFileExt(PasPath), '.pas') or SameText(ExtractFileExt(PasPath), '.dpr')) then Continue;
+    if not TFile.Exists(PasPath) then Continue;
+    if Cfg.IsPathExcluded(PasPath) then Continue;
+    if not Own.IsOurs(PasPath) then Continue;
+    { the exceptions unit itself is a TARGET, never a source of raises }
+    if SameText(TPath.GetFileNameWithoutExtension(PasPath), Cfg.ExceptionsUnit) then
+      begin UnitPath:= PasPath; Continue; end;
+    FilePaths:= FilePaths + [PasPath];
+  end;
+
+  Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
+  try
+    Linter.ExceptionsUnit:= Cfg.ExceptionsUnit;
+    for I:= 0 to High(FilePaths) do Linter.HarvestFile(FilePaths[I]);
+
+    Created := False;
+    UnitText:= '';
+    if UnitPath <> '' then UnitText:= TFile.ReadAllText(UnitPath, TEncoding.ANSI)
+    else
+    begin
+      { No such unit in the index. Create it at the project's own root, so it
+        compiles through the project-folder search path without anyone having to
+        edit the .dproj. Announced, never silent: a generated file appearing in
+        an unexpected folder is how this feature loses a day. }
+      var Dest: string:= '';
+      if Length(Own.Roots) > 0 then Dest:= Own.Roots[0];
+      if Dest = '' then Dest:= LintAnchorDir(AArgs, ProjectDb);
+      { LAST RESORT, and it is reached in practice: a folder-scoped index with
+        no drag-lint-project.json has no ownRoots, and LintAnchorDir returns ''
+        when it cannot name one -- TPath.Combine then raises 'Path is empty' and
+        the whole verb dies with exit 3. The project's own source is the honest
+        answer, so put the unit beside the first file we actually scanned. }
+      if (Dest = '') and (Length(FilePaths) > 0) then Dest:= ExtractFileDir(FilePaths[0]);
+      if Dest = '' then
+      begin
+        EmitStatusLine(AArgs, 'ERROR: cannot decide where to create ' + Cfg.ExceptionsUnit +
+          '.pas -- the index has no ownRoots, no anchor directory and no scanned files.');
+        Exit(2);
+      end;
+      UnitPath:= TPath.Combine(Dest, Cfg.ExceptionsUnit + '.pas');
+      Created:= True;
+    end;
+
+    Plan.Existing:= ParseExceptionBlock(UnitText);
+    PlanExceptionEntries(Plan.Existing, Linter.ExcSites, Linter.ExcCandidates,
+      { Is this name already a real type anywhere the project can see? Point
+        lookups, project index first and the library second, which is the order
+        every other consumer uses. }
+      function (AName: string): Boolean
+      var Syms: TArray<TSymbol>;
+      begin
+        Result:= False;
+        Syms:= Store.FindSymbolsByExactName(AName);
+        if Length(Syms) > 0 then Exit(True);
+        if LibStore <> nil then
+        begin
+          Syms:= LibStore.FindSymbolsByExactName(AName);
+          if Length(Syms) > 0 then Exit(True);
+        end;
+      end,
+      Plan);
+
+    All:= Plan.Existing;
+    for I:= 0 to High(Plan.Added) do All:= All + [Plan.Added[I]];
+
+    { The ancestor's declaring unit, so a house base class living elsewhere needs
+      no hand edit of a file this tool rewrites on every run. }
+    RootUnit:= '';
+    if (Cfg.ExceptionsRoot <> '') and (not SameText(Cfg.ExceptionsRoot, 'Exception')) then
+    begin
+      var RSyms: TArray<TSymbol>:= Store.FindSymbolsByExactName(Cfg.ExceptionsRoot);
+      if (Length(RSyms) = 0) and (LibStore <> nil) then RSyms:= LibStore.FindSymbolsByExactName(Cfg.ExceptionsRoot);
+      if Length(RSyms) > 0 then RootUnit:= TPath.GetFileNameWithoutExtension(Store.GetFilePath(RSyms[0].FileId));
+    end;
+
+    var Body: string:= RenderExceptionBlock(All, Cfg.ExceptionsRoot);
+    if Created then Plan.NewText:= RenderNewExceptionUnit(Cfg.ExceptionsUnit, RootUnit, Body)
+    else            Plan.NewText:= SpliceExceptionBlock(UnitText, Body);
+    Plan.Changed:= Created or (Plan.NewText <> UnitText);
+
+    Writeln(Format('exceptions-sync: %d file(s) scanned, %d bare raise site(s), %d class(es) already declared.',
+      [Length(FilePaths), Length(Linter.ExcSites), Length(Plan.Existing)]));
+    if Plan.Covered > 0 then
+      Writeln(Format('exceptions-sync: %d site(s) already covered by an existing class.', [Plan.Covered]));
+    if Plan.Duplicate > 0 then
+      Writeln(Format('exceptions-sync: %d site(s) repeat a message another site already names.', [Plan.Duplicate]));
+    if Plan.Skipped > 0 then
+      Writeln(Format('exceptions-sync: %d site(s) skipped -- no static message to name a class from.', [Plan.Skipped]));
+    for I:= 0 to High(Plan.Added) do
+      Writeln(Format('  + %s  // %s', [Plan.Added[I].Name, Plan.Added[I].RawMsg]));
+
+    if not Plan.Changed then
+    begin
+      Writeln('exceptions-sync: 0 new classes -- ' + UnitPath + ' is already up to date.');
+      Exit(0);
+    end;
+    if not AArgs.Apply then
+    begin
+      Writeln(Format('exceptions-sync: DRY RUN -- %d class(es) would be added to %s. Nothing was written.',
+        [Length(Plan.Added), UnitPath]));
+      Writeln('exceptions-sync: re-run with --apply to write it.');
+      Exit(0);
+    end;
+    TDirectory.CreateDirectory(ExtractFilePath(UnitPath));
+    TFile.WriteAllText(UnitPath, Plan.NewText, TEncoding.ANSI);
+    if Created then Writeln('exceptions-sync: CREATED ' + UnitPath)
+    else            Writeln('exceptions-sync: updated ' + UnitPath);
+    Writeln(Format('exceptions-sync: %d class(es) added. The index is now stale for that file -- reindex before linting.',
+      [Length(Plan.Added)]));
+    Result:= 0;
+  finally
+    Linter.Free;
+  end;
+end;
+
 function DoLintAll(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>              ;
@@ -21841,6 +22322,7 @@ begin
     else if Args.Command = 'ghost-recover'     then Result:= DoGhostRecover    (Args)
     else if Args.Command = 'check-unit'        then Result:= DoCheckUnit       (Args)
     else if Args.Command = 'lint-all'          then Result:= DoLintAll         (Args)
+    else if Args.Command = 'exceptions-sync'   then Result:= DoExceptionsSync  (Args)
     else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)
     else if Args.Command = 'cycles'            then Result:= DoCycles          (Args)
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)

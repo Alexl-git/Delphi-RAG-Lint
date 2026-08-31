@@ -23,6 +23,15 @@ const
   /// in.</para>
   /// </remarks>
   DEFAULT_EXCEPTIONS_UNIT = 'uExceptionDefinitions';
+  /// <summary>Ancestor for every generated exception class, from
+  /// "exceptions" key "root". Defaults to the RTL's own Exception.</summary>
+  /// <remarks>A project with a house base class (EMicroniteError) wants every
+  /// generated class under it, because that is what its top-level handlers
+  /// catch. Defaulting to Exception rather than to a house name keeps the
+  /// generated unit compilable in a project that has no such base -- a
+  /// generated unit that does not compile is the one failure this feature
+  /// cannot survive.</remarks>
+  DEFAULT_EXCEPTIONS_ROOT = 'Exception';
 
 type
   /// <summary>Configurable naming conventions read from the drag-lint-lint.json
@@ -155,6 +164,14 @@ type
     /// <remarks>Opting in costs one extra AST walk per linted file, so the empty
     /// case must stay genuinely free -- the walk is skipped, not filtered.</remarks>
     ExceptionsUnit: string;
+    /// <summary>Ancestor of every generated exception class, from
+    /// "exceptions" key "root". DEFAULT_EXCEPTIONS_ROOT when the block is
+    /// present but names none; empty when the block is absent.</summary>
+    /// <remarks>Its declaring unit is resolved through the index and added to
+    /// the generated unit's uses clause, so a house base class in another unit
+    /// works without the user editing the generated file -- which they must
+    /// never have to do, because the block is rewritten on every run.</remarks>
+    ExceptionsRoot: string;
     /// <summary>Loads config from APath (JSON). Empty/missing APath yields a
     /// no-op default config. If AProfile is non-empty and present under
     /// "profiles", the profile is merged over the top-level values: list fields
@@ -624,6 +641,8 @@ begin
     var ExcObj: TJSONObject:= AObj.GetValue('exceptions') as TJSONObject;
     if ExcObj.GetValue('unit') <> nil then ExceptionsUnit:= ExcObj.GetValue('unit').Value
     else ExceptionsUnit:= DEFAULT_EXCEPTIONS_UNIT;
+    if ExcObj.GetValue('root') <> nil then ExceptionsRoot:= ExcObj.GetValue('root').Value
+    else ExceptionsRoot:= DEFAULT_EXCEPTIONS_ROOT;
   end;
 end;
 

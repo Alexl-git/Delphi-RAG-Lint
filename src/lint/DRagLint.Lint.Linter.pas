@@ -251,6 +251,34 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DefaultDisabledRuleIds: TArray<string>                                          ;
+      /// <summary>Parses AFilePath and harvests its raise sites and exception
+      /// candidates, running NO rules.</summary>
+      /// <param name="AFilePath">A .pas or .dpr on disk.</param>
+      /// <remarks>
+      /// <para>This is what `exceptions-sync` walks a project with. LintFile
+      /// would give the same harvest, but it also executes 114 tree-sitter
+      /// queries and every built-in AST check per file -- work whose findings
+      /// the writer then throws away. The harvest is the only output that verb
+      /// has, so it pays for the parse and nothing else.</para>
+      /// <para>ACCUMULATES across calls, exactly as LintFile does: the whole
+      /// point is a PROJECT-WIDE message set, because a stable unique name
+      /// cannot be allocated from one file's view. Set ExceptionsUnit first --
+      /// this is a no-op while it is empty, matching the LintFile path.</para>
+      /// <para>A file that fails to read or parse is skipped in silence; a
+      /// harvest is best-effort enrichment, and refusing to write the unit
+      /// because one unrelated unit is malformed would be the wrong trade.</para>
+      /// </remarks>
+      procedure HarvestFile(const AFilePath: string);
+      /// <summary>Every bare `raise Exception.Create(...)` seen so far.</summary>
+      /// <remarks>Read-only view for the exceptions-unit writer. Order is the
+      /// order files were harvested in, and the writer depends on that: it is
+      /// what makes suffix allocation reproducible for a given file list.</remarks>
+      property ExcSites: TArray<TDragExcSite> read FExcSites;
+      /// <summary>Exception classes already raised WITH a literal message.</summary>
+      /// <remarks>Their names are taken, so the writer must not re-allocate
+      /// them, and their messages are already covered -- neither needs a
+      /// generated class.</remarks>
+      property ExcCandidates: TArray<TDragExcCand> read FExcCand;
   end;
 
 /// <summary>Ticks spent building the tree-sitter tree inside CheckFileImpl,
@@ -277,6 +305,16 @@ function LinterParseTicks: Int64;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function LinterParseCount: Int64;
+/// <summary>Reduces a raise message to its IDENTITY: two messages sharing this
+/// key are the same error and get one class.</summary>
+/// <param name="AMsg">Message text, already unquoted.</param>
+/// <returns>Lowercased, punctuation-stripped, specifier-blanked, stopword-free.</returns>
+/// <remarks>Interface-visible because the exceptions-unit writer re-derives the
+/// key from the `//` comment it reads back out of the generated block -- that
+/// comment IS the persisted message-to-name map. If the writer computed the key
+/// any other way, a rerun would fail to recognise its own output and would
+/// append a duplicate class on every run.</remarks>
+function NormalizeExcMessage(const AMsg: string): string;
 
 implementation
 
@@ -1018,6 +1056,58 @@ end; // function
   `Create('Disk quota exceeded on ' + S)` that is the STATIC PREFIX, which is
   what a class name can be derived from. Ruling 2 (exactly where the literal ends
   and the runtime data begins) is still open and gates stage 3, not this. }
+{ The rules-free harvest that `exceptions-sync` walks a project with.
+
+  It deliberately does NOT go through CheckFileImpl. That routine runs 114
+  tree-sitter queries and every built-in AST check, and the writer discards all
+  of it -- on ORM3 CLIENT that is the difference between paying for a lint-all
+  and paying for a parse. What it DOES copy from CheckFileImpl, line for line,
+  is how the bytes are obtained: EnsureUtf8Bytes then ApplyPreprocess. Skipping
+  the preprocess here would harvest raises inside branches the compiler never
+  sees, and the unit would then declare classes for dead messages -- the same
+  class of error that put 592 findings into a lint-all before the walk
+  preprocessed at all.
+
+  Failure is SILENT and per-file by design: one unreadable or malformed unit
+  must not stop a project's exceptions unit from being written, because the
+  alternative is a verb that refuses to run until every file in the project
+  parses. }
+procedure TLinter.HarvestFile(const AFilePath: string);
+var
+  Parser: TTSParser;
+  Tree  : TTSTree  ;
+  Source: TBytes   ;
+begin
+  if FExcUnit = '' then Exit;
+  if SameText(ExtractFileExt(AFilePath), '.dfm') then Exit;
+  Tree  := nil;
+  Parser:= nil;
+  try
+    try
+      Source:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFilePath));
+      Source:= TAstParseCache.ApplyPreprocess(Source, AFilePath);
+      Parser:= TTSParser.Create;
+      Parser.Language:= FLanguage;
+      Tree:= Parser.Parse(
+        function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+        var Remaining: Integer;
+        begin
+          Remaining:= Length(Source) - Integer(AByteIndex);
+          if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+          SetLength(Result, Remaining);
+          Move(Source[AByteIndex], Result[0], Remaining);
+          ABytesRead:= Remaining;
+        end, TTSInputEncoding.TSInputEncodingUTF8);
+      if Tree <> nil then HarvestExceptions(Tree.RootNode, Source, AFilePath);
+    except
+      { see the remark above -- best-effort, never fatal }
+    end;
+  finally
+    Tree.Free;
+    Parser.Free;
+  end;
+end;
+
 procedure TLinter.HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
 
   function FirstLiteralString(const N: TTSNode): string;
