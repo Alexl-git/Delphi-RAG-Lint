@@ -649,7 +649,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | Command | What it does |
 |---|---|
 | [`serve --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/serve) | Start the **MCP** stdio server -- for AI agents (Claude, Cursor). Nothing in the IDE uses this. |
-| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. Add `--proxy [--delphi-lsp <path>]` to relay in front of RAD Studio's DelphiLSP instead. |
+| [`lsp --db <db>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Start the **LSP** stdio server -- what the IDE plugin (and Zed/VS Code/Neovim/Helix) starts. Add `--proxy [--delphi-lsp <path>] [--trace <file>]` to relay in front of RAD Studio's DelphiLSP instead; `--trace` records every relayed message with a direction tag. |
 
 #### Maintenance
 

@@ -387,6 +387,7 @@ type
     // in relay form it answers nothing itself.
     LspProxy    : Boolean; // --proxy
     LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
+    LspTraceFile: string;  // --trace <file>       ('' = no trace, the default)
     // v0.47: ghost-check -- compile the project with one unit's content replaced
     // by an unsaved buffer, with a guaranteed restore. Track 3 sub-project B
     // Task 2: convert-apply's --unit (the .pas being converted) ALSO reuses
@@ -611,8 +612,9 @@ begin
   Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>]');
-  Writeln('                               --proxy [--delphi-lsp <path>]: relay in front of RAD Studio''s DelphiLSP,');
+  Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>]: relay in front of RAD Studio''s DelphiLSP,');
   Writeln('                               so registering drag-lint as the Code Insight server keeps the compiler front end.');
+  Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
@@ -1275,6 +1277,7 @@ begin
       the one environment where a failure costs the owner their working day. }
     else if A = '--proxy' then Result.LspProxy:= True
     else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
+    else if (A = '--trace') and (i < ParamCount) then begin Inc(i); Result.LspTraceFile:= ParamStr(i); end
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
       vscode-languageclient appends a transport flag to argv from the client's
       `transport:` declaration (node/main.js: `args.push('--stdio')`), so the
@@ -21869,6 +21872,7 @@ begin
         var ProxyOpt: DRagLint.LSP.Proxy.TLspProxyOptions;
         ProxyOpt.DelphiLspExe:= Args.LspDelphiExe;
         ProxyOpt.ChildArgs   := '';
+        ProxyOpt.TraceFile   := Args.LspTraceFile;
         Exit(DRagLint.LSP.Proxy.RunLspProxy(ProxyOpt));
       end;
       var DbList: TArray<string>;

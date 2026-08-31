@@ -464,7 +464,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 |------|--------------|
 | `serve --db DB` | MCP stdio server (JSON-RPC 2.0) -- see section 3 |
 | `lsp --db DB` | LSP stdio server. Beyond the standard methods it answers `draglint/hoverBundle` -- hover markdown + the `hover --format json` model + caller rows for one position, in a single reply (what the RAD Studio plugin uses instead of spawning the exe three times per tooltip); `draglint/callerCounts` -- every routine's caller count for one file in one reply; and `draglint/usages` (params `name`, optional `width`/`depth`) -- **the exact payload `usages --format json` prints**, built from the already-open stores, replacing a process spawn measured at 1,678 ms per Find Usages |
-| `lsp --proxy [--delphi-lsp PATH]` | LSP relay: spawns RAD Studio's `bin64\DelphiLSP.exe` and forwards the protocol, so registering drag-lint as the IDE's Code Insight server keeps the compiler front end. Transparent today; merging comes later. |
+| `lsp --proxy [--delphi-lsp PATH] [--trace FILE]` | LSP relay: spawns RAD Studio's `bin64\DelphiLSP.exe` and forwards the protocol, so registering drag-lint as the IDE's Code Insight server keeps the compiler front end. Transparent today; merging comes later. `--trace` appends every relayed message to FILE tagged `C>S` / `S>C` -- off by default, and pinned not to alter the relayed bytes. |
 
 ### 2a-i. VCL vs FMX: a bare name that two frameworks both declare
 

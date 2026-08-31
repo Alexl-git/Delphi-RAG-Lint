@@ -57,6 +57,23 @@ type
     /// from the IDE-generated `&lt;Project&gt;.delphilsp.json`), so this exists
     /// for stub servers and future diagnostics only.</summary>
     ChildArgs: string;
+    /// <summary>When non-empty, every framed LSP message is appended to this
+    /// file with a direction tag, in addition to being relayed. Off by
+    /// default.</summary>
+    /// <remarks>
+    /// EXISTS SO A LIVE IDE SESSION PRODUCES EVIDENCE RATHER THAN ANECDOTES.
+    /// Registering this relay as the IDE's Pascal language server is the step
+    /// where a drag-lint bug stops costing drag-lint features and starts
+    /// costing all of Code Insight. The questions that decides -- what the IDE
+    /// really sends as initializationOptions, how often it cancels, whether it
+    /// restarts the server per project activation -- cannot be answered from
+    /// outside the stream.
+    /// <para>A trace failure must NEVER perturb the relay. Writes are wrapped
+    /// and swallowed, and the bytes recorded are the ones already being
+    /// forwarded rather than a re-encoding of them, so the relay stays
+    /// byte-identical with tracing on.</para>
+    /// </remarks>
+    TraceFile: string;
   end;
 
 /// <summary>Resolves the DelphiLSP executable to spawn.</summary>
@@ -157,10 +174,12 @@ type
     FCloseSrc: Boolean;
     FCloseDst: Boolean;
     FFramed  : Boolean;
+    FDir     : string ;
   protected
     procedure Execute; override;
   public
-    constructor Create(ASrc, ADst: THandle; ACloseSrc, ACloseDst, AFramed: Boolean);
+    constructor Create(ASrc, ADst: THandle; ACloseSrc, ACloseDst, AFramed: Boolean;
+      const ADir: string = '');
   end;
 
 { Copies bytes from ASrc to ADst until either end closes. Returns when the
@@ -321,7 +340,45 @@ end;
 { Forwards every complete message (and every non-message byte) currently in
   ABuf, and compacts what is left to the front. Returns False if the
   destination closed. ALen is updated to the number of bytes still held. }
-function DrainFramed(ADst: THandle; var ABuf: TBytes; var ALen: Integer): Boolean;
+var
+  GTracePath: string              = '';
+  GTraceLock: TRTLCriticalSection;
+
+{ Appends one framed message to the trace, verbatim. NEVER raises: a diagnostic
+  that can take the session down is worse than no diagnostic, and this one is
+  armed precisely when someone is registering the relay in a live IDE. }
+procedure TraceFrame(const ADir: string; const ABuf: TBytes; ACount: Integer);
+var
+  FS : TFileStream;
+  Hdr: TBytes     ;
+begin
+  if (GTracePath = '') or (ACount <= 0) then Exit;
+  EnterCriticalSection(GTraceLock);
+  try
+    try
+      if FileExists(GTracePath) then
+        FS:= TFileStream.Create(GTracePath, fmOpenWrite or fmShareDenyNone)
+      else
+        FS:= TFileStream.Create(GTracePath, fmCreate or fmShareDenyNone);
+      try
+        FS.Seek(0, soEnd);
+        Hdr:= TEncoding.ASCII.GetBytes(Format('%s===== %s %d bytes =====%s',
+                                              [sLineBreak, ADir, ACount, sLineBreak]));
+        FS.WriteBuffer(Hdr[0], Length(Hdr));
+        FS.WriteBuffer(ABuf[0], ACount);
+      finally
+        FS.Free;
+      end;
+    except
+      { swallowed on purpose -- see the header }
+    end;
+  finally
+    LeaveCriticalSection(GTraceLock);
+  end;
+end;
+
+function DrainFramed(ADst: THandle; var ABuf: TBytes; var ALen: Integer;
+  const ADir: string): Boolean;
 var
   Idx      : Integer;
   HeaderEnd: Integer;
@@ -383,6 +440,9 @@ begin
     Total:= HeaderEnd + 4 + BodyLen;
     if ALen < Total then Exit;    { body still arriving }
 
+    { Traced HERE, on the complete frame, and BEFORE the write -- the recorded
+      bytes are exactly the bytes forwarded. }
+    TraceFrame(ADir, ABuf, Total);
     if not WriteAll(ADst, ABuf, 0, Total) then Exit(False);
     Consume(Total);
   end;
@@ -390,7 +450,7 @@ end;
 
 { As PumpBytes, but hands on whole LSP messages. See the Task 4 note above for
   why every byte still reaches the far end regardless of framing. }
-procedure PumpFramed(ASrc, ADst: THandle);
+procedure PumpFramed(ASrc, ADst: THandle; const ADir: string);
 var
   Chunk: array[0..PUMP_BUFFER_BYTES - 1] of Byte;
   Acc  : TBytes;
@@ -409,7 +469,7 @@ begin
     if Len + Integer(Got) > Length(Acc) then SetLength(Acc, (Len + Integer(Got)) * 2);
     Move(Chunk[0], Acc[Len], Got);
     Inc(Len, Integer(Got));
-    if not DrainFramed(ADst, Acc, Len) then Exit;
+    if not DrainFramed(ADst, Acc, Len, ADir) then Exit;
   end;
   { EOF. Whatever is still buffered is an incomplete message -- forward it
     anyway. It is the client's data, and a silently swallowed tail is
@@ -417,8 +477,10 @@ begin
   if Len > 0 then WriteAll(ADst, Acc, 0, Len);
 end;
 
-constructor TPumpThread.Create(ASrc, ADst: THandle; ACloseSrc, ACloseDst, AFramed: Boolean);
+constructor TPumpThread.Create(ASrc, ADst: THandle; ACloseSrc, ACloseDst, AFramed: Boolean;
+  const ADir: string = '');
 begin
+  FDir     := ADir;
   FSrc     := ASrc;
   FDst     := ADst;
   FCloseSrc:= ACloseSrc;
@@ -430,7 +492,7 @@ end;
 
 procedure TPumpThread.Execute;
 begin
-  if FFramed then PumpFramed(FSrc, FDst) else PumpBytes(FSrc, FDst);
+  if FFramed then PumpFramed(FSrc, FDst, FDir) else PumpBytes(FSrc, FDst);
   { Owned handles are closed HERE rather than by the caller, because the caller
     cannot know when this thread stopped touching them. The destination close
     is what forwards end-of-stream to the child. }
@@ -510,6 +572,10 @@ var
   CmdLine    : string;
   Code       : DWORD;
 begin
+  { Armed BEFORE the child is spawned, so the very first frame -- the IDE's
+    `initialize`, which carries initializationOptions -- is captured. Empty
+    leaves tracing off, which is the default. }
+  GTracePath:= AOptions.TraceFile;
   Exe:= ResolveDelphiLspPath(AOptions.DelphiLspExe);
   if Exe = '' then
   begin
@@ -617,14 +683,14 @@ begin
     exactly when someone is reading the log to find out what went wrong. }
   { ChildInWr and ChildErrRd now belong to those threads, which close them; the
     main thread must not touch either again. ChildOutRd stays ours. }
-  TPumpThread.Create(GetStdHandle(STD_INPUT_HANDLE), ChildInWr , False, True , True );
+  TPumpThread.Create(GetStdHandle(STD_INPUT_HANDLE), ChildInWr , False, True , True , 'C>S');
   TPumpThread.Create(ChildErrRd, GetStdHandle(STD_ERROR_HANDLE), True , False, False);
   try
     { Child -> client on THIS thread. When it returns, the child has closed
       stdout, which is the only reliable signal that the session is over: a
       language server that has exited is not coming back, and waiting on the
       client's stdin instead would hang until the IDE happened to type. }
-    PumpFramed(ChildOutRd, GetStdHandle(STD_OUTPUT_HANDLE));
+    PumpFramed(ChildOutRd, GetStdHandle(STD_OUTPUT_HANDLE), 'S>C');
 
     WaitForSingleObject(PI.hProcess, CHILD_REAP_TIMEOUT_MS);
     Code:= 0;
@@ -643,5 +709,11 @@ begin
     CloseHandle(PI.hProcess);
   end;
 end;
+
+initialization
+  InitializeCriticalSection(GTraceLock);
+
+finalization
+  DeleteCriticalSection(GTraceLock);
 
 end.
