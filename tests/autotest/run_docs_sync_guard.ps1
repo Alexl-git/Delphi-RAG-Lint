@@ -149,11 +149,14 @@
   default" in one paragraph and "154 enabled by default" in another, against a
   live 154, and this guard passed every run. So DEFAULT-ON is now checked too.
 
-  Still NOT checked: "16 categories" and "124 built-in and 54 external". Both are
-  derivable from `rules --json` (category is a field; source is built-in vs .scm),
-  and the only reason they are out is that nothing has yet gone wrong with them.
-  That is the same reason the default-on count was out, so treat this paragraph
-  as a standing invitation rather than a settled decision.
+  Categories and the built-in/external split were the last two known-unchecked
+  claims, and they went in the same day, for the reason the paragraph they
+  replace gave: "nothing has gone wrong with them yet" is precisely the state
+  the default-on count was in when README drifted to 152. Check 2 now polices
+  total, fixable, default-on, categories, built-in and external -- every count
+  `rules --json` can answer -- and asserts the built-in/external split accounts
+  for the whole catalog, so a renamed source value cannot quietly make both
+  halves low and turn every correct doc into a reported bug.
 
   Exit code: 0 on full pass, 1 on any failure.
 
@@ -342,14 +345,25 @@ try {
   $total     = [int]$cat.summary.total
   $fixable   = @($cat.rules | Where-Object { $_.fixable }).Count
   $defaultOn = @($cat.rules | Where-Object { $_.default_enabled }).Count
+  $catCount  = @($cat.rules | Group-Object category).Count
+  $builtin   = @($cat.rules | Where-Object { $_.source -eq 'builtin' }).Count
+  $external  = @($cat.rules | Where-Object { $_.source -eq 'scm'     }).Count
 } catch {
   Check 'rules --json parsed' $false $_.Exception.Message
 }
 # Non-emptiness control again: total=0 would make every stated count "wrong" in
 # a way that looks like a docs bug, and fixable=0 would silently excuse every
 # fixable claim. Assert the catalog is real before comparing anything to it.
-Check 'live rule catalog read' (($total -gt 0) -and ($fixable -gt 0) -and ($defaultOn -gt 0)) `
-  "total=$total fixable=$fixable defaultOn=$defaultOn"
+Check 'live rule catalog read' `
+  (($total -gt 0) -and ($fixable -gt 0) -and ($defaultOn -gt 0) -and
+   ($catCount -gt 0) -and ($builtin -gt 0) -and ($external -gt 0)) `
+  "total=$total fixable=$fixable defaultOn=$defaultOn categories=$catCount builtin=$builtin external=$external"
+# The split must also ACCOUNT for the whole catalog. A source value that stops
+# being 'builtin'/'scm' would leave both counts low and every doc claim would
+# then look wrong, which reads as a docs bug rather than as this guard losing
+# its grip on the data.
+Check 'builtin + external accounts for every rule' (($builtin + $external) -eq $total) `
+  "$builtin + $external vs total $total"
 
 # 2026-08-17: docs\wiki\ joined this scan. It was README/INSTALL only, which left
 # every wiki page's rule count unpoliced -- and pages DO state them (Fix-it.md
@@ -422,6 +436,30 @@ foreach ($d in $countDocs) {
       $badCount.Add(("{0}:{1}: claims {2} enabled by default, live default-on is {3}" -f $rel, (LineOf $m.Index), $m.Groups[1].Value, $defaultOn))
     }
   }
+  # "N categories". Added 2026-08-31 -- this guard's own scope note had been
+  # carrying it as a known-unchecked claim, which is exactly the state the
+  # default-on count was in when README drifted to 152.
+  foreach ($m in [regex]::Matches($flat, '\b(\d{1,3})\s+categor(?:y|ies)\b')) {
+    $seenCount++
+    if ([int]$m.Groups[1].Value -ne $catCount) {
+      $badCount.Add(("{0}:{1}: claims {2} categories, live is {3}" -f $rel, (LineOf $m.Index), $m.Groups[1].Value, $catCount))
+    }
+  }
+  # "N built-in" / "N are built-in", and the same for external. rules.md phrases
+  # it as "124 are built-in and 54 are external", so the optional 'are' is not
+  # decoration -- without it that page's claims match nothing.
+  foreach ($m in [regex]::Matches($flat, '\b(\d{1,4})\s+(?:are\s+)?built-in\b')) {
+    $seenCount++
+    if ([int]$m.Groups[1].Value -ne $builtin) {
+      $badCount.Add(("{0}:{1}: claims {2} built-in, live is {3}" -f $rel, (LineOf $m.Index), $m.Groups[1].Value, $builtin))
+    }
+  }
+  foreach ($m in [regex]::Matches($flat, '\b(\d{1,4})\s+(?:are\s+)?external\b')) {
+    $seenCount++
+    if ([int]$m.Groups[1].Value -ne $external) {
+      $badCount.Add(("{0}:{1}: claims {2} external, live is {3}" -f $rel, (LineOf $m.Index), $m.Groups[1].Value, $external))
+    }
+  }
 }
 
 # SELF-TEST, because every pattern above was silently matching nothing at some
@@ -431,7 +469,10 @@ $patternHits = [ordered]@{}
 foreach ($pat in @(
       @{ n = 'N rules';           r = '\b(\d{2,4})\s+rules\b' },
       @{ n = 'N fixable';         r = '\b(\d{1,4})\s+(?:with an auto-fix|with auto-fix|autofixable|fixable)\b' },
-      @{ n = 'N enabled by default'; r = '\b(\d{1,4})\s+enabled by default\b' })) {
+      @{ n = 'N enabled by default'; r = '\b(\d{1,4})\s+enabled by default\b' },
+      @{ n = 'N categories';      r = '\b(\d{1,3})\s+categor(?:y|ies)\b' },
+      @{ n = 'N built-in';        r = '\b(\d{1,4})\s+(?:are\s+)?built-in\b' },
+      @{ n = 'N external';        r = '\b(\d{1,4})\s+(?:are\s+)?external\b' })) {
   $hits = 0
   foreach ($d in $countDocs) {
     $raw2 = Get-Content -LiteralPath $d -Raw
