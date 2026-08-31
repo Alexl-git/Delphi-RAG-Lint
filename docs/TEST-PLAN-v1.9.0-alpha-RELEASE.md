@@ -94,12 +94,39 @@ finds plugin defects, and it is the half a reindex cannot help with.
       `.drag-lint\<Repo>-<Project>.sqlite` is a **stale config** -- that layout
       was retired.
 
-- [ ] **1.5 EXPECT A STALENESS WARNING, and read it.** Because the extractor
-      moved, the engine should now tell you the index is behind. **New in this
-      build:** it also reports the RESOLVER separately, e.g.
-      `resolver: this index carries NO resolver stamp ...`.
-      **Seeing this is a PASS.** Its absence on every database is the thing to
-      report -- that was a real defect earlier today.
+- [ ] **1.5 DO NOT EXPECT THE ABOUT WINDOW TO SHOW STALENESS. IT CANNOT.**
+
+      This step said the opposite when first written, and that was wrong -- it
+      would have had you file a false bug report. Corrected 2026-08-31 16:20
+      after reading `DragLint.Plugin.Diagnose.pas`, whose header states a
+      load-bearing performance contract: *"nothing here may COUNT rows or open a
+      database ... Index facts below come from the FILE"*.
+
+      So **`[ok]` on an index row means PRESENT, not FRESH.** Size and write time
+      are read from the filesystem; the fingerprints inside the database are
+      never consulted. An index a whole extractor version behind still shows
+      `[ok]`, which is exactly what it did on this machine today: `library-Win64`
+      is at `v=1.9.0-alpha` against a current `1.10.0-alpha`, with no resolver
+      stamp at all, and the window called it `[ok]`.
+
+      **The freshness report exists, but on the CLI, not in this window.** To ask
+      the real question:
+      ```
+      third_party\dll-win64\drag-lint.exe query --name <AnySymbol> --db <the .sqlite>
+      ```
+      and read **stderr**, which now carries both answers -- the parse-side note
+      and, new in this build, a separate resolver line.
+
+      - [ ] Run that against your ACTIVE PROJECT's index and record what it says.
+      - [ ] Run it against `C:\Projects\.drag-lint\library-Win64.sqlite`. Before
+            the evening reindex this SHOULD report staleness. Silence there is
+            the defect worth reporting.
+
+      > Filed as a gap: the About window is the one screen built to stop a stale
+      > index answering confidently -- its own header says so -- and it is blind
+      > to the staleness that matters most. Reading two `schema_meta` rows is an
+      > indexed lookup, not a COUNT, so the performance contract does not
+      > actually forbid it.
 
 ## 2. The engine can be rebuilt with the IDE open
 
