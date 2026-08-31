@@ -27,8 +27,15 @@
   --stand-in-for. A guard that checked only the skip would pass against a build
   that had simply broken per-file autofix, so control 3 is not decoration.
 
-  FINDINGS ARE NOT FILTERED, only edits. The reported count must be identical
-  with and without the scoping, or a shipped number moved silently.
+  OWNER RULING 2026-08-31: *"* - Copy.pas are not project members so should be
+  left alone"*, and asked whether that meant writes only or reporting too, the
+  answer was REPORTING TOO. So the walk drops non-member FINDINGS as well -- the
+  behaviour lint-all has always had through TOwnRoots -- and NAMES what it
+  dropped, because a scope filter that reports nothing is indistinguishable from
+  a clean codebase.
+
+  This deliberately MOVES a number: `lint <dir>` reports fewer findings than it
+  did. Recorded here so a future reader sees a decision rather than a regression.
 
   HOW THE FIXTURE PUTS A FILE OUTSIDE THE CLOSURE: the manifest section targets
   a .dpr, which makes it a PROJECT section, and a project index is exactly the
@@ -126,32 +133,33 @@ Check 'WALK: an edit is still produced for the in-closure unit' `
 Check 'WALK: NO edit is produced for the out-of-closure unit' `
   (-not ($walk.Out -match '(?m)^File: .*OutOfClosure\.pas')) `
   'this is the whole point -- a walk must not write to code no project compiles'
+# The edit-level skip message is now normally UNREACHABLE, and deliberately so:
+# findings are scoped first, so an out-of-closure edit cannot be built in the
+# first place. The edit filter stays as defence in depth. What must be visible
+# either way is that the walk SAID it skipped something and named it.
 Check 'WALK: the skip is REPORTED, not silent' `
-  ($walk.Err -match 'were NOT rewritten') `
+  (($walk.Out + $walk.Err) -match 'not a project member|NOT reported|were NOT rewritten') `
   'a silent skip is indistinguishable from a broken autofix'
 Check 'WALK: and it names the file it skipped' `
-  ($walk.Err -match 'skipped: .*OutOfClosure\.pas') ''
+  (($walk.Out + $walk.Err) -match 'OutOfClosure\.pas') ''
+Check 'WALK: the fixable count reflects the SCOPED set' `
+  ($walk.Out -match '(?m)^autofix: 1 fixable finding') `
+  ('2 would mean the non-member was still counted: ' +
+   (($walk.Out -split "`n" | Where-Object { $_ -match 'autofix:' }) -join ' '))
 
 Write-Host ''
-Write-Host 'CONTROL 2 -- REPORTING is untouched (no shipped count moved)' -ForegroundColor Cyan
-# The scoping drops EDITS, never findings. Two independent proofs, because the
-# first version of this control asserted the wrong STREAM: with --fix the output
-# is the fix PLAN, not the per-finding listing, so it failed against a build that
-# was behaving correctly.
-#
-# (a) the fixable COUNT still includes the out-of-closure file. Two findings
-#     counted, one file edited -- which is precisely the intended asymmetry.
-Check 'REPORT: the fixable count still counts BOTH files' `
-  ($walk.Out -match '(?m)^autofix: 2 fixable finding') `
-  ('a count of 1 would mean findings were filtered too: ' +
-   (($walk.Out -split "`n" | Where-Object { $_ -match 'autofix:' }) -join ' '))
-# (b) plain `lint <dir>` -- no --fix at all -- still reports both files.
+Write-Host 'CONTROL 2 -- the WALK does not REPORT non-members either' -ForegroundColor Cyan
+# Owner ruling: not project members, so left alone -- reporting included.
 $plain = RunLint @('lint', (Join-Path $WorkDir 'src'), '--db', $db) 'plain'
-Check 'REPORT: a plain lint still reports the out-of-closure file' `
-  ($plain.Out -match 'OutOfClosure\.pas:\d+:\d+') `
-  'filtering findings would silently change a number people depend on'
-Check 'REPORT: and reports the in-closure file too' `
-  ($plain.Out -match 'InClosure\.pas:\d+:\d+') ''
+Check 'REPORT: the in-closure file IS still reported' `
+  ($plain.Out -match 'InClosure\.pas:\d+:\d+') `
+  'scoping must not silence the project itself -- the control below passes if it did'
+Check 'REPORT: the out-of-closure file is NOT reported' `
+  (-not ($plain.Out -match 'OutOfClosure\.pas:\d+:\d+')) `
+  'a finding on code no project compiles is not this project quality signal'
+Check 'REPORT: and the skip is NAMED, not silent' `
+  (($plain.Err -match 'not a project member') -or ($plain.Out -match 'not a project member')) `
+  'a scope filter that reports nothing looks exactly like a clean codebase'
 
 Write-Host ''
 Write-Host 'CONTROL 3 -- an EXPLICIT file target is NEVER filtered' -ForegroundColor Cyan

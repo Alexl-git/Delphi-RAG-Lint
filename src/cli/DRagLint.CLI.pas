@@ -8294,8 +8294,62 @@ end;
   lints an unsaved buffer through --stand-in-for. The tool choosing files is a
   different act from the user naming one.
 
-  FINDINGS ARE NOT TOUCHED, only edits. Reporting is what it always was, so no
-  count anyone depends on moves. }
+  OWNER RULING 2026-08-31: *"* - Copy.pas are not project members so should be
+  left alone"*, and asked directly whether that meant writes only or reporting
+  too, the answer was REPORTING TOO. So the walk now drops non-member FINDINGS
+  as well, which is what `lint-all` has always done through TOwnRoots, and it
+  NAMES what it dropped for the same reason lint-all does: a scope filter that
+  reports nothing is indistinguishable from a clean codebase.
+
+  This DOES move a number -- `lint <dir>` reports fewer findings than it used
+  to. That is the intended effect and not a regression: the dropped ones were
+  never this project's quality signal, and a count nobody trusts is the defect
+  the owner's standing rule is about. }
+{ True when this run is a DIRECTORY WALK that can be scoped: a store to define
+  the closure, and a target that is a folder rather than a file the user named.
+  Reads Path/InFile because that is where `lint` puts its target -- AArgs.Target
+  belongs to check-unit, uses-fix and ghost-check, and reading it here once made
+  the whole filter a no-op that looked installed. }
+function WalkClosure(const AArgs: TArgs; const AStore: ISymbolStore;
+  out AInClosure: TDictionary<string, Boolean>): Boolean;
+begin
+  Result    := False;
+  AInClosure:= nil;
+  if AStore = nil then Exit;
+  var Target: string:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
+  if (Target = '') or (not TDirectory.Exists(Target)) then Exit;
+  AInClosure:= TDictionary<string, Boolean>.Create;
+  for var Fid: Int64 in AStore.GetAllFileIds do
+    AInClosure.AddOrSetValue(LowerCase(ExpandFileName(AStore.GetFilePath(Fid))), True);
+  Result:= True;
+end;
+
+{ Drop findings the walk reached but no project compiles. Returns the survivors
+  and names the files that were dropped. }
+function ScopeWalkFindingsToClosure(const AArgs: TArgs; const AStore: ISymbolStore;
+  const AFindings: TArray<TLintFinding>; out ADroppedFiles: TArray<string>): TArray<TLintFinding>;
+var
+  InClosure: TDictionary<string, Boolean>;
+  Dropped  : TStringList                 ;
+  F        : TLintFinding                ;
+begin
+  Result       := AFindings;
+  ADroppedFiles:= nil;
+  if not WalkClosure(AArgs, AStore, InClosure) then Exit;
+  Dropped:= TStringList.Create;
+  try
+    Dropped.Sorted:= True; Dropped.Duplicates:= dupIgnore; Dropped.CaseSensitive:= False;
+    Result:= nil;
+    for F in AFindings do
+      if InClosure.ContainsKey(LowerCase(ExpandFileName(F.FilePath))) then Result:= Result + [F]
+      else Dropped.Add(F.FilePath);
+    ADroppedFiles:= Dropped.ToStringArray;
+  finally
+    Dropped.Free;
+    InClosure.Free;
+  end;
+end;
+
 function ScopeWalkEditsToClosure(const AArgs: TArgs; const AStore: ISymbolStore;
   const AEdits: TArray<TTextEdit>; out ADroppedFiles: TArray<string>): TArray<TTextEdit>;
 var
@@ -8305,23 +8359,14 @@ var
 begin
   Result       := AEdits;
   ADroppedFiles:= nil;
-  if AStore = nil then Exit;
-  { The SAME expression DoLint uses to find its target. `lint` reads Path/InFile
-    and NOT Target -- Target belongs to check-unit, uses-fix, ghost-check and
-    friends. Reading Target here made this whole filter a no-op that looked
-    installed: ORM3 CLIENT still emitted an edit into `Blueprint4 - Copy.pas`,
-    which is not in the closure, and nothing was reported as skipped. }
-  var Target: string:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
-  if Target = '' then Exit;
-  if not TDirectory.Exists(Target) then Exit;   { an explicit FILE target }
   if Length(AEdits) = 0 then Exit;
-
-  InClosure:= TDictionary<string, Boolean>.Create;
-  Dropped  := TStringList.Create;
+  if not WalkClosure(AArgs, AStore, InClosure) then Exit;
+  { Defence in depth. Once findings are scoped this is normally a no-op, since
+    an edit is built FROM a finding -- but not every edit source is, and an
+    edit is the half that writes. }
+  Dropped:= TStringList.Create;
   try
     Dropped.Sorted:= True; Dropped.Duplicates:= dupIgnore; Dropped.CaseSensitive:= False;
-    for var Fid: Int64 in AStore.GetAllFileIds do
-      InClosure.AddOrSetValue(LowerCase(ExpandFileName(AStore.GetFilePath(Fid))), True);
     Result:= nil;
     for E in AEdits do
       if InClosure.ContainsKey(LowerCase(ExpandFileName(E.FilePath))) then Result:= Result + [E]
@@ -8346,6 +8391,27 @@ var
   JArr     : TJSONArray          ;
   JObj     : TJSONObject         ;
 begin
+  { 0-: SCOPE THE WALK. A directory walk reaches files no project compiles --
+    measured on ORM3 CLIENT as 84 of 284, 30%, including `Blueprint4 - Copy.pas`
+    and three `*_DELETE_SOON.pas`. The owner ruled those are not project members
+    and are to be left alone, reporting included, which is what lint-all already
+    does through TOwnRoots.
+
+    Named, never silent: a scope filter that reports nothing is indistinguishable
+    from a clean codebase, and that is the failure this repo has paid for before.
+    An explicit `lint <file>` is untouched -- see WalkClosure. }
+  var WalkSkipped: TArray<string>:= nil;
+  AFindings:= ScopeWalkFindingsToClosure(AArgs, AStore, AFindings, WalkSkipped);
+  if Length(WalkSkipped) > 0 then
+  begin
+    { COUNTS FILES THAT HAD FINDINGS, not files walked -- ORM3 CLIENT walks 84
+      non-members but only 7 of them produce anything, and saying "84 skipped"
+      here would be a number that matches nothing the reader can see. }
+    EmitStatusLine(AArgs, Format('lint: %d file(s) NOT reported -- reached by the directory walk, but no '
+      + 'project in this index compiles them. Name one explicitly to lint it anyway.', [Length(WalkSkipped)]));
+    for var WS: string in WalkSkipped do EmitStatusLine(AArgs, '  not a project member: ' + WS);
+  end;
+
   { 0a: drop exact duplicates. Four used-before-assignment findings arrived twice
     in a real report because their file is reached twice by the walk; the same
     (file, line, col, rule, message) is the same finding no matter how many
@@ -9515,6 +9581,23 @@ begin
     var StoreOk: Boolean;
     Store:= OpenReadOnlyStore(AArgs.DbPath, StoreOk);
     if not StoreOk then Store:= nil;
+  end
+  else if (AArgs.DbPath <> '') and TFile.Exists(AArgs.DbPath) and TDirectory.Exists(EffPath) then
+  begin
+    { A DIRECTORY WALK needs the store even without --fix, because the owner ruled
+      that files no project compiles are left alone in the REPORT too, and the
+      store is what defines the closure (see ScopeWalkFindingsToClosure).
+
+      QUIET, and that is the whole reason the gate above existed: a non-quiet open
+      prints an index-schema warning to STDOUT, and on `--format sarif` that line
+      lands inside the document and stops it parsing. Passing AQuiet mirrors what
+      the flow-checker store already does a few hundred lines up.
+
+      Safe for everything else: the entire edit-building region is gated on
+      AArgs.Fix, so a store handed to a non-fix run builds nothing. }
+    var WalkStoreOk: Boolean;
+    Store:= OpenReadOnlyStore(AArgs.DbPath, WalkStoreOk, {AQuiet=}True);
+    if not WalkStoreOk then Store:= nil;
   end;
   { SAY WHAT THIS VERB CANNOT SEE -- AND SAY IT ACCURATELY.
 
