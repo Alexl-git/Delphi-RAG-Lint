@@ -5477,10 +5477,57 @@ var
                   because it only looked at whether lpFile was a literal. }
             Flag:= ShellExecuteIsInjectable(Args, Cur, Interp);
           end
+          else if SameText(NodeStr(Ent), 'CreateProcess') then
+          begin
+            { CREATEPROCESS IS JUDGED ON WHETHER A SHELL IS INTERPRETING THE
+              LINE, NOT ON WHETHER lpCommandLine IS A LITERAL. Reported by
+              DataCopy 2026-08-31, and their diagnosis was right.
+
+              The old test -- "argument 1 is not a string literal" -- ignored
+              argument 0 (lpApplicationName) entirely, which made the rule
+              UNSATISFIABLE for any caller that passes an argument. Their note
+              put it exactly: the advice was "validate or use a fixed literal",
+              and a fixed literal is not available to anything that takes a
+              path. An `error` nobody can act on is the combination most likely
+              to teach people to ignore errors, which is the opposite of what
+              this severity is for.
+
+              THE SECURITY-RELEVANT AXIS IS THE SHELL.
+                * lpApplicationName NON-NIL: the executable is named directly
+                  and lpCommandLine is argument data. Nothing tokenises a
+                  program out of it -- this is ordinary argument passing that
+                  every process launcher must do. SILENT.
+                * lpApplicationName NIL: Windows parses the program out of
+                  lpCommandLine, so a runtime-built line chooses the program.
+                  Still reported.
+              And the sharper case, which the old test could not distinguish at
+              all: a line beginning `cmd.exe /c` (or another interpreter) IS a
+              command line by construction, so it gets the stronger interpreter
+              message rather than the generic one.
+
+              WHAT THIS DELIBERATELY KEEPS FIRING ON: the reporting project's own
+              code, `'cmd.exe /c ' + ACommandLine`, with a nil lpApplicationName.
+              They asked for a rewrite they could actually perform, not for the
+              finding to disappear -- and passing the resolved exe in
+              lpApplicationName now clears it, while routing through cmd.exe
+              does not. }
+            var AppName: TTSNode:= Args.NamedChild(0);
+            var HasApp : Boolean := (not AppName.IsNull)
+                                    and (not SameText(Trim(NodeStr(AppName)), 'nil'));
+            { NamesAnInterpreter is reused rather than reimplemented: it already
+              unwraps casts, sees through ONE local assignment -- which is
+              exactly the `LCmd := 'cmd.exe /c ' + X; CreateProcess(nil,
+              PChar(LCmd), ...)` shape reported -- and compares the first token
+              only, so a line's arguments cannot be mistaken for its program. }
+            Interp:= (not HasApp) and NamesAnInterpreter(A, Cur);
+            Flag  := (not HasApp)
+                     and (A.NodeType <> 'literalString')
+                     and (not ArgIsFixedSchemeUri(A, Cur));
+          end
           else
-            { WinExec and CreateProcess take a whole COMMAND LINE in the argument
-              CmdArgIndex selects, so a non-literal there is injection by
-              construction. Unchanged. }
+            { WinExec takes a whole COMMAND LINE and has no application-name
+              slot at all, so a non-literal there is injection by construction.
+              Unchanged. }
             Flag:= (A.NodeType <> 'literalString') and (not ArgIsFixedSchemeUri(A, Cur));
 
           if Flag then
@@ -5489,8 +5536,16 @@ var
             F:= Default(TLintFinding);
             F.RuleId  := 'unsafe-shellexecute';
             F.Severity:= 'error';
-            if Interp then
+            if Interp and SameText(NodeStr(Ent), 'CreateProcess') then
+              F.Message := 'CreateProcess routes this through a command interpreter with a nil lpApplicationName -- whatever follows the shell is a command line, so this is command injection (CWE-78). Pass the executable in lpApplicationName and drop the shell.'
+            else if Interp then
               F.Message := Format('%s launches a command interpreter -- whatever follows it is a command line, so this is command injection (CWE-78). Launch the target program directly instead.', [NodeStr(Ent)])
+            else if SameText(NodeStr(Ent), 'CreateProcess') then
+              { NOT "use a fixed literal": with lpApplicationName nil, Windows
+                parses the program out of lpCommandLine, so the actionable fix
+                is to name the executable -- which a caller taking a path can
+                actually do, and a fixed literal is not. }
+              F.Message := 'CreateProcess is called with lpApplicationName nil, so Windows parses the program name out of a runtime-built lpCommandLine (CWE-78). Pass the resolved executable path in lpApplicationName; the arguments may stay dynamic.'
             else if SameText(NodeStr(Ent), 'ShellExecute') then
               F.Message := 'ShellExecute builds a command line at runtime -- a non-literal lpParameters, or a verb that is not a plain literal open/explore/edit/print/find (CWE-78). Pass fixed arguments, or use a plain open with no parameters.'
             else

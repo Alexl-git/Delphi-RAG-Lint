@@ -2335,8 +2335,46 @@ begin
               begin
                 UF:= Default(TLintFinding);
                 UF.RuleId  := 'unused-unit-in-uses';
-                UF.Severity:= 'warning';
-                UF.Message := Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import', [U.UnitName]);
+                { INFO, NOT WARNING, AND THIS IS AN INTERIM -- see the two named
+                  fixes below. Downgraded 2026-08-31 on a MEASURED report from
+                  DataCopy, who did not guess: they commented out each candidate,
+                  compiled, and kept only what survived.
+
+                    66 findings, 23 tested -> 20 genuinely safe,
+                    1 broke the COMPILE, 2 built clean and were unsafe at RUNTIME.
+
+                  So the rule does find real dead imports -- it simply cannot yet
+                  tell them from the load-bearing ones, and it is wrong ~13% of
+                  the time in the direction of breaking the product.
+
+                  TWO SYSTEMATIC BLIND SPOTS, both already known:
+                    * TYPE HELPER methods are not counted as references.
+                      `TPath.GetFileName(X).ToUpper.Contains(Y)` names no symbol
+                      from System.SysUtils, but ToUpper/Contains are TStringHelper
+                      and live there. Removing it fails with E2671. This is the
+                      same helper-ref resolution gap already in
+                      stats\draglint-gaps.log.
+                    * A unit whose only contribution is `initialization`, or whose
+                      classes are instantiated by the sibling .DFM rather than by
+                      the .pas. The compiler cannot catch either: the EurekaLog
+                      call-stack provider silently stops registering, and a
+                      DFM-registered DevExpress class raises EClassNotFound at
+                      form-streaming time after a perfectly clean build. Those are
+                      also the units the IDE itself wrote into the uses clause when
+                      the components were dropped -- the rule is telling the user
+                      to undo the designer.
+
+                  WHY DOWNGRADE RATHER THAN SUPPRESS: the 20 true positives are
+                  real and worth surfacing. Why not leave it at warning: a warning
+                  that breaks the build 1 time in 23 trains people to ignore
+                  warnings, which is this repo's own standing rule about a rule
+                  that is on but permanently ignored.
+
+                  RESTORE TO WARNING once (a) helper-method calls resolve to their
+                  declaring unit, and (b) a class instantiated by the sibling DFM
+                  counts as a use of the unit that registers it. Both are filed. }
+                UF.Severity:= 'info';
+                UF.Message := Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. VERIFY BEFORE REMOVING: type-helper calls (.ToUpper/.Contains), classes instantiated only by the sibling .dfm, and units that work through their initialization section are all invisible to this check.', [U.UnitName]);
                 UF.FilePath := Path;
                 UF.StartLine:= U.StartLine;
                 UF.StartCol := U.StartCol;

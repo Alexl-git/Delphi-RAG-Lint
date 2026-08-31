@@ -351,6 +351,85 @@ var
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
 
+  { True when this routine declaration carries a test-framework attribute, in
+    which case method-pascalcase must not fire on it.
+
+    WHY. `Subject_does_the_thing` is not a style lapse in a DUnitX suite -- the
+    runner PRINTS the method name, so the underscores are the failure report.
+    It is the near-universal xUnit convention, and reported by DataCopy
+    (2026-08-31) at 330 findings on one test project: 71% of that project's
+    entire report, every one of them wrong. A rule that floods is the defect,
+    and 330 `dl:ok` markers would each record something untrue about the code.
+
+    SCOPED BY THE ATTRIBUTE, NOT BY THE PROJECT, which is the whole point. A
+    coarser "skip test projects" would also silence genuine casing lapses in
+    test HELPERS -- and `PlainHelper` in a fixture should still be checked. The
+    attribute is already in the declaration this walker parses, so this needs no
+    new information and no config.
+
+    THE GRAMMAR WAS PROBED, NOT ASSUMED (tools\dumpnode), and the first attempt
+    was wrong in exactly the way this repo keeps being wrong. The node is
+    `rttiAttributes` -- PLURAL, and a single named child of the declProc holding
+    EVERY attribute on that declaration:
+
+      declProc #1 at line 8: ChildCount=4 NamedChildCount=3
+          child[ 0] rttiAttributes named=True  | [Test]
+          child[ 1] kProcedure     named=True  | procedure
+          child[ 2] identifier     named=True  | Widget_does_the_thing
+
+      rttiAttributes #3 at line 10: ChildCount=6 NamedChildCount=2
+          child[ 1] identifier     named=True  | Test
+          child[ 4] exprCall       named=True  | TestCase('a','1,2')
+
+    There is NO node type `attribute` in a parsed unit at all -- `dumpnode
+    AttrProbe.pas attribute` reports none -- which also means the parser's
+    "Custom attribute [Foo] usage" branch keyed on that name is dead, and no
+    `attribute` ref is ever emitted. Filed separately; not this rule's problem.
+
+    TWO CHILD SHAPES, because a parameterised attribute is not an identifier:
+    `[Test]` arrives as `identifier`, `[TestCase('a','1,2')]` as `exprCall`
+    whose entity is the name. Matching only identifiers would silently miss
+    every `[TestCase]`, which is the more common DUnitX form. }
+  function HasTestAttribute(const N: TTSNode): Boolean;
+  const
+    { DUnitX's method-level attributes. TestFixture is a CLASS attribute and is
+      deliberately absent: a fixture class still has ordinary helpers, and
+      exempting the whole class is the coarse behaviour rejected above. }
+    TEST_ATTRS: array[0..7] of string = (
+      'Test', 'TestCase', 'TestCaseProvider', 'Setup', 'TearDown',
+      'SetupFixture', 'TearDownFixture', 'RepeatTest');
+  var
+    I, J   : Integer;
+    Attrs  : TTSNode;
+    Item   : TTSNode;
+    Nm     : TTSNode;
+    S      : string ;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      Attrs:= N.NamedChild(I);
+      if Attrs.IsNull or (Attrs.NodeType <> 'rttiAttributes') then Continue;
+      for J:= 0 to Attrs.NamedChildCount - 1 do
+      begin
+        Item:= Attrs.NamedChild(J);
+        if Item.IsNull then Continue;
+        if Item.NodeType = 'identifier' then
+          S:= Trim(NodeStr(Item))
+        else if Item.NodeType = 'exprCall' then
+        begin
+          Nm:= Item.ChildByField('entity');
+          if Nm.IsNull then Continue;
+          S:= Trim(NodeStr(Nm));
+        end
+        else Continue;
+        for var K:= Low(TEST_ATTRS) to High(TEST_ATTRS) do
+          if SameText(S, TEST_ATTRS[K]) then Exit(True);
+      end;
+    end;
+  end;
+
   { True when a declType's type expression is a record (optionally packed).
     Grammar-agnostic on purpose: the leading keyword of the type text is the
     one signal that cannot drift with the tree-sitter node naming. }
@@ -790,7 +869,8 @@ var
           and (LastDelimiter('.', MethName) = 0) then
         begin
           if (not MatchesCase(MethName, ANaming.MethodCase))
-            and (not IsShortAllCaps(MethName)) then
+            and (not IsShortAllCaps(MethName))
+            and (not HasTestAttribute(N)) then
             EmitAt(NameNode, 'method-pascalcase',
               Format('Method "%s" should be %s', [MethName, ANaming.MethodCase]));
         end;
@@ -860,8 +940,13 @@ var
             { Skip short all-caps abbreviations (FF, OK, BS, etc.) to avoid FP. }
             if (SimpleName <> '') and (not StartsText('operator', SimpleName)) then
             begin
+              { HasTestAttribute here covers an attributed STANDALONE routine.
+                Class-method tests never reach this branch -- their names are
+                qualified, and DotPos above sends them to declProc, which is the
+                authoritative check for them. }
               if (not MatchesCase(SimpleName, ANaming.MethodCase))
-                and (not IsShortAllCaps(SimpleName)) then
+                and (not IsShortAllCaps(SimpleName))
+                and (not HasTestAttribute(N)) then
                 EmitAt(NameNode, 'method-pascalcase',
                   Format('Method "%s" should be %s', [SimpleName, ANaming.MethodCase]));
             end;

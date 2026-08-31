@@ -341,7 +341,12 @@ begin
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
     B('used-unit-not-resolvable', 'project-wide', 'warning', 'Used unit resolves to no known unit (project/library/alias)');
-    B('unused-unit-in-uses',   'project-wide', 'warning', 'Unit in uses is never referenced');
+    { info, not warning -- INTERIM. Measured wrong ~13% of the time in the
+      direction of breaking the build or the product (type-helper calls, DFM-
+      registered classes, initialization-only units are all invisible to it).
+      The emit site in DRagLint.Lint.ProjectRules carries the full reasoning and
+      the two conditions for restoring it to warning. }
+    B('unused-unit-in-uses',   'project-wide', 'info',    'Unit in uses is never referenced');
     B('god-class',             'project-wide', 'info',    'Class has too many members/responsibilities');
     B('unused-public-symbol',  'project-wide', 'info',    'Public symbol is never referenced');
     B('unused-private-member', 'project-wide', 'warning', 'Private member is never referenced');

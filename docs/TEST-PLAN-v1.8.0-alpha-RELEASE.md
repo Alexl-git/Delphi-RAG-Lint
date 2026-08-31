@@ -52,6 +52,30 @@ the point of doing them in this order.
 
       On load the IDE confirms `drag-lint`.
 
+- [ ] **0.2b VS CODE WILL BLOCK YOUR BUILDS IF ITS EXTENSION IS OLD. Check
+      this before you lose a build to it.**
+
+      Measured on this machine 2026-08-31: with the Delphi IDE **closed**, a
+      build still failed at staging, and the holder was **VS Code**:
+
+      ```
+      PID 57928  ...\third_party\dll-win64\drag-lint.exe lsp --stdio
+      parent: Code(24384)
+      ```
+
+      Cause: the **installed** extension is **v1.2.2**. The private-engine-copy
+      fix -- which is what stops VS Code holding the deployed binary -- shipped
+      in extension **v1.4.0**, and `editors\vscode\drag-lint\package.json` in
+      this repo is already at 1.4.0. The fix exists and is guarded by
+      `tests\vscode\run_vscode_engine_copy.ps1`; it simply is not installed.
+
+      Either **package and install the current extension**, or close VS Code for
+      the duration of the build. If you hit it anyway, the workaround is good and
+      loses nothing: `msbuild` writes `src\cli\Win64\Debug\drag-lint.exe`, which
+      nothing holds, and **every runner takes `-Exe`** -- so test against that
+      path and defer only the deploy. Treat `ERROR: failed to stage` as expected
+      in that window; the compile line above it is what matters.
+
 - [ ] **0.3 Confirm the engine version the plugin will actually run.**
 
       ```
