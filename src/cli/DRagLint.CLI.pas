@@ -628,6 +628,8 @@ begin
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
   Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers from the STORED parses; skips the walk entirely --');
   Writeln('                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)');
+  Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
+  Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
@@ -2219,8 +2221,17 @@ end;
   would have removed and reports it, which is the only way an operator can
   review an eviction over the multi-gigabyte Library sections before approving
   it. }
+{ AResolveOnly reaches here because `--all` is the ONLY command that covers every
+  section, so it is the one place the cheap remedy actually needs to be
+  reachable. It was accepted on the command line and then silently dropped by
+  this path -- neither the ClearCallEdges nor the resolve gate below carried a
+  ResolveOnly term -- so `index --all --resolve-only` ran a walk and skipped the
+  very pass it names. That is the same shape as the flag's own bring-up note:
+  a flag that announces a re-derive and then does not do it is worse than no
+  flag, because the operator believes the edges were rebuilt. }
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
-  AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False): Boolean;
+  AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False;
+  AResolveOnly: Boolean = False): Boolean;
 var
   Store          : ISymbolStore                              ;
   Indexer        : IIndexer                                  ;
@@ -2305,14 +2316,47 @@ begin
       calls pass executed in THREE of them, because scope is decided by changed
       FILES and a changed resolver is not one. Putting the check only in DoIndex
       would have left exactly that path unprotected. }
+    { AN ABSENT STAMP IS STALE, NOT FRESH. This clause used to read
+      `(PrevRfp <> '') and (PrevRfp <> CurRfp)`, grandfathering a DB with no
+      stored value on the reasoning that "protection begins at the next
+      resolve". It does not. There IS no next resolve: the run adopts the
+      current stamp on its way out, so from then on PrevRfp = CurRfp and the
+      DB matches forever. The grandfather clause did not DEFER protection, it
+      CANCELLED it for every index that existed before the stamp shipped --
+      which, the release the stamp shipped in, is all of them.
+
+      MEASURED, not reasoned: `index --all` over 31 project sections printed
+      "resolve: calls skipped" 25 times, ran the calls pass 0 times, printed
+      "Resolver changed" 0 times, and stamped all 31 as current. Forcing the
+      pass on ONE of them afterwards took refs.symbol_id from 4,522 to 28,011
+      -- 84% of the resolved rows were missing from a database that was
+      reporting itself freshly resolved.
+
+      AND THE MISS WAS SELF-CONCEALING, which is what made it expensive: once
+      the stamp is written, no later build can tell that the pass never ran.
+      Recovery needs the forced flag, not a fixed comparison.
+
+      The analogy to the indexer fingerprint, which the old comment leaned on,
+      does not carry. The indexer has per-file mtime/sha as an INDEPENDENT
+      staleness signal, so grandfathering its fingerprint blinds nothing. The
+      resolver has no second signal -- this stamp is the only one -- so
+      grandfathering it is total.
+
+      The cost this bought was one re-resolve per index on the first run under
+      a build that stamps: minutes each, and the same charge the release note
+      already tells operators to expect. }
     var ResolverStale: Boolean:= False;
     var PrevRfp: string:= Store.GetMetaValue(RESOLVER_FP_KEY);
     var CurRfp : string:= ResolverFingerprint(Store);
-    if (PrevRfp <> '') and (PrevRfp <> CurRfp) then
+    if PrevRfp <> CurRfp then
     begin
       ResolverStale:= True;
-      Writeln(Format('  Resolver changed since this DB was resolved (%s -> %s): re-deriving every edge.',
-                     [PrevRfp, CurRfp]));
+      if PrevRfp = '' then
+        Writeln(Format('  This DB carries no resolver stamp (-> %s): re-deriving every edge.',
+                       [CurRfp]))
+      else
+        Writeln(Format('  Resolver changed since this DB was resolved (%s -> %s): re-deriving every edge.',
+                       [PrevRfp, CurRfp]));
     end;
 
     // Apply walk filter from the resolved plan item.
@@ -2321,6 +2365,14 @@ begin
     // Cross-index dedup: exclude roots already covered by other sections.
     for ExDir in AItem.DedupExcludeRoots do Indexer.AddExcludeRoot(ExDir);
 
+    { --resolve-only skips the walk here for the same reason DoIndex does: the
+      walk is skipped OUTRIGHT rather than made a no-op, so the intent is legible
+      in the output and a corpus whose files ARE newer is not silently re-parsed
+      by a flag that promised not to. The resolve below still runs -- it joins
+      the gate on AResolveOnly precisely because ParsedFiles is 0 here. }
+    if AResolveOnly then
+      Writeln('  Resolve-only: skipping the walk; re-deriving edges from the stored parses.')
+    else
     case AItem.Mode of
       smFolderTree, smLibrary:
       begin
@@ -2472,9 +2524,9 @@ begin
       the handful of changed files and leave the rest of the database on the old
       resolver -- which is precisely the 2026-08-30 failure, reproduced by the
       fix meant to prevent it. ClearCallEdges also nulls refs.symbol_id. }
-    if ResolverStale then Store.ClearCallEdges;
+    if ResolverStale or AResolveOnly then Store.ClearCallEdges;
     if (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
-       Store.CallEdgesNeedRebuild or ResolverStale then
+       Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly then
       Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
     else
       Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
@@ -2734,7 +2786,7 @@ begin
   if EffJobs <= 1 then
   begin
     FailedNames:= nil;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
     Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
@@ -2746,7 +2798,7 @@ begin
   begin
     Writeln(ErrOutput, 'NOTE: --jobs >1 requires --config <path>; running sequentially.');
     FailedNames:= nil;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
     Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
@@ -3349,17 +3401,25 @@ begin
     the manual workaround for the missing stamp was defeated by exactly the thing
     the stamp exists to catch, and nothing said so.
 
-    GRANDFATHERED like the indexer fingerprint: a DB with no stored value adopts
-    the current one silently rather than forcing a mass re-resolve of every index
-    on this build's first run. Protection begins at the next resolve. }
+    NOT GRANDFATHERED, and the comment here used to say the opposite. "A DB with
+    no stored value adopts the current one silently ... protection begins at the
+    next resolve" was wrong in its second half: adopting the stamp is what makes
+    every subsequent run match, so there is no next resolve to be protected by.
+    See the long note on the same clause in the --all section path for the
+    measurement that settled it (4,522 -> 28,011 resolved refs on a database
+    that was reporting itself freshly resolved). An absent stamp is stale. }
   var ResolverStale: Boolean:= False;
   var PrevResolverFp: string:= Store.GetMetaValue(RESOLVER_FP_KEY);
   var CurResolverFp : string:= ResolverFingerprint(Store);
-  if (PrevResolverFp <> '') and (PrevResolverFp <> CurResolverFp) then
+  if PrevResolverFp <> CurResolverFp then
   begin
     ResolverStale:= True;
-    Writeln(Format('Resolver changed since this DB was resolved (%s -> %s): re-deriving every edge.',
-                   [PrevResolverFp, CurResolverFp]));
+    if PrevResolverFp = '' then
+      Writeln(Format('This DB carries no resolver stamp (-> %s): re-deriving every edge.',
+                     [CurResolverFp]))
+    else
+      Writeln(Format('Resolver changed since this DB was resolved (%s -> %s): re-deriving every edge.',
+                     [PrevResolverFp, CurResolverFp]));
   end;
 
   { v0.42: cross-dictionary dedup -- exclude any subtree the caller says is

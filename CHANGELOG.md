@@ -182,6 +182,38 @@ days -- moved nothing and left every index silently stale.
   file. Both halves matter and either alone would pass for the wrong reason: it
   must not walk (or it is `index` wearing a flag), and it must still resolve
   (with the walk skipped, every other term in the resolve gate is false).
+  **`index --all` honours it too** -- it accepted the flag and silently dropped
+  it, which mattered because `--all` is the only command that reaches every
+  section.
+
+**An ABSENT stamp is stale, and getting that wrong cancelled the whole
+feature.** Both staleness checks were written as `(PrevRfp <> '') and (PrevRfp
+<> CurRfp)`, grandfathering a database with no stored value on the reasoning
+that *"protection begins at the next resolve"*. There is no next resolve: the
+run adopts the current stamp on its way out, so every later run matches. The
+clause did not defer protection, it **cancelled** it for every index that
+existed before the stamp shipped -- which, in this release, is all of them.
+
+Measured before the fix: `index --all` over 31 project sections printed
+`resolve: calls skipped` **25 times**, ran the calls pass **0 times**, printed
+`Resolver changed` **0 times**, and stamped all 31 as current. Forcing the pass
+afterwards on one of them took `refs.symbol_id` from **4,522 to 28,011** -- 84%
+of the resolved rows had been missing from a database reporting itself freshly
+resolved.
+
+The miss was also **self-concealing**, which is what made it expensive rather
+than merely wrong: once the stamp is written, no later build -- including a
+fixed one -- can tell the pass never ran, because the only signal it has now
+agrees. Recovering an index stamped by an affected build therefore needs
+`index --all --resolve-only`, not an upgrade.
+
+The old comment justified the grandfather clause as being "like the indexer
+fingerprint". That analogy does not carry: the indexer has per-file mtime/sha as
+an INDEPENDENT staleness signal, so grandfathering its fingerprint blinds
+nothing, while the resolver stamp is the only signal there is.
+`run_resolver_stamp_absent_is_stale.ps1` pins four cases, and the third is not
+optional -- a matching stamp on an unchanged corpus must still SKIP, or the fix
+degenerates into "always re-resolve" and the 2,252s-to-17s saving is gone.
 
 This is not theoretical. On 2026-08-30 a sequence re-ran all 31 project sections
 specifically to pick up a resolve fix, and the calls pass executed in **three of
