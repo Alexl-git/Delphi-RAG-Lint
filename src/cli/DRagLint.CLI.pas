@@ -13486,7 +13486,18 @@ begin
 
     var Body: string:= RenderExceptionBlock(All, Cfg.ExceptionsRoot);
     if Created then Plan.NewText:= RenderNewExceptionUnit(Cfg.ExceptionsUnit, RootUnit, Body)
-    else            Plan.NewText:= SpliceExceptionBlock(UnitText, Body);
+    else
+    begin
+      Plan.NewText:= SpliceExceptionBlock(UnitText, Body);
+      { The ancestor is configurable, so an EXISTING exceptions unit may not yet
+        use the unit that declares it -- and then every generated
+        `class(<root>)` line fails to compile. The creation path already puts it
+        in the uses; this is the same obligation on the far more common splice
+        path. No-op when the root is declared in this very unit, which is why
+        ORM3 did not expose it. }
+      if (RootUnit <> '') and (not SameText(RootUnit, Cfg.ExceptionsUnit)) then
+        Plan.NewText:= EnsureUsesEntry(Plan.NewText, RootUnit);
+    end;
     Plan.Changed:= Created or (Plan.NewText <> UnitText);
 
     Writeln(Format('exceptions-sync: %d file(s) scanned, %d bare raise site(s), %d class(es) already declared.',

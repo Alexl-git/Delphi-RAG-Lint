@@ -70,6 +70,10 @@
    12 WHITESPACE    a message with leading/trailing spaces survives its own
                     read-back. Found on ORM3 by the --apply kill condition, not
                     here -- every message in this fixture had been tidy.
+   13 ROOT + USES   a configured ancestor declared in ANOTHER unit reaches the
+                    exceptions unit's uses clause. The CREATION path always did
+                    this; the SPLICE path did not, and ORM3 could not show it,
+                    because its root is declared in the file being written.
    11 LINT-CLEAN    the generated unit parses AND lints to zero. This repo's
                     global rule holds tool-written code to the same standard as
                     hand-written code, and nothing else pins it. Must run after
@@ -508,6 +512,59 @@ Check 'GENERATED: the unit parses -- no parser-error, no syntax-error' `
 Check 'GENERATED: and it is lint-clean' `
   ($genLint -match '(?m)^0 finding\(s\)') `
   ("lint said: " + (($genLint -split "`n" | Where-Object { $_ -match 'finding\(s\)' }) -join ' '))
+
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host 'CONTROL 13 -- a configured ROOT in ANOTHER unit reaches the uses clause' -ForegroundColor Cyan
+# The ancestor is configurable, so the exceptions unit must USE whatever unit
+# declares it or every generated `class(<root>);` fails to compile.
+#
+# The CREATION path always got this right. The SPLICE path -- an exceptions unit
+# that already exists, which is the ordinary case -- did not, and ORM3 could not
+# reveal it: its root, EMicroniteError, is declared in CommonExceptions.pas,
+# the very file being written, so no uses entry was ever required. This fixture
+# puts the root somewhere else on purpose.
+$projD = Join-Path $WorkDir 'd'
+New-Item -ItemType Directory (Join-Path $projD 'src') | Out-Null
+WriteAscii (Join-Path $projD 'src\uRaises.pas') $raisesA
+WriteAscii (Join-Path $projD 'src\uBase.pas') @'
+unit uBase;
+
+interface
+
+uses
+  System.SysUtils;
+
+type
+  EMicroniteError = class(Exception);
+
+implementation
+
+end.
+'@
+# The existing exceptions unit does NOT use uBase. That is the whole point.
+WriteAscii (Join-Path $projD 'src\uExceptionDefinitions.pas') $defsA
+$cfgRoot = Join-Path $WorkDir 'root.json'
+WriteAscii $cfgRoot '{ "exceptions": { "root": "EMicroniteError" } }'
+$manD = NewManifest $projD 'SecD' 'd.sqlite'
+$dbD  = Join-Path $projD 'out\d.sqlite'
+Reindex $manD 'SecD'
+$sD1 = Sync $dbD $cfgRoot -Apply
+$defsD = [System.IO.File]::ReadAllText((Join-Path $projD 'src\uExceptionDefinitions.pas'))
+Check 'ROOT: the generated classes descend from the configured root' `
+  ($defsD -match 'E[A-Za-z0-9]+\s*=\s*class\(EMicroniteError\);') `
+  'without this the "root" config key does nothing'
+Check 'ROOT: the exceptions unit now USES the unit declaring the root' `
+  ($defsD -match '(?s)interface.*?\buses\b[^;]*\buBase\b[^;]*;') `
+  'otherwise every generated declaration fails to compile'
+# Idempotence again, narrowly: the uses entry must be added ONCE.
+$hD1 = TreeHash $projD
+$sD2 = Sync $dbD $cfgRoot -Apply
+$defsD2 = [System.IO.File]::ReadAllText((Join-Path $projD 'src\uExceptionDefinitions.pas'))
+$uBaseCount = @([regex]::Matches($defsD2, '(?m)^\s*uBase\s*,')).Count
+Check 'ROOT: a second run does not add uBase twice' `
+  (($uBaseCount -le 1) -and ($hD1 -eq (TreeHash $projD)) -and $sD2.Ran) `
+  ("uBase entries: " + $uBaseCount)
 
 # ---------------------------------------------------------------------------
 Write-Host ''

@@ -147,6 +147,23 @@ function SpliceExceptionBlock(const AUnitText, ABody: string): string;
 /// <param name="ARootUnit">Unit declaring the ancestor class, or '' for none.</param>
 /// <param name="ABody">Body from RenderExceptionBlock.</param>
 /// <returns>Unit source, CRLF, 7-bit ASCII.</returns>
+/// <summary>Adds AUnitName to an EXISTING unit's interface uses clause.</summary>
+/// <param name="AUnitText">The unit as it stands.</param>
+/// <param name="AUnitName">Unit to ensure is used; '' is a no-op.</param>
+/// <returns>The text, unchanged when the entry is already there or when the
+/// unit has no interface uses clause to extend.</returns>
+/// <remarks>
+/// <para>Needed because the ancestor is CONFIGURABLE. RenderNewExceptionUnit
+/// puts the root's declaring unit in the uses of a unit it CREATES, but the
+/// common case is an exceptions unit that already exists and is spliced into --
+/// and there the generated `class(EMicroniteError)` lines will not compile
+/// unless the unit declaring that root is used. ORM3 hid this: its root is
+/// declared in the very unit being written.</para>
+/// <para>Matching is whole-identifier and case-insensitive, so a unit named
+/// `Exceptions` is not considered present because `CommonExceptions` is.</para>
+/// </remarks>
+function EnsureUsesEntry(const AUnitText, AUnitName: string): string;
+
 function RenderNewExceptionUnit(const AUnitName, ARootUnit, ABody: string): string;
 
 implementation
@@ -377,6 +394,84 @@ begin
     for I:= Ins to High(Lines) do
     begin
       SB.Append(Lines[I]);
+      if I < High(Lines) then SB.Append(#13#10);
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ True when AName appears in ALine as a whole Delphi identifier. A plain Pos()
+  would call CommonExceptions a match for Exceptions and silently skip the
+  insertion, producing a unit that does not compile. }
+function MentionsUnit(const ALine, AName: string): Boolean;
+var
+  P, E: Integer;
+  Low : string ;
+begin
+  Result:= False;
+  Low:= LowerCase(ALine);
+  P  := Pos(LowerCase(AName), Low);
+  while P > 0 do
+  begin
+    E:= P + Length(AName);
+    if ((P = 1) or (not CharInSet(ALine[P - 1], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']))) and
+       ((E > Length(ALine)) or (not CharInSet(ALine[E], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']))) then
+      Exit(True);
+    P:= Pos(LowerCase(AName), Low, P + 1);
+  end;
+end;
+
+function EnsureUsesEntry(const AUnitText, AUnitName: string): string;
+var
+  Lines : TArray<string>;
+  SB    : TStringBuilder;
+  I     : Integer       ;
+  UsesAt: Integer       ;
+  ImplAt: Integer       ;
+  T     : string        ;
+begin
+  Result:= AUnitText;
+  if AUnitName = '' then Exit;
+  Lines := SplitLines(AUnitText);
+  { INTERFACE uses only -- the generated declarations are in the interface, so
+    an implementation-section uses entry would not bring the root into scope. }
+  ImplAt:= High(Lines) + 1;
+  for I:= 0 to High(Lines) do
+    if SameText(Trim(Lines[I]), 'implementation') then begin ImplAt:= I; Break; end;
+  UsesAt:= -1;
+  for I:= 0 to ImplAt - 1 do
+  begin
+    T:= LowerCase(Trim(Lines[I]));
+    if (T = 'uses') or T.StartsWith('uses ') then begin UsesAt:= I; Break; end;
+  end;
+  if UsesAt < 0 then Exit;
+  { already there? scan from the uses keyword to its terminating semicolon }
+  for I:= UsesAt to ImplAt - 1 do
+  begin
+    if MentionsUnit(Lines[I], AUnitName) then Exit;
+    if Pos(';', Lines[I]) > 0 then Break;
+  end;
+  SB:= TStringBuilder.Create;
+  try
+    for I:= 0 to High(Lines) do
+    begin
+      if I = UsesAt then
+      begin
+        if SameText(Trim(Lines[I]), 'uses') then
+        begin
+          SB.Append(Lines[I]); SB.Append(#13#10);
+          SB.Append('  '); SB.Append(AUnitName); SB.Append(',');
+        end
+        else
+        begin
+          var S: string:= Lines[I];
+          System.Insert(' ' + AUnitName + ',', S, Pos('uses', LowerCase(S)) + 4);
+          SB.Append(S);
+        end;
+      end
+      else SB.Append(Lines[I]);
       if I < High(Lines) then SB.Append(#13#10);
     end;
     Result:= SB.ToString;
