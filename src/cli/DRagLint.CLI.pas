@@ -8271,6 +8271,68 @@ begin
   end;
 end;
 
+{ A WRITE must not reach a file no project compiles.
+
+  `lint <dir>` is a DIRECTORY WALK: TLinter.LintFolder globs *.pas/*.dpr/*.dpk
+  and lints whatever it finds. `lint-all` has two filters for exactly this
+  (TOwnRoots and --project, the latter added after 989 of 1414 findings turned
+  out to come from source no project compiles); the per-file verb has neither.
+
+  That asymmetry was tolerable while `lint <dir>` only REPORTED -- a finding on
+  a dead file is noise a human filters. It stopped being tolerable when the same
+  verb grew --fix --apply, because the output became an EDIT.
+
+  Measured on ORM3 CLIENT 2026-08-31: 200 files in the compile closure, 284
+  .pas/.dpr on disk under CLIENT\, so 84 -- 30% -- outside it, including
+  `blueprint4 - copy.pas` and three `*_DELETE_SOON.pas`. A retired copy silently
+  diverging from the original it was copied from is worse than leaving it alone:
+  the next person to diff them sees a change nobody made deliberately.
+
+  SCOPED TO THE WALK, AND ONLY THE WALK. An explicit `lint <file>` is the user
+  POINTING at something and is never filtered -- that path must keep working for
+  a file no index covers at all, which is precisely what the IDE does when it
+  lints an unsaved buffer through --stand-in-for. The tool choosing files is a
+  different act from the user naming one.
+
+  FINDINGS ARE NOT TOUCHED, only edits. Reporting is what it always was, so no
+  count anyone depends on moves. }
+function ScopeWalkEditsToClosure(const AArgs: TArgs; const AStore: ISymbolStore;
+  const AEdits: TArray<TTextEdit>; out ADroppedFiles: TArray<string>): TArray<TTextEdit>;
+var
+  InClosure: TDictionary<string, Boolean>;
+  Dropped  : TStringList                 ;
+  E        : TTextEdit                   ;
+begin
+  Result       := AEdits;
+  ADroppedFiles:= nil;
+  if AStore = nil then Exit;
+  { The SAME expression DoLint uses to find its target. `lint` reads Path/InFile
+    and NOT Target -- Target belongs to check-unit, uses-fix, ghost-check and
+    friends. Reading Target here made this whole filter a no-op that looked
+    installed: ORM3 CLIENT still emitted an edit into `Blueprint4 - Copy.pas`,
+    which is not in the closure, and nothing was reported as skipped. }
+  var Target: string:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
+  if Target = '' then Exit;
+  if not TDirectory.Exists(Target) then Exit;   { an explicit FILE target }
+  if Length(AEdits) = 0 then Exit;
+
+  InClosure:= TDictionary<string, Boolean>.Create;
+  Dropped  := TStringList.Create;
+  try
+    Dropped.Sorted:= True; Dropped.Duplicates:= dupIgnore; Dropped.CaseSensitive:= False;
+    for var Fid: Int64 in AStore.GetAllFileIds do
+      InClosure.AddOrSetValue(LowerCase(ExpandFileName(AStore.GetFilePath(Fid))), True);
+    Result:= nil;
+    for E in AEdits do
+      if InClosure.ContainsKey(LowerCase(ExpandFileName(E.FilePath))) then Result:= Result + [E]
+      else Dropped.Add(E.FilePath);
+    ADroppedFiles:= Dropped.ToStringArray;
+  finally
+    Dropped.Free;
+    InClosure.Free;
+  end;
+end;
+
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''): Integer;
@@ -8556,6 +8618,16 @@ begin
       end;
     end;
 
+    { See ScopeWalkEditsToClosure: a directory WALK must not write outside the
+      project, and this is the one place every edit builder has finished. }
+    var WalkDropped: TArray<string>:= nil;
+    Edits:= ScopeWalkEditsToClosure(AArgs, AStore, Edits, WalkDropped);
+    if Length(WalkDropped) > 0 then
+    begin
+      Writeln(ErrOutput, Format('drag-lint: %d file(s) were NOT rewritten -- a directory walk reached them, '
+        + 'but no project in this index compiles them. Name one explicitly to fix it anyway.', [Length(WalkDropped)]));
+      for var WD: string in WalkDropped do Writeln(ErrOutput, '  skipped: ' + WD);
+    end;
     if AArgs.AsJson or SameText(AArgs.Format, 'json') then
     begin
       { Structured per-finding output so an AI orchestrator can drive fixes
