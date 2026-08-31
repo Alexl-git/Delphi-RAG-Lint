@@ -1986,6 +1986,11 @@ function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIn
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
   APreprocess: Boolean; const APlatform: string); forward;
 
+{ Declared up here because the MANIFEST index path uses them well before the
+  single-root one does, and that is the path toolseindex-all.ps1 drives. }
+const RESOLVER_FP_KEY = 'resolver_fingerprint';
+function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
+
 /// <summary>
 /// Expands a compile closure into the full INDEX scope of a project: the closure
 /// itself, the sibling .dfm of every closure unit, and the project file(s).
@@ -2276,6 +2281,23 @@ begin
       a silently stale parse survives longest. }
     ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, AItem.Platform);
 
+    { RESOLVER STALENESS -- and this path needs it MORE than the single-root one,
+      not less. `index --all --only <Section>` is what tools\reindex-all.ps1
+      drives, so it is the path every project index is actually rebuilt through.
+      On 2026-08-30 it re-ran all 31 sections to pick up a resolve fix and the
+      calls pass executed in THREE of them, because scope is decided by changed
+      FILES and a changed resolver is not one. Putting the check only in DoIndex
+      would have left exactly that path unprotected. }
+    var ResolverStale: Boolean:= False;
+    var PrevRfp: string:= Store.GetMetaValue(RESOLVER_FP_KEY);
+    var CurRfp : string:= ResolverFingerprint(Store);
+    if (PrevRfp <> '') and (PrevRfp <> CurRfp) then
+    begin
+      ResolverStale:= True;
+      Writeln(Format('  Resolver changed since this DB was resolved (%s -> %s): re-deriving every edge.',
+                     [PrevRfp, CurRfp]));
+    end;
+
     // Apply walk filter from the resolved plan item.
     Indexer.SetWalkFilter(AItem.Filter);
 
@@ -2425,7 +2447,17 @@ begin
       edges existed to begin with, and this is the path `index --all` takes, so
       omitting it here would leave every manifest-driven reindex unable to repair
       a dropped or emptied call_edges. }
-    if (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or Store.CallEdgesNeedRebuild then
+    { A STALE RESOLVER VOIDS THE EDGES, so they are dropped rather than
+      re-derived in place. Two reasons, and the first is correctness: edges this
+      build would no longer produce must not survive because their file happened
+      not to change. The second is that ResolveCallTargets picks its own scope
+      from what changed, so without the clear it would run a SCOPED pass over
+      the handful of changed files and leave the rest of the database on the old
+      resolver -- which is precisely the 2026-08-30 failure, reproduced by the
+      fix meant to prevent it. ClearCallEdges also nulls refs.symbol_id. }
+    if ResolverStale then Store.ClearCallEdges;
+    if (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
+       Store.CallEdgesNeedRebuild or ResolverStale then
       Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
     else
       Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
@@ -3011,7 +3043,6 @@ begin
 end;
 
 const INDEXER_FP_KEY  = 'indexer_fingerprint';
-const RESOLVER_FP_KEY = 'resolver_fingerprint';
 
 { The identity of what this build DERIVES from parses it already holds --
   call_edges, type_ancestors, type_helpers, unit_uses targets.
@@ -3670,6 +3701,10 @@ begin
       derives edges did. Without it the skip message below -- "no file changed,
       so every call edge already holds" -- is false in exactly the case nobody
       can see. }
+    { See the manifest path for why a stale resolver DROPS the edges rather than
+      re-deriving in place: otherwise the pass scopes itself to changed files and
+      leaves the rest of the database on the old resolver. }
+    if ResolverStale then Store.ClearCallEdges;
     if (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
        (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or ResolverStale then
       Store.ResolveCallTargets(OpenLibraryStores(AArgs)) { v14 (D5) + v21 cross-DB }

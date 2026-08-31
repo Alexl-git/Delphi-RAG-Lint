@@ -181,7 +181,7 @@ narrows to resolved calls only).
 | Column | Type | Meaning |
 |---|---|---|
 | `id` | INTEGER PK | Referenced by `call_edges.ref_id` |
-| `symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE SET NULL) | The symbol being referenced, when resolved. **NULL IN EVERY INDEX TODAY** -- see the note under the join list below |
+| `symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE SET NULL) | The symbol being referenced, when the resolver is CERTAIN which one it is. Populated for `call` and `member-access` refs only -- see the note under the join list below |
 | `file_id` | INTEGER FK -> `files.id` | File the reference occurs in |
 | `kind` | TEXT | See value domain below |
 | `name_text` | TEXT | Verbatim identifier text at the reference site |
@@ -196,23 +196,32 @@ references specifically).
 Join: `refs.symbol_id -> symbols.id`; `refs.file_id -> files.id`;
 `refs.enclosing_symbol_id -> symbols.id`.
 
-> **`refs.symbol_id` IS NOT POPULATED. The first join above matches ZERO rows.**
-> Measured 2026-08-30 on three indexes freshly built with extractor
-> 1.9.0-alpha: 0 of 543,482 rows on ORM3 CLIENT, 0 of 230,064 on SERVER, 0 of
-> 148,340 on this repo's own index -- across all eight `kind` values, not just
-> some of them. `call_edges` IS populated, so the resolve pass runs; it simply
-> never writes back to `refs`.
+> **`refs.symbol_id` IS PARTIAL, AND THE PART MATTERS.** It was NULL on every
+> row of every index until 2026-08-31 -- 0 of 543,482 on ORM3 CLIENT, all eight
+> `kind` values -- while the join above was documented as though it worked.
+> `ResolveCallTargets` now writes it from the same resolution that produces a
+> call edge.
 >
-> **Consequence for anyone querying `refs`: you are name-joining, whether you
-> meant to or not**, and a name join cannot separate two same-named symbols.
-> The identity that IS available is `refs.receiver_text` (what a qualified ref
-> hangs off; ~18% of rows) and `refs.enclosing_symbol_id` (which routine a bare
-> ref sits in; ~91%). Between them they decide about 91% of refs.
+> **Only a CERTAIN edge earns one.** An ambiguous edge means the resolver found
+> several plausible targets and declined to choose; writing one of them here
+> would launder a guess into a fact, and the column's entire value is that a
+> non-NULL means *this IS the declaration*.
 >
-> Tracked as `docs/INBOX-refs-symbol-id-never-populated.md`. Whether the column
-> SHOULD be populated, or the schema should say name-keyed and mean it, is an
-> open design question -- but the join is documented above and does not work, so
-> it is written down here rather than rediscovered.
+> **Only `call` and `member-access` refs have one at all.** `read`, `write` and
+> `type_use` are still NULL: the resolver knows a call's target because it is
+> already computing it, but resolving the others is a new problem, not a
+> write-back. Measured on this repo's own index: call 5,880 of 30,739,
+> member-access 1,713 of 27,594, everything else 0.
+>
+> **So a NULL still means "not resolved", never "no such symbol"**, and a query
+> that must cover every ref still has to name-join. The other identity columns
+> remain the broader answer: `refs.receiver_text` (what a qualified ref hangs
+> off, ~18% of rows) and `refs.enclosing_symbol_id` (which routine a bare ref
+> sits in, ~91%).
+>
+> Writing this column is a RESOLVE-pass change, so it is stamped by
+> `schema_meta.resolver_fingerprint`: an index built before it re-derives its
+> edges on the next `index` run rather than keeping the old ones silently.
 
 ### 2.4 `call_edges`
 

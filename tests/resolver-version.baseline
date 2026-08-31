@@ -33,4 +33,15 @@
 #   indexer fingerprint uses -- an absent stamp adopts the current one silently
 #   rather than forcing a mass re-resolve on first run.
 
-1.0.0-alpha|ae753fb79518fac5b932d8e9f6d78fc0fce625248ae44c846ac4ae6a57b805be
+# 2026-08-31: 1.0.0-alpha -> 1.1.0-alpha. UpsertCallEdge now writes
+#   refs.symbol_id for a CERTAIN call edge, and ClearCallEdges nulls the column
+#   it wrote. That column has been NULL on every row of every index while
+#   INDEX-SCHEMA.md documented a join on it, so every consumer of `refs` was
+#   name-joining whether it meant to or not. This is a genuine change to what
+#   the resolve pass DERIVES, so every index owes one re-resolve -- minutes,
+#   not the ~5 hours a re-parse would cost, which is the entire reason this
+#   stamp is separate from DRAGLINT_EXTRACTOR_VERSION.
+#
+#   Superseded: 1.0.0-alpha|ae753fb79518fac5b932d8e9f6d78fc0fce625248ae44c846ac4ae6a57b805be
+
+1.1.0-alpha|790d7011021acd549cc6420b02884df7470eef4c6a9ece2163405a6fdac3dfa9

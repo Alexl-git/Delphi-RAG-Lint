@@ -77,7 +77,7 @@ const
   /// <para>The surface is scoped BY FUNCTION, in tests\resolver-surface.txt, and
   /// guarded by tests\autotest\run_resolver_version_guard.ps1.</para>
   /// </remarks>
-  DRAGLINT_RESOLVER_VERSION = '1.0.0-alpha';
+  DRAGLINT_RESOLVER_VERSION = '1.1.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

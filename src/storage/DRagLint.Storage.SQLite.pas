@@ -85,6 +85,7 @@ type
       FQInsertTrigram        : TFDQuery     ;
       FQInsertRef            : TFDQuery     ;
       FQInsertCallEdge       : TFDQuery     ;
+      FQSetRefSymbol         : TFDQuery     ;
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -2800,6 +2801,7 @@ begin
   FQInsertTrigram.Free;
   FQInsertRef.Free;
   FQInsertCallEdge.Free;
+  FQSetRefSymbol  .Free;
   FQDeleteFileSymbols.Free;
   FQDeleteFileRefs.Free;
   FQUpsertDiBinding.Free;
@@ -3536,6 +3538,10 @@ begin
   FQInsertCallEdge:= NewQuery(
     'INSERT OR REPLACE INTO call_edges(ref_id, target_symbol_id, confidence, receiver_type_symbol_id) ' +
     'VALUES (:rid, :tid, :conf, :rtid)');
+  { refs.symbol_id, written from the SAME resolution that produces a call edge.
+    See UpsertCallEdge for why only CERTAIN edges earn one. }
+  FQSetRefSymbol:= NewQuery(
+    'UPDATE refs SET symbol_id = :sid WHERE id = :rid');
   FQDeleteFileSymbols:= NewQuery('DELETE FROM symbols WHERE file_id = :fid');
   FQDeleteFileRefs   := NewQuery('DELETE FROM refs WHERE file_id = :fid'   );
   FQUpsertDiBinding:= NewQuery(
@@ -4090,11 +4096,49 @@ begin
   if AEdge.ReceiverTypeSymbolId > 0 then FQInsertCallEdge.ParamByName('rtid').AsLargeInt:= AEdge.ReceiverTypeSymbolId
   else FQInsertCallEdge.ParamByName('rtid').Clear;
   FQInsertCallEdge.ExecSQL;
+
+  { AND WRITE THE IDENTITY BACK ONTO THE REF. `refs.symbol_id` has been NULL on
+    every row of every index -- 0 of 543,482 on ORM3 CLIENT, all eight ref
+    kinds -- while INDEX-SCHEMA.md documented `Join: refs.symbol_id ->
+    symbols.id` as though it worked. Every consumer of `refs` was therefore
+    name-joining whether it meant to or not, and a name join cannot separate two
+    same-named symbols. It is also why GetReferencedSymbolIds returns NOTHING,
+    so the ID half of unused-public-symbol and unused-private-member has been
+    dead code.
+
+    ONLY 'certain' EDGES EARN ONE, and that is the whole correctness argument.
+    An AMBIGUOUS edge means the resolver found several plausible targets and
+    declined to choose; writing one of them into refs.symbol_id would launder a
+    guess into a fact, and the column's whole value is that a non-NULL means
+    "this IS the declaration". A ref with no certain target keeps NULL and its
+    consumers keep name-joining, exactly as today.
+
+    SCOPE: this covers CALL refs, because that is where the resolver already
+    knows the answer -- the row is being written anyway. type_use, read, write
+    and member-access remain NULL; resolving those is a genuinely new problem
+    and not a write-back. Do not read a non-NULL symbol_id as "all refs are
+    resolved now". }
+  if SameText(AEdge.Confidence, 'certain') and (AEdge.TargetSymbolId > 0) then
+  begin
+    FQSetRefSymbol.ParamByName('sid').AsLargeInt:= AEdge.TargetSymbolId;
+    FQSetRefSymbol.ParamByName('rid').AsLargeInt:= AEdge.RefId;
+    FQSetRefSymbol.ExecSQL;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.ClearCallEdges;
 begin
   FConn.ExecSQL('DELETE FROM call_edges');
+  { AND THE IDENTITIES THOSE EDGES PUT ON THE REFS. UpsertCallEdge writes
+    refs.symbol_id for a certain edge, so dropping the edges without clearing
+    the column would leave a ref pointing at a declaration this run has decided
+    it can no longer vouch for -- stale identity is worse than none, because a
+    non-NULL symbol_id is read as "this IS the declaration".
+    Unconditional rather than scoped to the deleted edges: call refs are the
+    only writers of this column today, so "clear it all" and "clear what the
+    edges wrote" are the same set, and the cheaper statement cannot drift out
+    of step with the delete above. }
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL');
 end;
 
 { The kinds a call receiver's type can resolve TO, spelled as the stored kind
