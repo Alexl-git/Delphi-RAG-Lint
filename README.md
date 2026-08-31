@@ -695,7 +695,7 @@ CLI-only verbs).
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
 external `.scm`). As of v1.7.0-alpha: **178 rules across 16 categories -- 124
-built-in and 54 external `.scm`, 152 enabled by default, and 22 with an
+built-in and 54 external `.scm`, 154 enabled by default, and 22 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |
@@ -714,6 +714,26 @@ auto-fix.** The table below is a small sample of the built-in rules:
 | `boolean-comparison-true` | info | `X = True` or `X = False` -- redundant |
 | `redundant-as-tobject` | info | `(X as TObject)` -- every object is already TObject |
 | `inherited-bare` | info | Bare `inherited;` -- verify it calls the right ancestor |
+
+#### Coupling rules
+
+Newest additions, and a different kind of question: these ask which unit really
+depends on which, and why, rather than commenting on the code in front of you.
+They run project-wide, so they only fire under `lint-all` -- `lint <file>` is a
+documented subset that never reaches them.
+
+| Rule id | Severity | Description |
+|---------|----------|-------------|
+| `global-only-uses-edge` | info | A global variable is the ONLY link from one unit to another -- relocating it (or injecting it, when it is interface-typed) deletes the `uses` edge |
+| `uses-global-census` | info | How many of a used unit's globals and consts this unit actually draws -- acknowledge a travels-together pair with `// dl:census-ok <unit>` |
+| `duplicate-global-decl` | warning | The same name declared at interface level in two or more units -- const, var, type, record, class, interface, enum or routine -- so which one compiles depends on `uses` order |
+| `with-hides-outer-symbol` | warning | A bare name inside a `with` body binds to the with-target while an outer scope declares the same name -- the compiler never warns |
+| `stat-gated-destructive` | warning | Destructive act gated on a file-existence check (a failed stat answers False) |
+
+`global-only-uses-edge` and `uses-global-census` are ON by default but each
+costs a full `refs` scan (0.92 s and 1.26 s on a 144 MB index), so both stay
+behind an opt-in gate that now defaults to keeping them -- filtering them out
+after the fact would hide the cost rather than avoid it.
 
 Drop custom `.scm` + `.json` pairs in the `rules/` directory; see
 [rules/README.md](rules/README.md) for the schema.

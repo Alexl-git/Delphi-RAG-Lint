@@ -59,8 +59,8 @@ The foundation. Everything below that says *(index)* reads what this produces.
 
 ## Linting
 
-**178 rules. 22 have an auto-fix. 152 are on by default.**
-119 are built-in checks; 54 are external tree-sitter `.scm` rules you can read
+**178 rules. 22 have an auto-fix. 154 are on by default.**
+124 are built-in checks; 54 are external tree-sitter `.scm` rules you can read
 and extend in `rules\`.
 
 Run `drag-lint rules` for the always-current catalogue, or
@@ -68,13 +68,13 @@ Run `drag-lint rules` for the always-current catalogue, or
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 51 | 5 |
+| bug-patterns | 53 | 5 |
 | dead-code | 12 | 6 |
 | complexity | 11 | - |
 | refactoring | 11 | - |
 | naming | 10 | 8 |
 | platform | 10 | - |
-| project-wide | 10 | - |
+| project-wide | 13 | - |
 | security | 10 | - |
 | data-flow | 9 | - |
 | metrics | 8 | - |
@@ -84,7 +84,15 @@ Run `drag-lint rules` for the always-current catalogue, or
 | documentation | 5 | 2 |
 | firedac | 3 | - |
 | review-markers | 2 | - |
-| **Total** | **173** | **22** |
+| **Total** | **178** | **22** |
+
+**Newest -- the coupling rules.** `global-only-uses-edge` (a global variable is
+the only reason unit A depends on unit B, so relocating it deletes the `uses`
+edge), `uses-global-census` (how heavy that edge is), `duplicate-global-decl`
+(the same interface-level name in two units, so `uses` order decides which one
+compiles), `with-hides-outer-symbol` and `stat-gated-destructive`. The first
+three are `project-wide` and therefore only reachable through `lint-all` --
+`lint <path>` is a genuine subset and never runs them.
 
 Scopes:
 

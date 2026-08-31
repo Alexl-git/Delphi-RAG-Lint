@@ -3,6 +3,157 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.8.0-alpha -- 2026-08-31
+
+**The release where the linter learned to ask what a dependency actually is.**
+142 commits since v1.7.0-alpha. Five new rules, and not one of them is about
+style: they ask which unit really depends on which, and why. Underneath them the
+extractor stopped losing whole classes of reference that the compiler resolves
+without difficulty -- a gap that had let a "safe to delete" check clear a const
+the build needed.
+
+**No schema change.** `SCHEMA_VERSION` is 21 before and after.
+**178 rules across 16 categories**, 22 auto-fixable.
+
+> ### ONE FULL RE-PARSE IS OWED.
+> `DRAGLINT_EXTRACTOR_VERSION` moved **1.6.0-alpha -> 1.9.0-alpha** over three
+> bumps in this window, so every index re-parses once on its first run under this
+> build. The charge is for real extraction changes -- references that were being
+> dropped -- and not for the version number; the split introduced in v1.7.0 is
+> what keeps that difference legible. `tools\reindex-all.ps1` runs the libraries
+> and the project sections in parallel, and per-file resume means an interrupted
+> walk continues rather than restarting.
+
+### Extraction: references the index was silently dropping
+
+Each of these is a reference the compiler resolves and the index did not hold,
+which means `find-callers` and every delete-safety query answered "nobody uses
+this" about a name that was load-bearing. They were found by four different
+routes, and one of them was a broken build.
+
+* **A const in a TYPE position emitted no ref.** `TArr = array [1..CBound] of
+  Integer`, `F: array [0..CBound] of Byte`, `TStr = string[CLen]`,
+  `TSub = 0..CHigh` -- all silent. The filed note called it "array bounds"; the
+  measurement widened it before any code was written, because case labels and
+  const initialisers look like the same family and are fine. It surfaced when an
+  owner-ruled const deletion was pre-checked against `refs`, came back SAFE, and
+  broke the ORM3 build with E2003 plus two cascades.
+* **`with A, B do` emitted `A` only.** Slots 2..n of a multi-entity `with` were
+  dropped entirely.
+* **The library expression of an `external` directive** emitted nothing.
+* **Array ELEMENT types** in a type declaration or a global var
+  (`TArrT = array [0..3] of TPayload`) emitted no type use, though the same
+  declaration as a record or class field did.
+
+Measured across three corpora, the batch adds 0.05-0.07% more refs and removes
+none -- 361 new rows on ORM3 CLIENT, 116 on SERVER, 107 on the self-index.
+
+### Resolution: edges that existed but bound to nothing
+
+* **Helper-method calls now resolve.** 887 of 1,118 helper-member call refs bind
+  to a real target, up from **zero**. A record or class helper's methods were
+  invisible to the call graph.
+* **An ENUM-typed receiver can now be typed**, which is what makes enum helpers
+  resolve at all.
+* **A call through a plain type alias** (`TFoo = TBar`) now resolves to a real
+  edge instead of stopping at the alias.
+* **The lint walk resolves conditionals** the way the index side always did, so
+  the two no longer disagree about which branches exist.
+
+### New rules: coupling, not style
+
+| rule | question it asks |
+|---|---|
+| `global-only-uses-edge` | is an interface-section global the ONLY reason A depends on B? Then relocating it deletes the uses edge. |
+| `uses-global-census` | how HEAVY is a uses edge -- how many of B's globals does A actually touch? Deliberately not the same question as the one above. |
+| `duplicate-global-decl` | the same name declared at interface level in two units -- const, var, type, record, class, interface, enum or routine -- so which one compiles depends on uses order. |
+| `with-hides-outer-symbol` | a `with` block silently shadowing an outer name. Found ORM3 `Assign` methods that copy nothing. |
+| `stat-gated-destructive` | requested by DataCopy: a destructive act gated on a stat that can go stale between the check and the act. |
+
+`global-only-uses-edge` names the cure precisely rather than always saying
+"inject": only an INTERFACE-typed global earns that word, because a Boolean
+cannot be registered in a container. Its design-time DFM demotion is a blessing,
+so it now requires positive evidence -- a form binding to a datamodule's style or
+image list is legitimate; binding to its query or event handler is the finding.
+
+**`duplicate-global-decl` now covers every kind `uses` can put into scope**, not
+just `const` and `var`. Its own message -- *which one compiles depends on uses
+order* -- is exactly as true of a type, and the report that prompted this was
+about importing a global TYPE that already existed elsewhere. Measured on ORM3
+before widening: the rule saw 10 of 28 duplicated interface names on CLIENT and
+10 of 26 on SERVER. It immediately found `TARecTDistr` declared as
+`array [1..500]` in one unit and `array [1..100]` in another, and `Bool` as
+`Bytebool` against `Longbool` in a vendored library.
+
+Two guards came with it. `Register` is excluded by name -- it is Delphi's
+design-time registration protocol, declared in 134 ORM3 units, and the finding
+listed all 134 paths in one message. And the site enumeration is now capped at
+six with an "and N more" tail: a report line nobody can read is the same defect
+as a rule that floods, it just arrives as one row instead of many.
+
+### Performance
+
+* **Definite-assignment gen-set memoised** -- `lint-all` 223.5 s -> 182.2 s.
+* **A `.scm` query is skipped when the file cannot contain what it matches** --
+  33% off the query-rule pass.
+* **A run that only ADDS type names scopes the call-resolve** instead of
+  rewalking the whole database -- 4.2x on the measured corpus -- and a prune or
+  eviction no longer throws that scoping away.
+* **Code-lens caller counts run over the warm LSP**: 137 process spawns become
+  none.
+
+Two of these exist because per-solve counters replaced an aggregate ratio that
+was hiding the decision. The remaining target is now a single function.
+
+### CLI
+
+* `--library-db`, so the cross-store ancestry bridge is testable at all.
+* `--stand-in-for`, and the IDE finally passes a `--db`.
+* `query --name-like`, substring search over symbol names.
+* `query type-usage` -- which of these type names does this file reference?
+* `schema --format json` now carries what a column MEANS, not just its type.
+* `index --all` rolls up its failed sections by name instead of burying them.
+* `lint-all` gained a cycles SECTION that states the outcome, including the
+  negative one.
+* The deprecated `scan-all` verb is retired.
+* `<verb> --help` FATALed on every verb, and `-h` was worse. Both fixed.
+* `serve` warns when more than one `--db` is given, and names the ones ignored.
+* `-Jobs N` on the battery driver, default 1, with a serial quarantine.
+
+### The IDE plugin and LSP
+
+* **Per-severity icons in the editor gutter**, drawn rather than rasterised, and
+  on the Diagnostics rows in place of the `[E] ` text tag.
+* **The engine is released so it can be rebuilt with the IDE open** -- previously
+  a running IDE blocked every build.
+* **`draglint/usages` answers Find Usages without a process spawn.**
+* The VS Code client runs a private engine copy, so it too stops blocking builds.
+* A hover in an unindexed file no longer answers from the LIBRARY index.
+* The Options page rewrote `drag-lint.json` minified and with a BOM. Fixed.
+
+### Fixes worth naming
+
+* **`unused-unit-in-uses` reported ZERO everywhere** -- both layers were wrong.
+* **A generic export needs stripping on BOTH sides** -- 19 false positives.
+* **`unsafe-shellexecute` cried CWE-78 at Explorer and missed real injection.**
+  A plain `ShellExecute` open is now silent, by owner ruling.
+* **Config discovery is anchored to the FILE and to the `--db` path**, not to
+  whatever the current directory happened to be.
+* **`absolute` aliasing is modelled** as one storage cell and one slot.
+* **`too-many-exit-points` counted `Exit(Value)` twice.**
+* **A `.dpr` walk needs the `.dproj` search paths**, or reconcile reports false
+  EXTRA units.
+* **A build can no longer kill a running reindex** -- it once cost a five-hour
+  job.
+
+### Documentation and guards
+
+* The backlog was consolidated from four disagreeing places into one enumerated
+  index with machine-readable statuses, guarded against drift.
+* `index` warns when the index no longer describes the source on disk.
+* The intermittent FK violation on incremental reindex now names the failing
+  edge when it fires.
+
 ## v1.7.0-alpha -- 2026-08-23
 
 **The release where the IDE became the product surface.** v1.5.0-alpha and

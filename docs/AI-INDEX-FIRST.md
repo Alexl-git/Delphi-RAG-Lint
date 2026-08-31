@@ -104,5 +104,5 @@ not yet shipped.
   Third Party > drag-lint** configures/triggers the same behavior --
   auto-index on project open, auto-reindex on file save, scan-libraries
   on/off, extra index DB paths, auto-discover sibling DBs, include-library-DB
-  toggle. Useful alongside `scan-all` for anyone driving drag-lint
+  toggle. Useful alongside `index --all` for anyone driving drag-lint
   interactively rather than purely from a CLI-only agent loop.
