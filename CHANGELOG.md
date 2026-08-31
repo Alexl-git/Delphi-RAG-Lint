@@ -13,7 +13,7 @@ without difficulty -- a gap that had let a "safe to delete" check clear a const
 the build needed.
 
 **No schema change.** `SCHEMA_VERSION` is 21 before and after.
-**178 rules across 16 categories**, 22 auto-fixable.
+**178 rules across 16 categories**, 23 auto-fixable.
 
 > ### ONE FULL RE-PARSE IS OWED.
 > `DRAGLINT_EXTRACTOR_VERSION` moved **1.6.0-alpha -> 1.9.0-alpha** over three
@@ -23,6 +23,13 @@ the build needed.
 > what keeps that difference legible. `tools\reindex-all.ps1` runs the libraries
 > and the project sections in parallel, and per-file resume means an interrupted
 > walk continues rather than restarting.
+
+> ### AND ONE RE-RESOLVE, WHICH IS NOT THE SAME CHARGE.
+> `DRAGLINT_RESOLVER_VERSION` is new in this release and stands at
+> **1.1.0-alpha**, so an index stamped `r=1.0.0-alpha` re-derives its edges once.
+> That costs **minutes**, not hours, and it happens automatically on the next
+> `index` run -- or on demand with `index <dir> --db <db> --resolve-only`. The
+> whole point of the second stamp is that this is no longer priced as a re-parse.
 
 ### Extraction: references the index was silently dropping
 
@@ -111,6 +118,94 @@ The acknowledgement is now `// dl:unit <unit> accepted`, which reads better in a
 uses clause; `// dl:census-ok <unit>` keeps working, because an acknowledgement
 someone has already written must not stop working when the wording improves.
 
+### `exceptions-sync`: bare raises become named classes
+
+`raise Exception.Create('...')` gives every failure in a codebase the same type,
+so no caller can catch one without catching all of them. This release turns that
+into a two-part workflow, and the split is the design rather than an accident of
+where the code sat.
+
+```
+exceptions-sync --db <db> [--config <cfg>] [--apply] [--json]   -- dry run by default
+lint <f> --db <db> --fix --fix-rule raise-bare-exception [--apply]
+```
+
+* **The unit WRITER is a verb**, because its input is the project-wide harvested
+  message set and its output is one file -- neither of which is a per-finding
+  fix-it.
+* **The call-site rewrite is a fix-it** and stays on `lint --fix`, so it remains
+  reachable as an IDE code action. `raise-bare-exception` joins the auto-fixable
+  set, 22 -> 23.
+
+**The persisted map is the unit itself.** Each generated declaration carries its
+raw message in a same-line `//` comment, and the normalised form of that comment
+is the key -- so a human can rename a mediocre generated class and keep its
+binding. A `//` comment and never a brace one: a message containing `}` would
+end a brace comment, and writing this unit's own header tripped exactly that
+trap.
+
+Two defects were found by running `--apply` twice against ORM3, and neither was
+reachable from a fixture:
+
+* **A message ending in a space could not survive its own read-back.** The
+  comment is written verbatim and read back with `Trim()`, and 11 of ORM3's 78
+  real messages end in a space -- so the second run rewrote the unit while
+  correctly reporting `0 class(es) added`. Every message in the fixture was tidy.
+  Now canonicalised at write time.
+* **A configured ancestor declared in ANOTHER unit never reached the `uses`
+  clause**, so the generated unit did not compile.
+
+`--json` emits one document on stdout with the prose on stderr, so the verb is
+scriptable without parsing English.
+
+### Staleness that could not be detected
+
+`DRAGLINT_EXTRACTOR_VERSION` answers *"would this build PARSE bytes
+differently?"* and a bump costs a ~5 hour re-parse. The resolve pass asks
+*"would this build DERIVE different edges from parses it already holds?"* and its
+remedy is minutes. One stamp cannot answer both, and measured against real
+history it got both wrong **in opposite directions**: 19 resolve-only commits
+each demanded a full re-parse, while 42 resolve-write commits -- one every 2.2
+days -- moved nothing and left every index silently stale.
+
+* **`DRAGLINT_RESOLVER_VERSION`**, scoped by FUNCTION rather than by directory,
+  because no line through the tree separates the two questions. The manifest is
+  derived from what each routine WRITES, then closed over the callees the autodoc
+  facts already record -- not from a name regex. Eleven exclusions each carry a
+  reason.
+* **`schema_meta.resolver_fingerprint`**, written beside `indexer_fingerprint`
+  so it rides the same guarantee: only a run whose resolve completed stamps it.
+  A mismatch JOINS the terms that force a re-resolve rather than replacing any of
+  them -- it is the one that fires when nothing on disk changed but the code
+  deriving edges did.
+* **`index --resolve-only`** -- re-derive every edge without walking a single
+  file. Both halves matter and either alone would pass for the wrong reason: it
+  must not walk (or it is `index` wearing a flag), and it must still resolve
+  (with the walk skipped, every other term in the resolve gate is false).
+
+This is not theoretical. On 2026-08-30 a sequence re-ran all 31 project sections
+specifically to pick up a resolve fix, and the calls pass executed in **three of
+them** -- incremental scope is decided by changed FILES, and a changed resolver
+is not a changed file.
+
+### `refs.symbol_id` is populated
+
+`refs.symbol_id` was NULL on **every row of every index** -- 0 of 543,482 on ORM3
+CLIENT, across all eight ref kinds -- while `INDEX-SCHEMA.md` documented
+`refs.symbol_id -> symbols.id` as a working join. Every consumer was name-joining
+whether it meant to or not, and a name join cannot separate two same-named
+symbols. It is also why `GetReferencedSymbolIds` returned nothing, leaving the ID
+half of `unused-public-symbol` and `unused-private-member` as dead code nobody
+had noticed. The documented join now matches 7,593 rows on this repo's index,
+against 0 before.
+
+Two limits, both deliberate and both stated in the schema doc so the column is
+not over-trusted: **only `certain` edges** (writing one of several plausible
+targets would launder a guess into a fact), and **only `call` and
+`member-access` refs** -- `read`/`write`/`type_use` remain 0, because the
+resolver knows a call's target only because it is already computing it. A NULL
+still means "not resolved", never "no such symbol".
+
 ### Performance
 
 * **Definite-assignment gen-set memoised** -- `lint-all` 223.5 s -> 182.2 s.
@@ -147,6 +242,14 @@ was hiding the decision. The remaining target is now a single function.
 * **The engine is released so it can be rebuilt with the IDE open** -- previously
   a running IDE blocked every build.
 * **`draglint/usages` answers Find Usages without a process spawn.**
+* **`lsp --proxy --trace <file>`** records a live LSP session without altering
+  it. Phase 1a of the merge-proxy plan, and a prerequisite rather than a nicety:
+  Phase 1b registers the relay as the IDE's Pascal language server, the step
+  where a drag-lint bug stops costing drag-lint features and starts costing all
+  of Code Insight. The assertion that matters is not that the trace captures
+  things -- it is that it changes nothing, so the guard feeds identical input
+  through the proxy with and without `--trace` and requires the relayed bytes to
+  be byte-identical.
 * The VS Code client runs a private engine copy, so it too stops blocking builds.
 * A hover in an unindexed file no longer answers from the LIBRARY index.
 * The Options page rewrote `drag-lint.json` minified and with a BOM. Fixed.
@@ -165,6 +268,17 @@ was hiding the decision. The remaining target is now a single function.
   EXTRA units.
 * **A build can no longer kill a running reindex** -- it once cost a five-hour
   job.
+* **A directory walk no longer writes to -- or reports on -- files no project
+  compiles.** Pointing `lint` at a folder linted everything in it, including
+  units belonging to other projects; with `--fix --apply` it EDITED them. Owner
+  ruling, verbatim: *"they are completely unrelated and might belong to some
+  other project and reading or modifying those might break something else."*
+  The first attempt at this filter was a no-op that looked installed -- it read
+  the argument that `check-unit` and `ghost-check` use, while `lint` takes its
+  path from a different one -- and was caught by checking which files actually
+  received edits, not by the absence of a skip message.
+* **`lint --fix` cached source lines per FINDING rather than per FILE**, so a
+  file with many findings was re-read once per finding.
 
 ### Documentation and guards
 
@@ -173,6 +287,14 @@ was hiding the decision. The remaining target is now a single function.
 * `index` warns when the index no longer describes the source on disk.
 * The intermittent FK violation on incremental reindex now names the failing
   edge when it fires.
+* **The docs-sync guard could not see a claim that WRAPS.** `README.md` carried
+  "152 enabled by default" against a live 154, with the number and the phrase on
+  different lines, so the per-line scan never saw it -- a probe breaking the
+  figure to 999 stayed GREEN. Each doc is now scanned whole (newlines folded to
+  spaces, offsets preserved so line numbers survive), every pattern self-tests
+  that it matches at least one live claim, and coverage widened from 17 claims to
+  32 -- every count `rules --json` can answer, including per-category totals and
+  the built-in/external split.
 
 ## v1.7.0-alpha -- 2026-08-23
 

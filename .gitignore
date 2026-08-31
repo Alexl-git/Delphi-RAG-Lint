@@ -105,6 +105,7 @@ docs/wiki-featuremap.tsv
 circular-demo/*.res
 docs/PLAN-*
 docs/NEXT-SESSION-PLAN-*
+docs/PENDING-ISSUES-*
 docs/QUESTIONS-*
 docs/TRIAGE-*
 docs/BACKLOG-*
