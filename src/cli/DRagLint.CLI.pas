@@ -388,6 +388,7 @@ type
     LspProxy    : Boolean; // --proxy
     LspDelphiExe: string;  // --delphi-lsp <path>  ('' = resolve from the installed Studio)
     LspTraceFile: string;  // --trace <file>       ('' = no trace, the default)
+    ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
     // v0.47: ghost-check -- compile the project with one unit's content replaced
     // by an unsaved buffer, with a guaranteed restore. Track 3 sub-project B
     // Task 2: convert-apply's --unit (the .pas being converted) ALSO reuses
@@ -615,6 +616,8 @@ begin
   Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>]: relay in front of RAD Studio''s DelphiLSP,');
   Writeln('                               so registering drag-lint as the Code Insight server keeps the compiler front end.');
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
+  Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers from the STORED parses; skips the walk entirely --');
+  Writeln('                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
@@ -1278,6 +1281,7 @@ begin
     else if A = '--proxy' then Result.LspProxy:= True
     else if (A = '--delphi-lsp') and (i < ParamCount) then begin Inc(i); Result.LspDelphiExe:= ParamStr(i); end
     else if (A = '--trace') and (i < ParamCount) then begin Inc(i); Result.LspTraceFile:= ParamStr(i); end
+    else if A = '--resolve-only' then Result.ResolveOnly:= True
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
       vscode-languageclient appends a transport flag to argv from the client's
       `transport:` declaration (node/main.js: `args.push('--stdio')`), so the
@@ -3514,12 +3518,30 @@ begin
   begin
     StartTime:= Now;
     if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', Now), Interval]))
-    else Writeln('Indexing...');
-    for F in Folders do
-    begin
-      if TFile.Exists(F) then Indexer.IndexFile(F)
-      else Indexer.IndexFolder(F, True);
-    end;
+    else if not AArgs.ResolveOnly then Writeln('Indexing...');
+    { --resolve-only: re-derive the edges from parses the index ALREADY holds,
+      without walking a single file.
+
+      The cheap remedy for a resolver_fingerprint mismatch. A resolve change
+      costs minutes to redo; the ~5 hours a re-parse costs buys nothing, because
+      not one stored parse became wrong -- only the edges derived from them did.
+      The walk is skipped rather than made a no-op so the intent is legible in
+      the output, and so a corpus whose files ARE newer is not silently
+      re-parsed by a flag that promised not to.
+
+      It is deliberately NOT a synonym for a normal run: `index <dir>` on an
+      unchanged corpus already skips every file (0.05s for 22) and then
+      resolves, so this exists for the case where you want the edges rebuilt and
+      explicitly do NOT want the walk -- a huge library index, or a corpus
+      mid-edit whose partial saves you do not want indexed yet. }
+    if AArgs.ResolveOnly then
+      Writeln('Resolve-only: skipping the walk; re-deriving edges from the stored parses.')
+    else
+      for F in Folders do
+      begin
+        if TFile.Exists(F) then Indexer.IndexFile(F)
+        else Indexer.IndexFolder(F, True);
+      end;
     { --prune: drop rows for source that has been deleted, moved or renamed since
       the last run. The incremental walk adds and refreshes but has no notion of
       a file that went away, so without this the linter goes on reporting against
@@ -3707,9 +3729,14 @@ begin
     { See the manifest path for why a stale resolver DROPS the edges rather than
       re-deriving in place: otherwise the pass scopes itself to changed files and
       leaves the rest of the database on the old resolver. }
-    if ResolverStale then Store.ClearCallEdges;
+    { --resolve-only joins ResolverStale here for the same reason it joins the
+      clear above: with the walk skipped ParsedFiles is 0, so without this the
+      flag would announce a re-derive and then skip it -- the one outcome worse
+      than not having the flag. }
+    if ResolverStale or AArgs.ResolveOnly then Store.ClearCallEdges;
     if (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
-       (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or ResolverStale then
+       (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or ResolverStale or
+       AArgs.ResolveOnly then
       Store.ResolveCallTargets(OpenLibraryStores(AArgs)) { v14 (D5) + v21 cross-DB }
     else
       Writeln('resolve: calls skipped -- no file changed, so every call edge already holds.');
