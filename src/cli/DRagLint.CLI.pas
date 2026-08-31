@@ -1540,6 +1540,11 @@ end; // procedure
   would make src\storage depend on src\index, and it would fire during indexing.
   Universal coverage is also exactly the ruling's open "where does the gate
   live" question, which is the owner's to answer, not a side effect of this. }
+{ Declared up here because the MANIFEST index path uses them well before the
+  single-root one does, and that is the path tools\reindex-all.ps1 drives. }
+const RESOLVER_FP_KEY = 'resolver_fingerprint';
+function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
+
 var GFreshnessNoted: Boolean = False;
 
 procedure NoteIndexFreshnessOnce(const AStore: ISymbolStore; const ADbPath: string);
@@ -1549,6 +1554,31 @@ begin
   GFreshnessNoted:= True;
   Note:= FreshnessNote(ProbeIndexFreshness(AStore), ADbPath);
   if Note <> '' then Writeln(ErrOutput, Note);
+
+  { THE RESOLVE PASS IS A SECOND FRESHNESS QUESTION, AND IT HAD NO VOICE.
+    ProbeIndexFreshness answers "was this DB parsed by the current parser?" and
+    cannot answer "were its edges derived by the current resolver?" -- two
+    different questions with two different remedies (hours vs minutes).
+
+    This is the residual of INBOX-resolve-pass-staleness-has-no-fingerprint, and
+    2026-08-31 is why it earned its place: `index --all` skipped the resolve on
+    25 of 31 sections and stamped them current, and NOTHING SAID SO. An operator
+    watching for a re-resolve had no way to ask whether one was owed. The
+    detection is fixed; this makes the answer visible.
+
+    DELIBERATELY IMPLEMENTED HERE AND NOT IN DRagLint.Index.Freshness, which is
+    where it naturally belongs. `src\index` is inside the extractor fingerprint's
+    hash surface, so editing that unit bills a ~5 hour re-parse of every database
+    for a change that alters not one stored parse. The guard is directory-scoped
+    -- exactly the flaw DRAGLINT_RESOLVER_VERSION was created to avoid on the
+    resolve side -- so the reporting lives on this side of the line until that
+    guard is scoped by function too. }
+  var Prev: string:= AStore.GetMetaValue(RESOLVER_FP_KEY);
+  var Cur : string:= ResolverFingerprint(AStore);
+  if Prev = '' then
+    Writeln(ErrOutput, Format('  resolver: this index carries NO resolver stamp (current %s) -- its edges will be re-derived on the next index run.', [Cur]))
+  else if Prev <> Cur then
+    Writeln(ErrOutput, Format('  resolver: edges were derived by %s, this build is %s -- re-derive with `index <dir> --db <db> --resolve-only` (minutes, not a re-parse).', [Prev, Cur]));
 end;
 
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
@@ -2005,10 +2035,6 @@ function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIn
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
   APreprocess: Boolean; const APlatform: string); forward;
 
-{ Declared up here because the MANIFEST index path uses them well before the
-  single-root one does, and that is the path toolseindex-all.ps1 drives. }
-const RESOLVER_FP_KEY = 'resolver_fingerprint';
-function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
 
 /// <summary>
 /// Expands a compile closure into the full INDEX scope of a project: the closure
@@ -7182,7 +7208,41 @@ begin
           if (LN <= Length(CanBear)) and (not CanBear[LN - 1]) then Continue;
           for M in TReviewMarkers.Parse(Lines[LN - 1]) do
           begin
-            if not Known.ContainsKey(LowerCase(M.RuleId)) then Continue;
+            { AN UNPARSEABLE MARKER USED TO `Continue` HERE, AND THAT SILENCE WAS
+              THE DEFECT. Reported by DataCopy 2026-08-31 with unusually clean
+              evidence: 11 sites written `// dl:ok sleep-in-vcl: headless test`,
+              11 sleep-in-vcl findings still reported, and ZERO
+              review-marker-unused hints. The marker suppressed nothing and was
+              not flagged either -- invisible in both directions.
+
+              Mechanism: SplitReason splits the tail on ` -- ` only, so with a
+              colon the WHOLE tail becomes the rule list, and splitting that on
+              commas yields ids like `sleep-in-vcl: headless test` and `no UI`.
+              Neither is a known rule, so both fell through this Continue.
+
+              THE COMBINATION IS THE WORST ONE AVAILABLE. A marker that fails
+              loudly is a nuisance; a marker that fails silently is a lie the
+              source tells every future reader -- someone reviewed those sites,
+              recorded why, and the file now reads as reviewed while the linter
+              has never agreed. `dl:ok` is the mechanism this repo uses to make
+              suppression accountable, so a suppression that does not suppress
+              defeats the one property it exists to provide.
+
+              Reported rather than accepted-silently ON THE REPORTER'S OWN
+              PREFERENCE: given a choice between accepting the colon form and
+              reporting the malformed one, they picked reporting, "because it
+              catches every future typo, not just the colon". Accepting the
+              colon is correct too and lands with the sleep-in-vcl scoping fix,
+              so that activating those 11 markers does not launder 11 findings
+              they have said they do not accept. }
+            if not Known.ContainsKey(LowerCase(M.RuleId)) then
+            begin
+              EmitHint(SF, LN, 'review-marker-malformed',
+                Format('dl:ok names "%s", which is not a rule id -- this marker suppresses NOTHING. '
+                     + 'Write `dl:ok <rule-id>` , `dl:ok <rule-id>@<hash>` or `dl:ok <rule-id> -- <reason>`, '
+                     + 'or run `drag-lint allow` to format it.', [M.RuleId]));
+              Continue;
+            end;
             if MatchStr(LowerCase(M.RuleId), COMMENT_SENSITIVE) then Continue;
             if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
               EmitHint(SF, LN, 'review-marker-unused',

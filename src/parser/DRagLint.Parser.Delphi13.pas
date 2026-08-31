@@ -1942,6 +1942,20 @@ begin
   // shape in order; the first matching handler returns true and we're done.
   if NodeType = 'declType' then
   begin
+    { A CLASS/RECORD attribute (`[TestFixture]`, `[Entity]`) hangs off the
+      declType as child 0, and EVERY Try* handler below Exits without walking
+      it -- each claims the shape it recognises and returns. So the rttiAttributes
+      subtree is visited here, before the dispatch, or not at all.
+
+      Measured: with only the rttiAttributes branch added, a DUnitX fixture
+      emitted attribute refs for the three METHOD attributes and none for the
+      `[TestFixture]` on the class -- a partial fix that would have looked
+      complete, since "no rows" and "no attributes" are indistinguishable from
+      the outside. That is the same shape as the dead branch this replaces. }
+    for i:= 0 to ANode.NamedChildCount - 1 do
+      if ANode.NamedChild(i).NodeType = 'rttiAttributes' then
+        Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+
     if TryWalkInterface    (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
     if TryWalkHelper       (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v15: declHelper is distinct from declClass -- must be tried first or its target typeref gets grabbed by TryWalkAlias }
     if TryWalkClassOrRecord(ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
@@ -2482,12 +2496,54 @@ begin
       Exit;
     end;
 
-    // Custom attribute `[Foo]` usage.
-    if NodeType = 'attribute' then
+    { Custom RTTI attribute usage: `[Test]`, `[TestCase('a','1,2')]`, `[Inject]`.
+
+      THE NODE IS `rttiAttributes` -- PLURAL. This branch previously tested
+      `NodeType = 'attribute'`, a node type that DOES NOT EXIST in a parsed
+      unit: `tools\dumpnode` on a DUnitX fixture reports none, and no index
+      anywhere held a single `attribute` row. So the branch was dead from the
+      day it was written, and nothing failed, because a ref that is never
+      emitted looks exactly like a construct that has none.
+
+      Verified shape (tools\dumpnode, not assumed -- the guessed version of this
+      cost a shipped no-op earlier the same day):
+
+        declProc: child[0] rttiAttributes | [Test]
+        rttiAttributes: child[1] identifier | Test
+        rttiAttributes: child[1] identifier | Test
+                        child[4] exprCall   | TestCase('a','1,2')
+
+      One `rttiAttributes` node holds EVERY attribute on the declaration, a bare
+      attribute arrives as `identifier`, and a parameterised one as `exprCall`.
+
+      THIS ALSO FIXES A WRONG REF, not just a missing one. Falling through to the
+      generic walk made `[TestCase('a','1,2')]` emit a **call** ref, so the index
+      recorded the test method as CALLING a routine named `TestCase` -- a
+      fabricated edge that `find-callers` would answer with. Measured on a DUnitX
+      fixture before this change: `('call', 'TestCase', 11)`.
+
+      ARGUMENTS ARE STILL WALKED, and only the arguments. `[Category(SomeConst)]`
+      contains a genuine read of `SomeConst`, so the args subtree keeps its
+      ordinary treatment; the ENTITY does not, because it is an attribute name
+      rather than a callee. }
+    if NodeType = 'rttiAttributes' then
     begin
-      var Aid:= FindNamedChildOfType(ANode, 'identifier');
-      if not Aid.IsNull then AState.EmitRef('attribute', NodeText(Aid, AState.Source), Aid);
-      for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+      for i:= 0 to ANode.NamedChildCount - 1 do
+      begin
+        var Item:= ANode.NamedChild(i);
+        if Item.IsNull then Continue;
+        if Item.NodeType = 'identifier' then
+          AState.EmitRef('attribute', NodeText(Item, AState.Source), Item)
+        else if Item.NodeType = 'exprCall' then
+        begin
+          var Ent:= Item.ChildByField('entity');
+          if not Ent.IsNull then
+            AState.EmitRef('attribute', NodeText(Ent, AState.Source), Ent);
+          var Args:= Item.ChildByField('args');
+          if not Args.IsNull then
+            Walk(Args, AState, AParentSymbolIdx, AParentQualifiedName);
+        end;
+      end;
       Exit;
     end;
 

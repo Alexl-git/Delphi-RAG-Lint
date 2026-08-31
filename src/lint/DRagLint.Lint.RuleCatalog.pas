@@ -337,6 +337,13 @@ begin
       answer this project keeps paying for, so noticing it is the default. }
     B('review-marker-stale',  'review-markers', 'hint', 'dl:ok marker no longer matches the line it reviews -- the finding is reported again; re-review and re-mark');
     B('review-marker-unused', 'review-markers', 'hint', 'dl:ok marker records a finding that no longer occurs -- remove the marker');
+    { The sibling of the rule above, and the more important of the two: `unused`
+      catches a marker that has stopped matching, this catches one that NEVER
+      matched. A hand-written `dl:ok rule: prose` parses into a rule id that does
+      not exist, so it suppressed nothing and was reported by nothing -- the
+      source read as reviewed while the linter had never agreed. hint, not
+      warning, because the remedy is always a one-line edit. }
+    B('review-marker-malformed', 'review-markers', 'hint', 'dl:ok names something that is not a rule id -- the marker suppresses nothing');
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');

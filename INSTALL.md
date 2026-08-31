@@ -75,7 +75,7 @@ or more rule ids it silences only those. Applies to both `.scm` and built-in rul
 
 ## 4. What it checks
 
-This release ships **178 rules** (154 enabled by default, 23 with an auto-fix)
+This release ships **179 rules** (155 enabled by default, 23 with an auto-fix)
 across 16 categories: exceptions, control-flow
 / dead code, expression bugs, resource/lifetime, naming, and security (SQL
 injection, hardcoded credentials). Run `drag-lint rules` for the full,

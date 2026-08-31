@@ -53,7 +53,7 @@ const
   /// escape hatch. Guarded by tests\autotest\run_extractor_version_guard.ps1,
   /// which fails when extractor sources change without this constant moving.
   /// </remarks>
-  DRAGLINT_EXTRACTOR_VERSION = '1.9.0-alpha';
+  DRAGLINT_EXTRACTOR_VERSION = '1.10.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.

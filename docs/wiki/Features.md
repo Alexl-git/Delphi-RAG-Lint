@@ -59,8 +59,8 @@ The foundation. Everything below that says *(index)* reads what this produces.
 
 ## Linting
 
-**178 rules. 22 have an auto-fix. 154 are on by default.**
-124 are built-in checks; 54 are external tree-sitter `.scm` rules you can read
+**179 rules. 23 have an auto-fix. 155 are on by default.**
+125 are built-in checks; 54 are external tree-sitter `.scm` rules you can read
 and extend in `rules\`.
 
 Run `drag-lint rules` for the always-current catalogue, or
