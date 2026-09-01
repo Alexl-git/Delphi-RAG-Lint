@@ -40,6 +40,27 @@ var
     this unit must not depend on Editor. }
   GOnFileFirstSeenHook: function(const AFile: string): Boolean = nil;
 
+/// <summary>Forgets which files have already been asked for diagnostics, so the
+/// next activation of each asks again.</summary>
+/// <remarks>MUST be called whenever a NEW LSP server process is started. The
+/// "already asked" set records a conversation with ONE server: diagnostics live
+/// in that process and are gone when it dies, so a file marked asked against a
+/// dead server would keep its stale gutter -- or, far more visibly, keep NO
+/// gutter -- for the rest of the IDE session, because the set is consulted
+/// before any request is made and never expires on its own.
+///
+/// Found 2026-09-01 from a live report: several engine rebuilds killed the
+/// server, and afterwards a reopened unit showed no drag-lint marks at all
+/// while the IDE's own W1002 hint sat in the same gutter. The plugin log named
+/// the cause -- it published diagnostics for one unit, the server was replaced,
+/// and no request was ever issued for the unit actually on screen.
+///
+/// This is the THIRD defect in this family. The first marked a file asked even
+/// when the request never went out; the second did the same at IDE startup
+/// before the server was up. Both were about recording an ask that did not
+/// happen; this one is about not forgetting one that did. Main thread only.</remarks>
+procedure DragLintForgetDiagnosticsAsked;
+
 var { v0.46: published by PaintLine so the hover tracker can map a screen point to
     an editor row for gutter-glyph hover. The buffer row (1-based) at client-Y y
     is  GGutterAnchorLine + floor((y - GGutterAnchorTopY) / GGutterLineHeight).
@@ -116,12 +137,22 @@ type
 var
   GViewRegistrations: TList<TViewRegistration> = nil;
   GViewRegLock      : TObject                  = nil                 ;
-  { Files already asked about this session. Keyed per FILE, not per view: the
-    IDE fires EditorViewActivated on every focus change, and asking the engine
-    again on each of them would put an LSP round-trip behind every Alt-Tab.
-    Once per file is enough -- saving still refreshes, which is what keeps the
-    marks honest after an edit. }
+  { Files already asked about FOR THE CURRENT SERVER. Keyed per FILE, not per
+    view: the IDE fires EditorViewActivated on every focus change, and asking
+    the engine again on each of them would put an LSP round-trip behind every
+    Alt-Tab. Once per file is enough -- saving still refreshes, which is what
+    keeps the marks honest after an edit.
+
+    "FOR THE CURRENT SERVER" is the load-bearing part and was missing until
+    2026-09-01: diagnostics live in the server process, so this set is only
+    meaningful while that process is. DragLintForgetDiagnosticsAsked clears it
+    on every respawn -- see its remarks. }
   GDiagAskedFor     : TStringList               = nil;
+
+procedure DragLintForgetDiagnosticsAsked;
+begin
+  if GDiagAskedFor <> nil then GDiagAskedFor.Clear;
+end;
 
 procedure UnregisterAllViewNotifiers;
 var

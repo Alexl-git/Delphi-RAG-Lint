@@ -511,6 +511,12 @@ begin
 
   if GLspClient = nil then
   begin
+    { A NEW server knows nothing about what the OLD one was asked. The
+      first-seen set is a record of that conversation, so it has to be forgotten
+      here or every file already open keeps an empty gutter for the rest of the
+      session -- which is exactly what a live report showed after an engine
+      rebuild replaced the server underneath open editors. }
+    DragLint.Plugin.EditViewNotifier.DragLintForgetDiagnosticsAsked;
     GLspClient:= TDragLintLspClient.Create;
     GLspClient.OnNotification:= HandleNotification;
 

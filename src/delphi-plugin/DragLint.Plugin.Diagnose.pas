@@ -14,12 +14,27 @@ unit DragLint.Plugin.Diagnose;
   Every one of those steps was invisible. One line of UI -- which library index
   is in use, and why -- would have exposed it in seconds instead of a day.
 
-  PERFORMANCE CONTRACT, load-bearing: nothing here may COUNT rows or open a
-  database. Measured on the 3 GB library-Win32.sqlite, `schema --format json`
-  takes 38 s because it runs COUNT(*) per table, while opening the same file and
-  doing an indexed lookup takes 0.5 s. Index facts below come from the FILE
-  SYSTEM only (path, size, mtime). A status screen that is slow does not get
-  opened, and a status screen nobody opens reports nothing. }
+  PERFORMANCE CONTRACT, load-bearing: nothing here may COUNT rows. Measured on
+  the 3 GB library-Win32.sqlite, `schema --format json` takes 38 s because it
+  runs COUNT(*) per table. Size and mtime come from the FILE SYSTEM. A status
+  screen that is slow does not get opened, and a status screen nobody opens
+  reports nothing.
+
+  AMENDED 2026-09-01 -- FRESHNESS IS NOW REPORTED, and the contract never
+  forbade it. The rule above was read as "never look inside a database", so this
+  screen showed [ok] beside an index that was a whole extractor version behind:
+  [ok] meant PRESENT, and the one screen built to stop a stale index answering
+  confidently was blind to the staleness that matters most. The owner asked for
+  it directly: "it is possible extract versions of engine and other components
+  as you report them in About and compare to the DB version".
+
+  It is a FINGERPRINT COMPARISON, not a count -- two schema_meta rows per file --
+  and it is delegated to `info --json --db ...`, which already exists and which
+  DiagVersions already spawns. MEASURED on this machine: 0.099 s for the
+  DataCopy index PLUS the 2.37 GB library index, in ONE spawn. That is three
+  orders of magnitude away from the 38 s the contract was written against, and
+  the difference is entirely COUNT(*) -- which is exactly what the original
+  measurement was about. }
 
 interface
 
@@ -292,10 +307,13 @@ end;
 
 { ---- Versions ---- }
 
-function EngineInfoJson(out AJson: TJSONObject; out AError: string): Boolean;
+function EngineInfoJson(out AJson: TJSONObject; out AError: string;
+                        const ADbs: TArray<string> = nil): Boolean;
 var
   Exe   : string ;
   Output: string ;
+  Cmd   : string ;
+  Db    : string ;
   Code  : Integer;
   OpenP : Integer;
   CloseP: Integer;
@@ -312,8 +330,14 @@ begin
     Exit;
   end;
   Output:= '';
+  { ONE spawn for every database. Per-db spawning would multiply the process
+    cost by the number of indexes to learn facts the engine already reports
+    together. }
+  Cmd:= '"' + Exe + '" info --json';
+  for Db in ADbs do
+    if Db <> '' then Cmd:= Cmd + ' --db "' + Db + '"';
   try
-    Code:= RunAndCaptureStdout('"' + Exe + '" info --json', Output, 8000);
+    Code:= RunAndCaptureStdout(Cmd, Output, 8000);
   except
     on E: Exception do
     begin
@@ -521,12 +545,88 @@ end;
 
 { ---- Indexes ---- }
 
+{ Case-insensitive membership, because these are Windows paths. Deliberately NOT
+  TArray.BinarySearch or the Glob unit's MatchesAny: the first needs a sorted
+  array and the second matches GLOB PATTERNS, which would treat a path
+  containing [ ] or * as a wildcard rather than a name. }
+function PathAlreadyListed(const AList: TArray<string>; const APath: string): Boolean;
+var
+  S: string;
+begin
+  Result:= False;
+  for S in AList do
+    if SameText(S, APath) then Exit(True);
+end;
+
+{ THE FRESHNESS LOOKUP. Returns `path (lowercased) = verdict` pairs, so a caller
+  can ask about one index without knowing the order the engine reported them in.
+  Empty on any failure -- an unanswered question must render as "unknown", never
+  as "current", which is the whole defect this was added to fix: a stamp
+  claiming freshness it never earned is self-concealing once written. }
+function IndexVerdicts(const ADbs: TArray<string>): TStringList;
+var
+  Info   : TJSONObject;
+  Err    : string     ;
+  Arr    : TJSONArray ;
+  V      : TJSONValue ;
+  Obj    : TJSONObject;
+  I      : Integer    ;
+  P, Verd: string     ;
+begin
+  Result:= TStringList.Create;
+  Result.CaseSensitive:= False;
+  if Length(ADbs) = 0 then Exit;
+  Info:= nil;
+  if not EngineInfoJson(Info, Err, ADbs) then
+  begin
+    DebugLog('diagnose: index freshness unavailable -- ' + Err);
+    Exit;
+  end;
+  try
+    if not (Info.GetValue('indexes') is TJSONArray) then Exit;
+    Arr:= TJSONArray(Info.GetValue('indexes'));
+    for I:= 0 to Arr.Count - 1 do
+    begin
+      V:= Arr.Items[I];
+      if not (V is TJSONObject) then Continue;
+      Obj := TJSONObject(V);
+      P   := '';
+      Verd:= '';
+      if Obj.GetValue('path')    <> nil then P   := Obj.GetValue('path')   .Value;
+      if Obj.GetValue('verdict') <> nil then Verd:= Obj.GetValue('verdict').Value;
+      if (P <> '') and (Verd <> '') then Result.Values[LowerCase(P)]:= Verd;
+    end;
+  finally
+    Info.Free;
+  end;
+end;
+
+{ A verdict's severity. `current` is the only healthy answer; the two owed
+  states are deliberately NOT collapsed, because reparse-owed costs hours and
+  resolve-owed costs minutes, and treating the cheap one as the expensive one is
+  how a re-resolve gets deferred indefinitely. }
+function VerdictLine(const AVerdict: string): TDiagLine;
+begin
+  if AVerdict = '' then
+    Result:= Line('  freshness', 'UNKNOWN -- the engine did not answer', dsWarn)
+  else if SameText(AVerdict, 'current') then
+    Result:= Line('  freshness', 'current', dsOk)
+  else if SameText(AVerdict, 'resolve-owed') then
+    Result:= Line('  freshness', AVerdict + ' -- re-resolve needed (minutes)', dsWarn)
+  else if SameText(AVerdict, 'reparse-owed') then
+    Result:= Line('  freshness', AVerdict + ' -- FULL REPARSE needed (hours); answers are STALE', dsBad)
+  else
+    Result:= Line('  freshness', AVerdict, dsWarn);
+end;
+
 function DiagIndexes: TDiagLines;
 var
   Settings: TDragLintSettings;
   LibPath : string           ;
   LibWhy  : string           ;
   Plat    : string           ;
+  Verdicts: TStringList      ;
+  AllDbs  : TArray<string>   ;
   Proj    : string           ;
   Dbs     : TArray<string>   ;
   P       : string           ;
@@ -562,13 +662,6 @@ try
   else if Pos('manifest ', LibWhy) = 1 then Sev:= dsOk
   else Sev:= dsBad; { a fallback IS the defect, not a lesser mode }
 
-  Add(Result, Line('Library index', LibPath, Sev));
-  Add(Result, Line('  size / written', DescribeIndexFile(LibPath), Sev));
-  if Sev = dsOk then
-    Add(Result, Line('  chosen by', LibWhy, dsOk))
-  else
-    Add(Result, Line('  chosen by', 'FALLBACK -- ' + LibWhy, dsBad));
-
 Dbs:= nil;
   try
     Dbs:= ResolveActiveIndexDbs(Settings);
@@ -579,11 +672,37 @@ Dbs:= nil;
       DebugLog('diagnose: ResolveActiveIndexDbs raised (indexes) -- ' + E.Message);
     end;
   end;
+
+  { Asked ONCE, for the library index and every project index together, before
+    any row is emitted -- see the freshness amendment in the unit header.
+    DE-DUPLICATED because ResolveActiveIndexDbs usually ALREADY returns the
+    library path, and a repeated --db makes the engine open that file twice --
+    2.37 GB on this machine -- to answer a question it has already answered. }
+  AllDbs:= nil;
   for P in Dbs do
-  begin
-    if SameText(P, LibPath) then Continue; { already reported above }
-    Add(Result, Line('Index', P, dsOk));
-    Add(Result, Line('  size / written', DescribeIndexFile(P)));
+    if (P <> '') and not PathAlreadyListed(AllDbs, P) then AllDbs:= AllDbs + [P];
+  if TFile.Exists(LibPath) and not PathAlreadyListed(AllDbs, LibPath) then
+    AllDbs:= AllDbs + [LibPath];
+  Verdicts:= IndexVerdicts(AllDbs);
+  try
+    Add(Result, Line('Library index', LibPath, Sev));
+    Add(Result, Line('  size / written', DescribeIndexFile(LibPath), Sev));
+    if TFile.Exists(LibPath) then
+      Add(Result, VerdictLine(Verdicts.Values[LowerCase(LibPath)]));
+    if Sev = dsOk then
+      Add(Result, Line('  chosen by', LibWhy, dsOk))
+    else
+      Add(Result, Line('  chosen by', 'FALLBACK -- ' + LibWhy, dsBad));
+
+    for P in Dbs do
+    begin
+      if SameText(P, LibPath) then Continue; { already reported above }
+      Add(Result, Line('Index', P, dsOk));
+      Add(Result, Line('  size / written', DescribeIndexFile(P)));
+      Add(Result, VerdictLine(Verdicts.Values[LowerCase(P)]));
+    end;
+  finally
+    Verdicts.Free;
   end;
   if Length(Dbs) = 0 then
     Add(Result, Line('Index', 'no project index resolved for the active file', dsBad));
