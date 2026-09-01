@@ -545,6 +545,19 @@ end;
 
 { ---- Indexes ---- }
 
+{ A switch's label and its severity. Kept together so an "off" switch always
+  reads as off in BOTH the text and the marker -- a row that says OFF while
+  showing [ok] is the kind of mixed signal this screen exists to remove. }
+function BoolLabel(AOn: Boolean; const AOnText, AOffText: string): string;
+begin
+  if AOn then Result:= AOnText else Result:= AOffText;
+end;
+
+function SevOf(AOn: Boolean): TDiagSeverity;
+begin
+  if AOn then Result:= dsOk else Result:= dsWarn;
+end;
+
 { Case-insensitive membership, because these are Windows paths. Deliberately NOT
   TArray.BinarySearch or the Glob unit's MatchesAny: the first needs a sorted
   array and the second matches GLOB PATTERNS, which would treat a path
@@ -746,6 +759,44 @@ begin
   end
   else
     Add(Result, Line('DB path template', Settings.DbPathTemplate, Sev));
+
+  { WHICH SEVERITIES ACTUALLY REACH THE GUTTER.
+
+    Added 2026-09-01 after the owner reported "I still don't see icons in the
+    gutter" and pasted a finding list to prove there were findings. There were.
+    ShowInfoInline was 0 in his registry, info was 10 of the 12 rows he pasted,
+    and the remaining two sat at lines 2028/2055 of a 2,500-line unit -- so the
+    top of the file was legitimately, invisibly empty.
+
+    A saved 0 SHADOWS the shipped default, which is True, so nobody is fixed by
+    the default having been improved -- the same trap the DbPathTemplate
+    migration above documents. It is NOT auto-migrated here: a dead path
+    template can be recognised as dead, but a boolean cannot be told apart from
+    a deliberate choice, and silently re-enabling a switch the user turned off
+    is worse than leaving it off.
+
+    So it is REPORTED instead. The failure mode is that an empty gutter and a
+    filtered gutter look identical, which makes "no marks" unfalsifiable from
+    the screen alone. }
+  Add(Result, Line('Inline markers',
+    BoolLabel(Settings.EnableInlineMarkers, 'on', 'OFF -- NO gutter marks are drawn at all'),
+    SevOf(Settings.EnableInlineMarkers)));
+  if Settings.EnableInlineMarkers then
+  begin
+    Add(Result, Line('  severities drawn',
+      Format('errors %s, warnings %s, hints %s, info %s',
+             [BoolLabel(Settings.ShowErrorsInline,   'on', 'OFF'),
+              BoolLabel(Settings.ShowWarningsInline, 'on', 'OFF'),
+              BoolLabel(Settings.ShowHintsInline,    'on', 'OFF'),
+              BoolLabel(Settings.ShowInfoInline,     'on', 'OFF')]),
+      SevOf(Settings.ShowErrorsInline and Settings.ShowWarningsInline
+            and Settings.ShowHintsInline and Settings.ShowInfoInline)));
+    if not Settings.ShowInfoInline then
+      Add(Result, Line('  note',
+        'info is OFF and info is the LARGEST severity class (~83% of findings) -- '
+        + 'a file can report many findings and still show an empty gutter. '
+        + 'drag-lint Options > Show info inline.', dsWarn));
+  end;
 
   if Settings.IncludeLibraryDb then
     Add(Result, Line('Include library DB', 'yes', dsOk))

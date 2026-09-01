@@ -96,15 +96,36 @@ binary off PATH. Always the full path above.
 
 ## 3. Per-severity gutter icons -- use `uFileUtils.pas`
 
-`C:\Projects\DataCopy\uFileUtils.pas` is the right file because it is the only
-DataCopy unit carrying **all three** severities at once. Measured today:
+> **>>> CHECK YOUR FILTERS FIRST. An empty gutter is usually a SETTING, not a bug.**
+>
+> This step originally listed severity counts without saying that the plugin
+> draws only the severities you have switched on -- and on this machine
+> `ShowInfoInline` was **0**, so the whole info class was silently hidden. That
+> cost a full round trip on 2026-09-01: a real finding list, a genuinely empty
+> gutter, and no way to tell the two apart from the screen.
+>
+> **About > Configuration now states this** -- `severities drawn` plus a warning
+> when info is off. Read it before reporting anything in this section.
+> To change it: **drag-lint Options > Show info inline**.
 
-| severity | count |
-|---|---|
-| warning | 1 |
-| info | 10 |
-| hint | 2 |
+`C:\Projects\DataCopy\uFileUtils.pas` carries all four classes. Measured today
+with the per-file lint the LSP uses (45 findings):
 
+| severity | count | drawn only if |
+|---|---|---|
+| warning | 1 (line 2208) | `ShowWarningsInline` |
+| hint | 21 | `ShowHintsInline` |
+| info | 23 | `ShowInfoInline` |
+
+**The first non-info finding is at line 1036.** Everything above it -- lines 9,
+63-79, 246, 349, 392, 958, 965, 1034 -- is info. So with info off, the top
+thousand lines are CORRECTLY blank, and scrolling is not optional.
+
+Good places to look with info off: hints at **1036, 1064, 1110, 1289, 1338,
+1455, 1575-1589, 1732, 2028, 2055, 2492**, and the lone warning at **2208**.
+
+- [ ] **3.0** *About > Configuration* -- record which severities are drawn.
+      Every assertion below is relative to that.
 - [ ] **3.1** Open it. If the gutter is empty, *About > Run Diagnostics (didSave)*.
 - [ ] **3.2** Each severity draws a **distinct glyph** -- not a uniform filled
       square, and no `[E] ` text tag on Diagnostics rows.
