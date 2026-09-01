@@ -138,6 +138,59 @@ begin
   { Case-insensitive on both the tag and the rule id. }
   Check('marker tag is case-insensitive',
     Length(TReviewMarkers.Parse('except // DL:OK Bare-Except@7F3A')) = 1);
+
+  { 10: THE COLON FORM. `dl:ok <rule>: <prose>` is what people actually write.
+    It used to make the WHOLE tail the rule list, so the marker named a rule
+    that does not exist and suppressed nothing -- silently. DataCopy hit this
+    on 11 sites. The comma inside the prose is the sharp edge: before the fix
+    it split the tail into two bogus rule ids. }
+  M:= TReviewMarkers.Parse('    Sleep(100); // dl:ok sleep-in-vcl: headless test, no UI');
+  Check('10 colon form yields exactly one marker', Length(M) = 1);
+  if Length(M) = 1 then
+  begin
+    Check('10 rule id stops at the colon', M[0].RuleId = 'sleep-in-vcl');
+    Check('10 hash empty', M[0].Hash = '');
+    Check('10 reason keeps its comma', M[0].Reason = 'headless test, no UI');
+  end;
+
+  { 10b: colon after a hash. }
+  M:= TReviewMarkers.Parse('except // dl:ok bare-except@7f3a: rethrown by the caller');
+  Check('10b colon after hash yields one marker', Length(M) = 1);
+  if Length(M) = 1 then
+  begin
+    Check('10b rule id', M[0].RuleId = 'bare-except');
+    Check('10b hash survives', M[0].Hash = '7f3a');
+    Check('10b reason', M[0].Reason = 'rethrown by the caller');
+  end;
+
+  { 10c: two rules then a colon -- the comma BEFORE the separator still splits. }
+  M:= TReviewMarkers.Parse('// dl:ok bare-except,deep-nesting: both accepted');
+  Check('10c two rules parsed', Length(M) = 2);
+  if Length(M) = 2 then
+  begin
+    Check('10c first rule', M[0].RuleId = 'bare-except');
+    Check('10c second rule', M[1].RuleId = 'deep-nesting');
+    Check('10c reason shared', M[1].Reason = 'both accepted');
+  end;
+
+  { 10d: WHICHEVER SEPARATOR COMES FIRST WINS. `--` first, so the colon is
+    ordinary prose inside the reason. }
+  M:= TReviewMarkers.Parse('// dl:ok bare-except -- see note: it is rethrown');
+  Check('10d dash-first yields one marker', Length(M) = 1);
+  if Length(M) = 1 then
+  begin
+    Check('10d rule id', M[0].RuleId = 'bare-except');
+    Check('10d colon stays in the reason', M[0].Reason = 'see note: it is rethrown');
+  end;
+
+  { 10e: and the mirror -- colon first, so a later `--` is prose. }
+  M:= TReviewMarkers.Parse('// dl:ok bare-except: rethrown -- by the caller');
+  Check('10e colon-first yields one marker', Length(M) = 1);
+  if Length(M) = 1 then
+  begin
+    Check('10e rule id', M[0].RuleId = 'bare-except');
+    Check('10e dash stays in the reason', M[0].Reason = 'rethrown -- by the caller');
+  end;
 end;
 
 { ---- insertion ------------------------------------------------------------- }

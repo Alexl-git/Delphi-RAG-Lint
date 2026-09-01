@@ -72,8 +72,12 @@ type
     /// </remarks>
     class function LineCommentStart(const ALineText: string): Integer; static;
     /// <summary>Splits the text following the `dl:ok` tag into the comma-separated
-    /// rule list and the free-text reason, on the first `--` that follows
-    /// whitespace.</summary>
+    /// rule list and the free-text reason, on whichever separator appears
+    /// FIRST: a `--` that follows whitespace, or a `:`.</summary>
+    /// <remarks>Both forms are accepted because both are written by hand. The
+    /// loser is left in the reason verbatim, so `-- see note: why` keeps its
+    /// colon. Rule ids and the 4-hex @hash contain no colon, which is what
+    /// makes the first colon unambiguous.</remarks>
     /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ARules"><!-- drag-lint:auto type -->out string</param>
     /// <param name="AReason"><!-- drag-lint:auto type -->out string</param>
@@ -661,20 +665,47 @@ end;
 
 class procedure TReviewMarkers.SplitReason(const AText: string; out ARules, AReason: string);
 var
-  I: Integer;
+  I       : Integer;
+  DashPos : Integer;
+  ColonPos: Integer;
 begin
   ARules := AText;
   AReason:= '';
+
+  DashPos:= 0;
   for I:= 1 to Length(AText) - 1 do
     if (AText[I] = '-') and (AText[I + 1] = '-') and
        ((I = 1) or CharInSet(AText[I - 1], [' ', #9])) then
     begin
       { Preceded by whitespace, so a hyphenated rule id such as 'bare-except'
         cannot be mistaken for the separator. }
-      ARules := Copy(AText, 1, I - 1);
-      AReason:= Trim(Copy(AText, I + 2, MaxInt));
-      Exit;
+      DashPos:= I;
+      Break;
     end;
+
+  { A colon separates the rules from the prose too. Nothing to the LEFT of a
+    separator can legally contain one -- rule ids and the 4-hex @hash are both
+    colon-free -- so the first colon is unambiguous.
+
+    This form is accepted because people write it and it used to fail SILENTLY:
+    the whole tail became the rule list, the named rule did not exist, and the
+    marker suppressed nothing while reading as a review. DataCopy hit it on 11
+    sites. See the review-marker-malformed block in DRagLint.CLI. }
+  ColonPos:= Pos(':', AText);
+
+  { WHICHEVER SEPARATOR COMES FIRST WINS, so the other one is ordinary prose:
+    `-- see note: it is rethrown` keeps its colon, and `: rethrown -- by the
+    caller` keeps its dashes. }
+  if (ColonPos > 0) and ((DashPos = 0) or (ColonPos < DashPos)) then
+  begin
+    ARules := Copy(AText, 1, ColonPos - 1);
+    AReason:= Trim(Copy(AText, ColonPos + 1, MaxInt));
+  end
+  else if DashPos > 0 then
+  begin
+    ARules := Copy(AText, 1, DashPos - 1);
+    AReason:= Trim(Copy(AText, DashPos + 2, MaxInt));
+  end;
 end;
 
 class function TReviewMarkers.Parse(const ALineText: string): TArray<TReviewMarker>;
