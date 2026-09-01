@@ -7118,39 +7118,65 @@ begin
           end;
         end;
 
-        { The accountable form. }
+        { The accountable form.
+
+          SPAN, NOT ANCHOR LINE. A trailing `// dl:ok` can only ever be written
+          on the line where a statement ENDS -- there is nowhere else to put it
+          -- while a rule reports the line where the statement BEGINS. On a
+          WRAPPED statement those differ, so the marker never took AND was
+          reported dead at the same time: two messages for one reviewed site,
+          the second of which advised deleting a legitimate review record.
+          Reported by DataCopy 2026-08-31 (concat-in-loop, uFileUtils.pas 2029
+          vs 2030), and it generalises to EVERY rule that anchors to a first
+          line -- which is why it is fixed here and not in the rule.
+
+          The span is the finding's OWN StartLine..EndLine, so this does not
+          decay into 'any marker in the file suppresses anything'; a marker on
+          an unrelated line is still reported unused, and the test asserts that
+          as a positive control.
+
+          ACCOUNTING USES THE MARKER'S OWN LINE, not the finding's. The unused
+          reporter below looks Accounted up by the line the marker sits on, so
+          keying it to F.StartLine would suppress the finding and STILL call the
+          marker dead -- half a fix, and the more confusing half. }
         if not Suppressed then
         begin
-          Markers:= TReviewMarkers.Parse(LineTxt);
-          for M in Markers do
+          var MarkHi: Integer:= F.StartLine;
+          if (F.EndLine > MarkHi) and (F.EndLine <= Length(Lines)) then MarkHi:= F.EndLine;
+          for var ML: Integer:= F.StartLine to MarkHi do
           begin
-            if not SameText(M.RuleId, F.RuleId) then Continue;
-            Accounted.AddOrSetValue(MarkerKey(F.FilePath, F.StartLine, M.RuleId), True);
-            { Window, not line. Hashing LineTxt alone made every bare-except
-              marker identical once that rule anchored on the `except` keyword:
-              the normalized line is one invariant token, so the hash could never
-              go stale and the marker verified forever however the handler was
-              rewritten. See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
-            Want:= TReviewMarkers.HashWindow(Lines, F.StartLine - 1);
-            if M.Hash = '' then
+            if Suppressed then Break;
+            Markers:= TReviewMarkers.Parse(Lines[ML - 1]);
+            for M in Markers do
             begin
-              { Hand-written, no hash: honour it, but say that it cannot be
-                verified rather than pretending it was. }
-              Suppressed:= True;
-              EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
-                Format('dl:ok marker for "%s" carries no @hash, so it cannot be checked against the code -- re-mark it as %s@%s.',
-                       [M.RuleId, M.RuleId, Want]));
-            end
-            else if SameText(M.Hash, Want) then
-              Suppressed:= True
-            else
-              { The load-bearing case. Report the finding AND say why the marker
-                stopped applying; silently keeping the suppression is how a real
-                defect disappears behind someone's old signature. }
-              EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
-                Format('dl:ok marker for "%s" records @%s but the line now hashes to @%s -- the line changed since it was reviewed. Re-review, then update the marker.',
-                       [M.RuleId, M.Hash, Want]));
-            Break;
+              if not SameText(M.RuleId, F.RuleId) then Continue;
+              Accounted.AddOrSetValue(MarkerKey(F.FilePath, ML, M.RuleId), True);
+              { Window, not line. Hashing LineTxt alone made every bare-except
+                marker identical once that rule anchored on the `except` keyword:
+                the normalized line is one invariant token, so the hash could never
+                go stale and the marker verified forever however the handler was
+                rewritten. See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
+              Want:= TReviewMarkers.HashWindow(Lines, F.StartLine - 1);
+              if M.Hash = '' then
+              begin
+                { Hand-written, no hash: honour it, but say that it cannot be
+                  verified rather than pretending it was. }
+                Suppressed:= True;
+                EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
+                  Format('dl:ok marker for "%s" carries no @hash, so it cannot be checked against the code -- re-mark it as %s@%s.',
+                         [M.RuleId, M.RuleId, Want]));
+              end
+              else if SameText(M.Hash, Want) then
+                Suppressed:= True
+              else
+                { The load-bearing case. Report the finding AND say why the marker
+                  stopped applying; silently keeping the suppression is how a real
+                  defect disappears behind someone's old signature. }
+                EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
+                  Format('dl:ok marker for "%s" records @%s but the line now hashes to @%s -- the line changed since it was reviewed. Re-review, then update the marker.',
+                         [M.RuleId, M.Hash, Want]));
+              Break;
+            end;
           end;
         end;
       end; // if

@@ -51,6 +51,19 @@ type
         not quadratic in anything. A rule that cannot express its own
         precondition cannot be calibrated; this is that precondition. }
       FRequireAncestors: TArray<string>;
+      { Lowercased substrings, ANY of which must occur in the FILE TEXT for
+        this rule to run at all. Empty = no requirement (every existing rule).
+
+        This is SCOPE, not the optimisation FRequiredText is. sleep-in-vcl is
+        the case that forced it: its query matches any `Sleep(` call anywhere,
+        while its id and its whole message are about freezing a VCL UI. A
+        headless console or test unit has no UI to freeze, so the finding was
+        never true there -- DataCopy carried 11 of them in one DUnitX unit
+        whose uses clause names no VCL unit at all.
+
+        A rule that cannot express its own precondition cannot be calibrated,
+        which is the same reasoning that added require_ancestor. }
+      FRequireFileText: TArray<string>;
       { True if the picked node (or any ancestor up to the root) is one of the
         node kinds in FExcludeAncestors -- used to suppress a match that sits in
         a structural context the rule should not flag (e.g. an integer literal
@@ -173,6 +186,9 @@ type
       /// than a slow one -- so the bar is "provable", not "probably fine".
       /// </remarks>
       property RequiredText: string read FRequiredText;
+      /// <summary>Lowercased substrings, ANY of which must appear in a file's
+      /// text before this rule runs against it. Empty means no requirement.</summary>
+      property RequireFileText: TArray<string> read FRequireFileText;
       property Id        : string  read FId      ;
       property Severity  : string  read FSeverity;
       property Message   : string  read FMessage ;
@@ -460,6 +476,15 @@ begin
       if Assigned(ExArr) then
         for ExVal in ExArr do
           FRequireAncestors:= FRequireAncestors + [ExVal.Value];
+      { Optional FILE-TEXT requirement ("require_file_text"): the rule does not
+        run at all against a file whose text contains none of these. Matched
+        case-insensitively against the whole file, so it sees the uses clause,
+        qualified calls and the dfm-bearing header alike. See FRequireFileText. }
+      ExArr:= JSON.GetValue('require_file_text') as TJSONArray;
+      if Assigned(ExArr) then
+        for ExVal in ExArr do
+          if Trim(ExVal.Value) <> '' then
+            FRequireFileText:= FRequireFileText + [LowerCase(Trim(ExVal.Value))];
     finally
       JSON.Free;
     end;

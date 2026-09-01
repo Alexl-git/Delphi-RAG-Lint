@@ -1021,6 +1021,22 @@ begin
           end;
           if not LowerSrc.Contains(R.RequiredText) then Continue;
         end;
+        { FILE-TEXT SCOPE -- see TQueryRule.RequireFileText. Distinct from the
+          pre-filter above: that one is a provable optimisation derived from the
+          query, this one is the rule declaring WHERE it is meaningful at all.
+          Reuses the same lowercased copy, so scope costs nothing extra. }
+        if Length(R.RequireFileText) > 0 then
+        begin
+          if not LowerReady then
+          begin
+            LowerSrc  := LowerCase(TEncoding.UTF8.GetString(Source));
+            LowerReady:= True;
+          end;
+          var InScope: Boolean:= False;
+          for var Needle: string in R.RequireFileText do
+            if LowerSrc.Contains(Needle) then begin InScope:= True; Break; end;
+          if not InScope then Continue;
+        end;
         var QFindings:= R.Run(Tree.RootNode, Source, AFilePath);
         var F: TLintFinding;
         for F in QFindings do
