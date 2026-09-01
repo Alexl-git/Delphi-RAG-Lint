@@ -324,6 +324,11 @@ begin
 
   { v0.29: update the visual diagnostic cache (runs on the LSP reader thread;
     Cache.Update is thread-safe). }
+  { Telemetry BEFORE the cache write, so the log shows the arrival even if the
+    write itself throws. Cache.Update logs the before/after and the severity
+    histogram; this line records that the notification arrived and when. }
+  DLT('lsp', Format('publishDiagnostics %s -> %d diag(s) (REPLACES the live set)',
+    [ExtractFileName(FileName), Diags.Count]));
   Cache.Update(FileName, AParams);
   DebugLog(Format('LSP publishDiagnostics: %s -> %d diag(s) (overwrites live cache)', [ExtractFileName(FileName), Diags.Count]));
 
@@ -2935,6 +2940,13 @@ begin
   { Task 6 fix: log the spawn so it is VISIBLE in the plugin log which DB the
     sweep targets (previously invisible -- a wrong-DB sweep looked like no sweep). }
   DebugLog('SpawnRefreshFindings: ' + CmdLine);
+  { Into the TELEMETRY log as well, not only the plugin log, so it lands on the
+    SAME timeline as the cache writes. This process is DETACHED and nothing
+    waits for it: it rewrites the findings the engine then reads, so a publish
+    landing mid-rewrite is a candidate explanation for a diagnostic set that
+    shrinks between refreshes. Correlating the two needs one file, not two. }
+  DLT('refresh', Format('SPAWN (detached, not awaited) full=%s db=%s proj=%s',
+    [BoolToStr(AFull, True), ExtractFileName(ADb), ExtractFileName(AProj)]));
   SetLength(CmdLineW, Length(CmdLine) + 1);
   Move(PChar(CmdLine)^, CmdLineW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
   if CreateProcessW(nil, @CmdLineW[0], nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then

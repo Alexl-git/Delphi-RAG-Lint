@@ -75,6 +75,32 @@ function Cache: TDragLintDiagnosticCache;
 
 implementation
 
+{ E/W/H/I counts for one set. Every cache log line carries this, because
+  "12 diagnostics" does not say whether any of them can REACH the gutter -- the
+  inline severity filters decide that, and info alone is ~83% of findings. A
+  count that shrinks and a count that is merely filtered look identical without
+  the breakdown. }
+function SevHistogram(const ADiags: TArray<TDragLintDiagnostic>): string;
+var
+  D                : TDragLintDiagnostic;
+  nE, nW, nH, nI   : Integer            ;
+begin
+  nE:= 0; nW:= 0; nH:= 0; nI:= 0;
+  for D in ADiags do
+    case D.Severity of
+      dlsError  : Inc(nE);
+      dlsWarning: Inc(nW);
+      dlsHint   : Inc(nH);
+      else        Inc(nI);
+    end;
+  Result:= Format('E%d W%d H%d I%d', [nE, nW, nH, nI]);
+end;
+
+function BoolLabel(ACond: Boolean; const AYes, ANo: string): string;
+begin
+  if ACond then Result:= AYes else Result:= ANo;
+end;
+
 var
   GCache: TDragLintDiagnosticCache = nil;
 
@@ -112,6 +138,7 @@ var
   EndObj  : TJSONObject                ;
   SevInt  : Integer                    ;
   List    : TList<TDragLintDiagnostic> ;
+  Prev    : TArray<TDragLintDiagnostic>;
 begin
   if not (AParams is TJSONObject) then Exit;
   if not (AParams as TJSONObject).TryGetValue<TJSONArray>('diagnostics', DiagsArr) then Exit;
@@ -165,33 +192,57 @@ begin
 
   FLock.Enter;
   try
+    { WHAT IS BEING REPLACED is the fact this log was missing. Update REPLACES
+      the live set wholesale, so a thin publish silently discards a rich one and
+      the only visible effect is marks vanishing. Reported 2026-09-01: "at first
+      again no icons, then it showed more diagnostic and icon appeared, then
+      after refresh it again shows very little messages and no icons". A count
+      alone could not distinguish that from a file genuinely having few
+      findings -- the BEFORE number is what makes a clobber legible. }
+    if not FByFile.TryGetValue(LowerCase(AFilePath), Prev) then Prev:= nil;
     FByFile.AddOrSetValue(LowerCase(AFilePath), Arr);
   finally
     FLock.Leave;
   end;
-  DLT('cache', Format('Update %s -> %d diag(s) [key=%s]', [ExtractFileName(AFilePath), Length(Arr), LowerCase(AFilePath)]));
+  DLT('cache', Format('Update %s: %d -> %d diag(s)   was[%s] now[%s]%s', [
+    ExtractFileName(AFilePath), Length(Prev), Length(Arr),
+    SevHistogram(Prev), SevHistogram(Arr),
+    BoolLabel(Length(Arr) < Length(Prev), '   *** SHRANK -- previous set discarded ***', '')]));
 end; // procedure
 
 procedure TDragLintDiagnosticCache.SetCompilerFindings(const AFilePath: string; const ADiags: TArray<TDragLintDiagnostic>);
+var
+  Prev: TArray<TDragLintDiagnostic>;
 begin
   FLock.Enter;
   try
+    if not FCompilerByFile.TryGetValue(LowerCase(AFilePath), Prev) then Prev:= nil;
     if Length(ADiags) = 0 then FCompilerByFile.Remove(LowerCase(AFilePath))
     else FCompilerByFile.AddOrSetValue(LowerCase(AFilePath), ADiags);
   finally
     FLock.Leave;
   end;
-  DLT('cache', Format('SetCompilerFindings %s -> %d', [ExtractFileName(AFilePath), Length(ADiags)]));
+  DLT('cache', Format('SetCompilerFindings %s: %d -> %d   was[%s] now[%s]', [
+    ExtractFileName(AFilePath), Length(Prev), Length(ADiags),
+    SevHistogram(Prev), SevHistogram(ADiags)]));
 end;
 
 procedure TDragLintDiagnosticCache.ClearAllCompilerFindings;
+var
+  N: Integer;
 begin
   FLock.Enter;
   try
+    N:= FCompilerByFile.Count;
     FCompilerByFile.Clear;
   finally
     FLock.Leave;
   end;
+  { Logged because this wipes an overlay for EVERY file at once. It was the one
+    cache mutation with no telemetry at all, so a compile that cleared the
+    overlay and then repopulated only some files looked, in the log, like
+    nothing had happened. }
+  DLT('cache', Format('ClearAllCompilerFindings -> dropped the overlay for %d file(s)', [N]));
 end;
 
 function TDragLintDiagnosticCache.DropCompilerErrors: Integer;

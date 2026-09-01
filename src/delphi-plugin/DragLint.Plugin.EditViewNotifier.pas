@@ -299,18 +299,35 @@ var
   GPaintLastFlush: UInt64 = 0;
   GPaintLastLine : string = '';
 
+function OnOff(AValue: Boolean): string;
+begin
+  if AValue then Result:= 'on' else Result:= 'OFF';
+end;
+
 procedure PaintTelemetryFlush(const AFile: string; AForce: Boolean);
 var
-  Now : UInt64;
-  Line: string;
+  Now : UInt64            ;
+  Line: string            ;
+  S   : TDragLintSettings ;
 begin
   try
     Now:= GetTickCount64;
     if (not AForce) and (GPaintLastFlush <> 0) and (Now - GPaintLastFlush < PAINT_FLUSH_MS) then Exit;
 
-    Line:= Format('calls=%d drawn=%d | exits: markersOff=%d noView=%d noPath=%d ' +
+    { THE FILTER STATE BELONGS ON THIS LINE. Without it, `allSuppressed=N` and
+      `rows seen: info=23` are two facts a reader has to JOIN by hand against a
+      registry key to reach the conclusion "info is switched off". With it, the
+      line says so. Reading settings here is cheap: this flush is throttled to
+      PAINT_FLUSH_MS, unlike PaintLine itself, which runs per visible line. }
+    S:= LoadSettings;
+    Line:= Format('calls=%d drawn=%d | filters: markers=%s E=%s W=%s H=%s I=%s | ' +
+                  'exits: markersOff=%d noView=%d noPath=%d ' +
                   'noRows=%d allSuppressed=%d | rows seen: err=%d warn=%d info=%d hint=%d | file=%s',
-                  [GPaintCalls, GPaintDrawn, GPaintNoMarkers, GPaintNoView, GPaintNoPath,
+                  [GPaintCalls, GPaintDrawn,
+                   OnOff(S.EnableInlineMarkers), OnOff(S.ShowErrorsInline),
+                   OnOff(S.ShowWarningsInline), OnOff(S.ShowHintsInline),
+                   OnOff(S.ShowInfoInline),
+                   GPaintNoMarkers, GPaintNoView, GPaintNoPath,
                    GPaintNoRows, GPaintAllSupp, GPaintSeenErr, GPaintSeenWarn,
                    GPaintSeenInfo, GPaintSeenHint, ExtractFileName(AFile)]);
     { Nothing changed since the last report -- stay quiet rather than filling the
