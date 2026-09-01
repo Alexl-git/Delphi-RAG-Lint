@@ -148,3 +148,7 @@ build/release-artifacts*/
 # lines) because `git add -A src` swept them in.
 *.pas.bak
 *.dfm.bak
+
+# The packaged VS Code extension. A 468 KB binary per version has no place in
+# the history; rebuild it with `npm run package` in editorsscode\drag-lint.
+dist/

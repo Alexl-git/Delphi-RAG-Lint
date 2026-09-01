@@ -5,10 +5,24 @@
   "version": "1.4.0",
   "publisher": "drag-lint",
   "license": "SEE LICENSE IN LICENSE",
-  "engines": { "vscode": "^1.75.0" },
-  "categories": ["Programming Languages"],
-  "activationEvents": ["onLanguage:pascal"],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:pascal"
+  ],
   "main": "./extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alexl-git/Delphi-RAG-Lint.git",
+    "directory": "editors/vscode/drag-lint"
+  },
+  "scripts": {
+    "package": "node ./scripts/package.js"
+  },
   "contributes": {
     "commands": [
       {
@@ -25,8 +39,18 @@
     "languages": [
       {
         "id": "pascal",
-        "aliases": ["Delphi", "Object Pascal", "Pascal"],
-        "extensions": [".pas", ".dpr", ".dpk", ".inc", ".dfm"],
+        "aliases": [
+          "Delphi",
+          "Object Pascal",
+          "Pascal"
+        ],
+        "extensions": [
+          ".pas",
+          ".dpr",
+          ".dpk",
+          ".inc",
+          ".dfm"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -40,7 +64,11 @@
         },
         "dragLint.engineUpdate": {
           "type": "string",
-          "enum": ["onActivate", "manual", "off"],
+          "enum": [
+            "onActivate",
+            "manual",
+            "off"
+          ],
           "default": "onActivate",
           "markdownEnumDescriptions": [
             "Refresh the private copy when the extension activates (VS Code start, window reload, or the first Pascal file opened) and NEVER mid-session. This is what keeps a live VS Code session from blocking an engine rebuild.",
@@ -56,13 +84,19 @@
         },
         "dragLint.databases": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "markdownDescription": "Optional explicit `--db` paths. Leave EMPTY (the default) to let drag-lint auto-select databases from `drag-lint.json` beside the exe — that is what keeps VS Code pointed at whatever the manifest currently says, including per-project indexes."
         },
         "dragLint.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "description": "Log the LSP conversation to the 'drag-lint' output channel."
         }
@@ -71,5 +105,8 @@
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.9.2"
   }
 }

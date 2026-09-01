@@ -1,0 +1,6 @@
+.vscodeignore
+.gitignore
+package-lock.json
+scripts/**
+node_modules/.package-lock.json
+**/*.map
