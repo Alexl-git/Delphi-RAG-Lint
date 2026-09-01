@@ -75,6 +75,9 @@ type
   /// </remarks>
   TLinter = class
     strict private
+      { See the WalkFilter property. nil = no scoping, which is every caller
+        except the scoped directory walk. }
+      FWalkFilter: TPredicate<string>;
       FLanguage  : PTSLanguage                                             ;
       FQueryRules: TArray<TQueryRule>                                      ;
       { exception-class-unit stage 1. FExcUnit = '' means the feature is OFF and
@@ -220,6 +223,21 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LintFolder(const APath: string; ARecursive: Boolean = True): TArray<TLintFinding>;
+      /// <summary>Optional scope for the DIRECTORY WALK only: when assigned,
+      /// LintFolder does not even PARSE a file for which this returns False.</summary>
+      /// <remarks>
+      /// The walk used to parse every *.pas it globbed and then discard the
+      /// findings of files no project compiles -- 84 of 284 on ORM3 CLIENT, so
+      /// 30% of the parse budget spent to produce output that was thrown away.
+      /// The DROP is not new and is not what this changes; only the cost is.
+      ///
+      /// Caller-owned and caller-set. An explicit `lint &lt;file&gt;` must never
+      /// assign it: the user naming a file is a different act from the tool
+      /// finding one, and that path has to keep working for a file no index
+      /// covers at all -- which is exactly what the IDE does through
+      /// --stand-in-for.
+      /// </remarks>
+      property WalkFilter: TPredicate<string> read FWalkFilter write FWalkFilter;
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: Length(FQueryRules).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1298,6 +1316,12 @@ begin
       Files:= TDirectory.GetFiles(APath, Pattern, Mode);
       for F in Files do
       begin
+        { SCOPE BEFORE PARSE. Skipping here rather than discarding findings
+          later is the whole point: parsing a file to throw its findings away
+          is pure cost. The caller records what was skipped so the run can NAME
+          it -- a scope filter that reports nothing is indistinguishable from a
+          clean codebase. }
+        if Assigned(FWalkFilter) and (not FWalkFilter(F)) then Continue;
         try
           PartArr:= CheckFileImpl(F);
           for P in PartArr do All.Add(P);

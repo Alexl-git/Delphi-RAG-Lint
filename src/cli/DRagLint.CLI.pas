@@ -8528,7 +8528,7 @@ end;
 
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
-  const APrimaryDb: string = ''): Integer;
+  const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil): Integer;
 var
   Cfg      : TLintConfig         ;
   Survivors: TArray<TLintFinding>;
@@ -8550,14 +8550,37 @@ begin
     An explicit `lint <file>` is untouched -- see WalkClosure. }
   var WalkSkipped: TArray<string>:= nil;
   AFindings:= ScopeWalkFindingsToClosure(AArgs, AStore, AFindings, WalkSkipped);
+  { Files the walk skipped WITHOUT PARSING (B8) never reach the filter above,
+    because they produced no finding for it to drop. They are the same class of
+    skip and must be named the same way, so they are merged in here rather than
+    reported through a second, differently-worded channel. }
+  for var PS: string in AWalkSkipped do
+  begin
+    var Dup: Boolean:= False;
+    for var KS: string in WalkSkipped do
+      if SameText(KS, PS) then begin Dup:= True; Break; end;
+    if not Dup then WalkSkipped:= WalkSkipped + [PS];
+  end;
   if Length(WalkSkipped) > 0 then
   begin
-    { COUNTS FILES THAT HAD FINDINGS, not files walked -- ORM3 CLIENT walks 84
-      non-members but only 7 of them produce anything, and saying "84 skipped"
-      here would be a number that matches nothing the reader can see. }
+    { The count is now files SKIPPED, not files that happened to produce a
+      finding. It used to be the latter deliberately, because the walk parsed
+      everything and "84 skipped" described no action the reader could see. Since
+      B8 the walk really does skip them, so 84 is the true size of what was left
+      out -- and the names are capped, because a report is not improved by 84
+      lines the reader has to scroll past. }
     EmitStatusLine(AArgs, Format('lint: %d file(s) NOT reported -- reached by the directory walk, but no '
       + 'project in this index compiles them. Name one explicitly to lint it anyway.', [Length(WalkSkipped)]));
-    for var WS: string in WalkSkipped do EmitStatusLine(AArgs, '  not a project member: ' + WS);
+    const MAX_NAMED = 10;
+    var Shown: Integer:= 0;
+    for var WS: string in WalkSkipped do
+    begin
+      if Shown >= MAX_NAMED then Break;
+      EmitStatusLine(AArgs, '  not a project member: ' + WS);
+      Inc(Shown);
+    end;
+    if Length(WalkSkipped) > MAX_NAMED then
+      EmitStatusLine(AArgs, Format('  ... and %d more', [Length(WalkSkipped) - MAX_NAMED]));
   end;
 
   { 0a: drop exact duplicates. Four used-before-assignment findings arrived twice
@@ -9060,6 +9083,9 @@ var
   DefDisabled : TArray<string>              ;
   EffPath     : string                      ;
   Store       : ISymbolStore                ;
+  { B8: files the directory walk SKIPPED without parsing. Kept because the
+    skip must still be NAMED -- see the scope report in FinalizeAndOutput. }
+  WalkSkipped : TArray<string>              ;
 begin
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
@@ -9334,7 +9360,38 @@ begin
         See docs\INBOX-lint-rule-filter-leaks-other-rules.md. }
       var QueryFindings: TArray<TLintFinding>;
       if TFile.Exists(EffPath) then QueryFindings:= Linter.LintFile(EffPath)
-      else if TDirectory.Exists(EffPath) then QueryFindings:= Linter.LintFolder(EffPath, True)
+      else if TDirectory.Exists(EffPath) then
+      begin
+        { SCOPE THE WALK BEFORE IT PARSES (B8). The non-member DROP already
+          existed -- ScopeWalkFindingsToClosure threw those findings away after
+          the fact -- so this changes COST, not behaviour: 84 of ORM3 CLIENT's
+          284 walked files were parsed only to have their output discarded.
+
+          The skipped names are carried forward because the report must still
+          name them. They cannot be recovered later: a file that is never
+          parsed produces no finding to infer it from. }
+        var InClosure: TDictionary<string, Boolean>:= nil;
+        var SkipList : TStringList:= TStringList.Create;
+        try
+          SkipList.Sorted:= True; SkipList.Duplicates:= dupIgnore; SkipList.CaseSensitive:= False;
+          if WalkClosure(AArgs, Store, InClosure) then
+            Linter.WalkFilter:=
+              function(AFile: string): Boolean
+              begin
+                Result:= InClosure.ContainsKey(LowerCase(ExpandFileName(AFile)));
+                if not Result then SkipList.Add(AFile);
+              end;
+          try
+            QueryFindings:= Linter.LintFolder(EffPath, True);
+          finally
+            Linter.WalkFilter:= nil;
+          end;
+          WalkSkipped:= SkipList.ToStringArray;
+        finally
+          SkipList.Free;
+          InClosure.Free;
+        end;
+      end
       else begin Writeln('ERROR: path does not exist: ', EffPath); Exit(2); end;
       if AArgs.Rule <> '' then
       begin
@@ -9815,7 +9872,7 @@ begin
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
             FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('%d finding(s)', [Length(ASurv)])); end,
-    Store
+    Store, nil, '', WalkSkipped
   );
 end; // function
 
