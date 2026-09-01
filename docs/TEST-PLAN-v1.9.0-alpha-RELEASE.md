@@ -4,30 +4,47 @@
 resolver `1.1.0-alpha`, schema `21`.**
 
 **Purpose.** Confirm in a live RAD Studio 13 Florence (Studio 37.0) that this
-engine behaves in the IDE the way 430 headless tests say it does. This is the
+engine behaves in the IDE the way 433 headless tests say it does. This is the
 last gate before the release is tagged.
+
+**Refreshed 2026-09-01 (session 57) to cover what session 56 shipped.** What
+moved: **the [NOW]/[AFTER] split**, the path table, **0.3**, **1.5**, **all of
+section 4**, **6**, **11** (two rules added), the Part Two gate and the sign-off.
+
+**Three of those would have produced a FALSE BUG REPORT if run as previously
+written** -- 0.3 (the `serverPath` pin is now deliberately unset), 1.5 (it told
+you to report `current` as the defect), and 4.1 (its "deliberately malformed"
+example is now a valid marker). **Do not work from an older printed copy.**
+
+Every behavioural claim below was re-measured against the deployed
+`1.9.0-alpha` binary while writing this refresh, not copied forward.
 
 ---
 
-## >>> READ THIS FIRST: THE PLAN IS SPLIT IN TWO, AND THE SPLIT IS LOAD-BEARING
+## >>> READ THIS FIRST: THE REINDEX IS DONE. BOTH HALVES ARE UNBLOCKED.
 
-`DRAGLINT_EXTRACTOR_VERSION` moved to **1.10.0-alpha** in this build, so **every
-index on this machine is one re-parse behind.** The reindex is scheduled for the
-evening.
+The earlier version of this plan split into **[NOW]** and **[AFTER]** because
+`DRAGLINT_EXTRACTOR_VERSION` had moved to **1.10.0-alpha** and every index on
+this machine was one re-parse behind, with the reindex scheduled for the evening.
 
-That does **not** block most of this plan, but it changes what a failure MEANS,
-so each section is tagged:
+**That reindex has completed:** 33/33 sections, 17,825 files, 5.8 h, and **all 32
+databases verified `current`** (`indexer_stale=False`, `resolver_stale=False`).
+Re-verified at the top of this refresh; the three indexes this plan touches --
+`DataCopy`, `library-Win64` and ORM3 `Micronite2027` -- each read `current`.
 
-| tag | meaning |
-|---|---|
-| **[NOW]** | Valid before the reindex. Tests plumbing, rendering, menus, process behaviour -- things a stale index cannot fake. |
-| **[AFTER]** | **Do not run before the reindex.** These read the index, so a thin or wrong answer would be the STALE DATA, not a defect. Running them early produces false bug reports. |
+**So the gate on Part Two is already satisfied and the whole plan runs in one
+pass.** The `[NOW]` / `[AFTER]` tags are retained below only as a reading aid for
+what each half exercises; neither is blocked any more.
 
-**If you only have time for one half today, do [NOW].** It is the half that
-finds plugin defects, and it is the half a reindex cannot help with.
+> **The gate has INVERTED, and this is the important consequence.** Under the old
+> plan a stale index was expected, so a thin or wrong index answer meant "stale
+> data, not a defect". That excuse is gone. **Every index is current, so an index
+> answer that is thin, wrong, or off by a consistent line offset is now a REAL
+> DEFECT and should be reported.**
 
-> **A [AFTER] step run early is not a pass and not a fail -- it is noise.** Mark
-> it "not run", not "broken".
+15 files failed to parse in that reindex, all third-party and all expected: 6
+`.inc` fragments, fibplus, Raize/Indy, OmniThreadLibrary, Spring.Comparers,
+FireDAC.Phys.MongoDBCli, and 2 `.dfm`. Do not report these.
 
 ---
 
@@ -44,8 +61,9 @@ Copy these once; every command below uses them verbatim.
 |---|---|
 | engine | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` |
 | engine build script | `C:\Projects\Delphi-RAG-lint\build\build_draglint_win64.bat` |
-| VS Code engine refresh | `C:\Projects\Delphi-RAG-lint\tools\refresh-vscode-engine.ps1` |
-| VS Code private engine | `C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine\drag-lint.exe` |
+| VS Code engine refresh | the extension command **`drag-lint: Update Engine Copy Now`** (the old `tools\refresh-vscode-engine.ps1` targets the retired copy -- see 0.3) |
+| VS Code managed engine | `C:\Users\alexanderl\AppData\Roaming\Code\User\globalStorage\drag-lint.drag-lint\engine\drag-lint.exe` |
+| ~~VS Code private engine~~ | ~~`C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine\`~~ -- **RETIRED, still on disk, an orphan** |
 | plugin BPL | `C:\Projects\Delphi-RAG-lint\third_party\dll-win32\dclDragLintWizard.bpl` |
 | engine config | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.json` |
 | plugin log | `C:\Users\alexanderl\AppData\Local\Temp\drag-lint-plugin.log` |
@@ -77,26 +95,51 @@ C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe resolve-dbs --pr
       shows `dclDragLintWizard`. If you rebuilt it, **uncheck, rebuild, re-check**
       -- a BPL rebuilt under a loaded package does not take effect.
 
-- [ ] **0.3 VS Code no longer holds the engine.**
-      `dragLint.serverPath` is now set to a private copy at
-      `C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine\`. **This takes effect only after a
-      VS Code restart.** Verify after restarting it:
+- [ ] **0.3 VS Code no longer holds the engine -- AND THE PIN IS NOW GONE.**
+
+      **CHANGED 2026-09-01.** This step previously told you `dragLint.serverPath`
+      was *set* to a hand-made copy at
+      `C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine\`, and to verify
+      the LSP pointed there. **That is now backwards and would fail the step on
+      correct behaviour.**
+
+      Extension **v1.4.0 is installed** and manages its own private engine copy,
+      refreshing it on activation. An explicit `serverPath` **disables** that
+      managed copy and would freeze VS Code on one engine build forever, so the
+      pin was deliberately **removed**.
+
+      - [ ] `dragLint.serverPath` is **unset** in VS Code settings. (Set = the
+            defect.)
+      - [ ] After VS Code has opened a Pascal file at least once, verify:
       ```powershell
       Get-CimInstance Win32_Process -Filter "Name='drag-lint.exe'" |
         Select-Object ProcessId, ExecutablePath
       ```
-      Any `lsp --stdio` whose parent is `Code` must point at
-      `C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine`, **not** at `C:\Projects\Delphi-RAG-lint\third_party\dll-win64`.
+      Any `lsp --stdio` whose parent is `Code` must resolve under the extension's
+      global storage --
+      `C:\Users\alexanderl\AppData\Roaming\Code\User\globalStorage\drag-lint.drag-lint\engine\drag-lint.exe`
+      -- and **not** `C:\Projects\Delphi-RAG-lint\third_party\dll-win64`.
 
-      > That private copy is a SECOND DEPLOYMENT and goes stale. After any engine
-      > build you want VS Code to reflect:
-      > `pwsh -File C:\Projects\Delphi-RAG-lint\tools\refresh-vscode-engine.ps1 -Kill`
+      > That folder is created on first activation, so its absence before you have
+      > opened a Pascal file is normal, not a failure.
+
+      > **`C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine\` still
+      > exists and is now an ORPHAN** -- the retired hand-made copy, left on disk.
+      > It is no longer refreshed by anything. If you ever see the LSP running
+      > from there, `serverPath` has been re-pinned. An engine that merely EXISTS
+      > answers confidently while being months behind; that has bitten this
+      > project twice.
+
+      > To force the managed copy to refresh after an engine build, use the
+      > extension's own **"Update Engine Copy Now"** command. The old
+      > `tools\refresh-vscode-engine.ps1 -Kill` targeted the orphan above and is
+      > no longer the right instrument.
 
 - [ ] **0.4 Open ORM3** `CLIENT\Micronite2027.dproj` and a unit with real code.
 
 ---
 
-# PART ONE -- [NOW]: valid before the reindex
+# PART ONE -- [NOW]: plumbing, rendering, menus, process behaviour
 
 ## 1. Is the right build loaded?
 
@@ -164,30 +207,36 @@ C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe resolve-dbs --pr
       $r.indexes | Format-Table path, verdict, indexer_stale, resolver_stale -AutoSize
       ```
 
-      **What you should see BEFORE the evening reindex** -- measured on this
-      machine at 17:05 today, so this is a recorded expectation, not a guess:
+      **What you should see -- THE REINDEX HAS RUN, so this expectation is the
+      OPPOSITE of what this step said before.** Re-measured 2026-09-01, so this
+      is a recorded expectation, not a guess:
 
       | index | verdict |
       |---|---|
       | `C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite` | `current` |
-      | `C:\Projects\.drag-lint\library-Win64.sqlite` | `reparse-owed` |
+      | `C:\Projects\.drag-lint\library-Win64.sqlite` | `current` |
+      | `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite` | `current` |
 
-      `DataCopy` is already current because it was re-indexed at 15:34, after the
-      extractor bump. The library index is one extractor version behind and
-      carries **no resolver stamp at all**.
+      > **DO NOT USE THE OLDER VERSION OF THIS STEP.** It expected
+      > `library-Win64` to read `reparse-owed` and told you that `current` was
+      > "the defect worth reporting". Before the reindex that was right; now it
+      > would have you file a **false bug report** against correct behaviour. All
+      > 32 databases were verified `current` after the evening pass.
 
       - [ ] **Record the verdict for each index.**
-      - [ ] **The library index must NOT say `current` before the reindex.** If it
-            does, that is the defect worth reporting -- a stamp claiming
-            freshness the pass never earned is exactly what went wrong earlier
-            today, and it is self-concealing once written.
-      - [ ] **AFTER the evening reindex, re-run the same line.** Every row must
-            read `current`. Anything still `reparse-owed` means a section failed;
-            anything `resolve-owed` means the resolve half did not run.
+      - [ ] **Every row must read `current`.** Anything still `reparse-owed`
+            means a section failed; anything `resolve-owed` means the resolve
+            half did not run. Either one is now a real finding -- and it also
+            invalidates Part Two, so stop and say so rather than testing on.
 
       > The verdicts distinguish **`reparse-owed`** (hours) from
       > **`resolve-owed`** (minutes) on purpose. Treating the cheap one as the
       > expensive one is how a re-resolve gets deferred indefinitely.
+
+      > The original worry behind this step still stands and is worth restating:
+      > a stamp claiming freshness that the pass never earned is **self-concealing
+      > once written**. That is why the check asks the engine rather than trusting
+      > the About window.
 
       > Filed as a gap: the About window is the one screen built to stop a stale
       > index answering confidently -- its own header says so -- and it is blind
@@ -221,23 +270,94 @@ C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe resolve-dbs --pr
       and distinguishable.
 - [ ] **3.4** Toggle a severity off; only those rows lose their mark.
 
-## 4. `dl:ok` markers -- NEW, and the reason is a silent failure
+## 4. `dl:ok` markers -- REWRITTEN 2026-09-01. The old example is now VALID.
 
-- [ ] **4.1** In a scratch unit, put a real finding on a line and mark it with a
-      **deliberately malformed** marker:
+> **READ BEFORE RUNNING.** The previous version of this step used
+> `// dl:ok sleep-in-vcl: because reasons` as its **deliberately malformed**
+> marker. **The colon form is now ACCEPTED** (it is literally test case 10 in
+> `ReviewMarkerTests.dpr`), so that line now suppresses correctly and emits no
+> malformed hint. Running the old step would have you report a false defect.
+
+**Run all of section 4 through *Code Quality > Run Lint All*.** This is
+load-bearing, not a preference: `review-marker-malformed` and
+`review-marker-unused` are **structurally unreachable from the per-file `lint`
+verb**, which passes no scanned-file set. Per-file, you would see nothing and
+file a false bug. (Filed as `INBOX-lint-verb-cannot-report-unused-markers.md`.)
+
+- [ ] **4.1 The colon form is accepted.** In a scratch unit, put a real finding
+      on a line and mark it with the colon form, comma in the prose included:
       ```pascal
-      Sleep(100); // dl:ok sleep-in-vcl: because reasons
+      Sleep(100); // dl:ok sleep-in-vcl: headless test, no UI
       ```
-- [ ] **4.2** Run *Code Quality > Run Lint All*. Expect **two** things on that
-      line: the original finding **still reported**, and a new
-      **`review-marker-malformed`** hint saying the marker suppresses NOTHING and
-      listing the accepted forms.
-- [ ] **4.3** Now write it correctly -- `// dl:ok sleep-in-vcl -- because reasons`
-      -- and confirm the finding IS suppressed and the malformed hint is gone.
+      Expect the finding **suppressed**, and **no** `review-marker-malformed`.
+      The comma is part of the test -- it used to split the tail into two bogus
+      rule ids.
 
-> Why this matters: a marker that fails loudly is a nuisance; one that fails
-> silently is a lie the source tells every future reader. A real project had 11
-> such markers, 11 findings still firing, and no warning of any kind.
+      > **EXPECTED, NOT A DEFECT:** that line also raises a separate
+      > **`review-marker-stale`** hint -- *"carries no @hash, so it cannot be
+      > checked against the code -- re-mark it as `sleep-in-vcl@f48a`"*. That is
+      > a different rule doing its own job, and it appears on **every** hash-less
+      > marker including the correct ones below. Add the `@hash` it suggests and
+      > it goes away. Measured on this build 2026-09-01.
+
+      > This is the fix's whole point. A real project had 11 such markers, 11
+      > findings still firing, and **no warning of any kind**: the marker
+      > suppressed nothing while the source read as reviewed. A marker that fails
+      > loudly is a nuisance; one that fails silently is a lie the file tells
+      > every future reader.
+
+- [ ] **4.2 The dash form still works.**
+      `// dl:ok sleep-in-vcl -- headless test` suppresses, as before.
+
+- [ ] **4.3 Whichever separator comes FIRST wins.** Both of these are one valid
+      marker whose reason keeps the other separator as ordinary prose:
+      ```pascal
+      // dl:ok bare-except -- see note: it is rethrown
+      // dl:ok bare-except: rethrown -- by the caller
+      ```
+
+- [ ] **4.4 A genuinely malformed marker is still caught.** The check is now
+      "does this name a **real rule id**", so use a name that is not one:
+      ```pascal
+      Sleep(100); // dl:ok because reasons
+      ```
+      Expect **two** things on that line: the original finding **still
+      reported**, and a **`review-marker-malformed`** hint naming the bogus id,
+      saying the marker suppresses NOTHING, and listing the accepted forms. A
+      simple **misspelling** (`// dl:ok slepe-in-vcl -- typo`) must behave the
+      same way -- that is the reason this was implemented as "unknown rule id"
+      rather than as "unknown separator".
+
+      Measured on this build 2026-09-01, both lines report:
+      ```
+      review-marker-malformed: dl:ok names "because reasons", which is not a
+      rule id -- this marker suppresses NOTHING. ...
+      review-marker-malformed: dl:ok names "slepe-in-vcl", which is not a
+      rule id -- this marker suppresses NOTHING. ...
+      ```
+
+      > **KNOWN COSMETIC GAP, do not file:** the message lists
+      > `dl:ok <rule-id>`, `dl:ok <rule-id>@<hash>` and
+      > `dl:ok <rule-id> -- <reason>` but **omits the colon form it now
+      > accepts**. The advice is correct, merely incomplete.
+
+- [ ] **4.5 NEW (B3): a marker is honoured across the statement's whole SPAN.**
+      A trailing `// dl:ok` can only be written where a statement **ends**, but a
+      rule reports where it **begins**. On a wrapped multi-line statement, put
+      the marker on the LAST line:
+      ```pascal
+      S := 'a very long string' +
+           SomethingElse +
+           TrailingBit;   // dl:ok <the-rule-id-that-fired> -- reviewed
+      ```
+      Expect **one** outcome, not two: the finding suppressed, and **no**
+      `review-marker-unused` telling you to delete a legitimate review record.
+      Before this fix a single reviewed site produced two messages, the second
+      advising deletion of the very record that was doing the work.
+
+- [ ] **4.6 Positive control -- do not skip.** An **unmarked** finding of the
+      same rule in the same file must **still fire**. Without this, every
+      assertion above passes with the rule simply switched off.
 
 ## 5. Autofix from the panel
 
@@ -250,17 +370,38 @@ C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe resolve-dbs --pr
 - [ ] **5.4** **Allow this message** on a finding writes a properly formatted
       `dl:ok` -- cross-check it does NOT produce the malformed hint from 4.2.
 
-## 6. A directory walk stays inside the project
+## 6. A directory walk stays inside the project -- UPDATED (B8)
+
+**What changed:** the walk now scopes **before it parses**, not after. It used to
+glob every `*.pas`/`*.dpr`/`*.dpk`, parse them all, and then discard the findings
+of files no project compiles -- on ORM3 CLIENT that is **84 of 284 walked files**,
+30% of the parse budget spent on output thrown away a moment later.
+
+**The observable behaviour you are checking is the same; the reported NUMBER is
+not.** Because a file that is never parsed produces no finding, the skipped names
+are now carried out of the walk and merged into the report explicitly.
 
 - [ ] **6.1** Point a lint run at a folder containing units the project does not
       compile (ORM3 CLIENT qualifies -- it holds `- Copy.pas` files).
 - [ ] **6.2** **No finding may name a file the project does not compile.** Read
       the file column, not the summary count.
-- [ ] **6.3** On a **scratch copy**, repeat with `--fix --apply`, then check by
+- [ ] **6.3 The skipped files are still NAMED, and the count now means SKIPPED.**
+      Expect the skipped names listed, **capped at 10 followed by
+      `... and N more`**. The count is files **skipped** -- previously it was
+      files that happened to produce a discarded finding, so **a different number
+      here is correct, not a regression.**
+- [ ] **6.4 An explicitly named file is NEVER filtered.** `lint <file>` on a file
+      no project compiles must still lint it. The user naming a file is a
+      different act from the tool finding one, and the IDE depends on this path
+      through `--stand-in-for`. This is the direction most likely to break
+      silently.
+- [ ] **6.5** On a **scratch copy**, repeat with `--fix --apply`, then check by
       timestamp/hash which files changed.
 
 > Verify what was TOUCHED, not whether a skip message appeared. The first version
-> of this filter was a complete no-op that still printed plausibly.
+> of this filter was a complete no-op that still printed plausibly. "Named, never
+> silent" is the property that makes a scope filter distinguishable from a
+> genuinely clean codebase.
 
 ## 7. Options page and process hygiene
 
@@ -280,10 +421,15 @@ C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe resolve-dbs --pr
 
 ---
 
-# PART TWO -- [AFTER]: only once the reindex has finished
+# PART TWO -- [AFTER]: THE GATE IS OPEN, run these too
 
-**Gate:** the evening `index --all` has completed, and step 1.5's staleness
-warning is **gone**.
+**Gate: SATISFIED.** The `index --all` pass completed (33/33 sections, 17,825
+files) and all 32 databases read `current`. Confirm with step 1.5 and carry on --
+there is nothing left to wait for.
+
+**And the meaning of a failure here has inverted.** These steps read the index.
+Under the old plan a thin or wrong answer was presumed to be stale data; the
+indexes are now current, so **a thin or wrong answer here is a real defect.**
 
 ## 9. Attribute indexing -- NEW in this build
 
@@ -307,6 +453,29 @@ warning is **gone**.
 
 ## 11. Rules that changed behaviour
 
+**Rule counts for this build, measured 2026-09-01:** **179 total = 126 built-in +
+53 external `.scm`**. `hardcoded-absolute-path` moved from external to built-in in
+this build, which is what moved the split from 125/54.
+
+- [ ] **11.0 `sleep-in-vcl` is now SCOPED (new).** It used to match any `Sleep(`
+      call anywhere -- the word VCL appeared only in its message. It fired 11
+      times in one headless DUnitX unit of DataCopy with no message loop and no
+      VCL unit in its uses clause, and **those findings were never true**.
+
+      It now requires the file to contain `vcl.` or `{$r *.dfm}` (the second so a
+      legacy form unit saying `uses Forms` rather than `Vcl.Forms` stays in
+      scope).
+
+      - [ ] In a **VCL form unit**, a `Sleep(100)` in an event handler **fires**.
+      - [ ] In a **headless unit** naming no VCL unit, the same line is
+            **silent**.
+      - [ ] Known and deliberate, **do not report it**: a `Sleep` on a background
+            thread inside a VCL unit **still fires**. Suppressing it needs to know
+            the enclosing class descends from `TThread`, which is ancestry a
+            tree-sitter query cannot see. This is stated in the `.scm` rather than
+            pretended.
+
+
 - [ ] **11.1** `method-pascalcase` must **not** fire on DUnitX
       `[Test]`/`[TestCase]`/`[Setup]` methods, and **must** still fire on an
       ordinary badly-named helper in the same class.
@@ -321,6 +490,39 @@ warning is **gone**.
       `duplicate-global-decl` (caps site lists at six with "and N more"),
       `with-hides-outer-symbol`, `stat-gated-destructive`.
 
+
+- [ ] **11.5 `hardcoded-absolute-path` is now SINK-ANCHORED (B7 stage 1, new).**
+      It was one predicate -- any string literal starting with a drive letter,
+      anywhere, with no notion of what the program did with it. **73 findings on
+      DataCopy, 55% of that report, all literals that open nothing**, including
+      an `IniFile.ReadString` DEFAULT that advised the author to do exactly what
+      the line already did. It now anchors on a filesystem sink (`AssignFile`,
+      `TFile.*`, `TDirectory.*`, `LoadFromFile`/`SaveToFile`, `FileExists`,
+      `CopyFile`, ...) and walks back up to 4 steps.
+
+      - [ ] A literal reaching a real sink -- `TFile.ReadAllText('C:\in\x.txt')`
+            -- **fires**.
+      - [ ] A path-shaped literal reaching **no** sink -- a `Pos` needle, a
+            domain helper's argument, an INI default -- is **silent**.
+      - [ ] A UNC literal at a sink -- `'\\server\share\x'` -- **fires**. This
+            was invisible before, being drive-letter anchored.
+      - [ ] Measured expectation on DataCopy: **73 -> 0** for this rule, and the
+            whole project report **259 -> 123**.
+
+      > **THREE OWNER DECISIONS ARE RULED BUT NOT YET IMPLEMENTED. If you see
+      > these, they are KNOWN -- do not file them:**
+      >
+      > 1. A hardcoded **relative** portion under a computed base -- e.g.
+      >    `TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules\x.txt')` --
+      >    **still fires today and should not.** Only an absolute root (drive
+      >    letter or UNC) is to be flagged. Being fixed next.
+      > 2. `src\cli\DRagLint.CLI.pas:16844` is a **genuine** hardcoded path that
+      >    is **NOT flagged**: the env-var-with-hardcoded-fallback idiom assigns
+      >    the local twice, and the walk currently refuses to reason about a name
+      >    assigned more than once. Being relaxed next.
+      > 3. A path literal reaching no sink will become **`info`** rather than
+      >    silent, so a missing sink can no longer make a whole category
+      >    invisible. Not yet in this build.
 ## 12. Index-backed navigation
 
 - [ ] Hover | Go to Definition | Show Completion (**type a prefix, not just the
@@ -338,7 +540,8 @@ warning is **gone**.
 
 **Auto-Document Whole Project** writes to source files -- commit or stash first.
 **Rebuild Index for This Project** is destructive by design and would throw away
-the evening reindex. Run either only deliberately.
+**5.8 hours** of completed reindex -- and would invalidate all of Part Two with
+it. Run either only deliberately.
 
 ---
 
@@ -348,8 +551,10 @@ the evening reindex. Run either only deliberately.
 2. What you did and what you saw, **separately** -- not a diagnosis.
 3. Tail of *About > Open Plugin Log* (it records what was actually invoked).
 4. The **Versions** group, so the build under test is unambiguous.
-5. For anything index-shaped: *Show Resolved DBs (debug)*, and **whether the
-   reindex had finished**.
+5. For anything index-shaped: *Show Resolved DBs (debug)*, and **the verdict
+   step 1.5 recorded for that index**. Every index reads `current` in this pass,
+   so "it was probably stale" is no longer an available explanation -- if it is
+   not `current`, that is itself the finding.
 
 A step that could not be run is **not** a pass. Mark it skipped and say why.
 
@@ -357,6 +562,6 @@ A step that could not be run is **not** a pass. Mark it skipped and say why.
 
 - [ ] Part 0 complete
 - [ ] **PART ONE [NOW]** complete
-- [ ] Reindex finished
+- [x] Reindex finished -- 2026-08-31 evening, 33/33 sections, all 32 DBs `current`
 - [ ] **PART TWO [AFTER]** complete
 - [ ] **Verdict: release / hold**
