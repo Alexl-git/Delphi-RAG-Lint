@@ -55,6 +55,15 @@ REM and shouts on drift, so this copy and that check are a matched pair: the
 REM build makes them right, the battery proves they stayed right.
 for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
   if not exist "%%~D\rules" mkdir "%%~D\rules"
+  REM MIRROR, NOT COPY. copy /Y never DELETES, so a rule RETIRED from rules\
+  REM survived beside the exe forever. Retiring hardcoded-absolute-path.scm for
+  REM the B7 built-in exposed it: the stale .scm would have loaded ALONGSIDE the
+  REM new built-in under the SAME rule id on the next deploy, restoring the very
+  REM finding flood the rewrite removed. The battery K41 content check could not
+  REM see it either -- it walks rules\ asking present-and-identical, which
+  REM finds MISSING and DIFFERS but never ORPHAN. Both halves fixed 2026-08-31.
+  if exist "%%~D\rules\*.scm"  del /Q "%%~D\rules\*.scm"
+  if exist "%%~D\rules\*.json" del /Q "%%~D\rules\*.json"
   copy /Y "%ROOT%\rules\*.scm"  "%%~D\rules\" >NUL
   copy /Y "%ROOT%\rules\*.json" "%%~D\rules\" >NUL
   if exist "%ROOT%\rules\builtin-symbols.txt" copy /Y "%ROOT%\rules\builtin-symbols.txt" "%%~D\rules\" >NUL

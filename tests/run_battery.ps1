@@ -380,6 +380,23 @@ if ($missingRules.Count -eq 0) {
         $staleRules += ("{0}: DIFFERS {1}" -f $d, $srcFile.Name)
       }
     }
+    # EXTRA, the direction this check could not see (added 2026-08-31, session 56).
+    # The loop above walks rules\ and asks "is it beside the exe, and identical?",
+    # so it finds MISSING and DIFFERS -- and is structurally blind to a file that
+    # exists beside the exe and NO LONGER exists in rules\. That is exactly what
+    # RETIRING a rule leaves behind, because build_draglint_win64.bat stages with
+    # `copy /Y`, which never deletes.
+    #
+    # Found retiring hardcoded-absolute-path.scm for the B7 built-in: the .scm sat
+    # in third_partydll-win64ules and srccliWin64Releaseules after the
+    # source file was deleted. On the next deploy the retired external rule would
+    # have loaded ALONGSIDE the built-in under the same id and restored the very
+    # finding flood the rewrite removed -- while this check printed "matches".
+    foreach ($dstFile in (Get-ChildItem -LiteralPath $dst -File -Include '*.scm','*.json' -Recurse -ErrorAction SilentlyContinue)) {
+      if (-not (Test-Path -LiteralPath (Join-Path $rulesSrc $dstFile.Name))) {
+        $staleRules += ("{0}: ORPHAN {1} (retired from rules\ but still beside the exe)" -f $d, $dstFile.Name)
+      }
+    }
   }
 }
 if ($staleRules.Count -gt 0) {
