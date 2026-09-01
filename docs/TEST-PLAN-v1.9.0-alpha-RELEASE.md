@@ -108,6 +108,18 @@ C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe resolve-dbs --pr
       managed copy and would freeze VS Code on one engine build forever, so the
       pin was deliberately **removed**.
 
+      > **RESTART VS CODE FIRST, and this is not a formality -- MEASURED FAILING
+      > ON THIS MACHINE 2026-09-01.** A `drag-lint.exe lsp --stdio` whose parent
+      > was `Code.exe` was holding
+      > `third_party\dll-win64\drag-lint.exe` and **failed an engine build at the
+      > staging step**, twice, respawning within seconds of being killed --
+      > exactly the lock v1.4.0 exists to eliminate. `globalStorage\
+      > drag-lint.drag-lint\` did not exist, so no managed copy had ever been
+      > made. v1.4.0 is the only version installed on disk, so the running
+      > extension host is still executing the **pre-1.4.0 code it loaded at
+      > startup**. Restart VS Code before running this step, or you will be
+      > testing the old client.
+
       - [ ] `dragLint.serverPath` is **unset** in VS Code settings. (Set = the
             defect.)
       - [ ] After VS Code has opened a Pascal file at least once, verify:

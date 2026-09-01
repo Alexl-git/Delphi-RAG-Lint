@@ -5849,14 +5849,37 @@ var
     if not AProc.IsNull then CollectAssignments(AProc);
   end;
 
-  { THE CLASSIFIER, and the whole of the owner's "pure file name and extension
-    can be hardcoded, but the path to it not":
-      * PORTION  -- carries directory structure: any separator, a drive prefix
-                    `X:`, or a UNC lead `\\` (which the separator test already
-                    covers). Absolute, relative-with-directory and UNC alike.
-      * CLEAN    -- no separator at all: a bare 'report.csv', a bare '.tmp'
-                    extension, or any non-path-ish string that happens to reach
-                    a sink argument (a Format mask fragment, say).
+  { THE CLASSIFIER: an ABSOLUTE ROOT is the finding. Nothing else is.
+      * PORTION  -- a drive prefix `X:` or a UNC lead `\\`. These are the two
+                    ways a literal names a location on ONE machine.
+      * CLEAN    -- everything else, INCLUDING a relative path with directory
+                    structure ('subdir\data.csv'), a bare 'report.csv', a bare
+                    '.tmp' extension, and any non-path-ish string that happens
+                    to reach a sink argument (a Format mask fragment, say).
+
+    NARROWED 2026-09-01 ON THE OWNER'S RULING, and this REVERSES the previous
+    behaviour for relative paths:
+
+      "a hardcoded relative portion should be allowed. Not a risk. We can also
+       flag hard paths with drives included."
+
+    A separator alone used to be enough, which made every relative remainder a
+    finding. But the harm this rule exists to prevent is a path that BREAKS ON
+    ANOTHER MACHINE, and a relative remainder under a computed base does not:
+
+      TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules\builtin.txt')
+      TPath.Combine(GetEnvironmentVariable('APPDATA'),   'obsidian\x.json')
+
+    Both are CORRECT code -- computed base plus fixed remainder is the shape you
+    WANT -- and the old predicate flagged all four such sites in drag-lint's own
+    source. The owner's own suggested fix for the CLI.pas:16844 case is itself
+    of that shape, which confirms it.
+
+    The cost is stated rather than hidden: a relative path under a base that is
+    ALSO hardcoded is now reported only via the base, and a relative path used
+    against a process working directory is no longer reported at all. Both were
+    already weak signals, and the corpus showed the false positives dominating.
+
     ONE GUARD against the obvious over-trigger: a literal containing '://' is a
     URI, not a filesystem path. Fixed-scheme reasoning belongs to
     unsafe-shellexecute (IsFixedSchemeUri), not here. }
@@ -5865,7 +5888,13 @@ var
     Result:= False;
     if AText = '' then Exit;
     if Pos('://', AText) > 0 then Exit;
-    if (Pos('\', AText) > 0) or (Pos('/', AText) > 0) then Exit(True);
+
+    { UNC root, either slash spelling: \\server\share or //server/share. }
+    if (Length(AText) >= 2)
+       and CharInSet(AText[1], ['\', '/'])
+       and CharInSet(AText[2], ['\', '/']) then Exit(True);
+
+    { Drive-letter root: 'C:', 'C:\out\x', 'C:/out/x'. }
     Result:= (Length(AText) >= 2) and (AText[2] = ':')
              and CharInSet(AText[1], ['A'..'Z', 'a'..'z']);
   end;

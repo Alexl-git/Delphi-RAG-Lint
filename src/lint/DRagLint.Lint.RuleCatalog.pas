@@ -206,8 +206,10 @@ begin
       anywhere") until 2026-08-31; the .scm pair was DELETED, not filtered, so the
       built-in owns this id unconditionally and there is no dual implementation to drift.
       Design: docs\INBOX-b7-path-literal-reverse-taint-plan.md. Severity stays info and
-      the id is unchanged so existing dl:ok markers and baselines keep matching. }
-    B('hardcoded-absolute-path',       'security', 'info',    'A hardcoded path portion -- partial or complete -- that reaches a file/directory/ini/dataset-location sink (bare file name + extension are allowed)');
+      the id is unchanged so existing dl:ok markers and baselines keep matching.
+      NARROWED 2026-09-01 to an ABSOLUTE ROOT (owner ruling); the title below moved
+      with it. Rationale lives at IsPathPortion in DRagLint.Diagnostics.AstChecks. }
+    B('hardcoded-absolute-path',       'security', 'info',    'A hardcoded ABSOLUTE root -- a drive letter or a UNC lead -- that reaches a file/directory/ini/dataset-location sink (a relative path and a bare file name + extension are allowed)');
     B('weak-random-for-security',      'security', 'warning', 'A security-named variable is generated with System.Random (not a CSPRNG)');
     B('dfm-hardcoded-credential',      'security', 'warning', 'A credential-named DFM property (Password/Secret/ApiKey) holds a literal string');
     B('insecure-temp-file',            'security', 'warning', 'File written to a hardcoded temp path (\Temp\, C:\Temp) -- predictable/insecure location');

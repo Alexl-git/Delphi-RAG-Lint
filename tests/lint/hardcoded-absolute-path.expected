@@ -1,11 +1,21 @@
 # Redesigned 2026-08-31 (owner spec): a path PORTION that REACHES a filesystem
-# sink is the finding. Absolute and relative both count; a literal nothing opens
-# does not; a bare filename is allowed; anything computed is clean.
+# sink is the finding. A literal nothing opens does not count; a bare filename
+# is allowed; anything computed is clean.
 #
-# The negatives are load-bearing: with only the two positives this file would
+# NARROWED 2026-09-01 (owner ruling): only an ABSOLUTE ROOT -- a drive letter or
+# a UNC lead -- is a finding. A hardcoded RELATIVE portion is allowed, so the
+# LoadFromFile line moved from the positives to the negatives. It is kept as a
+# live negative rather than deleted: firing on it is the exact regression this
+# narrowing removes, and a deleted line asserts nothing.
+#
+# LINE NUMBERS MOVED with it -- the fixture gained a two-line comment, so the
+# old 18/21/24/26 are now 20/23/26/28. These are absolute line numbers; re-derive
+# them from the .pas whenever it is edited.
+#
+# The negatives are load-bearing: with only the one positive this file would
 # pass against the OLD unscoped rule, which fired on every drive-letter literal.
 hardcoded-absolute-path 16
-hardcoded-absolute-path 18
-!hardcoded-absolute-path 21
-!hardcoded-absolute-path 24
+!hardcoded-absolute-path 20
+!hardcoded-absolute-path 23
 !hardcoded-absolute-path 26
+!hardcoded-absolute-path 28

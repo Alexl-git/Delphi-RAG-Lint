@@ -31,8 +31,23 @@
   the safe failure direction).
 
   THIS ALSO FIXES A FALSE NEGATIVE. The old pattern was drive-letter anchored,
-  so `'subdir\report.csv'` and `'\\server\share\x'` were missed entirely.
-  Cases 2 and 3 are those.
+  so `'\\server\share\x'` was missed entirely. Case 3 is that.
+
+  NARROWED 2026-09-01 -- A RELATIVE PORTION IS NOW ALLOWED (owner ruling)
+  ----------------------------------------------------------------------
+    "a hardcoded relative portion should be allowed. Not a risk. We can also
+     flag hard paths with drives included."
+
+  Case 2 therefore INVERTS: it reaches a real sink and must now stay SILENT.
+  Only an absolute ROOT -- a drive letter or a UNC lead -- is a finding, because
+  only those name a location on one machine. Measured against drag-lint's own
+  source, the separator-based predicate produced 4 findings and every one was a
+  fixed remainder under a COMPUTED base, e.g.
+
+      TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules\builtin.txt')
+
+  which is the shape you want, not a defect. The expected finding count moves
+  4 -> 3 for that reason and not because a case was deleted.
 
   WHY BOTH POLARITIES ARE ASSERTED
   --------------------------------
@@ -196,9 +211,8 @@ $fired = @($fired | Sort-Object -Unique)
 Write-Host ("  fired on lines: {0}" -f ($fired -join ', ')) -ForegroundColor DarkGray
 
 Write-Host ''
-Write-Host 'POSITIVE CONTROLS -- a path portion reaching a sink MUST fire' -ForegroundColor Cyan
+Write-Host 'POSITIVE CONTROLS -- an ABSOLUTE ROOT reaching a sink MUST fire' -ForegroundColor Cyan
 Check "1  local literal -> TFile.WriteAllText      (line $ln1)"  ($fired -contains $ln1)
-Check "2  relative path -> AssignFile              (line $ln2)"  ($fired -contains $ln2)
 Check "3  UNC path -> TFileStream.Create           (line $ln3)"  ($fired -contains $ln3)
 Check "4  portion on one side of a concat          (line $ln4)"  ($fired -contains $ln4)
 
@@ -210,8 +224,19 @@ Check "7  IniFile default value                    (line $ln7)"  (-not ($fired -
 Check "10 bare filename, allowed by spec           (line $ln10)" (-not ($fired -contains $ln10))
 
 Write-Host ''
+Write-Host 'RELATIVE PATHS ARE ALLOWED -- owner ruling 2026-09-01' -ForegroundColor Cyan
+# THIS ASSERTION IS INVERTED FROM ITS ORIGINAL. Case 2 reaches a real sink
+# (AssignFile) and still must NOT fire: it carries no drive and no UNC lead, so
+# it names no location on any one machine. "a hardcoded relative portion should
+# be allowed. Not a risk. We can also flag hard paths with drives included."
+# Kept as a live assertion rather than deleted, because the FIRING direction is
+# what regressed drag-lint's own source (4 false positives, all of them a fixed
+# remainder under a computed base).
+Check "2  relative path -> AssignFile, now SILENT  (line $ln2)"  (-not ($fired -contains $ln2))
+
+Write-Host ''
 Write-Host 'COMPUTED SOURCES -- environment/config leaves MUST stay silent' -ForegroundColor Cyan
-Check '8  parameter leaf (form field idiom)'  ($fired.Count -eq 4)  "expected exactly 4 findings, got $($fired.Count)"
+Check '8  parameter leaf (form field idiom)'  ($fired.Count -eq 3)  "expected exactly 3 findings, got $($fired.Count)"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

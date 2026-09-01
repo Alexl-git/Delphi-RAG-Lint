@@ -12,8 +12,10 @@ var
   S : string;
   SL: TStringList;
 begin
-  { A path PORTION reaching a filesystem sink -- absolute and relative BOTH fire. }
+  { An ABSOLUTE ROOT reaching a filesystem sink is the finding. }
   TFile.WriteAllText('C:\Temp\log.txt', 'x');
+  { A RELATIVE portion is allowed (owner ruling 2026-09-01) -- it names no
+    location on any one machine, so it does not break on another. }
   SL := TStringList.Create;
   SL.LoadFromFile('relative\path\data.csv');
   SL.Free;
