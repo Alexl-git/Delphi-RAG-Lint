@@ -133,7 +133,7 @@ end.
 
 function SleepLines([string]$Path) {
   $out = @()
-  foreach ($line in (& $Exe lint $Path 2>`$null)) {
+  foreach ($line in (& $Exe lint $Path 2>$null)) {
     if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+sleep-in-vcl:') { $out += [int]$Matches[1] }
   }
   return @($out | Sort-Object -Unique)
