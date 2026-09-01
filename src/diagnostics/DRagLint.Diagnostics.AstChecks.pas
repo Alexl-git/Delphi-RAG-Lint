@@ -5762,12 +5762,16 @@ const
   { The owner's number: "propagate back say up to 4 steps". }
   MAX_DEPTH = 4;
 var
-  Src      : TBytes                      ;
-  PF       : TParsedFile                 ;
-  Findings : TList<TLintFinding>         ;
-  AsgnCount: TDictionary<string, Integer>;
-  AsgnRhs  : TDictionary<string, TTSNode>;
-  Seen     : TDictionary<string, Boolean>;
+  Src      : TBytes                              ;
+  PF       : TParsedFile                         ;
+  Findings : TList<TLintFinding>                 ;
+  AsgnNodes: TObjectDictionary<string, TList<TTSNode>>;
+  Seen     : TDictionary<string, Boolean>        ;
+  { Start byte of the sink call currently being reasoned about. An assignment
+    that occurs AFTER the sink cannot reach it, so the walk needs the position;
+    it is a field rather than a parameter because Classify recurses through
+    several shapes and every one of them would have to thread it through. }
+  SinkByte : Cardinal                            ;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -5808,15 +5812,17 @@ var
     Result:= Args.NamedChild(0);
   end;
 
-  { Every `X := <rhs>` in ASubtree, counted by lowercased LHS name -- the
-    CheckShellExec map, verbatim, including WHY the RHS kept is the first one:
-    a count above 1 means "refuse", so the stored node is never consulted. }
+  { EVERY `X := <rhs>` in ASubtree, in source order, keyed by lowercased LHS.
+    ALL of them are kept, which is the change of 2026-09-01: the old map counted
+    them and the walk REFUSED whenever the count was not exactly 1. See the
+    reaching-definitions note at SurvivingAssignments for why counting was the
+    wrong question. }
   procedure CollectAssignments(const N: TTSNode);
   var
-    I  : Integer;
-    L  : TTSNode;
-    Nm : string ;
-    Cnt: Integer;
+    I : Integer         ;
+    L : TTSNode         ;
+    Nm: string          ;
+    Lst: TList<TTSNode> ;
   begin
     if N.IsNull then Exit;
     if N.NodeType = 'assignment' then
@@ -5825,16 +5831,33 @@ var
       if (not L.IsNull) and (L.NodeType = 'identifier') then
       begin
         Nm:= LowerCase(NodeStr(L));
-        if AsgnCount.TryGetValue(Nm, Cnt) then
-          AsgnCount[Nm]:= Cnt + 1
-        else
+        if not AsgnNodes.TryGetValue(Nm, Lst) then
         begin
-          AsgnCount.Add(Nm, 1);
-          AsgnRhs  .Add(Nm, N.ChildByField('rhs'));
+          Lst:= TList<TTSNode>.Create;
+          AsgnNodes.Add(Nm, Lst);
         end;
+        Lst.Add(N);
       end;
     end;
     for I:= 0 to N.NamedChildCount - 1 do CollectAssignments(N.NamedChild(I));
+  end;
+
+  { Is this assignment inside a branch -- i.e. can control reach the sink
+    WITHOUT it having executed? Walked from the assignment up to the enclosing
+    routine; any conditional or loop construct on the way makes it so. }
+  function IsConditionalAsgn(const AAsgn, AProc: TTSNode): Boolean;
+  var
+    P: TTSNode;
+  begin
+    Result:= False;
+    if AAsgn.IsNull then Exit;
+    P:= AAsgn.Parent;
+    while (not P.IsNull) and (P.StartByte <> AProc.StartByte) do
+    begin
+      if MatchText(P.NodeType, ['if', 'ifElse', 'case', 'caseCase',
+                                'try', 'while', 'repeat', 'for']) then Exit(True);
+      P:= P.Parent;
+    end;
   end;
 
   { The scope is the INNERMOST enclosing routine, not the file. File-wide
@@ -5844,9 +5867,76 @@ var
     code it was written for. }
   procedure BuildMap(const AProc: TTSNode);
   begin
-    AsgnCount.Clear;
-    AsgnRhs  .Clear;
+    AsgnNodes.Clear;
     if not AProc.IsNull then CollectAssignments(AProc);
+  end;
+
+  { REACHING DEFINITIONS, to the owner's ruling of 2026-09-01:
+
+      "Even in case of hardcoded default; if X then <computed> we also should
+       issue because the default is a possible outcome."
+
+    So the question is not "how many times was this assigned" -- the old map
+    counted, and refused whenever the answer was not 1 -- but "which assignments
+    can still be in effect at the sink". That refusal silenced the single
+    commonest Delphi spelling of this bug, and the old drive-letter rule DID
+    catch it, so leaving it was a regression against the rule this replaced:
+
+      BdsDir := GetEnvironmentVariable('BDS');
+      if BdsDir = '' then BdsDir := 'C:\Program Files (x86)\...';   // MISSED
+      LibRelease := TPath.Combine(BdsDir, 'lib\' + PlatDir + '\release');
+
+    An assignment SURVIVES to the sink unless a later UNCONDITIONAL assignment
+    overwrites it first. Conditional ones never kill, because the branch may not
+    be taken -- that is exactly the owner's "the default is a possible outcome",
+    and it is why the mirror shape (hardcoded default, then a conditional
+    computed overwrite) reports too.
+
+    The one case that stays SILENT is a dead store -- an unconditional overwrite
+    makes the earlier value impossible, so it cannot break on any machine:
+
+      LPath := 'C:\out\report.csv';   // can never reach the sink
+      LPath := ReadCfg('EdtFrom');
+      TFile.WriteAllText(LPath, 'x');
+
+    Ordering is by StartByte rather than by collection order, because the
+    collection walk is pre-order over the whole routine and a branch body can be
+    visited before a statement that textually follows the branch. }
+  function SurvivingAssignments(const AName: string; const ASinkByte: Cardinal;
+                                const AProc: TTSNode): TArray<TTSNode>;
+  var
+    Lst      : TList<TTSNode>;
+    Res      : TList<TTSNode>;
+    N        : TTSNode       ;
+    I, LastU : Integer       ;
+  begin
+    Result:= nil;
+    if not AsgnNodes.TryGetValue(AName, Lst) then Exit;
+
+    Res:= TList<TTSNode>.Create;
+    try
+      { The last UNCONDITIONAL assignment before the sink kills every earlier
+        assignment, conditional or not. }
+      LastU:= -1;
+      for I:= 0 to Lst.Count - 1 do
+      begin
+        N:= Lst[I];
+        if N.StartByte >= ASinkByte then Continue;
+        if not IsConditionalAsgn(N, AProc) then
+          if (LastU < 0) or (N.StartByte > Lst[LastU].StartByte) then LastU:= I;
+      end;
+
+      for I:= 0 to Lst.Count - 1 do
+      begin
+        N:= Lst[I];
+        if N.StartByte >= ASinkByte then Continue;
+        if (LastU >= 0) and (N.StartByte < Lst[LastU].StartByte) then Continue;
+        Res.Add(N);
+      end;
+      Result:= Res.ToArray;
+    finally
+      Res.Free;
+    end;
   end;
 
   { THE CLASSIFIER: an ABSOLUTE ROOT is the finding. Nothing else is.
@@ -5899,6 +5989,25 @@ var
              and CharInSet(AText[1], ['A'..'Z', 'a'..'z']);
   end;
 
+  { A COMPLETE location, not merely a root: a drive plus something under it, or
+    a UNC share. 'C:\Temp\log.txt' and '\\server\share' qualify; 'C:' and 'C:\'
+    do not -- they name a device, and the thing that breaks on another machine
+    is the PLACE. Drives the severity split in Report. }
+  function IsCompleteAbsolute(const AText: string): Boolean;
+  begin
+    Result:= False;
+    if not IsPathPortion(AText) then Exit;
+
+    { UNC: needs a name after the leading pair. }
+    if (Length(AText) >= 2) and CharInSet(AText[1], ['\', '/'])
+                            and CharInSet(AText[2], ['\', '/']) then
+      Exit(Length(Trim(Copy(AText, 3, MaxInt))) > 0);
+
+    { Drive: needs a separator AND at least one character under it. }
+    Result:= (Length(AText) >= 4) and CharInSet(AText[3], ['\', '/'])
+             and (Length(Trim(Copy(AText, 4, MaxInt))) > 0);
+  end;
+
   { The path-building helpers whose ARGUMENTS are still the path, so the walk
     passes through them. Every OTHER call is a computed value -- the owner's
     "from some environment" -- and is therefore CLEAN. }
@@ -5945,9 +6054,17 @@ var
       AName:= Nm;
       { Classic Pascal / RTL file + directory I/O. }
       if SameText(Nm, 'AssignFile') then begin AIdx0:= 1; Exit(True); end;
+      { DirectoryExists/MkDir/RmDir/FindFirst added 2026-09-01. DirectoryExists
+        is the owner's own stated idiom -- "to figure out if the software is
+        running on a test computer or customer, to check for existence of some
+        folder. I don't open any files, just check" -- and its absence made
+        exactly that shape invisible, which is the silent-false-negative cost
+        this table's header warns about. MkDir/RmDir are the direct siblings of
+        ChDir, already here; FindFirst's first operand is a path mask. }
       if MatchText(Nm, ['FileOpen', 'FileCreate', 'FileExists', 'DeleteFile',
                         'ForceDirectories', 'CreateDir', 'ChDir', 'RemoveDir',
-                        'CreateFile']) then begin AIdx0:= 0; Exit(True); end;
+                        'CreateFile', 'DirectoryExists', 'MkDir', 'RmDir',
+                        'FindFirst']) then begin AIdx0:= 0; Exit(True); end;
       if MatchText(Nm, ['RenameFile', 'CopyFile', 'MoveFile']) then
         begin AIdx0:= 0; AIdx1:= 1; Exit(True); end;
       { ShellExecute is taken here in its PATH role only (lpFile). Injection
@@ -6030,8 +6147,20 @@ var
     Seen.Add(Key, True);
     F:= Default(TLintFinding);
     F.RuleId  := 'hardcoded-absolute-path';
-    F.Severity:= 'info';
-    F.Message := Format('Hardcoded path portion reaches %s -- a path baked into the source breaks on other machines and deployments. The file name and extension may be constants; the path to them should come from configuration or be computed at runtime (TPath, known-folder APIs).', [ASink]);
+    { TWO TIERS, owner ruling 2026-09-01: "issue a stronger message when we see
+      any complete path including drive letter". A literal that names a WHOLE
+      location -- a drive root plus something under it, or a UNC share -- is the
+      one that certainly breaks on another machine, so it is a warning and says
+      so. A bare root ('C:', 'C:\') still reports, but at info: it is a drive
+      reference, not yet a place. }
+    if IsCompleteAbsolute(UnquoteLiteral(NodeStr(ALit))) then
+    begin
+      F.Severity:= 'warning';
+      F.Message := Format('COMPLETE hardcoded path reaches %s -- this names one machine''s filesystem and will not exist on another. Take the root from configuration, the environment, or a known-folder API (TPath.GetHomePath / GetDocumentsPath, GetEnvironmentVariable) and keep only the relative remainder in the source.', [ASink]);
+    end
+    else
+      F.Message := Format('Hardcoded path portion reaches %s -- a path baked into the source breaks on other machines and deployments. The file name and extension may be constants; the path to them should come from configuration or be computed at runtime (TPath, known-folder APIs).', [ASink]);
+    if F.Severity = '' then F.Severity:= 'info';
     F.FilePath := AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
     F.StartCol := Integer(P.Column) + 1;
@@ -6048,8 +6177,9 @@ var
                      const AProc: TTSNode; const ASink: string);
   var
     A, Rhs, Args, Op: TTSNode;
+    Asgn            : TTSNode;
     Nm              : string ;
-    Cnt, I          : Integer;
+    I               : Integer;
   begin
     if ADepth > MAX_DEPTH then Exit; { depth exceeded -> CLEAN }
     A:= UnwrapCast(A0);
@@ -6095,12 +6225,14 @@ var
     Nm:= LowerCase(NodeStr(A));
     { Not assigned in this routine at all: a parameter, a field, a global, a
       with-alias -- every one of them "from some environment". CLEAN. }
-    if not AsgnCount.TryGetValue(Nm, Cnt) then Exit;
-    { Assigned more than once: the ShellExec refusal, INVERTED -- refusing
-      here means going silent, not reporting. }
-    if Cnt <> 1 then Exit;
-    if not AsgnRhs.TryGetValue(Nm, Rhs) then Exit;
-    Classify(Rhs, ADepth + 1, AProc, ASink);
+    { EVERY surviving assignment is classified, not just a lone one. A name with
+      several live definitions is several possible values at the sink, and any
+      one of them being a hardcoded path is the finding. }
+    for Asgn in SurvivingAssignments(Nm, SinkByte, AProc) do
+    begin
+      Rhs:= Asgn.ChildByField('rhs');
+      if not Rhs.IsNull then Classify(Rhs, ADepth + 1, AProc, ASink);
+    end;
   end;
 
   procedure Visit(const N: TTSNode; const AProc: TTSNode);
@@ -6126,6 +6258,7 @@ var
           { Rebuilt per sink site from its enclosing routine -- sinks are rare,
             so nothing is collected up front. }
           BuildMap(Cur);
+          SinkByte:= N.StartByte;
           if (I0 >= 0) and (Args.NamedChildCount > I0) then
             Classify(Args.NamedChild(I0), 0, Cur, SinkName);
           if (I1 >= 0) and (Args.NamedChildCount > I1) then
@@ -6139,6 +6272,7 @@ var
       if (not Lhs.IsNull) and (Lhs.NodeType = 'exprDot') and IsPathProperty(Lhs, SinkName) then
       begin
         BuildMap(Cur);
+        SinkByte:= N.StartByte;
         Classify(N.ChildByField('rhs'), 0, Cur, SinkName);
       end;
     end;
@@ -6152,16 +6286,16 @@ begin
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
   Findings := TList<TLintFinding>.Create;
-  AsgnCount:= TDictionary<string, Integer>.Create;
-  AsgnRhs  := TDictionary<string, TTSNode>.Create;
+  { OWNS the lists, so a routine's per-name assignment lists are freed on Clear
+    at the next sink and again at teardown. }
+  AsgnNodes:= TObjectDictionary<string, TList<TTSNode>>.Create([doOwnsValues]);
   Seen     := TDictionary<string, Boolean>.Create;
   try
     Visit(PF.Tree.RootNode, Default(TTSNode));
     Result:= Findings.ToArray;
   finally
     Seen     .Free;
-    AsgnRhs  .Free;
-    AsgnCount.Free;
+    AsgnNodes.Free;
     Findings .Free;
   end;
 end; // function

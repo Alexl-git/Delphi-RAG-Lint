@@ -177,9 +177,35 @@ procedure Case11_AssignedTwice;
 var
   LPath: string;
 begin
-  LPath := 'C:\out\report.csv';
+  LPath := 'C:\dead\store.csv';
   LPath := ReadCfg('EdtFrom');
   TFile.WriteAllText(LPath, 'x');
+end;
+
+// ---- MUST FIRE: a live hardcoded DEFAULT (owner ruling 2026-09-01) ---------
+
+procedure Case12_EnvThenHardcodedFallback;
+var
+  BdsDir, LibRelease: string;
+begin
+  BdsDir := ReadCfg('BDS');
+  if BdsDir = '' then BdsDir := 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
+  LibRelease := TPath.Combine(BdsDir, 'lib\release');
+  if TDirectory.Exists(LibRelease) then Exit;
+end;
+
+procedure Case13_HardcodedDefaultThenConditional(const AFlag: Boolean);
+var
+  LPath: string;
+begin
+  LPath := 'C:\fallback\out.txt';
+  if AFlag then LPath := ReadCfg('EdtFrom');
+  TFile.WriteAllText(LPath, 'x');
+end;
+
+procedure Case14_DirectoryExistsSink;
+begin
+  if DirectoryExists('C:\ProgramData\IsThisTheTestBox') then Exit;
 end;
 
 end.
@@ -200,6 +226,14 @@ $ln5  = LineOf "FolderInUse('Copy from folder', 'C:\FROM');"
 $ln6  = LineOf "N := Pos('C:\FROM', AMess);"
 $ln7  = LineOf "S := AIni.ReadString('General', 'EdtFrom', 'C:\');"
 $ln10 = LineOf "TFile.WriteAllText('report.csv', 'x');"
+# A DISTINCT literal on purpose: Case1 uses the identical statement text, and
+# LineOf returns the FIRST match, so sharing it silently pointed this assertion
+# at Case1's line -- where a finding is REQUIRED -- and it failed against a
+# correct build.
+$ln11 = LineOf "LPath := 'C:\dead\store.csv';"
+$ln12 = LineOf "if BdsDir = '' then BdsDir := 'C:\Program Files (x86)\Embarcadero\Studio\37.0';"
+$ln13 = LineOf "LPath := 'C:\fallback\out.txt';"
+$ln14 = LineOf "if DirectoryExists('C:\ProgramData\IsThisTheTestBox') then Exit;"
 Check 'fixture lines located' (@($ln1,$ln2,$ln3,$ln4,$ln5,$ln6,$ln7,$ln10) -notcontains -1) `
   "fire: $ln1,$ln2,$ln3,$ln4  silent: $ln5,$ln6,$ln7,$ln10"
 
@@ -235,8 +269,48 @@ Write-Host 'RELATIVE PATHS ARE ALLOWED -- owner ruling 2026-09-01' -ForegroundCo
 Check "2  relative path -> AssignFile, now SILENT  (line $ln2)"  (-not ($fired -contains $ln2))
 
 Write-Host ''
+Write-Host 'REACHING DEFINITIONS -- a LIVE hardcoded default MUST fire' -ForegroundColor Cyan
+# Owner ruling 2026-09-01: "Even in case of hardcoded default; if X then
+# <computed> we also should issue because the default is a possible outcome."
+# Both directions of the idiom are asserted, because they are mirror images and
+# a fix for one can easily miss the other:
+#   12 = env first, hardcoded fallback second (the CLI.pas:16844 shape)
+#   13 = hardcoded default first, conditional computed overwrite second
+# 12 also proves the walk still crosses TPath.Combine and a second local.
+Check "12 env, then hardcoded fallback         (line $ln12)" ($fired -contains $ln12)
+Check "13 hardcoded default, cond. overwrite   (line $ln13)" ($fired -contains $ln13)
+
+Write-Host ''
+Write-Host 'SINK TABLE -- DirectoryExists is a sink (owner idiom)' -ForegroundColor Cyan
+# "to figure out if the software is running on a test computer or customer, to
+# check for existence of some folder. I don't open any files, just check."
+# That idiom was INVISIBLE until 2026-09-01: DirectoryExists was missing from
+# SinkOf, and a missing sink is a false negative that looks like health.
+Check "14 DirectoryExists is a sink            (line $ln14)" ($fired -contains $ln14)
+
+Write-Host ''
+Write-Host 'DEAD STORE -- an UNCONDITIONAL overwrite still kills it' -ForegroundColor Cyan
+# The limit of the ruling, and the reason this is reaching-definitions rather
+# than "any assignment taints": here the hardcoded value can NEVER reach the
+# sink, so it cannot break on any machine. The owner's own test for firing is
+# that the default "is a possible outcome" -- this one is not.
+Check "11 dead store before the sink, SILENT   (line $ln11)" (-not ($fired -contains $ln11))
+
+Write-Host ''
 Write-Host 'COMPUTED SOURCES -- environment/config leaves MUST stay silent' -ForegroundColor Cyan
-Check '8  parameter leaf (form field idiom)'  ($fired.Count -eq 3)  "expected exactly 3 findings, got $($fired.Count)"
+Check '8  parameter leaf (form field idiom)'  ($fired.Count -eq 6)  "expected exactly 6 findings, got $($fired.Count)"
+
+Write-Host ''
+Write-Host 'SEVERITY TIERS -- a COMPLETE path is a warning, not info' -ForegroundColor Cyan
+# Owner ruling: "issue a stronger message when we see any complete path
+# including drive letter."
+$sev = @{}
+foreach ($line in (& $Exe lint $fixture 2>$null)) {
+  if ("$line" -match ':(\d+):\d+\s+\[(\w+)\]\s+hardcoded-absolute-path:') { $sev[[int]$Matches[1]] = $Matches[2] }
+}
+Check "1  'C:\out\report.csv' is warning"      ($sev[$ln1]  -eq 'warning') "got '$($sev[$ln1])'"
+Check "3  UNC share is warning"                ($sev[$ln3]  -eq 'warning') "got '$($sev[$ln3])'"
+Check "12 drive-rooted fallback is warning"    ($sev[$ln12] -eq 'warning') "got '$($sev[$ln12])'"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
