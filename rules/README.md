@@ -39,12 +39,39 @@ the rule id, warn capture name = `warn`).
   "id": "rule-id",
   "severity": "info | warning | error",
   "message": "Human-readable message printed with each finding.",
-  "warn_capture": "name-of-the-capture-to-pin-the-finding-to"
+  "warn_capture": "name-of-the-capture-to-pin-the-finding-to",
+  "enabled": false,
+  "exclude_if_ancestor": ["declConst"],
+  "require_ancestor": ["for", "while", "repeat"],
+  "require_file_text": ["vcl.", "{$r *.dfm}"]
 }
 ```
 
+| key | default | meaning |
+|---|---|---|
+| `id` | the `.scm` file name | Rule id, as reported and as written in a `dl:ok` marker. |
+| `severity` | `warning` | `info` / `warning` / `error`. |
+| `message` | the rule id | Printed with each finding. |
+| `warn_capture` | `warn` | Which capture the finding is pinned to. |
+| `enabled` | `true` | `false` ships the rule OFF; `--enable <id>` turns it back on. |
+| `exclude_if_ancestor` | none | Node kinds; a match is DROPPED when the picked node has an ancestor of any listed kind. |
+| `require_ancestor` | none | Node kinds; a match COUNTS ONLY inside one of them. |
+| `require_file_text` | none | Substrings; the rule does not run at all against a file whose text contains NONE of them. Case-insensitive, matched against the whole file. |
+
 If `warn_capture` is omitted (or no capture by that name is present in a
 match), the finding is pinned to the **first** capture in the match.
+
+**Ancestor keys are STRUCTURE; `require_file_text` is SCOPE.** A tree-sitter
+pattern matches a subtree shape and cannot ask "has some ancestor of kind K",
+which is what the two ancestor keys are for -- `concat-in-loop` names the three
+loop kinds so `S := S + X` executed once is not reported as quadratic.
+`require_file_text` answers a different question: whether the rule is
+MEANINGFUL in this file at all. `sleep-in-vcl` requires `vcl.` or `{$r *.dfm}`,
+because a headless console or test unit has no UI to freeze -- unscoped it fired
+11 times in one DUnitX unit whose uses clause names no VCL unit.
+
+Do not confuse `require_file_text` with the internal literal pre-filter, which
+is DERIVED from the query as an optimisation and is not settable here.
 
 ### .scm format
 
