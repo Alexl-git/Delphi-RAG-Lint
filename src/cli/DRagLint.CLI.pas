@@ -19896,6 +19896,42 @@ begin
   while (LineEnd <= Length(Raw)) and not CharInSet(Raw[LineEnd], [#13, #10]) do Inc(LineEnd);
   OldLine:= Copy(Raw, LineStart, LineEnd - LineStart);
 
+  { REFUSE A LINE THAT CARRIES NO CODE. A `dl:ok` marker asserts "a human
+    reviewed THIS CODE", and its hash is taken over the line's code content, so
+    a line with none cannot carry one meaningfully.
+
+    THE `///` CASE IS WHY THIS EXISTS, and it is DATA DAMAGE, not a nuisance.
+    Reported by DataCopy 2026-09-01: `allow --fix-line 1163 --fix-rule doc-drift
+    --apply` wrote the marker into a DocInsight `///` line. Because `///` runs to
+    end of line, the appended `// dl:ok ...` becomes DOCUMENTATION TEXT -- it was
+    reverted by hand. Reproduced here exactly.
+
+    THE ROUND-TRIP CHECK BELOW DOES NOT CATCH IT. That check was added for the
+    block-comment case, where Parse refuses to see the marker and the write is
+    rejected. On a `///` line Parse SUCCEEDS -- LineCommentStart finds the `//`
+    of the `///` itself -- so the marker parses back, the guard passes, and the
+    doc comment is corrupted anyway.
+
+    The empty normalization is also proof on its own terms: the marker written
+    to that line carried `@e3b0`, the first four hex of SHA-256 of the EMPTY
+    STRING, so it could never have matched anything and would have reported
+    stale forever. Two failures, one cause: there is no code on the line.
+
+    Refusing rather than relocating is deliberate. Moving the marker to the
+    declaration the doc belongs to is a GUESS about which line the finding meant,
+    and this command's whole failure mode is writing a marker somewhere it does
+    not belong. The message names the problem and leaves the choice to a human. }
+  if Trim(TReviewMarkers.NormalizeLine(OldLine)) = '' then
+  begin
+    Writeln(Format('Refusing to write: %s:%d carries no code -- it is a comment, ' +
+                   'doc comment or blank line. A dl:ok marker records that CODE was ' +
+                   'reviewed and is hashed over that code, so a marker here would ' +
+                   'become comment text and could never match. Allow the rule on the ' +
+                   'declaration or statement the finding is about.',
+                   [AArgs.Target, AArgs.FixLine]));
+    Exit(1);
+  end;
+
   { Compute the SAME window hash the checker will compute, from the same file
     text this edit is about to be applied to. InsertInto only ever sees one
     line, so it cannot derive a window itself; letting it fall back to
