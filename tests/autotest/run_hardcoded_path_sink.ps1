@@ -1,0 +1,219 @@
+<#
+  run_hardcoded_path_sink.ps1 -- `hardcoded-absolute-path` must flag a path
+  PORTION that reaches a filesystem SINK, and stay silent otherwise.
+
+  THE REDESIGN (owner spec, 2026-08-31)
+  -------------------------------------
+  The old rule was one predicate -- any string literal starting with a drive
+  letter, anywhere, regardless of what the program did with it:
+
+      ((literalString) @warn (#match? @warn "^'[A-Za-z]:"))
+
+  73 findings on DataCopy, 55% of their test report, and the failures were all
+  literals passed to things that touch no filesystem: a domain helper, `Pos`
+  as a search needle, and an IniFile default -- that last one advising the
+  author to do exactly what the line already does.
+
+  The owner's specification, in his words:
+    * "if we see any specific hardcoded part of location - doesn't have to be
+      a complete address we put this message"
+    * "The pure file name and extension can be hardcoded, but the path to it
+      not. Be it partial or complete path."
+    * "BUT if it is computed and not from string const, but from some
+      environment, like form field or INI file, then it is OK."
+    * "propagate back say up to 4 steps ... if none of them is a text const we
+      consider it not hard coded"
+
+  So: anchor on a sink, walk backwards up to 4 steps, classify the leaves.
+  A string literal contributing a path PORTION is the finding; anything
+  computed -- config, environment, UI, parameter, function result -- is clean,
+  and so is anything unresolved (this rule over-reports today, so silence is
+  the safe failure direction).
+
+  THIS ALSO FIXES A FALSE NEGATIVE. The old pattern was drive-letter anchored,
+  so `'subdir\report.csv'` and `'\\server\share\x'` were missed entirely.
+  Cases 2 and 3 are those.
+
+  WHY BOTH POLARITIES ARE ASSERTED
+  --------------------------------
+  A suite asserting only "the false findings are gone" passes with the rule
+  switched off. Cases 1-4 are the positive controls: they must fire, and case
+  1 is specifically the true positive that the tempting cheap fix ("only flag
+  a literal that IS a direct argument to a file API") would have lost.
+#>
+[CmdletBinding()]
+param(
+  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$WorkDir = "$env:TEMP\drag-lint-hardcoded-path-sink"
+)
+$ErrorActionPreference = 'Stop'
+$script:Failed = $false
+function Check($n, $ok, $d = '') {
+  $s = if ($ok) { 'PASS' } else { 'FAIL' }
+  $c = if ($ok) { 'Green' } else { 'Red' }
+  Write-Host ("  [{0}] {1} {2}" -f $s, $n, $d) -ForegroundColor $c
+  if (-not $ok) { $script:Failed = $true }
+}
+
+if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+$Exe = (Resolve-Path $Exe).Path
+if (-not (Test-Path $WorkDir)) { New-Item -ItemType Directory $WorkDir | Out-Null }
+
+$fixture = Join-Path $WorkDir 'HardcodedPathSink.pas'
+$body = @'
+unit HardcodedPathSink;
+
+interface
+
+implementation
+
+uses
+  System.SysUtils, System.Classes, System.IOUtils, System.IniFiles;
+
+function FolderInUse(const ALabel, APath: string): Boolean; forward;
+function ReadCfg(const AKey: string): string; forward;
+
+function FolderInUse(const ALabel, APath: string): Boolean;
+begin
+  Result := (ALabel <> '') and (APath <> '');
+end;
+
+function ReadCfg(const AKey: string): string;
+begin
+  Result := AKey;
+end;
+
+// ---- MUST FIRE -------------------------------------------------------------
+
+procedure Case1_LocalThenSink;
+var
+  LPath: string;
+begin
+  LPath := 'C:\out\report.csv';
+  TFile.WriteAllText(LPath, 'x');
+end;
+
+procedure Case2_RelativePath;
+var
+  F: TextFile;
+begin
+  AssignFile(F, 'subdir\data.csv');
+end;
+
+procedure Case3_UncPath;
+var
+  S: TFileStream;
+begin
+  S := TFileStream.Create('\\server\share\x.dat', fmOpenRead);
+  S.Free;
+end;
+
+procedure Case4_ConcatPortion(const AName: string);
+var
+  SL: TStringList;
+begin
+  SL := TStringList.Create;
+  SL.LoadFromFile('C:\cfg\' + AName);
+  SL.Free;
+end;
+
+// ---- MUST STAY SILENT ------------------------------------------------------
+
+procedure Case5_NonSinkCall;
+begin
+  FolderInUse('Copy from folder', 'C:\FROM');
+end;
+
+procedure Case6_SearchNeedle(const AMess: string);
+var
+  N: Integer;
+begin
+  N := Pos('C:\FROM', AMess);
+  if N > 0 then Exit;
+end;
+
+procedure Case7_IniDefault(const AIni: TIniFile);
+var
+  S: string;
+begin
+  S := AIni.ReadString('General', 'EdtFrom', 'C:\');
+  if S = '' then Exit;
+end;
+
+procedure Case8_EnvironmentLeaf(const AText: string);
+begin
+  TFile.WriteAllText(AText, 'x');
+end;
+
+procedure Case9_ComputedOneStepBack;
+var
+  LPath: string;
+begin
+  LPath := ReadCfg('EdtFrom');
+  TFile.WriteAllText(LPath, 'x');
+end;
+
+procedure Case10_BareFilename;
+begin
+  TFile.WriteAllText('report.csv', 'x');
+end;
+
+procedure Case11_AssignedTwice;
+var
+  LPath: string;
+begin
+  LPath := 'C:\out\report.csv';
+  LPath := ReadCfg('EdtFrom');
+  TFile.WriteAllText(LPath, 'x');
+end;
+
+end.
+'@
+$norm = $body -replace "`r`n", "`n" -replace "`n", "`r`n"
+[System.IO.File]::WriteAllText($fixture, $norm, [System.Text.Encoding]::ASCII)
+
+$lines = [System.IO.File]::ReadAllLines($fixture)
+function LineOf([string]$Needle) {
+  for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq $Needle) { return $i + 1 } }
+  return -1
+}
+$ln1  = LineOf "LPath := 'C:\out\report.csv';"
+$ln2  = LineOf "AssignFile(F, 'subdir\data.csv');"
+$ln3  = LineOf "S := TFileStream.Create('\\server\share\x.dat', fmOpenRead);"
+$ln4  = LineOf "SL.LoadFromFile('C:\cfg\' + AName);"
+$ln5  = LineOf "FolderInUse('Copy from folder', 'C:\FROM');"
+$ln6  = LineOf "N := Pos('C:\FROM', AMess);"
+$ln7  = LineOf "S := AIni.ReadString('General', 'EdtFrom', 'C:\');"
+$ln10 = LineOf "TFile.WriteAllText('report.csv', 'x');"
+Check 'fixture lines located' (@($ln1,$ln2,$ln3,$ln4,$ln5,$ln6,$ln7,$ln10) -notcontains -1) `
+  "fire: $ln1,$ln2,$ln3,$ln4  silent: $ln5,$ln6,$ln7,$ln10"
+
+$fired = @()
+foreach ($line in (& $Exe lint $fixture 2>$null)) {
+  if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+hardcoded-absolute-path:') { $fired += [int]$Matches[1] }
+}
+$fired = @($fired | Sort-Object -Unique)
+Write-Host ("  fired on lines: {0}" -f ($fired -join ', ')) -ForegroundColor DarkGray
+
+Write-Host ''
+Write-Host 'POSITIVE CONTROLS -- a path portion reaching a sink MUST fire' -ForegroundColor Cyan
+Check "1  local literal -> TFile.WriteAllText      (line $ln1)"  ($fired -contains $ln1)
+Check "2  relative path -> AssignFile              (line $ln2)"  ($fired -contains $ln2)
+Check "3  UNC path -> TFileStream.Create           (line $ln3)"  ($fired -contains $ln3)
+Check "4  portion on one side of a concat          (line $ln4)"  ($fired -contains $ln4)
+
+Write-Host ''
+Write-Host 'THE DEFECT -- literals that reach no sink MUST stay silent' -ForegroundColor Cyan
+Check "5  non-sink domain call                     (line $ln5)"  (-not ($fired -contains $ln5))
+Check "6  search needle, not a path                (line $ln6)"  (-not ($fired -contains $ln6))
+Check "7  IniFile default value                    (line $ln7)"  (-not ($fired -contains $ln7))
+Check "10 bare filename, allowed by spec           (line $ln10)" (-not ($fired -contains $ln10))
+
+Write-Host ''
+Write-Host 'COMPUTED SOURCES -- environment/config leaves MUST stay silent' -ForegroundColor Cyan
+Check '8  parameter leaf (form field idiom)'  ($fired.Count -eq 4)  "expected exactly 4 findings, got $($fired.Count)"
+
+Write-Host ''
+if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
+Write-Host 'PASS' -ForegroundColor Green
+exit 0

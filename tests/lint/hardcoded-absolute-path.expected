@@ -1,3 +1,11 @@
-# absolute 'C:\...' path (11) fires; relative path (12) must not
-hardcoded-absolute-path 11
-!hardcoded-absolute-path 12
+# Redesigned 2026-08-31 (owner spec): a path PORTION that REACHES a filesystem
+# sink is the finding. Absolute and relative both count; a literal nothing opens
+# does not; a bare filename is allowed; anything computed is clean.
+#
+# The negatives are load-bearing: with only the two positives this file would
+# pass against the OLD unscoped rule, which fired on every drive-letter literal.
+hardcoded-absolute-path 16
+hardcoded-absolute-path 18
+!hardcoded-absolute-path 21
+!hardcoded-absolute-path 24
+!hardcoded-absolute-path 26

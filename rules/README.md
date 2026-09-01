@@ -171,7 +171,6 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `redundant-not-not` | info | `not not X` -- redundant double negation, simplify to `X` |
 | `public-field` | info | public data field on a class -- breaks encapsulation; use a property |
 | `locale-sensitive-conversion` | warning | `StrToFloat`/`FloatToStr`/`StrToDate`/... without a `TFormatSettings` |
-| `hardcoded-absolute-path` | info | string literal that is an absolute drive path (`'C:\...'`) |
 | `uppercase-compare` | warning | `UpperCase(X) = 'literal'` -- fragile/slow; use `SameText` |
 | `outputdebugstring` | info | `OutputDebugString` debug tracing left in code |
 | `length-zero-compare` | info | `Length(X) = 0` / `> 0` -- prefer `X = ''` for strings |

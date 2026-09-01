@@ -4,7 +4,7 @@ interface
 
 implementation
 
-uses Windows;
+uses Vcl.Forms;
 
 procedure Bad;
 begin

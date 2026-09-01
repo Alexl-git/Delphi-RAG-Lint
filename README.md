@@ -540,7 +540,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 
 #### Lint
 
-**179 rules across 16 categories -- 125 built-in + 54 external `.scm`, 155
+**179 rules across 16 categories -- 126 built-in + 53 external `.scm`, 155
 enabled by default, 23 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -697,8 +697,8 @@ CLI-only verbs).
 ### Lint rule pack (179 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.9.0-alpha: **179 rules across 16 categories -- 125
-built-in and 54 external `.scm`, 155 enabled by default, and 23 with an
+external `.scm`). As of v1.9.0-alpha: **179 rules across 16 categories -- 126
+built-in and 53 external `.scm`, 155 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |

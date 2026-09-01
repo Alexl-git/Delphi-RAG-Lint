@@ -3092,7 +3092,7 @@ type
   TFindingArray = TArray<TLintFinding>;
   PFindingArray = ^TFindingArray;
 const
-  SCAN_SLOTS = 31;
+  SCAN_SLOTS = 32;
   { Slots in execution order, named for the routine that owns each -- a hot slot
     should name code to open, not a rule id that several checks can emit. }
   SCAN_NAMES: array[0..SCAN_SLOTS - 1] of string = (
@@ -3100,7 +3100,7 @@ const
     'RaiseInFinally', 'CodeAfterExit', 'ControlFlowInFinally', 'MissingInherited',
     'RoutineMetrics', 'TypeAware', 'FireDacSqlMismatch', 'UnprotectedFree',
     'UseAfterFree', 'UiThread', 'GlobalFormVars', 'MutableGlobalVars',
-    'SeparateQueryFromModifier', 'ShellExec', 'PathTraversal', 'LoopAtMostOnce',
+    'SeparateQueryFromModifier', 'ShellExec', 'PathTraversal', 'HardcodedPath', 'LoopAtMostOnce',
     'FormatCall', 'SwallowedExcept', 'DatasetOpen', 'CriticalSection',
     'TooManyExitPoints', 'CyclomaticComplexity', 'CognitiveComplexity',
     'VirtualInConstructor', 'FlowChecker.Check', 'NamingChecker.Check',
@@ -9597,6 +9597,11 @@ begin
       if (AArgs.Rule = '') or (AArgs.Rule = 'unsafe-shellexecute') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec(EffPath);
       { v0.63: concatenated path to a file API -- path traversal risk }
       if (AArgs.Rule = '') or (AArgs.Rule = 'path-traversal') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal(EffPath);
+      { v1.10: a hardcoded path PORTION that actually reaches a filesystem sink. Built-in
+        because it needs a backward walk a .scm predicate cannot express -- it SUPERSEDES
+        and replaces rules\hardcoded-absolute-path.scm, which was deleted in the same
+        change, so unlike string-equality-comparison there is no .scm left to filter out. }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'hardcoded-absolute-path') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath(EffPath);
       { v0.63: loop whose first body statement is Exit/Break/raise -- runs at most once }
       if (AArgs.Rule = '') or (AArgs.Rule = 'loop-executes-at-most-once') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce(EffPath);
       { v0.63: Format() specifier/argument count + literal type mismatch (one walk, two ids) }
@@ -14344,31 +14349,32 @@ begin
         ScanAdd(16, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(PasPath)); { v0.83: CQS (OFF) }
         ScanAdd(17, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec                (PasPath));
         ScanAdd(18, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal            (PasPath));
-        ScanAdd(19, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce           (PasPath));
+        ScanAdd(19, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath            (PasPath)); { hardcoded-absolute-path: sink-anchored, replaces the retired .scm }
+        ScanAdd(20, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce           (PasPath));
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall(PasPath) do Findings:= Findings + [F];
-        ScanMark(20);
-        ScanAdd(21, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath));
-        ScanAdd(22, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath));
-        ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
-        ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath, Cfg.ThresholdFor('too-many-exit-points', 5)));
-        ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckStatGatedDestructive(PasPath)); { stat-gated-destructive: both verbs build their rule lists separately -- see the note at the top of DoLint }
-        ScanAdd(25, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD)));
-        ScanAdd(26, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD)));
-        ScanAdd(27, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath))); { v12 (M1): cross-unit }
-        ScanAdd(28, DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore)); { M2: flow checks, store-exact managed types, ownership via library store }
+        ScanMark(21);
+        ScanAdd(22, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath));
+        ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath));
+        ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
+        ScanAdd(25, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath, Cfg.ThresholdFor('too-many-exit-points', 5)));
+        ScanAdd(25, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckStatGatedDestructive(PasPath)); { stat-gated-destructive: both verbs build their rule lists separately -- see the note at the top of DoLint }
+        ScanAdd(26, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD)));
+        ScanAdd(27, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD)));
+        ScanAdd(28, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath))); { v12 (M1): cross-unit }
+        ScanAdd(29, DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore)); { M2: flow checks, store-exact managed types, ownership via library store }
         { with-hides-outer-symbol: the SAME library store, and it is not
           optional here -- the owner's own case (Width/Height on a form)
           lives on TCustomForm, which no project index can resolve. }
-        ScanAdd(29, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(PasPath, Store, LibStore, Store.FindFileIdByPath(PasPath)));
+        ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(PasPath, Store, LibStore, Store.FindFileIdByPath(PasPath)));
         { v0.68: naming-convention prefix rules (store-optional; enables exception-ancestry sub-check) }
         for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
-        ScanMark(29);
+        ScanMark(30);
         { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set);
           v0.70-72: + redundant-parens/commented-out-code/function-result-ignored + #5/#6/#7 rules }
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
           PasPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
           Cfg.ThresholdFor('message-chain', 4)) do Findings:= Findings + [F];
-        ScanMark(30);
+        ScanMark(31);
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));
       end; // try

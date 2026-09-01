@@ -554,6 +554,30 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckPathTraversal(const AFile: string): TArray<TLintFinding>;
+      /// <summary>Flags a hardcoded path PORTION -- partial or complete -- that reaches a
+      /// filesystem, stream, ini-file or dataset-location sink. The bare file name and
+      /// extension may be constants; the path to them may not.</summary>
+      /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <returns>One finding per string literal that carries a path portion AND is shown,
+      /// by a bounded backward walk, to reach a sink operand. Empty when the file does not
+      /// parse.</returns>
+      /// <exception cref="">None -- a parse failure returns nil rather than raising.</exception>
+      /// <remarks>
+      /// Severity info; rule id <c>hardcoded-absolute-path</c>. Stage 1 of
+      /// docs\INBOX-b7-path-literal-reverse-taint-plan.md: sink-anchored reverse taint,
+      /// intra-routine, pure AST, no DB. From each sink's path operand the walk goes back at
+      /// most 4 steps through single-assignment locals, '+' concatenations, PChar casts and
+      /// path combinators (TPath.Combine, IncludeTrailingPathDelimiter, ExpandFileName,
+      /// ExtractFilePath, Format).
+      /// SILENCE IS THE SAFE FAILURE DIRECTION and is INVERTED from CheckShellExec: a name
+      /// assigned zero or more than once, an unmodelled call, or an exceeded depth yields NO
+      /// finding, because this rule over-reports rather than under-reports. Interprocedural
+      /// follow-through is Stage 2 and is not implemented.
+      /// Supersedes the retired rules\hardcoded-absolute-path.scm outright -- the built-in
+      /// owns the id unconditionally, so there is no dual implementation to drift.
+      /// Never raises.
+      /// </remarks>
+      class function CheckHardcodedPath(const AFile: string): TArray<TLintFinding>;
       /// <summary>Flags a for/while/repeat loop whose body's first statement is an
       /// unconditional Exit, Break, or raise -- the loop can never reach a second
       /// iteration.</summary>
@@ -5671,6 +5695,445 @@ begin
     Result:= Findings.ToArray;
   finally
     Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.CheckHardcodedPath(const AFile: string): TArray<TLintFinding>;
+{ ---------------------------------------------------------------------------
+  A HARDCODED PATH PORTION THAT ACTUALLY REACHES A FILESYSTEM SINK.
+  Owner specification + staged design: docs\INBOX-b7-path-literal-reverse-taint-plan.md
+  (2026-08-31). This is STAGE 1 -- intra-routine, store-free.
+
+  IT REPLACES rules\hardcoded-absolute-path.scm, which was one predicate --
+  "a string literal starting with a drive letter, ANYWHERE":
+
+      ((literalString) @warn (#match? @warn "^'[A-Za-z]:"))
+
+  73 findings on DataCopy, 55% of their whole report, and the failures were all
+  literals that touch no filesystem: an argument to a domain helper, a `Pos`
+  search needle, an IniFile DEFAULT VALUE -- that last one advising the author
+  to do exactly what the line already does.
+
+  THE OWNER'S SPEC, in his words:
+    * "if we see any specific hardcoded part of location - doesn't have to be a
+      complete address we put this message";
+    * "The pure file name and extension can be hardcoded, but the path to it
+      not. Be it partial or complete path.";
+    * "BUT if it is computed and not from string const, but from some
+      environment, like form field or INI file, then it is OK.";
+    * "propagate back say up to 4 steps ... if none of them is a text const we
+      consider it not hard coded".
+
+  SO THE SHAPE IS SINK-ANCHORED, NOT LITERAL-ANCHORED. Anchor on a real file /
+  directory / table operation, take the operand that names the file, walk
+  BACKWARDS up to MAX_DEPTH steps through single-assignment locals, `+`
+  concatenations and path combinators, and classify the leaves. A string
+  literal carrying a path PORTION is the finding; config, UI, parameter, field
+  or function result is fine. This composes two precedents that already live in
+  this unit: CheckPathTraversal's mini sink table (PathArgIndex) driving
+  CheckShellExec's routine-scoped assignment resolution (CollectAssignments).
+
+  IT ALSO FIXES A FALSE NEGATIVE. Being drive-letter anchored, the old pattern
+  could not see `'subdir\report.csv'` or UNC `'\\server\share\x'` at all.
+  IsPathPortion below is separator-based, not drive-based, so "partial path"
+  from the spec is a first-class case rather than an afterthought.
+
+  SILENCE IS THE SAFE DIRECTION -- AND THAT IS INVERTED FROM CheckShellExec.
+  There, a name assigned more than once makes the checker REFUSE TO REASON and
+  keep reporting, because it is a security rule where a false negative costs
+  more than a false positive (see the note at ArgIsFixedSchemeUri). Here the
+  cost runs the other way: this rule over-reports today, so every case the walk
+  cannot settle -- assigned zero times or more than once, depth exceeded, a
+  call this checker does not model -- is CLEAN and SILENT. That is precisely
+  the owner's "if none of them is a text const we consider it not hard coded".
+
+  THE SINK TABLE IS THE MAINTENANCE COST, AND ITS OMISSION COST IS STATED
+  HONESTLY: a sink MISSING from SinkOf is a FALSE NEGATIVE NOBODY NOTICES --
+  the rule simply says nothing, and silence looks like health. So when a real
+  sink turns up, add it HERE, in the plan doc, and as a fixture line for its
+  FAMILY in tests\autotest\run_hardcoded_path_sink.ps1, in the same change.
+
+  NOT DONE HERE, DELIBERATELY: following the operand into a callee body (the
+  owner's "2 lines back we see ABC(Filename, XYZ) then we need to examine ABC")
+  is Stage 2 of the plan -- one interprocedural hop, store-backed. Stage 1
+  classifies those CLEAN.
+  --------------------------------------------------------------------------- }
+const
+  { The owner's number: "propagate back say up to 4 steps". }
+  MAX_DEPTH = 4;
+var
+  Src      : TBytes                      ;
+  PF       : TParsedFile                 ;
+  Findings : TList<TLintFinding>         ;
+  AsgnCount: TDictionary<string, Integer>;
+  AsgnRhs  : TDictionary<string, TTSNode>;
+  Seen     : TDictionary<string, Boolean>;
+
+  function NodeStr(const N: TTSNode): string;
+  var
+    S, E, L: Integer;
+  begin
+    Result:= '';
+    if N.IsNull then Exit;
+    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { NodeStr returns the RAW SOURCE of a literal, quotes and all -- the trap
+    CheckShellExec hit and documented (every comparison silently failed). }
+  function UnquoteLiteral(const ALit: string): string;
+  begin
+    Result:= Trim(ALit);
+    if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then
+      Result:= Copy(Result, 2, Length(Result) - 2);
+  end;
+
+  { PChar(X) / PWideChar(X) / PAnsiChar(X) -> X; anything else unchanged.
+    Same shape as CheckShellExec's UnwrapCast -- a WinAPI sink almost always
+    wears one of these. }
+  function UnwrapCast(const A: TTSNode): TTSNode;
+  var
+    E, Args: TTSNode;
+    Nm     : string ;
+  begin
+    Result:= A;
+    if A.IsNull or (A.NodeType <> 'exprCall') then Exit;
+    E:= A.ChildByField('entity');
+    if E.IsNull or (E.NodeType <> 'identifier') then Exit;
+    Nm:= NodeStr(E);
+    if not (SameText(Nm, 'PChar') or SameText(Nm, 'PWideChar') or SameText(Nm, 'PAnsiChar')) then Exit;
+    Args:= A.ChildByField('args');
+    if Args.IsNull or (Args.NamedChildCount <> 1) then Exit;
+    Result:= Args.NamedChild(0);
+  end;
+
+  { Every `X := <rhs>` in ASubtree, counted by lowercased LHS name -- the
+    CheckShellExec map, verbatim, including WHY the RHS kept is the first one:
+    a count above 1 means "refuse", so the stored node is never consulted. }
+  procedure CollectAssignments(const N: TTSNode);
+  var
+    I  : Integer;
+    L  : TTSNode;
+    Nm : string ;
+    Cnt: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'assignment' then
+    begin
+      L:= N.ChildByField('lhs');
+      if (not L.IsNull) and (L.NodeType = 'identifier') then
+      begin
+        Nm:= LowerCase(NodeStr(L));
+        if AsgnCount.TryGetValue(Nm, Cnt) then
+          AsgnCount[Nm]:= Cnt + 1
+        else
+        begin
+          AsgnCount.Add(Nm, 1);
+          AsgnRhs  .Add(Nm, N.ChildByField('rhs'));
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectAssignments(N.NamedChild(I));
+  end;
+
+  { The scope is the INNERMOST enclosing routine, not the file. File-wide
+    counting was tried in CheckShellExec first and is wrong in the direction
+    that matters -- `LPath` is assigned once in each of a dozen routines, the
+    file-wide count is >1 everywhere, and the reasoning never applies to the
+    code it was written for. }
+  procedure BuildMap(const AProc: TTSNode);
+  begin
+    AsgnCount.Clear;
+    AsgnRhs  .Clear;
+    if not AProc.IsNull then CollectAssignments(AProc);
+  end;
+
+  { THE CLASSIFIER, and the whole of the owner's "pure file name and extension
+    can be hardcoded, but the path to it not":
+      * PORTION  -- carries directory structure: any separator, a drive prefix
+                    `X:`, or a UNC lead `\\` (which the separator test already
+                    covers). Absolute, relative-with-directory and UNC alike.
+      * CLEAN    -- no separator at all: a bare 'report.csv', a bare '.tmp'
+                    extension, or any non-path-ish string that happens to reach
+                    a sink argument (a Format mask fragment, say).
+    ONE GUARD against the obvious over-trigger: a literal containing '://' is a
+    URI, not a filesystem path. Fixed-scheme reasoning belongs to
+    unsafe-shellexecute (IsFixedSchemeUri), not here. }
+  function IsPathPortion(const AText: string): Boolean;
+  begin
+    Result:= False;
+    if AText = '' then Exit;
+    if Pos('://', AText) > 0 then Exit;
+    if (Pos('\', AText) > 0) or (Pos('/', AText) > 0) then Exit(True);
+    Result:= (Length(AText) >= 2) and (AText[2] = ':')
+             and CharInSet(AText[1], ['A'..'Z', 'a'..'z']);
+  end;
+
+  { The path-building helpers whose ARGUMENTS are still the path, so the walk
+    passes through them. Every OTHER call is a computed value -- the owner's
+    "from some environment" -- and is therefore CLEAN. }
+  function IsPathCombinator(const ACall: TTSNode): Boolean;
+  var
+    Ent, L, R: TTSNode;
+  begin
+    Result:= False;
+    Ent:= ACall.ChildByField('entity');
+    if Ent.IsNull then Exit;
+    if Ent.NodeType = 'identifier' then
+      Exit(MatchText(Trim(NodeStr(Ent)), ['IncludeTrailingPathDelimiter',
+                                          'ExcludeTrailingPathDelimiter',
+                                          'ExpandFileName', 'ExtractFilePath',
+                                          'Format']));
+    if Ent.NodeType <> 'exprDot' then Exit;
+    L:= Ent.ChildByField('lhs');
+    R:= Ent.ChildByField('rhs');
+    if L.IsNull or R.IsNull then Exit;
+    Result:= SameText(Trim(NodeStr(L)), 'TPath') and SameText(Trim(NodeStr(R)), 'Combine');
+  end;
+
+  { THE SINK TABLE (v1). Entry = (callee shape, path-argument index), matched
+    the way PathArgIndex and CmdArgIndex already match -- a bare identifier
+    callee, or an exprDot whose rhs names the member. AIdx1 is -1 unless the
+    sink has a SECOND path operand (a copy/rename target).
+    Read the omission-cost note in this routine's header before trimming it. }
+  function SinkOf(const ACall: TTSNode; out AIdx0, AIdx1: Integer;
+                  out AName: string): Boolean;
+  var
+    Ent, L, R: TTSNode;
+    Nm, Recv : string ;
+  begin
+    Result:= False;
+    AIdx0 := -1;
+    AIdx1 := -1;
+    AName := '';
+    Ent:= ACall.ChildByField('entity');
+    if Ent.IsNull then Exit;
+
+    if Ent.NodeType = 'identifier' then
+    begin
+      Nm   := Trim(NodeStr(Ent));
+      AName:= Nm;
+      { Classic Pascal / RTL file + directory I/O. }
+      if SameText(Nm, 'AssignFile') then begin AIdx0:= 1; Exit(True); end;
+      if MatchText(Nm, ['FileOpen', 'FileCreate', 'FileExists', 'DeleteFile',
+                        'ForceDirectories', 'CreateDir', 'ChDir', 'RemoveDir',
+                        'CreateFile']) then begin AIdx0:= 0; Exit(True); end;
+      if MatchText(Nm, ['RenameFile', 'CopyFile', 'MoveFile']) then
+        begin AIdx0:= 0; AIdx1:= 1; Exit(True); end;
+      { ShellExecute is taken here in its PATH role only (lpFile). Injection
+        remains unsafe-shellexecute's job -- two rules, two questions. }
+      if SameText(Nm, 'ShellExecute') then begin AIdx0:= 2; Exit(True); end;
+      Exit;
+    end;
+
+    if Ent.NodeType <> 'exprDot' then Exit;
+    L:= Ent.ChildByField('lhs');
+    R:= Ent.ChildByField('rhs');
+    if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+    Nm  := Trim(NodeStr(R));
+    Recv:= '';
+    if (not L.IsNull) and (L.NodeType = 'identifier') then Recv:= Trim(NodeStr(L));
+    if Recv = '' then AName:= Nm else AName:= Recv + '.' + Nm;
+
+    { RECEIVER-BLIND ON PURPOSE: TStringList, TStrings, TPicture, TMemoryStream
+      and dataset persistence all spell it the same way and all take a file
+      name at argument 0. Requiring a known receiver here would silently drop
+      the single most common Delphi file sink there is. }
+    if MatchText(Nm, ['LoadFromFile', 'SaveToFile']) then begin AIdx0:= 0; Exit(True); end;
+
+    { System.IOUtils. }
+    if SameText(Recv, 'TFile') then
+    begin
+      if MatchText(Nm, ['Copy', 'Move']) then begin AIdx0:= 0; AIdx1:= 1; Exit(True); end;
+      if MatchText(Nm, ['Open', 'OpenRead', 'OpenWrite', 'OpenText', 'Create',
+                        'Delete', 'Exists', 'ReadAllText', 'ReadAllLines',
+                        'ReadAllBytes', 'WriteAllText', 'WriteAllLines',
+                        'WriteAllBytes', 'AppendAllText']) then
+        begin AIdx0:= 0; Exit(True); end;
+      Exit;
+    end;
+    if SameText(Recv, 'TDirectory') then
+    begin
+      if MatchText(Nm, ['CreateDirectory', 'Delete', 'Exists', 'GetFiles',
+                        'GetDirectories']) then begin AIdx0:= 0; Exit(True); end;
+      Exit;
+    end;
+
+    { Streams, and config-as-file (an .ini IS a file on disk). }
+    if SameText(Nm, 'Create')
+       and MatchText(Recv, ['TFileStream', 'TBufferedFileStream',
+                            'TIniFile', 'TMemIniFile', 'TRegistryIniFile']) then
+      begin AIdx0:= 0; Exit(True); end;
+  end;
+
+  { The owner's "table opening": a dataset or connection is pointed at a
+    location by PROPERTY, not by a call, so the assignment itself is the sink.
+    'TableName' is deliberately ABSENT -- a table name is not a path. }
+  function IsPathProperty(const ALhs: TTSNode; out AName: string): Boolean;
+  var
+    R: TTSNode;
+  begin
+    Result:= False;
+    AName := '';
+    R:= ALhs.ChildByField('rhs');
+    if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+    if not MatchText(Trim(NodeStr(R)), ['DatabaseName', 'Directory', 'FileName',
+                                        'ConnectionString']) then Exit;
+    AName := Trim(NodeStr(ALhs));
+    Result:= True;
+  end;
+
+  { Reported AT THE LITERAL, not at the sink: that is where the author has to
+    type, and it keeps existing dl:ok markers and baselines on the same line
+    the old .scm rule used. Deduplicated by position, because one literal can
+    be reached from two operands of the same sink. }
+  procedure Report(const ALit: TTSNode; const ASink: string);
+  var
+    P  : TTSPoint    ;
+    F  : TLintFinding;
+    Key: string      ;
+  begin
+    if Findings.Count >= 200 then Exit;
+    P  := ALit.StartPoint;
+    Key:= Format('%d:%d', [Integer(P.Row), Integer(P.Column)]);
+    if Seen.ContainsKey(Key) then Exit;
+    Seen.Add(Key, True);
+    F:= Default(TLintFinding);
+    F.RuleId  := 'hardcoded-absolute-path';
+    F.Severity:= 'info';
+    F.Message := Format('Hardcoded path portion reaches %s -- a path baked into the source breaks on other machines and deployments. The file name and extension may be constants; the path to them should come from configuration or be computed at runtime (TPath, known-folder APIs).', [ASink]);
+    F.FilePath := AFile;
+    F.StartLine:= Integer(P.Row   ) + 1;
+    F.StartCol := Integer(P.Column) + 1;
+    F.EndLine  := F.StartLine;
+    F.EndCol   := F.StartCol + 1;
+    Findings.Add(F);
+  end;
+
+  { THE BACKWARD WALK. ADepth counts steps taken away from the sink operand;
+    every branch that is not a literal, a concatenation, a combinator or a
+    once-assigned local ends the walk SILENTLY -- see the inversion note in the
+    routine header. }
+  procedure Classify(const A0: TTSNode; const ADepth: Integer;
+                     const AProc: TTSNode; const ASink: string);
+  var
+    A, Rhs, Args, Op: TTSNode;
+    Nm              : string ;
+    Cnt, I          : Integer;
+  begin
+    if ADepth > MAX_DEPTH then Exit; { depth exceeded -> CLEAN }
+    A:= UnwrapCast(A0);
+    if A.IsNull then Exit;
+
+    if A.NodeType = 'literalString' then
+    begin
+      if IsPathPortion(UnquoteLiteral(NodeStr(A))) then Report(A, ASink);
+      Exit;
+    end;
+
+    if A.NodeType = 'exprParens' then
+    begin
+      for I:= 0 to A.NamedChildCount - 1 do Classify(A.NamedChild(I), ADepth, AProc, ASink);
+      Exit;
+    end;
+
+    { `'C:\out\' + FileName` is the canonical true positive: a portion on
+      EITHER side taints the result, so both sides are classified. }
+    if A.NodeType = 'exprBinary' then
+    begin
+      Op:= A.ChildByField('operator');
+      if Op.IsNull or (Op.NodeType <> 'kAdd') then Exit;
+      Classify(A.ChildByField('lhs'), ADepth + 1, AProc, ASink);
+      Classify(A.ChildByField('rhs'), ADepth + 1, AProc, ASink);
+      Exit;
+    end;
+
+    if A.NodeType = 'exprCall' then
+    begin
+      if not IsPathCombinator(A) then Exit; { a function result is computed -> CLEAN }
+      Args:= A.ChildByField('args');
+      if Args.IsNull then Exit;
+      for I:= 0 to Args.NamedChildCount - 1 do
+        Classify(Args.NamedChild(I), ADepth + 1, AProc, ASink);
+      Exit;
+    end;
+
+    { exprDot (form field, record member), indexed expressions, anything else
+      the walk does not model -> CLEAN. }
+    if A.NodeType <> 'identifier' then Exit;
+    if AProc.IsNull then Exit;
+    Nm:= LowerCase(NodeStr(A));
+    { Not assigned in this routine at all: a parameter, a field, a global, a
+      with-alias -- every one of them "from some environment". CLEAN. }
+    if not AsgnCount.TryGetValue(Nm, Cnt) then Exit;
+    { Assigned more than once: the ShellExec refusal, INVERTED -- refusing
+      here means going silent, not reporting. }
+    if Cnt <> 1 then Exit;
+    if not AsgnRhs.TryGetValue(Nm, Rhs) then Exit;
+    Classify(Rhs, ADepth + 1, AProc, ASink);
+  end;
+
+  procedure Visit(const N: TTSNode; const AProc: TTSNode);
+  var
+    I, I0, I1: Integer;
+    Args, Lhs: TTSNode;
+    Cur      : TTSNode;
+    SinkName : string ;
+  begin
+    if N.IsNull or (Findings.Count >= 200) then Exit;
+    { Innermost enclosing routine wins, so a nested procedure reasons about its
+      OWN locals rather than the outer routine's (CheckShellExec's Visit). }
+    Cur:= AProc;
+    if N.NodeType = 'defProc' then Cur:= N;
+
+    if N.NodeType = 'exprCall' then
+    begin
+      if SinkOf(N, I0, I1, SinkName) then
+      begin
+        Args:= N.ChildByField('args');
+        if not Args.IsNull then
+        begin
+          { Rebuilt per sink site from its enclosing routine -- sinks are rare,
+            so nothing is collected up front. }
+          BuildMap(Cur);
+          if (I0 >= 0) and (Args.NamedChildCount > I0) then
+            Classify(Args.NamedChild(I0), 0, Cur, SinkName);
+          if (I1 >= 0) and (Args.NamedChildCount > I1) then
+            Classify(Args.NamedChild(I1), 0, Cur, SinkName);
+        end;
+      end;
+    end
+    else if N.NodeType = 'assignment' then
+    begin
+      Lhs:= N.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'exprDot') and IsPathProperty(Lhs, SinkName) then
+      begin
+        BuildMap(Cur);
+        Classify(N.ChildByField('rhs'), 0, Cur, SinkName);
+      end;
+    end;
+
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I), Cur);
+  end; // procedure
+
+begin
+  Result:= nil;
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
+  Findings := TList<TLintFinding>.Create;
+  AsgnCount:= TDictionary<string, Integer>.Create;
+  AsgnRhs  := TDictionary<string, TTSNode>.Create;
+  Seen     := TDictionary<string, Boolean>.Create;
+  try
+    Visit(PF.Tree.RootNode, Default(TTSNode));
+    Result:= Findings.ToArray;
+  finally
+    Seen     .Free;
+    AsgnRhs  .Free;
+    AsgnCount.Free;
+    Findings .Free;
   end;
 end; // function
 
