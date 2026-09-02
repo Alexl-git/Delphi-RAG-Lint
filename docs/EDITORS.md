@@ -23,15 +23,21 @@ referencesProvider, signatureHelpProvider, workspaceSymbolProvider
 
 | | Highlighting | Language server | Status |
 |---|---|---|---|
-| **VS Code** | TextMate grammar (not shipped) | **yes** | **ready -- extension included** |
+| **VS Code** | **TextMate grammar -- shipped, v1.5** | **yes** | **ready -- extension included** |
 | **Zed** | tree-sitter (shipped separately) | yes | **needs a small Rust extension -- not built; see below** |
 | Neovim / Helix | tree-sitter (shipped separately) | yes | configure `drag-lint lsp` as an LSP command |
 
 **VS Code cannot use tree-sitter for highlighting.** VS Code highlights with
 TextMate grammars and does not expose tree-sitter to extensions, so the
-tree-sitter grammars do nothing there. VS Code gets the *language server*;
-syntax highlighting comes from whatever Pascal TextMate extension you already
-use. This is stated plainly because it is easy to assume otherwise.
+tree-sitter grammars do nothing there. This is stated plainly because it is easy
+to assume otherwise.
+
+Since **v1.5** the extension therefore ships its own Pascal TextMate grammar,
+plus a colour theme generated from your RAD Studio editor scheme -- see
+[Syntax colouring](#syntax-colouring----and-matching-the-ide-exactly). Before
+v1.5 nothing coloured Pascal in VS Code at all: no third-party extension was
+required, because none was installed and none of VS Code's built-ins covers
+Pascal.
 
 ---
 
@@ -53,7 +59,7 @@ That writes `dist\drag-lint-<version>.vsix`. Install it with
 *Extensions > ... > Install from VSIX...*, or:
 
 ```bat
-code --install-extension dist\drag-lint-1.4.0.vsix
+code --install-extension dist\drag-lint-1.5.0.vsix
 ```
 
 `node_modules` is not tracked; `npm install` restores exactly what
@@ -88,6 +94,7 @@ nothing, which reads as "the reload did not help".
 | `dragLint.engineUpdate` | `onActivate` | When the private copy is refreshed: `onActivate` (VS Code start / window reload / first Pascal file), `manual` (only the command), or `off` (run the deployed engine directly). |
 | `dragLint.serverPath` | `""` (empty) | Explicit override -- run this exact exe, make no copy. Leave empty to use the managed copy. |
 | `dragLint.databases` | `[]` (empty) | Optional explicit `--db` paths. |
+| `dragLint.colors.bdsVersion` | `auto` | Which RAD Studio install the colour commands read their editor scheme from, e.g. `37.0`. `auto` picks the newest under `HKCU\Software\Embarcadero\BDS`. See [Syntax colouring](#syntax-colouring----and-matching-the-ide-exactly). |
 | `dragLint.trace.server` | `off` | Log the LSP conversation to the *drag-lint* output channel. |
 
 **The defaults are deliberate.**
@@ -141,6 +148,104 @@ databases from the `drag-lint.json` sitting beside the exe -- the same manifest
 the IDE reads -- so VS Code follows your project layout automatically. Pinning an
 explicit list here means adding or renaming a project index silently stops
 working in the editor until someone remembers to update this setting.
+
+### Syntax colouring -- and matching the IDE exactly
+
+Extension **v1.5** ships a Pascal TextMate grammar and a colour theme
+**generated from your own RAD Studio editor scheme**. Before it, nothing
+coloured Pascal in VS Code at all.
+
+#### What you were actually seeing before v1.5
+
+Not "poor highlighting" -- *no* highlighting. Measured:
+
+| source | result |
+|---|---|
+| our extension | contributed `languages` but **no `grammars`** |
+| VS Code's 97 built-in extensions | **none** for Pascal or Delphi; none claiming `.pas` |
+| our LSP | no `semanticTokens` |
+
+The `begin`/`end` and bracket colours were VS Code's **bracket-pair
+colourization** reading the pairs in `language-configuration.json`. That is a
+bracket feature, not highlighting -- which is why keywords, strings, comments
+and numbers were all one colour.
+
+#### Two ways to get the IDE's colours
+
+Both read `HKCU\Software\Embarcadero\BDS\<ver>\Editor\Highlight` -- your actual
+IDE scheme, all 42 elements -- so "exactly like the IDE" is literal rather than
+approximate, and it follows you if you change your scheme. Both go through the
+same converter, so they cannot disagree about a colour.
+
+**1. Pascal only, applied instantly** -- command palette:
+**drag-lint: Apply RAD Studio Colours (Pascal only)**
+
+Writes `editor.tokenColorCustomizations` into your `settings.json`. Takes effect
+immediately with no reload, and touches **only Pascal files** -- every scope the
+grammar emits ends in `.pascal`, which is what confines the rules. Your own VS
+Code theme keeps everything else. It cannot set the editor background: that is
+global in VS Code with no per-language form.
+
+Re-running it replaces the rules it wrote before and leaves any rule of your own
+alone (it recognises its own by that `.pascal` suffix), so it will not
+accumulate duplicates.
+
+**2. The full IDE look** -- `Ctrl+K Ctrl+T` -> **Delphi IDE (drag-lint)**
+
+A real theme, so it carries the editor background too. It recolours *every*
+language, not just Pascal. To rebuild it after changing your IDE scheme, run
+**drag-lint: Generate Theme From RAD Studio Colours**; VS Code reads a theme file
+once, so it will offer a window reload.
+
+#### For pure IDE fidelity, turn bracket-pair colourization off
+
+It is on by default and paints `begin`/`end` and brackets in rotating colours
+that override the theme, which is the one visible way the result still differs
+from the IDE:
+
+```json
+"editor.bracketPairColorization.enabled": false
+```
+
+Leave it on if you like it -- nothing else depends on it.
+
+#### Regenerating the shipped theme from a checkout
+
+```
+cd editors\vscode\drag-lint
+node scripts\gen-theme.js                 # newest install
+node scripts\gen-theme.js --version 37.0  # a specific one
+```
+
+The generator is deliberately **not** wired into `npm run package`: packaging
+must not depend on a registry that exists only on a developer's machine, or a
+build elsewhere would emit a colourless theme rather than failing.
+
+#### The colour format, because getting it wrong is silent
+
+Values are stored as `$00BBGGRR` -- a Delphi `TColor`, so the bytes are **BGR,
+not RGB**. `$00FFAA7F` is `#7FAAFF` (light blue), not `#FFAA7F` (salmon). Both
+readings produce a plausible dark palette and the **wrong** one looks *more*
+conventional (blue keywords, salmon strings -- close to Dark+), so a mistake
+here never looks like a mistake. Three further traps live in the same data:
+the value name is `Foreground Color New` (the old name reads back **empty**);
+`Default Foreground`/`Default Background` are booleans that **override** the
+stored colour; and a value may be a VCL colour *name* (`clWhite`, `clRed`)
+rather than hex. `tests\vscode\run_pascal_grammar_and_theme.ps1` pins all four.
+
+#### Known limits
+
+A TextMate grammar is a regex cascade with no parser behind it, so it disagrees
+with drag-lint's own tree-sitter parse in the corners -- generics versus
+comparison (`AreEqual<Integer>` vs `A < B`), nested `{$IFDEF}` regions, `asm`
+bodies. That is inherent to the mechanism, not a defect to chase. The version
+that cannot drift from the analysis is `textDocument/semanticTokens` fed by the
+real parse; VS Code layers semantic tokens **over** a grammar, so it is a
+complement to this, not a replacement.
+
+**Do not also install a third-party Pascal extension.** A second extension
+declaring `source.pascal` conflicts with this grammar, and some start their own
+language server, which double-publishes into the Problems panel.
 
 ### The Problems panel
 

@@ -467,7 +467,11 @@ predates it answers the standard `-32601`.
   else is editing. Compiler diagnostics from `DelphiLSP` merge there for free if
   you install an extension that runs it: VS Code gives every extension its own
   diagnostic collection, so unlike the RAD Studio plugin the two cannot clobber
-  each other.
+  each other. Since **v1.5** it also ships a **Pascal TextMate grammar** and a
+  colour theme **generated from your own RAD Studio scheme** (read out of
+  `HKCU\Software\Embarcadero\BDS\<ver>\Editor\Highlight`), so the colours match
+  the IDE literally rather than approximately -- before v1.5 nothing coloured
+  Pascal in VS Code at all, since it has no built-in Pascal grammar.
 * **Zed** -- tree-sitter highlighting ships today; the language-server
   registration needs a small Rust/WASM extension that is **not yet built** and is
   fully specified for contributors.

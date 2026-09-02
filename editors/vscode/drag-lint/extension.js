@@ -11,10 +11,11 @@
 // advertising hover, definition, references, workspaceSymbol, completion and
 // signatureHelp.
 
-const { workspace, window, commands } = require('vscode');
+const { workspace, window, commands, ConfigurationTarget } = require('vscode');
 const { LanguageClient, TransportKind, CloseAction, ErrorAction } = require('vscode-languageclient/node');
 const fs = require('fs');
 const path = require('path');
+const radcolors = require('./lib/radcolors');
 
 // Set once in activate(). restartServer() and updateEngineNow() both need the
 // extension context to locate the private engine copy, and neither is called
@@ -322,6 +323,94 @@ async function restartServer() {
   window.setStatusBarMessage('drag-lint: language server restarted', 3000);
 }
 
+/*
+  --- IDE colour matching -------------------------------------------------
+
+  Two ways to get the RAD Studio scheme, because they answer different wants
+  and neither subsumes the other:
+
+    applyRadStudioColours()  writes editor.tokenColorCustomizations into the
+                             user's settings. Applies INSTANTLY with no reload,
+                             and because every scope our grammar emits ends in
+                             '.pascal' it recolours Pascal files ONLY -- the
+                             user keeps their own VS Code theme everywhere else.
+                             It cannot set the editor background, which is
+                             global in VS Code and has no per-language form.
+
+    generateThemeFile()      rewrites the contributed colour theme, which DOES
+                             carry the background and is the full IDE look. It
+                             recolours every language and needs a window reload,
+                             since VS Code reads a theme file once.
+
+  Both call the same buildTheme()/buildTokenRules() in lib/radcolors.js, so the
+  two paths cannot disagree about a colour.
+*/
+
+// Ours are exactly the rules whose every scope ends in '.pascal'. Identifying
+// them by shape rather than by a marker means a user who hand-edits the list
+// keeps their own rules through a re-apply, and we never accumulate duplicates.
+function isOurRule(rule) {
+  const scopes = Array.isArray(rule && rule.scope) ? rule.scope
+    : (typeof (rule && rule.scope) === 'string' ? [rule.scope] : []);
+  return scopes.length > 0 && scopes.every((s) => String(s).endsWith('.pascal'));
+}
+
+async function applyRadStudioColours() {
+  let scheme;
+  try {
+    scheme = radcolors.readScheme(cfg().get('colors.bdsVersion') || 'auto');
+  } catch (e) {
+    window.showErrorMessage('drag-lint: ' + e.message);
+    return;
+  }
+
+  const rules = radcolors.buildTokenRules(scheme);
+  const conf = workspace.getConfiguration();
+  const current = conf.get('editor.tokenColorCustomizations') || {};
+  const kept = (current.textMateRules || []).filter((r) => !isOurRule(r));
+
+  await conf.update(
+    'editor.tokenColorCustomizations',
+    Object.assign({}, current, { textMateRules: kept.concat(rules) }),
+    ConfigurationTarget.Global
+  );
+
+  log(`applied ${rules.length} token rule(s) from ${scheme.key}`);
+  window.showInformationMessage(
+    `drag-lint: applied ${rules.length} colour rule(s) from RAD Studio ${scheme.version} to Pascal files.`
+  );
+}
+
+async function generateThemeFile() {
+  let scheme;
+  try {
+    scheme = radcolors.readScheme(cfg().get('colors.bdsVersion') || 'auto');
+  } catch (e) {
+    window.showErrorMessage('drag-lint: ' + e.message);
+    return;
+  }
+
+  const out = path.join(extContext.extensionPath, 'themes', 'delphi-ide.color-theme.json');
+  try {
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, radcolors.serializeJson(radcolors.buildTheme(scheme)), 'utf8');
+  } catch (e) {
+    // The extension directory is read-only under some managed installs. Say so
+    // instead of leaving the user to wonder why the colours did not change.
+    window.showErrorMessage(
+      `drag-lint: could not write ${out} (${e.message}). Use "Apply RAD Studio Colours" instead -- it writes to your settings, not the extension.`
+    );
+    return;
+  }
+
+  log('regenerated theme from ' + scheme.key);
+  const pick = await window.showInformationMessage(
+    `drag-lint: regenerated the "Delphi IDE" theme from RAD Studio ${scheme.version}. VS Code reads a theme file once, so this needs a reload.`,
+    'Reload Window'
+  );
+  if (pick === 'Reload Window') commands.executeCommand('workbench.action.reloadWindow');
+}
+
 function activate(context) {
   extContext = context;
   // Its own channel, not the client's: this logs BEFORE the client exists, and
@@ -339,6 +428,11 @@ function activate(context) {
   // mean the recovery command is absent exactly when it is needed.
   context.subscriptions.push(commands.registerCommand('dragLint.restartServer', restartServer));
   context.subscriptions.push(commands.registerCommand('dragLint.updateEngine', updateEngineNow));
+  // Colour commands are registered before the exe check too: they read the
+  // registry and touch no engine, so they must keep working on a machine where
+  // the server path is wrong.
+  context.subscriptions.push(commands.registerCommand('dragLint.applyRadStudioColours', applyRadStudioColours));
+  context.subscriptions.push(commands.registerCommand('dragLint.generateTheme', generateThemeFile));
 
   // Fail LOUDLY and specifically. A language client that cannot spawn its
   // server otherwise just produces no hovers, which reads as "the index has
@@ -373,7 +467,7 @@ module.exports = { activate, deactivate };
 // Test hook. The engine-copy logic is the part with real failure modes -- a
 // half-finished copy, a locked destination, a rule deleted upstream -- and none
 // of them are reachable through activate() without a live VS Code. Exported so
-// testsscode\ can drive it directly with a stubbed `vscode` module; nothing
+// tests\vscode\ can drive it directly with a stubbed `vscode` module; nothing
 // in the extension itself reads this.
 module.exports.__test = {
   mirrorEngine,

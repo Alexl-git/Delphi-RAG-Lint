@@ -1,0 +1,143 @@
+{
+  "name": "Delphi IDE (RAD Studio 37.0)",
+  "type": "dark",
+  "semanticHighlighting": true,
+  "colors": {
+    "editor.background": "#2D2F32",
+    "editor.foreground": "#FAFEFF",
+    "editorLineNumber.foreground": "#FAFEFF",
+    "editorRuler.foreground": "#C0C0C0",
+    "editor.lineHighlightBackground": "#09151C",
+    "editor.selectionBackground": "#7FAAFF59",
+    "editor.findMatchHighlightBackground": "#7FAAFF4D",
+    "editorCursor.foreground": "#FAFEFF",
+    "editorWhitespace.foreground": "#FAFEFF40"
+  },
+  "tokenColors": [
+    {
+      "scope": [
+        "keyword.control.pascal",
+        "keyword.other.pascal",
+        "storage.type.pascal",
+        "storage.modifier.pascal"
+      ],
+      "settings": {
+        "foreground": "#FFE0BC",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "scope": [
+        "comment.line.double-slash.pascal",
+        "comment.block.pascal",
+        "comment.block.parens.pascal"
+      ],
+      "settings": {
+        "foreground": "#BCE784",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "scope": [
+        "string.quoted.single.pascal",
+        "constant.character.escape.pascal"
+      ],
+      "settings": {
+        "foreground": "#7FAAFF",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "constant.character.pascal"
+      ],
+      "settings": {
+        "foreground": "#B18A50",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "constant.numeric.decimal.pascal"
+      ],
+      "settings": {
+        "foreground": "#FF7FAA",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "constant.numeric.float.pascal"
+      ],
+      "settings": {
+        "foreground": "#FF7FAA",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "constant.numeric.hex.pascal"
+      ],
+      "settings": {
+        "foreground": "#FF7FAA",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "constant.numeric.binary.pascal"
+      ],
+      "settings": {
+        "foreground": "#FF7FAA",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "constant.numeric.octal.pascal"
+      ],
+      "settings": {
+        "foreground": "#FF7FAA",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "keyword.control.directive.pascal"
+      ],
+      "settings": {
+        "foreground": "#66CDFF",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "keyword.operator.pascal",
+        "punctuation.pascal"
+      ],
+      "settings": {
+        "foreground": "#FFF9F0",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "entity.name.function.pascal",
+        "entity.name.type.pascal"
+      ],
+      "settings": {
+        "foreground": "#FFF9F0",
+        "fontStyle": ""
+      }
+    },
+    {
+      "scope": [
+        "meta.assembly.pascal"
+      ],
+      "settings": {
+        "foreground": "#F0E3D0",
+        "fontStyle": ""
+      }
+    }
+  ]
+}

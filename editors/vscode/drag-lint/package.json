@@ -2,7 +2,7 @@
   "name": "drag-lint",
   "displayName": "drag-lint (Delphi)",
   "description": "Delphi/Pascal language server backed by the drag-lint index: hover, go-to-definition, find-references, workspace symbols, completion and signature help.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "publisher": "drag-lint",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
@@ -34,6 +34,16 @@
         "command": "dragLint.updateEngine",
         "title": "Update Engine Copy Now",
         "category": "drag-lint"
+      },
+      {
+        "command": "dragLint.applyRadStudioColours",
+        "title": "Apply RAD Studio Colours (Pascal only)",
+        "category": "drag-lint"
+      },
+      {
+        "command": "dragLint.generateTheme",
+        "title": "Generate Theme From RAD Studio Colours",
+        "category": "drag-lint"
       }
     ],
     "languages": [
@@ -52,6 +62,20 @@
           ".dfm"
         ],
         "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "pascal",
+        "scopeName": "source.pascal",
+        "path": "./syntaxes/pascal.tmLanguage.json"
+      }
+    ],
+    "themes": [
+      {
+        "label": "Delphi IDE (drag-lint)",
+        "uiTheme": "vs-dark",
+        "path": "./themes/delphi-ide.color-theme.json"
       }
     ],
     "configuration": {
@@ -89,6 +113,11 @@
           },
           "default": [],
           "markdownDescription": "Optional explicit `--db` paths. Leave EMPTY (the default) to let drag-lint auto-select databases from `drag-lint.json` beside the exe — that is what keeps VS Code pointed at whatever the manifest currently says, including per-project indexes."
+        },
+        "dragLint.colors.bdsVersion": {
+          "type": "string",
+          "default": "auto",
+          "markdownDescription": "Which RAD Studio installation the colour commands read their editor scheme from, e.g. `37.0` (Delphi 13 Florence). `auto` picks the newest found under `HKCU\\Software\\Embarcadero\\BDS`."
         },
         "dragLint.trace.server": {
           "type": "string",

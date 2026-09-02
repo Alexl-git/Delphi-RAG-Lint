@@ -43,6 +43,8 @@ rebuild, the copy is stale until you reload the window** or run
 |---|---|
 | `drag-lint: Restart Language Server` | Restarts the LSP client and its engine process |
 | `drag-lint: Update Engine Copy Now` | Refreshes the private engine copy immediately |
+| `drag-lint: Apply RAD Studio Colours (Pascal only)` | Reads your RAD Studio editor scheme and applies it to Pascal files via `editor.tokenColorCustomizations`. Instant, no reload, leaves other languages alone |
+| `drag-lint: Generate Theme From RAD Studio Colours` | Rebuilds the **Delphi IDE (drag-lint)** theme from your current IDE scheme (offers a window reload) |
 
 ## Settings
 
@@ -52,6 +54,7 @@ rebuild, the copy is stale until you reload the window** or run
 | `dragLint.engineUpdate` | `onActivate` | When the copy is refreshed: `onActivate`, `manual`, or `off` |
 | `dragLint.serverPath` | *(empty)* | Absolute path to an exe to run AS-IS; disables the copy |
 | `dragLint.databases` | *(empty)* | Explicit `--db` paths; empty means auto-select from the manifest |
+| `dragLint.colors.bdsVersion` | `auto` | Which RAD Studio install the colour commands read, e.g. `37.0`; `auto` picks the newest |
 | `dragLint.trace.server` | `off` | Log the LSP conversation to the `drag-lint` output channel |
 
 Setting `dragLint.engineUpdate` to `off`, or pointing `dragLint.serverPath` at
@@ -59,6 +62,29 @@ the deployed path, restores the pre-1.4 behaviour -- VS Code and the Delphi IDE
 then always run the identical file, and a live VS Code session blocks engine
 rebuilds again.
 
+## Syntax colouring
+
+Since **v1.5** the extension ships a Pascal TextMate grammar. Before it, nothing
+coloured Pascal in VS Code: this extension contributed no grammar, VS Code has no
+built-in Pascal grammar, and the `begin`/`end` colours you may have seen were
+bracket-pair colourization, not highlighting.
+
+It also ships the theme **Delphi IDE (drag-lint)** (`Ctrl+K Ctrl+T`), which is
+GENERATED from `HKCU\Software\Embarcadero\BDS\<ver>\Editor\Highlight` -- your
+own IDE scheme, so the match is literal rather than approximate. Prefer to keep
+your VS Code theme? Run **drag-lint: Apply RAD Studio Colours (Pascal only)**
+instead: it recolours Pascal files only and applies with no reload.
+
+For pure IDE fidelity also set `"editor.bracketPairColorization.enabled": false`
+-- it overrides theme colours on `begin`/`end` and brackets.
+
+A TextMate grammar is a regex cascade, so it disagrees with drag-lint's own
+tree-sitter parse in the corners (generics vs comparison, nested `{$IFDEF}`,
+`asm` bodies). `textDocument/semanticTokens` fed by the real parse is the fix,
+and VS Code layers it OVER a grammar -- a complement, not a replacement.
+
+Do not also install a third-party Pascal extension: a second one declaring
+`source.pascal` conflicts with this grammar.
 ## Packaging
 
 From this directory:

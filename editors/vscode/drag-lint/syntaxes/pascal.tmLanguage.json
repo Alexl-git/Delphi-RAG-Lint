@@ -1,0 +1,194 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Object Pascal",
+  "scopeName": "source.pascal",
+  "fileTypes": ["pas", "dpr", "dpk", "inc", "dfm"],
+
+  "_comment": [
+    "Object Pascal (Delphi 13) TextMate grammar for the drag-lint extension.",
+    "",
+    "TWO RULES GOVERN THIS FILE.",
+    "",
+    "1. ORDER: the compiler-directive patterns MUST be tried before the comment",
+    "   patterns. '{ ... }' is a comment but '{$...}' is a directive, and they",
+    "   must not share a scope -- colouring {$IFDEF} as a comment is wrong, and",
+    "   this repo has hit the same confusion at the parser level (a nested '}'",
+    "   inside a brace comment ended it early and cost a build). The comment",
+    "   rules additionally guard with a negative lookahead so the ordering is",
+    "   not the ONLY thing holding it up.",
+    "",
+    "2. SUFFIX: every scope ends in '.pascal'. That is load-bearing. The",
+    "   'Apply RAD Studio Colours' command writes editor.tokenColorCustomizations",
+    "   globally, and the .pascal suffix is the only thing confining those rules",
+    "   to Pascal files instead of recolouring every language the user opens.",
+    "   run_pascal_grammar_and_theme.ps1 fails on a scope without it.",
+    "",
+    "Known and accepted: a TextMate grammar is a regex cascade with no parser",
+    "behind it, so it disagrees with our tree-sitter parse in the corners --",
+    "generics vs comparison (AreEqual<Integer> vs A < B), nested {$IFDEF}",
+    "regions, asm bodies. That is inherent to the mechanism. The fix is",
+    "textDocument/semanticTokens fed by the real parse, which VS Code layers OVER",
+    "this grammar; it is a complement, not a replacement."
+  ],
+
+  "patterns": [
+    { "include": "#directives" },
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#characters" },
+    { "include": "#numbers" },
+    { "include": "#assembly" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#operators" }
+  ],
+
+  "repository": {
+
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.control.directive.pascal",
+          "begin": "\\{\\$",
+          "end": "\\}",
+          "_comment": "{$IFDEF} / {$R *.dfm} / {$I unit.inc}. Ends at the first '}' -- Delphi brace comments and directives do not nest."
+        },
+        {
+          "name": "keyword.control.directive.pascal",
+          "begin": "\\(\\*\\$",
+          "end": "\\*\\)"
+        }
+      ]
+    },
+
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.pascal",
+          "match": "//.*$",
+          "_comment": "Covers '///' DocInsight comments too: the IDE draws them with the same Comment element, and fidelity to the IDE beats inventing a distinction it does not make."
+        },
+        {
+          "name": "comment.block.pascal",
+          "begin": "\\{(?!\\$)",
+          "end": "\\}"
+        },
+        {
+          "name": "comment.block.parens.pascal",
+          "begin": "\\(\\*(?!\\$)",
+          "end": "\\*\\)"
+        }
+      ]
+    },
+
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.pascal",
+          "begin": "'''[ \\t]*$",
+          "end": "^[ \\t]*'''",
+          "_comment": "Delphi 12+ multi-line string. The opening ''' must be last on its line, which is what keeps this from swallowing the '''' that writes one quote character."
+        },
+        {
+          "name": "string.quoted.single.pascal",
+          "begin": "'",
+          "end": "'(?!')",
+          "patterns": [
+            {
+              "name": "constant.character.escape.pascal",
+              "match": "''",
+              "_comment": "Delphi escapes a quote by doubling it -- 'It''s'. There are no backslash escapes."
+            }
+          ]
+        }
+      ]
+    },
+
+    "characters": {
+      "patterns": [
+        {
+          "name": "constant.character.pascal",
+          "match": "#\\$[0-9A-Fa-f]+|#[0-9]+|\\^[A-Za-z@\\[\\\\\\]^_]"
+        }
+      ]
+    },
+
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.hex.pascal", "match": "\\$[0-9A-Fa-f]+" },
+        { "name": "constant.numeric.binary.pascal", "match": "%[01]+\\b" },
+        { "name": "constant.numeric.octal.pascal", "match": "&[0-7]+\\b" },
+        {
+          "name": "constant.numeric.float.pascal",
+          "match": "\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b|\\b[0-9]+[eE][+-]?[0-9]+\\b",
+          "_comment": "Digits are REQUIRED after the dot so the subrange '1..5' does not read as the float '1.'."
+        },
+        { "name": "constant.numeric.decimal.pascal", "match": "\\b[0-9]+\\b" }
+      ]
+    },
+
+    "assembly": {
+      "patterns": [
+        {
+          "begin": "\\basm\\b",
+          "beginCaptures": { "0": { "name": "keyword.control.pascal" } },
+          "end": "\\bend\\b",
+          "endCaptures": { "0": { "name": "keyword.control.pascal" } },
+          "name": "meta.assembly.pascal",
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#strings" },
+            { "include": "#numbers" }
+          ]
+        }
+      ]
+    },
+
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(?i:(procedure|function|constructor|destructor|property))\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)",
+          "captures": {
+            "1": { "name": "storage.type.pascal" },
+            "2": { "name": "entity.name.function.pascal" }
+          },
+          "_comment": "storage.type.pascal, matching the #keywords list: this rule runs first, so scoping 'procedure' differently here would give the same word two scopes depending on whether a name followed it."
+        },
+        {
+          "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*\\b(?i:(packed\\s+)?(class|record|interface|dispinterface|object|set|array))\\b",
+          "captures": {
+            "1": { "name": "entity.name.type.pascal" }
+          }
+        }
+      ]
+    },
+
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.pascal",
+          "match": "\\b(?i:(begin|end|if|then|else|case|of|while|do|for|to|downto|repeat|until|with|try|except|finally|raise|goto|exit|break|continue|on|asm|inherited|nil))\\b"
+        },
+        {
+          "name": "storage.type.pascal",
+          "match": "\\b(?i:(unit|program|library|package|uses|interface|implementation|initialization|finalization|type|var|const|threadvar|resourcestring|label|procedure|function|constructor|destructor|property|class|record|object|array|set|file|string|packed|dispinterface|exports|contains|requires))\\b"
+        },
+        {
+          "name": "storage.modifier.pascal",
+          "match": "\\b(?i:(private|protected|public|published|strict|automated|virtual|dynamic|override|overload|abstract|sealed|final|static|reintroduce|inline|assembler|external|forward|export|cdecl|stdcall|safecall|register|pascal|winapi|varargs|far|near|resident|local|message|dispid|index|name|read|write|readonly|writeonly|stored|default|nodefault|implements|deprecated|experimental|platform|delayed|helper|operator|reference|absolute|out|constref|unsafe|align)\\b)"
+        },
+        {
+          "name": "keyword.other.pascal",
+          "match": "\\b(?i:(and|or|not|xor|div|mod|shl|shr|in|is|as|at))\\b"
+        }
+      ]
+    },
+
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.pascal", "match": ":=|<>|<=|>=|[+\\-*/=<>@^]" },
+        { "name": "punctuation.pascal", "match": "\\.\\.|[;,:.()\\[\\]]" }
+      ]
+    }
+  }
+}
