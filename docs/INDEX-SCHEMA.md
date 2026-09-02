@@ -189,9 +189,21 @@ narrows to resolved calls only).
 | `enclosing_symbol_id` | INTEGER FK -> `symbols.id` (v13+, ON DELETE SET NULL) | The innermost routine whose implementation body contains this ref; NULL if the ref is not inside any routine body |
 
 **`kind` value domain** (free-form string set at each call site in the
-parser; no enum backs it): `type_use`, `call`, `di-resolve`, `di-unresolved`,
-`read`, `write`, `attribute`, `event-binding` (the last is DFM/form-file
-references specifically).
+parser; no enum backs it): `attribute`, `call`, `di-resolve`, `di-unresolved`,
+`event-binding`, `member-access`, `read`, `sql_table_ref`, `type_use`, `write`.
+
+`event-binding` is DFM/form-file references specifically; `sql_table_ref` comes
+from the SQL parser; `member-access` is a dotted access, which since v20b is
+also part of the universe `ResolveCallTargets` walks (see the block comment
+above `REF_KIND_CALL` in `DRagLint.Core.Model.pas`).
+
+Because no enum backs this column, **adding an `EmitRef` kind means adding it
+here AND to `ColumnSemantics` in `DRagLint.CLI.pas`** -- `drag-lint schema`
+declares this domain to consumers, and `tests\autotest\run_schema_semantics.ps1`
+compares that declaration against a live `SELECT DISTINCT`. Both drifted before
+2026-09-02, when the declaration listed only the five Pascal-expression kinds
+and omitted everything the DFM, DI and SQL extractors emit. `symbols.kind` is
+not exposed to this hazard: it is derived from `TSymbolKind`.
 
 Join: `refs.symbol_id -> symbols.id`; `refs.file_id -> files.id`;
 `refs.enclosing_symbol_id -> symbols.id`.

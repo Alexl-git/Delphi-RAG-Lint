@@ -136,8 +136,22 @@ Write-Host 'run_test_project_rule_scoping -- checks whose remedy the caller coul
 Push-Location C:\TEMP
 try {
   $naming = & $Exe lint (Join-Path $WorkDir 'uTestsFixture.pas') 2>&1 | Out-String
-  $proc   = & $Exe lint (Join-Path $WorkDir 'uProcLaunch.pas')   2>&1 | Out-String
+  $procAll = & $Exe lint (Join-Path $WorkDir 'uProcLaunch.pas')  2>&1 | Out-String
 } finally { Pop-Location }
+
+# SECTION 2 ASSERTS ON unsafe-shellexecute ONLY, and must be filtered to it.
+#
+# $procAll is the WHOLE report for the fixture, and the fixture necessarily
+# contains an absolute path -- `LExe:= 'C:\Windows\System32\icacls.exe'` is the
+# non-nil lpApplicationName the whole section exists to test. Since ruling 2
+# (2026-09-02) a literal that reaches no modelled sink reports at `info` under
+# hardcoded-absolute-path, and that finding QUOTES the literal. So the arm
+# `-not ($proc -match 'icacls\.exe|ViaAppName')` began failing on a finding from
+# an unrelated rule, while unsafe-shellexecute behaved exactly as intended.
+#
+# A guard that greps a whole lint report cannot survive any rule gaining a
+# severity tier. Filter to the rule under test, then match.
+$proc = (($procAll -split "`n") | Where-Object { $_ -match 'unsafe-shellexecute' }) -join "`n"
 
 Write-Host ''
 Write-Host 'SECTION 1 -- method-pascalcase must not fire on DUnitX test methods' -ForegroundColor Cyan

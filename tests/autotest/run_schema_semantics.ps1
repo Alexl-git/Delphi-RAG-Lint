@@ -78,10 +78,29 @@ $refKind = Col 'refs' 'kind'
 Check 'refs.kind enumerates its vocabulary' `
   (($null -ne $refKind) -and ($null -ne $refKind.values)) ''
 if ($refKind.values) {
+  # WAS "exactly the five verified values", CHANGED 2026-09-02 -- and the reason
+  # is this runner's OWN stated contract, not convenience.
+  #
+  # The header above says the comparison is deliberately ASYMMETRIC: a value in
+  # the DATA that is not curated is a defect, while "a curated value that this
+  # particular index happens not to contain is NOT ... reported as a NOTE, never
+  # as a failure." An exact-equality assertion is the second thing, and it fails.
+  #
+  # It is a leftover from before `drag-lint sql` shipped, when -- again the
+  # header's words -- "the assertions below could only pin the curated list
+  # against careless EDITS". Check 2 now does the real work by scanning the
+  # live data, so exact equality only forbids the emitter from ever declaring a
+  # kind this index lacks. It fired when refs.kind was corrected to include the
+  # DFM, DI and SQL kinds the extractors genuinely emit.
+  #
+  # The ORIGINAL PURPOSE IS KEPT: the five verified core kinds must still all be
+  # declared, so a careless edit that drops 'call' still goes red. Additions are
+  # allowed; removals are not.
   $expected = @('call','member-access','read','type_use','write')
-  $got = @($refKind.values | Sort-Object)
-  Check 'refs.kind is exactly the five verified values' `
-    ((@(Compare-Object $expected $got -SyncWindow 0)).Count -eq 0) "got: $($got -join ',')"
+  $got = @($refKind.values)
+  $missing = @($expected | Where-Object { $got -notcontains $_ })
+  Check 'refs.kind still declares all five verified core values' `
+    ($missing.Count -eq 0) "missing: $($missing -join ',') -- got: $($got -join ',')"
 }
 
 $sec = Col 'symbols' 'section'

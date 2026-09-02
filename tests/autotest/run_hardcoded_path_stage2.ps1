@@ -198,13 +198,38 @@ Check 'control: the fixture units parsed' ($idx -notmatch '-> 0 symbols') `
   'a parse failure would make every silent-arm pass by silence'
 
 # Findings carry a line; map each to its routine so the arms mean something.
+#
+# TWO THINGS HERE ARE LOAD-BEARING, and this guard was RED for both from
+# 2026-09-02 (session 60's ruling 2) until session 61 found it:
+#
+#  1. ONLY `warning` COUNTS. Ruling 2 made a literal that reaches NO sink report
+#     at `info` -- deliberately, as a backstop. The helper routines BuildPath,
+#     DefaultPath and TakesByValue each hold such a literal, so this fixture now
+#     produces three `info` findings that are CORRECT and have nothing to do
+#     with Stage 2. A Stage-2 hit -- a literal that reaches a sink through one
+#     interprocedural hop -- is a `warning`. Matching every severity made the
+#     silence arms assert on findings from a different tier of the same rule.
+#
+#  2. THE ROUTINE MAPPER MUST SEE FUNCTIONS AND PARAMETER LISTS. The old pattern
+#     was `^procedure (\w+);` -- which matches neither `function DefaultPath:
+#     string;` nor `procedure BuildPath(var A: string);`. Every finding inside
+#     those helpers therefore inherited the last thing it DID match: the final
+#     INTERFACE forward declaration, `procedure SilentAmbiguous;` at line 11.
+#     That is how a correct engine produced "SilentAmbiguous fired".
+#
+# Anchoring on `^(procedure|function) Name` with an optional parameter list and
+# requiring column 1 keeps interface declarations out only because the
+# implementation ones come later and overwrite -- which is what the walk below
+# relies on.
 $src = Get-Content (Join-Path $WorkDir 'uStage2.pas')
 $hit = @()
 foreach ($l in $out) {
-  if ($l -match 'uStage2\.pas:(\d+):\d+.*hardcoded-absolute-path') {
-    $ln = [int]$Matches[1]; $r = '?'
+  if ($l -match 'uStage2\.pas:(\d+):\d+\s+\[(\w+)\]\s+hardcoded-absolute-path') {
+    $ln = [int]$Matches[1]
+    if ($Matches[2] -ne 'warning') { continue }   # info = ruling 2's backstop, not a Stage-2 hit
+    $r = '?'
     for ($i = 0; $i -lt $ln -and $i -lt $src.Count; $i++) {
-      if ($src[$i] -match '^procedure (\w+);') { $r = $Matches[1] }
+      if ($src[$i] -match '^(?:procedure|function)\s+(\w+)\s*(?:\(|:|;)') { $r = $Matches[1] }
     }
     $hit += $r
   }
