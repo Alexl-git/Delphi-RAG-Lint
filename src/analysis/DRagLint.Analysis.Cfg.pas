@@ -651,6 +651,15 @@ type
     { >0 while emitting an exit-path copy of a finally body, which suspends the
       list so a divert INSIDE a finally cannot recurse into itself forever. }
     CopyDepth: Integer;
+    { C1: every block DivertVia emitted as an exit-path COPY of a finally body.
+      Those blocks sit inside the try body's index range but are NOT part of its
+      normal statement flow, and an exception raised in one is not caught by the
+      try's own handler -- the divert has already left the region. The
+      body->handler edges added for C1 must skip them, or the handler becomes
+      reachable from the inlined finally and the finally's statements are
+      analysed twice on ONE path (measured: 5 phantom double-frees on DataCopy
+      CSVRoutines.pas, where each object is freed exactly once). }
+    DivertBlocks: TDictionary<Integer, Boolean>;
     constructor Create(ACfg: TCfg);
     destructor Destroy; override;
     function EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;
@@ -664,11 +673,15 @@ constructor TBuilderState.Create(ACfg: TCfg);
 begin
   inherited Create; Cfg := ACfg; Loops := TStack<TLoopCtx>.Create; WithDepth := 0;
   Finallys := TList<TTSNode>.Create; CopyDepth := 0;
+  DivertBlocks := TDictionary<Integer, Boolean>.Create;
 end;
 
 destructor TBuilderState.Destroy;
 begin
-  Finallys.Free; Loops.Free; inherited;
+  DivertBlocks.Free;
+  Finallys.Free;
+  Loops.Free;
+  inherited;
 end;
 
 { Delphi runs every enclosing finally before an exit/break/continue leaves the
@@ -695,6 +708,7 @@ begin
   if (Finallys.Count <= AFromDepth) or (CopyDepth > 0) then Exit;
   First := -1; Cur := -1;
   Inc(CopyDepth);
+  var CopyFrom: Integer := Cfg.Blocks.Count;
   try
     for I := Finallys.Count - 1 downto AFromDepth do { innermost first }
     begin
@@ -706,6 +720,12 @@ begin
     end;
   finally
     Dec(CopyDepth);
+    { C1: register everything emitted above as divert-copy, INCLUDING the blocks
+      EmitStmt created for the copied body's own control flow. Registered in a
+      finally so the `Exit(First)` above -- a finally body that itself diverts --
+      cannot leave a half-registered range behind. }
+    for var DIdx: Integer := CopyFrom to Cfg.Blocks.Count - 1 do
+      DivertBlocks.AddOrSetValue(DIdx, True);
   end;
   Cfg.Blocks[Cur].AddSucc(ATarget);
   Result := First;
@@ -1016,6 +1036,11 @@ begin
     { While the TRY BODY is being emitted, this finally is in scope for any
       exit/break/continue inside it -- see DivertVia. Pushed only around the
       body: a divert in the FINALLY itself does not re-run it. }
+    { C1: remember which blocks the TRY BODY occupies, so the handler edges
+      below can come from all of them and not only from the region entry. Every
+      block created while the body is emitted belongs to the body -- BodyIdx and
+      FollowIdx both already exist, so neither is caught by this range. }
+    var BodyFirst: Integer := Cfg.Blocks.Count;
     if FinNode.IsNull then TryAfter := EmitStmt(BodyIdx, TryNode)
     else
     begin
@@ -1026,6 +1051,7 @@ begin
         Finallys.Delete(Finallys.Count - 1);
       end;
     end;
+    var BodyLast: Integer := Cfg.Blocks.Count - 1;
     if not FinNode.IsNull then
     begin
       HdrIdx := Cfg.NewBlock.Index; { finally entry }
@@ -1080,6 +1106,39 @@ begin
         begin
           HdrIdx := Cfg.NewBlock.Index;
           Cfg.Blocks[BodyIdx].AddSucc(HdrIdx); { try entry -> handler (conservative) }
+
+          { C1: AN EXCEPTION CAN BE RAISED AT ANY STATEMENT IN THE BODY, NOT ONLY
+            BEFORE THE FIRST ONE. The entry edge above models "it threw before
+            anything ran", which is the right MOST-CONSERVATIVE state but is not
+            the only one, and on its own it makes every assignment in a later
+            basic block unable to reach the handler at all. A local assigned
+            after a branch and read ONLY by the handler therefore looked dead:
+
+              LOpened := False;   // later block, because of an earlier if/exit
+              ...
+              except on E: Exception do
+                if LOpened and (not RollBackOutput) then ...   // the reader
+
+            Measured on DataCopy: 7 such findings when this note was written,
+            11 today (uMahrRoutines.pas, DPPRoutines.pas and the newer
+            uMarpossRoutines.pas), every one of them a FALSE POSITIVE on a store
+            the handler genuinely consumes -- and a dangerous class of FP,
+            because acting on it deletes the assignment the error path depends
+            on.
+
+            Adding the remaining body blocks can only make MORE reads reachable
+            from an assignment; it never removes an assignment from a path. So
+            it cannot manufacture a used-before-assignment: the "nothing in the
+            body ran" state still arrives via the entry edge above and remains
+            the dominating one for that rule.
+
+            NOT extended to `finally` -- that edge is refused deliberately just
+            above, and for a different reason (it would route the skipped-body
+            state into the normal post-finally exit and fire
+            function-result-not-set on routines that set Result in the try). }
+          for var BIdx := BodyFirst to BodyLast do
+            if not DivertBlocks.ContainsKey(BIdx) then
+              Cfg.Blocks[BIdx].AddSucc(HdrIdx);
           if ANode.NamedChild(I).NodeType = 'exceptionHandler' then
             ExcAfter := EmitStmt(HdrIdx, ANode.NamedChild(I).ChildByField('body'))
           else
