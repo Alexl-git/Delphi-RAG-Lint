@@ -2027,6 +2027,28 @@ end;
 // -- unioned with a .dproj's config defines when the section is a single-project
 // closure. --no-preprocess (from index --all) passes False for a raw all-branch
 // build.
+{ WHAT KIND OF INDEX THIS DATABASE IS -- the owner's two-type model, 2026-09-02.
+
+  A LIBRARY index scans every file under the folders it names. A PROJECT index
+  scans only a project's members, which may span several folders and which
+  deliberately exclude loose .pas files parked among them.
+
+  Until this key existed the distinction lived ONLY in the manifest, derived at
+  plan time from an include's file extension -- so a database could not say what
+  it was, and `index <dir> --db <projectDb>` had nothing to refuse on. See the
+  refusal in DoIndex.
+
+  Written only after a run that COMPLETED, alongside the fingerprints, for the
+  same reason they are: an interrupted run must not leave a claim about a scope
+  it never finished walking.
+
+  DECLARED HERE, well above both writers, because Pascal needs it: the manifest
+  path (index --all) stamps it several thousand lines before DoIndex does. }
+const
+  SCAN_TYPE_KEY     = 'scan_type';
+  SCAN_TYPE_PROJECT = 'project';
+  SCAN_TYPE_LIBRARY = 'library';
+
 { INBOX 2.3: defined with DoIndex (the single-root path) but needed here too;
   forward-declared rather than moved so the fingerprint policy stays next to the
   comment that explains it. }
@@ -2580,6 +2602,17 @@ begin
       section that failed above exits before this point and deliberately leaves
       the OLD fingerprint in place, so the next run re-parses it. }
     CommitIndexerFingerprint(Store, APreprocess, AItem.Platform);
+    { The manifest path must stamp the scan type too, and this is the site that
+      matters MOST: nearly every project database is built through
+      `index --all --only <Section>`, not through a bare `index`. Stamping only
+      in DoIndex would have left the common case unmarked and the refusal there
+      falling back to the _D-RAG folder heuristic for ever.
+
+      smClosure is the project model -- the section's roots are .dpr/.dproj
+      paths and its files are that project's members. smFolderTree and
+      smLibrary both walk folders, which is the library model. }
+    Store.SetMetaValue(SCAN_TYPE_KEY,
+      IfThen(AItem.Mode = smClosure, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
     Writeln(Format('=== %s%s -> %s : files=%d symbols=%d [%.1fs] ===', [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols, Elapsed]));
     Result:= True;
   except
@@ -3576,6 +3609,15 @@ begin
   end
   else Folders:= [AArgs.Path];
 
+  { PROJECT-scoped means the scope came from a project's compile closure, not
+    from a folder walk. `--project` is the explicit form; a bare .dpr/.dproj
+    path reaches the same arm, so both count. Everything else -- an explicit
+    folder, --scan-libraries-* -- is a LIBRARY scan. }
+  var IsProjectScopedTarget: Boolean:=
+    (AArgs.ProjectPath <> '') or
+    SameText(ExtractFileExt(AArgs.Path), '.dpr') or
+    SameText(ExtractFileExt(AArgs.Path), '.dproj');
+
   if AArgs.DryRun then begin Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.'); Result:= 0; Exit; end;
 
   { MODE: --rebuild empties the index of source before the walk, so the run
@@ -3608,6 +3650,91 @@ begin
         Exit(2);
       end;
     end;
+  end;
+
+  { =====================================================================
+    A FOLDER TARGET IS VALID ONLY FOR A LIBRARY DATABASE.
+
+    Owner ruling, 2026-09-02: there are exactly two kinds of index. A LIBRARY
+    scans every file under the folders it names. A PROJECT scans only the
+    files belonging to a project -- which may span several folders, and which
+    deliberately EXCLUDES loose .pas files parked in those folders.
+
+    `index <dir> --db <projectDb>` violated that. It took the directory as the
+    whole scope and added every .pas beneath it; then out-of-scope eviction set
+    the in-scope set from the walk it had just done, so the widened set became
+    the database's own definition of itself. Silent, and sticky until somebody
+    happened to run a section rebuild.
+
+    Measured twice on 2026-09-02, both from agents following the documented
+    post-build recipe: DataCopy 39 -> 72 files (lint-all 393 -> 1123 findings
+    over 38 -> 70 files), and this repository's own self-index 198 -> 200.
+
+    HOW THE DATABASE KNOWS WHAT IT IS, in order:
+
+      1. SCAN_TYPE_KEY, written at the end of every completed run. A database
+         indexed by this build or later says what it is, in its own words.
+      2. No key -> PROCEED, with a NOTE naming the risk. It is NOT refused.
+
+    WHY THERE IS NO PATH HEURISTIC HERE, and there was one for about an hour.
+
+    The first version also treated a `_D-RAG` parent as proof of a project
+    database, on the strength of the documented layout
+    <project folder>\_D-RAG\<project>.sqlite. That is wrong, and the battery
+    said so immediately: NINE existing runners deliberately index a FOLDER into
+    a `_D-RAG`-located database, because that path is what the config anchor
+    walk keys off. `_D-RAG` says where a project database LIVES. It does not say
+    how the database was BUILT, and a folder scan may legitimately write there.
+
+    The mistake is worth naming because it is the mirror of the one the comment
+    originally cited: reading an ABSENT stamp as a positive claim. "Missing is
+    not fresh" cuts both ways -- absence is not evidence of "library", and it is
+    not evidence of "project" either. Only the stamp is evidence.
+
+    THE COST, stated plainly: a project database written before this key existed
+    is unprotected until something re-indexes it project-scoped, which
+    `index --all --only <Section>` or `index --project` does routinely. The NOTE
+    is what covers the gap in the meantime.
+    ===================================================================== }
+  { A DIRECTORY target only. A single FILE target is not the same operation and
+    must keep working: `index <file.pas> --db <projectDb>` refreshes ONE member
+    of a project, which is the ordinary incremental move after editing a unit,
+    and it cannot widen a scope the way a folder walk does -- IndexFolder walks
+    and adopts, IndexFile touches one row.
+
+    Refusing file targets was a real over-reach, and the guard did not catch it
+    because it only ever exercised folders. The battery did:
+    run_index_rebuild_recompile POLLUTES a project DB with one out-of-root FILE
+    on purpose, to prove --rebuild evicts it again, and the refusal blocked the
+    setup rather than the defect. The owner's ruling names `index <dir>`. }
+  if (not IsProjectScopedTarget) and TDirectory.Exists(AArgs.Path) then
+  begin
+    var DbScanType: string:= '';
+    try DbScanType:= Store.GetMetaValue(SCAN_TYPE_KEY); except DbScanType:= ''; end;
+
+    if SameText(DbScanType, SCAN_TYPE_PROJECT) then
+    begin
+      Writeln(ErrOutput, 'ERROR: refusing to index a FOLDER into a PROJECT database.');
+      Writeln(ErrOutput, '  database: ' + ResolvedDb);
+      Writeln(ErrOutput, '  folder  : ' + AArgs.Path);
+      Writeln(ErrOutput, '');
+      Writeln(ErrOutput, 'A project index holds the project''s MEMBERS, which may span several folders');
+      Writeln(ErrOutput, 'and deliberately exclude loose .pas files sitting beside them. Indexing a');
+      Writeln(ErrOutput, 'folder into it would add those loose files and then adopt the widened set as');
+      Writeln(ErrOutput, 'the database''s own scope -- silently, and until the next section rebuild.');
+      Writeln(ErrOutput, '');
+      Writeln(ErrOutput, 'Use instead:');
+      Writeln(ErrOutput, '  drag-lint index --project <file.dproj> --db ' + ResolvedDb);
+      Writeln(ErrOutput, '  drag-lint index --all --only <Section>');
+      Exit(2);
+    end;
+
+    if DbScanType = '' then
+      Writeln(ErrOutput, 'NOTE: this database records no scan_type (it predates the stamp), so a '
+                       + 'folder scan cannot be refused on evidence. If it is a PROJECT index, stop '
+                       + 'and re-run as `index --project <file.dproj> --db <db>` or '
+                       + '`index --all --only <Section>` -- a folder walk would add every loose .pas '
+                       + 'beneath the folder and then adopt that widened set as the scope.');
   end;
 
   var Interval:= AArgs.Interval;
@@ -3842,6 +3969,12 @@ begin
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
     CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform);
+    { Rides the same completed-run guarantee as the fingerprints above: a
+      database that says "project" was walked as a project, all the way through.
+      This is what lets the next `index <dir> --db` refuse instead of guessing
+      from the folder layout. }
+    Store.SetMetaValue(SCAN_TYPE_KEY,
+      IfThen(IsProjectScopedTarget, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
     Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
@@ -10747,14 +10880,39 @@ var
     if Key = 'refs.kind' then
     begin
       ADesc  := 'How the name is used at this site.';
-      AValues:= 'call,member-access,read,type_use,write';
+      { CURATED, because refs.kind has no enum behind it -- each value is a
+        string literal at its emit site. The list below is every literal passed
+        to EmitRef/AddRef across src\, plus REF_KIND_CALL.
+
+        It was WRONG until 2026-09-02, declaring only the five Pascal-expression
+        kinds and omitting everything the DFM, DI and SQL extractors emit. That
+        is not cosmetic: run_schema_semantics.ps1 compares this list against a
+        live DISTINCT scan, so `schema` was under-declaring its own value domain
+        and the guard was red on every index containing a .dfm. A consumer
+        filtering on this list would silently drop DFM event bindings.
+
+        Adding an EmitRef kind means adding it here. There is no mechanism that
+        can notice for you -- which is the argument for the enum-derived
+        treatment symbols.kind gets below. }
+      AValues:= 'attribute,call,di-resolve,di-unresolved,event-binding,'
+              + 'member-access,read,sql_table_ref,type_use,write';
     end
     else if Key = 'symbols.kind' then
     begin
       ADesc  := 'Declaration kind.';
-      AValues:= 'class,const,constructor,destructor,enum,enum_value,field,'
-              + 'finalization,function,initialization,interface,local_var,'
-              + 'method,param,procedure,property,record,type,unit,var';
+      { DERIVED FROM THE ENUM, not curated. The hand-written list this replaced
+        had drifted: it was missing 'form' and 'component' (every .dfm root and
+        component), 'program', 'package', and all ten sql_* kinds -- so `schema`
+        under-declared the domain and run_schema_semantics.ps1 failed against
+        any index holding a form.
+
+        TSymbolKind is the single source of truth and ToText is its own
+        spelling, so a new kind appears here the moment it exists. This is the
+        fix; completing a hand-written list would only reset the clock. }
+      AValues:= '';
+      for var SK: TSymbolKind:= Low(TSymbolKind) to High(TSymbolKind) do
+        if AValues = '' then AValues:= SK.ToText
+        else AValues:= AValues + ',' + SK.ToText;
     end
     else if Key = 'symbols.section' then
     begin
