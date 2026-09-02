@@ -5783,6 +5783,17 @@ var
     is a decision to take with measurements in hand, not a default. }
   FollowMemo : TDictionary<string, Boolean>      ;
   FollowCount: Integer                           ;
+  { RULING 2 (owner, 2026-09-02): a path literal reaching NO sink is reported at
+    `info` rather than staying silent. This rule is SINK-ANCHORED, so such a
+    literal is never visited on the reasoning path at all -- it has to be
+    collected separately during the same walk and emitted afterwards, once Seen
+    holds every position the sink-anchored tiers already claimed.
+
+    THE COST WAS STATED BEFORE THE DECISION AND IS NOT A SURPRISE: this
+    re-admits the literals B7 was built to remove (~73 on DataCopy), one
+    severity lower. It is bounded by IsPathPortion still requiring a drive
+    letter or a UNC lead, so a relative portion stays silent (ruling (a)). }
+  Orphans    : TList<TTSNode>                    ;
 
   { The source text of a node, read from an EXPLICIT buffer. Stage 2 reads nodes
     from a CALLEE's file, whose bytes are not in Src -- and the range check below
@@ -5999,15 +6010,47 @@ var
     URI, not a filesystem path. Fixed-scheme reasoning belongs to
     unsafe-shellexecute (IsFixedSchemeUri), not here. }
   function IsPathPortion(const AText: string): Boolean;
+  var
+    I: Integer;
   begin
     Result:= False;
     if AText = '' then Exit;
     if Pos('://', AText) > 0 then Exit;
 
-    { UNC root, either slash spelling: \\server\share or //server/share. }
-    if (Length(AText) >= 2)
+    { UNC root, either slash spelling: \\server\share or //server/share.
+
+      A SERVER NAME IS REQUIRED, and that requirement is load-bearing rather
+      than cosmetic. Testing only for the leading PAIR classifies '//', '///',
+      '\\', '// ---' and '//\s*(TODO|FIXME)\b' as paths -- comment markers and
+      regex fragments, of which drag-lint's own comment-parsing code holds
+      about thirty. That was unreachable while the rule was purely
+      sink-anchored (no comment marker flows into TFile.WriteAllText), so it sat
+      here harmlessly until ruling 2's backstop began asking about EVERY
+      literal. The backstop did not create this; it made it visible.
+
+      '?' and '.' are admitted alongside a name character because Windows spells
+      two real path families that way -- '\\?\C:\very\long\path' (extended
+      length) and '\\.\PhysicalDrive0' (device namespace) -- and dropping them
+      would trade this false positive for a false negative.
+
+      A SHARE SEPARATOR IS REQUIRED TOO, and the reason it is not simply "the
+      first character must be a letter" is '\\192.168.1.10\share': a UNC host
+      may be an IP address, and an IP-addressed share is the MOST machine-bound
+      path there is -- exactly what this rule exists to catch. So digits stay
+      legal in the host, and what separates '\\192.168.1.10\share' from the
+      doc-comment marker '//1' is that a real UNC names a SHARE after the host.
+      The cost is that a bare '\\server' with no share is no longer a path
+      portion; it names a machine, not a location, so that is the right side to
+      err on. }
+    if (Length(AText) >= 3)
        and CharInSet(AText[1], ['\', '/'])
-       and CharInSet(AText[2], ['\', '/']) then Exit(True);
+       and CharInSet(AText[2], ['\', '/'])
+       and CharInSet(AText[3], ['A'..'Z', 'a'..'z', '0'..'9', '?', '.']) then
+    begin
+      for I:= 4 to Length(AText) do
+        if CharInSet(AText[I], ['\', '/']) then Exit(True);
+      Exit(False);
+    end;
 
     { Drive-letter root: 'C:', 'C:\out\x', 'C:/out/x'. }
     Result:= (Length(AText) >= 2) and (AText[2] = ':')
@@ -6205,6 +6248,49 @@ var
   procedure Report(const ALit: TTSNode; const ASink: string);
   begin
     ReportAt(ALit, ASink, UnquoteLiteral(NodeStr(ALit)));
+  end;
+
+  { RULING 2 (owner, 2026-09-02): "a path literal reaching NO sink becomes info,
+    not silence."
+
+    THE MESSAGE MUST NOT ASSERT A USE. What distinguishes this tier from the
+    other two is precisely that there is NO evidence the literal is used as a
+    path -- no sink claimed it, and the reason may be a sink we do not model, a
+    second interprocedural hop, or the literal being genuinely inert. Wording it
+    like the warning tier ("reaches X ... will not exist on another machine")
+    would state a fact the checker has not established, which is the failure
+    this repo has hit five times in text-scan rules. It reports for REVIEW.
+
+    Runs AFTER the walk: Seen is only complete once the sink-anchored pass has
+    claimed its positions, so a literal the warning tier already reported is
+    skipped here rather than reported twice. }
+  procedure ReportOrphanLiterals;
+  var
+    I  : Integer     ;
+    P  : TTSPoint    ;
+    F  : TLintFinding;
+    Key: string      ;
+    Txt: string      ;
+  begin
+    for I:= 0 to Orphans.Count - 1 do
+    begin
+      if Findings.Count >= 200 then Exit;
+      P  := Orphans[I].StartPoint;
+      Key:= Format('%d:%d', [Integer(P.Row), Integer(P.Column)]);
+      if Seen.ContainsKey(Key) then Continue;
+      Seen.Add(Key, True);
+      Txt:= UnquoteLiteral(NodeStr(Orphans[I]));
+      F:= Default(TLintFinding);
+      F.RuleId   := 'hardcoded-absolute-path';
+      F.Severity := 'info';
+      F.Message  := Format('Absolute path literal "%s" is not reached by any filesystem operation this checker models, so it is reported for REVIEW rather than as an established defect. If it does name a real location -- a folder probed on a test or customer machine, or a path handed to code not analysed here -- take the root from configuration, the environment, or a known-folder API. If it is inert, retire it or record a dl:ok review saying so.', [Txt]);
+      F.FilePath := AFile;
+      F.StartLine:= Integer(P.Row   ) + 1;
+      F.StartCol := Integer(P.Column) + 1;
+      F.EndLine  := F.StartLine;
+      F.EndCol   := F.StartCol + 1;
+      Findings.Add(F);
+    end;
   end;
 
 { ---------------------------------------------------------------------------
@@ -6649,6 +6735,14 @@ var
     Cur:= AProc;
     if N.NodeType = 'defProc' then Cur:= N;
 
+    { RULING 2 -- candidates are COLLECTED here and REPORTED after the walk.
+      Whether a literal reaches a sink is not knowable at the literal: the sink
+      may be several statements later, and the sink-anchored pass is what
+      populates Seen. Reporting here would race that and duplicate every
+      literal the warning tier is about to claim. }
+    if N.NodeType = 'literalString' then
+      if IsPathPortion(UnquoteLiteral(NodeStr(N))) then Orphans.Add(N);
+
     if N.NodeType = 'exprCall' then
     begin
       if SinkOf(N, I0, I1, SinkName) then
@@ -6696,10 +6790,14 @@ begin
     outlived the file would be keyed to parses that no longer exist. }
   FollowMemo := TDictionary<string, Boolean>.Create;
   FollowCount:= 0;
+  Orphans    := TList<TTSNode>.Create;
   try
     Visit(PF.Tree.RootNode, Default(TTSNode));
+    { RULING 2's backstop tier -- strictly after the walk, see ReportOrphanLiterals. }
+    ReportOrphanLiterals;
     Result:= Findings.ToArray;
   finally
+    Orphans   .Free;
     FollowMemo.Free;
     Seen      .Free;
     AsgnNodes .Free;

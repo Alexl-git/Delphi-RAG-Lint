@@ -14,8 +14,19 @@
 #
 # The negatives are load-bearing: with only the one positive this file would
 # pass against the OLD unscoped rule, which fired on every drive-letter literal.
+#
+# RULING 2 (owner, 2026-09-02) INVERTED LINE 23. "A literal nothing opens does
+# not count" -- stated at the top of this file -- is no longer the contract: an
+# absolute literal reaching NO sink now reports at INFO for review. Line 23 is
+# therefore a POSITIVE, and the line count did not move (the .pas comment above
+# it was kept to one line deliberately, so 20/23/26/28 still hold).
+#
+# 20, 26 and 28 STAY NEGATIVE, and that is what proves the backstop is bounded
+# rather than "every string literal": 20 is relative, 26 is a bare filename, 28
+# is computed. If a change ever makes those fire, the tier has been widened past
+# the owner's ruling (a) and the rule is back to the flood B7 removed.
 hardcoded-absolute-path 16
 !hardcoded-absolute-path 20
-!hardcoded-absolute-path 23
+hardcoded-absolute-path 23
 !hardcoded-absolute-path 26
 !hardcoded-absolute-path 28

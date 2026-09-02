@@ -19,7 +19,7 @@ begin
   SL := TStringList.Create;
   SL.LoadFromFile('relative\path\data.csv');
   SL.Free;
-  { No sink: nothing opens it, so it is not a hardcoded path USE. }
+  { No sink: silent until 2026-09-02, now INFO (ruling 2) -- see .expected. }
   S := 'C:\Temp\never-opened.txt';
   Writeln(S);
   { A bare filename MAY be hardcoded -- only the path to it may not. }

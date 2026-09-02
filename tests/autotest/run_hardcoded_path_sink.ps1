@@ -49,6 +49,28 @@
   which is the shape you want, not a defect. The expected finding count moves
   4 -> 3 for that reason and not because a case was deleted.
 
+  THIRD TIER 2026-09-02 -- NO SINK IS NOW `info`, NOT SILENCE (owner ruling 2)
+  ---------------------------------------------------------------------------
+    "a path literal reaching NO sink becomes info, not silence."
+
+  The standing engineering recommendation was to DROP this, on the measurement
+  that it re-admits roughly DataCopy's original 73 literals one severity lower
+  -- the very flood B7 existed to remove. The owner was shown that and ruled for
+  the tier. It is implemented, and the cost is recorded HERE rather than argued
+  again: cases 5, 6, 7 and 11 below flipped from silent to firing, and they are
+  the same three shapes (domain helper, search needle, IniFile default) that
+  opened the redesign, plus a dead store.
+
+  What keeps it honest is the SEVERITY SPLIT and the wording. The backstop has
+  established nothing about how the literal is used, so it reports at `info` and
+  its message says "for REVIEW", never "reaches X and will break". A warning
+  asserts a fact; this tier has no fact to assert.
+
+  And it is BOUNDED: IsPathPortion still requires a drive letter or a UNC lead,
+  so ruling (a) survives -- cases 2 and 10 (relative path, bare filename) remain
+  silent, and they are the controls that would catch a backstop widened to every
+  string literal.
+
   WHY BOTH POLARITIES ARE ASSERTED
   --------------------------------
   A suite asserting only "the false findings are gone" passes with the rule
@@ -208,6 +230,50 @@ begin
   if DirectoryExists('C:\ProgramData\IsThisTheTestBox') then Exit;
 end;
 
+// ---- MUST STAY SILENT: a leading slash PAIR is not automatically a UNC -----
+
+procedure Case15_CommentMarkerIsNotAPath;
+var
+  S: string;
+begin
+  S := '//';
+  Writeln(S);
+end;
+
+procedure Case16_RegexFragmentIsNotAPath;
+var
+  S: string;
+begin
+  S := '//\s*(TODO|FIXME|HACK)\b';
+  Writeln(S);
+end;
+
+procedure Case17_DocMarkerIsNotAPath;
+var
+  S: string;
+begin
+  S := '// ---';
+  Writeln(S);
+end;
+
+procedure Case18_DocPrefixDigitIsNotAPath;
+var
+  S: string;
+begin
+  S := '//1';
+  Writeln(S);
+end;
+
+// ---- MUST FIRE: an IP-addressed UNC share is still a path -----------------
+
+procedure Case19_IpAddressedUncShare;
+var
+  S: string;
+begin
+  S := '\\192.168.1.10\share\data.csv';
+  Writeln(S);
+end;
+
 end.
 '@
 $norm = $body -replace "`r`n", "`n" -replace "`n", "`r`n"
@@ -234,8 +300,16 @@ $ln11 = LineOf "LPath := 'C:\dead\store.csv';"
 $ln12 = LineOf "if BdsDir = '' then BdsDir := 'C:\Program Files (x86)\Embarcadero\Studio\37.0';"
 $ln13 = LineOf "LPath := 'C:\fallback\out.txt';"
 $ln14 = LineOf "if DirectoryExists('C:\ProgramData\IsThisTheTestBox') then Exit;"
-Check 'fixture lines located' (@($ln1,$ln2,$ln3,$ln4,$ln5,$ln6,$ln7,$ln10) -notcontains -1) `
-  "fire: $ln1,$ln2,$ln3,$ln4  silent: $ln5,$ln6,$ln7,$ln10"
+$ln15 = LineOf "S := '//';"
+$ln16 = LineOf "S := '//\s*(TODO|FIXME|HACK)\b';"
+$ln17 = LineOf "S := '// ---';"
+$ln18 = LineOf "S := '//1';"
+$ln19 = LineOf "S := '\\192.168.1.10\share\data.csv';"
+# ln15..ln17 MUST be in this list. A silent-direction assertion reads
+# "-not ($fired -contains $lnN)", which is VACUOUSLY TRUE when LineOf returned
+# -1 -- so an unlocated line would give three green ticks that assert nothing.
+Check 'fixture lines located' (@($ln1,$ln2,$ln3,$ln4,$ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18,$ln19) -notcontains -1) `
+  "fire: $ln1,$ln2,$ln3,$ln4,$ln19  silent: $ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18"
 
 $fired = @()
 foreach ($line in (& $Exe lint $fixture 2>$null)) {
@@ -251,11 +325,57 @@ Check "3  UNC path -> TFileStream.Create           (line $ln3)"  ($fired -contai
 Check "4  portion on one side of a concat          (line $ln4)"  ($fired -contains $ln4)
 
 Write-Host ''
-Write-Host 'THE DEFECT -- literals that reach no sink MUST stay silent' -ForegroundColor Cyan
-Check "5  non-sink domain call                     (line $ln5)"  (-not ($fired -contains $ln5))
-Check "6  search needle, not a path                (line $ln6)"  (-not ($fired -contains $ln6))
-Check "7  IniFile default value                    (line $ln7)"  (-not ($fired -contains $ln7))
+Write-Host 'BACKSTOP TIER (owner ruling 2, 2026-09-02) -- NO sink means INFO, not silence' -ForegroundColor Cyan
+# THESE THREE ASSERTIONS ARE INVERTED FROM THEIR ORIGINALS, and that inversion
+# IS the ruling. They are the exact shapes B7 was built to remove -- a domain
+# helper, `Pos` as a search needle, and an IniFile default -- taken from the
+# DataCopy corpus where literals like these were 55% of the report. The cost was
+# put to the owner before the decision and he chose the tier anyway:
+#     "a path literal reaching NO sink becomes info, not silence."
+# They are kept as LIVE assertions in the firing direction rather than deleted.
+# If the tier is ever dropped, invert these three BACK; do not remove them,
+# because the silent direction is what the redesign originally bought and it
+# must not be lost by omission.
+Check "5  non-sink domain call now fires           (line $ln5)"  ($fired -contains $ln5)
+Check "6  search needle now fires                  (line $ln6)"  ($fired -contains $ln6)
+Check "7  IniFile default now fires                (line $ln7)"  ($fired -contains $ln7)
+
+Write-Host ''
+Write-Host 'THE BACKSTOP IS STILL BOUNDED -- a non-absolute literal stays SILENT' -ForegroundColor Cyan
+# The tier did NOT become "any string literal". IsPathPortion still demands a
+# drive letter or a UNC lead, so ruling (a) survives it. This is the control
+# that catches a backstop accidentally widened to every literal -- the only way
+# this rule could reach the thousands the lint-clean standard forbids.
 Check "10 bare filename, allowed by spec           (line $ln10)" (-not ($fired -contains $ln10))
+
+Write-Host ''
+Write-Host 'A LEADING SLASH PAIR IS NOT AUTOMATICALLY A UNC ROOT' -ForegroundColor Cyan
+# REGRESSION CONTROL, and it is not hypothetical: when the backstop first ran it
+# produced 68 findings on drag-lint's own source and THIRTY-ONE of them were
+# these -- '//', '///', '\\', '// ---', '//\s*(TODO|FIXME)\b' -- string literals
+# in the comment-parsing code, classified as UNC roots because IsPathPortion
+# tested only for the leading PAIR. The defect predates ruling 2 and was simply
+# unreachable while the rule was sink-anchored: no comment marker flows into a
+# filesystem call. A server name is now required.
+#
+# These assertions belong to the SILENT direction permanently. Case 3 above is
+# their counterweight -- a real UNC share must still fire -- so a fix that
+# silences the markers by breaking UNC support cannot pass both.
+Check "15 '//' comment marker                      (line $ln15)" (-not ($fired -contains $ln15))
+Check "16 '//\s*(TODO...)' regex fragment          (line $ln16)" (-not ($fired -contains $ln16))
+Check "17 '// ---' doc rule                        (line $ln17)" (-not ($fired -contains $ln17))
+Check "18 '//1' doc-comment prefix                 (line $ln18)" (-not ($fired -contains $ln18))
+
+Write-Host ''
+Write-Host 'BUT AN IP-ADDRESSED UNC SHARE IS STILL A PATH' -ForegroundColor Cyan
+# THE COUNTERWEIGHT TO 18, AND THE REASON THE FIX IS NOT "THE HOST MUST START
+# WITH A LETTER". '\\192.168.1.10\share' is a legal UNC and the most
+# machine-bound path a program can contain -- silencing it to be rid of '//1'
+# would trade the noisiest false positive for the most valuable true one.
+# What actually separates them is the SHARE separator after the host, and this
+# pair of assertions is what holds the implementation to that distinction
+# rather than to a cheaper one that happens to pass case 18 alone.
+Check "19 IP-addressed UNC share fires             (line $ln19)" ($fired -contains $ln19)
 
 Write-Host ''
 Write-Host 'RELATIVE PATHS ARE ALLOWED -- owner ruling 2026-09-01' -ForegroundColor Cyan
@@ -289,16 +409,25 @@ Write-Host 'SINK TABLE -- DirectoryExists is a sink (owner idiom)' -ForegroundCo
 Check "14 DirectoryExists is a sink            (line $ln14)" ($fired -contains $ln14)
 
 Write-Host ''
-Write-Host 'DEAD STORE -- an UNCONDITIONAL overwrite still kills it' -ForegroundColor Cyan
-# The limit of the ruling, and the reason this is reaching-definitions rather
-# than "any assignment taints": here the hardcoded value can NEVER reach the
-# sink, so it cannot break on any machine. The owner's own test for firing is
-# that the default "is a possible outcome" -- this one is not.
-Check "11 dead store before the sink, SILENT   (line $ln11)" (-not ($fired -contains $ln11))
+Write-Host 'DEAD STORE -- still not a WARNING, but the backstop now sees it' -ForegroundColor Cyan
+# The reaching-definitions limit is INTACT and is still what this case tests:
+# the hardcoded value can never reach the sink, so it is not a warning. What
+# changed on 2026-09-02 is that "not a warning" no longer means "invisible" --
+# ruling 2 reports it at info, having established nothing about its use. That
+# is precisely the tier's contract, so the case now asserts BOTH halves: it
+# fires, AND it fires at info rather than warning. Asserting only "it fires"
+# would pass if the dead-store kill regressed and it fired as a warning.
+Check "11 dead store fires at the info tier    (line $ln11)" ($fired -contains $ln11)
 
 Write-Host ''
 Write-Host 'COMPUTED SOURCES -- environment/config leaves MUST stay silent' -ForegroundColor Cyan
-Check '8  parameter leaf (form field idiom)'  ($fired.Count -eq 6)  "expected exactly 6 findings, got $($fired.Count)"
+# 6 -> 11 with ruling 2's backstop tier: cases 5, 6, 7 and 11 flipped to firing,
+# and case 19 (the IP-addressed UNC share) was added as a firing case. All five
+# are asserted individually above; this TOTAL is what catches a TWELFTH
+# appearing from nowhere -- e.g. a backstop that stopped honouring Seen and
+# double-reported a literal the warning tier already claimed, which is the most
+# likely way this tier breaks and the one no individual assertion can see.
+Check '8  parameter leaf (form field idiom)'  ($fired.Count -eq 11)  "expected exactly 11 findings, got $($fired.Count)"
 
 Write-Host ''
 Write-Host 'SEVERITY TIERS -- a COMPLETE path is a warning, not info' -ForegroundColor Cyan
@@ -311,6 +440,20 @@ foreach ($line in (& $Exe lint $fixture 2>$null)) {
 Check "1  'C:\out\report.csv' is warning"      ($sev[$ln1]  -eq 'warning') "got '$($sev[$ln1])'"
 Check "3  UNC share is warning"                ($sev[$ln3]  -eq 'warning') "got '$($sev[$ln3])'"
 Check "12 drive-rooted fallback is warning"    ($sev[$ln12] -eq 'warning') "got '$($sev[$ln12])'"
+
+Write-Host ''
+Write-Host 'BACKSTOP SEVERITY -- an unreached literal is INFO, never warning' -ForegroundColor Cyan
+# THIS IS THE ASSERTION THAT MAKES THE TIER MEAN SOMETHING. Ruling 2 buys
+# visibility at the price of precision, and the severity is the ONLY thing
+# keeping the two apart: a warning says "this reaches a filesystem operation and
+# will break on another machine", which the checker has NOT established for any
+# of these four. If the backstop ever emitted at warning it would be asserting a
+# fact it does not have -- the exact failure this repo has hit repeatedly -- and
+# every one of these literals would be indistinguishable from case 1.
+Check "5  non-sink domain call is info"        ($sev[$ln5]  -eq 'info')    "got '$($sev[$ln5])'"
+Check "6  search needle is info"               ($sev[$ln6]  -eq 'info')    "got '$($sev[$ln6])'"
+Check "7  IniFile default is info"             ($sev[$ln7]  -eq 'info')    "got '$($sev[$ln7])'"
+Check "11 dead store is info, not warning"     ($sev[$ln11] -eq 'info')    "got '$($sev[$ln11])'"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
