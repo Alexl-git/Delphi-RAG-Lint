@@ -1404,6 +1404,7 @@ var
   i       : Integer    ;
   JV      : TJSONValue ;
   JObj    : TJSONObject;
+  Spawn0  : UInt64     ;
 begin
   Result:= False;
   { Zero the out-param so a False return leaves a clean, empty model. }
@@ -1416,7 +1417,19 @@ begin
 
   CmdLine:= Format('"%s" hover --qname "%s"%s --format json', [AExe, AQName, DbArgs]);
 
+  { Item 5 (hover latency). HoverTracker's own comment already names this as the
+    remaining cost -- "the `hover --json` PROCESS SPAWN ... an out-of-process CLI
+    start plus an index open, which no dwell tuning can hide" -- and hoverBundle
+    was built to avoid it. But the fallback is SILENT: when the engine answers
+    -32601 the session latches to spawns and every hover pays this, with nothing
+    in the log to distinguish that session from a fast one. Timing it here makes
+    the two paths directly comparable in a single log (spawnMs vs reqMs), so the
+    question "is this session on the slow path?" is answered by reading, not by
+    inference. }
+  Spawn0:= GetTickCount64;
   ExitCode:= RunAndCaptureStdout(CmdLine, Output, 5000);
+  DLT('hover', Format('spawn hover --qname "%s" dbs=%d exit=%d spawnMs=%d',
+    [AQName, Length(ADbList), ExitCode, GetTickCount64 - Spawn0]));
   { Guard: non-zero exit (e.g. "No symbol matched qname" -> exit 1) or empty
     output falls back to the string path. }
   if (ExitCode <> 0) or (Trim(Output) = '') then Exit;
@@ -1501,6 +1514,19 @@ var
   ErrVal   : TJSONValue        ;
   JArr     : TJSONArray        ;
   i        : Integer           ;
+  { Item 5 (hover latency). Nine DLT('hover', ...) sites existed and not one
+    recorded an ELAPSED TIME -- they logged qnames and counts -- so the log could
+    never answer "sometimes hover takes too long", however long the owner drove
+    the IDE. GetTickCount64 rather than TStopwatch: Winapi.Windows is already in
+    scope, HoverForm times its grace windows the same way, and the quantities
+    here are hundreds of milliseconds, far above the ~16 ms tick resolution.
+    The 64-bit form specifically -- the linter's gettickcount-wraparound rule
+    caught the 32-bit one here, and it is right: an IDE left open past 49.7 days
+    would start reporting absurd hover timings, which is precisely the kind of
+    number someone would then chase as a real latency regression. }
+  T0       : Cardinal          ;
+  MsSync   : Cardinal          ;
+  MsReq    : Cardinal          ;
 begin
   Result:= False;
   AMarkdown:= '';
@@ -1514,10 +1540,19 @@ begin
     if Client = nil then Exit;
     { The position names a spot in the EDITOR's buffer, which diverges from disk
       on the first keystroke -- sync before asking, exactly as hover does. }
+    T0:= GetTickCount64;
     SyncLiveBufferToLsp(AUri);
+    MsSync:= GetTickCount64 - T0;
     Params:= MakeTextDocumentPositionParams(AUri, ALine, ACol);
     try
+      { Split from the sync deliberately. The owner reports the popup showing the
+        diagnostic first and "the whole info" only after a delay; the diagnostic
+        is served from the local cache, so that delay IS this round-trip. Timing
+        sync and request separately says which of the two is the one to attack --
+        re-uploading a large buffer, or the engine's own answer. }
+      T0:= GetTickCount64;
       Resp:= Client.Request('draglint/hoverBundle', Params, 5000);
+      MsReq:= GetTickCount64 - T0;
     finally
       Params.Free;
     end;
@@ -1616,8 +1651,9 @@ begin
 
       var Src   : TDLCallerSource;
       var Picked: TDLCallerRows:= SelectCallers(ResolvedRows, NameRows, AQName, ClassQual, Src);
-      DLT('hover', Format('bundle qname="%s" resolved=%d name=%d -> %d (source=%d)',
-        [AQName, Length(ResolvedRows), Length(NameRows), Length(Picked), Ord(Src)]));
+      DLT('hover', Format('bundle qname="%s" resolved=%d name=%d -> %d (source=%d) syncMs=%d reqMs=%d',
+        [AQName, Length(ResolvedRows), Length(NameRows), Length(Picked), Ord(Src),
+         MsSync, MsReq]));
 
       { De-duplicate by (file,line): a call site emits two refs (call + member). }
       SetLength(ACallers, 0);

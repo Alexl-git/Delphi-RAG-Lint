@@ -46,6 +46,7 @@ uses
   , DragLint.Plugin.EditViewNotifier
   , DragLint.Plugin.Editor
   , DragLint.Plugin.StatusBar    { SetDragLintNote -- the 'thinking' note }
+  , DragLint.Plugin.Telemetry    { DLT -- item 5: where a dwell fired, and whether it showed }
   ;
 
 function IdeIsForeground: Boolean;
@@ -421,6 +422,18 @@ begin
       exactly the distinction the owner asked for: whether the engine is
       thinking, finished, or has nothing. The commonest cause by far is that no
       resolved index covers this file, so that is what it says. }
+    { Item 5 (over-eagerness). The owner reports the popup appearing "even in
+      non-code areas", and nothing in the log recorded WHERE a dwell fired or
+      what it found -- so the report could not be turned into a position anyone
+      could go and look at. One line per dwell that reaches this decision makes
+      it locatable: shown=0 is a dwell that correctly declined, and shown=1 at a
+      caret he calls non-code is the defect, with the file:row:col to reproduce
+      it. Logged BEFORE the Exit below, so the declining path is recorded too --
+      logging only the popups would leave the common case invisible. }
+    DLT('hover', Format('dwell %s:%d:%d bundleOk=%d lspLen=%d diagLen=%d shown=%d',
+      [ExtractFileName(FilePath), CaretRow, CaretCol, Ord(FLastBundleOk),
+       Length(LspText), Length(DiagText), Ord(Combined <> '')]));
+
     if Combined = '' then
     begin
       SetDragLintNote('drag-lint: hover -- nothing indexed at the cursor');
