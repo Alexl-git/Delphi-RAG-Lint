@@ -459,7 +459,15 @@ hover round trip plus three `drag-lint.exe` spawns that each re-opened indexes
 the server already had open. Any other client can ignore it; a server that
 predates it answers the standard `-32601`.
 
-* **VS Code** -- extension included (`editors/vscode/drag-lint/`).
+* **VS Code** -- extension included (`editors/vscode/drag-lint/`); package it with
+  `npm run package` and install the `.vsix`. Findings land in the **Problems**
+  panel tagged `drag-lint`, on save. It runs a *private copy* of the engine from
+  its own `globalStorage`, so an open VS Code window never blocks an engine
+  rebuild -- which makes it usable as a read-only window onto units something
+  else is editing. Compiler diagnostics from `DelphiLSP` merge there for free if
+  you install an extension that runs it: VS Code gives every extension its own
+  diagnostic collection, so unlike the RAD Studio plugin the two cannot clobber
+  each other.
 * **Zed** -- tree-sitter highlighting ships today; the language-server
   registration needs a small Rust/WASM extension that is **not yet built** and is
   fully specified for contributors.

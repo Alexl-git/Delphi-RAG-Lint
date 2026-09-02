@@ -39,18 +39,46 @@ use. This is stated plainly because it is easy to assume otherwise.
 
 ### Install
 
-The extension lives in this repo at `editors/vscode/drag-lint/`.
+The extension lives in this repo at `editors/vscode/drag-lint/`. Package it as a
+`.vsix` and install that -- do not copy the folder into `.vscode\extensions` by
+hand:
 
 ```bat
 cd editors\vscode\drag-lint
-npm install --omit=dev
-xcopy /E /I . "%USERPROFILE%\.vscode\extensions\drag-lint-1.2.2"
+npm install
+npm run package
 ```
 
-Restart VS Code, open any `.pas`, and hover a symbol.
+That writes `dist\drag-lint-<version>.vsix`. Install it with
+*Extensions > ... > Install from VSIX...*, or:
+
+```bat
+code --install-extension dist\drag-lint-1.4.0.vsix
+```
 
 `node_modules` is not tracked; `npm install` restores exactly what
-`package-lock.json` pins.
+`package-lock.json` pins. `@vscode/vsce` is a devDependency, so it is not
+shipped inside the package (vsce bundles production deps only).
+
+> **The hand-copy recipe this replaces is a trap, and it bit this project.** A
+> copied folder is not registered as an installed extension version, so a newer
+> copy can sit beside an older one and VS Code keeps loading the old one. The
+> repo carried extension v1.4.0 while the machine ran v1.2.2 for weeks -- the
+> private-engine fix, which is the entire point of 1.4.0, never reached the
+> editor and engine builds kept failing at staging.
+
+### Activation: it does nothing until a Pascal file is open
+
+The extension declares `"activationEvents": ["onLanguage:pascal"]`. Until a
+`.pas` file is **open in that window**, it has not run: no language server, and
+no private engine copy.
+
+This matters because it makes a correct fix look like a failed one. Reloading
+the window is not enough on its own -- **reload, then open a `.pas` file**, and
+do it **per window**, because activation is per extension host. On a machine with
+two VS Code windows open, doing one and checking
+`%APPDATA%\Code\User\globalStorage\drag-lint.drag-lint\engine` still shows
+nothing, which reads as "the reload did not help".
 
 ### Settings
 
@@ -113,6 +141,57 @@ databases from the `drag-lint.json` sitting beside the exe -- the same manifest
 the IDE reads -- so VS Code follows your project layout automatically. Pinning an
 explicit list here means adding or renaming a project index silently stops
 working in the editor until someone remembers to update this setting.
+
+### The Problems panel
+
+Lint findings and syntax errors appear in VS Code's **Problems** panel, one row
+per finding, each tagged with the **source** `drag-lint`. That label is how you
+tell whose finding it is, and it is set on every diagnostic the server emits.
+
+**Everything Pascal in that panel is drag-lint's, unless you have installed
+another Pascal extension.** RAD Studio's `DelphiLSP.exe` is *not* involved: it is
+spawned by `bds.exe` for the IDE's own Code Insight and publishes nothing to VS
+Code. Seeing `DelphiLSP.exe` in Task Manager while VS Code is open is therefore
+expected and means nothing about the Problems panel.
+
+Diagnostics are published on **didSave**, not per keystroke.
+
+#### Merging with compiler diagnostics is free here -- unlike in RAD Studio
+
+If you also want DelphiLSP's compiler errors in VS Code, install an extension
+that runs `DelphiLSP.exe`. Nothing else is needed: **the two sets merge
+automatically**, and neither can overwrite the other.
+
+That is worth stating explicitly because the opposite is true in the Delphi IDE,
+and the difference is structural:
+
+| | RAD Studio plugin | VS Code |
+|---|---|---|
+| diagnostic channel | ONE, shared | one `DiagnosticCollection` **per extension** |
+| effect of a second publisher | `publishDiagnostics` REPLACES the set for that URI, so whoever publishes last wins | both collections coexist; the panel shows the UNION |
+| merging requires | appending into DelphiLSP's own frame -- the `lsp --proxy` work | nothing |
+
+So `lsp --proxy` and the diagnostics-merge design exist to solve a **RAD Studio**
+problem. In VS Code they buy nothing: two language servers cannot clobber each
+other's diagnostics, because each client owns its own collection and the panel
+aggregates them.
+
+### Reading a unit while something else edits it
+
+A common use is keeping VS Code open purely to *read* units -- including ones an
+agent or another tool is actively rewriting -- while the IDE is busy or closed.
+That works, and the private engine copy is what makes it safe: VS Code never
+holds the deployed `drag-lint.exe`, so it cannot block an engine rebuild, and
+whatever is editing the source is unaffected by VS Code having the file open.
+
+Two consequences to expect rather than report:
+
+* diagnostics refresh on **save**, so a file being rewritten by another process
+  updates its Problems rows when that process saves, not while it types;
+* the answers come from the **index**, so a symbol added seconds ago is not
+  there until that project is re-indexed -- the Problems rows are still correct
+  about the file's own text, since linting parses the file, but hover and
+  go-to-definition can lag.
 
 ### Checking it works
 
