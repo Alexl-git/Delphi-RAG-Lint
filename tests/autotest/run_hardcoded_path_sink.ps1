@@ -71,6 +71,21 @@
   silent, and they are the controls that would catch a backstop widened to every
   string literal.
 
+  THE TIER EXPOSED TWO LATENT FALSE-POSITIVE FAMILIES, both in the ROOT TESTS
+  themselves rather than in the tier, and both invisible beforehand because a
+  sink-anchored rule never asked about a literal nothing opens:
+
+    * a leading SLASH PAIR read as a UNC root -- '//', '///', '\\', '// ---',
+      '//1', '//\s*(TODO|FIXME)\b'. 31 of the 68 findings on drag-lint's OWN
+      source. Cases 15-18; case 3 and case 19 are the counterweight.
+    * a LETTER AND A COLON read as a drive root -- 'h:nn', 'hh:mm:ss', i.e.
+      FormatDateTime pictures. 11 of the 28 findings on ORM3-Micronite2027, the
+      largest single group there. Cases 20-21; cases 1 and 12 are the
+      counterweight.
+
+  Both counterweights matter: each family could be silenced by breaking root
+  detection outright, and only the paired assertions stop that.
+
   WHY BOTH POLARITIES ARE ASSERTED
   --------------------------------
   A suite asserting only "the false findings are gone" passes with the rule
@@ -264,6 +279,22 @@ begin
   Writeln(S);
 end;
 
+procedure Case20_TimeFormatIsNotAPath;
+var
+  S: string;
+begin
+  S := 'h:nn';
+  Writeln(S);
+end;
+
+procedure Case21_LongTimeFormatIsNotAPath;
+var
+  S: string;
+begin
+  S := 'hh:mm:ss';
+  Writeln(S);
+end;
+
 // ---- MUST FIRE: an IP-addressed UNC share is still a path -----------------
 
 procedure Case19_IpAddressedUncShare;
@@ -305,11 +336,13 @@ $ln16 = LineOf "S := '//\s*(TODO|FIXME|HACK)\b';"
 $ln17 = LineOf "S := '// ---';"
 $ln18 = LineOf "S := '//1';"
 $ln19 = LineOf "S := '\\192.168.1.10\share\data.csv';"
+$ln20 = LineOf "S := 'h:nn';"
+$ln21 = LineOf "S := 'hh:mm:ss';"
 # ln15..ln17 MUST be in this list. A silent-direction assertion reads
 # "-not ($fired -contains $lnN)", which is VACUOUSLY TRUE when LineOf returned
 # -1 -- so an unlocated line would give three green ticks that assert nothing.
-Check 'fixture lines located' (@($ln1,$ln2,$ln3,$ln4,$ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18,$ln19) -notcontains -1) `
-  "fire: $ln1,$ln2,$ln3,$ln4,$ln19  silent: $ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18"
+Check 'fixture lines located' (@($ln1,$ln2,$ln3,$ln4,$ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18,$ln19,$ln20,$ln21) -notcontains -1) `
+  "fire: $ln1,$ln2,$ln3,$ln4,$ln19  silent: $ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18,$ln20,$ln21"
 
 $fired = @()
 foreach ($line in (& $Exe lint $fixture 2>$null)) {
@@ -365,6 +398,20 @@ Check "15 '//' comment marker                      (line $ln15)" (-not ($fired -
 Check "16 '//\s*(TODO...)' regex fragment          (line $ln16)" (-not ($fired -contains $ln16))
 Check "17 '// ---' doc rule                        (line $ln17)" (-not ($fired -contains $ln17))
 Check "18 '//1' doc-comment prefix                 (line $ln18)" (-not ($fired -contains $ln18))
+
+Write-Host ''
+Write-Host 'A LETTER AND A COLON IS NOT AUTOMATICALLY A DRIVE ROOT' -ForegroundColor Cyan
+# THE SECOND FALSE-POSITIVE FAMILY THE BACKSTOP EXPOSED, and on a real corpus it
+# was the LARGEST: 11 of the 28 findings on ORM3-Micronite2027 were `h:nn` --
+# a FormatDateTime picture. 'letter, colon' also describes 'hh:mm:ss' and 'm:ss'.
+# Harmless while the rule was sink-anchored (no time format flows into a file
+# API); visible the moment ruling 2 began asking about every literal.
+# A drive root now requires the literal to END at the colon ('C:') or to carry a
+# separator after it. Case 1 and case 12 are the counterweight -- real
+# drive-rooted paths must still fire, so a fix that silences these by breaking
+# drive detection cannot pass both.
+Check "20 'h:nn' time format                       (line $ln20)" (-not ($fired -contains $ln20))
+Check "21 'hh:mm:ss' time format                   (line $ln21)" (-not ($fired -contains $ln21))
 
 Write-Host ''
 Write-Host 'BUT AN IP-ADDRESSED UNC SHARE IS STILL A PATH' -ForegroundColor Cyan

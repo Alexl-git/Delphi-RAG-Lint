@@ -6052,9 +6052,26 @@ var
       Exit(False);
     end;
 
-    { Drive-letter root: 'C:', 'C:\out\x', 'C:/out/x'. }
+    { Drive-letter root: 'C:', 'C:\out\x', 'C:/out/x'.
+
+      A SEPARATOR MUST FOLLOW THE COLON unless the literal ENDS there, and that
+      clause is the difference between a path and a TIME FORMAT. 'letter, colon'
+      alone also describes `h:nn`, `hh:mm:ss` and `m:ss` -- FormatDateTime
+      pictures, of which ORM3-Micronite2027 holds eleven. They were the single
+      largest group this rule reported on that corpus (11 of 28) once ruling 2's
+      backstop started asking about every literal, and not one of them is a path.
+
+      Same shape as the UNC defect above: a root test loose enough to match
+      ordinary text, harmless while the rule was sink-anchored (no time format
+      flows into TFile.WriteAllText) and visible the moment it was not.
+
+      'C:' and 'C:\' still qualify -- they are the bare-root case IsCompleteAbsolute
+      deliberately reports at info. What is dropped is the DRIVE-RELATIVE form
+      'C:Temp' (legal Windows, meaning Temp under C:'s current directory), which
+      is not an absolute root and so was never this rule's business. }
     Result:= (Length(AText) >= 2) and (AText[2] = ':')
-             and CharInSet(AText[1], ['A'..'Z', 'a'..'z']);
+             and CharInSet(AText[1], ['A'..'Z', 'a'..'z'])
+             and ((Length(AText) = 2) or CharInSet(AText[3], ['\', '/']));
   end;
 
   { A COMPLETE location, not merely a root: a drive plus something under it, or
