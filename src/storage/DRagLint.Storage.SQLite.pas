@@ -2679,6 +2679,11 @@ end;
   (CanonicalizeFilePaths and FileIsUpToDate). }
 function NormalizeStoredPath(const APath: string): string; forward;
 
+{ Forward only. The separator/drive-case fold WITHOUT the absolutise step, for
+  the one caller that must not resolve against the cwd: CanonicalizeFilePaths
+  reads paths written by EARLIER runs, whose cwd is not this one's. }
+function NormalizeStoredPathSpelling(const APath: string): string; forward;
+
 { Forward only. Defined beside ScopedResolveIsSound, whose argument explains why
   the predicate is deliberately wide; UpsertSymbol calls it from further up. }
 function IsTypeDeclaringKind(const AKindText: string): Boolean; forward;
@@ -3373,6 +3378,38 @@ var
     Result:= ACand.Id > AHeld.Id;
   end;
 
+  { Canonical form of a path ALREADY IN THE TABLE, which is not the same problem
+    as canonicalising an incoming one. A rooted path folds exactly as
+    NormalizeStoredPath does. A RELATIVE one is the residue of a pre-fix run, and
+    resolving it against THIS process's cwd is a GUESS -- the run that wrote it
+    had a cwd of its own, and nothing in the row records which. The guess is
+    accepted only when it names a file that actually exists, which is precisely
+    the case worth merging: the split row rejoins the real one. When it does not
+    exist the row keeps its raw spelling and PruneMissingFiles retires it later.
+
+    THE EXISTENCE TEST NARROWS THE BAD GUESS; IT DOES NOT ELIMINATE IT, and this
+    comment used to claim that it did. The surviving case: residue 'src\U.pas'
+    written under cwd C:\B, merged by a run whose cwd is C:\A, where
+    C:\A\src\U.pas is itself indexed. The guess resolves, the file exists, the
+    two key together -- and if the residue's parsed_at is the fresher of the two,
+    Beats keeps the residue and deletes the legitimate row, leaving foreign
+    symbols under a real path. It self-heals the next time that file is indexed
+    (the sha will not match, so it is re-parsed), but until then reads are wrong.
+    It is not defended against further because the alternative -- always
+    preferring the rooted spelling -- loses the case this repair actually exists
+    for: on the wizard index the RELATIVE rows held the current extraction and
+    the absolute ones were the stale vintage. Freshest-wins is right on the
+    evidence; the residual is recorded here rather than hidden. }
+  function CanonForStored(const APath: string): string;
+  var
+    Spelled: string;
+  begin
+    Spelled:= NormalizeStoredPathSpelling(APath);
+    if TPath.IsPathRooted(Spelled) then Exit(Spelled);
+    Result:= NormalizeStoredPath(APath);
+    if not TFile.Exists(Result) then Result:= Spelled;
+  end;
+
 begin
   if FReadOnly then Exit;
   Rows  := TList<TFileRow>.Create;
@@ -3393,7 +3430,7 @@ begin
         R.Id      := Q.FieldByName('id'       ).AsLargeInt;
         R.Path    := Q.FieldByName('path'     ).AsString  ;
         R.ParsedAt:= Q.FieldByName('parsed_at').AsLargeInt;
-        R.Canon   := NormalizeStoredPath(R.Path);
+        R.Canon   := CanonForStored(R.Path);
         Rows.Add(R);
         Q.Next;
       end;
@@ -3439,7 +3476,12 @@ begin
       is entitled to know why. }
     Note:= 'index repair (B6): ';
     if Doomed.Count > 0 then
-      Note:= Note + Format('merged %d duplicate file row(s) differing only in path case', [Doomed.Count]);
+      { "path case" was the whole story only while B6 covered separators and the
+        drive letter. Since relative roots joined the family (2026-09-02) the
+        merge routinely folds an absolute row and a relative one, and naming the
+        cause wrongly sends anyone who reads the line hunting for a casing
+        difference that is not there. Say what is actually true of all three. }
+      Note:= Note + Format('merged %d duplicate file row(s) that name one file under different path spellings', [Doomed.Count]);
     if (Doomed.Count > 0) and (Rename.Count > 0) then Note:= Note + '; ';
     if Rename.Count > 0 then
       Note:= Note + Format('re-spelled %d path(s) to canonical form', [Rename.Count]);
@@ -3938,11 +3980,35 @@ end; // procedure
 // rest of the path is left exactly as the caller spelled it: only the case-
 // insensitive MATCHING below (and the merge in CanonicalizeFilePaths) has to
 // cope with a differently-cased directory or file name, and it does.
-function NormalizeStoredPath(const APath: string): string;
+//
+// 2026-09-02: RELATIVE ROOTS, the third spelling in this family and the one that
+// the two folds above could not reach. `drag-lint index src\delphi-plugin` walks
+// a relative root, so the store was handed 'src\delphi-plugin\Foo.pas' -- which
+// differs from the stored absolute path in no way this function used to look at.
+// FileIsUpToDate found no row, OpenFileTx's UPDATE matched none, and the INSERT
+// fell through to a SECOND row; CanonicalizeFilePaths keyed the two spellings to
+// different buckets, so the B6 merge could not see them as one file either.
+// Measured on this repo's own dclDragLintWizard.sqlite: ONE such run took `files`
+// from 65 rows to 119, duplicating every file under the root along with its
+// symbols and refs. Worse than the casing bug, because the reader kept reading
+// the stale ABSOLUTE rows and kept printing "refresh with: drag-lint index <dir>"
+// -- the command that caused the split, which CLAUDE.md itself spells relative.
+//
+// So absolutise FIRST, against the process cwd, which is by definition the base a
+// relative argument was written against. Already-absolute and UNC paths are
+// returned unchanged by ExpandFileName; '' is guarded because it would otherwise
+// expand to the cwd and turn "no path" into a real one.
+function NormalizeStoredPathSpelling(const APath: string): string;
 begin
   Result:= StringReplace(APath, '/', '\', [rfReplaceAll]);
   if (Length(Result) >= 2) and (Result[2] = ':') and (Result[1] >= 'a') and (Result[1] <= 'z') then
     Result[1]:= UpCase(Result[1]);
+end;
+
+function NormalizeStoredPath(const APath: string): string;
+begin
+  if APath = '' then Exit('');
+  Result:= NormalizeStoredPathSpelling(ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll])));
 end;
 
 function TSQLiteSymbolStore.OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;

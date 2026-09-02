@@ -52,9 +52,19 @@ uses
   Path normalisation helpers
   --------------------------------------------------------------------------- }
 
+{ 2026-09-02: RESOLVE '..' TOO, because drift compares a ROOT against a STORED
+  path and the two sides must be canonicalised the same way. NormalizeStoredPath
+  (DRagLint.Storage.SQLite) now expands stored paths to a full path, so a root
+  still spelled 'tests\autotest\..\fixtures\reconcile' no longer prefix-matches
+  the stored 'tests\fixtures\reconcile\X.pas' -- and every file under it reads as
+  drift, i.e. as a source folder someone forgot to index. run_drift.ps1 caught
+  exactly that. Folding case and separators but not '..' left the comparison
+  half-canonical, which is only ever correct while BOTH sides are equally
+  half-canonical. }
 function NormPath(const APath: string): string;
 begin
-  Result:= LowerCase(StringReplace(APath, '/', '\', [rfReplaceAll]));
+  if APath = '' then Exit('');
+  Result:= LowerCase(ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll])));
 end;
 
 function NormRoot(const APath: string): string;
