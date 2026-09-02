@@ -89,6 +89,7 @@ uses
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Sql    .Guarded   { TSqlGuard: the authorizer + time cap behind `sql` }
   , DRagLint.Core   .EngineHold { the sentinel behind `ide-release` }
+  , DRagLint.Core   .StudioEnv  { TStudioEnv: the ONLY source of a RAD Studio path }
   , DRagLint.Lint   .Config
   , DRagLint.Lint   .RuleCatalog
   , DRagLint.Lint   .Linter
@@ -16076,8 +16077,12 @@ begin
   var PlatDir : string:= IfThen(Plat = 'win32', 'Win32'  , 'Win64'  );
   var WrongDir: string:= IfThen(Plat = 'win32', '\win64\', '\win32\');
 
-  var BdsDir: string:= GetEnvironmentVariable('BDS');
-  if BdsDir = '' then BdsDir:= 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
+  { TStudioEnv.Root is $BDS, then the IDE registry, then an existence-checked
+    fallback; it raises EStudioNotFound when none resolves, which Run's handler
+    reports. Compiling without Studio cannot succeed, so failing here -- while
+    naming Studio -- beats handing dcc a wrong -U path and reading its
+    complaint about units instead. }
+  var BdsDir: string:= TStudioEnv.Root;
   var LibRelease: string:= TPath.Combine(BdsDir, 'lib\' + PlatDir + '\release');
 
   { unit search path -- shadow first so the unsaved overlay wins }
@@ -16109,7 +16114,7 @@ begin
   { dcc reads <compiler>.cfg from its working dir, so name the cfg to match }
   TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [UPath, Namespaces, DcuDir]));
 
-  RsVars:= 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat';
+  RsVars:= TStudioEnv.RsvarsBat;
   Cmd:= Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"', [RsVars, CfgDir, DccExe, CompileTarget]);
 
   Res:= TCompileChecker.RunCommand(Cmd);
@@ -16891,8 +16896,9 @@ begin
   PlatDir := IfThen(Plat = 'win32', 'Win32'  , 'Win64'  );
   WrongDir:= IfThen(Plat = 'win32', '\win64\', '\win32\');
 
-  BdsDir:= GetEnvironmentVariable('BDS');
-  if BdsDir = '' then BdsDir:= 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
+  { See the sibling check-unit path above: one accessor, and a missing Studio is
+    an attributable error rather than a wrong -U path. }
+  BdsDir:= TStudioEnv.Root;
   LibRelease:= TPath.Combine(BdsDir, 'lib\' + PlatDir + '\release');
 
   UPath:= '';
@@ -16912,7 +16918,7 @@ begin
   TDirectory.CreateDirectory(DcuDir);
   TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [UPath, Namespaces, DcuDir]));
 
-  RsVars:= 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat';
+  RsVars:= TStudioEnv.RsvarsBat;
   Cmd:= Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"', [RsVars, CfgDir, DccExe, CompileTarget]);
   Result:= TCompileChecker.RunCommand(Cmd);
 end; // function
@@ -21233,8 +21239,8 @@ var
   OldLen   : Integer        ;
   K        : Integer        ;
 begin
-  Global:= TManifestIO.ParseText(GlobalJson, 'C:\global');
-  Local:= TManifestIO.ParseTextEx(LocalJson, 'C:\local', LocalKeys);
+  Global:= TManifestIO.ParseText(GlobalJson, 'C:\global');  // dl:ok hardcoded-absolute-path@4933 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
+  Local:= TManifestIO.ParseTextEx(LocalJson, 'C:\local', LocalKeys);  // dl:ok hardcoded-absolute-path@b75c -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
 
   { Replicate the merge logic from TManifestIO.Load }
   Merged:= Global;
@@ -21766,41 +21772,41 @@ var
   Got: string        ;
 begin
   M        := Default(TIndexManifest);
-  M.RootDir:= 'C:\cfg';
-  M.OutDir := 'C:\out';
+  M.RootDir:= 'C:\cfg';  // dl:ok hardcoded-absolute-path@cd37 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
+  M.OutDir := 'C:\out';  // dl:ok hardcoded-absolute-path@6008 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
 
   S        := Default(TIndexSection);
   S.Name   := 'YADF';
-  S.Include:= ['C:\Projects\YADF\YADF.dproj'];
+  S.Include:= ['C:\Projects\YADF\YADF.dproj'];  // dl:ok hardcoded-absolute-path@b955 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
   Got      := ExpandSectionDb(M, S);
-  if not SameText(Got, 'C:\Projects\YADF\_D-RAG\YADF.sqlite') then
+  if not SameText(Got, 'C:\Projects\YADF\_D-RAG\YADF.sqlite') then  // dl:ok hardcoded-absolute-path@3b93 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
     begin Writeln('SECTIONDB-FAIL: derived ', Got); Exit(1); end;
 
   S.Name   := 'YADFOT';
-  S.Include:= ['C:\Projects\YADF\YADFOT.dproj'];
+  S.Include:= ['C:\Projects\YADF\YADFOT.dproj'];  // dl:ok hardcoded-absolute-path@f905 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
   Got      := ExpandSectionDb(M, S);
-  if not SameText(Got, 'C:\Projects\YADF\_D-RAG\YADFOT.sqlite') then
+  if not SameText(Got, 'C:\Projects\YADF\_D-RAG\YADFOT.sqlite') then  // dl:ok hardcoded-absolute-path@e3ec -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
     begin Writeln('SECTIONDB-FAIL: same-folder second project got ', Got); Exit(1); end;
 
-  S.Db:= 'C:\elsewhere\pinned.sqlite';
+  S.Db:= 'C:\elsewhere\pinned.sqlite';  // dl:ok hardcoded-absolute-path@33b9 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
   Got := ExpandSectionDb(M, S);
-  if not SameText(Got, 'C:\elsewhere\pinned.sqlite') then
+  if not SameText(Got, 'C:\elsewhere\pinned.sqlite') then  // dl:ok hardcoded-absolute-path@ca9c -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
     begin Writeln('SECTIONDB-FAIL: explicit db did not win, got ', Got); Exit(1); end;
 
   S        := Default(TIndexSection);
   S.Name   := 'Library';
-  S.Include:= ['C:\Projects\SomeFolder'];
+  S.Include:= ['C:\Projects\SomeFolder'];  // dl:ok hardcoded-absolute-path@d137 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
   Got      := ExpandSectionDb(M, S);
-  if not SameText(Got, 'C:\out\Library.sqlite') then
+  if not SameText(Got, 'C:\out\Library.sqlite') then  // dl:ok hardcoded-absolute-path@8016 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
     begin Writeln('SECTIONDB-FAIL: folder section got ', Got); Exit(1); end;
 
   { A .dpr and a .dpk anchor a project just as a .dproj does -- DragLint-Tests
     and the Graph packages are configured that way. }
   S        := Default(TIndexSection);
   S.Name   := 'Tests';
-  S.Include:= ['C:\Projects\X\tests\Edge.dpr'];
+  S.Include:= ['C:\Projects\X\tests\Edge.dpr'];  // dl:ok hardcoded-absolute-path@acd1 -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
   Got      := ExpandSectionDb(M, S);
-  if not SameText(Got, 'C:\Projects\X\tests\_D-RAG\Edge.sqlite') then
+  if not SameText(Got, 'C:\Projects\X\tests\_D-RAG\Edge.sqlite') then  // dl:ok hardcoded-absolute-path@e6ec -- synthetic input to the selftest verb -- names no real location, reaches no filesystem call
     begin Writeln('SECTIONDB-FAIL: .dpr anchor got ', Got); Exit(1); end;
 
   Writeln('SECTIONDB-OK');
@@ -21992,6 +21998,31 @@ begin
   Result:= 0;
 end; // function
 
+// selftest studio-root: the TStudioEnv contract, exercised through the shipping
+// binary so the runner tests what users get rather than a re-implementation.
+//
+// Only the $BDS step is controllable from a test -- the registry and the
+// existence-checked fallback are properties of the machine -- so what is
+// asserted here is precedence, delimiter normalisation, and COMPOSITION: that
+// RsvarsBat is built from Root rather than being a second literal. That last
+// one is the whole point of the consolidation, and it is the assertion that
+// fails if someone re-introduces a hardcoded rsvars path.
+//
+// Prints STUDIOROOT-FAIL: <desc> and returns 1 on the first failed assertion;
+// STUDIOROOT-OK and 0 on success.
+function DoSelfTestStudioRoot: Integer;
+var
+  Failure: string;
+begin
+  { The assertions live in TStudioEnv.SelfTest, not here. run_studio_root_guard
+    requires that DRagLint.Core.StudioEnv is the ONLY unit naming a Studio path,
+    and a test spelling out the expected rsvars composition names one too -- so
+    keeping it in the owning unit avoids exempting CLI.pas from the very guard
+    this verb exists to serve. }
+  if TStudioEnv.SelfTest(Failure) then begin Writeln('STUDIOROOT-OK'); Result:= 0; end
+  else begin Writeln('STUDIOROOT-FAIL: ', Failure); Result:= 1; end;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -22008,10 +22039,11 @@ begin
   else if AArgs.SubCommand = 'section-db'    then Result:= DoSelfTestSectionDb
   else if AArgs.SubCommand = 'manifest-save-atomic' then Result:= DoSelfTestManifestSaveAtomic
   else if AArgs.SubCommand = 'own-roots'     then Result:= DoSelfTestOwnRoots     (AArgs)
+  else if AArgs.SubCommand = 'studio-root'   then Result:= DoSelfTestStudioRoot
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots, studio-root');
     Result:= 2;
   end;
 end; // function

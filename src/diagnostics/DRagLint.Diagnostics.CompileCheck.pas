@@ -13,6 +13,7 @@ uses
   , Winapi.Windows
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
   ;
 
 type
@@ -225,9 +226,6 @@ type
 
 implementation
 
-const
-  DEFAULT_RSVARS = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat';
-
   { TCompileChecker }
 
   class function TCompileChecker.ResolveIdeLibraryPath(const APlatform: string): string;
@@ -241,6 +239,7 @@ const
     PlatKey   : string;
     Seen      : TDictionary<string, Boolean>;
     IsCompiled: Boolean;
+    BdsRoot   : string;
 
     { 8.3-shorten a dir; returns the input unchanged if no short name exists
       (e.g. 8dot3 disabled on the volume). Roughly halves each entry's length. }
@@ -257,6 +256,13 @@ const
   begin
     Result:= '';
     if APlatform = '' then Exit;
+
+    { Resolved ONCE for the whole loop, and non-raising because this function is
+      best-effort: with no Studio, BdsRoot stays empty, the $(BDS) replace below
+      is skipped, and the generic $(NAME) blanking then drops those entries at
+      the existence check -- exactly what the comment below already prescribes
+      for an unresolved macro. }
+    BdsRoot:= TStudioEnv.RootOrEmpty;
 
     { Query the IDE registry for the global Library Path:
         HKCU\Software\Embarcadero\BDS\37.0\Library\<Platform>\Search Path
@@ -300,7 +306,8 @@ const
             { Expand the two common macros; blank any remaining $(NAME) so an
               unresolved-macro path becomes invalid and is dropped by the
               existence check below. }
-            Path:= StringReplace(Path, '$(BDS)', 'C:\Program Files (x86)\Embarcadero\Studio\37.0', [rfReplaceAll, rfIgnoreCase]);
+            if BdsRoot <> '' then
+              Path:= StringReplace(Path, '$(BDS)', BdsRoot, [rfReplaceAll, rfIgnoreCase]);
             Path:= StringReplace(Path, '$(Platform)', APlatform, [rfReplaceAll, rfIgnoreCase]);
             Path:= TRegEx.Replace(Path, '\$\([A-Za-z0-9_]+\)', '');
 
@@ -503,7 +510,10 @@ var
 begin
   Result:= Default(TCompileCheckResult);
   RsVars:= ARsvarsPath;
-  if RsVars = '' then RsVars:= DEFAULT_RSVARS;
+  { An explicit --rsvars wins; otherwise compose it from the one Studio root.
+    TStudioEnv.RsvarsBat raises EStudioNotFound when no Studio resolves at all,
+    which is the correct outcome here -- there is nothing to compile with. }
+  if RsVars = '' then RsVars:= TStudioEnv.RsvarsBat;
 
   { RAD Studio's DCC msbuild task rejects a lower-case platform ("Platform not
     supported:win32", MSB4018) before dcc even runs -- it wants the exact-case

@@ -88,8 +88,8 @@ class function TYadfFormatter.FindYadfPath: string;
 const
   REGISTRY_KEY  = 'Software\YADF';
   REGISTRY_VAL  = 'ExePath';
-  KNOWN_RELEASE = 'C:\Projects\YADF\Win32\Release\EXE\YADF.exe';
-  KNOWN_DEBUG   = 'C:\Projects\YADF\Win32\Debug\EXE\YADF.exe';
+  KNOWN_RELEASE = 'C:\Projects\YADF\Win32\Release\EXE\YADF.exe';  // dl:ok hardcoded-absolute-path@7923 -- registry first (HKCU Software\YADF, ExePath); an existence-checked dev-box fallback, never the only source
+  KNOWN_DEBUG   = 'C:\Projects\YADF\Win32\Debug\EXE\YADF.exe';  // dl:ok hardcoded-absolute-path@3c95 -- registry first (HKCU Software\YADF, ExePath); an existence-checked dev-box fallback, never the only source
 var
   Reg    : TRegistry;
   RegPath: string   ;

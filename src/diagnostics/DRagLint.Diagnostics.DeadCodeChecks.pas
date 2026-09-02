@@ -1258,7 +1258,7 @@ var
   var L: string;
   begin
     L:= LowerCase(AText);
-    Result:= (Pos('\temp\', L) > 0) or (Pos('c:\temp', L) > 0)
+    Result:= (Pos('\temp\', L) > 0) or (Pos('c:\temp', L) > 0)  // dl:ok hardcoded-absolute-path@f838 -- a search NEEDLE inside the insecure-temp-file detector, not a path this program uses
           or (Pos('/tmp/', L) > 0) or (Pos('\windows\temp', L) > 0)
           or (Pos('\winnt\temp', L) > 0);
   end;

@@ -11,6 +11,7 @@ uses
   , System.Generics.Collections
   , System.Win     .Registry
   , Winapi.Windows
+  , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
   ;
 
 type
@@ -352,9 +353,13 @@ const
 constructor TProjectResolver.Create;
 begin
   inherited Create;
-  // Default BDS install. Could be overridden by env var.
-  FBDS:= GetEnvironmentVariable('BDS');
-  if FBDS = '' then FBDS:= 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
+  { TryRoot, not Root: constructing a resolver must not raise. This class is
+    built on every project-scoped verb, and $(BDS) is one macro among many --
+    a machine without Studio can still resolve a .dproj's own folders. When it
+    does not resolve, FBDS stays EMPTY so $(BDS) expands to nothing and the
+    resulting path fails the existence checks downstream, rather than pointing
+    at a Studio that is not there. }
+  FBDS:= TStudioEnv.RootOrEmpty;
   FCurrentPlatform:= 'Win64';
   FEnvVars:= TDictionary<string, string>.Create;
   FEnvVarsLoaded:= False;

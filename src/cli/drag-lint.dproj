@@ -109,6 +109,7 @@
         <DCCReference Include="..\core\DRagLint.Wiring.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Indexer.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JsonFile.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.LiveDocs.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.Schema.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.SQLite.pas"/>

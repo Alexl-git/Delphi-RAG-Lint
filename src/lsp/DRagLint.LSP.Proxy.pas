@@ -125,8 +125,8 @@ implementation
 uses
     System.SysUtils
   , System.Classes
-  , System.Win.Registry
   , DRagLint.Core.JobObject
+  , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
   ;
 
 const
@@ -136,11 +136,10 @@ const
     chunking of it. }
   PUMP_BUFFER_BYTES = 64 * 1024;
 
-  { Keep in step with the registry root drag-lint-switch writes to. Both are
-    pinned to 37.0 (Delphi 13 Florence) because that is the only Studio this
-    product supports; a future version bump touches both, deliberately. }
-  BDS_REG_KEY  = 'Software\Embarcadero\BDS\37.0';
-  BDS_FALLBACK = 'C:\Program Files (x86)\Embarcadero\Studio\37.0';
+  { The Studio root and the registry key that names it moved to
+    DRagLint.Core.StudioEnv, which is now the only place either is written. It
+    stays pinned to 37.0 (Delphi 13 Florence) -- the one Studio this product
+    supports, and the same root drag-lint-switch writes to. }
 
   EXIT_SPAWN_FAILED = 3;
 
@@ -522,39 +521,30 @@ end;
 
 function ResolveDelphiLspPath(const AOverride: string): string;
 var
-  Reg : TRegistry;
   Root: string;
+  Diag: string;
 begin
   if AOverride <> '' then Exit(AOverride);
 
-  Root:= '';
-  Reg:= TRegistry.Create(KEY_READ);
-  try
-    try
-      Reg.RootKey:= HKEY_CURRENT_USER;
-      if Reg.OpenKeyReadOnly(BDS_REG_KEY) and Reg.ValueExists('RootDir') then
-        Root:= Reg.ReadString('RootDir');
-    except
-      on E: Exception do
-      begin
-        { A missing or unreadable key is not fatal -- the install path below is
-          right on every machine this has ever run on. It is still reported,
-          because a SILENT fallback here would present a wrong-Studio DelphiLSP
-          as the configured one. }
-        Root:= '';
-        StdErrLine('drag-lint lsp --proxy: cannot read HKCU\' + BDS_REG_KEY +
-                   ' (' + E.ClassName + ': ' + E.Message + '); using the default install path.');
-      end;
-    end;
-  finally
-    Reg.Free;
+  { TryRoot, not Root: this function owns its failure mode. The proxy answers a
+    missing Studio with EXIT_SPAWN_FAILED and a printed reason, and an
+    unhandled exception here would replace that with a stack-trace line on a
+    stream the IDE is reading as JSON-RPC. The diagnostic names every source
+    that was tried, so a wrong-Studio DelphiLSP is never presented silently as
+    the configured one. }
+  if not TStudioEnv.TryRoot(Root, Diag) then
+  begin
+    StdErrLine('drag-lint lsp --proxy: ' + Diag);
+    Exit('');
   end;
 
-  if Root = '' then Root:= BDS_FALLBACK;
-  Root:= ExcludeTrailingPathDelimiter(Root);
-
   Result:= Root + '\bin64\DelphiLSP.exe';
-  if not FileExists(Result) then Result:= '';
+  if not FileExists(Result) then
+  begin
+    StdErrLine('drag-lint lsp --proxy: no bin64\DelphiLSP.exe under the ' +
+               'resolved RAD Studio root ' + Root + '.');
+    Result:= '';
+  end;
 end;
 
 function RunLspProxy(const AOptions: TLspProxyOptions): Integer;
@@ -579,10 +569,10 @@ begin
   Exe:= ResolveDelphiLspPath(AOptions.DelphiLspExe);
   if Exe = '' then
   begin
-    StdErrLine('drag-lint lsp --proxy: DelphiLSP.exe not found. Looked for ' +
-               'bin64\DelphiLSP.exe under the RAD Studio 37.0 root (registry ' +
-               'HKCU\' + BDS_REG_KEY + ' RootDir, then ' + BDS_FALLBACK + '). ' +
-               'Pass --delphi-lsp <path> to override.');
+    { ResolveDelphiLspPath has already printed WHICH step failed -- the root, or
+      the exe under a root that did resolve. This line adds only the remedy. }
+    StdErrLine('drag-lint lsp --proxy: DelphiLSP.exe not found. Pass ' +
+               '--delphi-lsp <path> to override.');
     Exit(EXIT_SPAWN_FAILED);
   end;
   if not FileExists(Exe) then
