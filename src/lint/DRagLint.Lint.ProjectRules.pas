@@ -2308,6 +2308,35 @@ begin
               AddRefName(RefdUnitStems, Ref.NameText    );
               AddRefName(RefdUnitStems, Ref.ReceiverText);
             end;
+
+            { B6: A CLASS THE SIBLING .DFM INSTANTIATES IS A USE OF ITS UNIT.
+              The .dfm is a separate `files` row with its own id and emits ZERO
+              refs of its own, so Fid -- the .PAS id -- could never see it. A
+              component dropped on a form therefore contributed nothing here and
+              the unit declaring it read as a dead import: ~23 of DataCopy's 66
+              findings. The rule's message has been carrying the confession
+              ("classes instantiated only by the sibling .dfm ... are invisible
+              to this check") in place of the behaviour.
+
+              Lint-side only. The type name is ALREADY in the index, on the DFM
+              symbol's `signature` (kind=component, signature='TMyWidget'), so
+              this needs no extractor change and no reindex -- which is what
+              kept it out of the banked extractor work.
+
+              ONLY THE INSTANTIATED TYPE. The component's own NAME (`Widget1`)
+              references nothing, and unioning it in would keep alive any unit
+              that happened to export a symbol of that name.
+
+              Gated on the file existing rather than asked unconditionally:
+              unused-unit-in-uses is 32.2 s of a 37.4 s pass, the one place in
+              this rule set where a careless extra query per file is measurable.
+              Most units have no DFM, and a stat is far cheaper than the read. }
+            var DfmPath: string:= ChangeFileExt(Path, '.dfm');
+            if FileExists(DfmPath) then
+              for var DfmSym in AStore.FindSymbolsByFile(DfmPath) do
+                if DfmSym.Kind in [skForm, skComponent] then
+                  AddRefName(RefdUnitStems, DfmSym.Signature);
+
             { Check each used unit: flag if its stem is absent from the ref set. }
             for U in UsesList do
             begin
