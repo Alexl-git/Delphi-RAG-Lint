@@ -40,7 +40,13 @@
 [CmdletBinding()]
 param(
   [string]$Source = "$PSScriptRoot\..\third_party\dll-win64",
-  [string]$Dest   = "$env:LOCALAPPDATA\drag-lint-vscode-engine",
+  # DEFAULTS TO THE PATH THE INSTALLED EXTENSION ACTUALLY RUNS FROM.
+  # It used to default to %LOCALAPPDATA%\drag-lint-vscode-engine, which on
+  # 2026-09-02 was a THIRD copy nobody read: the two live engine processes were
+  # running from globalStorage, and the LOCALAPPDATA copy was two days stale and
+  # referenced by nothing. Refreshing a directory no client reads, and reporting
+  # success for it, is the same defect as the version line below.
+  [string]$Dest   = "$env:APPDATA\Code\User\globalStorage\drag-lint.drag-lint\engine",
   [switch]$Kill
 )
 $ErrorActionPreference = 'Stop'
@@ -67,17 +73,41 @@ if ($Kill) {
 $files = @('drag-lint.exe','drag-lint.json',
            'tree-sitter-delphi13.dll','tree-sitter-dfm.dll','tree-sitter.dll')
 
-$copied = 0
+function Sha16($p) {
+  if (-not (Test-Path $p)) { return '(absent)' }
+  try { return (Get-FileHash $p -Algorithm SHA256).Hash.Substring(0,16).ToLower() } catch { return '(unreadable)' }
+}
+
+$copied  = 0
+$failed  = @()
+$missing = @()
+
+# RETRY BUDGET, and 10 attempts was not one. The VS Code client respawns its
+# engine eagerly, so the copy races the respawn -- the same race
+# build_draglint_win64.bat fights, and on 2026-09-02 that build reported
+# "staged after recovery (153 attempt(s))". Ten tries at 400ms gave up after
+# four seconds and the refresh silently did nothing.
+$deadline = (Get-Date).AddSeconds(45)
+
 foreach ($f in $files) {
   $s = Join-Path $Source $f
-  if (-not (Test-Path $s)) { Write-Host "  WARN missing in source: $f" -ForegroundColor Yellow; continue }
+  $d = Join-Path $Dest   $f
+  if (-not (Test-Path $s)) { Write-Host "  WARN missing in source: $f" -ForegroundColor Yellow; $missing += $f; continue }
   $ok = $false
-  # Retry: the client can respawn between the kill above and the copy below.
-  for ($i = 1; $i -le 10 -and -not $ok; $i++) {
-    try { Copy-Item $s (Join-Path $Dest $f) -Force -ErrorAction Stop; $ok = $true }
-    catch { Start-Sleep -Milliseconds 400 }
+  do {
+    try { Copy-Item $s $d -Force -ErrorAction Stop; $ok = $true }
+    catch { Start-Sleep -Milliseconds 250 }
+  } while ((-not $ok) -and ((Get-Date) -lt $deadline))
+
+  # VERIFY BY CONTENT. A successful Copy-Item is not proof the destination now
+  # matches: a partial write, or a copy that silently landed elsewhere, both
+  # look like success. Compare hashes and say so.
+  if ($ok) {
+    $hs = Sha16 $s; $hd = Sha16 $d
+    if ($hs -ne $hd) { $ok = $false; Write-Host "  FAILED (content mismatch after copy): $f  src=$hs dst=$hd" -ForegroundColor Red }
   }
-  if ($ok) { $copied++ } else { Write-Host "  FAILED (locked): $f" -ForegroundColor Red }
+
+  if ($ok) { $copied++ } else { $failed += $f; Write-Host "  FAILED (locked): $f" -ForegroundColor Red }
 }
 
 # rules\ is not optional. An engine with an EMPTY rules directory opens cleanly
@@ -97,8 +127,34 @@ Write-Host "  files copied : $copied of $($files.Count)"
 Write-Host "  rule files   : $nRules"
 if ($nRules -eq 0) { Write-Host '  ERROR: rules directory is EMPTY -- the engine would report nothing at all.' -ForegroundColor Red; exit 1 }
 
+# THE VERSION LINE IS PRINTED ONLY ON A REFRESH THAT ACTUALLY HAPPENED, and the
+# hash is printed beside it.
+#
+# `--version` is read from the DESTINATION. When the copy failed that is the
+# STALE engine reporting its own version -- and because a product version moves
+# far less often than the binary does, it prints exactly what a successful
+# refresh would print. On 2026-09-02 this script copied 1 of 5 files, failed on
+# drag-lint.exe itself, printed "version : drag-lint 1.9.0-alpha", and exited 0.
+# The one field a reader would check was guaranteed to look right.
+#
+# The sha256 prefix is the fix for that, suggested by the YADF session after it
+# identified three engine copies on one machine -- 34,021,745 / 33,972,632 /
+# 33,862,113 bytes, three distinct builds, ALL reporting "1.9.0-alpha". A
+# version string cannot tell those apart; sixteen hex characters can.
+if ($failed.Count -gt 0) {
+  Write-Host ''
+  Write-Host "  REFRESH FAILED -- $($failed.Count) file(s) could not be replaced: $($failed -join ', ')" -ForegroundColor Red
+  Write-Host '  The destination still holds the OLD engine. No version is reported, because' -ForegroundColor Red
+  Write-Host '  it would be the old one and would look like success.' -ForegroundColor Red
+  Write-Host "  src drag-lint.exe : $(Sha16 (Join-Path $Source 'drag-lint.exe'))" -ForegroundColor DarkGray
+  Write-Host "  dst drag-lint.exe : $(Sha16 (Join-Path $Dest   'drag-lint.exe'))" -ForegroundColor DarkGray
+  Write-Host '  Close VS Code (or run its "Update Engine Copy Now" command) and retry.' -ForegroundColor Yellow
+  exit 1
+}
+
 $v = & (Join-Path $Dest 'drag-lint.exe') --version 2>$null | Select-Object -First 1
 Write-Host "  version      : $v"
+Write-Host "  sha256       : $(Sha16 (Join-Path $Dest 'drag-lint.exe'))  (matches source)"
 Write-Host ''
 Write-Host 'Set (once) in VS Code User settings:' -ForegroundColor DarkGray
 Write-Host "  ""dragLint.serverPath"": ""$($Dest -replace '\\','\\')\\drag-lint.exe""" -ForegroundColor DarkGray
