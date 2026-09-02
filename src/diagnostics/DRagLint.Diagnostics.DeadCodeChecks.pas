@@ -1148,6 +1148,49 @@ var
       (ANt = 'try') or (ANt = 'raise') or (ANt = 'inherited') or (ANt = 'goto');
   end;
 
+  { True if a STATEMENT SEPARATOR stands between two sibling statement nodes --
+    i.e. the pair really is 'a := 1; b := 2;' packing and not an artefact.
+
+    WHY multiple-statements-per-line NEEDS THIS. IsStatementNodeType accepts
+    'exprCall', and a typecast like PChar(X) is an exprCall too. Inside a call
+    whose argument list is split across lines, the parse can hand back arguments
+    as DIRECT NAMED CHILDREN of the enclosing block, which then look exactly
+    like siblings that share a row. Measured on DataCopy's
+    Test.UsageWiring.pas:258 (reported as 257, see the lone-CR note): the
+    "second statement" was `PChar(LCmd)`, the second argument of a wrapped
+    CreateProcess call, and the rule fired inside an argument list.
+
+    The discriminator is what SEPARATES them in the source: real packing is
+    separated by a semicolon, an argument list by a comma. Both node
+    conventions are handled -- the separator may sit between the two nodes, or
+    the previous statement may already include its own terminator -- because
+    which one applies is a grammar detail this rule should not depend on.
+
+    Two hypotheses were tested and refuted before this one (argument commas
+    counted as separators; angle brackets confusing the scan), and a synthetic
+    fixture built from a paraphrase stayed silent while the verbatim code fired.
+    The reproducer that finally isolated it was produced by delta-debugging the
+    real routine down, not by writing a fixture from the description. }
+  function SeparatedByStatementTerminator(const APrev, ACur: TTSNode): Boolean;
+  var
+    K, GapFrom, GapTo: Integer;
+    PrevText         : string ;
+  begin
+    Result:= False;
+    if APrev.IsNull or ACur.IsNull then Exit;
+
+    GapFrom:= Integer(APrev.EndByte);
+    GapTo  := Integer(ACur.StartByte);
+    if (GapFrom >= 0) and (GapTo <= Length(Src)) and (GapTo > GapFrom) then
+      for K:= GapFrom to GapTo - 1 do
+        if Src[K] = Byte(Ord(';')) then Exit(True);
+
+    { The other convention: the statement node carries its own terminator, so
+      the gap holds nothing but whitespace. }
+    PrevText:= TrimRight(NodeStr(APrev));
+    Result  := (PrevText <> '') and (PrevText[Length(PrevText)] = ';');
+  end;
+
   { v0.76 #10: True if the callee text of an exprCall is a file read/write API
     (a temp path handed to one of these lands data in a predictable location). }
   function IsFileApiCallee(const AText: string): Boolean;
@@ -1860,19 +1903,25 @@ var
       inlines statements directly or wraps them in a 'statement' node. }
     begin
       var PrevRow: Integer:= -1;
+      var PrevStmt: TTSNode;
       var LastFlagged: Integer:= -1;   { one finding per line, not one per extra statement }
       for I:= 0 to N.NamedChildCount - 1 do
       begin
         var Stmt: TTSNode:= N.NamedChild(I);
         if Stmt.IsNull or (not IsStatementNodeType(Stmt.NodeType)) then Continue;
         var Row: Integer:= Integer(Stmt.StartPoint.Row);
-        if (PrevRow >= 0) and (Row = PrevRow) and (Row <> LastFlagged) then
+        { The semicolon test is what keeps this off a split ARGUMENT LIST, whose
+          arguments can reach here looking like same-row siblings. See
+          SeparatedByStatementTerminator. }
+        if (PrevRow >= 0) and (Row = PrevRow) and (Row <> LastFlagged)
+           and SeparatedByStatementTerminator(PrevStmt, Stmt) then
         begin
           EmitAt(Stmt, 'multiple-statements-per-line',
             'More than one statement on this line -- put each statement on its own line for readability and cleaner diffs.');
           LastFlagged:= Row;
         end;
-        PrevRow:= Row;
+        PrevRow := Row;
+        PrevStmt:= Stmt;
       end;
     end;
 
