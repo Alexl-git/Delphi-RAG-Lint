@@ -1023,12 +1023,41 @@ begin
     TryNode := ANode.ChildByField('try');
     { the grammar labels BOTH the `kFinally` token and the finally statements with
       the field name 'finally', so ChildByField returns the token -- scan for the
-      first non-kEnd child after kFinally to get the actual finally body. }
+      finally body after kFinally.
+
+      MATCH ON THE NODE TYPE, NOT ON "first thing that is not kEnd".
+
+      A COMMENT WRITTEN AS THE FIRST THING INSIDE THE FINALLY IS A NAMED CHILD OF
+      THE `try` NODE ITSELF -- the shape is
+      (kTry)(statements)(kFinally)(comment)(statements)(kEnd) -- so the old
+      not-kEnd test picked the COMMENT as the finally body. EmitStmt then hit its
+      opaque default and the real `statements` node never entered the CFG at all:
+      the whole finally block vanished, and the comment was additionally pushed
+      as the finally body so every exit-path replay replayed a comment.
+
+      That is a WRONG-ANSWER bug across every CFG-based rule, not one rule's
+      quirk. Measured 2026-09-02 on the same shape: write-only-local FALSELY
+      fires on a local whose only read is in the block, while
+      used-before-assignment and overwrite-before-read FALSELY go silent. It was
+      reported from DataCopy as `X := Create; try ... finally X.Free; end` with a
+      comment in the finally -- the commonest resource shape in Delphi, and the
+      one this project's own rules mandate.
+
+      A comment INSIDE the block is harmless: it lives within the single
+      `statements` node and does not split it. Exactly one `statements` child
+      follows kFinally regardless of how many comments precede it, so this stays
+      a single node and Finallys/DivertVia replay is unchanged.
+
+      `except` never had the bug because its scan (below) already filters by node
+      type and iterates all matches. This makes `finally` agree with it.
+
+      A finally containing ONLY comments leaves FinNode null, which is treated as
+      try-without-finally -- correct, because such a block is semantically empty. }
     FinNode := Default(TTSNode);
     var SeenFinally := False;
     for I := 0 to ANode.NamedChildCount - 1 do
       if ANode.NamedChild(I).NodeType = 'kFinally' then SeenFinally := True
-      else if SeenFinally and (ANode.NamedChild(I).NodeType <> 'kEnd') then
+      else if SeenFinally and (ANode.NamedChild(I).NodeType = 'statements') then
       begin FinNode := ANode.NamedChild(I); Break; end;
     BodyIdx := Cfg.NewBlock.Index; { try region entry }
     Cfg.Blocks[ACur].AddSucc(BodyIdx);
