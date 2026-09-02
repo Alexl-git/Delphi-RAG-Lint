@@ -295,6 +295,14 @@ begin
   Writeln(S);
 end;
 
+procedure Case22_NamedPipeIsNotAPath;
+var
+  S: string;
+begin
+  S := '\\.\pipe\Micronite\Greeting';
+  Writeln(S);
+end;
+
 // ---- MUST FIRE: an IP-addressed UNC share is still a path -----------------
 
 procedure Case19_IpAddressedUncShare;
@@ -302,6 +310,14 @@ var
   S: string;
 begin
   S := '\\192.168.1.10\share\data.csv';
+  Writeln(S);
+end;
+
+procedure Case23_ExtendedLengthPrefixIsAPath;
+var
+  S: string;
+begin
+  S := '\\?\C:\very\long\path\report.csv';
   Writeln(S);
 end;
 
@@ -338,11 +354,13 @@ $ln18 = LineOf "S := '//1';"
 $ln19 = LineOf "S := '\\192.168.1.10\share\data.csv';"
 $ln20 = LineOf "S := 'h:nn';"
 $ln21 = LineOf "S := 'hh:mm:ss';"
+$ln22 = LineOf "S := '\\.\pipe\Micronite\Greeting';"
+$ln23 = LineOf "S := '\\?\C:\very\long\path\report.csv';"
 # ln15..ln17 MUST be in this list. A silent-direction assertion reads
 # "-not ($fired -contains $lnN)", which is VACUOUSLY TRUE when LineOf returned
 # -1 -- so an unlocated line would give three green ticks that assert nothing.
-Check 'fixture lines located' (@($ln1,$ln2,$ln3,$ln4,$ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18,$ln19,$ln20,$ln21) -notcontains -1) `
-  "fire: $ln1,$ln2,$ln3,$ln4,$ln19  silent: $ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18,$ln20,$ln21"
+Check 'fixture lines located' (@($ln1,$ln2,$ln3,$ln4,$ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18,$ln19,$ln20,$ln21,$ln22,$ln23) -notcontains -1) `
+  "fire: $ln1,$ln2,$ln3,$ln4,$ln19,$ln23  silent: $ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18,$ln20,$ln21,$ln22"
 
 $fired = @()
 foreach ($line in (& $Exe lint $fixture 2>$null)) {
@@ -425,6 +443,21 @@ Write-Host 'BUT AN IP-ADDRESSED UNC SHARE IS STILL A PATH' -ForegroundColor Cyan
 Check "19 IP-addressed UNC share fires             (line $ln19)" ($fired -contains $ln19)
 
 Write-Host ''
+Write-Host 'DEVICE NAMESPACE IS OUT, EXTENDED-LENGTH IS IN (owner ruling 2026-09-02)' -ForegroundColor Cyan
+# "named pipes are out." The device namespace '\\.\' resolves on EVERY machine,
+# so by this rule's own harm test -- "names one machine's filesystem and will not
+# exist on another" -- it can never be the defect this rule reports. It was the
+# largest group left on ORM3 after the two root-test fixes: 6 of 16, all pipes.
+#
+# '\\?\' STAYS, and that is the whole reason these two are asserted together.
+# Both are backslash-backslash-punctuation prefixes and the tempting fix is to
+# drop every non-alphanumeric lead -- which would also silence the
+# extended-length form, and THAT one wraps a real drive path ('\\?\C:\...'), so
+# it is machine-bound like any other. A fix that cannot tell them apart fails 23.
+Check "22 '\\.\pipe\...' device namespace, SILENT  (line $ln22)" (-not ($fired -contains $ln22))
+Check "23 '\\?\C:\...' extended length, FIRES      (line $ln23)" ($fired -contains $ln23)
+
+Write-Host ''
 Write-Host 'RELATIVE PATHS ARE ALLOWED -- owner ruling 2026-09-01' -ForegroundColor Cyan
 # THIS ASSERTION IS INVERTED FROM ITS ORIGINAL. Case 2 reaches a real sink
 # (AssignFile) and still must NOT fire: it carries no drive and no UNC lead, so
@@ -474,7 +507,7 @@ Write-Host 'COMPUTED SOURCES -- environment/config leaves MUST stay silent' -For
 # appearing from nowhere -- e.g. a backstop that stopped honouring Seen and
 # double-reported a literal the warning tier already claimed, which is the most
 # likely way this tier breaks and the one no individual assertion can see.
-Check '8  parameter leaf (form field idiom)'  ($fired.Count -eq 11)  "expected exactly 11 findings, got $($fired.Count)"
+Check '8  parameter leaf (form field idiom)'  ($fired.Count -eq 12)  "expected exactly 12 findings, got $($fired.Count)"
 
 Write-Host ''
 Write-Host 'SEVERITY TIERS -- a COMPLETE path is a warning, not info' -ForegroundColor Cyan

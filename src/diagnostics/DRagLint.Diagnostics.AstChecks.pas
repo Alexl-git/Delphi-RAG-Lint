@@ -6028,10 +6028,22 @@ var
       here harmlessly until ruling 2's backstop began asking about EVERY
       literal. The backstop did not create this; it made it visible.
 
-      '?' and '.' are admitted alongside a name character because Windows spells
-      two real path families that way -- '\\?\C:\very\long\path' (extended
-      length) and '\\.\PhysicalDrive0' (device namespace) -- and dropping them
-      would trade this false positive for a false negative.
+      '?' is admitted alongside a name character because Windows spells the
+      extended-length family that way -- '\\?\C:\very\long\path' -- and that
+      prefix wraps a REAL drive path, so it is machine-bound like any other.
+
+      '.' IS DELIBERATELY NOT ADMITTED (owner ruling 2026-09-02, "named pipes
+      are out"). The device namespace '\\.\' -- '\\.\pipe\Micronite\Greeting',
+      '\\.\PhysicalDrive0' -- resolves on EVERY machine, so by this rule's own
+      harm test ("names one machine's filesystem and will not exist on another")
+      it can never be the defect this rule reports. It was the largest group
+      left on ORM3 after the two root-test fixes: 6 of 16, all named pipes.
+
+      THE COST IS NAMED HONESTLY: a hardcoded pipe name is still a hardcoded
+      resource name, and it is now invisible to this rule. That is accepted
+      because this rule is about PORTABILITY BETWEEN MACHINES, and a pipe name
+      does not vary between them. If hardcoded pipe names are ever worth
+      reporting, they want a rule of their own, not a false positive in this one.
 
       A SHARE SEPARATOR IS REQUIRED TOO, and the reason it is not simply "the
       first character must be a letter" is '\\192.168.1.10\share': a UNC host
@@ -6045,7 +6057,7 @@ var
     if (Length(AText) >= 3)
        and CharInSet(AText[1], ['\', '/'])
        and CharInSet(AText[2], ['\', '/'])
-       and CharInSet(AText[3], ['A'..'Z', 'a'..'z', '0'..'9', '?', '.']) then
+       and CharInSet(AText[3], ['A'..'Z', 'a'..'z', '0'..'9', '?']) then
     begin
       for I:= 4 to Length(AText) do
         if CharInSet(AText[I], ['\', '/']) then Exit(True);
