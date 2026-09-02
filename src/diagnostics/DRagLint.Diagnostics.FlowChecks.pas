@@ -672,7 +672,7 @@ end;
   Anything with a call, a dot, an index or an operator is refused -- only a
   simple identifier can be compared textually and still mean the same thing at
   two different points in the routine. }
-function ThenGuardName(const AIf, AChild: TTSNode; const ASrc: TBytes): string;
+function GuardToken(const AIf, AChild: TTSNode; const ASrc: TBytes): string;
 var
   I, CondIx, ThenIx, ElseIx: Integer;
   C, Cond                  : TTSNode;
@@ -704,26 +704,51 @@ begin
     else if C.NodeType = 'kElse' then ElseIx := I + 1;
   end;
   if (CondIx < 0) or (ThenIx < 0) or (CondIx >= AIf.ChildCount) or (ThenIx >= AIf.ChildCount) then Exit;
-  { The child must be the THEN arm. An else-arm read is guarded by the NEGATION
-    and must never match. }
-  if AIf.Child(ThenIx).StartByte <> AChild.StartByte then
-  begin
-    { AChild may be nested deeper than the arm itself -- compare by containment. }
-    if (AChild.StartByte < AIf.Child(ThenIx).StartByte) or
-       (AChild.EndByte   > AIf.Child(ThenIx).EndByte  ) then Exit;
-  end;
+  { WHICH ARM, rather than "the THEN arm or nothing".
+
+    C4: this used to refuse an else-arm child outright, reasoning that such a
+    child is "guarded by the NEGATION". That is true, and it is not a reason to
+    refuse -- it is a reason to RECORD THE POLARITY. Two positions both in the
+    ELSE arm of one predicate are exactly as correlated as two in the then arm.
+
+    DataCopy's real shape is that one, and it is why the FP survived a
+    suppression that had shipped since v1.4.0-alpha: LPlan is assigned in the
+    else arm of `if LWasNew then ... else ...` and read, later, in the else arm
+    of the same predicate. The backlog paraphrase ("assigned in one branch and
+    read in a branch guarded by the SAME condition") was polarity-inverted
+    relative to the field code, which is why reading the source mattered.
+
+    The token carries the sign -- '+name' for the then arm, '-name' for the else
+    arm -- so matching stays a plain string compare AND a then-arm assignment can
+    never excuse an else-arm read. That pairing is a genuine
+    used-before-assignment and goes on being reported; it is the positive control
+    in run_flow_correlated_else_arms.ps1. }
+  var InThen: Boolean := (AChild.StartByte >= AIf.Child(ThenIx).StartByte)
+                     and (AChild.EndByte   <= AIf.Child(ThenIx).EndByte  );
+  var InElse: Boolean := False;
   if (ElseIx >= 0) and (ElseIx < AIf.ChildCount) then
-    if (AChild.StartByte >= AIf.Child(ElseIx).StartByte) and
-       (AChild.EndByte   <= AIf.Child(ElseIx).EndByte  ) then Exit;
+    InElse := (AChild.StartByte >= AIf.Child(ElseIx).StartByte)
+          and (AChild.EndByte   <= AIf.Child(ElseIx).EndByte  );
+  { `not P` is still refused. Handling it would mean flipping the sign, which is
+    correct in principle, but the node name for a unary `not` is unverified here
+    and this repo has now guessed a grammar node name wrong five times. The
+    measured defect does not need it -- DataCopy's predicate is a bare
+    identifier -- so it stays out until someone dumps the real shape.
+
+    The two refusals are one test, and neither arm falls out as Result = '',
+    rather than as a third Exit: this routine is a guard-clause chain already
+    sitting at the too-many-exit-points limit, and adding polarity must not
+    spend the budget. }
   Cond := AIf.Child(CondIx);
-  if Cond.IsNull then Exit;
-  if Cond.NodeType <> 'identifier' then Exit; { compound / call / not -> refuse }
-  Result := LowerCase(Trim(NodeStr(Cond, ASrc)));
+  if Cond.IsNull or (Cond.NodeType <> 'identifier') then Exit; { compound / call / not }
+  if      InThen then Result := '+' + LowerCase(Trim(NodeStr(Cond, ASrc)))
+  else if InElse then Result := '-' + LowerCase(Trim(NodeStr(Cond, ASrc)));
 end;
 
-{ Collects the bare-identifier THEN-guards governing ANode, innermost first,
+{ Collects the signed guard tokens governing ANode ('+name' then-arm,'-name'
+  else-arm), innermost first,
   stopping at ARoutine. }
-procedure CollectThenGuards(const ANode, ARoutine: TTSNode; const ASrc: TBytes;
+procedure CollectGuardTokens(const ANode, ARoutine: TTSNode; const ASrc: TBytes;
   AAcc: TList<string>);
 var
   Cur, Par: TTSNode;
@@ -734,7 +759,7 @@ begin
   begin
     Par := Cur.Parent;
     if Par.IsNull then Break;
-    G := ThenGuardName(Par, Cur, ASrc);
+    G := GuardToken(Par, Cur, ASrc);
     if G <> '' then AAcc.Add(G);
     if Par.StartByte = ARoutine.StartByte then Break;
     Cur := Par;
@@ -784,10 +809,17 @@ begin
     begin
       Own := TList<string>.Create;
       try
-        CollectThenGuards(ANode, ARoutine, ASrc, Own);
+        CollectGuardTokens(ANode, ARoutine, ASrc, Own);
         for K := 0 to Own.Count - 1 do
+          { The token match must keep the SIGN -- an assignment in the then arm
+            does not excuse a read in the else arm -- while AssignedInRange asks
+            about the predicate VARIABLE and must be handed the bare name with
+            the sign stripped. Passing the token there would look for a local
+            literally called '+lwasnew', never find one, and silently disable the
+            "was the predicate rewritten in between?" safety check that makes
+            this suppression sound. }
           if (AGuards.IndexOf(Own[K]) >= 0)
-             and (not AssignedInRange(ARoutine, ASrc, Own[K],
+             and (not AssignedInRange(ARoutine, ASrc, Copy(Own[K], 2, MaxInt),
                                       Integer(ANode.EndByte), AReadStart)) then
             Exit(True);
       finally
@@ -868,10 +900,20 @@ function WitnessFlagForRead(const ANode, ARoutine: TTSNode; const ASrc: TBytes;
       if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier') then
       begin
         Nm := LowerCase(Trim(NodeStr(Lhs, ASrc)));
-        { AGuards holds lowercased bare identifiers (ThenGuardName lowercases),
-          so Nm is lowercased to match; the literal test uses SameText rather
-          than another LowerCase allocation. }
-        if (AGuards.IndexOf(Nm) >= 0)
+        { AGuards holds lowercased SIGNED tokens (GuardToken lowercases the name
+          and prefixes '+' for a then-arm position, '-' for an else-arm one), so
+          Nm is lowercased to match; the literal test uses SameText rather than
+          another LowerCase allocation.
+
+          C4: '+' EXPLICITLY, not a sign-stripping compare. The witness form this
+          recognises is `if HaveX then Use(X)`, whose read sits in the THEN arm,
+          so '+' is the token it produced before polarity existed and matching it
+          alone keeps this path's behaviour byte-identical to what shipped. An
+          else-arm witness may well be sound too, but widening a TIERING rule is
+          a separate decision with its own measurement, and doing it silently
+          here as a side effect of the suppression fix is exactly how an
+          unreviewed behaviour change gets in. }
+        if (AGuards.IndexOf('+' + Nm) >= 0)
            and SameText(Trim(NodeStr(Rhs, ASrc)), 'True') then Exit(Nm);
       end;
     end;
@@ -932,8 +974,8 @@ end;
 
   Clause 6 of the design -- the read is dominated by the flag -- holds by
   construction rather than by test: this is only ever called after
-  CollectThenGuards returned the flag as a THEN-guard of the read, which IS
-  domination for that form. If CollectThenGuards is ever widened to early-exit
+  CollectGuardTokens returned the flag as a THEN-guard of the read, which IS
+  domination for that form. If CollectGuardTokens is ever widened to early-exit
   or conjunction guards, that widening must re-establish domination or this
   becomes unsound.
 
@@ -1918,7 +1960,7 @@ var
                 begin
                   ROW := Integer(It.Node.StartPoint.Row) + 1;
                   COL := Integer(It.Node.StartPoint.Column) + 1;
-                  { SAME-PREDICATE SUPPRESSION -- see ThenGuardName above.
+                  { SAME-PREDICATE SUPPRESSION -- see GuardToken above.
 
                     Applied ONLY in the `may` (info) arm. A `must` finding says
                     the variable is unassigned on EVERY path, which no guard
@@ -1931,7 +1973,7 @@ var
                   begin
                     var Guards: TList<string> := TList<string>.Create;
                     try
-                      CollectThenGuards(It.Node, Cfg.RoutineNode, PF.Src, Guards);
+                      CollectGuardTokens(It.Node, Cfg.RoutineNode, PF.Src, Guards);
                       if Guards.Count > 0 then
                       begin
                         if AssignedUnderSameGuard(Cfg.RoutineNode, Cfg.RoutineNode,
