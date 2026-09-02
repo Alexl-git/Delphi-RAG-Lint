@@ -577,7 +577,7 @@ type
       /// owns the id unconditionally, so there is no dual implementation to drift.
       /// Never raises.
       /// </remarks>
-      class function CheckHardcodedPath(const AFile: string): TArray<TLintFinding>;
+      class function CheckHardcodedPath(const AFile: string; const AStore: ISymbolStore = nil): TArray<TLintFinding>;
       /// <summary>Flags a for/while/repeat loop whose body's first statement is an
       /// unconditional Exit, Break, or raise -- the loop can never reach a second
       /// iteration.</summary>
@@ -5698,7 +5698,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckHardcodedPath(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckHardcodedPath(const AFile: string; const AStore: ISymbolStore): TArray<TLintFinding>;
 { ---------------------------------------------------------------------------
   A HARDCODED PATH PORTION THAT ACTUALLY REACHES A FILESYSTEM SINK.
   Owner specification + staged design: docs\INBOX-b7-path-literal-reverse-taint-plan.md
@@ -5761,6 +5761,10 @@ class function TAstChecker.CheckHardcodedPath(const AFile: string): TArray<TLint
 const
   { The owner's number: "propagate back say up to 4 steps". }
   MAX_DEPTH = 4;
+  { STAGE 2 cap: callee follows per FILE. Each one re-parses the callee's unit,
+    and lint-all clears TAstParseCache between files, so these parses are not
+    amortised across the corpus. Raise it with measurements in hand, not before. }
+  MAX_CALLEE_FOLLOWS = 8;
 var
   Src      : TBytes                              ;
   PF       : TParsedFile                         ;
@@ -5772,16 +5776,37 @@ var
     it is a field rather than a parameter because Classify recurses through
     several shapes and every one of them would have to thread it through. }
   SinkByte : Cardinal                            ;
+  { STAGE 2 bounds. The callee follow re-parses the callee's UNIT, and lint-all
+    clears TAstParseCache between files, so those parses are NOT amortised across
+    the corpus. Both bounds are the ones the plan fixed in advance: a per-file
+    memo keyed callee#target, and a hard cap on follows per file. Raising the cap
+    is a decision to take with measurements in hand, not a default. }
+  FollowMemo : TDictionary<string, Boolean>      ;
+  FollowCount: Integer                           ;
 
-  function NodeStr(const N: TTSNode): string;
+  { The source text of a node, read from an EXPLICIT buffer. Stage 2 reads nodes
+    from a CALLEE's file, whose bytes are not in Src -- and the range check below
+    returns '' for an out-of-range node rather than failing, so a wrong buffer is
+    a SILENT wrong answer. Hence a parameter rather than a capture. }
+  function SrcStr(const N: TTSNode; const ASrc: TBytes): string;  // dl:ok duplicate-code@7c08 -- this file nests its own NodeStr per check (19 copies, all pre-existing); SrcStr is the parameterised twin of one of them, needed because Stage 2 reads a CALLEE's buffer. Hoisting a shared helper would be a unit-level refactor that leaves the other 19 untouched anyway.
   var
-    S, E, L: Integer;
+    S: Integer;
+    E: Integer;
+    L: Integer;
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
-    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
-    Result:= TEncoding.UTF8.GetString(Src, S, L);
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte);
+    L:= E - S;
+    if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
+    Result:= TEncoding.UTF8.GetString(ASrc, S, L);
+  end;
+
+  { The file under lint. One line, so the two spellings cannot drift apart. }
+  function NodeStr(const N: TTSNode): string;
+  begin
+    Result:= SrcStr(N, Src);
   end;
 
   { NodeStr returns the RAW SOURCE of a literal, quotes and all -- the trap
@@ -6134,14 +6159,20 @@ var
     type, and it keeps existing dl:ok markers and baselines on the same line
     the old .scm rule used. Deduplicated by position, because one literal can
     be reached from two operands of the same sink. }
-  procedure Report(const ALit: TTSNode; const ASink: string);
+  { Reports AT a node in THIS file, while the tier is decided by TEXT supplied by
+    the caller. Stage 2 needs the split: the offending literal lives in the
+    CALLEE's file and its bytes are not in Src, so `NodeStr(ALit)` would read the
+    wrong buffer -- silently, since NodeStr range-checks against Src and returns
+    '' rather than failing. The finding still points at the sink operand in the
+    file being linted, which is where the reader is. }
+  procedure ReportAt(const AAt: TTSNode; const ASink: string; const ALitText: string);
   var
     P  : TTSPoint    ;
     F  : TLintFinding;
     Key: string      ;
   begin
     if Findings.Count >= 200 then Exit;
-    P  := ALit.StartPoint;
+    P  := AAt.StartPoint;
     Key:= Format('%d:%d', [Integer(P.Row), Integer(P.Column)]);
     if Seen.ContainsKey(Key) then Exit;
     Seen.Add(Key, True);
@@ -6153,7 +6184,7 @@ var
       one that certainly breaks on another machine, so it is a warning and says
       so. A bare root ('C:', 'C:\') still reports, but at info: it is a drive
       reference, not yet a place. }
-    if IsCompleteAbsolute(UnquoteLiteral(NodeStr(ALit))) then
+    if IsCompleteAbsolute(ALitText) then
     begin
       F.Severity:= 'warning';
       F.Message := Format('COMPLETE hardcoded path reaches %s -- this names one machine''s filesystem and will not exist on another. Take the root from configuration, the environment, or a known-folder API (TPath.GetHomePath / GetDocumentsPath, GetEnvironmentVariable) and keep only the relative remainder in the source.', [ASink]);
@@ -6169,6 +6200,327 @@ var
     Findings.Add(F);
   end;
 
+  { Stage 1's call shape: the literal IS the node reported, so its text comes
+    from this file's Src. }
+  procedure Report(const ALit: TTSNode; const ASink: string);
+  begin
+    ReportAt(ALit, ASink, UnquoteLiteral(NodeStr(ALit)));
+  end;
+
+{ ---------------------------------------------------------------------------
+  STAGE 2 -- ONE interprocedural hop. The owner's case, in his words: "Say we
+  suspect Filename contains a path. Then 2 lines back we see ABC(Filename, XYZ)
+  then we need to examine ABC and XYZ."
+
+  Two shapes, and only these two:
+    (a) FN := Foo(...)   -- a first-party FUNCTION RESULT
+    (b) Foo(FN, ...)     -- FN at a var/out parameter position
+
+  Everything else stays CLEAN, which is this rule's stated failure direction:
+  third-party, no body in the index, cross-file name ambiguity, a nested call
+  inside the callee (no second hop), or the cap being reached.
+
+  The callee's literal is NOT reported at its own position. The finding belongs
+  at the sink in the file being linted -- that is the line the reader is looking
+  at, and the callee may not even be part of this project. Hence ReportAt.
+  --------------------------------------------------------------------------- }
+
+
+  { The implementation `defProc` named AName whose body spans AImplStartLine,
+    falling back to the first same-named one. Mirrors FlowChecks.FindCalleeDefProc,
+    which is unit-private there; a local twelve-line walk is cheaper than either
+    duplicating that unit's exports or taking a dependency on Cfg for
+    CfgFindProcs. The node type 'defProc' is read from CfgFindProcs, not guessed
+    -- this repo has spelled a grammar node name wrong five times. }
+  function FindDefProcNamed(const ARoot: TTSNode; const AName: string;
+                            AImplStartLine: Integer; const ASrc: TBytes): TTSNode;
+  var
+    Fallback: TTSNode;
+    Found   : TTSNode;
+
+    procedure Walk(const N: TTSNode);
+    var
+      I      : Integer;
+      Hdr, Nm: TTSNode;
+      SR, ER : Integer;
+    begin
+      if N.IsNull or (not Found.IsNull) then Exit;
+      if N.NodeType = 'defProc' then
+      begin
+        Hdr:= N.ChildByField('header');
+        if not Hdr.IsNull then
+        begin
+          Nm:= Hdr.ChildByField('name');
+          if (not Nm.IsNull) and SameText(Trim(SrcStr(Nm, ASrc)), AName) then
+          begin
+            if Fallback.IsNull then Fallback:= N;
+            SR:= Integer(N.StartPoint.Row) + 1;
+            ER:= Integer(N.EndPoint  .Row) + 1;
+            if (AImplStartLine >= SR) and (AImplStartLine <= ER) then
+            begin
+              Found:= N;
+              Exit;
+            end;
+          end;
+        end;
+      end;
+      for I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+    end;
+
+  begin
+    Fallback:= Default(TTSNode);
+    Found   := Default(TTSNode);
+    Walk(ARoot);
+    if not Found.IsNull then Result:= Found else Result:= Fallback;
+  end;
+
+  { Resolve a callee name to a single first-party body, exactly as the OwnsOracle
+    in FlowChecks does: reject cross-FILE ambiguity (an interface forward-decl
+    and its implementation share a file and are not ambiguous), require a body in
+    the index, then parse that unit. }
+  function CalleeBody(const AName: string; out ADefProc: TTSNode; out ASrc: TBytes): Boolean;
+  var
+    Syms : TArray<TSymbol>;
+    RSym : TSymbol        ;
+    I    : Integer        ;
+    CalleeFid: Int64      ;
+    Have, Ambig: Boolean  ;
+    CPath: string         ;
+    CPF  : TParsedFile    ;
+  begin
+    Result  := False;
+    ADefProc:= Default(TTSNode);
+    ASrc    := nil;
+    if AStore = nil then Exit;
+    Syms:= AStore.FindSymbolsByExactName(AName);
+    Have := False;
+    Ambig:= False;
+    CalleeFid:= -1;
+    RSym := Default(TSymbol);
+    for I:= 0 to High(Syms) do
+      if Syms[I].Kind in [skProcedure, skFunction, skMethod] then
+      begin
+        if not Have then
+        begin
+          CalleeFid:= Syms[I].FileId;
+          RSym     := Syms[I];
+          Have     := True;
+        end
+        else if Syms[I].FileId <> CalleeFid then Ambig:= True;
+        if Syms[I].ImplStartLine > 0 then RSym:= Syms[I]; { prefer the bodied one }
+      end;
+    if (not Have) or Ambig or (RSym.ImplStartLine <= 0) then Exit;
+    CPath:= AStore.GetFilePath(RSym.FileId);
+    if (CPath = '') or (not TFile.Exists(CPath)) then Exit;
+    CPF:= TAstParseCache.Get(CPath);
+    if CPF.Tree = nil then Exit;
+    ASrc:= CPF.Src;
+    ADefProc:= FindDefProcNamed(CPF.Tree.RootNode, AName, RSym.ImplStartLine, CPF.Src);
+    Result:= not ADefProc.IsNull;
+  end;
+
+  { Does this RHS, read in the CALLEE's buffer, carry a hardcoded path portion?
+    A deliberately small classifier: literal, parenthesised, and `+` concatenation
+    only. It does NOT chase identifiers and does NOT hop again -- the plan caps
+    Stage 2 at one hop, and a nested unknown call inside the callee is CLEAN. }
+  function CalleeRhsTaints(const N: TTSNode; const ASrc: TBytes; ADepth: Integer;
+                           out ALitText: string): Boolean;
+  var
+    I : Integer;
+    Op: TTSNode;
+  begin
+    Result  := False;
+    ALitText:= '';
+    if N.IsNull or (ADepth > MAX_DEPTH) then Exit;
+    if N.NodeType = 'literalString' then
+    begin
+      ALitText:= UnquoteLiteral(SrcStr(N, ASrc));
+      Result  := IsPathPortion(ALitText);
+    end
+    else if N.NodeType = 'exprParens' then
+    begin
+      for I:= 0 to N.NamedChildCount - 1 do
+        if CalleeRhsTaints(N.NamedChild(I), ASrc, ADepth, ALitText) then
+        begin
+          Result:= True;
+          Break;
+        end;
+    end
+    else if N.NodeType = 'exprBinary' then
+    begin
+      Op:= N.ChildByField('operator');
+      { or short-circuits, so a tainted LHS leaves ALitText holding ITS literal
+        and the RHS is not walked -- which is what the message should quote. }
+      if (not Op.IsNull) and (Op.NodeType = 'kAdd') then
+        Result:= CalleeRhsTaints(N.ChildByField('lhs'), ASrc, ADepth + 1, ALitText)
+              or CalleeRhsTaints(N.ChildByField('rhs'), ASrc, ADepth + 1, ALitText);
+    end;
+  end;
+
+  { Walks the callee body for `ATarget := <rhs>` and tests each RHS. ATarget is
+    'result' for shape (a) or the formal's name for shape (b). }
+  function BodyTaints(const N: TTSNode; const ASrc: TBytes; const ATarget: string;
+                      out ALitText: string): Boolean;
+  var
+    I  : Integer;
+    Lhs: TTSNode;
+  begin
+    Result  := False;
+    ALitText:= '';
+    if N.IsNull then Exit;
+    if N.NodeType = 'assignment' then
+    begin
+      Lhs:= N.ChildByField('lhs');
+      if (not Lhs.IsNull) and SameText(Trim(SrcStr(Lhs, ASrc)), ATarget) then
+        if CalleeRhsTaints(N.ChildByField('rhs'), ASrc, 0, ALitText) then Exit(True);
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do
+      if BodyTaints(N.NamedChild(I), ASrc, ATarget, ALitText) then Exit(True);
+  end;
+
+  { The formal name at AArgIdx, and whether it is var/out. A value parameter
+    cannot carry anything back to the caller, so shape (b) requires var/out. }
+  function FormalAt(const ADefProc: TTSNode; AArgIdx: Integer; const ASrc: TBytes;
+                    out AName: string; out AIsVarOut: Boolean): Boolean;
+  var
+    Hdr, Args, DA, Ch: TTSNode;
+    I, J, Idx        : Integer;
+    Kind             : string ;
+  begin
+    Result   := False;
+    AName    := '';
+    AIsVarOut:= False;
+    Hdr:= ADefProc.ChildByField('header');
+    if Hdr.IsNull then Exit;
+    Args:= Hdr.ChildByField('args');
+    if Args.IsNull then Exit;
+    Idx:= 0;
+    for I:= 0 to Args.NamedChildCount - 1 do
+    begin
+      DA:= Args.NamedChild(I);
+      if DA.NodeType <> 'declArg' then Continue;
+      Kind:= '';
+      for J:= 0 to DA.NamedChildCount - 1 do
+      begin
+        Ch:= DA.NamedChild(J);
+        if (Ch.NodeType = 'kVar') or (Ch.NodeType = 'kOut') then Kind:= 'varout';
+      end;
+      for J:= 0 to DA.NamedChildCount - 1 do
+      begin
+        Ch:= DA.NamedChild(J);
+        if Ch.NodeType = 'identifier' then
+        begin
+          if Idx = AArgIdx then
+          begin
+            AName    := LowerCase(Trim(SrcStr(Ch, ASrc)));
+            AIsVarOut:= Kind = 'varout';
+            Exit(AName <> '');
+          end;
+          Inc(Idx);
+        end;
+      end;
+    end;
+  end;
+
+  { The one entry point. AArgIdx < 0 means shape (a) -- follow the function
+    RESULT; otherwise shape (b) -- follow that argument position, which must be
+    var/out. Memoised and capped. }
+  function CalleeTaints(const ACalleeName: string; AArgIdx: Integer;
+                        out ALitText: string): Boolean;
+  var
+    Key    : string  ;
+    Cached : Boolean ;
+    DefProc: TTSNode ;
+    CSrc   : TBytes  ;
+    PName  : string  ;
+    IsVarOut: Boolean;
+  begin
+    Result  := False;
+    ALitText:= '';
+    if (AStore = nil) or (ACalleeName = '') then Exit;
+    Key:= LowerCase(ACalleeName) + '#' + IntToStr(AArgIdx);
+    if FollowMemo.TryGetValue(Key, Cached) then
+    begin
+      { The memo stores the VERDICT only. A cached True still has to re-derive the
+        literal text for the message, so it re-follows; that is bounded by the
+        same cap and keeps the memo a pure yes/no rather than a second cache with
+        its own invalidation. }
+      if not Cached then Exit(False);
+    end
+    else
+    begin
+      if FollowCount >= MAX_CALLEE_FOLLOWS then Exit;
+      Inc(FollowCount);
+    end;
+    PName   := '';
+    IsVarOut:= False;
+    { One expression, one memo write. Each refusal -- unresolvable callee, no such
+      formal, a VALUE parameter that cannot carry anything back to the caller --
+      simply leaves Result False. }
+    if CalleeBody(ACalleeName, DefProc, CSrc) then
+      if AArgIdx < 0 then
+        Result:= BodyTaints(DefProc, CSrc, 'result', ALitText)
+      else if FormalAt(DefProc, AArgIdx, CSrc, PName, IsVarOut) and IsVarOut then
+        Result:= BodyTaints(DefProc, CSrc, PName, ALitText);
+    FollowMemo.AddOrSetValue(Key, Result);
+  end;
+
+  { STAGE 2 (b) locator: a statement `Foo(AName, ...)` in this routine, starting
+    BEFORE the sink, whose callee is a bare identifier. Returns the callee and
+    the position AName sits at, so CalleeTaints can check that the formal is
+    var/out and see what the callee assigns to it.
+
+    `ABefore` is the same ordering rule SurvivingAssignments applies: a call that
+    happens after the sink cannot have filled the operand the sink reads. The
+    LAST such call wins -- it is the one whose effect survives to the sink. }
+  function VarOutCallFor(const AProc: TTSNode; const AName: string; ABefore: Cardinal;
+                         out ACallee: string; out AArgIdx: Integer): Boolean;
+  var
+    BestByte: Cardinal;
+    FoundAny: Boolean ;
+    OutCallee: string ;
+    OutIdx   : Integer;
+
+    procedure Walk(const N: TTSNode);
+    var
+      I, J   : Integer;
+      Ent, Ar: TTSNode;
+    begin
+      if N.IsNull then Exit;
+      Ent:= N.ChildByField('entity');
+      Ar := N.ChildByField('args');
+      { One combined guard rather than three nested ones -- the checks are
+        independent and nesting them only deepened the routine. }
+      if (N.NodeType = 'exprCall') and (N.StartByte < ABefore)
+         and (not Ent.IsNull) and (Ent.NodeType = 'identifier') and (not Ar.IsNull) then
+        for J:= 0 to Ar.NamedChildCount - 1 do
+          if (Ar.NamedChild(J).NodeType = 'identifier')
+             and SameText(Trim(NodeStr(Ar.NamedChild(J))), AName)
+             and ((not FoundAny) or (N.StartByte > BestByte)) then
+          begin
+            BestByte := N.StartByte;
+            OutCallee:= Trim(NodeStr(Ent));
+            OutIdx   := J;
+            FoundAny := True;
+            Break;
+          end;
+      for I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+    end;
+
+  begin
+    ACallee := '';
+    AArgIdx := -1;
+    BestByte:= 0;
+    FoundAny:= False;
+    OutCallee:= '';
+    OutIdx   := -1;
+    if AProc.IsNull then Exit(False);
+    Walk(AProc);
+    ACallee:= OutCallee;
+    AArgIdx:= OutIdx;
+    Result := FoundAny;
+  end;
+
   { THE BACKWARD WALK. ADepth counts steps taken away from the sink operand;
     every branch that is not a literal, a concatenation, a combinator or a
     once-assigned local ends the walk SILENTLY -- see the inversion note in the
@@ -6177,9 +6529,11 @@ var
                      const AProc: TTSNode; const ASink: string);
   var
     A, Rhs, Args, Op: TTSNode;
-    Asgn            : TTSNode;
-    Nm              : string ;
+    Asgn, Ent       : TTSNode;
+    Nm, LitText     : string ;
     I               : Integer;
+    VoCallee        : string ;
+    VoArgIdx        : Integer;
   begin
     if ADepth > MAX_DEPTH then Exit; { depth exceeded -> CLEAN }
     A:= UnwrapCast(A0);
@@ -6210,7 +6564,20 @@ var
 
     if A.NodeType = 'exprCall' then
     begin
-      if not IsPathCombinator(A) then Exit; { a function result is computed -> CLEAN }
+      if not IsPathCombinator(A) then
+      begin
+        { STAGE 2 (a): a first-party FUNCTION RESULT. Stage 1 stopped here and
+          called it CLEAN; one hop into the callee asks whether its Result is
+          assigned a hardcoded path. Restricted to a BARE IDENTIFIER callee: a
+          dotted `TFoo.Bar` is a method whose receiver type would have to be
+          resolved first, and guessing that is how a rule starts reporting the
+          wrong routine's body. }
+        Ent:= A.ChildByField('entity');
+        if (not Ent.IsNull) and (Ent.NodeType = 'identifier')
+           and CalleeTaints(Trim(NodeStr(Ent)), -1, LitText) then
+          ReportAt(A, ASink, LitText);
+        Exit;
+      end;
       Args:= A.ChildByField('args');
       if Args.IsNull then Exit;
       for I:= 0 to Args.NamedChildCount - 1 do
@@ -6232,6 +6599,40 @@ var
     begin
       Rhs:= Asgn.ChildByField('rhs');
       if not Rhs.IsNull then Classify(Rhs, ADepth + 1, AProc, ASink);
+    end;
+
+    { STAGE 2 (b): the operand was never ASSIGNED here -- it was filled by a
+      first-party routine through a var/out parameter, which is the owner's
+      literal example ("2 lines back we see ABC(Filename, XYZ)"). Stage 1 saw no
+      assignment and stopped.
+
+      Only when there is no surviving assignment: if the name IS assigned in this
+      routine, that assignment is what the sink reads and the walk above has
+      already judged it. Following the call as well would report the callee's
+      literal for a value the caller then overwrote. }
+    if Length(SurvivingAssignments(Nm, SinkByte, AProc)) = 0 then
+    begin
+      if VarOutCallFor(AProc, Nm, SinkByte, VoCallee, VoArgIdx) then
+        if CalleeTaints(VoCallee, VoArgIdx, LitText) then
+        begin
+          ReportAt(A, ASink, LitText);
+          Exit;
+        end;
+
+      { STAGE 2 (a), and the reason it needs to be HERE rather than only in the
+        exprCall branch: Delphi lets a parameterless function be called without
+        parentheses, so `FN := DefaultPath;` parses as an ordinary identifier and
+        never reaches that branch at all. The first version of this hook lived
+        only under exprCall and the function-result case silently did not fire --
+        the same paren-less shape that makes `find-callers` under-report
+        (docs\INBOX-parenless-call-is-not-a-caller.md), biting twice in one day.
+
+        Reached only when the name has no surviving assignment in this routine,
+        so an ordinary local is never sent to the store; and CalleeTaints returns
+        False immediately for anything that is not a resolvable first-party
+        routine, which a variable name is not. }
+      if CalleeTaints(Nm, -1, LitText) then
+        ReportAt(A, ASink, LitText);
     end;
   end;
 
@@ -6290,13 +6691,19 @@ begin
     at the next sink and again at teardown. }
   AsgnNodes:= TObjectDictionary<string, TList<TTSNode>>.Create([doOwnsValues]);
   Seen     := TDictionary<string, Boolean>.Create;
+  { Stage 2 state is per FILE, matching the cap's unit and the parse cache's own
+    lifetime -- lint-all clears TAstParseCache between files, so a memo that
+    outlived the file would be keyed to parses that no longer exist. }
+  FollowMemo := TDictionary<string, Boolean>.Create;
+  FollowCount:= 0;
   try
     Visit(PF.Tree.RootNode, Default(TTSNode));
     Result:= Findings.ToArray;
   finally
-    Seen     .Free;
-    AsgnNodes.Free;
-    Findings .Free;
+    FollowMemo.Free;
+    Seen      .Free;
+    AsgnNodes .Free;
+    Findings  .Free;
   end;
 end; // function
 

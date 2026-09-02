@@ -9652,7 +9652,7 @@ begin
         because it needs a backward walk a .scm predicate cannot express -- it SUPERSEDES
         and replaces rules\hardcoded-absolute-path.scm, which was deleted in the same
         change, so unlike string-equality-comparison there is no .scm left to filter out. }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'hardcoded-absolute-path') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath(EffPath);
+      if (AArgs.Rule = '') or (AArgs.Rule = 'hardcoded-absolute-path') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath(EffPath, FlowStore);
       { v0.63: loop whose first body statement is Exit/Break/raise -- runs at most once }
       if (AArgs.Rule = '') or (AArgs.Rule = 'loop-executes-at-most-once') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce(EffPath);
       { v0.63: Format() specifier/argument count + literal type mismatch (one walk, two ids) }
@@ -14400,7 +14400,7 @@ begin
         ScanAdd(16, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(PasPath)); { v0.83: CQS (OFF) }
         ScanAdd(17, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec                (PasPath));
         ScanAdd(18, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckPathTraversal            (PasPath));
-        ScanAdd(19, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath            (PasPath)); { hardcoded-absolute-path: sink-anchored, replaces the retired .scm }
+        ScanAdd(19, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath            (PasPath, Store)); { hardcoded-absolute-path: sink-anchored, replaces the retired .scm }
         ScanAdd(20, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckLoopAtMostOnce           (PasPath));
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFormatCall(PasPath) do Findings:= Findings + [F];
         ScanMark(21);
