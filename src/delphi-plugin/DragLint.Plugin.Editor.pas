@@ -327,10 +327,14 @@ begin
   { Telemetry BEFORE the cache write, so the log shows the arrival even if the
     write itself throws. Cache.Update logs the before/after and the severity
     histogram; this line records that the notification arrived and when. }
-  DLT('lsp', Format('publishDiagnostics %s -> %d diag(s) (REPLACES the live set)',
+  DLT('lsp', Format('publishDiagnostics %s -> %d diag(s) (own overlay; live runner owns the gutter once it has run)',
     [ExtractFileName(FileName), Diags.Count]));
-  Cache.Update(FileName, AParams);
-  DebugLog(Format('LSP publishDiagnostics: %s -> %d diag(s) (overwrites live cache)', [ExtractFileName(FileName), Diags.Count]));
+  { dlpLsp: its OWN overlay. This used to write the same slot as the live
+    runner, so whichever published last won and the marks flapped between 45 and
+    11. The LSP's set is a strict subset -- .scm rules plus three built-ins --
+    so it now serves only files the live runner has not reached yet. }
+  Cache.Update(FileName, AParams, dlpLsp);
+  DebugLog(Format('LSP publishDiagnostics: %s -> %d diag(s) (lsp overlay)', [ExtractFileName(FileName), Diags.Count]));
 
   { Collect diagnostic entries before queuing (Diags is owned by AMsg which
     will be freed after this call returns) }

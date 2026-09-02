@@ -499,7 +499,10 @@ begin
       Arr.AddElement(DObj);
     end; // for
     Params.AddPair('diagnostics', Arr   );
-    Cache .Update (AFile        , Params);
+    { dlpLive stated explicitly rather than left to the default: this is the
+      producer that OWNS the gutter's lint content, and a silent default is a
+      poor place for that to be recorded. }
+    Cache .Update (AFile        , Params, dlpLive);
     LiveLog(Format('PublishToCache: %s -> %d diag(s)', [ExtractFileName(AFile), Length(ADiags)]));
   finally
     Params.Free;

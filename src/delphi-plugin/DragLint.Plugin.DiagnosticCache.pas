@@ -24,20 +24,44 @@ type
     Message : string           ;
   end;
 
+  { WHICH PRODUCER a diagnostic set came from. Two of them publish lint
+    findings and they do NOT agree: the LSP's BuildDiagnostics composes the
+    .scm rules plus exactly three built-ins, while the out-of-process live
+    runner runs the whole scan list. Measured on DataCopy's uFileUtils.pas --
+    LSP 11, live runner 45. }
+  TDragLintDiagProducer = (dlpLive, dlpLsp);
+
   TDragLintDiagnosticCache = class
     strict private
+      { The LIVE runner's set. }
       FByFile: TDictionary<string, TArray<TDragLintDiagnostic>>;
       { v0.47: compiler findings from "Compile && Diagnose" live in a SEPARATE
       overlay so the per-keystroke live runner (which overwrites FByFile every
       tick) cannot clobber them. GetForFile returns the union of both. }
       FCompilerByFile: TDictionary<string, TArray<TDragLintDiagnostic>>;
-      FLock          : TCriticalSection                                ;
+      { v1.9: the LSP's publishDiagnostics set, in its OWN overlay.
+
+        WHY. Both producers used to write FByFile, and Update REPLACES it, so
+        whichever published last won. The owner saw exactly that and reported it
+        as flapping: "at first no icons, then it showed more diagnostics and
+        icons appeared, then after refresh it again shows very little". That is
+        45 being overwritten by 11.
+
+        Separating them is the same move FCompilerByFile already made, for the
+        same reason. It also makes the two sets comparable in the telemetry
+        instead of one silently erasing the other. }
+      FLspByFile: TDictionary<string, TArray<TDragLintDiagnostic>>;
+      FLock     : TCriticalSection                                ;
     public
       constructor Create;
       destructor Destroy; override;
-      /// <summary>Replaces the live-lint diagnostics for AFilePath from an LSP
-      /// publishDiagnostics params object. Thread-safe.</summary>
-      procedure Update(const AFilePath: string; AParams: TJSONValue);
+      /// <summary>Replaces ONE PRODUCER'S lint diagnostics for AFilePath from a
+      /// publishDiagnostics-shaped params object. Thread-safe.</summary>
+      /// <param name="AProducer">Which set to replace. The two producers keep
+      /// separate overlays, so an LSP publish can no longer discard the live
+      /// runner's richer set (or the reverse).</param>
+      procedure Update(const AFilePath: string; AParams: TJSONValue;
+        AProducer: TDragLintDiagProducer = dlpLive);
       /// <summary>Replaces the compiler-findings overlay for AFilePath (from
       /// "Compile &amp;&amp; Diagnose"). These persist across live-lint ticks until the
       /// next compile. Thread-safe.</summary>
@@ -115,19 +139,23 @@ begin
   inherited Create;
   FByFile        := TDictionary<string, TArray<TDragLintDiagnostic>>.Create;
   FCompilerByFile:= TDictionary<string, TArray<TDragLintDiagnostic>>.Create;
+  FLspByFile     := TDictionary<string, TArray<TDragLintDiagnostic>>.Create;
   FLock:= TCriticalSection.Create;
 end;
 
 destructor TDragLintDiagnosticCache.Destroy;
 begin
   FLock.Free;
+  FLspByFile.Free;
   FCompilerByFile.Free;
   FByFile.Free;
   inherited;
 end;
 
-procedure TDragLintDiagnosticCache.Update(const AFilePath: string; AParams: TJSONValue);
+procedure TDragLintDiagnosticCache.Update(const AFilePath: string; AParams: TJSONValue;
+  AProducer: TDragLintDiagProducer);
 var
+  Target  : TDictionary<string, TArray<TDragLintDiagnostic>>;
   Arr     : TArray<TDragLintDiagnostic>;
   D       : TDragLintDiagnostic        ;
   DiagsArr: TJSONArray                 ;
@@ -199,12 +227,18 @@ begin
       after refresh it again shows very little messages and no icons". A count
       alone could not distinguish that from a file genuinely having few
       findings -- the BEFORE number is what makes a clobber legible. }
-    if not FByFile.TryGetValue(LowerCase(AFilePath), Prev) then Prev:= nil;
-    FByFile.AddOrSetValue(LowerCase(AFilePath), Arr);
+    if AProducer = dlpLsp then Target:= FLspByFile else Target:= FByFile;
+    if not Target.TryGetValue(LowerCase(AFilePath), Prev) then Prev:= nil;
+    Target.AddOrSetValue(LowerCase(AFilePath), Arr);
   finally
     FLock.Leave;
   end;
-  DLT('cache', Format('Update %s: %d -> %d diag(s)   was[%s] now[%s]%s', [
+  { The SHRANK flag now means what it says. It used to fire whenever the two
+    producers took turns, which is not a clobber but two different sets -- and
+    that noise is what made the real clobber hard to see. Each producer is now
+    compared only against its own previous set. }
+  DLT('cache', Format('Update[%s] %s: %d -> %d diag(s)   was[%s] now[%s]%s', [
+    BoolLabel(AProducer = dlpLsp, 'lsp', 'live'),
     ExtractFileName(AFilePath), Length(Prev), Length(Arr),
     SevHistogram(Prev), SevHistogram(Arr),
     BoolLabel(Length(Arr) < Length(Prev), '   *** SHRANK -- previous set discarded ***', '')]));
@@ -285,11 +319,34 @@ begin
   FLock.Enter;
   try
     Key:= LowerCase(AFilePath);
-    if not FByFile        .TryGetValue(Key, LintArr) then LintArr:= nil;
     if not FCompilerByFile.TryGetValue(Key, CompArr) then CompArr:= nil;
+
+    { ONE OWNER FOR THE GUTTER'S LINT CONTENT, and it is the LIVE RUNNER.
+
+      The two lint producers are not peers. The live runner runs the whole scan
+      list; the LSP's BuildDiagnostics runs the .scm rules plus three built-ins,
+      so its set is a SUBSET -- 11 against 45 on the file this was measured on.
+      Unioning them would therefore report the same finding twice wherever they
+      overlap, and dropping to the LSP's set whenever it published last is the
+      flapping the owner reported.
+
+      So: once the live runner has published for a file, its set IS the lint
+      content and the LSP's is ignored. ContainsKey, not Length -- a file the
+      live runner found CLEAN is a real answer of zero, and falling back to the
+      LSP there would resurrect findings the runner had cleared.
+
+      The LSP set still serves every file the runner has not reached yet, which
+      is what keeps marks present at startup instead of blank until the first
+      debounce fires. }
+    if not FByFile.ContainsKey(Key) then
+    begin
+      if not FLspByFile.TryGetValue(Key, LintArr) then LintArr:= nil;
+    end
+    else if not FByFile.TryGetValue(Key, LintArr) then LintArr:= nil;
+
     if Length(CompArr)      = 0 then Result:= LintArr
     else if Length(LintArr) = 0 then Result:= CompArr
-    else Result:= LintArr + CompArr; { union: live-lint + compiler overlay }
+    else Result:= LintArr + CompArr; { union: lint + compiler overlay }
   finally
     FLock.Leave;
   end;
@@ -317,6 +374,7 @@ begin
   FLock.Enter;
   try
     FByFile.Clear;
+    FLspByFile.Clear;
     FCompilerByFile.Clear;
   finally
     FLock.Leave;
