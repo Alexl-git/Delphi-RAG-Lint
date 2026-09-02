@@ -7169,12 +7169,63 @@ begin
               else if SameText(M.Hash, Want) then
                 Suppressed:= True
               else
+              begin
                 { The load-bearing case. Report the finding AND say why the marker
                   stopped applying; silently keeping the suppression is how a real
-                  defect disappears behind someone's old signature. }
-                EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
-                  Format('dl:ok marker for "%s" records @%s but the line now hashes to @%s -- the line changed since it was reviewed. Re-review, then update the marker.',
-                         [M.RuleId, M.Hash, Want]));
+                  defect disappears behind someone's old signature.
+
+                  BUT DO NOT ASSERT A CAUSE THIS CHECK CANNOT ESTABLISH. A hash
+                  mismatch has at least three causes:
+
+                    (a) the reviewed code really did change;
+                    (b) the marker is not on the finding's ANCHOR, so it was
+                        hashed against a different line than the one checked here
+                        and can never verify, however untouched the code is;
+                    (c) the marker predates a change in HOW markers are hashed
+                        (HashLine -> HashWindow, and the bare-except anchor move
+                        that forced it).
+
+                  This message used to assert (a) unconditionally -- "the line
+                  changed since it was reviewed". DataCopy reported the result on
+                  2026-09-01 as "review-marker-stale fires on files nobody
+                  touched ... if hashes drift for unchanged text then every stale
+                  finding everywhere is suspect", and they were right to escalate
+                  it: on uFileUtils.pas:2028 and :2055 -- two byte-identical
+                  duplicated blocks -- the markers record @54b7, while this build
+                  hashes line 2028 to @ab38 and line 2029 to @1b83. @54b7 is
+                  neither, i.e. cause (c), reported as cause (a). A message that
+                  names the wrong cause does not just fail to help; it discredits
+                  every other finding in the report.
+
+                  (b) IS decidable here, and exactly: if the marker's hash equals
+                  the window hash at the MARKER'S OWN line, then that is where it
+                  was recorded, and this is misplacement rather than drift. The
+                  span walk above made such markers reachable (f709bea) without
+                  making them verifiable -- they match positionally and then fail
+                  on a hash taken at a different anchor, which is the shape a
+                  trailing `// dl:ok` on a WRAPPED statement naturally has.
+
+                  (a) and (c) remain genuinely indistinguishable, so the second
+                  message offers both readings instead of picking one. Both name
+                  the exact re-record command, which is the other half of what was
+                  being asked for -- "which line do I pass to --fix-line" was
+                  itself filed as a defect. }
+                var SelfHash: string:= '';
+                if ML <> F.StartLine then SelfHash:= TReviewMarkers.HashWindow(Lines, ML - 1);
+                if (SelfHash <> '') and SameText(M.Hash, SelfHash) then
+                  EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
+                    Format('dl:ok marker for "%s" sits on line %d, but this finding anchors at line %d and is ' +
+                           'hashed there. @%s is the hash of line %d itself, so the marker was recorded against ' +
+                           'the wrong anchor and can never verify -- this is NOT evidence that the code changed. ' +
+                           'Remove it and re-record with: allow --fix-line %d --fix-rule %s',
+                           [M.RuleId, ML, F.StartLine, M.Hash, ML, F.StartLine, M.RuleId]))
+                else
+                  EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
+                    Format('dl:ok marker for "%s" records @%s but line %d now hashes to @%s. Either the reviewed ' +
+                           'code changed, or the marker predates a change in how markers are hashed -- this check ' +
+                           'cannot tell those apart. Re-review, then: allow --fix-line %d --fix-rule %s',
+                           [M.RuleId, M.Hash, F.StartLine, Want, F.StartLine, M.RuleId]));
+              end;
               Break;
             end;
           end;
