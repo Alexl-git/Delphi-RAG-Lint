@@ -87,12 +87,64 @@ function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
 implementation
 
 uses
-  System.SysUtils         ,
+  System.SysUtils              ,
+  System.RegularExpressions    ,
   DRagLint.Core .LiveDocs ,
   DRagLint.Hover.Returns  ,
   DRagLint.Doc  .Facts    ,
   DRagLint.Doc  .Regions  ,
   DRagLint.Index.Manifest ;
+
+{ The `const` / `var` / `out` / `constref` in front of AParamName within a
+  routine signature, or '' when the parameter is passed by value.
+
+  It is read back out of the SIGNATURE TEXT because that is the only place it
+  survives: EmitRoutineParams stores a parameter's declared type and nothing
+  else, since the modifier tokens are siblings of the type field rather than
+  part of it.
+
+  Grouped parameters share one modifier and one type (`const A, B: string`), so
+  a group is matched by scanning its comma-separated name list, not by assuming
+  one name per group. }
+function ModifierOf(const ASignature, AParamName: string): string;
+const
+  MODS: array[0..3] of string = ('const', 'var', 'out', 'constref');
+var
+  Inner, Grp, Names, First: string;
+  P1, P2, C               : Integer;
+begin
+  Result:= '';
+  if (ASignature = '') or (AParamName = '') then Exit;
+  P1:= Pos('(', ASignature);
+  if P1 <= 0 then Exit;
+  { Last ')' -- a parameter's own type may carry parentheses. }
+  P2:= LastDelimiter(')', ASignature);
+  if P2 <= P1 then Exit;
+  Inner:= Copy(ASignature, P1 + 1, P2 - P1 - 1);
+
+  for Grp in Inner.Split([';']) do
+  begin
+    C:= Pos(':', Grp);
+    if C > 0 then Names:= Copy(Grp, 1, C - 1) else Names:= Grp;  { untyped var/out }
+    Names:= Trim(Names);
+    if Names = '' then Continue;
+
+    { A leading modifier applies to every name in the group. }
+    First:= Trim(Copy(Names, 1, Pos(' ', Names + ' ') - 1));
+    Result:= '';
+    for var M: string in MODS do
+      if SameText(First, M) then
+      begin
+        Result:= LowerCase(First);
+        Names := Trim(Copy(Names, Length(First) + 1, MaxInt));
+        Break;
+      end;
+
+    for var Nm: string in Names.Split([',']) do
+      if SameText(Trim(Nm), AParamName) then Exit;   { Result already holds the group's modifier }
+  end;
+  Result:= '';
+end;
 
 function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
   AWithFacts: Boolean): THoverAssembly;
@@ -101,6 +153,8 @@ var
   Rhs     : TArray<string>  ;
   RhsLines: TArray<Integer> ;
   UnitFile: string          ;
+  ParamMod: string          ;
+  Doc2Sig : string          ;
 begin
   Result:= Default(THoverAssembly);
   if AStore = nil then Exit;
@@ -108,6 +162,64 @@ begin
   { No doc comment is not fatal: the renderer still shows the qualified name and
     an IDE-style Parameters block parsed from the signature. }
   Doc:= AStore.GetSymbolDoc(ASym.Id);
+
+  { A PARAMETER MUST NOT BORROW ITS ROUTINE'S WORDS.
+
+    Two defects, one cause -- an skParam symbol stores only its declared TYPE
+    (EmitRoutineParams deliberately excludes the modifier tokens, which are
+    siblings of the type field, not part of it) and resolves its doc to the
+    OWNING ROUTINE's block. Measured on DataCopy 2026-09-01:
+
+      // NOTE: braces are spelled out below -- a nested closing brace would end
+      // this comment early, which is a trap this repo has paid for twice.
+      hover TransferFile        -> params: modifier "const", name "AFile", ...
+      hover TransferFile.AFile  -> kind "parameter", signature "string",
+                                   summary = the ROUTINE's summary, verbatim
+
+    So the modifier the engine already knows was dropped at hover time, and both
+    AFile and AMess described the routine rather than themselves.
+
+    Both are fixed by COMPOSITION from the parent, which is why this costs no
+    extractor bump and no reindex: the facts are already indexed, they were just
+    never assembled for this kind. }
+  if (ASym.Kind = skParam) and (ASym.ParentId > 0) then
+  begin
+    var Owner: TSymbol:= AStore.GetSymbolById(ASym.ParentId);
+    if Owner.Id > 0 then
+    begin
+      { The <param name="..."> entry, not the routine's <summary>. When the
+        routine documents no such param the summary is left EMPTY rather than
+        falling back -- an empty hover is honest, and the routine's prose about
+        something else is not. }
+      { ParamsJsonRaw, not Params: GetSymbolDoc fills the RAW json and leaves the
+        parsed array empty (its own comment says "v0.16 renderers read these
+        directly; v0.17 may parse"). Reading Params here returned nothing and
+        looked like "the routine documents no parameters". Same regex the hover
+        renderer already uses, so the two cannot disagree about the shape. }
+      var OwnerDoc: TParsedDoc:= AStore.GetSymbolDoc(Owner.Id);
+      Doc.Summary:= '';
+      Doc.Remarks:= '';
+      if OwnerDoc.ParamsJsonRaw <> '' then
+        for var M: TMatch in TRegEx.Create('"name":"([^"]+)","desc":"([^"]*)"').Matches(OwnerDoc.ParamsJsonRaw) do
+          if SameText(M.Groups[1].Value, ASym.Name) then
+          begin
+            Doc.Summary:= M.Groups[2].Value;
+            Break;
+          end;
+
+      { `const AFile: string` rather than a bare `string`. The modifier is read
+        back out of the owning routine's signature, which is the only place it
+        survives. }
+      ParamMod:= ModifierOf(Owner.Signature, ASym.Name);
+      if ASym.Signature <> '' then
+      begin
+        if ParamMod <> '' then Doc2Sig:= ParamMod + ' ' + ASym.Name + ': ' + ASym.Signature
+        else Doc2Sig:= ASym.Name + ': ' + ASym.Signature;
+      end
+      else if ParamMod <> '' then Doc2Sig:= ParamMod + ' ' + ASym.Name   { untyped var/out }
+      else Doc2Sig:= '';
+    end;
+  end;
 
   SetLength(Rhs     , 0);
   SetLength(RhsLines, 0);
@@ -153,6 +265,8 @@ begin
     itself, so a real signature is never overwritten. }
   var Described: TSymbol:= ASym;
   if Described.Signature = '' then Described.Signature:= DescribeTypeKind(Described, AStore);
+  { Composed above for a parameter: `const AFile: string` instead of `string`. }
+  if Doc2Sig <> '' then Described.Signature:= Doc2Sig;
 
   Result.Model    := BuildHoverModel(Described, Doc, UnitFile, Rhs, RhsLines);
   Result.ReturnRhs:= Rhs;
