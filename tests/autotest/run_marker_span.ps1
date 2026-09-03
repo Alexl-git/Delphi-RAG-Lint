@@ -29,10 +29,14 @@
   earlier draft asserted the absence of findings only, and would have passed if
   concat-in-loop had simply stopped firing at all.
 
-  NOT ASSERTED HERE: review-marker-unused. The `lint` verb calls
-  FinalizeAndOutput WITHOUT AScannedFiles, so that hint is a lint-all feature
-  and is unreachable from a single-file run. DataCopy's report came from
-  lint-all. See docsINBOX-lint-verb-cannot-report-unused-markers.md.
+  review-marker-unused IS asserted here, in its own lint-all pass at the bottom.
+  It was previously left out because the `lint` verb calls FinalizeAndOutput
+  WITHOUT AScannedFiles, so the hint is unreachable from a single-file run (see
+  docs\INBOX-lint-verb-cannot-report-unused-markers.md) -- but leaving it out
+  meant the report's MORE SERIOUS half was pinned by nothing. The suppression
+  failing costs a duplicate message; "remove it" being wrong costs a legitimate
+  review record, because obeying it deletes the marker and the finding then
+  fires for ever. So the second pass indexes the same fixture and runs lint-all.
 #>
 [CmdletBinding()]
 param(
@@ -85,7 +89,7 @@ begin
   begin
     S := S + Trim(S);
   end;
-  Writeln(S);
+  Writeln(S); // dl:ok bare-except
 end;
 
 end.
@@ -129,6 +133,41 @@ Write-Host 'POSITIVE CONTROL -- the span is BOUNDED, and the rule is live' -Fore
 # stopped firing, the two checks above would pass vacuously. It guards both.
 Check "unmarked statement (line $lnUnmarked) STILL fires" ($concat -contains $lnUnmarked)
 Check "exactly one finding survives" ($concat.Count -eq 1) "got: $($concat -join ', ')"
+
+# ---------------------------------------------------------------------------
+# THE OTHER HALF OF THE REPORT, and the one that destroys data if it is wrong.
+# DataCopy's site produced a PAIR: the finding fired at the anchor AND the
+# correctly-placed marker was called dead. Obeying "remove it" deletes a real
+# review record and leaves the finding firing for ever, which is why they
+# refused to. review-marker-unused is a lint-all feature, so it needs its own
+# pass over an indexed fixture.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host 'THE OTHER HALF -- the span marker must not be reported UNUSED' -ForegroundColor Cyan
+$db = Join-Path $WorkDir 'MarkerSpan.sqlite'
+& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+Check 'fixture indexed' (Test-Path $db)
+
+$unused = @()
+foreach ($line in (& $Exe lint-all --db $db 2>&1)) {
+  if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+review-marker-unused:') { $unused += [int]$Matches[1] }
+}
+$unused = @($unused | Sort-Object -Unique)
+Write-Host ("  review-marker-unused fired on: {0}" -f ($unused -join ', ')) -ForegroundColor DarkGray
+
+$lnBareExcept = LineOf 'Writeln(S); // dl:ok bare-except'
+Check "the wrapped statement's marker (line $lnWrapEnd) is NOT called unused" (-not ($unused -contains $lnWrapEnd)) `
+  'obeying that hint deletes a legitimate review record'
+Check "nor is the anchor line ($lnWrapStart)" (-not ($unused -contains $lnWrapStart))
+Check "nor the single-line marker ($lnSingle)"  (-not ($unused -contains $lnSingle))
+
+# POSITIVE CONTROL. Without it, this section passes with review-marker-unused
+# switched off entirely -- and it also re-guards the degeneration the triage
+# warned about: if the matcher had become "any marker in the file suppresses
+# anything", this genuinely dead marker would be silently accounted for too.
+Check "a genuinely dead marker (line $lnBareExcept) IS still reported unused" ($unused -contains $lnBareExcept) `
+  'bare-except is marked on a line with no such finding'
+Check 'exactly one marker is reported unused' ($unused.Count -eq 1) "got: $($unused -join ', ')"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
