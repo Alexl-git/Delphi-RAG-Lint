@@ -17,6 +17,22 @@
   `FIXDOC OK 1 edit(s)` next to an untouched file, which is what finally located
   it. Silent, and it looks exactly like "the fixer does not support this rule".
 
+
+  GHOST UNITS CHANGED 2026-09-02, and the reason matters more than the change.
+  Both ghosts used to read `Nobody.Nowhere (nowhere.pas)` -- a unit in NEITHER
+  database. Since the doc-drift fixability fix, a stored entry naming a unit the
+  index does not hold is deliberately NOT auto-fixed: the index cannot vouch for
+  its absence, and deleting it is how DataCopy's 43 findings were destroying
+  true test-caller facts. So the old ghosts stopped being fixable and every
+  assertion here went red.
+
+  What this suite pins is FIXCOUNT ACCOUNTING for a DELETE-alone versus a
+  rewrite. WHERE the ghost lives is incidental to that, so the ghosts now name
+  their own units -- `uLone.Nobody (uLone.pas)` and `uPair.Nobody (uPair.pas)`.
+  Each unit IS in its database, so the absence is vouchable and fixable, while
+  the delete-alone shape (uLone has no callers, so the fresh render is empty) is
+  preserved exactly. The guard was repointed, not weakened.
+
   THE TWO SHAPES MUST BE IN SEPARATE RUNS, AND THAT IS THE WHOLE TRICK.
   The first version of this suite put both in ONE lint-all run and PASSED against
   the unfixed build -- worthless as a guard. The rewrite's insert pushed FixCount
@@ -74,7 +90,7 @@ type
   public
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: Nobody.Nowhere (nowhere.pas)</para>
+    /// <para>Called from: uLone.Nobody (uLone.pas)</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Solo;
@@ -100,7 +116,7 @@ type
   public
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: Nobody.Nowhere (nowhere.pas)</para>
+    /// <para>Called from: uPair.Nobody (uPair.pas)</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Ping;
@@ -154,7 +170,7 @@ try {
         ($outL -match 'autofix: applied \d+ edit') `
         (($outL -split "`r?`n" | Where-Object { $_ -match 'autofix' }) -join ' / ')
   Check 'REMOVAL: the unaccountable block is actually deleted from the file' `
-        (-not ((Get-Content $lone -Raw) -match 'Nobody\.Nowhere')) `
+        (-not ((Get-Content $lone -Raw) -match '\.Nobody')) `
         (Get-Content $lone -Raw)
 
   # === REGRESSION GUARD on the fix itself: the ordinary rewrite still works =
@@ -166,7 +182,7 @@ try {
         (($outP -split "`r?`n" | Where-Object { $_ -match 'autofix' }) -join ' / ')
   $pairTxt = (Get-Content $pair -Raw)
   Check 'REWRITE: the stale caller is replaced by the real one' `
-        (($pairTxt -notmatch 'Nobody\.Nowhere') -and ($pairTxt -match 'uPair\.Drive')) `
+        (($pairTxt -notmatch '\.Nobody') -and ($pairTxt -match 'uPair\.Drive')) `
         $pairTxt
 
   # === CONVERGENCE =========================================================

@@ -205,6 +205,47 @@ type
     /// </remarks>
     class function HoldsForeignInboundEntries(const AStoredRemarks: string;
       const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+
+    /// <summary>True when regenerating this block would DELETE stored fact
+    /// content that this index cannot vouch for -- which makes the drift
+    /// finding unsafe to advertise as an automatic repair.</summary>
+    /// <param name="AStored">The managed block body as it stands in the source,
+    /// flattened by the doc parser.</param>
+    /// <param name="AFresh">The freshly rendered block this index would write in
+    /// its place.</param>
+    /// <param name="AStore">The current project's index. Not owned. Nil answers
+    /// False: with no index there is nothing to vouch with, and the caller's
+    /// existing behaviour stands.</param>
+    /// <returns>True to withhold the `fixable` flag.</returns>
+    /// <remarks>
+    /// <para>THIS ANSWERS "CAN I VOUCH FOR THE DELETION", NOT "IS THERE DRIFT".
+    /// The finding is still reported either way; only the offer to fix it
+    /// automatically is withdrawn. Reporting a real difference is always right.
+    /// Deleting a true fact on the strength of an index that structurally
+    /// cannot hold it is not.</para>
+    ///
+    /// <para>WHY A PROJECT INDEX CANNOT VOUCH. Under the one-DB-per-project
+    /// layout a production project index is exactly the compile closure, so it
+    /// can never hold a test caller. A block written when one database covered
+    /// production AND tests therefore regenerates to a strict subset, for ever,
+    /// with no code change involved.</para>
+    ///
+    /// <para>TWO SHAPES, MEASURED, and the second is the larger loss.
+    /// `Called from:` / `Used by:` / `Used in units:` are NARROWED entry by
+    /// entry. `Covered by:` is DELETED WHOLE -- it names tests by definition, so
+    /// a closure index reproduces none of it, and it is not in INBOUND_LABELS,
+    /// so the entry-level forgiveness never sees it. On DataCopy one such line
+    /// named 41 tests and the regeneration proposed no line at all.</para>
+    ///
+    /// <para>DELIBERATELY CONSERVATIVE IN ONE DIRECTION ONLY. An entry whose
+    /// unit IS in the closure and is genuinely gone stays fixable -- the index
+    /// can vouch for that absence, and withholding it would disable the feature
+    /// rather than protect it. That case is the positive control in
+    /// run_doc_drift_unseen_units.ps1 and it is what stops this predicate from
+    /// degenerating into "never fixable".</para>
+    /// </remarks>
+    class function RegenerationDropsUnvouchable(const AStored, AFresh: string;
+      const AStore: ISymbolStore; const AUnitPath: string): Boolean;
   end;
 
 implementation
@@ -267,6 +308,23 @@ const
 
   MORE_MARK = '(+';
   UNCERTAIN_SUFFIX = ' ?';
+
+  { Labels whose content is derived from OTHER units and which a compile-closure
+    index therefore cannot reproduce at all -- as opposed to the inbound labels,
+    which it reproduces PARTIALLY and which are screened entry by entry.
+
+    `Covered by:` names tests. A production project index is exactly the compile
+    closure, so it holds no test unit, so it renders no `Covered by:` line for
+    any symbol, ever. The regeneration does not narrow the label; it deletes it.
+    Measured on DataCopy 2026-09-02: a line naming 41 tests against a proposed
+    text with no such line, on a finding marked [FIXABLE].
+
+    Kept SEPARATE from INBOUND_LABELS on purpose. Adding it there would put it
+    through ParseBlock's entry-level set difference, whose entries carry a
+    `(file.pas)` part this label does not have -- the keys would not resolve and
+    the screening would be nominal. Whole-label absence is the right test for a
+    whole-label loss. }
+  UNVOUCHABLE_LABELS: array[0..0] of string = ('Covered by:');
 
 type
   TFactMap = TDictionary<string, string>;
@@ -769,6 +827,138 @@ begin
     finally
       Handled.Free;
       Lines.Free;
+    end;
+  finally
+    SIn.Free;
+  end;
+end;
+
+{ Can this index VOUCH for the unit an entry names -- i.e. does it hold that
+  unit, so that the entry's absence from a fresh render is a fact rather than a
+  blind spot?
+
+  WHY NOT JUST UnitInClosure. That reads the unit out of the '(file.pas)' part
+  and, when there is none, falls back to the WHOLE qualified name -- which can
+  never match a file base name, so every parenthesis-less entry would read as
+  unvouchable. Two real shapes have no file part: a hand-written
+  `Called from: driftfixable.NoSuchCallerAnyMore` (the D4 fixture, whose unit IS
+  indexed) and `Covered by: Test.Prod.TProdTests.Ping_works` (whose unit is NOT).
+  Treating both the same way is wrong in opposite directions.
+
+  So: try the parenthesised form first, then every DOTTED PREFIX of the name.
+  Unit names in this codebase are themselves dotted (`Test.Prod`,
+  `DRagLint.Doc.Facts`), so the prefix walk is what makes those resolvable at
+  all; `Test.Prod` matches a `Test.Prod.pas` row, while a prefix of a test name
+  matches nothing in a closure index -- which is exactly the distinction wanted. }
+function UnitVouchable(const AStore: ISymbolStore; const AEntry: string): Boolean;
+var
+  Names: TDictionary<string, Byte>;
+  S    : string;
+  P, I : Integer;
+begin
+  if UnitInClosure(AStore, AEntry) then Exit(True);
+
+  S:= Trim(AEntry);
+  P:= Pos('(', S);
+  if P > 0 then S:= TrimRight(Copy(S, 1, P - 1));
+  if EndsText(UNCERTAIN_SUFFIX, S) then
+    S:= TrimRight(Copy(S, 1, Length(S) - Length(UNCERTAIN_SUFFIX)));
+  S:= LowerCase(Trim(S));
+
+  Names:= ClosureNames(AStore);
+  for I:= 1 to Length(S) do
+    if S[I] = '.' then
+      if Names.ContainsKey(Copy(S, 1, I - 1)) then Exit(True);
+
+  Result:= False;
+end;
+
+{ The content a label carries in a flattened block, or '' when the label is
+  absent. Slices to the NEXT label of any kind, exactly as ParseBlock does, so a
+  label sitting between two others is not swallowed. }
+function LabelContent(const AText, ALabel: string): string;
+var
+  P, Stop: Integer;
+  Flat   : string;
+begin
+  Result:= '';
+  Flat  := CollapseWs(AText.Replace('<para>', '').Replace('</para>', ''));
+  P     := Pos(ALabel, Flat);
+  if P = 0 then Exit;
+  Stop:= NextLabelPos(Flat, P + Length(ALabel));
+  if Stop = 0 then Stop:= Length(Flat) + 1;
+  Result:= Trim(Copy(Flat, P + Length(ALabel), Stop - P - Length(ALabel)));
+end;
+
+class function TSharedFacts.RegenerationDropsUnvouchable(const AStored, AFresh: string;
+  const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+var
+  SIn, FreshIn: TFactMap;
+  SRes, FreshRes: string;
+  Lab, SC, FreshContent, E: string;
+  FreshSet: TDictionary<string, Byte>;
+  I: Integer;
+begin
+  Result:= False;
+  if AStore = nil then Exit;
+
+  { A MARKED UNIT IS ALREADY SAFE, AND SAYING OTHERWISE BREAKS IT.
+
+    On a dl:shared unit the WRITER merges: MergeInboundFacts keeps the inbound
+    entries this index cannot see and adds the ones it can. So the regeneration
+    does not drop them, and the repair is exactly the accumulation the feature
+    exists to perform.
+
+    This predicate compares the stored block against the FRESH RENDER, which is
+    pre-merge and therefore narrow on any project that cannot see the other's
+    callers. Reading that as a loss withdraws `fixable` from the one path that
+    was already handling this correctly -- measured: it took the whole --fix arm
+    of run_shared_unit_staleness red, on a project whose only job there is to
+    ADD its own caller to a shared block.
+
+    The unmarked case is the defect; the marked case is the cure. }
+  if TSharedUnit.IsShared(AUnitPath) then Exit(False);
+
+  { 1. A WHOLE LABEL this index cannot reproduce, present then gone. }
+  for I:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
+    if (LabelContent(AStored, UNVOUCHABLE_LABELS[I]) <> '') and
+       (LabelContent(AFresh,  UNVOUCHABLE_LABELS[I]) =  '') then
+      Exit(True);
+
+  { 2. Inbound labels, entry by entry. }
+  ParseBlock(AStored, SIn, SRes);
+  try
+    ParseBlock(AFresh, FreshIn, FreshRes);
+    try
+      for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
+      begin
+        Lab:= INBOUND_LABELS[I];
+        if not SIn.TryGetValue(Lab, SC) then Continue;
+        if Trim(SC) = '' then Continue;
+
+        { A truncated stored list cannot be set-differenced -- the entries past
+          the window are unknown, so nothing can be said about whether the fresh
+          render drops them. Withhold the offer rather than guess. }
+        if IsTruncated(SC) then Exit(True);
+
+        if not FreshIn.TryGetValue(Lab, FreshContent) then FreshContent:= '';
+
+        FreshSet:= TDictionary<string, Byte>.Create;
+        try
+          for E in SplitEntries(FreshContent) do FreshSet.AddOrSetValue(LowerCase(Trim(E)), 1);
+          for E in SplitEntries(SC) do
+          begin
+            if FreshSet.ContainsKey(LowerCase(Trim(E))) then Continue;
+            { Dropped. Vouchable ONLY if this index actually holds the unit the
+              entry names -- then its absence is a fact, not a blind spot. }
+            if not UnitVouchable(AStore, E) then Exit(True);
+          end;
+        finally
+          FreshSet.Free;
+        end;
+      end;
+    finally
+      FreshIn.Free;
     end;
   finally
     SIn.Free;

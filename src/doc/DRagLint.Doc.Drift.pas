@@ -1049,10 +1049,37 @@ begin
       // has to merge (Doc.Document.BuildForSymbol) rather than the checker
       // simply forgiving more: forgiveness alone silences the narrow project
       // while the wide one keeps re-adding what the narrow one dropped.
+      // REPORTING AND REPAIRING ARE TWO DIFFERENT QUESTIONS, and until now this
+      // line answered both with the same literal True.
+      //
+      // The block above explains why a narrow index and a wide one each call the
+      // other's block stale, truthfully. What it did NOT settle is what to OFFER
+      // when the narrow one wins the race: the repair deletes the entry, and a
+      // finding whose sanctioned fix makes the committed record less true is
+      // worse than noise, because the label [FIXABLE] is what invites it.
+      //
+      // Measured on DataCopy 2026-09-02: 43 such findings over 9 units, one
+      // block losing 30 test callers and a `Covered by:` line naming 41 tests.
+      // The reporter declined to apply it, which is the only reason the record
+      // survived.
+      //
+      // So: report unconditionally, and offer the fix only where this index can
+      // vouch for what the regeneration would delete. Step 2 makes the
+      // regeneration itself preserve them; this stops the bleeding first, and is
+      // deliberately separable from it.
       if TSharedFacts.BlockDrifted(CurBlock, Fresh, AStore,
            AStore.GetFilePath(ASym.FileId)) then
-        Findings.Add(MakeFinding(ddFactsBlockStale,
-          'managed facts block is out of date', True, DocLine));
+      begin
+        var CanVouch: Boolean:=
+          not TSharedFacts.RegenerationDropsUnvouchable(CurBlock, Fresh, AStore,
+                AStore.GetFilePath(ASym.FileId));
+        // The message PREFIX stays byte-identical: two runners match it with
+        // -like '*managed facts block is out of date*'.
+        var Detail: string:= 'managed facts block is out of date';
+        if not CanVouch then
+          Detail:= Detail + ' -- names facts in unit(s) this index does not hold; not auto-fixed';
+        Findings.Add(MakeFinding(ddFactsBlockStale, Detail, CanVouch, DocLine));
+      end;
     end;
 
     // --- 10. ddHarvestDrift: a MARKED <summary> vs a fresh harvest. FIXABLE. --
