@@ -7,12 +7,25 @@
 # the DB file's md5 AND the trigger count in sqlite_master: a pure read must
 # leave both byte-identical.
 #
-# Also asserts a pre-current (v12-shaped) DB gets the actionable
-#   index schema v12 < v<N>: run "drag-lint index <dir> --db <db>" to migrate
+# Also asserts a pre-current (v12-shaped) DB gets an ACTIONABLE stale-schema
 # message + nonzero exit from a read verb (outline), NOT a "no such column"
-# (the target version <N> is the CURRENT SCHEMA_VERSION -- assertion matches
-#  v12 < v\d+ so a future schema bump does not re-break this test)
 # field error.
+#
+# THE MESSAGE CHANGED IN 5080478 AND THIS ASSERTION DID NOT, so it failed
+# against a CORRECT build. It used to demand the single sentence
+#   index schema v12 < v<N>: run "drag-lint index <dir> --db <db>" to migrate
+# but a bare folder target is refused against a PROJECT database since 5e4d6c6
+# (exit 2, "refusing to index a FOLDER into a PROJECT database"). So the engine
+# now names BOTH forms, and a v12 DB is exactly the case where it cannot know
+# which kind it is looking at -- it predates the scan_type stamp.
+#
+# The assertion is therefore on SUBSTANCE, not on a sentence: the line must name
+# the schema gap and offer BOTH a project and a library command. Pinning the
+# prose again would just re-break on the next honest rewording, while pinning
+# "some advice was printed" would not notice the engine advising a command it
+# refuses -- which is the defect 5080478 existed to fix.
+# (The target version is the CURRENT SCHEMA_VERSION -- matched as v\d+ so a
+#  future schema bump does not re-break this test.)
 #
 # Usage: pwsh -File tests/autotest/run_readonly_verbs.ps1 [-Exe <path>]
 [CmdletBinding()]
@@ -149,8 +162,14 @@ Check 'v12 fixture DB created' (($LASTEXITCODE -eq 0) -and (Test-Path $dbv12))
 $staleOut = (& $Exe outline --file $pas --db $dbv12 2>&1) -join "`n"
 $staleEc  = $LASTEXITCODE
 Check 'read verb on v12 db exits nonzero' ($staleEc -ne 0) "exit=$staleEc"
-Check 'read verb on v12 db prints actionable stale-schema line' `
-    ($staleOut -match 'index schema v12 < v\d+: run "drag-lint index <dir> --db <db>" to migrate') `
+Check 'read verb on v12 db names the schema gap' `
+    ($staleOut -match 'index schema v12 < v\d+') `
+    $staleOut
+Check 'read verb on v12 db offers a PROJECT migration command' `
+    ($staleOut -match 'drag-lint index --project') `
+    $staleOut
+Check 'read verb on v12 db offers a LIBRARY migration command' `
+    ($staleOut -match 'drag-lint index <dir>') `
     $staleOut
 Check 'read verb on v12 db does NOT print a field error' `
     (-not ($staleOut -match 'no such column')) `

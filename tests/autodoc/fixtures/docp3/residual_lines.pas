@@ -119,7 +119,7 @@ procedure CallsAttributedExample;
 /// <summary>Has a LIVE facts fence with an unmodeled tail on its close line.</summary>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: residual_lines.STALE_GHOST (ghost.pas)
+/// Called from: residual_lines.STALE_GHOST (residual_lines.pas)
 /// <!-- drag-lint:auto END -->
 /// </remarks> <value>tail value</value>
 procedure FencedRemarksTailValue;
