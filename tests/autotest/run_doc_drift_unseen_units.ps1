@@ -206,16 +206,15 @@ Check 'CASE-B FIXTURE: Ping''s block carries an engine-written Covered by:' `
   ($pingBlk -match 'Covered by:') 'the wide db saw the tests and wrote it'
 Check 'CASE-B FIXTURE: Ping also has an IN-CLOSURE caller (non-empty render)' `
   ($pingBlk -match 'uOther') 'so this exercises the residual path, not empty-render'
-# RECORDED, NOT YET FIXED (Step 2b). `Covered by:` is not an inbound label, so
-# ParseBlock leaves it in the RESIDUAL, which is byte-compared -- and a closure
-# index renders no such line for any symbol, so stored-has / fresh-lacks is
-# guaranteed and the compare fires. Step 2a's inbound reconciliation cannot see
-# it. The facts are SAFE (the writer preserves them, and the finding is not
-# offered as fixable); what remains is the noise of a finding that no code
-# change caused. Asserted as-is so the suite states the truth rather than
-# hiding it; flip this to -notmatch when 2b lands.
-Check 'CASE-B RECORDED: a non-empty render is STILL reported (Step 2b owed)' `
-  ($pingT2 -match 'ddFactsBlockStale') $($pingT2.Trim())
+# FIXED by Step 2b. `Covered by:` is not an inbound label, so ParseBlock leaves
+# it in the RESIDUAL, which is byte-compared -- and a closure index renders no
+# such line for any symbol, so stored-has / fresh-lacks was GUARANTEED and the
+# compare fired on every one of DataCopy's 42 blocks. Step 2a's inbound
+# reconciliation could not reach it, because it never looked at the residual.
+# The label is now removed from the STORED text before the parse, so it cannot
+# reach the compare at all.
+Check 'CASE-B a non-empty render with unvouchable facts is NOT reported' `
+  ($pingT2 -notmatch 'ddFactsBlockStale') $($pingT2.Trim())
 
 # --- CASE-COVERED: a whole label the regeneration drops -> NOT fixable ------
 # `Covered by:` is absent from the fresh render entirely, and is not in

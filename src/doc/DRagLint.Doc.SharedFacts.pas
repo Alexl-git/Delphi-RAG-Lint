@@ -550,6 +550,38 @@ end;
 function UnitVouchable(const AStore: ISymbolStore; const AEntry: string): Boolean; forward;
 function LabelContent(const AText, ALabel: string): string; forward;
 
+{ The raw block text with ALabel's whole <para> element removed.
+
+  WHY THE RAW TEXT AND NOT THE COLLAPSED RESIDUAL, which is what this did first:
+  the residual has already lost its <para> boundaries, so the end of a fact has
+  to be GUESSED from the next label or the next tag -- and that guess turned out
+  to be position-dependent. Measured: a `Covered by:` sitting LAST round-tripped
+  cleanly while the identical label sitting BEFORE two <seealso> crefs did not.
+  A rule that depends on where in the block a label happens to sit is not a rule.
+
+  The raw text still carries the delimiters, so removing the element is exact,
+  and the residual is then computed from text that never held the label at all.
+
+  NO WRAPPER -> NO CHANGE, deliberately. A hand-written block with a bare
+  `Covered by:` and no <para> is left alone, so the compare still fires and the
+  finding is still reported. That is this unit's fail-safe direction: report,
+  never hide. }
+function WithoutParaLabel(const AText, ALabel: string): string;
+var
+  P, Open, Close: Integer;
+begin
+  Result:= AText;
+  P     := Pos(ALabel, Result);
+  if P = 0 then Exit;
+
+  Open:= P;
+  while (Open > 1) and (Copy(Result, Open, 6) <> '<para>') do Dec(Open);
+  Close:= PosEx('</para>', Result, P);
+
+  if (Copy(Result, Open, 6) = '<para>') and (Close > 0) then
+    Delete(Result, Open, Close + Length('</para>') - Open);
+end;
+
 { Does the stored block carry anything this index cannot vouch for -- an inbound
   entry naming a unit it does not hold, or a whole label it cannot produce? }
 function BlockHoldsUnvouchable(const AStore: ISymbolStore; const ABlock: string): Boolean;
@@ -624,13 +656,33 @@ var
   StoredSet     : TDictionary<string, Byte>;
   E             : string;
   I             : Integer;
+  StoredCmp     : string;
 begin
   { An unmarked unit with nothing unvouchable in its block is not part of this
     feature, and keeps the byte compare that shipped before it existed. }
   if not Participates(AStore, AUnitPath, AStored) then
     Exit(CollapseWs(AStored) <> CollapseWs(AFresh));
 
-  ParseBlock(AStored, SIn, SRes);
+  { TAKE OUT ANY LABEL THIS INDEX CANNOT PRODUCE, BEFORE THE PARSE.
+
+    `Covered by:` is not an inbound label, so ParseBlock leaves it in the
+    RESIDUAL -- and the residual is byte-compared. A compile-closure index
+    renders no such line for any symbol, so stored-has / fresh-lacks is
+    GUARANTEED, and the compare fired on every one of DataCopy's 42 blocks:
+    drift that no code change caused and no repair could ever settle. Step 2a's
+    inbound reconciliation could not reach it, because it never looked at the
+    residual.
+
+    Its absence from the fresh render is not evidence about the source; it is
+    the same blind spot as an unseen caller. A label BOTH sides render is still
+    compared normally, and every other residual fact is untouched. }
+  StoredCmp:= AStored;
+  for I:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
+    if (LabelContent(AStored, UNVOUCHABLE_LABELS[I]) <> '') and
+       (LabelContent(AFresh,  UNVOUCHABLE_LABELS[I]) =  '') then
+      StoredCmp:= WithoutParaLabel(StoredCmp, UNVOUCHABLE_LABELS[I]);
+
+  ParseBlock(StoredCmp, SIn, SRes);
   try
     ParseBlock(AFresh, FIn, FRes);
     try
@@ -818,7 +870,11 @@ begin
     block ends on the inbound line itself. }
   ParseBlock(ExtractBlockBody(AStoredRemarks), SIn, SRes);
   try
-    if SIn.Count = 0 then Exit;
+    { A block may carry NOTHING but an unvouchable label -- a `Covered by:` with
+      no inbound entries at all -- and that block still has something to
+      preserve, so the inbound count alone cannot decide there is no work. }
+    if (SIn.Count = 0) and
+       (not BlockHoldsUnvouchable(AStore, ExtractBlockBody(AStoredRemarks))) then Exit;
 
     Changed:= False;
     Lines  := TStringList.Create;
@@ -889,6 +945,28 @@ begin
           Changed:= True;
         end;
 
+      { CARRY OVER A LABEL THIS INDEX CANNOT PRODUCE AT ALL.
+
+        The loop above only re-inserts INBOUND labels, which is where ParseBlock
+        puts its three. `Covered by:` names TESTS, so a compile-closure index
+        renders none of it for any symbol -- and it lives in the residual, so
+        without this the write drops it outright. 23 such lines across 3 units in
+        DataCopy, one of them naming 41 tests.
+
+        Only when the fresh text does not already carry the label: a project that
+        CAN see the tests renders its own, and that one wins. }
+      if BeginAt >= 0 then
+        for J:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
+        begin
+          Lab:= UNVOUCHABLE_LABELS[J];
+          SC := LabelContent(ExtractBlockBody(AStoredRemarks), Lab);
+          if SC = '' then Continue;
+          if LabelContent(ADocText, Lab) <> '' then Continue;
+          Prefix:= Copy(Lines[BeginAt], 1, Pos(AUTO_BEGIN, Lines[BeginAt]) - 1);
+          Lines.Insert(BeginAt + 1, Prefix + '<para>' + Lab + ' ' + SC + '</para>');
+          Changed:= True;
+        end;
+
       if Changed then Result:= Lines.Text;
     finally
       Handled.Free;
@@ -950,8 +1028,8 @@ end;
   label sitting between two others is not swallowed. }
 function LabelContent(const AText, ALabel: string): string;
 var
-  P, Stop: Integer;
-  Flat   : string;
+  P, Stop, TagAt: Integer;
+  Flat          : string;
 begin
   Result:= '';
   Flat  := CollapseWs(AText.Replace('<para>', '').Replace('</para>', ''));
@@ -959,6 +1037,17 @@ begin
   if P = 0 then Exit;
   Stop:= NextLabelPos(Flat, P + Length(ALabel));
   if Stop = 0 then Stop:= Length(Flat) + 1;
+
+  { STOP AT THE NEXT TAG AS WELL AS THE NEXT LABEL. <seealso .../> survives the
+    <para> strip above and is not in ALL_LABELS, so a label followed by crefs
+    had no next label at all and the content ran to the end of the block --
+    swallowing the crefs. The writer's carry-over then emitted
+    `<para>Covered by: X <seealso/> <seealso/></para>` and duplicated the crefs
+    below it. A fact's content is plain text; a '<' after it begins the next
+    element. }
+  TagAt:= PosEx('<', Flat, P + Length(ALabel));
+  if (TagAt > 0) and (TagAt < Stop) then Stop:= TagAt;
+
   Result:= Trim(Copy(Flat, P + Length(ALabel), Stop - P - Length(ALabel)));
 end;
 
