@@ -518,6 +518,52 @@ procedure PrintHelp;
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
+  { COMMON QUESTIONS, and why this table is FIRST.
+
+    Two grep-fallback audits from DataCopy (2026-09-02) counted, honestly, what
+    their sessions reached for grep to answer. The second one is the reason this
+    exists: of ten greps over Delphi source, EIGHT were answerable by a verb
+    that already shipped, and the reporter did not know the command. Their own
+    conclusion: "the agent could not find the feature costs the same as the
+    feature does not exist, and the fix is cheaper."
+
+    The diagnosis was specific, and it was about SHAPE, not content -- the help
+    below is complete and correct, and that is the problem: 110 lines that read
+    as a reference, so a reader in a hurry greps instead. `outline`, the answer
+    to the single most common question anyone asks about a unit, was invisible
+    in it.
+
+    So: questions, not verbs; the ten that actually get asked; the traps that
+    turn a right command into a silent zero inline with the command they trap.
+    Under the DOCS-IN-SYNC RULE this table also lives in README.md and
+    docs\AI-USAGE.md, and those three must agree. }
+  Writeln('COMMON QUESTIONS -- the shortest command for each. Full reference below.');
+  Writeln('');
+  Writeln('  What is in this unit?                 drag-lint outline --file <U.pas> --db <db>');
+  Writeln('  Which unit declares X?                drag-lint find-unit --name X --in <U.pas> --db <db>');
+  Writeln('       ^ for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database');
+  Writeln('         (resolve-dbs --platform win64) -- a project DB holds only that project''s units.');
+  Writeln('  Where is X, what is its signature?    drag-lint query --name X --db <db>');
+  Writeln('  Who calls X?                          drag-lint query find-callers --name X --db <db>');
+  Writeln('       ^ the BARE member name. --name TFoo.Bar silently returns 0; --name Bar returns the sites.');
+  Writeln('  Change X without reading the file     drag-lint context --task "modify <Unit.TType.X>" --db <db> --format markdown');
+  Writeln('       ^ ~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work.');
+  Writeln('  Is unit U part of project P?          drag-lint query --name U --db <P.sqlite> --exact');
+  Writeln('       ^ a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.');
+  Writeln('  Where is this message/caption/SQL?    drag-lint query --text "<phrase>" --db <db>');
+  Writeln('       ^ STRING LITERALS, DFM and SQL. NOT comments and NOT source text -- use grep for those.');
+  Writeln('  Which database covers this file?      drag-lint resolve-dbs --in <U.pas>');
+  Writeln('       ^ never guess a DB path. Also --project <P.dproj> and --platform <win32|win64>.');
+  Writeln('  What is wrong with this file?         drag-lint lint <U.pas>');
+  Writeln('  ...with the whole project?            drag-lint lint-all --db <db>');
+  Writeln('       ^ lint <file> is a strict SUBSET: project-wide rules can only fire in lint-all.');
+  Writeln('  Record that a finding was reviewed    drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply');
+  Writeln('  Repair what the linter can repair     drag-lint lint-all --db <db> --fix          (preview)');
+  Writeln('                                        drag-lint lint-all --db <db> --fix --apply (write)');
+  Writeln('');
+  Writeln('  Add --json to any query for machine-readable output. A "note: N of M indexed file(s)');
+  Writeln('  changed since this index was built" line means REINDEX FIRST -- the answer may be stale.');
+  Writeln('');
   Writeln('Usage:');
   Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
   Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');

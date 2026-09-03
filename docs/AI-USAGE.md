@@ -1,22 +1,67 @@
 # Using drag-lint with your AI agent (CLI + MCP)
 
 > **Alpha / work in progress.** Windows-only, RAD Studio 13 / Delphi 13 focus.
-> Shared early for feedback — see warnings at the bottom. Suggestions welcome:
+> Shared early for feedback ? see warnings at the bottom. Suggestions welcome:
 > https://github.com/Alexl-git/Delphi-RAG-Lint/issues
 
 drag-lint builds a **symbol-exact index** of your Delphi/Pascal code in a SQLite
 file. Instead of your AI reading whole `.pas` files (expensive, noisy), it
-**queries the index for exactly the symbol or context it needs** — typically
+**queries the index for exactly the symbol or context it needs** ? typically
 **10-60x fewer tokens**, AST-exact (no string-literal / comment / backup-copy
 noise).
 
 You can drive it two ways, both backed by the same engine:
-- **CLI** — your agent runs `drag-lint <cmd>` and reads stdout. **Most
+- **CLI** ? your agent runs `drag-lint <cmd>` and reads stdout. **Most
   token-efficient** (no tool schema sits resident in the model's context).
-- **MCP** — a stdio JSON-RPC server exposing structured tools. More ergonomic,
+- **MCP** ? a stdio JSON-RPC server exposing structured tools. More ergonomic,
   but every tool's schema stays resident, so it costs more context. Prefer the
   CLI unless you specifically want MCP tool-calling.
 
+---
+
+## 0. Common questions -> command
+
+The fastest command for each question people actually ask. This table is also the
+first thing `drag-lint --help` prints, and it lives in `README.md` too;
+the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
+
+| Question | Command |
+|---|---|
+| What is in this unit? | `drag-lint outline --file <U.pas> --db <db>` |
+| Which unit declares `X`? | `drag-lint find-unit --name X --in <U.pas> --db <db>` |
+| Where is `X`, what is its signature? | `drag-lint query --name X --db <db>` |
+| Who calls `X`? | `drag-lint query find-callers --name X --db <db>` |
+| Change `X` without reading the file | `drag-lint context --task "modify <Unit.TType.X>" --db <db> --format markdown` |
+| Is unit `U` part of project `P`? | `drag-lint query --name U --db <P.sqlite> --exact` |
+| Where is this message / caption / SQL? | `drag-lint query --text "<phrase>" --db <db>` |
+| Which database covers this file? | `drag-lint resolve-dbs --in <U.pas>` |
+| What is wrong with this file? | `drag-lint lint <U.pas>` |
+| ...with the whole project? | `drag-lint lint-all --db <db>` |
+| Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` |
+| Repair what the linter can repair | `drag-lint lint-all --db <db> --fix` (preview), then `--fix --apply` |
+
+**The traps, because each one turns a correct command into a silent zero:**
+
+* `find-callers` matches the **bare member name**. `--name TFoo.Bar` returns 0;
+  `--name Bar` returns the call sites.
+* `find-unit` for an **RTL / VCL / third-party** symbol needs the **platform
+  library** database (`resolve-dbs --platform win64`), not a project DB - a
+  project DB holds only that project's own units.
+* `query --name U --exact` against a **project** DB answers MEMBERSHIP in both
+  directions: a project DB is exactly the compile closure, so a miss is a real
+  answer, not a lookup failure.
+* `query --text` searches **string literals, DFM and SQL** - not comments and not
+  source text. Use grep for those.
+* `lint <file>` is a strict **subset** of `lint-all`: project-wide rules
+  (unused-public-symbol, unused-unit-in-uses, the uses-edge and duplicate-global
+  rules) can only fire in `lint-all`. Never report "clean" from a per-file run.
+* `context` wants the **fully qualified** name - `Unit.TType.Member`. It is about
+  60x leaner than reading the source files; add `--full-surface` only when the
+  task is about a form's components, DFM or event wiring.
+* A `note: N of M indexed file(s) changed since this index was built` line means
+  **reindex first**. The answer may be stale.
+
+Add `--json` to any query for machine-readable output.
 ---
 
 ## 1. Setup (once)
@@ -61,10 +106,10 @@ You can drive it two ways, both backed by the same engine:
 
 ---
 
-## 2. Paste this to your AI (CLI mode — recommended)
+## 2. Paste this to your AI (CLI mode ? recommended)
 
 > You have a drag-lint index of this Delphi codebase at `<DB_PATH>`. **Before
-> reading whole `.pas` files, query the index** — it is AST-exact and ~10-60x
+> reading whole `.pas` files, query the index** ? it is AST-exact and ~10-60x
 > cheaper in tokens. Use:
 >
 > - **Find a symbol:** `drag-lint query --name <Name> --db <DB> --json`
@@ -73,7 +118,7 @@ You can drive it two ways, both backed by the same engine:
 > - **Who calls it:** `drag-lint query find-callers --name <Name> --db <DB> [--context N]`
 > - **Which unit do I add to `uses`?** `drag-lint resolve-uses --name <Name> --db <DB>`
 >   (won't suggest implementation-only symbols).
-> - **Understand or modify a symbol — get a lean context bundle, do NOT open the
+> - **Understand or modify a symbol ? get a lean context bundle, do NOT open the
 >   files:** `drag-lint context --task "modify <Unit.TClass.Method>" --db <DB> --format markdown`
 >   If the task phrase is a project WORD rather than an identifier, the bundle
 >   answers with the matching `dl:wiki` topic and its symbols instead of nothing.
@@ -100,7 +145,7 @@ You can drive it two ways, both backed by the same engine:
 >   resolved in any DB, `2` = usage error or bad `--db`. Also available in the
 >   IDE: the top **drag-lint** menu (or **Ctrl+Alt+K**) runs **"Reverse Call
 >   Tree (clickable, Messages window)"**, which posts each node as a clickable
->   row in the IDE Messages window — double-click a row to jump to that call
+>   row in the IDE Messages window ? double-click a row to jump to that call
 >   site (a richer in-dock tree/graph rendering is still a filed TODO).
 > - **Introspect the index (for other tools):** `drag-lint schema --db <DB> [--format json]`
 >   Dumps the live schema -- schema_version + every table with its columns + row
@@ -590,11 +635,11 @@ per-rule "auto-fix" checkbox in the IDE is a save-time auto-apply preference, no
 the batch gate.)
 
 **Risky fixes.** Most fixes are behaviour-preserving (they rewrite redundant code
-to an equivalent). One rule — `off-by-one-count` — is behaviour-**changing**: it
+to an equivalent). One rule ? `off-by-one-count` ? is behaviour-**changing**: it
 assumes `for I := 0 to List.Count do` is a bug and rewrites the bound to
 `... - 1`. Its fix is still applied by `--fix`, but the `--json` output flags it
 `"risky": true` and the text preview prints a `[risky]` note. Review a risky fix
-before trusting it in a batch apply — a deliberately-inclusive loop would break.
+before trusting it in a batch apply ? a deliberately-inclusive loop would break.
 
 ### Naming-convention autofixes (opt-in, off by default)
 
@@ -707,7 +752,7 @@ Two companion documents, both meant to be handed straight to your agent:
 - **Re-index after big changes** (or use `--watch`); a stale index gives stale
   answers.
 - **Writing commands** (`rename`, `generate-docs`, `format`) modify your source
-  — keep it under version control / back up first.
+  ? keep it under version control / back up first.
 - **Symbol-level "who calls THIS exact overload"** is matched by name and can
   be approximate for common/overloaded names; unit-level uses (`resolve-uses`,
   uses-clause data) are exact.
@@ -763,4 +808,4 @@ There is a companion **standalone VCL graph viewer** over the same index:
 An interactive symbol graph with drill-in, a left **Structure panel** (units ->
 interface/implementation -> types/consts/routines, initialization/finalization,
 uses / used-by), symbol search, and click-to-jump into a running RAD Studio (via
-a named pipe). Separate and even-more-experimental — feedback welcome there too.
+a named pipe). Separate and even-more-experimental ? feedback welcome there too.

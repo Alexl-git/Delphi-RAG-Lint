@@ -801,6 +801,76 @@ $ctlDead = $liveCaptions.Contains('Zz Not A Real Menu Item')
 Check 'positive control: a real caption is recognised' $ctlLive "'About'"
 Check 'negative control: an invented caption is not' (-not $ctlDead) "'Zz Not A Real Menu Item'"
 
+# ---------------------------------------------------------------------------
+# CHECK 6 -- the COMMON QUESTIONS table agrees across all three surfaces
+#
+# The table exists because two grep-fallback audits found agents reaching for
+# grep on questions the tool already answers -- eight of ten in the second one,
+# every time because the reporter did not know the command. A discoverability
+# aid that drifts is worse than none: it teaches a command that no longer works.
+# So it is held to the DOCS-IN-SYNC rule like any other surface, in BOTH
+# directions -- a question added to --help but not to the docs fails here, and
+# so does one dropped from either doc.
+#
+# Verbs are checked against the CLI dispatch table harvested for check 1, so a
+# renamed verb cannot survive in the table.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '-- check 6: the COMMON QUESTIONS table' -ForegroundColor Cyan
+
+function Normalize-Q([string]$s) {
+  # The three surfaces format the same question differently -- README puts the
+  # symbol in backticks, --help does not. Compare MEANING, not punctuation.
+  return ((($s -replace '[`*]', '') -replace '[^A-Za-z0-9]+', ' ').Trim().ToLowerInvariant())
+}
+
+$helpBlock = ''
+if ($helpText -match '(?s)COMMON QUESTIONS(.*?)\r?\nUsage:') { $helpBlock = $Matches[1] }
+Check 'the --help COMMON QUESTIONS block is present' ($helpBlock -ne '') `
+  'it must lead the banner -- the whole point is that a reader in a hurry sees it first'
+
+# question -> command, from lines shaped "  <question>   drag-lint <verb> ..."
+$helpRows = @()
+foreach ($m in [regex]::Matches($helpBlock, '(?m)^\s{2}(\S[^\r\n]*?)\s{2,}(drag-lint\s+[a-z][a-z0-9-]*)')) {
+  $helpRows += [pscustomobject]@{ Q = (Normalize-Q $m.Groups[1].Value); Verb = ($m.Groups[2].Value -split '\s+')[1] }
+}
+# Non-emptiness is the control: a harvest that yields nothing makes every
+# comparison below trivially true, which is this repo's commonest fail-open.
+Check 'the --help table parsed' ($helpRows.Count -ge 10) "$($helpRows.Count) question(s)"
+
+$helpQ = @($helpRows | ForEach-Object { $_.Q } | Sort-Object -Unique)
+
+foreach ($doc in @('README.md', 'docs\AI-USAGE.md')) {
+  $path = Join-Path $Repo $doc
+  if (-not (Test-Path -LiteralPath $path)) { Check "$doc exists" $false $path; continue }
+  $txt  = Get-Content -LiteralPath $path -Raw
+  $rows = @()
+  foreach ($m in [regex]::Matches($txt, '(?m)^\|\s*([^|]+?)\s*\|\s*`(drag-lint[^`]*)`')) {
+    $rows += (Normalize-Q $m.Groups[1].Value)
+  }
+  $rows = @($rows | Sort-Object -Unique)
+  Check "$doc carries the table" ($rows.Count -ge 10) "$($rows.Count) row(s)"
+
+  $missingHere = @($helpQ | Where-Object { $rows -notcontains $_ })
+  $extraHere   = @($rows  | Where-Object { $helpQ -notcontains $_ })
+  Check "$doc lists every question --help does" ($missingHere.Count -eq 0) `
+    ("not in $doc" + ": " + ($missingHere -join ' | '))
+  Check "$doc lists no question --help omits" ($extraHere.Count -eq 0) `
+    ("only in $doc" + ": " + ($extraHere -join ' | '))
+}
+
+# Every verb the table recommends must be a verb the CLI accepts. $dispatch is
+# harvested from the source in check 1; a table naming a retired verb is exactly
+# the "advises a command it refuses" defect that shipped in 5080478.
+$badVerbs = @($helpRows | ForEach-Object { $_.Verb } | Sort-Object -Unique |
+              Where-Object { $dispatch -notcontains $_ })
+Check 'every verb the table recommends is accepted by the CLI' ($badVerbs.Count -eq 0) `
+  ("unknown: " + ($badVerbs -join ', '))
+
+# NEGATIVE CONTROL: the comparison must be capable of noticing a difference.
+Check 'negative control: an invented question is not in the set' `
+  (-not ($helpQ -contains (Normalize-Q 'How do I summon a dragon?')))
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'DOCS SYNC GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'DOCS SYNC GUARD: PASS' -ForegroundColor Green

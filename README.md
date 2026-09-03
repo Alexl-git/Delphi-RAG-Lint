@@ -3,25 +3,25 @@
 [![Release](https://img.shields.io/github/v/release/Alexl-git/Delphi-RAG-Lint?include_prereleases)](https://github.com/Alexl-git/Delphi-RAG-Lint/releases)
 [![License](https://img.shields.io/github/license/Alexl-git/Delphi-RAG-Lint)](LICENSE)
 
-> **⚠️ Alpha / work in progress.** This is an early alpha under active, daily
-> development — expect rough edges, unfinished corners, and breaking changes
+> **?? Alpha / work in progress.** This is an early alpha under active, daily
+> development ? expect rough edges, unfinished corners, and breaking changes
 > between versions. It is shared early so the Delphi community can try it and
-> shape it. **Feedback and suggestions are very welcome** — please open an
+> shape it. **Feedback and suggestions are very welcome** ? please open an
 > [Issue](https://github.com/Alexl-git/Delphi-RAG-Lint/issues) with ideas, bugs,
-> or "I wish it could…". Not yet recommended for unattended/production use.
+> or "I wish it could?". Not yet recommended for unattended/production use.
 
 A symbol-aware retrieval + lint + refactoring + IDE-integration tool for Delphi.
 Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 
 **Use it as:** CLI tool &middot; LSP server (Zed / VS Code) &middot; MCP server (Claude / Cursor) &middot; RAD Studio 13 plugin.
 
-**→ Driving it from an AI agent? See [docs/AI-USAGE.md](docs/AI-USAGE.md)** — copy-paste instructions so your AI uses drag-lint over CLI or MCP (and reads ~10-60x fewer tokens than opening whole units).
+**? Driving it from an AI agent? See [docs/AI-USAGE.md](docs/AI-USAGE.md)** ? copy-paste instructions so your AI uses drag-lint over CLI or MCP (and reads ~10-60x fewer tokens than opening whole units).
 
 Built on [`tree-sitter-delphi13`](https://github.com/Alexl-git/tree-sitter-delphi13)
 (sibling project) and a vendored Pascal binding for libtree-sitter.
 
 **Companion:** [`Delphi-RAG-Lint-Graph`](https://github.com/Alexl-git/Delphi-RAG-Lint-Graph)
-— a standalone VCL viewer (Win64) that turns this index into an interactive symbol
+? a standalone VCL viewer (Win64) that turns this index into an interactive symbol
 graph: UML class boxes, a **Code Flow View** that renders your DocInsight comments,
 a **Where-Used** caller list, search with Back/Forward history, and **editor-sync**
 (the graph follows the active unit in RAD Studio). Click-to-jump back into the IDE.
@@ -31,8 +31,8 @@ a **Where-Used** caller list, search with Back/Forward history, and **editor-syn
 ## Screenshots
 
 ### Out-of-process compiler intelligence, inside the IDE
-Live diagnostics come from compiling your buffer in a **spawned** process — even
-unsaved code — so the IDE never freezes. The Structure panel and a dockable code
+Live diagnostics come from compiling your buffer in a **spawned** process ? even
+unsaved code ? so the IDE never freezes. The Structure panel and a dockable code
 graph sit beside the editor.
 
 ![drag-lint live diagnostics in RAD Studio with a docked code graph](docs/Images/IDE_Out_of_process_compilation.png)
@@ -43,7 +43,7 @@ graph sit beside the editor.
 ![A DocInsight doc-comment shown in the IDE Help Insight tooltip](docs/Images/IDE_DOCInsight.png)
 
 ### Code Flow View
-Trace a routine's calls as a flowchart — each box carries its DocInsight summary
+Trace a routine's calls as a flowchart ? each box carries its DocInsight summary
 (here `TCompileChecker.Run`).
 
 ![Code Flow View of TCompileChecker.Run with DocInsight summaries on each box](docs/Images/Graph_Calls_out.png)
@@ -55,14 +55,14 @@ member for its DocInsight doc.
 ![UML class box for TCompileChecker with a member doc tooltip](docs/Images/Graph_Find.png)
 
 ### Where Used
-A precise, clickable list of a symbol's callers — 7 callers of
-`ResolveActiveIndexDbs` — beside its unit's call graph.
+A precise, clickable list of a symbol's callers ? 7 callers of
+`ResolveActiveIndexDbs` ? beside its unit's call graph.
 
 ![Where-Used caller list for ResolveActiveIndexDbs in the graph viewer](docs/Images/Graph_Who_uses.png)
 
 ### AST-exact symbol query (CLI)
 `drag-lint query --name TCompileChecker --json` returns every match with kind,
-qualified name, section, file and precise line/impl ranges — no comment or
+qualified name, section, file and precise line/impl ranges ? no comment or
 string-literal noise.
 
 ![drag-lint query --json output for TCompileChecker](docs/Images/DRAG-Lint.exe_query_example1.png)
@@ -82,6 +82,50 @@ findings (here: clean).
 ---
 
 ## Quick start
+
+### Common questions -> command
+
+The fastest command for each question people actually ask. This table is also the
+first thing `drag-lint --help` prints, and it lives in `docs/AI-USAGE.md` too;
+the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
+
+| Question | Command |
+|---|---|
+| What is in this unit? | `drag-lint outline --file <U.pas> --db <db>` |
+| Which unit declares `X`? | `drag-lint find-unit --name X --in <U.pas> --db <db>` |
+| Where is `X`, what is its signature? | `drag-lint query --name X --db <db>` |
+| Who calls `X`? | `drag-lint query find-callers --name X --db <db>` |
+| Change `X` without reading the file | `drag-lint context --task "modify <Unit.TType.X>" --db <db> --format markdown` |
+| Is unit `U` part of project `P`? | `drag-lint query --name U --db <P.sqlite> --exact` |
+| Where is this message / caption / SQL? | `drag-lint query --text "<phrase>" --db <db>` |
+| Which database covers this file? | `drag-lint resolve-dbs --in <U.pas>` |
+| What is wrong with this file? | `drag-lint lint <U.pas>` |
+| ...with the whole project? | `drag-lint lint-all --db <db>` |
+| Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` |
+| Repair what the linter can repair | `drag-lint lint-all --db <db> --fix` (preview), then `--fix --apply` |
+
+**The traps, because each one turns a correct command into a silent zero:**
+
+* `find-callers` matches the **bare member name**. `--name TFoo.Bar` returns 0;
+  `--name Bar` returns the call sites.
+* `find-unit` for an **RTL / VCL / third-party** symbol needs the **platform
+  library** database (`resolve-dbs --platform win64`), not a project DB - a
+  project DB holds only that project's own units.
+* `query --name U --exact` against a **project** DB answers MEMBERSHIP in both
+  directions: a project DB is exactly the compile closure, so a miss is a real
+  answer, not a lookup failure.
+* `query --text` searches **string literals, DFM and SQL** - not comments and not
+  source text. Use grep for those.
+* `lint <file>` is a strict **subset** of `lint-all`: project-wide rules
+  (unused-public-symbol, unused-unit-in-uses, the uses-edge and duplicate-global
+  rules) can only fire in `lint-all`. Never report "clean" from a per-file run.
+* `context` wants the **fully qualified** name - `Unit.TType.Member`. It is about
+  60x leaner than reading the source files; add `--full-surface` only when the
+  task is about a form's components, DFM or event wiring.
+* A `note: N of M indexed file(s) changed since this index was built` line means
+  **reindex first**. The answer may be stale.
+
+Add `--json` to any query for machine-readable output.
 
 ### Standalone CLI
 
@@ -226,7 +270,7 @@ Each cycle lists its `A uses B [interface|implementation]` edges, marks the
 **interface** edges as move-to-implementation candidates, and flags layering
 inversions (e.g. a COMMON unit reaching into CLIENT). Add **`--causes`** to
 pinpoint the *specific symbols* in `A`'s interface that force the dependency on
-`B` (the types/vars/methods to move or extract) — with the line numbers, and an
+`B` (the types/vars/methods to move or extract) ? with the line numbers, and an
 honest note where the index couldn't resolve a reference.
 
 Or generate a full **followable refactoring playbook** that a junior dev (or a
@@ -258,7 +302,7 @@ drag-lint uses-fix MyUnit.pas --project MyApp.dproj --db myapp.sqlite --apply   
 ```
 
 > **Caveat (important):** `uses-fix`'s per-unit verify is **best-effort, not a
-> faithful full-build check** — a single-unit `dcc` compile can reuse a stale
+> faithful full-build check** ? a single-unit `dcc` compile can reuse a stale
 > `.dcu` (masking a real error) or abort on an RTL dependency. Treat
 > `cycles`/`uses-audit` as **advisory** (they pinpoint candidates, and the index
 > can miss refs like `set` types), and **always do a full project build** after
@@ -299,7 +343,7 @@ Longer walkthrough: [wiki -- Circular Dependency Report](https://github.com/Alex
 
 ### Third-party dependency report
 
-See which external/library units the project leans on — RTL, DevExpress,
+See which external/library units the project leans on ? RTL, DevExpress,
 Spring4D, and anything not in your own tree:
 
 ```
@@ -309,7 +353,7 @@ drag-lint deps-report --db myapp.sqlite --edges --format csv
 
 Per external unit it reports which project units import it, how many, the
 shortest uses-path, and a library grouping; `--edges` gives the flat
-project-unit → external-unit list. A unit is "external" when it isn't indexed
+project-unit ? external-unit list. A unit is "external" when it isn't indexed
 or resolves to a library path (RTL / installed packages).
 
 ### Component conversion
@@ -329,7 +373,7 @@ conversion surfaces, and the safety scheme: **[docs/CONVERSION-RULES.md](docs/CO
 ### Consuming the index from another tool
 
 The SQLite index is documented for external consumers in
-[docs/INDEX-SCHEMA.md](docs/INDEX-SCHEMA.md) — every table, the
+[docs/INDEX-SCHEMA.md](docs/INDEX-SCHEMA.md) ? every table, the
 project-vs-external boundary, and the stability contract. Introspect any index
 live with:
 
@@ -914,7 +958,7 @@ Build the IDE plugin:
 msbuild src/delphi-plugin/dclDragLintWizard.dproj /p:Config=Debug /p:Platform=Win64
 ```
 
-Run the test battery — **every** `run_*.ps1` under `tests/`, enumerated recursively
+Run the test battery ? **every** `run_*.ps1` under `tests/`, enumerated recursively
 (~10 min). The driver prints the number it found; that printed denominator is the
 count, not any figure written in a document. See [tests/README.md](tests/README.md) for
 the definition and the rules that go with it:
@@ -930,7 +974,7 @@ pwsh -File tests/autotest/run_smoke.ps1       # CLI + LSP server smoke
 pwsh -File tests/autotest/run_formsmap.ps1    # forms-csv navigation-map smoke (fixture project)
 ```
 
-Older batch harnesses in `tests/fixtures/` (`T61_hovertracker.bat`, …) are not part of
+Older batch harnesses in `tests/fixtures/` (`T61_hovertracker.bat`, ?) are not part of
 the PowerShell battery.
 
 ---
