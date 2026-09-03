@@ -1,40 +1,30 @@
 <#
-  run_doc_drift_unseen_units.ps1 -- a managed facts block must not be
-  advertised as auto-fixable when the regeneration would DELETE true facts this
-  database cannot see.
+  pending_doc_drift_document_apply.ps1 -- RED ON PURPOSE. A confirmed, unfixed gap.
 
-  THE DEFECT (DataCopy, 2026-09-02, docs\INBOX-doc-drift-vs-split-project-test-dbs.md).
-  Under the one-DB-per-project layout a production project DB is exactly the
-  compile closure, so it can NEVER hold a test caller. Fact blocks written when
-  one DB covered production AND tests now regenerate to a strict subset:
+  `document --apply` DELETES managed facts that the index structurally cannot
+  see. It is the exact command DataCopy's report named, and it is NOT gated by
+  the `fixable` flag, so the Step-1 fix (run_doc_drift_unseen_units.ps1) does
+  not protect it. Measured 2026-09-02 on this fixture:
 
-    stored : Covered by: <41 tests>            Used by: <30 entries>
-    fresh  : (no Covered by: line at all)      Used by: <2 entries>
+      document --qname uProd.TProd.OnlyTested --db <closure.sqlite> --apply
+        -> doc: removed -- 1 edit(s) applied (.bak written)
 
-  doc-drift reports ddFactsBlockStale [FIXABLE] and the offered repair makes the
-  committed record LESS TRUE. 43 findings across 9 units in DataCopy, firing for
-  ever, caused by no code change.
+  and the block loses BOTH `Called from: Test.Prod.TestAll (Test.Prod.pas)` and
+  `Covered by: Test.Prod.TestAll` -- true facts about tests that exist.
 
-  MEASURED, and it is why this suite tests two shapes and not one:
-    * `Used by:` / `Called from:` / `Used in units:` are NARROWED (entry-level).
-    * `Covered by:` is DELETED WHOLE. It names tests by definition, so a closure
-      DB can never reproduce any of it, and it is NOT in INBOUND_LABELS -- it
-      falls to the byte-compared residual and the existing shared-facts
-      forgiveness never sees it. A fix that widened only the three inbound
-      labels would leave the LARGEST loss untouched.
+  It goes GREEN when Step 2 lands: the writer preserving stored entries whose
+  unit this index cannot vouch for, on UNMARKED units, the way it already does
+  on `dl:shared` ones.
 
-  STEP 1 SCOPE (this file): stop calling it FIXABLE, which gates
-  `lint-all --fix --apply`. That is NOT the whole exposure -- `document --apply`
-  is not gated by the fixable flag at all, and still deletes. That gap is REAL,
-  reproduced, and pinned separately in pending_doc_drift_document_apply.ps1
-  until Step 2 makes the regeneration itself preserve. Do not read a green run
-  of this file as "the facts are safe"; read it as "the autofix will not touch
-  them".
-
-  POSITIVE CONTROLS COME FIRST, deliberately. A predicate that answered "never
-  fixable" would pass every Step-1 assertion below while silently disabling the
-  feature; CONTROL-1 is what forbids that. This repo has shipped 8 vacuous
-  fixtures across 3 projects -- the known-firing case leads.
+  THREE VACUITIES PRODUCED THIS ASSERTION BEFORE IT WAS HONEST, all in one
+  sitting, and they are why the setup checks below are not optional:
+    1. matching `Test.Prod` file-wide -- TProd's CLASS block names it too, so the
+       assertion passed while OnlyTested's block was being deleted;
+    2. no reindex after the preceding --apply, so `document` refused at an
+       unverified coordinate ("Nothing was written") and the assertion passed
+       because the command never ran;
+    3. the control symbol was itself called by the test, so its block was
+       legitimately unvouchable.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -167,34 +157,26 @@ $pingT = DriftText 'uProd.TProd.ProdOnly'   $prod
 $onlyJ = DriftJson 'uProd.TProd.OnlyTested' $prod
 $onlyT = DriftText 'uProd.TProd.OnlyTested' $prod
 
-# --- CONTROL-1: an IN-SCOPE entry that is genuinely gone stays FIXABLE -------
-# ProdOnly is called by uOther and by no test. uOther.pas IS in the closure, and
-# uOther.NoSuchProc does not exist. The engine
-# can vouch for its absence, so this must remain an offered repair. If this goes
-# red the predicate has over-reached and disabled the feature.
-Check 'CONTROL-1 an in-scope ghost entry is reported' ($pingT -match 'ddFactsBlockStale') $($pingT.Trim())
-Check 'CONTROL-1 an in-scope ghost entry is still FIXABLE' ($pingT -match '\[FIXABLE\]') $($pingT.Trim())
-
-# --- CASE-A: entries naming a unit the closure cannot see -> NOT fixable ----
-Check 'CASE-A a block naming an unseen TEST unit is reported' ($onlyT -match 'ddFactsBlockStale') $($onlyT.Trim())
-Check 'CASE-A a block naming an unseen TEST unit is NOT fixable (text)' ($onlyT -notmatch '\[FIXABLE\]') $($onlyT.Trim())
-Check 'CASE-A a block naming an unseen TEST unit is NOT fixable (json)' ($onlyJ -notmatch '"fixable"\s*:\s*true') $($onlyJ.Trim())
-
-# --- CASE-COVERED: a whole label the regeneration drops -> NOT fixable ------
-# `Covered by:` is absent from the fresh render entirely, and is not in
-# INBOUND_LABELS, so entry-level forgiveness cannot see it.
-$reg = (Run @('document','--qname','uProd.TProd.OnlyTested','--db',$prod)).Out
-Check 'CASE-COVERED the regeneration really does drop the whole label' `
-  ($reg -notmatch 'Covered by:') 'no Covered by: in the proposed text'
-
-# --- CASE-FIX: --fix --apply must not delete what it cannot vouch for -------
 $uProdPas = Join-Path $proj 'uProd.pas'
-$blkBefore = BlockAbove $uProdPas 'procedure OnlyTested;'
-Check 'CASE-FIX FIXTURE: OnlyTested''s own block names the test unit' ($blkBefore -match 'Test\.Prod') 'scoped to OnlyTested'
-$null = Run @('lint-all','--db',$prod,'--fix','--apply')
-$blkAfter = BlockAbove $uProdPas 'procedure OnlyTested;'
-Check 'CASE-FIX --fix --apply leaves the TEST entries in OnlyTested''s block' ($blkAfter -match 'Test\.Prod') 'scoped to OnlyTested'
-Check 'CASE-FIX --fix --apply leaves the Covered by: line in OnlyTested''s block' ($blkAfter -match 'Covered by:') 'scoped to OnlyTested'
+
+# --- CASE-DOC: `document --apply` is the command the ORIGINAL REPORT named ----
+# lint-all --fix --apply is gated on the fixable flag. `document --apply` may
+# not be. If it is not, Step 1 does not protect the very command that was
+# reported, and the [FIXABLE] label was only half the exposure.
+# REINDEX FIRST. CASE-FIX's --apply shifted lines, so document refuses at an
+# unverified coordinate ("the reindex FAILED. Nothing was written") -- and the
+# assertions below then pass because the command NEVER RAN. That is the third
+# distinct vacuity this one suite has produced; assert the command did work.
+$r = Run @('index','--project',(Join-Path $proj 'Prod.dpr'),'--db',$prod)
+Check 'CASE-DOC setup: reindexed before document --apply' ($r.Code -eq 0) "exit $($r.Code)"
+$docRun = Run @('document','--qname','uProd.TProd.OnlyTested','--db',$prod,'--apply')
+Check 'CASE-DOC setup: document --apply actually ran (not refused at a stale coordinate)' `
+  ($docRun.Out -notmatch 'Nothing was written') ($docRun.Out -split "`r?`n" | Where-Object { $_ -match 'doc:' })
+Write-Host ("      document --apply said: " + ($docRun.Out -split "`r?`n" | Where-Object { $_ -match 'doc:' }) )
+$blkDoc = BlockAbove $uProdPas 'procedure OnlyTested;'
+Check 'CASE-DOC document --apply leaves the TEST entries in OnlyTested''s block' ($blkDoc -match 'Test\.Prod') 'scoped to OnlyTested'
+Check 'CASE-DOC document --apply leaves the Covered by: line in OnlyTested''s block' ($blkDoc -match 'Covered by:') 'scoped to OnlyTested'
+
 
 Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
-if ($fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+if ($fail) { Write-Host 'FAIL (expected -- Step 2 not yet shipped)' -ForegroundColor Yellow; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

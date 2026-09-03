@@ -13,7 +13,10 @@ unit DRagLint.Lint.DocRules;
   diffs that existing doc against the live signature/body facts.
 
   doc-drift is ALSO --fix-capable, but only for its mechanically-safe subset
-  (the findings TDocDrift.Analyze marks Fixable: ddFactsBlockStale, and
+  (the findings TDocDrift.Analyze marks Fixable: ddFactsBlockStale EXCEPT where
+  the repair would delete facts this index cannot vouch for -- a closure project
+  index can never hold a test caller, and deleting on that basis destroys true
+  information; see TSharedFacts.RegenerationDropsUnvouchable -- and
   ddValueButNoReturns ONLY on the instances a fix can actually satisfy --
   v(ADP3 T3d) made that flag per-finding rather than per-kind, so a function
   with no minable return case now reports ddValueButNoReturns as report-only;

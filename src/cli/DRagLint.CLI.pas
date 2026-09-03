@@ -4051,7 +4051,20 @@ begin
       assertion failed because the DB it had just resolve-only'd no longer said
       `project`. A silent downgrade of a safety stamp, caught only because the
       assertion that noticed was about something else. }
-    if not AArgs.ResolveOnly then
+    { A SINGLE FILE TARGET IS THE SAME HAZARD, and it is the likelier one.
+
+      `index <member.pas> --db <projectDb>` is the ordinary incremental move
+      after editing a unit -- endorsed a few hundred lines up, and deliberately
+      exempted from the refusal because it cannot widen a scope. But it is not
+      project-scoped either, so it fell to the `library` arm and restamped a
+      project database as a library one. The next folder scan would then be
+      permitted, which is precisely the corruption the stamp exists to prevent.
+
+      A stamp is a claim about SCOPE, so only a run that established one may
+      write it: a project target, or a folder walk. Anything narrower -- one
+      file, or a resolve-only pass -- leaves the existing claim alone. }
+    if (not AArgs.ResolveOnly) and
+       (IsProjectScopedTarget or TDirectory.Exists(AArgs.Path)) then
       Store.SetMetaValue(SCAN_TYPE_KEY,
         IfThen(IsProjectScopedTarget, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
     Elapsed:= (Now - StartTime) * 86400;

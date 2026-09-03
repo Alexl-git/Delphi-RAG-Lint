@@ -860,7 +860,13 @@ begin
 
   S:= Trim(AEntry);
   P:= Pos('(', S);
-  if P > 0 then S:= TrimRight(Copy(S, 1, P - 1));
+
+  { A '(file.pas)' part is BETTER EVIDENCE than any prefix guess, so when one is
+    present the answer above is final. Letting the prefix walk run on anyway
+    would let `Test.Prod.TProdTests.X (Test.Prod.pas)` vouch through a closure
+    that merely holds `Test.pas` -- overriding an explicit, correct "not mine"
+    with a coincidence, and permitting the very deletion this guards. }
+  if P > 0 then Exit(False);
   if EndsText(UNCERTAIN_SUFFIX, S) then
     S:= TrimRight(Copy(S, 1, Length(S) - Length(UNCERTAIN_SUFFIX)));
   S:= LowerCase(Trim(S));
@@ -936,10 +942,25 @@ begin
         if not SIn.TryGetValue(Lab, SC) then Continue;
         if Trim(SC) = '' then Continue;
 
-        { A truncated stored list cannot be set-differenced -- the entries past
-          the window are unknown, so nothing can be said about whether the fresh
-          render drops them. Withhold the offer rather than guess. }
-        if IsTruncated(SC) then Exit(True);
+        { TRUNCATION ALONE DOES NOT WITHHOLD, and an earlier draft that made it
+          do so was a silent, unmeasured regression across every project.
+
+          Inbound lists cap at docs.max_callers (5 by default), so ANY symbol
+          with more than five callers renders a `(+N more)` window. Withholding
+          on the window itself therefore took `fixable` away from most
+          facts-block findings everywhere -- including the commonest and most
+          harmless one, a new in-closure caller, where nothing is deleted at all.
+
+          The window is a real limit on what can be known, but it is not
+          evidence of loss. What withholds is evidence: a VISIBLE entry this
+          index cannot vouch for, or a whole unvouchable label going missing.
+          Both are tested below and neither is weakened by a cap.
+
+          ACCEPTED RESIDUAL, stated rather than hidden: an entry hiding BEYOND
+          the window on an unmarked unit is still reapable. It is the same
+          window-unsoundness this unit's header documents, it is the behaviour
+          that shipped before this predicate existed, and closing it needs the
+          uncapped render that `dl:shared` units already get. }
 
         if not FreshIn.TryGetValue(Lab, FreshContent) then FreshContent:= '';
 

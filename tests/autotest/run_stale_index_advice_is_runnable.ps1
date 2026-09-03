@@ -31,7 +31,7 @@
     D. The staleness note printed for a PROJECT db advises `index --project`,
        not the folder form.
     E. The staleness note printed for a LIBRARY db still advises the folder form.
-    F. The schema-migration advice does not hand a project DB the folder form.
+    F. A single FILE target is allowed AND does not restamp the DB's scan_type.
 
   ON THE -wal SIDECAR. schema_meta.scan_type is written late and can live in the
   SQLite write-ahead log, so a DB copied WITHOUT its -wal/-shm sidecars silently
@@ -140,13 +140,19 @@ Check 'D the PROJECT staleness note does NOT advise the folder form' `
 Check 'E the LIBRARY staleness note still advises the folder form' `
   ($lNote -match 'index <dir>') $lNote
 
-# --- F. the schema-migration advice is not the folder form for a project db --
-# The message only fires on an out-of-date schema, which cannot be produced
-# here; assert instead that the string in the binary is no longer the bare
-# folder form. Scoped to the one line so it cannot pass vacuously.
-$helpOut = (Run @('--help')).Out
-$roLine = ($helpOut -split "`r?`n" | Where-Object { $_ -match '--resolve-only' -and $_ -match 'drag-lint index' }) -join ' '
-Check 'F --help documents --resolve-only' ($roLine -ne '') $roLine
+# --- F. a single FILE target must not restamp the DB either -----------------
+# `index <member.pas> --db <projectDb>` is the ordinary incremental move after
+# editing a unit, and it is deliberately NOT refused -- it cannot widen a scope.
+# But it is not project-scoped either, so it fell to the `library` arm of the
+# stamp writer and restamped the project database as a library one, disarming
+# the refusal exactly as the --resolve-only path did. Found by review, not by
+# this suite, which is why it is now in it.
+$r = Run @('index',(Join-Path $src 'uAlpha.pas'),'--db',$projDb)
+Check 'F a single FILE target into a PROJECT db is allowed' `
+  (($r.Code -eq 0) -and ($r.Out -notmatch 'refusing to index a FOLDER')) "exit $($r.Code)"
+$r = Run @('index',$src,'--db',$projDb)
+Check 'F2 scan_type SURVIVES a single-FILE index (folder still refused)' `
+  (($r.Code -eq 2) -and ($r.Out -match 'refusing to index a FOLDER')) "exit $($r.Code)"
 
 Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
 if ($fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

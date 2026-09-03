@@ -38,7 +38,10 @@ type
   //                             (ImplStartLine > 0); an interface method has no
   //                             body to observe -- see the rule's own comment.
   //   ddIdentifierGone        - a <c>/<paramref> code identifier no longer present (bounded)
-  //   ddFactsBlockStale       - the managed facts block differs from a fresh render (FIXABLE)
+  //   ddFactsBlockStale       - the managed facts block differs from a fresh render
+  //                             (FIXABLE only when this index can VOUCH for what the
+  //                             regeneration would delete -- see MakeFinding's call
+  //                             site and TSharedFacts.RegenerationDropsUnvouchable)
   //   ddHarvestDrift          - a MARKED <summary> no longer matches the comment it
   //                             was harvested from: it will be refreshed, or removed
   //                             when the source comment is gone (FIXABLE -- v(ADP3 T9))
@@ -67,14 +70,20 @@ type
   );
 
   /// <summary>One drift finding: its kind, a human-readable detail string, the
-  /// Fixable flag (True for ddFactsBlockStale, for ddHarvestDrift, and for the
+  /// Fixable flag (True for ddHarvestDrift, for ddFactsBlockStale EXCEPT where
+  /// the repair would delete facts this index cannot see, and for the
   /// ddValueButNoReturns instances a fix can actually satisfy -- a mechanical,
   /// prose-free fix; v(ADP3 T3) update: ddParamMissing is report-only, see
   /// MakeFinding's own call site for why), and the doc/decl line it anchors
   /// to.</summary>
   /// <remarks>
   /// v(ADP3 T3d): Fixable is a PER-FINDING answer, not a per-kind
-  /// constant. ddValueButNoReturns reports it True only when the engine can
+  /// constant. 2026-09-02 added the second instance: ddFactsBlockStale reports
+  /// it False when the regeneration would drop stored facts whose unit this
+  /// index does not hold -- a compile-closure project index can never see a
+  /// test caller, so the repair would delete true information. It is NOT
+  /// withheld on a `dl:shared` unit, where the writer already merges and
+  /// preserves, nor merely because a list is capped. ddValueButNoReturns reports it True only when the engine can
   /// actually satisfy that instance (a return case is minable and no
   /// hand-written blank &lt;returns&gt; slot is in the way); the same kind on a
   /// function with nothing minable is report-only. Consumers must read this
