@@ -1,8 +1,9 @@
 <#
-  pending_doc_drift_document_apply.ps1 -- RED ON PURPOSE. A confirmed, unfixed gap.
+  run_doc_drift_document_apply.ps1 -- `document --apply` must not delete facts
+  this index cannot see.
 
-  `document --apply` DELETES managed facts that the index structurally cannot
-  see. It is the exact command DataCopy's report named, and it is NOT gated by
+  `document --apply` USED TO DELETE managed facts that the index structurally
+  cannot see. It is the exact command DataCopy's report named, and it is NOT gated by
   the `fixable` flag, so the Step-1 fix (run_doc_drift_unseen_units.ps1) does
   not protect it. Measured 2026-09-02 on this fixture:
 
@@ -12,9 +13,11 @@
   and the block loses BOTH `Called from: Test.Prod.TestAll (Test.Prod.pas)` and
   `Covered by: Test.Prod.TestAll` -- true facts about tests that exist.
 
-  It goes GREEN when Step 2 lands: the writer preserving stored entries whose
-  unit this index cannot vouch for, on UNMARKED units, the way it already does
-  on `dl:shared` ones.
+  FIXED by Step 2 (2026-09-02): the writer now preserves stored entries whose
+  unit this index cannot vouch for on UNMARKED units too, the way it already did
+  on `dl:shared` ones. `document --apply` now reports "doc: up to date (no
+  change)". This file was RED on purpose until that landed; it stays as the
+  regression guard, because the fixable flag alone never protected this path.
 
   THREE VACUITIES PRODUCED THIS ASSERTION BEFORE IT WAS HONEST, all in one
   sitting, and they are why the setup checks below are not optional:
@@ -179,4 +182,4 @@ Check 'CASE-DOC document --apply leaves the Covered by: line in OnlyTested''s bl
 
 
 Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
-if ($fail) { Write-Host 'FAIL (expected -- Step 2 not yet shipped)' -ForegroundColor Yellow; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+if ($fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

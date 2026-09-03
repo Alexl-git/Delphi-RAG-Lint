@@ -543,6 +543,71 @@ begin
   end;
 end;
 
+{ Declared here rather than moved: UnitVouchable and LabelContent live further
+  down beside RegenerationDropsUnvouchable, which is where they were introduced,
+  and the reconciliation below needs both. A forward declaration keeps the
+  ordering legal without relocating working code. }
+function UnitVouchable(const AStore: ISymbolStore; const AEntry: string): Boolean; forward;
+function LabelContent(const AText, ALabel: string): string; forward;
+
+{ Does the stored block carry anything this index cannot vouch for -- an inbound
+  entry naming a unit it does not hold, or a whole label it cannot produce? }
+function BlockHoldsUnvouchable(const AStore: ISymbolStore; const ABlock: string): Boolean;
+var
+  SIn : TFactMap;
+  SRes: string;
+  Lab, SC, E: string;
+  I   : Integer;
+begin
+  Result:= False;
+  if (AStore = nil) or (ABlock = '') then Exit;
+
+  for I:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
+    if LabelContent(ABlock, UNVOUCHABLE_LABELS[I]) <> '' then Exit(True);
+
+  ParseBlock(ABlock, SIn, SRes);
+  try
+    for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
+    begin
+      Lab:= INBOUND_LABELS[I];
+      if not SIn.TryGetValue(Lab, SC) then Continue;
+      for E in SplitEntries(SC) do
+        if (not UnitVouchable(AStore, E)) and (not IsUncertainEntry(E)) then Exit(True);
+    end;
+  finally
+    SIn.Free;
+  end;
+end;
+
+{ Does this unit take part in fact reconciliation at all?
+
+  UNTIL 2026-09-02 THE ANSWER WAS "ONLY IF MARKED `dl:shared`", and that is what
+  let DataCopy's 43 findings destroy true facts. The one-DB-per-project layout
+  made every production project a compile closure, so a test caller became
+  invisible to the project that owns the code -- without anybody marking
+  anything, and with no way for a reader to know it had happened.
+
+  Marking every such unit by hand is not an answer: the condition is a property
+  of the INDEX LAYOUT, not of the unit, and it now applies to essentially every
+  project with a sibling test project.
+
+  So an unmarked unit participates too -- but ONLY ON EVIDENCE, never by
+  default. The stored block must actually carry something this index cannot
+  vouch for. That distinction is the whole design:
+
+    * it keeps ordinary blocks on their existing semantics, so a stale entry
+      whose unit IS indexed is still reported and still reaped -- no silent
+      accumulation, and run_docdrift_fix_removal still passes;
+    * it engages exactly where deletion would destroy information.
+
+  A marked unit still participates unconditionally: it opted into the
+  accumulate-only contract described at the top of this unit. }
+function Participates(const AStore: ISymbolStore; const AUnitPath, ABlock: string): Boolean;
+begin
+  Result:= (AStore <> nil) and
+           (TSharedUnit.IsShared(AUnitPath) or BlockHoldsUnvouchable(AStore, ABlock));
+end;
+
 { ---------------------------------------------------------------------------
   TSharedFacts
   --------------------------------------------------------------------------- }
@@ -560,8 +625,9 @@ var
   E             : string;
   I             : Integer;
 begin
-  { An unmarked unit is not part of this feature at all. }
-  if (AStore = nil) or (not TSharedUnit.IsShared(AUnitPath)) then
+  { An unmarked unit with nothing unvouchable in its block is not part of this
+    feature, and keeps the byte compare that shipped before it existed. }
+  if not Participates(AStore, AUnitPath, AStored) then
     Exit(CollapseWs(AStored) <> CollapseWs(AFresh));
 
   ParseBlock(AStored, SIn, SRes);
@@ -617,7 +683,7 @@ begin
             nothing -- which is why the closure test carries the decision. }
           for E in SE do
             if not FreshSet.ContainsKey(LowerCase(E)) then
-              if UnitInClosure(AStore, E) or IsUncertainEntry(E) then Exit(True);
+              if UnitVouchable(AStore, E) or IsUncertainEntry(E) then Exit(True);
         finally
           FreshSet.Free;
           StoredSet.Free;
@@ -644,7 +710,7 @@ var
   I   : Integer ;
 begin
   Result:= False;
-  if (AStore = nil) or (not TSharedUnit.IsShared(AUnitPath)) then Exit;
+  if not Participates(AStore, AUnitPath, AStoredRemarks) then Exit;
 
   ParseBlock(AStoredRemarks, SIn, SRes);
   try
@@ -660,7 +726,7 @@ begin
         reason: both fail toward PRESERVING the source. }
       if IsTruncated(SC) then Exit(True);
       for E in SplitEntries(SC) do
-        if (not UnitInClosure(AStore, E)) and (not IsUncertainEntry(E)) then Exit(True);
+        if (not UnitVouchable(AStore, E)) and (not IsUncertainEntry(E)) then Exit(True);
     end;
   finally
     SIn.Free;
@@ -698,7 +764,7 @@ var
       for E in AAlready do Seen.AddOrSetValue(LowerCase(E), 1);
       for E in SplitEntries(AStoredContent) do
         if (not Seen.ContainsKey(LowerCase(E))) and
-           (not UnitInClosure(AStore, E)) and
+           (not UnitVouchable(AStore, E)) and
            (not IsUncertainEntry(E)) then
         begin
           Seen.AddOrSetValue(LowerCase(E), 1);
@@ -734,7 +800,7 @@ var
 begin
   Result:= ADocText;
   if (AStore = nil) or (AStoredRemarks = '') then Exit;
-  if not TSharedUnit.IsShared(AUnitPath) then Exit;
+  if not Participates(AStore, AUnitPath, AStoredRemarks) then Exit;
 
   { PARSE THE BLOCK BODY, NOT THE WHOLE REMARKS. The remarks continue past
     AUTO_END, and ParseBlock ends a fact at the next LABEL -- so when the last

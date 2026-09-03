@@ -184,13 +184,42 @@ try {
         $(($d2 -split "`n" | Where-Object { $_ -match '(?i)doc:' } | Select-Object -First 1))
   Reindex
 
-  # --- 3. POSITIVE CONTROL: one store -> the entry IS unaccountable ---------
-  # Must stay green. If this ever goes red, the checker has stopped reporting
-  # drift at all and step 4 below is worthless.
+  # --- 3. one store -> the entry is PRESERVED, not called stale -------------
+  # INVERTED 2026-09-02. This used to assert that dbA alone REPORTS drift, on
+  # the reasoning that the caller entry "genuinely is unaccountable" there.
+  # That reasoning is what DataCopy's report overturned: dbA cannot see
+  # bside's user.pas at all, so its silence is a blind spot, not a fact, and
+  # reporting on it led straight to a repair that DELETED a true caller. Fact
+  # reconciliation now applies to any block carrying entries this index cannot
+  # vouch for, marked or not -- so the entry is forgiven and no drift is
+  # reported. That is the fix, asserted here rather than left implicit.
   $l3 = (& $exePath lint-all --db $dbA --quiet 2>&1 | Out-String)
-  Check '3. POSITIVE CONTROL: lint-all --db A alone REPORTS drift' `
-        (DriftReported $l3) `
-        'with only dbA open the caller entry genuinely is unaccountable'
+  Check '3. lint-all --db A alone does NOT report drift on an unvouchable entry' `
+        (-not (DriftReported $l3)) `
+        'dbA cannot see the bside caller, so its absence is a blind spot, not evidence'
+
+  # --- ON THE LIVENESS CONTROL STEP 3 USED TO PROVIDE ----------------------
+  # Step 3 also proved doc-drift CAN report on this file, which steps 4 and 5
+  # need because both assert an ABSENCE. That role cannot be filled here any
+  # more, and the reason is a property of the fixture, not an oversight:
+  #
+  #   dbA renders NO managed block for DoIt at all (it compiles thing.pas but
+  #   calls nothing in it). Once the stored block holds entries only another
+  #   project could have written, the empty-render rule in
+  #   TSharedFacts.BlockDrifted exits BEFORE any comparison -- including the
+  #   intrinsic byte compare. So NO drift of any kind is reportable on this
+  #   symbol with dbA. That rule predates this change and is deliberate: a
+  #   project that renders nothing has nothing to say about the block.
+  #
+  # Two candidate controls were written and both failed against a CORRECT
+  # engine before this was understood -- an in-scope ghost entry, and a planted
+  # intrinsic 'Complexity:' line. Neither is reportable here, for that reason.
+  #
+  # The liveness control for the facts checker therefore lives where the fresh
+  # render is non-empty: CONTROL-1 in run_doc_drift_unseen_units.ps1, which
+  # asserts an in-scope ghost IS still reported and still fixable. Step 5 below
+  # is also a POSITIVE assertion now (the block must still name the caller),
+  # which is what keeps this suite from passing on absences alone.
 
   # --- 4. THE BUG: the same two stores that wrote it must accept it ---------
   $l4 = (& $exePath lint-all --db $dbB --db $dbA --quiet 2>&1 | Out-String)
@@ -209,14 +238,22 @@ try {
       ForEach-Object { Write-Host "        $_" -ForegroundColor DarkGray }
   }
 
-  # --- 5. the churn, recorded rather than asserted as desirable -------------
-  # document with a NARROWER store set removes the whole managed block. This is
-  # what actually alternates the file, not `lint-all --fix` (which refuses
-  # doc-drift outright -- see failure mode 3 in the header).
+  # --- 5. the churn this suite RECORDED is now CURED ------------------------
+  # This step used to assert the defect: `document` with a NARROWER store set
+  # stripped the whole managed block, so two legitimate invocations gave
+  # opposite results on one file -- and the IDE passes the project DB alone, so
+  # the destructive one is the common case. It was recorded rather than
+  # asserted as desirable, with no owner for the fix.
+  #
+  # DataCopy hit the same mechanism through the one-DB-per-project layout, where
+  # it is not a two-store edge case but the DEFAULT: a production closure can
+  # never hold a test caller. The writer now preserves entries whose unit the
+  # primary store cannot vouch for, so the narrow invocation is non-destructive
+  # and the two agree. The assertion is inverted to pin the cure.
   & $exePath document --qname $QNAME --db $dbA --apply 2>&1 | Out-Null
-  Check '5. RECORDED: document --db A alone strips the block written by A+B' `
-        (-not (BlockHasCaller)) `
-        'two legitimate invocations, opposite results on one file -- the IDE passes the project DB alone'
+  Check '5. CURED: document --db A alone PRESERVES the block written by A+B' `
+        (BlockHasCaller) `
+        'the narrow invocation is no longer destructive -- was RECORDED as a defect until 2026-09-02'
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

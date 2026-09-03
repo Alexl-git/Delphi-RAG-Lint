@@ -175,10 +175,47 @@ $onlyT = DriftText 'uProd.TProd.OnlyTested' $prod
 Check 'CONTROL-1 an in-scope ghost entry is reported' ($pingT -match 'ddFactsBlockStale') $($pingT.Trim())
 Check 'CONTROL-1 an in-scope ghost entry is still FIXABLE' ($pingT -match '\[FIXABLE\]') $($pingT.Trim())
 
-# --- CASE-A: entries naming a unit the closure cannot see -> NOT fixable ----
-Check 'CASE-A a block naming an unseen TEST unit is reported' ($onlyT -match 'ddFactsBlockStale') $($onlyT.Trim())
-Check 'CASE-A a block naming an unseen TEST unit is NOT fixable (text)' ($onlyT -notmatch '\[FIXABLE\]') $($onlyT.Trim())
-Check 'CASE-A a block naming an unseen TEST unit is NOT fixable (json)' ($onlyJ -notmatch '"fixable"\s*:\s*true') $($onlyJ.Trim())
+# --- CASE-A: entries naming a unit the closure cannot see -------------------
+# STEP 2 CHANGED WHAT IS CORRECT HERE, and the change is the point. Under Step 1
+# this block was REPORTED and merely not offered as fixable. Now the writer
+# preserves what this index cannot vouch for, so there is nothing to repair and
+# nothing to say: the finding is gone entirely.
+#
+# That is the outcome DataCopy asked for -- 43 findings that no code change
+# caused, on blocks that were already correct.
+Check 'CASE-A a block naming an unseen TEST unit is NOT reported at all' `
+  ($onlyT -notmatch 'ddFactsBlockStale') $($onlyT.Trim())
+Check 'CASE-A nothing is offered as fixable for it (json)' `
+  ($onlyJ -notmatch '"fixable"\s*:\s*true') $($onlyJ.Trim())
+
+# --- CASE-B: a NON-EMPTY fresh render, the shape DataCopy actually has -------
+# CASE-A's block renders EMPTY under the closure DB (OnlyTested has no in-closure
+# caller), so it exercises the empty-render preservation rule. DataCopy's real
+# blocks are not that shape: MicroniteShortenName has two production callers the
+# index CAN see, plus test facts it cannot. That path runs the RESIDUAL byte
+# compare instead, and `Covered by:` lives in the residual -- so it drifted for a
+# completely different reason than CASE-A, and a fixture with only CASE-A would
+# have reported this fixed while 42 findings still stood.
+$pingT2 = DriftText 'uProd.TProd.Ping' $prod
+# NOTE: do NOT hand-inject a `Covered by:` here. The engine writes one itself
+# when the WIDE db can see the tests, and adding a second produced a DUPLICATE
+# label -- which drifts for a reason that has nothing to do with this case, and
+# read as "the fix does not work" against a correct engine.
+$pingBlk = BlockAbove (Join-Path $proj 'uProd.pas') 'procedure Ping;'
+Check 'CASE-B FIXTURE: Ping''s block carries an engine-written Covered by:' `
+  ($pingBlk -match 'Covered by:') 'the wide db saw the tests and wrote it'
+Check 'CASE-B FIXTURE: Ping also has an IN-CLOSURE caller (non-empty render)' `
+  ($pingBlk -match 'uOther') 'so this exercises the residual path, not empty-render'
+# RECORDED, NOT YET FIXED (Step 2b). `Covered by:` is not an inbound label, so
+# ParseBlock leaves it in the RESIDUAL, which is byte-compared -- and a closure
+# index renders no such line for any symbol, so stored-has / fresh-lacks is
+# guaranteed and the compare fires. Step 2a's inbound reconciliation cannot see
+# it. The facts are SAFE (the writer preserves them, and the finding is not
+# offered as fixable); what remains is the noise of a finding that no code
+# change caused. Asserted as-is so the suite states the truth rather than
+# hiding it; flip this to -notmatch when 2b lands.
+Check 'CASE-B RECORDED: a non-empty render is STILL reported (Step 2b owed)' `
+  ($pingT2 -match 'ddFactsBlockStale') $($pingT2.Trim())
 
 # --- CASE-COVERED: a whole label the regeneration drops -> NOT fixable ------
 # `Covered by:` is absent from the fresh render entirely, and is not in
