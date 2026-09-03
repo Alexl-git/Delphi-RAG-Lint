@@ -34,6 +34,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Change `X` without reading the file | `drag-lint context --task "modify <Unit.TType.X>" --db <db> --format markdown` |
 | Is unit `U` part of project `P`? | `drag-lint query --name U --db <P.sqlite> --exact` |
 | Where is this message / caption / SQL? | `drag-lint query --text "<phrase>" --db <db>` |
+| Which files reference unit `U`? | `drag-lint query unit-usage --unit U --db <db>` |
 | Which database covers this file? | `drag-lint resolve-dbs --in <U.pas>` |
 | What is wrong with this file? | `drag-lint lint <U.pas>` |
 | ...with the whole project? | `drag-lint lint-all --db <db>` |
@@ -50,6 +51,10 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 * `query --name U --exact` against a **project** DB answers MEMBERSHIP in both
   directions: a project DB is exactly the compile closure, so a miss is a real
   answer, not a lookup failure.
+* `query unit-usage` without `--in` answers the project-wide question (which files
+  reference the unit, and which merely IMPORT it); with `--in` it answers about one
+  file. Its candidate set is the uses graph, since in Delphi you cannot name an
+  export without a uses entry.
 * `query --text` searches **string literals, DFM and SQL** - not comments and not
   source text. Use grep for those.
 * `lint <file>` is a strict **subset** of `lint-all`: project-wide rules

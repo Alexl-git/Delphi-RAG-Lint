@@ -552,6 +552,8 @@ begin
   Writeln('       ^ a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.');
   Writeln('  Where is this message/caption/SQL?    drag-lint query --text "<phrase>" --db <db>');
   Writeln('       ^ STRING LITERALS, DFM and SQL. NOT comments and NOT source text -- use grep for those.');
+  Writeln('  Which files reference unit U?         drag-lint query unit-usage --unit U --db <db>');
+  Writeln('       ^ omit --in for the project-wide answer; add --in <F.pas> to ask about ONE file.');
   Writeln('  Which database covers this file?      drag-lint resolve-dbs --in <U.pas>');
   Writeln('       ^ never guess a DB path. Also --project <P.dproj> and --platform <win32|win64>.');
   Writeln('  What is wrong with this file?         drag-lint lint <U.pas>');
@@ -630,7 +632,10 @@ begin
   Writeln('                               a STRING LITERAL is correctly not a reference -- which is the difference');
   Writeln('                               from grep. Name-keyed: a project type sharing an RTL name is');
   Writeln('                               indistinguishable, and the output says so.');
-  Writeln('  drag-lint query unit-usage   --in <file.pas> --unit <UnitName> [--db ...] [--json]   (does the file reference any export of the unit? Empty = dead import)');
+  Writeln('  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json]');
+  Writeln('                               WITH --in: of that unit''s exports, which does THIS file reference? Empty = dead import.');
+  Writeln('                               WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.');
+  Writeln('                               The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry.');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
@@ -4635,6 +4640,214 @@ begin
   Result:= (Base <> '') and SameText(Base, ATypeName);
 end;
 
+{ The unit's EXPORT SURFACE: the interface-section children of its unit symbol
+  -- i.e. what another unit can name after adding it to `uses`.
+
+  TWO THINGS THIS GETS RIGHT THAT THE OBVIOUS VERSION DOES NOT, both measured
+  against System.IniFiles in the Win32 library index:
+
+  1. NOT FindSymbolsByQualifiedName(<unit>). A unit's members are qualified
+     `System.IniFiles.TIniFile`, so an exact qualified-name lookup on
+     'System.IniFiles' returns exactly ONE row -- the unit symbol itself -- and
+     the verb then answered about a one-element "export surface". The members
+     hang off the unit symbol as CHILDREN; that is where to look.
+     (`symbols.parent_id` is never NULL in this schema: every symbol roots at
+     its unit, so "top level" means "parent IS the unit symbol".)
+
+  2. THE UNIT IS RESOLVED IN WHICHEVER STORE HAS IT, not in the store that
+     happens to contain the consuming file. Those are routinely different: a
+     PROJECT index is the compile closure and deliberately excludes
+     library-path units, so asking "does CSVRoutines.pas use System.IniFiles"
+     needs the project DB for the file and the LIBRARY DB for the unit.
+     Resolving both in one store made the verb fail with "no interface-section
+     symbols found" on precisely the case it was built for.
+
+  Members (methods, fields, properties) are deliberately NOT included: they are
+  not addressable by bare name from another unit, and folding them in is what
+  makes a loop counter named `I` inside System.IniFiles look like a reference
+  to it.
+
+  Extracted from DoQueryUnitUsage when the project-wide mode was added, so both
+  modes answer from the SAME surface. Two copies of this resolution would be
+  two chances to disagree about what a unit exports. }
+function ResolveUnitExportSurface(const APathsToScan: TArray<string>; const AUnitName: string): TArray<TSymbol>;
+var
+  DbPath: string;
+begin
+  Result:= nil;
+  for DbPath in APathsToScan do
+  begin
+    if not TFile.Exists(DbPath) then Continue;
+    var UOk: Boolean;
+    var Cand: ISymbolStore := OpenReadOnlyStore(DbPath, UOk);
+    if not UOk or (Cand = nil) then Continue;
+    var FoundUnit: Boolean := False;
+    for var U: TSymbol in Cand.FindSymbolsByExactName(AUnitName) do
+      if U.Kind = skUnit then
+      begin
+        FoundUnit:= True;
+        for var Ch: TSymbol in Cand.FindAllChildSymbols(U.Id) do
+          if SameText(Ch.Section, 'interface') then Result:= Result + [Ch];
+        Break;
+      end;
+    { The FIRST store that holds the unit wins, even if it exports nothing --
+      the same precedence the per-file mode has always had. Falling through to
+      a later store on an empty surface would silently answer about a DIFFERENT
+      copy of the unit, which is worse than saying it exports nothing. }
+    if FoundUnit then Break;
+  end;
+end;
+
+// S6: `query unit-usage --unit <UnitName>` with NO --in -- which files in this
+// index reference the unit at all?
+//
+// The reverse of the per-file question, and the one that actually arises.
+// DataCopy's grep-fallback audit (2026-09-02, gap G1) put it plainly: asking it
+// today needed a shell loop over every file, "which is enough friction that
+// grep wins". `find-callers` already has this shape for a symbol; this is the
+// unit-level equivalent.
+//
+// THE CANDIDATE SET IS THE USES GRAPH, NOT EVERY FILE. FindUsersOfUnit gives
+// the files that name the unit in a uses clause, and in Delphi you cannot
+// reference a unit's exports without one. Scanning every file instead would
+// cost N times more and could only add FALSE hits -- a local `I` in some
+// unrelated unit matching an export named `I`.
+//
+// A file that imports the unit and references NOTHING is reported as a DEAD
+// IMPORT rather than omitted. That is the same judgement the per-file mode
+// already makes ("Empty = dead import"), and it is the answer people are
+// usually looking for when they ask this question about a unit they want to
+// delete.
+function DoQueryUnitUsageProjectWide(const AArgs: TArgs): Integer;
+type
+  TFileHit = record
+    Path     : string ;
+    Section  : string ;
+    Refs     : Integer;
+    ExportsUsed: Integer; { Exports alone is a reserved word (the exports clause) }
+    FirstLine: Integer;
+  end;
+var
+  PathsToScan: TArray<string>;
+  ExportSyms : TArray<TSymbol>;
+  Hits       : TArray<TFileHit>;
+  DbPath     : string;
+  SeenPaths  : TDictionary<string, Boolean>;
+begin
+  PathsToScan:= ResolveConsumerDbs(AArgs);
+  ExportSyms := ResolveUnitExportSurface(PathsToScan, AArgs.UnitName);
+  if Length(ExportSyms) = 0 then
+  begin
+    Writeln('ERROR: no interface-section symbols found in unit: ', AArgs.UnitName);
+    Writeln('       The unit may not be indexed, or it contains no public symbols.');
+    Exit(2);
+  end;
+
+  Hits:= nil;
+  SeenPaths:= TDictionary<string, Boolean>.Create;
+  try
+    for DbPath in PathsToScan do
+    begin
+      if not TFile.Exists(DbPath) then Continue;
+      var Ok: Boolean;
+      var Store: ISymbolStore := OpenReadOnlyStore(DbPath, Ok);
+      if not Ok or (Store = nil) then Continue;
+
+      { FindUsersOfUnit KEYS ON unit_uses.unit_name_norm, WHICH IS THE LOWERCASED
+        TRAILING SEGMENT -- 'reviewmarker', not 'draglint.lint.reviewmarker'.
+        Passing the dotted name returns zero rows, silently, and a zero here
+        reads as "nothing uses this unit", which is the most confidently wrong
+        answer this verb could give. (Measured: it did exactly that on the first
+        build of this feature.)
+
+        The tail is not unique -- A.Foo and B.Foo both normalise to 'foo' -- so
+        the rows are then filtered on the FULL name. A caller who passed a bare
+        name without dots meant the tail, so that case keeps every row. }
+      var WantNorm: string := LowerCase(AArgs.UnitName);
+      var DotPos  : Integer := LastDelimiter('.', WantNorm);
+      if DotPos > 0 then WantNorm:= Copy(WantNorm, DotPos + 1, MaxInt);
+      var WantIsBare: Boolean := LastDelimiter('.', AArgs.UnitName) = 0;
+
+      for var Use: TUnitUse in Store.FindUsersOfUnit(WantNorm) do
+      begin
+        if not (WantIsBare or SameText(Use.UnitName, AArgs.UnitName)) then Continue;
+        var Path: string := Store.GetFilePath(Use.FileId);
+        if Path = '' then Continue;
+        { One row per FILE, not per store. The authoritative set is a project DB
+          plus a library DB, and a file can legitimately sit in both. }
+        if SeenPaths.ContainsKey(LowerCase(Path)) then Continue;
+        SeenPaths.Add(LowerCase(Path), True);
+
+        var Hit: TFileHit;
+        Hit.Path     := Path;
+        Hit.Section  := UnitUseSectionToStr(Use.Section);
+        Hit.Refs     := 0;
+        Hit.ExportsUsed:= 0;
+        Hit.FirstLine:= 0;
+
+        var Used: TDictionary<string, Boolean> := TDictionary<string, Boolean>.Create;
+        try
+          for var R: TReference in Store.GetReferencesFromFile(Use.FileId) do
+            for var Sym: TSymbol in ExportSyms do
+              if SameText(R.NameText, Sym.Name) or ReceiverNamesType(R.ReceiverText, Sym.Name) then
+              begin
+                Inc(Hit.Refs);
+                if not Used.ContainsKey(LowerCase(Sym.Name)) then
+                begin
+                  Used.Add(LowerCase(Sym.Name), True);
+                  Inc(Hit.ExportsUsed);
+                end;
+                if (Hit.FirstLine = 0) or (R.StartLine < Hit.FirstLine) then Hit.FirstLine:= R.StartLine;
+                Break;
+              end;
+        finally
+          Used.Free;
+        end;
+
+        Hits:= Hits + [Hit];
+      end;
+    end;
+  finally
+    SeenPaths.Free;
+  end;
+
+  var UsedFiles: Integer:= 0;
+  for var H: TFileHit in Hits do if H.Refs > 0 then Inc(UsedFiles);
+
+  if AArgs.AsJson then
+  begin
+    var Arr: TJSONArray:= TJSONArray.Create;
+    try
+      for var H: TFileHit in Hits do
+      begin
+        var O: TJSONObject:= TJSONObject.Create;
+        O.AddPair('file', H.Path);
+        O.AddPair('uses_section', H.Section);
+        O.AddPair('referenced', TJSONBool.Create(H.Refs > 0));
+        O.AddPair('ref_count', TJSONNumber.Create(H.Refs));
+        O.AddPair('exports_used', TJSONNumber.Create(H.ExportsUsed));
+        if H.FirstLine > 0 then O.AddPair('first_line', TJSONNumber.Create(H.FirstLine));
+        Arr.AddElement(O);
+      end;
+      Writeln(Arr.ToJSON);
+    finally
+      Arr.Free;
+    end;
+  end
+  else
+  begin
+    Writeln('unit: ', AArgs.UnitName, Format('  (%d export(s))', [Length(ExportSyms)]));
+    for var H: TFileHit in Hits do
+      if H.Refs = 0 then
+        Writeln(Format('  %-70s uses(%s)  DEAD IMPORT', [H.Path, H.Section]))
+      else
+        Writeln(Format('  %-70s uses(%s)  %d ref(s) to %d export(s), first line %d',
+          [H.Path, H.Section, H.Refs, H.ExportsUsed, H.FirstLine]));
+    Writeln(Format('%d of %d importing file(s) reference it', [UsedFiles, Length(Hits)]));
+  end;
+  Result:= 0;
+end;
+
 // v1.8: `query unit-usage --in <file.pas> --unit <UnitName>` -- of this unit's
 // exported symbols, which does THIS file reference?
 function DoQueryUnitUsage(const AArgs: TArgs): Integer;
@@ -4652,10 +4865,13 @@ var
   Tallies    : TArray<TSymbolTally>;
   I          : Integer       ;
 begin
-  if AArgs.InFile = '' then
-  begin Writeln('ERROR: query unit-usage requires --in <file.pas>'); Exit(2); end;
   if AArgs.UnitName = '' then
   begin Writeln('ERROR: query unit-usage requires --unit <UnitName>'); Exit(2); end;
+  { --in is now OPTIONAL, and its absence is a DIFFERENT QUESTION rather than an
+    error: with a file it asks "what does THIS file use of that unit", without
+    one it asks "which files use that unit at all". S6 / gap G1 of DataCopy's
+    2026-09-02 grep-fallback audit. }
+  if AArgs.InFile = '' then Exit(DoQueryUnitUsageProjectWide(AArgs));
 
   if not TFile.Exists(AArgs.InFile) then
   begin Writeln('ERROR: file not found: ', AArgs.InFile); Exit(2); end;
@@ -4691,49 +4907,9 @@ begin
       Exit(2);
     end;
 
-    { The unit's EXPORT SURFACE: the interface-section children of its unit
-      symbol -- i.e. what another unit can name after adding it to `uses`.
-
-      TWO THINGS THIS GETS RIGHT THAT THE OBVIOUS VERSION DOES NOT, both
-      measured against System.IniFiles in the Win32 library index:
-
-      1. NOT FindSymbolsByQualifiedName(<unit>). A unit's members are qualified
-         `System.IniFiles.TIniFile`, so an exact qualified-name lookup on
-         'System.IniFiles' returns exactly ONE row -- the unit symbol itself --
-         and the verb then answered about a one-element "export surface". The
-         members hang off the unit symbol as CHILDREN; that is where to look.
-         (`symbols.parent_id` is never NULL in this schema: every symbol roots at
-         its unit, so "top level" means "parent IS the unit symbol".)
-
-      2. THE UNIT IS RESOLVED IN WHICHEVER STORE HAS IT, not in the store that
-         happens to contain the target file. Those are routinely different: a
-         PROJECT index is the compile closure and deliberately excludes
-         library-path units, so asking "does CSVRoutines.pas use System.IniFiles"
-         needs the project DB for the file and the LIBRARY DB for the unit.
-         Resolving both in one store made the verb fail with "no interface-section
-         symbols found" on precisely the case it was built for.
-
-      Members (methods, fields, properties) are deliberately NOT included: they
-      are not addressable by bare name from another unit, and folding them in is
-      what makes a loop counter named `I` inside System.IniFiles look like a
-      reference to it. }
-    var UnitStore: ISymbolStore := nil;
-    for DbPath in PathsToScan do
-    begin
-      if not TFile.Exists(DbPath) then Continue;
-      var UOk: Boolean;
-      var Cand: ISymbolStore := OpenReadOnlyStore(DbPath, UOk);
-      if not UOk or (Cand = nil) then Continue;
-      for var U: TSymbol in Cand.FindSymbolsByExactName(AArgs.UnitName) do
-        if U.Kind = skUnit then
-        begin
-          UnitStore := Cand;
-          for var Ch: TSymbol in Cand.FindAllChildSymbols(U.Id) do
-            if SameText(Ch.Section, 'interface') then ExportSyms := ExportSyms + [Ch];
-          Break;
-        end;
-      if UnitStore <> nil then Break;
-    end;
+    { See ResolveUnitExportSurface -- the reasoning that used to live here moved
+      with the code when the project-wide mode began sharing it. }
+    ExportSyms:= ResolveUnitExportSurface(PathsToScan, AArgs.UnitName);
 
     if Length(ExportSyms) = 0 then
     begin
