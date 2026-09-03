@@ -1546,6 +1546,16 @@ end; // procedure
 { Declared up here because the MANIFEST index path uses them well before the
   single-root one does, and that is the path tools\reindex-all.ps1 drives. }
 const RESOLVER_FP_KEY = 'resolver_fingerprint';
+
+{ The database's own statement of what it IS -- see the long comment at the
+  writers further down. Hoisted up here with RESOLVER_FP_KEY because
+  NoteIndexFreshnessOnce, immediately below, reads it to decide which repair
+  command a staleness note may honestly advise. }
+const
+  SCAN_TYPE_KEY     = 'scan_type';
+  SCAN_TYPE_PROJECT = 'project';
+  SCAN_TYPE_LIBRARY = 'library';
+
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
 
 var GFreshnessNoted: Boolean = False;
@@ -1555,8 +1565,51 @@ var Note: string;
 begin
   if GFreshnessNoted or (AStore = nil) then Exit;
   GFreshnessNoted:= True;
-  Note:= FreshnessNote(ProbeIndexFreshness(AStore), ADbPath);
-  if Note <> '' then Writeln(ErrOutput, Note);
+
+  { THE ADVICE MUST BE A COMMAND THIS ENGINE ACCEPTS.
+
+    FreshnessNote says "refresh with: drag-lint index <dir> --db <db>". Since
+    5e4d6c6 that is REFUSED against a project database (exit 2, "refusing to
+    index a FOLDER into a PROJECT database") -- so on the commonest case of all,
+    a project index gone stale because a member unit was saved, the engine was
+    telling the operator to run something it rejects.
+
+    Session 61 corrected --help, README.md and the shared C:\Projects\CLAUDE.md
+    in the same change that shipped the refusal. It did not correct the runtime
+    advice strings, because the DOCS-IN-SYNC guard walks documents and not
+    Writeln. Every "use instead" string in this engine carries that same drift
+    risk with none of the coverage.
+
+    The wording deliberately MATCHES the refusal message's own "Use instead"
+    block, so an operator who hits both sees one consistent instruction.
+
+    FreshnessNote is still the right text for a LIBRARY database -- a folder
+    target is exactly what those take -- and for a database with no scan_type,
+    where nothing has been established and the older, broader advice is the
+    honest one. It keeps its caller for that reason. }
+  var Rep: TFreshnessReport:= ProbeIndexFreshness(AStore);
+  { No try/except: GetMetaValue's contract is to answer '' for a missing table
+    AND a missing key, never to raise -- callers read '' as "unknown". Guarding
+    it would buy nothing and cost two real findings (bare-except and
+    try-except-swallowed). The older reader at the folder refusal still wraps it;
+    that predates this and is left alone deliberately. }
+  var ScanType: string:= AStore.GetMetaValue(SCAN_TYPE_KEY);
+
+  if (Rep.Verdict = fvStale) and SameText(ScanType, SCAN_TYPE_PROJECT) then
+  begin
+    var Extra: string:= '';
+    if Length(Rep.Examples) > 0 then Extra:= ' e.g. ' + TPath.GetFileName(Rep.Examples[0]);
+    Writeln(ErrOutput, Format(
+      'drag-lint: note: %d of %d indexed file(s) changed since this index was built%s.' +
+      ' Answers may be stale -- this is a PROJECT index, so refresh it with:' +
+      ' drag-lint index --project <file.dproj> --db %s   (or: drag-lint index --all --only <Section>)',
+      [Rep.Changed, Rep.Checked, Extra, ADbPath]));
+  end
+  else
+  begin
+    Note:= FreshnessNote(Rep, ADbPath);
+    if Note <> '' then Writeln(ErrOutput, Note);
+  end;
 
   { THE RESOLVE PASS IS A SECOND FRESHNESS QUESTION, AND IT HAD NO VOICE.
     ProbeIndexFreshness answers "was this DB parsed by the current parser?" and
@@ -1588,7 +1641,6 @@ function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Bool
 var
   Found   : Integer;
   Expected: Integer;
-  Note    : string ;
 begin
   Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
   if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
@@ -1596,7 +1648,11 @@ begin
   begin
     AOk:= False;
     if not AQuiet then
-      Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected]));
+      { Both forms, because at this point the schema is too old to be trusted to
+        tell us which kind of database this is -- scan_type may predate it. The
+        folder form alone would be refused on a project index. }
+      Writeln(Format('index schema v%d < v%d: to migrate, run "drag-lint index --project <file.dproj> --db <db>"'
+                   + ' for a project index, or "drag-lint index <dir> --db <db>" for a library index', [Found, Expected]));
   end;
   { INDEX FRESHNESS -- the 2026-08-13 owner ruling, warn-only half.
     "A stale DB is not authoritative; the answer is to rescan, not to report."
@@ -2042,12 +2098,10 @@ end;
   same reason they are: an interrupted run must not leave a claim about a scope
   it never finished walking.
 
-  DECLARED HERE, well above both writers, because Pascal needs it: the manifest
-  path (index --all) stamps it several thousand lines before DoIndex does. }
-const
-  SCAN_TYPE_KEY     = 'scan_type';
-  SCAN_TYPE_PROJECT = 'project';
-  SCAN_TYPE_LIBRARY = 'library';
+  DECLARED further up (beside RESOLVER_FP_KEY) because Pascal needs it: the
+  manifest path (index --all) stamps it several thousand lines before DoIndex
+  does, and NoteIndexFreshnessOnce -- earlier still -- now READS it to decide
+  which repair command to advise. }
 
 { INBOX 2.3: defined with DoIndex (the single-root path) but needed here too;
   forward-declared rather than moved so the fingerprint policy stays next to the
@@ -3707,7 +3761,18 @@ begin
     run_index_rebuild_recompile POLLUTES a project DB with one out-of-root FILE
     on purpose, to prove --rebuild evicts it again, and the refusal blocked the
     setup rather than the defect. The owner's ruling names `index <dir>`. }
-  if (not IsProjectScopedTarget) and TDirectory.Exists(AArgs.Path) then
+  { --resolve-only IS EXEMPT, and the exemption is structural rather than a
+    convenience. It skips the walk entirely (see the gate further down) and
+    re-derives edges from parses the index ALREADY holds, so it cannot add a
+    loose file and cannot adopt a widened set as the scope. The harm this
+    refusal exists to prevent is absent by construction.
+
+    It was refused until now -- measured, exit 2 -- and that was the worst
+    possible case to refuse: `index <dir> --db <db> --resolve-only` is what the
+    resolver-staleness note prints, so the advice failed exactly when the
+    operator needed it. }
+  if (not IsProjectScopedTarget) and (not AArgs.ResolveOnly)
+     and TDirectory.Exists(AArgs.Path) then
   begin
     var DbScanType: string:= '';
     try DbScanType:= Store.GetMetaValue(SCAN_TYPE_KEY); except DbScanType:= ''; end;
@@ -3972,9 +4037,23 @@ begin
     { Rides the same completed-run guarantee as the fingerprints above: a
       database that says "project" was walked as a project, all the way through.
       This is what lets the next `index <dir> --db` refuse instead of guessing
-      from the folder layout. }
-    Store.SetMetaValue(SCAN_TYPE_KEY,
-      IfThen(IsProjectScopedTarget, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
+      from the folder layout.
+
+      --resolve-only MUST NOT WRITE IT. It walks nothing, so it establishes no
+      scope and has nothing to claim. Writing it here anyway would take the
+      target's shape -- a FOLDER, since that is the form the resolver-staleness
+      note advises -- and restamp a project database as `library`, destroying
+      the one piece of evidence the refusal runs on. The next folder scan would
+      then be permitted and the database would inflate exactly as before.
+
+      This was live for the length of one build: exempting --resolve-only from
+      the refusal (above) opened the path, and the guard's own project-staleness
+      assertion failed because the DB it had just resolve-only'd no longer said
+      `project`. A silent downgrade of a safety stamp, caught only because the
+      assertion that noticed was about something else. }
+    if not AArgs.ResolveOnly then
+      Store.SetMetaValue(SCAN_TYPE_KEY,
+        IfThen(IsProjectScopedTarget, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
     Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
