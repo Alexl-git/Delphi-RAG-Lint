@@ -2907,17 +2907,35 @@ begin
     Exit;
   end;
 
-  // Parallel path: --jobs N > 1.
-  // Requires --config so the child gets a deterministic config path.
-  // If no --config was given (discovered mode), warn and fall back to sequential.
-  if AArgs.WorkspaceConfig = '' then
-  begin
-    Writeln(ErrOutput, 'NOTE: --jobs >1 requires --config <path>; running sequentially.');
-    FailedNames:= nil;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
-    Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
-    Exit;
-  end;
+  { Parallel path: --jobs N > 1. It used to DOWNGRADE ITSELF TO SEQUENTIAL
+    whenever --config was absent --
+
+      NOTE: --jobs >1 requires --config <path>; running sequentially.
+
+    -- on the stated reasoning that the child needs "a deterministic config
+    path". The premise was wrong twice over. The command has ALREADY resolved
+    the manifest by this line, without --config, from (EngineDir, CWD); and a
+    single --config path could not even express what it resolved, because
+    TManifestIO.Load MERGES <engine>\drag-lint.json with the nearest
+    .drag-lint.json walking up from the CWD. Passing one of the two files would
+    hand the child a DIFFERENT manifest than the parent built its plan from.
+
+    Letting the child rediscover is therefore not a fallback, it is the FAITHFUL
+    option: the child is spawned as ParamStr(0) (same EngineDir) with
+    lpCurrentDirectory = nil (inherits the CWD), so Load() there sees the same
+    two inputs and reproduces the same merge. --config is forwarded only when
+    the caller actually gave one, in which case it IS the whole manifest.
+
+    WHAT IT COST, and why a downgrade is worse than a refusal: three documents
+    -- including C:\Projects\CLAUDE.md -- taught the bare `index --all --jobs 0`
+    as the way to build every index, so the mandatory post-extractor-bump
+    reindex ran SINGLE-THREADED for 28 minutes before anyone noticed the note,
+    which had already scrolled off. The run looks healthy the whole way: every
+    file reports 0 errors and progress is continuous. Measured 2026-09-03 on
+    3 sections x 250 units -- `--jobs 3` reached 1 concurrent process without
+    --config and 4 with it. See
+    tests\autotest\run_index_all_jobs_spawns_workers.ps1, which now pins the
+    process count itself rather than the absence of the note. }
 
   // Spawn one child process per plan item, throttled to EffJobs concurrent.
   // Each child runs: "<self>" index --all --only "<Name>" [--platform "<P>"]
@@ -2970,7 +2988,11 @@ begin
       // Build child command line.
       ChildCmdLine:= '"' + SelfExe + '" index --all --only "' + Plan.Items[i].Name + '"';
       if Plan.Items[i].Platform <> '' then ChildCmdLine:= ChildCmdLine + ' --platform "' + Plan.Items[i].Platform + '"';
-      ChildCmdLine:= ChildCmdLine + ' --config "' + AArgs.WorkspaceConfig + '"' + ' --jobs 1';
+      { Only when the caller gave one -- see the block above. With no --config
+        the child rediscovers the SAME manifest from the EngineDir and CWD it
+        inherits, which is what the parent did. }
+      if AArgs.WorkspaceConfig <> '' then ChildCmdLine:= ChildCmdLine + ' --config "' + AArgs.WorkspaceConfig + '"';
+      ChildCmdLine:= ChildCmdLine + ' --jobs 1';
       // PP-Task-9: propagate --no-preprocess to the child so a parallel --all
       // build honours the raw all-branch request across every spawned worker.
       if AArgs.NoPreprocess then ChildCmdLine:= ChildCmdLine + ' --no-preprocess';
@@ -2986,6 +3008,33 @@ begin
         -- `index --all --no-prune --jobs 4` would evict from every section it
         was told not to touch, and report nothing. }
       if AArgs.NoPrune then ChildCmdLine:= ChildCmdLine + ' --no-prune';
+      { THE SAME OMISSION, THREE MORE TIMES, found by reading this list against
+        the sequential call two screens up. That call passes AArgs.ResolveOnly,
+        AArgs.ForceReparse and the --max-file-kb override; none of the three
+        travelled, so `--jobs N` did not merely run the same work in parallel,
+        it ran DIFFERENT WORK and reported success:
+
+          --resolve-only   the worst of them. The sequential path re-runs the
+                           resolve pass over an existing index; a child without
+                           the flag performs a FULL INDEX instead -- minutes of
+                           unasked-for parsing, and every stored parse rewritten
+                           on a run whose whole point was not to touch them.
+          --force-reparse  silently downgraded to the incremental skip, which is
+                           exactly the flag's opposite. (--rebuild already
+                           implies it in the child's own ParseArgs, so it is
+                           forwarded on its own account too.)
+          --max-file-kb    the parent applies it to every plan item AFTER
+                           ResolvePlan; the child re-resolves from the manifest
+                           and got the manifest's limit back.
+
+        The pattern is now four for four -- --no-preprocess, --rebuild,
+        --no-prune and these -- so state the rule rather than the instances:
+        THE CHILD RE-PARSES ITS OWN ARGUMENTS, so anything the sequential path
+        reads out of AArgs must be put on this line or it does not exist over
+        there. }
+      if AArgs.ResolveOnly  then ChildCmdLine:= ChildCmdLine + ' --resolve-only';
+      if AArgs.ForceReparse then ChildCmdLine:= ChildCmdLine + ' --force-reparse';
+      if AArgs.MaxFileKBSet then ChildCmdLine:= ChildCmdLine + ' --max-file-kb ' + IntToStr(AArgs.MaxFileKB);
 
       SetLength(ChildCmdBuf, Length(ChildCmdLine) + 1);
       Move(PChar(ChildCmdLine)^, ChildCmdBuf[0], (Length(ChildCmdLine) + 1) * SizeOf(WideChar));
