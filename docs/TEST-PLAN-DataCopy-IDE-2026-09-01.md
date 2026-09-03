@@ -178,9 +178,10 @@ at lines **73, 89, 103, 118, 121, 123, 143, 146, 170, 175, 180**.
       saying the marker suppresses NOTHING. A misspelling
       (`// dl:ok slepe-in-vcl -- typo`) must behave the same way.
 
-      > **Known, do not file:** that message lists three accepted forms and
-      > **omits the colon form it now accepts**. Already filed as
-      > `INBOX-malformed-marker-message-omits-the-colon-form.md`.
+      That message must list **all four** accepted forms, including the colon
+      form you use. It omitted the colon form until **2026-09-03**; it is now
+      pinned by
+      `tests\autotest\run_marker_malformed_advises_every_form.ps1`.
 
 - [ ] **4.4 A hash-less marker also raises `review-marker-stale`** -- *"carries
       no @hash, so it cannot be checked against the code"*. That is a **different

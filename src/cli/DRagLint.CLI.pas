@@ -7543,9 +7543,17 @@ begin
             if not Known.ContainsKey(LowerCase(M.RuleId)) then
             begin
               EmitHint(SF, LN, 'review-marker-malformed',
+                { EVERY accepted form, or this message lies to the one reader who
+                  most needs it. The colon form was omitted from 645f70c until
+                  2026-09-03, and it is the form people write by hand -- DataCopy
+                  used it on all 11 of its sites. The list is pinned against the
+                  parser's real capability by
+                  tests\autotest\run_marker_malformed_advises_every_form.ps1:
+                  every form named here is exercised there, and an accepted form
+                  missing from here FAILS that suite. }
                 Format('dl:ok names "%s", which is not a rule id -- this marker suppresses NOTHING. '
-                     + 'Write `dl:ok <rule-id>` , `dl:ok <rule-id>@<hash>` or `dl:ok <rule-id> -- <reason>`, '
-                     + 'or run `drag-lint allow` to format it.', [M.RuleId]));
+                     + 'Write `dl:ok <rule-id>`, `dl:ok <rule-id>@<hash>`, `dl:ok <rule-id> -- <reason>` '
+                     + 'or `dl:ok <rule-id>: <reason>`, or run `drag-lint allow` to format it.', [M.RuleId]));
               Continue;
             end;
             if MatchStr(LowerCase(M.RuleId), COMMENT_SENSITIVE) then Continue;

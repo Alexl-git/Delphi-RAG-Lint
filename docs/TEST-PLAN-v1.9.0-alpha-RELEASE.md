@@ -348,10 +348,13 @@ file a false bug. (Filed as `INBOX-lint-verb-cannot-report-unused-markers.md`.)
       rule id -- this marker suppresses NOTHING. ...
       ```
 
-      > **KNOWN COSMETIC GAP, do not file:** the message lists
-      > `dl:ok <rule-id>`, `dl:ok <rule-id>@<hash>` and
-      > `dl:ok <rule-id> -- <reason>` but **omits the colon form it now
-      > accepts**. The advice is correct, merely incomplete.
+      The message must list **all four** accepted forms -- `dl:ok <rule-id>`,
+      `dl:ok <rule-id>@<hash>`, `dl:ok <rule-id> -- <reason>` and
+      `dl:ok <rule-id>: <reason>`. The colon form was **omitted until
+      2026-09-03**; it is now pinned by
+      `tests\autotest\run_marker_malformed_advises_every_form.ps1`, which
+      exercises every advertised form against the engine and fails if the
+      advertised set and the accepted set diverge in either direction.
 
 - [ ] **4.5 NEW (B3): a marker is honoured across the statement's whole SPAN.**
       A trailing `// dl:ok` can only be written where a statement **ends**, but a
