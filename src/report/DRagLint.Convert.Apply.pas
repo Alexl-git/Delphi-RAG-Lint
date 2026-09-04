@@ -76,6 +76,78 @@ type
     ToType      : string;
   end;
 
+  /// <summary>What one reported line of a convert-apply run IS, as a stable
+  /// machine-readable token -- the dispatchable half of the report, so a
+  /// consumer never has to pattern-match the prose.</summary>
+  /// <remarks>
+  /// The wire spelling of each value is produced by ApplyItemKindName and is a
+  /// COMPATIBILITY SURFACE (schema apply/1): adding a kind is additive, but
+  /// renaming one is a breaking change and requires apply/2.
+  ///
+  /// The REMAINDER of a conversion -- everything the engine did not or could
+  /// not carry over -- is exactly the subset of items whose Field is afTodos,
+  /// afReemitNotes or afWarnings. aikMappingNotApplied is emitted by the
+  /// #mapping surface (DRagLint.Convert.DfmReemit).
+  ///
+  /// NOT represented, deliberately: a property removed by an explicit #remove
+  /// or acknowledged by #ignore. Both are silent by design, and whether a
+  /// DELIBERATE removal counts as remainder at all is an open question for the
+  /// converter side -- see docs\converter\apply-remainder-contract.md.
+  /// </remarks>
+  TApplyItemKind = (
+    aikFieldRetyped,         { .pas published field decl retyped F -> T }
+    aikAccessSiteRewritten,  { obj.Old -> obj.New at a .pas access site }
+    aikCreatorRetyped,       { FromType.Create -> ToType.Create }
+    aikDfmPathCreated,       { intermediate T sub-object synthesized (info) }
+    aikCreatorVerify,        { the verify-creator marker left at a rewritten creator }
+    aikCreatorUnverified,    { T has no indexed generic Create(AOwner) }
+    aikUnmappedProperty,     { F property with a non-default value, dropped }
+    aikBinaryTypeMismatch,   { binary/complex value whose F/T types differ }
+    aikOwnedPartUnconverted, { nested owned part needing its own #convert }
+    aikLinkStubUnfilled,     { #link ToPath still spelled '???' }
+    aikCollectionRelocated,  { collection moved verbatim to a new path (info) }
+    aikDefaultsMayDiverge,   { F/T differ, absent values adopt the T default }
+    aikCastNotApplied,       { #link carrying a cast, refused on the .pas side }
+    aikInstanceSkipped,      { whole instance skipped before any edit }
+    aikFieldDeclNotRetyped,  { shared multi-declarator line, not retyped }
+    aikUsesUnitUnresolved,   { no unit found declaring T, uses not added }
+    aikMappingNotApplied);   { #apply'd #mapping matched no value }
+
+  /// <summary>Which of TApplyReport's six legacy arrays an item was reported
+  /// in. The wire spelling is produced by ApplyFieldName.</summary>
+  /// <remarks>The three REMAINDER fields are afTodos, afReemitNotes and
+  /// afWarnings; afConverted, afAccessSites and afCreatorSites describe work
+  /// that WAS done.</remarks>
+  TApplyField = (afConverted, afAccessSites, afCreatorSites, afTodos,
+                 afReemitNotes, afWarnings);
+
+  /// <summary>One reported line of a convert-apply run, carrying both the
+  /// original prose (Text) and the structured facts behind it.</summary>
+  /// <remarks>
+  /// Every item mirrors exactly one entry in one of TApplyReport's six legacy
+  /// string arrays, so Length(Items) always equals the sum of their lengths --
+  /// see TApplyReport's remarks.
+  ///
+  /// The non-Text fields are best-effort context, NOT guaranteed populated:
+  /// which ones carry a value depends on Kind. Line is a 1-based line in
+  /// FilePath and is 0 when unknown -- notably for anything derived from the
+  /// DFM re-emit, because TDfmNode carries no line number, so such items can
+  /// only be anchored to the instance's object-block header line. RuleLine is
+  /// the 1-based line in the rules file that produced the item, or 0.
+  /// </remarks>
+  TApplyItem = record
+    Kind    : TApplyItemKind;
+    Field   : TApplyField;
+    Instance: string;  { the .dfm instance name, when the item is about one }
+    FromType: string;
+    ToType  : string;
+    FilePath: string;  { absolute path of the file the item is about }
+    Path    : string;  { a .dfm property path, when the item is about one }
+    Text    : string;  { the human-readable line, verbatim }
+    Line    : Integer; { 1-based line in FilePath, or 0 }
+    RuleLine: Integer; { 1-based line in the rules file, or 0 }
+  end;
+
   /// <summary>Human-readable summary of one convert-apply run, grouped by
   /// surface: Converted lists one line per instance actually rewritten;
   /// AccessSites and CreatorSites list the .pas property/event-access and
@@ -85,6 +157,14 @@ type
   /// DfmReemit); Warnings lists non-fatal problems found while building the
   /// plan.</summary>
   /// <remarks>
+  /// Items is the SAME report in typed form: one TApplyItem per entry across
+  /// the six string arrays, in emission order, each carrying the kind and the
+  /// structured facts the prose was rendered from.
+  ///
+  /// INVARIANT: Length(Items) = the sum of the lengths of the six arrays.
+  /// BuildApplyPlan maintains it structurally -- every report line is appended
+  /// through a single Emit, which writes to exactly one array and to Items.
+  /// The six arrays are kept as-is so existing text consumers are unaffected.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.Convert.Apply</para>
@@ -97,6 +177,7 @@ type
     Todos       : TArray<string>;
     ReemitNotes : TArray<string>;
     Warnings    : TArray<string>;
+    Items       : TArray<TApplyItem>;
   end;
 
   /// <summary>The outcome of BuildApplyPlan: the full set of text edits to
@@ -275,6 +356,22 @@ function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADf
 function FindConvertInstances(const ADfmText: string; const ARules: TConversionRuleSet;
   const AOnly: TArray<string>): TArray<TConvertInstance>;
 
+/// <summary>The stable wire name of an item kind, e.g. 'creator-verify'.</summary>
+/// <param name="AKind">The kind to spell.</param>
+/// <returns>A lowercase, hyphenated ASCII token; never empty.</returns>
+/// <remarks>THE SINGLE SOURCE of these names. Every emitter (the apply/1 JSON,
+/// the remainder contract doc, any consumer dispatch table) must go through
+/// here rather than spelling a literal, so a rename cannot drift apart. Pure.
+/// </remarks>
+function ApplyItemKindName(AKind: TApplyItemKind): string;
+
+/// <summary>The stable wire name of a report field, e.g. 'reemit_notes'.</summary>
+/// <param name="AField">The field to spell.</param>
+/// <returns>A lowercase, snake_case ASCII token matching the apply/1 JSON key
+/// of the corresponding array; never empty.</returns>
+/// <remarks>Pure.</remarks>
+function ApplyFieldName(AField: TApplyField): string;
+
 implementation
 
 uses
@@ -283,6 +380,33 @@ uses
   System.Classes,
   System.Hash,
   System.DateUtils;
+
+function ApplyItemKindName(AKind: TApplyItemKind): string;
+const
+  { Positional against TApplyItemKind -- keep the two in step. A new kind is
+    appended to BOTH; renaming an existing entry breaks apply/1 (see the type's
+    remarks) and requires a schema bump. }
+  NAMES: array[TApplyItemKind] of string = (
+    'field-retyped', 'access-site-rewritten', 'creator-retyped',
+    'dfm-path-created', 'creator-verify', 'creator-unverified',
+    'unmapped-property', 'binary-type-mismatch', 'owned-part-unconverted',
+    'link-stub-unfilled', 'collection-relocated', 'defaults-may-diverge',
+    'cast-not-applied', 'instance-skipped', 'field-decl-not-retyped',
+    'uses-unit-unresolved', 'mapping-not-applied');
+begin
+  Result:= NAMES[AKind];
+end;
+
+function ApplyFieldName(AField: TApplyField): string;
+const
+  { Positional against TApplyField; each name is also the apply/1 JSON key of
+    the matching TApplyReport array. }
+  NAMES: array[TApplyField] of string = (
+    'converted', 'access_sites', 'creator_sites', 'todos', 'reemit_notes',
+    'warnings');
+begin
+  Result:= NAMES[AField];
+end;
 
 // True when AName appears (case-insensitively) in AOnly. Empty AOnly means
 // "no filter" -- everything passes.
@@ -949,15 +1073,16 @@ var
   CreatorSites: TList<string>;
   AccessSites : TList<string>;
   Todos       : TList<string>;
+  Items       : TList<TApplyItem>; { the typed mirror of the six lists above -- see Emit }
   PasLines    : TStringList;
   PasFileSyms : TArray<TSymbol>;
   PasFileId   : Int64;
   PasStore    : ISymbolStore; { the store that actually has AUnitPas indexed -- see StoreForFile }
-  Sym         : TSymbol;
   DoneUnits   : TDictionary<string, Boolean>; { ToType -> already handled (added or already-used) }
   ToTypesSeen : TList<string>;
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
   E           : TTextEdit;
+  It          : TApplyItem; { scratch for the main body's own Emit calls }
   TreeCache   : TDictionary<string, TPropTree>; { qname -> tree, built once per distinct type }
   Opts        : TPropTreeOptions;
 
@@ -1007,6 +1132,310 @@ var
     end;
   end;
 
+  // Appends ONE report line: the prose to whichever legacy array AItem.Field
+  // names, and the typed item to Items. EVERY report line in this routine goes
+  // through here, which is what makes TApplyReport's
+  // "Length(Items) = sum of the six arrays" invariant true by construction
+  // instead of by discipline -- there is no way to add prose without also
+  // adding its item, or vice versa.
+  procedure Emit(const AItem: TApplyItem);
+  begin
+    case AItem.Field of
+      afConverted   : Converted.Add(AItem.Text);
+      afAccessSites : AccessSites.Add(AItem.Text);
+      afCreatorSites: CreatorSites.Add(AItem.Text);
+      afTodos       : Todos.Add(AItem.Text);
+      afReemitNotes : ReemitNotes.Add(AItem.Text);
+      afWarnings    : Warnings.Add(AItem.Text);
+    end;
+    Items.Add(AItem);
+  end;
+
+  // An item carrying only what the caller states. Context fields stay empty --
+  // see TApplyItem's remarks: they are best-effort, not guaranteed.
+  function PlainItem(AKind: TApplyItemKind; AField: TApplyField; const AText: string): TApplyItem;
+  begin
+    Result:= Default(TApplyItem);
+    Result.Kind := AKind;
+    Result.Field:= AField;
+    Result.Text := AText;
+  end;
+
+  // As PlainItem, pre-filled from the instance currently being converted (Inst
+  // is the enclosing loop's variable, so this is only valid inside that loop).
+  function InstItem(AKind: TApplyItemKind; AField: TApplyField; const AText: string): TApplyItem;
+  begin
+    Result:= PlainItem(AKind, AField, AText);
+    Result.Instance:= Inst.InstanceName;
+    Result.FromType:= Inst.FromType;
+    Result.ToType  := Inst.ToType;
+  end;
+
+  // Folds one instance's re-emit report into ReemitNotes, giving each entry the
+  // kind its SOURCE array implies rather than one inferred from its prose.
+  // ABlockLine is the instance's .dfm object-block header line: TDfmNode carries
+  // no line number, so it is the most precise anchor a re-emit-derived item can
+  // have. The prose is byte-identical to what this used to add inline.
+  procedure FoldReemitReport(const AReport: TReemitReport; ABlockLine: Integer);
+    procedure FoldOne(const AEntries: TArray<string>; AKind: TApplyItemKind; const AFmt: string);
+    var
+      N : string;
+      It: TApplyItem;
+    begin
+      for N in AEntries do
+      begin
+        It:= InstItem(AKind, afReemitNotes, Format(AFmt, [Inst.InstanceName, N]));
+        It.FilePath:= ADfmPath;
+        It.Line    := ABlockLine;
+        Emit(It);
+      end;
+    end;
+  begin
+    FoldOne(AReport.Dropped,    aikUnmappedProperty,     '%s: dropped %s');
+    FoldOne(AReport.Mismatched, aikBinaryTypeMismatch,   '%s: mismatched %s');
+    FoldOne(AReport.OwnedParts, aikOwnedPartUnconverted, '%s: owned-part %s');
+    FoldOne(AReport.Created,    aikDfmPathCreated,       '%s: created %s');
+    { Stubs and Relocated used to live in Notes and were emitted with this same
+      '%s: %s' shape -- keeping it means every existing text assertion still
+      matches; only the KIND is newly distinguishable. }
+    FoldOne(AReport.Stubs,     aikLinkStubUnfilled,    '%s: %s');
+    FoldOne(AReport.Relocated, aikCollectionRelocated, '%s: %s');
+    FoldOne(AReport.Notes,     aikDefaultsMayDiverge,  '%s: %s');
+  end;
+
+  // -- surface #1: locate the published field decl 'Name: FromType;' via the
+  // field symbol (gives us the line range to scope the text search), then find
+  // the exact FromType token span for a tekReplaceInLine edit.
+  procedure PlanFieldRetype;
+  var
+    E    : TTextEdit;
+    It   : TApplyItem;
+    Sym  : TSymbol; { must be local: E1019 forbids a for-in over an enclosing routine's var }
+    Found: Boolean;
+  begin
+    Found:= False;
+    for Sym in PasFileSyms do
+    begin
+      if (Sym.Kind <> skField) or (not SameText(Sym.Name, Inst.InstanceName)) or
+         (not SameText(Sym.Signature, Inst.FromType)) then Continue;
+
+      var FLine, FCol, FEndCol: Integer;
+      if LocateFieldTypeToken(PasLines, Sym.StartLine, Sym.EndLine,
+           Inst.InstanceName, Inst.FromType, FLine, FCol, FEndCol) then
+      begin
+        E:= Default(TTextEdit);
+        E.FilePath:= AUnitPas;
+        E.Kind    := tekReplaceInLine;
+        E.Line    := FLine;
+        E.Col     := FCol;
+        E.EndCol  := FEndCol;
+        E.Text    := Inst.ToType;
+        Edits.Add(E);
+        It:= InstItem(aikFieldRetyped, afConverted,
+          Format('%s: %s -> %s', [Inst.InstanceName, Inst.FromType, Inst.ToType]));
+        It.FilePath:= AUnitPas;
+        It.Line    := FLine;
+        Emit(It);
+        Found:= True;
+      end;
+      Break; { one matching field symbol is enough }
+    end;
+    if not Found then
+      { A multi-declarator field line (`Edit1, Edit2: TOldEdit;`) indexes only
+        the FIRST declarator as a field symbol, so a later name on the shared
+        line is not located here -- the .dfm/access/creator surfaces still
+        convert it, but this .pas decl line stays typed as the F type. Name the
+        limitation so the user fixes the shared line by hand. }
+      Emit(InstItem(aikFieldDeclNotRetyped, afWarnings,
+        Format('%s: could not locate field declaration "%s: %s" in %s'
+          + ' (a shared multi-declarator line is not retyped -- fix the decl by hand)',
+          [Inst.InstanceName, Inst.InstanceName, Inst.FromType, AUnitPas])));
+  end;
+
+  // -- surface #5: runtime-creator retype. Every explicit construction site
+  // 'FromType.Xxx(...)' (e.g. 'Edit1 := TOldEdit.Create(Self);') in this unit
+  // gets its type token rewritten to ToType, PLUS a TODO marker comment --
+  // ALWAYS, unconditionally: ToType's constructor/init may take a different
+  // shape than FromType's (a different parameter list, extra required setup),
+  // and this applier never attempts to fix up constructor ARGUMENTS. The marker
+  // is the safety net the user checks by hand. A design-time (DFM-only)
+  // instance has no .Create in code, so it simply contributes zero sites here --
+  // its #1/#2/#3 edits still apply on their own.
+  procedure PlanCreatorSites;
+  var
+    E : TTextEdit;
+    It: TApplyItem;
+  begin
+    var Sites: TArray<TCreatorSite>:= FindConstructionSites(AStores, PasStore, PasFileId, PasLines, Inst.FromType);
+    var HasGenericCreate: Boolean:= ToTypeHasGenericCreate(AStores, Inst.ToType);
+    for var Site in Sites do
+    begin
+      var CtorName: string:= Site.CtorName;
+      if CtorName = '' then CtorName:= 'Create';
+
+      E:= Default(TTextEdit);
+      E.FilePath:= AUnitPas;
+      E.Kind    := tekReplaceInLine;
+      E.Line    := Site.Line;
+      E.Col     := Site.Col;
+      E.EndCol  := Site.EndCol;
+      E.Text    := Inst.ToType;
+      Edits.Add(E);
+
+      var TodoText: string:= Format(
+        '{ TODO: drag-lint convert -- verify creator for %s (was %s.%s); %s''s ctor/init may differ }',
+        [Inst.ToType, Inst.FromType, CtorName, Inst.ToType]);
+
+      { end-of-line insert keeps line numbers stable for every OTHER edit on
+        this line/file (a tekInsertLines line-above would shift every
+        subsequent line number, which every other surface's edits are NOT
+        computed to account for). }
+      var LineLen: Integer:= 0;
+      if (Site.Line >= 1) and (Site.Line <= PasLines.Count) then
+        LineLen:= Length(PasLines[Site.Line - 1]);
+      E:= Default(TTextEdit);
+      E.FilePath:= AUnitPas;
+      E.Kind    := tekInsertInLine;
+      E.Line    := Site.Line;
+      E.Col     := LineLen + 1;
+      E.Text    := ' ' + TodoText;
+      Edits.Add(E);
+
+      It:= InstItem(aikCreatorRetyped, afCreatorSites,
+        Format('%s: %s.%s -> %s.%s', [Inst.InstanceName, Inst.FromType, CtorName, Inst.ToType, CtorName]));
+      It.FilePath:= AUnitPas;
+      It.Line    := Site.Line;
+      Emit(It);
+
+      if not HasGenericCreate then
+      begin
+        It:= InstItem(aikCreatorUnverified, afReemitNotes,
+          Format('%s: %s has no indexed generic Create(AOwner: TComponent) -- verify the creator manually',
+            [Inst.InstanceName, Inst.ToType]));
+        It.FilePath:= AUnitPas;
+        It.Line    := Site.Line;
+        Emit(It);
+      end;
+
+      It:= InstItem(aikCreatorVerify, afTodos, TodoText);
+      It.FilePath:= AUnitPas;
+      It.Line    := Site.Line;
+      Emit(It);
+    end;
+  end;
+
+  // -- surface #4: instance-scoped property/event ACCESS rewrite, via ref-gap
+  // G's 'member-access' refs. Runs ONCE over the whole unit per renaming
+  // '#link ToMember <- FromMember' rule (not per-instance --
+  // GetReferencesFromFile already returns every ref in the file, and
+  // FindMemberAccessSites' own instance-name join is what scopes each hit to a
+  // specific converted receiver), rather than inside the per-instance loop: a
+  // single access-rewrite pass naturally covers every instance sharing the same
+  // rule in one query instead of N redundant whole-file ref scans. Identity
+  // renames (ToPath = FromPath) are skipped -- there is nothing to rewrite.
+  // Dotted paths (e.g. '#link Name <- Inner.Shade' -- a NESTED .dfm property
+  // path) are also skipped here: they describe the .dfm property tree, not a
+  // single .pas 'obj.Member' token, so they are out of surface #4's scope (no
+  // crash, just no rewrite -- the .dfm-side #link still applies via surface #3).
+  procedure PlanAccessSites;
+  var
+    E : TTextEdit;
+    It: TApplyItem;
+  begin
+    for var LinkRule in ARules.Rules do
+    begin
+      if LinkRule.Kind <> rkLink then Continue;
+      if (LinkRule.ToPath = '') or (LinkRule.FromPath = '') then Continue;
+      { A CAST IS NOT YET PERFORMED, SO THE RENAME IS REFUSED RATHER THAN
+        HALF-APPLIED. This surface rewrites the member IDENTIFIER at an access
+        site: `obj.Old` -> `obj.New`. A rule carrying `: Round` says the VALUE
+        also needs converting, and this code cannot do that. Renaming without it
+        would emit source that compiles and is numerically wrong -- the worst
+        possible outcome, and strictly worse than the defect this cast handling
+        was added to fix.
+
+        Before the FromPath split landed, `: Round` was swallowed into FromPath
+        and matched no member, so nothing was rewritten by accident. Making the
+        path resolve correctly therefore OPENS this hazard, and this guard is
+        what keeps it closed. It is loud (a warning naming the rule and its cast)
+        rather than silent, because a skipped conversion the operator never hears
+        about is the same class of defect. }
+      if LinkRule.Cast <> '' then
+      begin
+        It:= PlainItem(aikCastNotApplied, afWarnings,
+          Format('line %d: #link %s <- %s : %s SKIPPED on the .pas side -- ' +
+            'the cast is not applied by convert-apply, and renaming without it would produce ' +
+            'wrong values. Convert this access site by hand.',
+            [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast]));
+        It.Path    := LinkRule.FromPath;
+        It.RuleLine:= LinkRule.LineNo;
+        Emit(It);
+        Continue;
+      end;
+      if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
+      if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
+
+      var Sites: TArray<TAccessSite>:= FindMemberAccessSites(PasStore, PasFileId, PasLines,
+        LinkRule.FromPath, ConvertedInstNames.ToArray);
+      for var Site in Sites do
+      begin
+        E:= Default(TTextEdit);
+        E.FilePath:= AUnitPas;
+        E.Kind    := tekReplaceInLine;
+        E.Line    := Site.Line;
+        E.Col     := Site.Col;
+        E.EndCol  := Site.EndCol;
+        E.Text    := LinkRule.ToPath;
+        Edits.Add(E);
+
+        It:= PlainItem(aikAccessSiteRewritten, afAccessSites,
+          Format('%s.%s -> %s.%s (L%d)',
+            [Site.InstanceName, LinkRule.FromPath, Site.InstanceName, LinkRule.ToPath, Site.Line]));
+        It.Instance:= Site.InstanceName;
+        It.FilePath:= AUnitPas;
+        It.Path    := LinkRule.FromPath;
+        It.Line    := Site.Line;
+        It.RuleLine:= LinkRule.LineNo;
+        Emit(It);
+      end;
+    end;
+  end;
+
+  // -- surface #2: uses-add for each distinct ToType (once per type).
+  // Bug 2: the To type's declaring unit may live in a DIFFERENT --db than the
+  // unit being converted (PasStore) -- try every store as the NAME store, in
+  // order, keeping PasStore fixed as the UNIT store (whose uses clause is what
+  // actually gets edited), first store that resolves (AlreadyUsed or a
+  // non-empty edit set) wins.
+  procedure PlanUsesAdditions;
+  var
+    E : TTextEdit;
+    It: TApplyItem;
+  begin
+    for var ToType_ in ToTypesSeen do
+    begin
+      var ResolvedUnit: string;
+      var AlreadyUsed : Boolean;
+      var UseEdits: TArray<TTextEdit>;
+      for var St in AStores do
+      begin
+        UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
+        if AlreadyUsed or (Length(UseEdits) > 0) then Break;
+      end;
+      if AlreadyUsed then Continue;
+      if Length(UseEdits) = 0 then
+      begin
+        It:= PlainItem(aikUsesUnitUnresolved, afWarnings,
+          Format('could not resolve a unit declaring "%s" to add to uses', [ToType_]));
+        It.ToType  := ToType_;
+        It.FilePath:= AUnitPas;
+        Emit(It);
+        Continue;
+      end;
+      for E in UseEdits do Edits.Add(E);
+    end;
+  end;
+
 begin
   Result:= Default(TApplyResult);
   Result.Ok:= False;
@@ -1034,16 +1463,25 @@ begin
   { PasStore: whichever --db actually has AUnitPas indexed -- every unit-scoped
     lookup below (PasFileSyms, PasFileId, and everything keyed off PasFileId)
     goes through THIS SAME store, since an id is only meaningful within the
-    store that produced it. }
+    store that produced it.
+
+    The two dl:ok markers below are a RULE defect, not a code smell.
+    overwrite-before-read does not count a read that happens inside a NESTED
+    routine, and after the A1 extraction PasFileSyms is read only by
+    PlanFieldRetype and PasFileId only by PlanCreatorSites/PlanAccessSites. The
+    controlled comparison is 15 lines down: DfmFileSyms has the identical
+    assign-then-fallback shape and is NOT flagged, purely because its read sits
+    in the main body. Repro + expected/actual: docs\INBOX-overwrite-before-read-
+    nested-routine-reads.md. Remove these markers when that is fixed. }
   PasStore:= StoreForFile(AUnitPas);
   PasFileSyms:= PasStore.FindSymbolsByFile(AUnitPas);
   if Length(PasFileSyms) = 0 then
-    PasFileSyms:= PasStore.FindSymbolsByFile(TPath.GetFullPath(AUnitPas));
+    PasFileSyms:= PasStore.FindSymbolsByFile(TPath.GetFullPath(AUnitPas));  // dl:ok overwrite-before-read@2936 -- read in nested PlanFieldRetype; rule ignores nested reads
 
   { surface #5 needs the .pas file's own refs (GetReferencesFromFile is
     keyed by file id, not path) to find construction sites. }
   PasFileId:= PasStore.FindFileIdByPath(AUnitPas);
-  if PasFileId <= 0 then PasFileId:= PasStore.FindFileIdByPath(TPath.GetFullPath(AUnitPas));
+  if PasFileId <= 0 then PasFileId:= PasStore.FindFileIdByPath(TPath.GetFullPath(AUnitPas));  // dl:ok overwrite-before-read@4116 -- read in nested PlanCreatorSites/PlanAccessSites
 
   var DfmStore: ISymbolStore:= StoreForFile(ADfmPath);
   DfmFileSyms:= DfmStore.FindSymbolsByFile(ADfmPath);
@@ -1062,6 +1500,7 @@ begin
   CreatorSites:= TList<string>.Create;
   AccessSites:= TList<string>.Create;
   Todos    := TList<string>.Create;
+  Items    := TList<TApplyItem>.Create;
   DoneUnits:= TDictionary<string, Boolean>.Create;
   ToTypesSeen:= TList<string>.Create;
   ConvertedInstNames:= TList<string>.Create;
@@ -1081,8 +1520,11 @@ begin
       var DfmSym: TSymbol:= FindDfmInstanceSymbol(DfmFileSyms, Inst.InstanceName, Inst.FromType);
       if DfmSym.Id = 0 then
       begin
-        Warnings.Add(Format('%s: could not locate .dfm object block for "%s: %s" in %s -- instance skipped',
-          [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]));
+        It:= InstItem(aikInstanceSkipped, afWarnings,
+          Format('%s: could not locate .dfm object block for "%s: %s" in %s -- instance skipped',
+            [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]));
+        It.FilePath:= ADfmPath;
+        Emit(It);
         Continue;
       end;
 
@@ -1090,8 +1532,11 @@ begin
       var BlockEnd  : Integer:= DfmSym.EndLine;
       if (BlockStart < 1) or (BlockEnd < BlockStart) or (BlockEnd > Length(DfmLines)) then
       begin
-        Warnings.Add(Format('%s: .dfm object block line range [%d..%d] out of bounds in %s -- instance skipped',
-          [Inst.InstanceName, BlockStart, BlockEnd, ADfmPath]));
+        It:= InstItem(aikInstanceSkipped, afWarnings,
+          Format('%s: .dfm object block line range [%d..%d] out of bounds in %s -- instance skipped',
+            [Inst.InstanceName, BlockStart, BlockEnd, ADfmPath]));
+        It.FilePath:= ADfmPath;
+        Emit(It);
         Continue;
       end;
 
@@ -1101,7 +1546,11 @@ begin
       var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ARules, FromTree, ToTree);
       if not ReemitRes.Ok then
       begin
-        Warnings.Add(Format('%s: .dfm re-emit failed (%s) -- instance skipped', [Inst.InstanceName, ReemitRes.Error]));
+        It:= InstItem(aikInstanceSkipped, afWarnings,
+          Format('%s: .dfm re-emit failed (%s) -- instance skipped', [Inst.InstanceName, ReemitRes.Error]));
+        It.FilePath:= ADfmPath;
+        It.Line    := BlockStart;
+        Emit(It);
         Continue;
       end;
 
@@ -1127,98 +1576,11 @@ begin
       E.Text    := ReindentBlock(ReemitRes.DfmText, Indent);
       Edits.Add(E);
 
-      for var N in ReemitRes.Report.Dropped    do ReemitNotes.Add(Format('%s: dropped %s', [Inst.InstanceName, N]));
-      for var N in ReemitRes.Report.Mismatched do ReemitNotes.Add(Format('%s: mismatched %s', [Inst.InstanceName, N]));
-      for var N in ReemitRes.Report.OwnedParts do ReemitNotes.Add(Format('%s: owned-part %s', [Inst.InstanceName, N]));
-      for var N in ReemitRes.Report.Created    do ReemitNotes.Add(Format('%s: created %s', [Inst.InstanceName, N]));
-      for var N in ReemitRes.Report.Notes      do ReemitNotes.Add(Format('%s: %s', [Inst.InstanceName, N]));
+      FoldReemitReport(ReemitRes.Report, BlockStart);
 
-      { -- surface #1: locate the published field decl 'Name: FromType;' via
-        the field symbol (gives us the line range to scope the text search),
-        then find the exact FromType token span for a tekReplaceInLine edit. }
-      var Found: Boolean:= False;
-      for Sym in PasFileSyms do
-      begin
-        if (Sym.Kind <> skField) or (not SameText(Sym.Name, Inst.InstanceName)) or
-           (not SameText(Sym.Signature, Inst.FromType)) then Continue;
+      PlanFieldRetype;
 
-        var FLine, FCol, FEndCol: Integer;
-        if LocateFieldTypeToken(PasLines, Sym.StartLine, Sym.EndLine,
-             Inst.InstanceName, Inst.FromType, FLine, FCol, FEndCol) then
-        begin
-          E:= Default(TTextEdit);
-          E.FilePath:= AUnitPas;
-          E.Kind    := tekReplaceInLine;
-          E.Line    := FLine;
-          E.Col     := FCol;
-          E.EndCol  := FEndCol;
-          E.Text    := Inst.ToType;
-          Edits.Add(E);
-          Converted.Add(Format('%s: %s -> %s', [Inst.InstanceName, Inst.FromType, Inst.ToType]));
-          Found:= True;
-        end;
-        Break; { one matching field symbol is enough }
-      end;
-      if not Found then
-        { A multi-declarator field line (`Edit1, Edit2: TOldEdit;`) indexes only
-          the FIRST declarator as a field symbol, so a later name on the shared
-          line is not located here -- the .dfm/access/creator surfaces still
-          convert it, but this .pas decl line stays typed as the F type. Name the
-          limitation so the user fixes the shared line by hand. }
-        Warnings.Add(Format('%s: could not locate field declaration "%s: %s" in %s'
-          + ' (a shared multi-declarator line is not retyped -- fix the decl by hand)',
-          [Inst.InstanceName, Inst.InstanceName, Inst.FromType, AUnitPas]));
-
-      { -- surface #5: runtime-creator retype. Every explicit construction
-        site 'FromType.Xxx(...)' (e.g. 'Edit1 := TOldEdit.Create(Self);') in
-        this unit gets its type token rewritten to ToType, PLUS a TODO marker
-        comment -- ALWAYS, unconditionally: ToType's constructor/init may take
-        a different shape than FromType's (a different parameter list, extra
-        required setup), and this applier never attempts to fix up
-        constructor ARGUMENTS. The marker is the safety net the user checks
-        by hand. A design-time (DFM-only) instance has no .Create in code, so
-        it simply contributes zero sites here -- its #1/#2/#3 edits still
-        apply on their own. }
-      var Sites: TArray<TCreatorSite>:= FindConstructionSites(AStores, PasStore, PasFileId, PasLines, Inst.FromType);
-      var HasGenericCreate: Boolean:= ToTypeHasGenericCreate(AStores, Inst.ToType);
-      for var Site in Sites do
-      begin
-        var CtorName: string:= Site.CtorName;
-        if CtorName = '' then CtorName:= 'Create';
-
-        E:= Default(TTextEdit);
-        E.FilePath:= AUnitPas;
-        E.Kind    := tekReplaceInLine;
-        E.Line    := Site.Line;
-        E.Col     := Site.Col;
-        E.EndCol  := Site.EndCol;
-        E.Text    := Inst.ToType;
-        Edits.Add(E);
-
-        var TodoText: string:= Format(
-          '{ TODO: drag-lint convert -- verify creator for %s (was %s.%s); %s''s ctor/init may differ }',
-          [Inst.ToType, Inst.FromType, CtorName, Inst.ToType]);
-
-        { end-of-line insert keeps line numbers stable for every OTHER edit on
-          this line/file (a tekInsertLines line-above would shift every
-          subsequent line number, which every other surface's edits are NOT
-          computed to account for). }
-        var LineLen: Integer:= 0;
-        if (Site.Line >= 1) and (Site.Line <= PasLines.Count) then
-          LineLen:= Length(PasLines[Site.Line - 1]);
-        E:= Default(TTextEdit);
-        E.FilePath:= AUnitPas;
-        E.Kind    := tekInsertInLine;
-        E.Line    := Site.Line;
-        E.Col     := LineLen + 1;
-        E.Text    := ' ' + TodoText;
-        Edits.Add(E);
-
-        CreatorSites.Add(Format('%s: %s.%s -> %s.%s', [Inst.InstanceName, Inst.FromType, CtorName, Inst.ToType, CtorName]));
-        if not HasGenericCreate then
-          ReemitNotes.Add(Format('%s: %s has no indexed generic Create(AOwner: TComponent) -- verify the creator manually', [Inst.InstanceName, Inst.ToType]));
-        Todos.Add(TodoText);
-      end;
+      PlanCreatorSites;
 
       { -- surface #2: uses-add for each distinct ToType (once per type). }
       if not DoneUnits.ContainsKey(Inst.ToType) then
@@ -1228,91 +1590,8 @@ begin
       end;
     end;
 
-    { -- surface #4: instance-scoped property/event ACCESS rewrite, via
-      ref-gap G's 'member-access' refs. Runs ONCE over the whole unit per
-      renaming '#link ToMember <- FromMember' rule (not per-instance --
-      GetReferencesFromFile already returns every ref in the file, and
-      FindMemberAccessSites' own instance-name join is what scopes each hit
-      to a specific converted receiver), rather than inside the per-instance
-      loop above: a single access-rewrite pass naturally covers every
-      instance sharing the same rule in one query instead of N redundant
-      whole-file ref scans. Identity renames (ToPath = FromPath, e.g. a
-      #link that maps a property to itself) are skipped -- there is nothing
-      to rewrite. Dotted paths (ToPath/FromPath containing '.', e.g. '#link
-      Name <- Inner.Shade' -- a NESTED .dfm property path) are also skipped
-      here: they describe the .dfm property tree, not a single .pas
-      'obj.Member' token, so they are out of surface #4's scope (no crash,
-      just no rewrite -- the .dfm-side #link still applies via surface #3). }
-    for var LinkRule in ARules.Rules do
-    begin
-      if LinkRule.Kind <> rkLink then Continue;
-      if (LinkRule.ToPath = '') or (LinkRule.FromPath = '') then Continue;
-      { A CAST IS NOT YET PERFORMED, SO THE RENAME IS REFUSED RATHER THAN
-        HALF-APPLIED. This surface rewrites the member IDENTIFIER at an access
-        site: `obj.Old` -> `obj.New`. A rule carrying `: Round` says the VALUE
-        also needs converting, and this code cannot do that. Renaming without it
-        would emit source that compiles and is numerically wrong -- the worst
-        possible outcome, and strictly worse than the defect this cast handling
-        was added to fix.
-
-        Before the FromPath split landed, `: Round` was swallowed into FromPath
-        and matched no member, so nothing was rewritten by accident. Making the
-        path resolve correctly therefore OPENS this hazard, and this guard is
-        what keeps it closed. It is loud (a warning naming the rule and its cast)
-        rather than silent, because a skipped conversion the operator never hears
-        about is the same class of defect. }
-      if LinkRule.Cast <> '' then
-      begin
-        Warnings.Add(Format('line %d: #link %s <- %s : %s SKIPPED on the .pas side -- ' +
-          'the cast is not applied by convert-apply, and renaming without it would produce ' +
-          'wrong values. Convert this access site by hand.',
-          [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast]));
-        Continue;
-      end;
-      if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
-      if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
-
-      var Sites: TArray<TAccessSite>:= FindMemberAccessSites(PasStore, PasFileId, PasLines,
-        LinkRule.FromPath, ConvertedInstNames.ToArray);
-      for var Site in Sites do
-      begin
-        E:= Default(TTextEdit);
-        E.FilePath:= AUnitPas;
-        E.Kind    := tekReplaceInLine;
-        E.Line    := Site.Line;
-        E.Col     := Site.Col;
-        E.EndCol  := Site.EndCol;
-        E.Text    := LinkRule.ToPath;
-        Edits.Add(E);
-
-        AccessSites.Add(Format('%s.%s -> %s.%s (L%d)',
-          [Site.InstanceName, LinkRule.FromPath, Site.InstanceName, LinkRule.ToPath, Site.Line]));
-      end;
-    end;
-
-    for var ToType_ in ToTypesSeen do
-    begin
-      var ResolvedUnit: string;
-      var AlreadyUsed : Boolean;
-      var UseEdits: TArray<TTextEdit>;
-      { Bug 2: the To type's declaring unit may live in a DIFFERENT --db than
-        the unit being converted (PasStore) -- try every store as the NAME
-        store, in order, keeping PasStore fixed as the UNIT store (whose uses
-        clause is what actually gets edited), first store that resolves
-        (AlreadyUsed or a non-empty edit set) wins. }
-      for var St in AStores do
-      begin
-        UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
-        if AlreadyUsed or (Length(UseEdits) > 0) then Break;
-      end;
-      if AlreadyUsed then Continue;
-      if Length(UseEdits) = 0 then
-      begin
-        Warnings.Add(Format('could not resolve a unit declaring "%s" to add to uses', [ToType_]));
-        Continue;
-      end;
-      for E in UseEdits do Edits.Add(E);
-    end;
+    PlanAccessSites;
+    PlanUsesAdditions;
 
     Result.Edits          := Edits.ToArray;
     Result.Report.Converted:= Converted.ToArray;
@@ -1321,6 +1600,7 @@ begin
     Result.Report.CreatorSites:= CreatorSites.ToArray;
     Result.Report.AccessSites:= AccessSites.ToArray;
     Result.Report.Todos    := Todos.ToArray;
+    Result.Report.Items    := Items.ToArray;
     Result.Ok:= True;
   finally
     PasLines.Free;
@@ -1331,6 +1611,7 @@ begin
     CreatorSites.Free;
     AccessSites.Free;
     Todos.Free;
+    Items.Free;
     DoneUnits.Free;
     ToTypesSeen.Free;
     ConvertedInstNames.Free;

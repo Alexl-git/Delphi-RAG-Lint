@@ -19477,7 +19477,14 @@ begin
     JReport.AddPair('mismatched', ArrJson(Res.Report.Mismatched));
     JReport.AddPair('created',    ArrJson(Res.Report.Created));
     JReport.AddPair('ownedParts', ArrJson(Res.Report.OwnedParts));
-    JReport.AddPair('notes',      ArrJson(Res.Report.Notes));
+    JReport.AddPair('stubs',      ArrJson(Res.Report.Stubs));
+    JReport.AddPair('relocated',  ArrJson(Res.Report.Relocated));
+    { 'notes' deliberately stays the UNION of stubs + relocated + notes.
+      DRagLint.Convert.DfmReemit split those two OUT of Notes so each entry can
+      carry a stable kind instead of being classified by matching its prose; this
+      key predates the split, so emitting the union keeps every existing consumer
+      reading exactly what it read before. 'stubs'/'relocated' are additive. }
+    JReport.AddPair('notes',      ArrJson(Res.Report.Stubs + Res.Report.Relocated + Res.Report.Notes));
     JRoot.AddPair('report', JReport);
     Writeln(JRoot.ToJSON);
   finally
@@ -19818,6 +19825,54 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>Prints the human-readable summary of one convert-apply run: the
+/// header line, then one block per non-empty report surface.</summary>
+/// <param name="AReport">The report to print. ALL SIX of its arrays are shown.</param>
+/// <param name="AEditCount">Edit count for the header line.</param>
+/// <param name="AVerb">'planned' (dry-run) or 'applied' (--apply).</param>
+/// <remarks>
+/// This replaces TWO byte-for-byte duplicated print blocks (the dry-run one and
+/// the --apply one), which BOTH printed only four of the six arrays: CreatorSites
+/// and ReemitNotes were computed by BuildApplyPlan and then silently discarded.
+/// That is why the engine could write "verify the creator manually" and no
+/// operator ever saw it.
+///
+/// Block order is Converted, AccessSites, CreatorSites, Todos, ReemitNotes,
+/// Warnings -- work-done surfaces first, then the REMAINDER (Todos, ReemitNotes,
+/// Warnings: the things a human still has to do).
+///
+/// Each block is preceded by a BLANK LINE. Consumers slice a block with
+/// 'Heading:([\s\S]*?)(\r?\n\r?\n|\z)' (tests\autotest\run_convert_apply.ps1);
+/// without a blank terminator every such slice ran to end-of-output and so
+/// silently included every later block, which made those assertions pass for the
+/// wrong reason. Empty surfaces print nothing at all, as before.
+/// </remarks>
+procedure PrintApplyReport(const AReport: TApplyReport; AEditCount: Integer; const AVerb: string);
+
+  procedure Block(const AHeading: string; const ALines: TArray<string>);
+  var
+    S: string;
+  begin
+    if Length(ALines) = 0 then Exit;
+    Writeln('');
+    Writeln(AHeading + ':');
+    for S in ALines do Writeln('  ' + S);
+  end;
+
+var
+  S: string;
+begin
+  Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) %s',
+    [Length(AReport.Converted), AEditCount, AVerb]));
+  { Converted keeps its heading-less shape -- it reads as the header's detail. }
+  for S in AReport.Converted do Writeln('  ' + S);
+  Block('AccessSites',  AReport.AccessSites);
+  Block('CreatorSites', AReport.CreatorSites);
+  Block('Todos',        AReport.Todos);
+  Block('ReemitNotes',  AReport.ReemitNotes);
+  Block('Warnings',     AReport.Warnings);
+end; // procedure
+
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] -- Track 3 sub-project B: locates the
 /// component instances to convert in the sibling .dfm and rewrites all five surfaces
@@ -20010,23 +20065,7 @@ begin
     // DRY-RUN: writes nothing.
     Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
     Writeln('');
-    Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) planned', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
-    for S in PlanRes.Report.Converted do Writeln('  ' + S);
-    if Length(PlanRes.Report.AccessSites) > 0 then
-    begin
-      Writeln('AccessSites:');
-      for S in PlanRes.Report.AccessSites do Writeln('  ' + S);
-    end;
-    if Length(PlanRes.Report.Todos) > 0 then
-    begin
-      Writeln('Todos:');
-      for S in PlanRes.Report.Todos do Writeln('  ' + S);
-    end;
-    if Length(PlanRes.Report.Warnings) > 0 then
-    begin
-      Writeln('Warnings:');
-      for S in PlanRes.Report.Warnings do Writeln('  ' + S);
-    end;
+    PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'planned');
     Exit(0);
   end;
 
@@ -20064,23 +20103,7 @@ begin
     TouchedSet.Free;
   end;
 
-  Writeln(Format('convert-apply: %d instance(s) converted, %d edit(s) applied', [Length(PlanRes.Report.Converted), Length(PlanRes.Edits)]));
-  for S in PlanRes.Report.Converted do Writeln('  ' + S);
-  if Length(PlanRes.Report.AccessSites) > 0 then
-  begin
-    Writeln('AccessSites:');
-    for S in PlanRes.Report.AccessSites do Writeln('  ' + S);
-  end;
-  if Length(PlanRes.Report.Todos) > 0 then
-  begin
-    Writeln('Todos:');
-    for S in PlanRes.Report.Todos do Writeln('  ' + S);
-  end;
-  if Length(PlanRes.Report.Warnings) > 0 then
-  begin
-    Writeln('Warnings:');
-    for S in PlanRes.Report.Warnings do Writeln('  ' + S);
-  end;
+  PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
 
   Result:= 0;
 end; // function

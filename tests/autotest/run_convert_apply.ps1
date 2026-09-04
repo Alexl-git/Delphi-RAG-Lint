@@ -419,6 +419,32 @@ Check 'at least 2 replace-to-Text edits in the plan (Edit1.Caption write+read)' 
 Check 'dry-run output has a Todos: block' ($applyRaw -match 'Todos:') "raw=$applyRaw"
 Check 'Todos block lists the verify-creator marker' ($applyRaw -match 'Todos:[\s\S]*verify creator for TNewEdit') "raw=$applyRaw"
 
+# A1: ALL SIX report surfaces must be printed. CreatorSites and ReemitNotes were
+# computed by BuildApplyPlan and then silently DISCARDED by both copies of the
+# print block -- 4 refs each for Converted/AccessSites/Todos/Warnings, 0 for
+# these two -- so the engine wrote "verify the creator manually" into a void.
+# Both headings are absent from the pre-A1 build, which is what makes these RED.
+Check 'dry-run output has a CreatorSites: block' ($applyRaw -match 'CreatorSites:') "raw=$applyRaw"
+$creatorBlockMatch = [regex]::Match($applyRaw, 'CreatorSites:([\s\S]*?)(\r?\n\r?\n|\z)')
+$creatorBlock = if ($creatorBlockMatch.Success) { $creatorBlockMatch.Groups[1].Value } else { '' }
+Check 'CreatorSites block names the retyped ctor TOldEdit.Create -> TNewEdit.Create' `
+  ($creatorBlock -match 'TOldEdit\.Create\s*->\s*TNewEdit\.Create') "block=$creatorBlock"
+
+# ReemitNotes carries the DFM re-emit's per-instance notes. The F/T default-
+# divergence note fires whenever the F and T root types differ (they do here:
+# TOldEdit -> TNewEdit), so this block is non-empty for this fixture.
+Check 'dry-run output has a ReemitNotes: block' ($applyRaw -match 'ReemitNotes:') "raw=$applyRaw"
+$reemitBlockMatch = [regex]::Match($applyRaw, 'ReemitNotes:([\s\S]*?)(\r?\n\r?\n|\z)')
+$reemitBlock = if ($reemitBlockMatch.Success) { $reemitBlockMatch.Groups[1].Value } else { '' }
+Check 'ReemitNotes block carries the F/T default-divergence note' `
+  ($reemitBlock -match 'defaults may diverge') "block=$reemitBlock"
+
+# Blocks are blank-line separated so a 'Heading:(...)(blank|end)' slice returns
+# THAT block only. Without the separator every such slice ran to end-of-output,
+# so e.g. the 'AccessSites block does NOT mention Other' assertion above was
+# really checking the whole tail. Pin the separator so it cannot regress.
+Check 'report blocks are blank-line separated' ($applyRaw -match '\r?\n\r?\nCreatorSites:') "raw=$applyRaw"
+
 # I-1 regression: 's := TOldEdit.ClassName;' is a class-STATIC reference, not
 # a construction -- ClassName is not a constructor of TOldEdit. It must NOT be
 # misdetected as surface #5 (no false 'verify creator ... ClassName' TODO, and

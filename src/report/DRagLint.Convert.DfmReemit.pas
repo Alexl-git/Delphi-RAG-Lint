@@ -95,8 +95,16 @@ type
   /// complex values whose F/T resolved types differ (WARN, not copied). Created=
   /// intermediate T sub-objects synthesized for moved-depth (Style/Active/Font).
   /// OwnedParts=nested owned parts (fields/columns) needing their own #convert
-  /// rules (WARN). Notes=free-form (e.g. a relocated collection). Each entry is an
-  /// ASCII, human-readable string.
+  /// rules (WARN). Stubs=#link targets still spelled '???' (an unfilled rule, so
+  /// the F value was NOT carried over). Relocated=collections moved verbatim to a
+  /// new ToPath (INFO). Notes=everything else, currently only the F/T default-
+  /// divergence warning. Each entry is an ASCII, human-readable string.
+  ///
+  /// Stubs/Relocated were split OUT of Notes so a consumer can assign each entry a
+  /// stable kind without matching on its prose (DRagLint.Convert.Apply's typed
+  /// TApplyItem). The convert-reemit JSON still emits 'notes' as the UNION of the
+  /// three, so existing consumers keep seeing what they saw; 'stubs' and
+  /// 'relocated' are additive keys.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
@@ -108,6 +116,8 @@ type
     Mismatched: TArray<string>;
     Created   : TArray<string>;
     OwnedParts: TArray<string>;
+    Stubs     : TArray<string>;
+    Relocated : TArray<string>;
     Notes     : TArray<string>;
   end;
 
@@ -601,12 +611,12 @@ var
     if FindLinkFor(AFromPath, ToPath) then
     begin
       if Trim(ToPath) = '???' then
-      begin Result.Report.Notes:= Result.Report.Notes + [Format('unfilled ToPath (???) for %s', [AFromPath])]; Exit; end;
+      begin Result.Report.Stubs:= Result.Report.Stubs + [Format('unfilled ToPath (???) for %s', [AFromPath])]; Exit; end;
       if ALeaf.Kind = dnkCollection then
       begin
         // Collection relocate-keep-items: move the whole collection verbatim.
         PlaceAtPath(TRoot, ToPath, ALeaf.ValueText, dnkCollection, Created);
-        Result.Report.Notes:= Result.Report.Notes +
+        Result.Report.Relocated:= Result.Report.Relocated +
           [Format('collection %s relocated to %s, items unchanged', [AFromPath, ToPath])];
         Exit;
       end;
