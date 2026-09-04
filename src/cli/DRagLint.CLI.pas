@@ -10033,6 +10033,37 @@ begin
         the flag, keeps the one place that knows rule ids (the catalog) in
         charge and cannot fall out of step with the .scm corpus.
         See docs\INBOX-lint-rule-filter-leaks-other-rules.md. }
+      { >>> OPEN THE STORE BEFORE THE WALK ASKS IT ANYTHING (T2, 2026-09-03).
+        This block used to sit 425 lines BELOW, so `WalkClosure(AArgs, Store, ...)`
+        in the directory branch always received Store = nil, always answered "no
+        closure", and the pre-parse scope filter B8 shipped was INERT. Every file
+        under the folder was still parsed; the non-member DROP that made the
+        output look correct was the post-hoc finding filter in FinalizeAndOutput
+        doing the whole job by itself.
+
+        Nothing failed, which is why it survived: the 12-control guard asserts on
+        the REPORT, and the report was right. Only the cost was wrong -- and, once
+        item 1b started deriving the marker scan's scanned-set from this same
+        walk, correctness depended on it too.
+
+        QUIET for the non-fix path, and that gate is load-bearing: a non-quiet
+        open prints an index-schema warning to STDOUT, and under `--format sarif`
+        that line lands inside the document and stops it parsing
+        (tests/ergonomics/run_pipeline_tests.ps1 pins it). }
+      Store:= nil;
+      if AArgs.Fix and (AArgs.DbPath <> '') and TFile.Exists(AArgs.DbPath) then
+      begin
+        var StoreOk: Boolean;
+        Store:= OpenReadOnlyStore(AArgs.DbPath, StoreOk);
+        if not StoreOk then Store:= nil;
+      end
+      else if (AArgs.DbPath <> '') and TFile.Exists(AArgs.DbPath) and TDirectory.Exists(EffPath) then
+      begin
+        var WalkStoreOk: Boolean;
+        Store:= OpenReadOnlyStore(AArgs.DbPath, WalkStoreOk, {AQuiet=}True);
+        if not WalkStoreOk then Store:= nil;
+      end;
+
       var QueryFindings: TArray<TLintFinding>;
       if TFile.Exists(EffPath) then
       begin
@@ -10485,30 +10516,10 @@ begin
     document and it stops being parseable JSON -- caught by
     tests/ergonomics/run_pipeline_tests.ps1 ("sarif parses" / "sarif version
     2.1.0") when this was first written without the gate. }
-  Store:= nil;
-  if AArgs.Fix and (AArgs.DbPath <> '') and TFile.Exists(AArgs.DbPath) then
-  begin
-    var StoreOk: Boolean;
-    Store:= OpenReadOnlyStore(AArgs.DbPath, StoreOk);
-    if not StoreOk then Store:= nil;
-  end
-  else if (AArgs.DbPath <> '') and TFile.Exists(AArgs.DbPath) and TDirectory.Exists(EffPath) then
-  begin
-    { A DIRECTORY WALK needs the store even without --fix, because the owner ruled
-      that files no project compiles are left alone in the REPORT too, and the
-      store is what defines the closure (see ScopeWalkFindingsToClosure).
-
-      QUIET, and that is the whole reason the gate above existed: a non-quiet open
-      prints an index-schema warning to STDOUT, and on `--format sarif` that line
-      lands inside the document and stops it parsing. Passing AQuiet mirrors what
-      the flow-checker store already does a few hundred lines up.
-
-      Safe for everything else: the entire edit-building region is gated on
-      AArgs.Fix, so a store handed to a non-fix run builds nothing. }
-    var WalkStoreOk: Boolean;
-    Store:= OpenReadOnlyStore(AArgs.DbPath, WalkStoreOk, {AQuiet=}True);
-    if not WalkStoreOk then Store:= nil;
-  end;
+  { The store was OPENED HERE and USED 425 LINES EARLIER. See OpenLintStore, which
+    now runs before the walk. This site is deliberately left as a no-op comment
+    rather than deleted, because "why is there no store open in the middle of
+    DoLint" is the question a reader will ask at exactly this point. }
   { SAY WHAT THIS VERB CANNOT SEE -- AND SAY IT ACCURATELY.
 
     The old note claimed "project-wide checks" wholesale, which stopped being
