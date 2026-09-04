@@ -779,7 +779,7 @@ begin
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup)');
+  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -19873,8 +19873,122 @@ begin
   Block('Warnings',     AReport.Warnings);
 end; // procedure
 
+type
+  /// <summary>Everything schema apply/1 reports about one convert-apply run.
+  /// A record rather than nine parameters, per too-many-parameters (max 7).</summary>
+  /// <remarks>Populated on the SUCCESS path and on both failure paths (rule
+  /// validation, and BuildApplyPlan returning Ok=False), so a JSON consumer gets
+  /// a parseable document with ok=false rather than nothing at all.</remarks>
+  TApplyJsonCtx = record
+    Report    : TApplyReport;
+    UnitPas   : string;
+    DfmPath   : string;
+    RulesFile : string;
+    Mode      : string;  { 'dry-run' or 'apply' }
+    Error     : string;
+    RuleErrors: TArray<TRuleError>;
+    Freshness : TFreshnessResult;
+    EditCount : Integer;
+    Ok        : Boolean;
+  end;
+
+/// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
+/// <param name="ACtx">The run to report.</param>
+/// <remarks>
+/// Mirrors info/1's house style -- 'schema' first, snake_case keys. It does NOT
+/// follow convert-reemit's JSON, which predates the convention, carries no
+/// 'schema' key at all and uses camelCase; that is not a precedent to copy.
+///
+/// INVARIANT, and the reason the typed items exist: items.length equals the sum
+/// of the lengths of the six arrays. Each item mirrors one array entry, adding
+/// the machine-readable 'kind' and the structured facts behind the prose. The
+/// REMAINDER of a conversion is the subset whose 'field' is todos, reemit_notes
+/// or warnings.
+///
+/// Compatibility: adding a kind, or a key, is additive and stays apply/1.
+/// RENAMING a kind or a key is a breaking change and requires apply/2. The kind
+/// spellings come from ApplyItemKindName, never from a literal here.
+///
+/// Emits nothing else on stdout: under JSON the caller suppresses RenderDryRun
+/// and every Writeln, or the document would not parse.
+/// </remarks>
+procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
+
+  function ArrOf(const AItems: TArray<string>): TJSONArray;
+  var
+    S: string;
+  begin
+    Result:= TJSONArray.Create;
+    for S in AItems do Result.Add(S);
+  end;
+
+  function ItemJson(const AItem: TApplyItem): TJSONObject;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('kind'     , ApplyItemKindName(AItem.Kind));
+    Result.AddPair('field'    , ApplyFieldName(AItem.Field));
+    Result.AddPair('instance' , AItem.Instance);
+    Result.AddPair('from_type', AItem.FromType);
+    Result.AddPair('to_type'  , AItem.ToType);
+    Result.AddPair('file'     , AItem.FilePath);
+    Result.AddPair('path'     , AItem.Path);
+    Result.AddPair('text'     , AItem.Text);
+    Result.AddPair('line'     , TJSONNumber.Create(AItem.Line));
+    Result.AddPair('rule_line', TJSONNumber.Create(AItem.RuleLine));
+  end;
+
+var
+  JRoot, JFresh, JErr: TJSONObject;
+  JRuleErrors, JItems: TJSONArray;
+  RE  : TRuleError;
+  Item: TApplyItem;
+begin
+  JRoot:= TJSONObject.Create;
+  try
+    JRoot.AddPair('schema', 'apply/1');
+    JRoot.AddPair('mode', ACtx.Mode);
+    JRoot.AddPair('unit', ACtx.UnitPas);
+    JRoot.AddPair('dfm', ACtx.DfmPath);
+    JRoot.AddPair('rules_file', ACtx.RulesFile);
+    JRoot.AddPair('ok', TJSONBool.Create(ACtx.Ok));
+    JRoot.AddPair('error', ACtx.Error);
+
+    JRuleErrors:= TJSONArray.Create;
+    for RE in ACtx.RuleErrors do
+    begin
+      JErr:= TJSONObject.Create;
+      JErr.AddPair('line', TJSONNumber.Create(RE.LineNo));
+      JErr.AddPair('message', RE.Message);
+      JRuleErrors.AddElement(JErr);
+    end;
+    JRoot.AddPair('rule_errors', JRuleErrors);
+
+    JRoot.AddPair('edits_count', TJSONNumber.Create(ACtx.EditCount));
+
+    JFresh:= TJSONObject.Create;
+    JFresh.AddPair('fresh', TJSONBool.Create(ACtx.Freshness.Fresh));
+    JFresh.AddPair('reasons', ArrOf(ACtx.Freshness.Reasons));
+    JRoot.AddPair('freshness', JFresh);
+
+    JRoot.AddPair('converted'    , ArrOf(ACtx.Report.Converted));
+    JRoot.AddPair('access_sites' , ArrOf(ACtx.Report.AccessSites));
+    JRoot.AddPair('creator_sites', ArrOf(ACtx.Report.CreatorSites));
+    JRoot.AddPair('todos'        , ArrOf(ACtx.Report.Todos));
+    JRoot.AddPair('reemit_notes' , ArrOf(ACtx.Report.ReemitNotes));
+    JRoot.AddPair('warnings'     , ArrOf(ACtx.Report.Warnings));
+
+    JItems:= TJSONArray.Create;
+    for Item in ACtx.Report.Items do JItems.AddElement(ItemJson(Item));
+    JRoot.AddPair('items', JItems);
+
+    Writeln(JRoot.ToJSON);
+  finally
+    JRoot.Free;
+  end;
+end; // procedure
+
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
-/// [--only Name1,Name2,...] [--apply] [--no-backup] -- Track 3 sub-project B: locates the
+/// [--only Name1,Name2,...] [--apply] [--no-backup] [--format json] -- Track 3 sub-project B: locates the
 /// component instances to convert in the sibling .dfm and rewrites all five surfaces
 /// (#1 declaration retype, #2 uses-add, #3 .dfm re-emit, #4 property/event access-site
 /// rewrite via ref-gap G's member-access index, #5 runtime-creator retype + TODO markers).
@@ -19934,9 +20048,11 @@ var
   Freshness   : TFreshnessResult;
   TouchedFiles: TList<string>   ;
   TouchedSet  : TDictionary<string, Boolean>;
-  Ed          : TTextEdit       ;
-  Timestamp   : string          ;
-  Mappings    : TArray<string>  ;
+  { --format json / --json. Both are parsed globally (ParseArgs), so this verb
+    only has to READ them. Under JSON every Writeln on the success and failure
+    paths is suppressed -- one stray line and the document stops parsing. }
+  UseJson     : Boolean         ;
+  JCtx        : TApplyJsonCtx   ;
 
   // Build the property tree for a type qname across the resolved DBs (first DB
   // that resolves it wins). Empty RootType if unresolved / no db. Mirrors
@@ -19959,10 +20075,61 @@ var
     end;
   end;
 
+  // The --apply write sequence. Nested so its five working variables
+  // (TouchedFiles/TouchedSet/Ed/Timestamp/Mappings) live here instead of in
+  // DoConvertApply's var block, which was already at the 25-local limit.
+  procedure PerformApplyWrites;
+  var
+    TouchedFiles: TList<string>;
+    TouchedSet  : TDictionary<string, Boolean>;
+    Ed          : TTextEdit;
+    Timestamp   : string;
+    Mappings    : TArray<string>;
+  begin
+    // 1. Collect the distinct touched file paths from the edit set.
+    TouchedFiles:= TList<string>.Create;
+    TouchedSet  := TDictionary<string, Boolean>.Create;
+    try
+      for Ed in PlanRes.Edits do
+        if not TouchedSet.ContainsKey(Ed.FilePath) then
+        begin TouchedSet.Add(Ed.FilePath, True); TouchedFiles.Add(Ed.FilePath); end;
+
+      Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
+
+      // 2. Backup + recovery record BEFORE any conversion write. Writing the
+      // recovery record first means a crash between here and the actual write
+      // still leaves a complete recovery map alongside the untouched .BCK files.
+      if not AArgs.NoBackup then
+      begin
+        BackupFiles(TouchedFiles.ToArray, Mappings);
+        WriteRecoveryRecord(ExtractFileDir(UnitPas), Timestamp, AArgs.RulesFile, Mappings);
+      end;
+
+      // 3. Perform the conversion write. AWriteBackups=False: our backup layer
+      // (step 2) already backed up every touched file -- letting the applier
+      // ALSO write its own .bak would double-backup.
+      TTextEditApplier.Apply(PlanRes.Edits, False);
+
+      // 4. Stamp the converted .pas with a provenance comment (skipped along
+      // with backups under --no-backup, per the brief: keep --no-backup simple).
+      if not AArgs.NoBackup then
+        PrependConvertComment(UnitPas, Timestamp, AArgs.RulesFile, Mappings);
+    finally
+      TouchedFiles.Free;
+      TouchedSet.Free;
+    end;
+  end;
+
 begin
+  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  JCtx   := Default(TApplyJsonCtx);
+  JCtx.Mode:= if AArgs.Apply then 'apply' else 'dry-run';
+  JCtx.RulesFile:= AArgs.RulesFile;
+  JCtx.Freshness.Fresh:= True;
+
   if (AArgs.GhostUnit = '') or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--format json]');
     Exit(2);
   end;
   UnitPas:= AArgs.GhostUnit;
@@ -20006,6 +20173,18 @@ begin
   RuleErrors:= ValidateConversionRules(Rules, FromTree, ToTree);
   if Length(RuleErrors) > 0 then
   begin
+    { A JSON consumer gets a parseable ok=false document naming every rule
+      error, rather than prose on stdout that its parser would choke on. }
+    if UseJson then
+    begin
+      JCtx.UnitPas   := UnitPas;
+      JCtx.DfmPath   := DfmPath;
+      JCtx.Ok        := False;
+      JCtx.Error     := 'conversion rules failed validation';
+      JCtx.RuleErrors:= RuleErrors;
+      EmitApplyJson(JCtx);
+      Exit(1);
+    end;
     Writeln('ERROR: conversion rules failed validation:');
     for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
     Exit(1);
@@ -20041,16 +20220,30 @@ begin
   // reindexing). --apply: REFUSE outright -- writing a conversion built from
   // a stale/empty property tree could silently drop or mis-map properties.
   Freshness:= CheckFreshness(Stores, Rules);
+  JCtx.UnitPas  := UnitPas;
+  JCtx.DfmPath  := DfmPath;
+  JCtx.Freshness:= Freshness;
   if not Freshness.Fresh then
   begin
     if AArgs.Apply then
     begin
+      { --apply refuses. Under JSON the reasons ride in freshness.reasons, so
+        the consumer sees WHY without parsing prose. }
+      if UseJson then
+      begin
+        JCtx.Ok   := False;
+        JCtx.Error:= 'freshness guard failed -- refusing to --apply';
+        EmitApplyJson(JCtx);
+        Exit(1);
+      end;
       Writeln('ERROR: freshness guard failed -- refusing to --apply:');
       for S in Freshness.Reasons do Writeln('  ' + S);
       Exit(1);
     end
-    else
+    else if not UseJson then
     begin
+      { dry-run only warns. Under JSON the warning is NOT printed -- it is
+        already carried structurally by freshness.fresh=false + reasons. }
       Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
       for S in Freshness.Reasons do Writeln('  ' + S);
     end;
@@ -20058,52 +20251,44 @@ begin
 
   PlanRes:= BuildApplyPlan(Stores, UnitPas, DfmPath, Rules, AArgs.OnlySections);
   if not PlanRes.Ok then
-  begin Writeln('ERROR: ' + PlanRes.Error); Exit(1); end;
+  begin
+    if UseJson then
+    begin
+      JCtx.Ok   := False;
+      JCtx.Error:= PlanRes.Error;
+      EmitApplyJson(JCtx);
+      Exit(1);
+    end;
+    Writeln('ERROR: ' + PlanRes.Error);
+    Exit(1);
+  end;
+
+  JCtx.Ok       := True;
+  JCtx.Report   := PlanRes.Report;
+  JCtx.EditCount:= Length(PlanRes.Edits);
 
   if not AArgs.Apply then
   begin
     // DRY-RUN: writes nothing.
+    if UseJson then
+    begin
+      { RenderDryRun and the summary are BOTH suppressed -- the edit plan is
+        reported as edits_count, and the summary as the six arrays + items. }
+      EmitApplyJson(JCtx);
+      Exit(0);
+    end;
     Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
     Writeln('');
     PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'planned');
     Exit(0);
   end;
 
-  // -- --apply: actually write. --------------------------------------------
-  // 1. Collect the distinct touched file paths from the edit set.
-  TouchedFiles:= TList<string>.Create;
-  TouchedSet  := TDictionary<string, Boolean>.Create;
-  try
-    for Ed in PlanRes.Edits do
-      if not TouchedSet.ContainsKey(Ed.FilePath) then
-      begin TouchedSet.Add(Ed.FilePath, True); TouchedFiles.Add(Ed.FilePath); end;
+  PerformApplyWrites;
 
-    Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
-
-    // 2. Backup + recovery record BEFORE any conversion write. Writing the
-    // recovery record first means a crash between here and the actual write
-    // still leaves a complete recovery map alongside the untouched .BCK files.
-    if not AArgs.NoBackup then
-    begin
-      BackupFiles(TouchedFiles.ToArray, Mappings);
-      WriteRecoveryRecord(ExtractFileDir(UnitPas), Timestamp, AArgs.RulesFile, Mappings);
-    end;
-
-    // 3. Perform the conversion write. AWriteBackups=False: our backup layer
-    // (step 2) already backed up every touched file -- letting the applier
-    // ALSO write its own .bak would double-backup.
-    TTextEditApplier.Apply(PlanRes.Edits, False);
-
-    // 4. Stamp the converted .pas with a provenance comment (skipped along
-    // with backups under --no-backup, per the brief: keep --no-backup simple).
-    if not AArgs.NoBackup then
-      PrependConvertComment(UnitPas, Timestamp, AArgs.RulesFile, Mappings);
-  finally
-    TouchedFiles.Free;
-    TouchedSet.Free;
-  end;
-
-  PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
+  if UseJson then
+    EmitApplyJson(JCtx)
+  else
+    PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
 
   Result:= 0;
 end; // function

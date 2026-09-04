@@ -721,5 +721,119 @@ $castUnchanged = ($castBeforeBytes.Length -eq $castAfter.Length) -and
 Check 'cast: MyForm.pas byte-unchanged after dry-run' $castUnchanged `
   "before=$($castBeforeBytes.Length)B after=$($castAfter.Length)B"
 
+# ===========================================================================
+# PHASE 5: --format json emits schema apply/1.
+#
+# The point of the schema is that a consumer can DISPATCH on a conversion's
+# remainder instead of parsing it out of prose. So the assertions below are
+# about structure, not wording: the document parses at all, the six report
+# arrays are present, items[] mirrors them exactly, and a known item carries
+# the right kind and the right anchor.
+#
+# 2>$null is load-bearing: the engine writes a '(loaded defaults from ...)'
+# note to stderr, and merging it into stdout would make ConvertFrom-Json throw.
+# ===========================================================================
+Write-Host ''
+Write-Host '=== Phase 5: --format json (schema apply/1) ===' -ForegroundColor Cyan
+
+Push-Location $phase1
+try {
+  $jsonRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db --format json 2>$null) -join "`n"
+  $jsonExit = $LASTEXITCODE
+} finally { Pop-Location }
+Check 'json: exits 0' ($jsonExit -eq 0) "exit=$jsonExit"
+
+# Parses AT ALL. This is the assertion that RenderDryRun and every summary
+# Writeln are suppressed under --format json -- one stray line and this throws.
+$doc = $null
+try { $doc = $jsonRaw | ConvertFrom-Json } catch { $doc = $null }
+Check 'json: output parses as JSON (no stray text on stdout)' ($null -ne $doc) `
+  "raw=$($jsonRaw.Substring(0, [Math]::Min(300, $jsonRaw.Length)))"
+
+if ($null -ne $doc) {
+  Check 'json: schema is apply/1' ($doc.schema -eq 'apply/1') "schema=$($doc.schema)"
+  Check 'json: mode is dry-run' ($doc.mode -eq 'dry-run') "mode=$($doc.mode)"
+  Check 'json: ok is true' ($doc.ok -eq $true) "ok=$($doc.ok)"
+  Check 'json: freshness.fresh is true' ($doc.freshness.fresh -eq $true) "fresh=$($doc.freshness.fresh)"
+  Check 'json: edits_count is positive' ($doc.edits_count -gt 0) "edits_count=$($doc.edits_count)"
+
+  # All six report surfaces are present as keys, including the two that the
+  # pre-A1 text output dropped entirely.
+  $six = @('converted','access_sites','creator_sites','todos','reemit_notes','warnings')
+  $missing = $six | Where-Object { -not ($doc.PSObject.Properties.Name -contains $_) }
+  Check 'json: all six report arrays present' ($missing.Count -eq 0) "missing=$($missing -join ',')"
+
+  # THE INVARIANT: one item per reported line, across all six arrays.
+  $sum = 0
+  foreach ($k in $six) { $sum += @($doc.$k).Count }
+  Check 'json: items.Count equals the sum of the six arrays' (@($doc.items).Count -eq $sum) `
+    "items=$(@($doc.items).Count) sum=$sum"
+
+  # No item may carry an unnamed kind -- KindStr-style '?' leakage would make
+  # the whole vocabulary undispatchable while still looking populated.
+  $badKind = @($doc.items) | Where-Object { [string]::IsNullOrWhiteSpace($_.kind) -or $_.kind -eq '?' }
+  Check 'json: every item has a real kind (no blank, no "?")' ($badKind.Count -eq 0) `
+    "bad=$($badKind.Count)"
+  $badField = @($doc.items) | Where-Object { $_.field -notin $six }
+  Check 'json: every item field names one of the six arrays' ($badField.Count -eq 0) `
+    "bad=$(($badField | ForEach-Object { $_.field }) -join ',')"
+
+  # A known item, checked against the fixture rather than a hardcoded number:
+  # the verify-creator TODO must anchor at the real 'TOldEdit.Create' line.
+  $formLines = Get-Content (Join-Path $phase1 'MyForm.pas')
+  $ctorLine = 0
+  for ($i = 0; $i -lt $formLines.Count; $i++) {
+    if ($formLines[$i] -match 'TOldEdit\.Create') { $ctorLine = $i + 1; break }
+  }
+  Check 'json: fixture has a TOldEdit.Create line to anchor against' ($ctorLine -gt 0) "line=$ctorLine"
+  $cv = @($doc.items) | Where-Object { $_.kind -eq 'creator-verify' }
+  Check 'json: exactly one creator-verify item' ($cv.Count -eq 1) "count=$($cv.Count)"
+  if ($cv.Count -eq 1) {
+    Check 'json: creator-verify item names instance Edit1' ($cv[0].instance -eq 'Edit1') "instance=$($cv[0].instance)"
+    Check 'json: creator-verify item carries from_type TOldEdit' ($cv[0].from_type -eq 'TOldEdit') "from_type=$($cv[0].from_type)"
+    Check 'json: creator-verify item carries to_type TNewEdit' ($cv[0].to_type -eq 'TNewEdit') "to_type=$($cv[0].to_type)"
+    Check 'json: creator-verify item anchors at the TOldEdit.Create line' ($cv[0].line -eq $ctorLine) `
+      "item=$($cv[0].line) fixture=$ctorLine"
+    Check 'json: creator-verify item is reported in the todos field' ($cv[0].field -eq 'todos') "field=$($cv[0].field)"
+  }
+
+  # The REMAINDER is the todos/reemit_notes/warnings subset -- the definition
+  # the converter side consumes. Pin that it is non-empty for this fixture.
+  $remainder = @($doc.items) | Where-Object { $_.field -in @('todos','reemit_notes','warnings') }
+  Check 'json: remainder subset is non-empty for this fixture' ($remainder.Count -gt 0) `
+    "count=$($remainder.Count)"
+}
+else {
+  # The 19 assertions above are guarded by the parse succeeding. Without this
+  # branch a broken document would SKIP them silently and report a single
+  # failure, which reads like one small problem instead of "nothing was
+  # checked". Make the skip loud.
+  Check 'json: 19 structural assertions were SKIPPED (document did not parse)' $false `
+    'fix the parse failure above -- until it parses, nothing below it is verified'
+}
+
+# The cast skip (Phase 4) must ALSO surface as a typed item, not only as prose.
+Push-Location $phase4
+try {
+  $castJsonRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $castRulesPath --db $db --format json 2>$null) -join "`n"
+} finally { Pop-Location }
+$castDoc = $null
+try { $castDoc = $castJsonRaw | ConvertFrom-Json } catch { $castDoc = $null }
+Check 'json: cast run parses as JSON' ($null -ne $castDoc) `
+  "raw=$($castJsonRaw.Substring(0, [Math]::Min(300, $castJsonRaw.Length)))"
+if ($null -ne $castDoc) {
+  $cna = @($castDoc.items) | Where-Object { $_.kind -eq 'cast-not-applied' }
+  Check 'json: cast skip surfaces as a cast-not-applied item' ($cna.Count -eq 1) "count=$($cna.Count)"
+  if ($cna.Count -eq 1) {
+    Check 'json: cast-not-applied is reported in the warnings field' ($cna[0].field -eq 'warnings') "field=$($cna[0].field)"
+    Check 'json: cast-not-applied carries the rules-file line number' ($cna[0].rule_line -gt 0) `
+      "rule_line=$($cna[0].rule_line)"
+  }
+}
+else {
+  Check 'json: cast-run assertions were SKIPPED (document did not parse)' $false `
+    'fix the parse failure above'
+}
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
