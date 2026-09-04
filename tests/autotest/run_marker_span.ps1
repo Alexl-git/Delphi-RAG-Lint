@@ -169,6 +169,109 @@ Check "a genuinely dead marker (line $lnBareExcept) IS still reported unused" ($
   'bare-except is marked on a line with no such finding'
 Check 'exactly one marker is reported unused' ($unused.Count -eq 1) "got: $($unused -join ', ')"
 
+# ---------------------------------------------------------------------------
+# THE `allow` ROUND TRIP -- the WRITER's half of the same disagreement.
+#
+# Everything above tests the CHECKER: a marker already in the file must be
+# honoured across the statement span. Nothing tested the WRITER, and the two
+# can disagree in the opposite direction -- which is exactly what DataCopy
+# reported on 2026-09-01 as defect 2: passing the line the report NAMED left
+# the finding open AND produced a review-marker-unused one line down. The
+# obvious operator move ("copy the line out of the report") failed in the worst
+# way, by adding a second finding to the first.
+#
+# MEASURED 2026-09-03 (item 1f) rather than closed on the memory of a commit:
+# the round trip below is clean on the current build, and on DataCopy's own
+# uFileUtils.pas:2028 `allow --fix-line 2028` now proposes exactly the @ab38
+# the checker asks for. This section is what stops that silently regressing --
+# run_marker_span did not exercise `allow` at all.
+#
+# RED-CHECKED, and the result is stated exactly rather than rounded up. Rerun
+# with `--fix-line ($rtLine + 1)` -- the wrong line, which is the shape defect 2
+# described -- and the SUPPRESSED and STALE assertions go red. The UNUSED
+# assertion does NOT: a marker on the wrapped statement's last line is inside
+# the span, so it is stale, not unused. That assertion is therefore the weakest
+# of the three here; what exercises it is a SUPERSEDED marker left behind after
+# annotating the anchor line, which is a separate open defect
+# (docs\INBOX-allow-leaves-a-superseded-marker-behind.md). Do not read its green
+# as coverage it does not have.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host 'THE WRITER -- allow --fix-line <the reported line> must round-trip' -ForegroundColor Cyan
+
+$rtDir = Join-Path $WorkDir 'roundtrip'
+New-Item -ItemType Directory -Force -Path (Join-Path $rtDir '_D-RAG') | Out-Null
+$rtPas = Join-Path $rtDir 'uRt.pas'
+[System.IO.File]::WriteAllText($rtPas, ((@'
+unit uRt;
+
+interface
+
+procedure Build(const AItems: array of string; out AOut: string);
+
+implementation
+
+uses
+  System.SysUtils;
+
+procedure Build(const AItems: array of string; out AOut: string);
+var
+  I  : Integer;
+  Str: string ;
+begin
+  Str := '';
+  for I := Low(AItems) to High(AItems) do
+    Str := Str + Format(
+      ' [%d] item: %s', [I, AItems[I]]);
+  AOut := Str;
+end;
+
+end.
+'@ -replace "`r`n", "`n") -replace "`n", "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllText((Join-Path $rtDir 'App.dpr'), ((@'
+program App;
+uses
+  uRt in 'uRt.pas';
+begin
+end.
+'@ -replace "`r`n", "`n") -replace "`n", "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+
+$rtDb = Join-Path $rtDir '_D-RAG\App.sqlite'
+& $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | Out-Null
+
+function RtLines($pattern) {
+  $out = @()
+  foreach ($line in (& $Exe lint-all --db $rtDb 2>&1)) {
+    if ("$line" -match (':(\d+):\d+\s+\[\w+\]\s+' + $pattern + ':')) { $out += [int]$Matches[1] }
+  }
+  return @($out | Sort-Object -Unique)
+}
+
+# 1. The reported line is read out of the report, exactly as an operator would.
+$rtConcat = RtLines 'concat-in-loop'
+Check 'the wrapped concat fires before annotation' ($rtConcat.Count -eq 1) "got: $($rtConcat -join ', ')"
+$rtLine = if ($rtConcat.Count -ge 1) { $rtConcat[0] } else { 0 }
+
+# 2. THE DEFECT'S SHAPE: the finding anchors on the statement's FIRST line,
+#    while a trailing // comment can only be written on its LAST. If those were
+#    the same line this whole section would prove nothing, so assert the gap.
+$rtSrc = Get-Content $rtPas
+Check 'the fixture really is a WRAPPED statement (anchor line has no ";")' `
+  (($rtLine -gt 0) -and ($rtSrc[$rtLine - 1] -notmatch ';\s*$')) `
+  "line $rtLine = '$($rtSrc[$rtLine - 1])' -- if this ends the statement the round trip is trivial"
+
+# 3. Round-trip it with the line the report named.
+& $Exe allow $rtPas --fix-line $rtLine --fix-rule concat-in-loop --apply 2>&1 | Out-Null
+& $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | Out-Null
+
+Check 'after allow --fix-line <reported line>, the finding is SUPPRESSED' `
+  ((RtLines 'concat-in-loop').Count -eq 0) `
+  'the marker the writer produced is not one the checker accepts -- writer and checker disagree again'
+Check 'and no review-marker-unused appeared' ((RtLines 'review-marker-unused').Count -eq 0) `
+  'the marker landed somewhere the checker does not associate with the finding'
+Check 'and no review-marker-stale appeared' ((RtLines 'review-marker-stale').Count -eq 0) `
+  'the hash the writer recorded is not the hash the checker computes'
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
