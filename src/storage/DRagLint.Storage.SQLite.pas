@@ -5087,7 +5087,8 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= ScopeC +
-      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line ' +
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ' +
+      '       r.receiver_text ' +
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
@@ -5116,6 +5117,13 @@ begin
       else R.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
       R.FullPath  := Q.FieldByName('file_path').AsString;
       R.Location  := ExtractFileName(R.FullPath);
+      { The SELECT has always fetched start_line and this loop never read it, so
+        every consumer of a name-bucket caller saw CallSiteLine = 0 -- including
+        the reverse call tree the field was added for. }
+      if Q.FieldByName('start_line').IsNull then R.CallSiteLine:= 0
+      else R.CallSiteLine:= Q.FieldByName('start_line').AsInteger;
+      if Q.FieldByName('receiver_text').IsNull then R.ReceiverText:= ''
+      else R.ReceiverText:= Q.FieldByName('receiver_text').AsString;
       R.Confidence:= 'unverified';
       List.Add(R);
       Q.Next;

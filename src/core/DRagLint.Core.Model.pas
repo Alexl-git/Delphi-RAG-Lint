@@ -409,6 +409,21 @@ type
     /// Added for reverse-calltree; other consumers may ignore it.</summary>
     CallSiteLine     : Integer;
     Confidence       : string;
+    /// <summary>The call site's receiver text as extracted -- `LModule` in
+    /// `LModule.TransferFile(...)`, '' for an unqualified call.</summary>
+    /// <remarks>An empty value means two very different things depending on the
+    /// TARGET. For a free routine it is simply correct: an unqualified call to a
+    /// routine in scope has no receiver, and counting those as a defect is what
+    /// inflated "3,882 untypable receivers" out of a real handful. For a METHOD
+    /// it means the receiver was not captured, so nothing here proves the call
+    /// reached THIS method rather than a same-named one -- which is how a DPP
+    /// test came to be listed as covering eight different TransferFile symbols.
+    /// ComputeCoveredBy reads it to mark such a coverage fact unverified rather
+    /// than dropping it (owner ruling 2026-09-03) or asserting it.
+    /// Filled by FindUnresolvedNameCallers; the resolved bucket does not need it
+    /// -- a call_edges row IS the proof, so those callers are verified whatever
+    /// this holds.</remarks>
+    ReceiverText     : string;
   end;
 
   /// <summary>v8: one Spring4D DI registration (interface implemented by impl,

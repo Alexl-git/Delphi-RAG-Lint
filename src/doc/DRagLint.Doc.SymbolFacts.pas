@@ -2997,6 +2997,26 @@ function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): stri
 var
   Names  : TStringList;
   Visited: TDictionary<Int64, Boolean>; // caller-routine ids already expanded, across the WHOLE walk (cycle guard + the render-size cap)
+  { lowercased test qname -> was it reached by at least one VERIFIED path.
+    See the classification block inside Walk for what verified means here. }
+  VerifiedName: TDictionary<string, Boolean>;
+
+  { True when ASymbolId names a method -- i.e. its parent is a class, interface
+    or record rather than a unit. Only for such a target is a MISSING receiver
+    evidence of anything; for a free routine an unqualified call is ordinary
+    Delphi. Returns False for an unknown id, which keeps an unresolvable target
+    on the permissive side. }
+  function TargetIsMethodOf(ASymbolId: Int64): Boolean;
+  var
+    S, P: TSymbol;
+  begin
+    Result:= False;
+    if ASymbolId <= 0 then Exit;
+    S:= AStore.GetSymbolById(ASymbolId);
+    if (S.Id <= 0) or (S.ParentId <= 0) then Exit;
+    P:= AStore.GetSymbolById(S.ParentId);
+    Result:= P.Kind in [skClass, skInterface, skRecord];
+  end;
 
   // Finds every caller of (ASymbolId as a resolved call_edges target) UNION
   // (AQName's last segment as a NAME match with no call_edges row) -- the
@@ -3009,16 +3029,21 @@ var
   // exactly once (Visited, shared across the whole walk) and stopping once
   // COVERED_BY_MAXWALK distinct callers have been expanded (a render-time
   // safety net against a pathologically hot symbol).
-  procedure Walk(ASymbolId: Int64; const AQName: string; ADepth: Integer);
+  procedure Walk(ASymbolId: Int64; const AQName: string; ADepth: Integer; AVerified: Boolean);
   var
     RC       : TResolvedCaller;
     Combined : TArray<TResolvedCaller>;
     HopSeen  : TDictionary<Int64, Boolean>; // dedupes a caller seen in BOTH buckets at THIS hop
+    NResolved: Integer                    ; // how many of Combined came from the RESOLVED bucket
   begin
     if ADepth <= 0 then Exit;
     Combined:= nil;
+    NResolved:= 0;
     if ASymbolId > 0 then
+    begin
       Combined:= Combined + AStore.FindResolvedCallers(ASymbolId);
+      NResolved:= Length(Combined);
+    end;
     // v(ADP3 T3i, register E1): takes FindUnresolvedNameCallers' DEFAULT
     // (call sites only) DELIBERATELY -- this is a consumer of the
     // "is this call site resolved?" notion, and the default is the right answer
@@ -3036,19 +3061,58 @@ var
       Combined:= Combined + AStore.FindUnresolvedNameCallers(LastSegment(AQName));
     if Length(Combined) = 0 then Exit;
 
+    { IS THIS HOP'S TARGET A METHOD? Only then can a missing receiver be evidence
+      of anything. Computed once per hop rather than per caller. }
+    var TargetIsMethod: Boolean:= TargetIsMethodOf(ASymbolId);
+
     HopSeen:= TDictionary<Int64, Boolean>.Create;
     try
+      var Idx: Integer:= -1;
       for RC in Combined do
       begin
+        Inc(Idx);
         if RC.EnclosingSymbolId <= 0 then Continue; // no enclosing routine -- nothing to attribute the call to
         if HopSeen.ContainsKey(RC.EnclosingSymbolId) then Continue;
         HopSeen.Add(RC.EnclosingSymbolId, True);
         if Visited.ContainsKey(RC.EnclosingSymbolId) then Continue; // already expanded (earlier hop, or another branch) -- cycle guard
         if Visited.Count >= COVERED_BY_MAXWALK then Exit; // hard walk-size cap reached
         Visited.Add(RC.EnclosingSymbolId, True);
+
+        { WHEN IS THIS EDGE PROOF, AND WHEN IS IT ONLY A NAME MATCH?
+
+          * RESOLVED bucket (the first NResolved entries): a call_edges row IS
+            the resolver's proof that this call reaches THIS symbol. Verified.
+          * NAME bucket, target is a FREE ROUTINE: an unqualified call to a
+            routine in scope has no receiver and needs none. Verified. Treating
+            these as suspect is what turned a real handful of untypable
+            receivers into a reported "3,882".
+          * NAME bucket, target is a METHOD, receiver recorded: the receiver
+            names something, so the match is anchored. Verified. (Typing that
+            receiver to the owner is a further tightening, deliberately NOT done
+            here -- the ruling was to MARK, not to drop, and a name that types to
+            an interface is a genuinely undecidable case, not a bad match.)
+          * NAME bucket, target is a METHOD, receiver EMPTY: nothing ties the
+            call to this method rather than a same-named one in another class.
+            This is the reported defect -- one such site attributed a DPP test to
+            all eight TransferFile symbols within three hops.
+
+          Verification does not survive a weak hop: a test reached THROUGH an
+          unproven edge is no better established than that edge. }
+        var EdgeVerified: Boolean:=
+          (Idx < NResolved) or (not TargetIsMethod) or (Trim(RC.ReceiverText) <> '');
+        var PathVerified: Boolean:= AVerified and EdgeVerified;
+
         if IsTestRoutine(AStore, RC.EnclosingSymbolId, RC.Location) then
+        begin
           Names.Add(RC.EnclosingQName);
-        Walk(RC.EnclosingSymbolId, RC.EnclosingQName, ADepth - 1);
+          { A test reachable by ANY verified path is verified, however many
+            unverified paths also reach it. Recording the best evidence, not the
+            last seen. }
+          var Was: Boolean;
+          if not VerifiedName.TryGetValue(LowerCase(RC.EnclosingQName), Was) then Was:= False;
+          VerifiedName.AddOrSetValue(LowerCase(RC.EnclosingQName), Was or PathVerified);
+        end;
+        Walk(RC.EnclosingSymbolId, RC.EnclosingQName, ADepth - 1, PathVerified);
       end;
     finally
       HopSeen.Free;
@@ -3086,12 +3150,13 @@ begin
 
   Names  := TStringList.Create;
   Visited:= TDictionary<Int64, Boolean>.Create;
+  VerifiedName:= TDictionary<string, Boolean>.Create;
   try
     Names.Sorted      := True;      // DETERMINISTIC order regardless of walk/encounter order
     Names.Duplicates  := dupIgnore; // the SAME test can be reached via >1 reverse path/hop
     Names.CaseSensitive:= False;
     Visited.Add(ASym.Id, True); // seed with the root itself -- a (mutually) recursive target must never be re-attributed as its own "covered by" caller
-    Walk(ASym.Id, ASym.QualifiedName, COVERED_BY_DEPTH);
+    Walk(ASym.Id, ASym.QualifiedName, COVERED_BY_DEPTH, True);
 
     if Names.Count = 0 then Exit;
 
@@ -3101,12 +3166,29 @@ begin
     // TStringList, so its (already-ordered) contents are copied across.
     var Capped: TList<string>:= TList<string>.Create;
     try
-      Capped.AddRange(Names.ToStringArray);
+      { MARK WHAT COULD NOT BE VERIFIED, RATHER THAN DROPPING IT OR ASSERTING IT
+        (owner ruling 2026-09-03).
+
+        Dropping was the recommendation and was not taken: an unverified fact is
+        still a lead, and the owner wants the underlying question -- how an
+        interface-dispatched call should be attributed at all -- brainstormed
+        rather than pre-empted by a filter. Asserting it is what produced the
+        report: `uMahrRoutines.pas:219` carried a `Covered by:` naming a DPP test
+        that never touches it.
+
+        The suffix rides on the ENTRY, so the ', '-joined + capped contract every
+        other fact uses is unchanged, and each name carries its own confidence
+        even after '(+N more)' truncates the list. }
+      var Was: Boolean;
+      for var N: string in Names.ToStringArray do
+        if VerifiedName.TryGetValue(LowerCase(N), Was) and Was then Capped.Add(N)
+        else Capped.Add(N + ' (unverified)');
       Result:= JoinCappedDisplay(Capped, COVERED_BY_CAP);
     finally
       Capped.Free;
     end;
   finally
+    VerifiedName.Free;
     Visited.Free;
     Names.Free;
   end;
