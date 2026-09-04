@@ -629,6 +629,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetMetaValue(const AKey, AValue: string)                                                                    ;
+      /// <summary>Implements
+      /// <see cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/> --
+      /// `PRAGMA wal_checkpoint(TRUNCATE)`, so the `.sqlite` is self-contained
+      /// without its sidecars.</summary>
+      /// <remarks>Best-effort; see the interface for why, and for the
+      /// measurement that shows a completed run can leave everything in the
+      /// `-wal`.</remarks>
+      procedure Checkpoint                                                                                                  ;
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
       /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
@@ -3957,6 +3965,53 @@ begin
     FConn.ExecSQL('INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ?)', [AKey, AValue]);
   except
     { non-writable / pre-schema_meta DB -- recording the fingerprint is best-effort }
+  end;
+end; // procedure
+
+// Item 1a (2026-09-03): fold the WAL back into the main file so a completed run
+// leaves a database that is self-contained on disk.
+//
+// MEASURED, because the obvious fixture is vacuous. A one-shot `index` run
+// already ends up checkpointed -- SQLite checkpoints when the last connection
+// closes -- so a fixture that indexes and then reads a copy passes with or
+// without this call, and would have pinned nothing. The hazard is a COMPLETED
+// run whose process does not close straight after. On a 3-member fixture under
+// `--watch`, after the run had finished and stamped: main file 8 KB, -wal
+// 758 KB, and a copy of the .sqlite alone reported NO scan_type and NO files
+// rows. `index <dir> --db <thatCopy>` then exited 0 instead of 2 -- the
+// folder-into-project refusal disarmed by a plain file copy.
+//
+// TWO PRAGMAS, AND THE ORDER IS THE POINT -- not belt and braces.
+//
+// TRUNCATE implies RESTART, which WAITS FOR READERS. A concurrent reader is
+// not hypothetical here: an LSP or an IDE plugin routinely holds the same
+// project database open, and `index --all` reads its own sections. If TRUNCATE
+// gives up under a reader, nothing is copied into the main file and the run is
+// back to the defect this exists to remove -- silently, since the pragma
+// reports no error a caller sees.
+//
+// FULL copies every frame into the main file and blocks only on WRITERS, so it
+// makes the .sqlite COMPLETE regardless of readers. That is the property that
+// matters: a copy of the main file alone must carry the run. TRUNCATE then
+// resets the sidecar to zero when it can, which is tidiness, not correctness.
+//
+// PASSIVE is deliberately not used: it gives up quietly and reports success,
+// which is the same silence this is here to remove.
+//
+// Best-effort by the same argument as SetMetaValue above: a database that
+// cannot be checkpointed (read-only, or a non-WAL DB) must not fail the run
+// that produced the data.
+procedure TSQLiteSymbolStore.Checkpoint;
+begin
+  try
+    FConn.ExecSQL('PRAGMA wal_checkpoint(FULL)');
+  except
+    { non-WAL or read-only DB -- best-effort }
+  end;
+  try
+    FConn.ExecSQL('PRAGMA wal_checkpoint(TRUNCATE)');
+  except
+    { a live reader can block the reset; FULL above already did the copying }
   end;
 end; // procedure
 

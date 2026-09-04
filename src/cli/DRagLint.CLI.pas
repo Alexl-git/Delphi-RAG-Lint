@@ -2718,6 +2718,13 @@ begin
       smLibrary both walk folders, which is the library model. }
     Store.SetMetaValue(SCAN_TYPE_KEY,
       IfThen(AItem.Mode = smClosure, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
+    { Item 1a: everything above -- the fingerprints and the scan_type stamp
+      especially -- can still be sitting in the -wal at this point. Fold it in
+      so the section's database is self-contained the moment the section
+      finishes, rather than whenever this process happens to close. `index
+      --all` builds many sections in one process and is exactly the run someone
+      copies a database out of while it is still going. }
+    Store.Checkpoint;
     Writeln(Format('=== %s%s -> %s : files=%d symbols=%d [%.1fs] ===', [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols, Elapsed]));
     Result:= True;
   except
@@ -4167,6 +4174,17 @@ begin
        (IsProjectScopedTarget or TDirectory.Exists(AArgs.Path)) then
       Store.SetMetaValue(SCAN_TYPE_KEY,
         IfThen(IsProjectScopedTarget, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
+    { Item 1a: UNCONDITIONAL, unlike the stamp above. The stamp is a claim about
+      SCOPE and only a run that established one may write it; a checkpoint
+      claims nothing, it just makes whatever this run DID write durable in the
+      main file. So --resolve-only and single-file runs check point too -- they
+      wrote fingerprints and edges, and stranding those in a sidecar is the same
+      bug wearing a smaller hat.
+
+      This is the site that reproduces: under --watch the loop below does NOT
+      break, so without this the connection stays open indefinitely and a copy
+      of the .sqlite alone is empty of everything this run just did. }
+    Store.Checkpoint;
     Elapsed:= (Now - StartTime) * 86400;
     if Indexer.SkippedUpToDate > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))

@@ -160,6 +160,30 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure SetMetaValue(const AKey, AValue: string)                                                                    ;
+    /// <summary>Folds the write-ahead log back into the main database file, so
+    /// the `.sqlite` is self-contained on disk without its `-wal` / `-shm`
+    /// sidecars.</summary>
+    /// <remarks>
+    /// <para>Call at the END of a COMPLETED index run, after the fingerprints
+    /// and `scan_type` are stamped. Until then the whole run may live in the
+    /// sidecar: measured 2026-09-03 on a 3-member fixture whose run had
+    /// finished and stamped -- main file 8 KB, `-wal` 758 KB, and a copy of the
+    /// `.sqlite` alone carried no `scan_type` and no `files` rows at all.</para>
+    /// <para>WHY IT IS NOT REDUNDANT WITH SQLite's OWN CHECKPOINT-ON-CLOSE. A
+    /// one-shot run does checkpoint when the last connection closes, and there
+    /// the stamp is durable. The hazard is every run whose process does NOT
+    /// close cleanly straight after: `--watch`, an orphaned or killed engine, a
+    /// resident LSP holding the same database, or any copy taken while a run is
+    /// in flight. In those states a `.sqlite`-only copy silently reports
+    /// "records no scan_type", which downgrades the database to UNKNOWN, where
+    /// a folder scan into a PROJECT database is NOT refused -- the exact
+    /// corruption that refusal exists to prevent.</para>
+    /// <para>Best-effort: a checkpoint that cannot run must not fail the run
+    /// that produced the data, for the same reason
+    /// <see cref="DRagLint.Core.Interfaces.ISymbolStore.SetMetaValue"/> swallows
+    /// its own failure.</para>
+    /// </remarks>
+    procedure Checkpoint                                                                                                  ;
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
