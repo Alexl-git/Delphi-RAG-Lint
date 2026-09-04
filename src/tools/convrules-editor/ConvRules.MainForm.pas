@@ -20,7 +20,8 @@ uses
   Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus, Vcl.Graphics, Vcl.Themes,
   ConvRules.Model, ConvRules.Casts, ConvRules.Engine, ConvRules.Platform,
   ConvRules.CastLib, ConvRules.Theme, ConvRules.OpenSourceClient,
-  ConvRules.Mappings, ConvRules.MappingForm;
+  ConvRules.Mappings, ConvRules.MappingForm,
+  ConvRules.FormTypes, ConvRules.RuleCatalog;
 
 const
   /// <summary>HKCU key holding this editor's per-user settings.</summary>
@@ -29,6 +30,13 @@ const
   /// (see ConvRules.Theme.ThemePrefToStr). The .dpr reads it at start-up; the
   /// View &gt; Theme menu writes it back.</summary>
   EDITOR_REG_THEME = 'Theme';
+  /// <summary>Value under EDITOR_REG_KEY holding the folder the form-file Open
+  /// dialog last started in, so browsing resumes where the user left off rather
+  /// than at the process working directory.</summary>
+  /// <remarks>Seeded by --form on the command line, then updated by every
+  /// successful browse. A missing or stale folder is harmless: TOpenDialog falls
+  /// back on its own when InitialDir does not exist.</remarks>
+  EDITOR_REG_FORMDIR = 'LastFormDir';
 
 type
   TConvRulesForm = class(TForm)
@@ -92,6 +100,27 @@ type
     // can never dirty the rule book. Filtered against the current rules at DISPLAY
     // time, so authoring a rule for one makes its candidate row go away by itself.
     FUnitCandidates: TArray<string>;
+    // --- form-types panel (leftmost): what is ON the examined form(s) ---
+    // FFormTypeRows is the decorated model the list paints; ScanDfmTypes fills
+    // TypeName/Count and RefreshFormTypes applies Visual/Excluded/Ruled on top.
+    // Reenabled is the user's per-row override and is preserved ACROSS a refilter,
+    // which is the whole reason the override lives on the row and is not recomputed.
+    FFormTypeList : TListBox;         // owner-drawn: [V] TOvcTable (28)
+    FFormTypeRows : TFormTypeRows;
+    FFilterMemo   : TMemo;            // one exclusion regex per line
+    FChkStdCtrls  : TCheckBox;        // also exclude Vcl./FMX. declared types
+    FLblFormTypes : TLabel;           // "N types, M shown"
+    FFilterError  : string;           // first malformed regex, surfaced in the label
+    FCatalog      : TRuleCatalog;     // every #convert the rules folder already has
+    FRulesFolder  : string;           // scanned folder (registry-backed)
+    FLastFormDir  : string;           // where the Open-form dialog resumes
+    // Three descendant sets, fetched ONCE each (~1.5 s per call, measured against
+    // the 3.4 GB Win32 library). They replace a per-type DeclaringUnitOf, which
+    // costs 1.7 s PER TYPE and blocked the UI for ~78 s on VARINSP's 46 types.
+    FVisualSet    : TStringList;      // TControl descendants    -> [V]
+    FComponentSet : TStringList;      // TComponent descendants  -> [N] when not TControl
+    FPersistentSet: TStringList;      // TPersistent descendants -> [N] (catches TField)
+    FDeclUnits    : TDictionary<string, string>; // type -> declaring unit, memoised
     FPool     : TListBox;             // unassigned T pool
     FPoolFind : TEdit;
     // "Go to definition of <T>": ONE popup shared by the grid and the pool, because
@@ -151,6 +180,60 @@ type
     /// ConvRules.Usage.ComputeUsage for the active rule's From class, and marks the
     /// used From properties green in the grid. No-op with a status message when no
     /// conversion is selected.</summary>
+    /// <summary>Harvests the component types of the examined .dfm file(s) into the
+    /// form-types panel.</summary>
+    /// <param name="ADfmTexts">The .dfm contents Examine just read.</param>
+    /// <remarks>Deliberately independent of FActiveHdr: the panel exists to CHOOSE
+    /// a From class, so it must work before any conversion is selected. Manual
+    /// re-enables are carried over by type name so a re-Examine of the same form
+    /// does not silently undo them.</remarks>
+    procedure HarvestFormTypes(const ADfmTexts: TArray<string>);
+    /// <summary>Re-applies Visual/Excluded/Ruled decoration and repaints the list.</summary>
+    /// <remarks>Cheap and idempotent -- called on every filter keystroke.</remarks>
+    procedure RefreshFormTypes;
+    /// <summary>TNotifyEvent shim so the filter controls can re-run RefreshFormTypes.</summary>
+    procedure FilterChanged(Sender: TObject);
+    /// <summary>Rescans FRulesFolder into FCatalog and rewrites its index file.</summary>
+    procedure RescanRulesFolder(Sender: TObject);
+    /// <summary>Copies the clicked type into the From picker.</summary>
+    /// <remarks>Fires whether the row is greyed or not, by design: a greyed row is
+    /// a hint, never a prohibition.</remarks>
+    procedure FormTypeClick(Sender: TObject);
+    /// <summary>Toggles the selected row's manual re-enable override.</summary>
+    procedure ToggleFormTypeReenable(Sender: TObject);
+    /// <summary>Owner-draws one form-type row: V/N/? mark, name, count, why greyed.</summary>
+    procedure FormTypeDrawItem(AControl: TWinControl; AIndex: Integer;
+      ARect: TRect; AState: TOwnerDrawState);
+    /// <summary>Bare names of every descendant of AAncestor, as a fast lookup set.</summary>
+    /// <param name="AAncestor">e.g. 'TControl'. One engine call, ~1.5 s.</param>
+    /// <returns>An owned list; EMPTY (never nil) when the engine cannot answer, so
+    /// callers cannot mistake "no answer" for "not a descendant".</returns>
+    function LoadDescendantSet(const AAncestor: string): TStringList;
+    /// <summary>The declaring unit of ATypeName, memoised for the session.</summary>
+    /// <returns>'' when the engine cannot resolve it -- which must NOT be read as
+    /// "not a standard control".</returns>
+    function DeclaringUnitCached(const ATypeName: string): string;
+    /// <summary>Browses for form/source files, starting in the last-used folder.</summary>
+    /// <param name="AFiles">Receives the chosen paths, sibling-expanded.</param>
+    /// <returns>False when the user cancels; AFiles is then untouched.</returns>
+    function PickFormFiles(out AFiles: TArray<string>): Boolean;
+    /// <summary>Reads the given files, harvests their types, and -- only when a
+    /// conversion is selected -- marks its used From properties.</summary>
+    /// <param name="AFiles">Absolute paths; unreadable ones are reported, not fatal.</param>
+    /// <remarks>The single load path. The toolbar's Examine, the panel's Open form
+    /// button and --form all funnel through here, so none of them can drift.</remarks>
+    procedure LoadFormFiles(const AFiles: TArray<string>);
+    /// <summary>Adds each path's sibling .pas/.dfm when it exists.</summary>
+    /// <param name="APaths">Chosen paths.</param>
+    /// <returns>The input plus any siblings, de-duplicated.</returns>
+    /// <remarks>A Delphi form IS the pair: the .dfm carries the component types and
+    /// the .pas carries the uses clause and the property access sites. Opening one
+    /// and silently ignoring the other would answer half of every question.</remarks>
+    function ExpandUnitSiblings(const APaths: TArray<string>): TArray<string>;
+    /// <summary>Records and persists the folder the Open dialog should start in.</summary>
+    procedure SetLastFormDir(const ADir: string);
+    /// <summary>Panel button: browse for a form, then load it.</summary>
+    procedure DoOpenForm(Sender: TObject);
     procedure DoExamine(Sender: TObject);
     /// <summary>Drops the current examination (FUsedProps/FUsedFiles/FExamineInfo)
     /// and repaints the grid with no rows marked.</summary>
@@ -275,6 +358,11 @@ var
   { Path to the shipped class-cast library (.castlib); '' = class casts unavailable
     (scalar-only, today's behavior). Resolved + set by the .dpr before CreateForm. }
   GEditorCastLib: string = '';
+  { A form (.dfm or .pas) to load at start-up, from --form on the command line.
+    Exists so a debug run lands straight on the unit under study instead of
+    browsing to it every time. Its FOLDER also seeds the Open dialog, so a browse
+    from a --form session starts beside the unit that was passed. }
+  GEditorFormPath: string = '';
   { Defaults come from ConvRules.Platform so the .dpr and this unit cannot drift
     apart; the .dpr overwrites both from --from-platform / --to-platform, which
     still accept win32|win64|both. FROM was cpBoth until 2026-07-29 -- see
@@ -302,6 +390,29 @@ const
   STYLE_DARK  = 'Windows11 Modern Dark';
 
 { ---- helpers ---- }
+
+{ The folder the Open-form dialog should start in, remembered from a previous
+  session. '' when never set or unreadable -- TOpenDialog then uses its own
+  default, which is the correct fallback rather than an error. }
+function ReadLastFormDir: string;
+var
+  Reg: TRegistry;
+begin
+  Result := '';
+  Reg := TRegistry.Create(KEY_READ);
+  try
+    try
+      Reg.RootKey := HKEY_CURRENT_USER;
+      if Reg.OpenKeyReadOnly(EDITOR_REG_KEY) then
+        if Reg.ValueExists(EDITOR_REG_FORMDIR) then
+          Result := Reg.ReadString(EDITOR_REG_FORMDIR);
+    except
+      on E: ERegistryException do Result := '';
+    end;
+  finally
+    Reg.Free;
+  end;
+end;
 
 type
   { Scoped hourglass. Sets Screen.Cursor on create; restores the previous cursor
@@ -356,8 +467,24 @@ begin
   ApplyTheme(ResolveThemeMode(GEditorThemePref, GEditorIdeTheme));
   OnClose := FormCloseHandler;
   Visible := True;  // ensure the CreateNew form is shown by Run
-  SetStatus('Ready. Open a .rules file, or pick From/To classes and press '
-    + '"+ New Conversion".');
+
+  // Where the Open-form dialog resumes. --form's own folder wins over the stored
+  // one, so a debug run pointed at a different tree browses THERE, not wherever
+  // the last interactive session happened to be.
+  FLastFormDir := ReadLastFormDir;
+  if GEditorFormPath <> '' then
+    FLastFormDir := ExtractFileDir(GEditorFormPath);
+
+  if GEditorFormPath <> '' then
+  begin
+    if TFile.Exists(GEditorFormPath) then
+      LoadFormFiles(ExpandUnitSiblings([GEditorFormPath]))
+    else
+      SetError(Format('--form "%s" does not exist.', [GEditorFormPath]));
+  end
+  else
+    SetStatus('Ready. Open a .rules file, or pick From/To classes and press '
+      + '"+ New Conversion".');
 end;
 
 procedure TConvRulesForm.FormCloseHandler(Sender: TObject; var Action: TCloseAction);
@@ -370,6 +497,12 @@ destructor TConvRulesForm.Destroy;
 begin
   FEngine.Free;
   FBook.Free;
+  // Both are lazily created (FVisualSet only if the engine answered, FDeclUnits on
+  // the first lookup), so both can legitimately still be nil here.
+  FVisualSet.Free;
+  FComponentSet.Free;
+  FPersistentSet.Free;
+  FDeclUnits.Free;
   inherited;
 end;
 
@@ -615,7 +748,10 @@ procedure TConvRulesForm.BuildUI;
 var
   Split1: TSplitter;
   Split2: TSplitter;
-  LeftPanel, GridPanel, PoolPanel: TPanel;
+  SplitForms: TSplitter;
+  LeftPanel, GridPanel, PoolPanel, FormTypesPanel: TPanel;
+  LblFormHdr, LblFilter: TLabel;
+  BtnRescan, BtnReenable, BtnOpenForm: TButton;
   TabRules, TabRaw, TabUnits: TTabSheet;
 begin
   Caption := 'ConvRulesEditor -- conversion rule-book editor';
@@ -726,6 +862,68 @@ begin
   FLblFile := TLabel.Create(Self);
   FLblFile.Parent := FPanelTop; FLblFile.SetBounds(8, 101, 1080, 15);
   FLblFile.Caption := '(no file)';
+
+  // --- leftmost: the types ON the examined form ---
+  // Created BEFORE LeftPanel so it wins the leftmost alLeft slot: VCL orders same-
+  // aligned siblings by creation, so swapping these two swaps the columns.
+  FormTypesPanel := TPanel.Create(Self);
+  FormTypesPanel.Parent := Self; FormTypesPanel.Align := alLeft; FormTypesPanel.Width := 300;
+  FormTypesPanel.BevelOuter := bvNone;
+
+  LblFormHdr := TLabel.Create(Self);
+  LblFormHdr.Parent := FormTypesPanel; LblFormHdr.SetBounds(6, 8, 288, 15);
+  LblFormHdr.Caption := 'Types on form (Examine to fill)';
+
+  BtnOpenForm := TButton.Create(Self);
+  BtnOpenForm.Parent := FormTypesPanel; BtnOpenForm.SetBounds(6, 26, 90, 23);
+  BtnOpenForm.Caption := 'Open form...';
+  BtnOpenForm.Hint := 'Browse for a .dfm/.pas; its sibling is loaded too';
+  BtnOpenForm.ShowHint := True;
+  BtnOpenForm.OnClick := DoOpenForm;
+
+  BtnRescan := TButton.Create(Self);
+  BtnRescan.Parent := FormTypesPanel; BtnRescan.SetBounds(102, 26, 92, 23);
+  BtnRescan.Caption := 'Rescan rules';
+  BtnRescan.Hint := 'Re-read the rules folder and rebuild the coverage index';
+  BtnRescan.ShowHint := True;
+  BtnRescan.OnClick := RescanRulesFolder;
+
+  BtnReenable := TButton.Create(Self);
+  BtnReenable.Parent := FormTypesPanel; BtnReenable.SetBounds(200, 26, 94, 23);
+  BtnReenable.Caption := 'Re-enable';
+  BtnReenable.Hint := 'Ignore the filter for the selected type (toggles)';
+  BtnReenable.ShowHint := True;
+  BtnReenable.OnClick := ToggleFormTypeReenable;
+
+  FChkStdCtrls := TCheckBox.Create(Self);
+  FChkStdCtrls.Parent := FormTypesPanel; FChkStdCtrls.SetBounds(6, 54, 288, 17);
+  FChkStdCtrls.Caption := 'Exclude standard VCL / FMX controls';
+  FChkStdCtrls.OnClick := FilterChanged;
+
+  LblFilter := TLabel.Create(Self);
+  LblFilter.Parent := FormTypesPanel; LblFilter.SetBounds(6, 76, 288, 15);
+  LblFilter.Caption := 'Exclude (one regex per line, any match):';
+
+  FFilterMemo := TMemo.Create(Self);
+  FFilterMemo.Parent := FormTypesPanel; FFilterMemo.SetBounds(6, 94, 288, 60);
+  FFilterMemo.ScrollBars := ssVertical;
+  FFilterMemo.OnChange := FilterChanged;
+
+  FLblFormTypes := TLabel.Create(Self);
+  FLblFormTypes.Parent := FormTypesPanel; FLblFormTypes.SetBounds(6, 158, 288, 15);
+  FLblFormTypes.Caption := '';
+
+  FFormTypeList := TListBox.Create(Self);
+  FFormTypeList.Parent := FormTypesPanel;
+  FFormTypeList.SetBounds(6, 176, 288, 466);
+  FFormTypeList.Anchors := [akLeft, akTop, akRight, akBottom];
+  FFormTypeList.Style := lbOwnerDrawFixed;
+  FFormTypeList.ItemHeight := 18;
+  FFormTypeList.OnDrawItem := FormTypeDrawItem;
+  FFormTypeList.OnClick := FormTypeClick;
+
+  SplitForms := TSplitter.Create(Self);
+  SplitForms.Parent := Self; SplitForms.Align := alLeft; SplitForms.Width := 4;
 
   // --- left: rules library + tabs ---
   LeftPanel := TPanel.Create(Self);
@@ -1725,9 +1923,364 @@ end;
   The same .pas texts are also run through ScanUsesClauses, and the units they name
   become CANDIDATE rows on the Unit Rules tab -- a work list, not an edit. The rule
   book is not touched by any of this. }
+function TConvRulesForm.DeclaringUnitCached(const ATypeName: string): string;
+begin
+  if FDeclUnits = nil then
+    FDeclUnits := TDictionary<string, string>.Create;
+  if FDeclUnits.TryGetValue(UpperCase(ATypeName), Result) then Exit;
+  Result := FEngine.DeclaringUnitOf(ATypeName);
+  FDeclUnits.AddOrSetValue(UpperCase(ATypeName), Result);
+end;
+
+procedure TConvRulesForm.HarvestFormTypes(const ADfmTexts: TArray<string>);
+var
+  Parts : TArray<TFormTypeRows>;
+  Old   : TFormTypeRows;
+  Txt   : string;
+  Names : TArray<string>;
+  Err   : string;
+  N     : string;
+  i, j  : Integer;
+begin
+  Old   := FFormTypeRows;
+  Parts := nil;
+  for Txt in ADfmTexts do
+    Parts := Parts + [ScanDfmTypes(Txt)];
+  FFormTypeRows := MergeFormTypes(Parts);
+
+  // A manual re-enable is the user's decision about a TYPE, not about a scan, so it
+  // survives re-Examining the same form. Without this, re-running Examine would
+  // silently undo every override.
+  for i := 0 to High(FFormTypeRows) do
+    for j := 0 to High(Old) do
+      if SameText(Old[j].TypeName, FFormTypeRows[i].TypeName) then
+      begin
+        FFormTypeRows[i].Reenabled := Old[j].Reenabled;
+        Break;
+      end;
+
+  // Three descendant sets, once per session. Non-fatal: if the engine cannot
+  // answer, rows stay '?' rather than being labelled non-visual on no evidence.
+  if FVisualSet = nil then
+  begin
+    var LGuard: IInterface := HourGlass;
+    FVisualSet     := LoadDescendantSet('TControl');
+    FComponentSet  := LoadDescendantSet('TComponent');
+    FPersistentSet := LoadDescendantSet('TPersistent');
+  end;
+
+  if Length(FCatalog) = 0 then RescanRulesFolder(nil);
+  RefreshFormTypes;
+end;
+
+function TConvRulesForm.LoadDescendantSet(const AAncestor: string): TStringList;
+var
+  Names: TArray<string>;
+  Err  : string;
+  N    : string;
+begin
+  Result := TStringList.Create;
+  Result.Sorted        := True;
+  Result.Duplicates    := dupIgnore;
+  Result.CaseSensitive := False;
+  if not FEngine.ListDescendantsOf(AAncestor, Names, Err) then Exit;
+  for N in Names do
+    if Trim(N) <> '' then Result.Add(Trim(N));
+end;
+
+procedure TConvRulesForm.FilterChanged(Sender: TObject);
+begin
+  RefreshFormTypes;
+end;
+
+procedure TConvRulesForm.RefreshFormTypes;
+var
+  Pats  : TArray<string>;
+  Err   : string;
+  DeclU : string;
+  Entry : TRuleCatalogEntry;
+  i     : Integer;
+  Active: Integer;
+  Cold  : Integer;
+begin
+  if (FFormTypeList = nil) or (FFilterMemo = nil) then Exit;
+
+  Pats := FFilterMemo.Lines.ToStringArray;
+  FFilterError := '';
+  Active := 0;
+
+  // Resolving a declaring unit costs a process spawn against a multi-GB index
+  // (measured 1.7 s each), so it happens ONLY when the standard-controls box is
+  // ticked -- the one thing that needs it -- and the user is told what it costs
+  // rather than watching a frozen window.
+  if FChkStdCtrls.Checked then
+  begin
+    Cold := 0;
+    for i := 0 to High(FFormTypeRows) do
+      if (FDeclUnits = nil)
+         or (not FDeclUnits.ContainsKey(UpperCase(FFormTypeRows[i].TypeName))) then
+        Inc(Cold);
+    if Cold > 0 then
+    begin
+      SetStatus(Format('Resolving declaring units for %d type(s) (~%d s) ...',
+        [Cold, Round(Cold * 1.7)]));
+      Application.ProcessMessages;
+    end;
+  end;
+
+  for i := 0 to High(FFormTypeRows) do
+  begin
+    // Only the standard-controls test needs the unit. Everything else works off
+    // the three cached descendant sets.
+    if FChkStdCtrls.Checked then
+      DeclU := DeclaringUnitCached(FFormTypeRows[i].TypeName)
+    else
+      DeclU := '';
+
+    // '?' is NOT a synonym for non-visual. A type is only tvkNonVisual when the
+    // index PLACES it (it descends from TComponent or TPersistent) and it is not a
+    // TControl. TField and its kin come through TPersistent, not TComponent, which
+    // is why both sets are consulted.
+    if (FVisualSet <> nil) and (FVisualSet.IndexOf(FFormTypeRows[i].TypeName) >= 0) then
+      FFormTypeRows[i].Visual := tvkVisual
+    else if ((FComponentSet <> nil) and (FComponentSet.IndexOf(FFormTypeRows[i].TypeName) >= 0))
+         or ((FPersistentSet <> nil) and (FPersistentSet.IndexOf(FFormTypeRows[i].TypeName) >= 0)) then
+      FFormTypeRows[i].Visual := tvkNonVisual
+    else
+      FFormTypeRows[i].Visual := tvkUnknown;
+
+    FFormTypeRows[i].Excluded := TypeIsExcluded(FFormTypeRows[i].TypeName, DeclU,
+      Pats, FChkStdCtrls.Checked, Err);
+    if (Err <> '') and (FFilterError = '') then FFilterError := Err;
+
+    if FindRuleForType(FCatalog, FFormTypeRows[i].TypeName, Entry) then
+    begin
+      FFormTypeRows[i].Ruled   := True;
+      FFormTypeRows[i].RuledBy := ExtractFileName(Entry.FilePath);
+    end
+    else
+    begin
+      FFormTypeRows[i].Ruled   := False;
+      FFormTypeRows[i].RuledBy := '';
+    end;
+
+    if not RowIsGreyed(FFormTypeRows[i]) then Inc(Active);
+  end;
+
+  FFormTypeList.Items.BeginUpdate;
+  try
+    FFormTypeList.Items.Clear;
+    for i := 0 to High(FFormTypeRows) do
+      FFormTypeList.Items.Add(FFormTypeRows[i].TypeName);
+  finally
+    FFormTypeList.Items.EndUpdate;
+  end;
+
+  // A malformed pattern excludes nothing, so without this line the user would read
+  // an un-greyed row as "my filter kept this" when the condition never ran at all.
+  if FFilterError <> '' then
+    FLblFormTypes.Caption := 'FILTER ERROR -- ' + FFilterError
+  else
+    FLblFormTypes.Caption := Format('%d type(s), %d active',
+      [Length(FFormTypeRows), Active]);
+end;
+
+procedure TConvRulesForm.RescanRulesFolder(Sender: TObject);
+var
+  Errs  : TArray<string>;
+  Folder: string;
+begin
+  Folder := Trim(FRulesFolder);
+  if Folder = '' then Folder := ExtractFilePath(FFilePath);
+  if Folder = '' then
+  begin
+    SetStatus('No rules folder yet -- open a rule book first, then Rescan rules.');
+    Exit;
+  end;
+
+  FCatalog     := ScanRulesFolder(Folder, Errs);
+  FRulesFolder := Folder;
+
+  // The index is a CACHE of what the folder says; failing to write it must not
+  // invalidate the catalog we just built in memory.
+  try
+    TFile.WriteAllText(TPath.Combine(Folder, CATALOG_INDEX_FILE),
+      CatalogToIndexText(FCatalog));
+  except
+    on E: Exception do
+      SetStatus('Catalog built, but its index could not be written: ' + E.Message);
+  end;
+
+  if Sender <> nil then
+  begin
+    RefreshFormTypes;
+    if Length(Errs) > 0 then
+      SetStatus(Format('%d conversion(s) catalogued from %s; %d file(s) unreadable: %s',
+        [Length(FCatalog), Folder, Length(Errs), string.Join('; ', Errs)]))
+    else
+      SetStatus(Format('%d conversion(s) catalogued from %s.',
+        [Length(FCatalog), Folder]));
+  end;
+end;
+
+procedure TConvRulesForm.FormTypeClick(Sender: TObject);
+var
+  i: Integer;
+begin
+  i := FFormTypeList.ItemIndex;
+  if (i < 0) or (i > High(FFormTypeRows)) then Exit;
+
+  FCbFrom.Text := FFormTypeRows[i].TypeName;
+  if FFormTypeRows[i].Ruled then
+    SetStatus(Format('From set to %s -- already converted by %s. Pick a To class, ' +
+      'then New conversion.', [FFormTypeRows[i].TypeName, FFormTypeRows[i].RuledBy]))
+  else
+    SetStatus(Format('From set to %s. Pick a To class, then New conversion.',
+      [FFormTypeRows[i].TypeName]));
+end;
+
+procedure TConvRulesForm.ToggleFormTypeReenable(Sender: TObject);
+var
+  i: Integer;
+begin
+  i := FFormTypeList.ItemIndex;
+  if (i < 0) or (i > High(FFormTypeRows)) then Exit;
+  FFormTypeRows[i].Reenabled := not FFormTypeRows[i].Reenabled;
+  RefreshFormTypes;
+  FFormTypeList.ItemIndex := i;
+end;
+
+procedure TConvRulesForm.FormTypeDrawItem(AControl: TWinControl; AIndex: Integer;
+  ARect: TRect; AState: TOwnerDrawState);
+var
+  LB  : TListBox;
+  Row : TFormTypeRow;
+  Mark: string;
+  S   : string;
+begin
+  LB := TListBox(AControl);
+  LB.Canvas.FillRect(ARect);
+  if (AIndex < 0) or (AIndex > High(FFormTypeRows)) then Exit;
+  Row := FFormTypeRows[AIndex];
+
+  case Row.Visual of
+    tvkVisual   : Mark := '[V]';
+    tvkNonVisual: Mark := '[N]';
+  else
+    Mark := '[?]';
+  end;
+
+  S := Format('%s %s  (%d)', [Mark, Row.TypeName, Row.Count]);
+  if Row.Ruled     then S := S + '  -- ' + Row.RuledBy;
+  if Row.Reenabled then S := S + '  *';
+
+  // Selection keeps the theme's highlight colours; only unselected greyed rows are
+  // dimmed, so a greyed row stays readable when the user is on it.
+  if RowIsGreyed(Row) and not (odSelected in AState) then
+    LB.Canvas.Font.Color := clGrayText;
+
+  LB.Canvas.TextOut(ARect.Left + 4, ARect.Top + 1, S);
+end;
+
+function TConvRulesForm.ExpandUnitSiblings(const APaths: TArray<string>): TArray<string>;
+var
+  Seen: TStringList;
+  P, Sib, Ext: string;
+
+  procedure Take(const APath: string);
+  begin
+    if (Trim(APath) = '') or (not TFile.Exists(APath)) then Exit;
+    if Seen.IndexOf(APath) >= 0 then Exit;
+    Seen.Add(APath);
+    Result := Result + [APath];
+  end;
+
+begin
+  Result := nil;
+  Seen := TStringList.Create;
+  try
+    Seen.CaseSensitive := False;
+    for P in APaths do
+    begin
+      Take(P);
+      Ext := LowerCase(ExtractFileExt(P));
+      if Ext = '.pas' then Sib := ChangeFileExt(P, '.dfm')
+      else if Ext = '.dfm' then Sib := ChangeFileExt(P, '.pas')
+      else Sib := '';
+      Take(Sib);
+    end;
+  finally
+    Seen.Free;
+  end;
+end;
+
+procedure TConvRulesForm.SetLastFormDir(const ADir: string);
+var
+  Reg: TRegistry;
+begin
+  if Trim(ADir) = '' then Exit;
+  FLastFormDir := ADir;
+  // Same policy as the theme: a locked HKCU costs the NEXT session's convenience,
+  // never this session's work, so it is not worth an error dialog.
+  Reg := TRegistry.Create(KEY_READ or KEY_WRITE);
+  try
+    try
+      Reg.RootKey := HKEY_CURRENT_USER;
+      if Reg.OpenKey(EDITOR_REG_KEY, True) then
+        Reg.WriteString(EDITOR_REG_FORMDIR, ADir);
+    except
+      // Same precedent as SetThemePref: say it once, do not raise. Callers set the
+      // dir BEFORE loading a form, so the load's own status supersedes this line --
+      // which is why it is safe to report here at all.
+      on E: ERegistryException do
+        SetStatus('Folder remembered for this session only, not saved: ' + E.Message);
+    end;
+  finally
+    Reg.Free;
+  end;
+end;
+
+function TConvRulesForm.PickFormFiles(out AFiles: TArray<string>): Boolean;
+var
+  Dlg: TOpenDialog;
+begin
+  Result := False;
+  AFiles := nil;
+  Dlg := TOpenDialog.Create(Self);
+  try
+    Dlg.Filter := 'Delphi form and source (*.dfm;*.pas)|*.dfm;*.pas|'
+      + 'Form files (*.dfm)|*.dfm|Source (*.pas)|*.pas|All files (*.*)|*.*';
+    Dlg.Options := Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
+    // Resume where the user was: --form's folder on the first browse of a debug
+    // run, otherwise wherever they browsed last. A folder that no longer exists is
+    // ignored by TOpenDialog rather than being an error.
+    if (FLastFormDir <> '') and TDirectory.Exists(FLastFormDir) then
+      Dlg.InitialDir := FLastFormDir;
+    if not Dlg.Execute then Exit;
+    AFiles := ExpandUnitSiblings(Dlg.Files.ToStringArray);
+    if Length(AFiles) > 0 then SetLastFormDir(ExtractFileDir(AFiles[0]));
+    Result := Length(AFiles) > 0;
+  finally
+    Dlg.Free;
+  end;
+end;
+
+procedure TConvRulesForm.DoOpenForm(Sender: TObject);
+var
+  Files: TArray<string>;
+begin
+  if PickFormFiles(Files) then LoadFormFiles(Files);
+end;
+
 procedure TConvRulesForm.DoExamine(Sender: TObject);
 var
-  Dlg  : TOpenDialog;
+  Files: TArray<string>;
+begin
+  if PickFormFiles(Files) then LoadFormFiles(Files);
+end;
+
+procedure TConvRulesForm.LoadFormFiles(const AFiles: TArray<string>);
+var
   Dfms, Pass: TArray<string>;
   Bad  : TArray<string>;
   Paths: TArray<string>;
@@ -1739,32 +2292,11 @@ var
   FromBare: string;
   DotPos  : Integer;
 begin
-  if FActiveHdr < 0 then
-  begin
-    SetStatus('Select a conversion first -- Examine marks the From properties of the active rule.');
-    Exit;
-  end;
-  Dlg := TOpenDialog.Create(Self);
-  try
-    Dlg.Filter := 'Delphi form and source (*.dfm;*.pas)|*.dfm;*.pas|'
-      + 'Form files (*.dfm)|*.dfm|Source (*.pas)|*.pas|All files (*.*)|*.*';
-    Dlg.Options := Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
-    if not Dlg.Execute then Exit;
-    FUsedFiles := Dlg.Files.ToStringArray;
-  finally
-    Dlg.Free;
-  end;
-
-  Paths := nil;
-  for L in FFromTree.Leaves do
-    Paths := Paths + [L.Path];
-
-  // A DFM always writes the BARE class name ('object X: TabcToggleBtn'), never a
-  // unit-qualified one, but FBook's FromType may be qualified -- strip any prefix
-  // up to and including the last '.' before handing it to ComputeUsage.
-  FromBare := FBook.Nodes[FActiveHdr].FromType;
-  DotPos := LastDelimiter('.', FromBare);
-  if DotPos > 0 then FromBare := Copy(FromBare, DotPos + 1, MaxInt);
+  // NO "select a conversion first" gate. The form-types panel exists to CHOOSE a
+  // From class, so loading a form has to work before any rule is selected. Only
+  // the property-usage half below needs an active rule; the type harvest does not.
+  if Length(AFiles) = 0 then Exit;
+  FUsedFiles := AFiles;
 
   // LGuard is scoped to this nested block only, so the wait cursor comes back down
   // before ShowUsageReport's modal report below -- that dialog waits on the user,
@@ -1782,6 +2314,33 @@ begin
         on E: Exception do Bad := Bad + [ExtractFileName(F)];
       end;
 
+    HarvestFormTypes(Dfms);
+  end;
+
+  if FActiveHdr < 0 then
+  begin
+    FExamineInfo := Format('Examined %d file(s): %d type(s) listed on the left. ' +
+      'Select a conversion to also mark its used From properties.',
+      [Length(FUsedFiles), Length(FFormTypeRows)]);
+    if Length(Bad) > 0 then
+      FExamineInfo := FExamineInfo + ' Unreadable: ' + string.Join(', ', Bad);
+    SetStatus(FExamineInfo);
+    Exit;
+  end;
+
+  Paths := nil;
+  for L in FFromTree.Leaves do
+    Paths := Paths + [L.Path];
+
+  // A DFM always writes the BARE class name ('object X: TabcToggleBtn'), never a
+  // unit-qualified one, but FBook's FromType may be qualified -- strip any prefix
+  // up to and including the last '.' before handing it to ComputeUsage.
+  FromBare := FBook.Nodes[FActiveHdr].FromType;
+  DotPos := LastDelimiter('.', FromBare);
+  if DotPos > 0 then FromBare := Copy(FromBare, DotPos + 1, MaxInt);
+
+  begin
+    var LUsageGuard: IInterface := HourGlass;
     U := ComputeUsage(Dfms, Pass, FromBare, Paths);
   end;
 

@@ -65,7 +65,15 @@ begin
   Result := '';                                                          // (3) none
 end;
 
-{ The library index directory and the project index. The FROM/TO platform (each
+{ Command line:
+    --from-platform win32|win64|both   which library the FROM picker resolves against
+    --to-platform   win32|win64|both   ditto for the TO picker
+    --form <path>                      a .dfm/.pas to load at start-up; its sibling
+                                       is loaded too, and its folder seeds the
+                                       Open-form dialog
+    --project-db <path>                override the project index below
+
+  The library index directory and the project index. The FROM/TO platform (each
   selectable via --from-platform / --to-platform, default FROM=Win64, TO=Win64)
   picks which library-Win32/Win64.sqlite each side draws types from; the project
   DB (ORM3) is always-on and additive (project units + project-declared types).
@@ -74,7 +82,13 @@ end;
   healthy index (proptree resolves from the first --db that answers). }
 const
   LibDir    = 'C:\Projects\.drag-lint\';
-  ProjectDb = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
+  { The project index carrying the app's OWN forms and types. It MOVED on
+    2026-08-09: indexes are now one DB per project inside that project's own
+    _D-RAG folder, and the old shared 'C:\Projects\DB\ORM3\drag-lint.sqlite' was
+    DELETED. This constant still named that dead path, so project-declared types
+    resolved against nothing and showed up as unindexed. Override with
+    --project-db when working on a different project. }
+  ProjectDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite';
 
 { Parse --from-platform / --to-platform (case-insensitive win32|win64|both).
   Absent -> ADefault, which the caller passes as DEFAULT_FROM_PLATFORM /
@@ -87,6 +101,18 @@ begin
   for i := 1 to ParamCount - 1 do
     if SameText(ParamStr(i), AFlag) then
       Exit(ParsePlatform(ParamStr(i + 1), ADefault));
+end;
+
+{ The value following AFlag on the command line; '' when the flag is absent or is
+  the last argument. Used by --form and --project-db. }
+function ArgValue(const AFlag: string): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 1 to ParamCount - 1 do
+    if SameText(ParamStr(i), AFlag) then
+      Exit(Trim(ParamStr(i + 1)));
 end;
 
 { Highest installed BDS version key, e.g. '37.0'. '' when none is present. }
@@ -164,7 +190,9 @@ begin
   // Config the globals BEFORE CreateForm (the form's constructor reads them).
   GEditorExe          := ResolveDragLintExe;
   GEditorLibDir       := LibDir;
-  GEditorProjectDb    := ProjectDb;
+  GEditorProjectDb    := ArgValue('--project-db');
+  if GEditorProjectDb = '' then GEditorProjectDb := ProjectDb;
+  GEditorFormPath     := ArgValue('--form');
   GEditorCastLib      := ResolveCastLib;
   GEditorFromPlatform := ArgPlatform('--from-platform', DEFAULT_FROM_PLATFORM);
   GEditorToPlatform   := ArgPlatform('--to-platform', DEFAULT_TO_PLATFORM);

@@ -30,6 +30,17 @@ type
     PasCount: Integer;
   end;
 
+/// <summary>PURE: parses a DFM block header line into the class it declares.</summary>
+/// <param name="ALine">One .dfm line, e.g. 'object btnA: TabcToggleBtn'. Accepts the
+/// 'object', 'inherited' and 'inline' keywords real DFMs use for forms and frames.</param>
+/// <param name="AClass">Receives the bare class name, with any trailing collection
+/// index ('[0]') stripped; '' when the line is not a block header.</param>
+/// <returns>True when ALine is a block header declaring a class.</returns>
+/// <remarks>Exported so ConvRules.FormTypes can harvest the types on a form through
+/// the SAME parser this unit scans properties with. A second object-header parser
+/// would be free to disagree with this one about what a form contains.</remarks>
+function ParseBlockHeader(const ALine: string; out AClass: string): Boolean;
+
 /// <summary>PURE: the property names assigned to instances of AFromClass in a .dfm text.</summary>
 /// <param name="AText">The whole .dfm as text. A binary .dfm simply yields nothing.</param>
 /// <param name="AFromClass">Bare class name, matched case-insensitively (e.g. 'TabcToggleBtn').</param>

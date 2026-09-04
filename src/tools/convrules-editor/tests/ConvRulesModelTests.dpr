@@ -10,6 +10,7 @@ uses
   System.SysUtils,
   System.IOUtils,
   System.Classes,
+  System.StrUtils,
   Winapi.Windows,
   ConvRules.Model in '..\ConvRules.Model.pas',
   ConvRules.Mappings in '..\ConvRules.Mappings.pas',
@@ -22,7 +23,9 @@ uses
   ConvRules.Engine in '..\ConvRules.Engine.pas',
   ConvRules.Platform in '..\ConvRules.Platform.pas',
   ConvRules.Theme in '..\ConvRules.Theme.pas',
-  ConvRules.Usage in '..\ConvRules.Usage.pas';
+  ConvRules.Usage in '..\ConvRules.Usage.pas',
+  ConvRules.FormTypes in '..\ConvRules.FormTypes.pas',
+  ConvRules.RuleCatalog in '..\ConvRules.RuleCatalog.pas';
 
 var
   GPass: Integer = 0;
@@ -4121,6 +4124,370 @@ end;
 { What the mapping grid, the To pool and Auto-Match have to agree on: a From leaf an
   applied #mapping decides is NOT unassigned, and the targets that mapping sets are NOT
   free. Three call sites, one answer, so they cannot drift apart. }
+{ ConvRules.FormTypes -- the form-types panel's harvest and its pure filter
+  predicates. Shapes are taken from ORM3 CLIENT\VARINSP.dfm: nested objects, an
+  'inherited' frame header, a collection item carrying a '[0]' index, and a
+  Caption whose LITERAL contains something that looks like an object header. }
+const
+  FT_DFM =
+    'object VARINSPForm: TVARINSPForm'#13#10 +
+    '  Caption = ''Variance Inspector'''#13#10 +
+    '  object Panel1: TPanel'#13#10 +
+    '    object lblA: TLabel'#13#10 +
+    '      Caption = ''object fake: TNotReal'''#13#10 +
+    '    end'#13#10 +
+    '    object lblB: TLabel'#13#10 +
+    '    end'#13#10 +
+    '    object tbl: TOvcTable'#13#10 +
+    '    end'#13#10 +
+    '  end'#13#10 +
+    '  inherited Frame1: TMyFrame'#13#10 +
+    '  end'#13#10 +
+    '  object col1: TcxGridDBColumn [0]'#13#10 +
+    '  end'#13#10 +
+    'end'#13#10;
+
+function FtFind(const ARows: TFormTypeRows; const AName: string;
+  out ARow: TFormTypeRow): Boolean;
+var
+  R: TFormTypeRow;
+begin
+  Result := False;
+  for R in ARows do
+    if SameText(R.TypeName, AName) then
+    begin ARow := R; Exit(True); end;
+end;
+
+function FtCountOf(const ARows: TFormTypeRows; const AName: string): Integer;
+var
+  R: TFormTypeRow;
+begin
+  if FtFind(ARows, AName, R) then Result := R.Count else Result := -1;
+end;
+
+procedure TestFormTypesScan;
+var
+  Rows, Merged: TFormTypeRows;
+  Row         : TFormTypeRow;
+  Names       : string;
+  R           : TFormTypeRow;
+begin
+  Rows := ScanDfmTypes(FT_DFM);
+
+  Check('formtypes.scan.distinct', Length(Rows) = 6,
+    Format('expected 6 distinct types, got %d', [Length(Rows)]));
+  Check('formtypes.scan.count.label', FtCountOf(Rows, 'TLabel') = 2,
+    Format('TLabel count = %d', [FtCountOf(Rows, 'TLabel')]));
+  Check('formtypes.scan.count.panel', FtCountOf(Rows, 'TPanel') = 1);
+  Check('formtypes.scan.root', FtCountOf(Rows, 'TVARINSPForm') = 1,
+    'the root form type counts like any other');
+
+  // 'inherited Frame1: TMyFrame' is a real header DFMs use for inherited forms.
+  Check('formtypes.scan.inherited', FtCountOf(Rows, 'TMyFrame') = 1);
+
+  // A collection item writes a '[0]' index after the type -- it is not part of it.
+  Check('formtypes.scan.index.stripped', FtCountOf(Rows, 'TcxGridDBColumn') = 1,
+    'the [0] index must not end up in the type name');
+
+  // The one that a naive line scan gets wrong: a Caption LITERAL containing what
+  // looks like an object header. If this counts, the scanner is reading strings.
+  Check('formtypes.scan.literal.ignored', FtCountOf(Rows, 'TNotReal') = -1,
+    'a type named inside a quoted literal must NOT be harvested');
+
+  // Name-ascending, case-insensitive -- so a family (every TOvc*) sits together.
+  Names := '';
+  for R in Rows do Names := Names + R.TypeName + ' ';
+  Check('formtypes.scan.sorted',
+    Trim(Names) = 'TcxGridDBColumn TLabel TMyFrame TOvcTable TPanel TVARINSPForm',
+    Trim(Names));
+
+  Check('formtypes.scan.empty', Length(ScanDfmTypes('')) = 0, 'empty text');
+  Check('formtypes.scan.binary', Length(ScanDfmTypes(#0#1#2#3)) = 0,
+    'a binary .dfm yields nothing rather than raising');
+
+  // Only TypeName/Count are the harvest's business; decoration comes later.
+  if FtFind(Rows, 'TOvcTable', Row) then
+  begin
+    Check('formtypes.scan.undecorated.visual', Row.Visual = tvkUnknown);
+    Check('formtypes.scan.undecorated.flags',
+      (not Row.Excluded) and (not Row.Ruled) and (not Row.Reenabled));
+  end
+  else
+    Check('formtypes.scan.undecorated.visual', False, 'TOvcTable missing');
+
+  // Merging two forms sums the shared type and keeps the union.
+  Merged := MergeFormTypes([Rows, ScanDfmTypes(FT_DFM)]);
+  Check('formtypes.merge.union', Length(Merged) = 6,
+    Format('expected 6, got %d', [Length(Merged)]));
+  Check('formtypes.merge.sums', FtCountOf(Merged, 'TLabel') = 4,
+    Format('TLabel across two identical forms = %d', [FtCountOf(Merged, 'TLabel')]));
+  Check('formtypes.merge.empty', Length(MergeFormTypes([])) = 0);
+end;
+
+procedure TestFormTypesFilter;
+var
+  Err: string;
+  Row: TFormTypeRow;
+begin
+  // --- the standard-controls test is deliberately LITERAL: Vcl./FMX. only.
+  Check('formtypes.std.vcl',  IsStandardVclOrFmxUnit('Vcl.StdCtrls'));
+  Check('formtypes.std.fmx',  IsStandardVclOrFmxUnit('FMX.Forms'));
+  Check('formtypes.std.ci',   IsStandardVclOrFmxUnit('vcl.graphics'), 'case-insensitive');
+  Check('formtypes.std.empty', not IsStandardVclOrFmxUnit(''), 'unresolved unit');
+  Check('formtypes.std.system', not IsStandardVclOrFmxUnit('System.Classes'),
+    'RTL is not a "standard Delphi CONTROL"');
+  Check('formtypes.std.data', not IsStandardVclOrFmxUnit('Data.DB'),
+    'TIntegerField must not vanish behind a box labelled VCL/FMX');
+  Check('formtypes.std.thirdparty', not IsStandardVclOrFmxUnit('ovcTable'));
+  Check('formtypes.std.prefixonly', not IsStandardVclOrFmxUnit('VclSomething'),
+    'the namespace DOT is what makes it standard, not the letters');
+
+  // --- exclusion is OR across patterns, case-insensitive, unanchored.
+  Check('formtypes.excl.none',
+    not TypeIsExcluded('TOvcTable', 'ovcTable', [], False, Err));
+  Check('formtypes.excl.match',
+    TypeIsExcluded('TOvcTable', 'ovcTable', ['^TOvc'], False, Err));
+  Check('formtypes.excl.unanchored',
+    TypeIsExcluded('TOvcTable', 'ovcTable', ['Ovc'], False, Err),
+    'a bare substring pattern matches');
+  Check('formtypes.excl.ci',
+    TypeIsExcluded('TOvcTable', 'ovcTable', ['^tovc'], False, Err),
+    'patterns are case-insensitive');
+  Check('formtypes.excl.or',
+    TypeIsExcluded('TLabel', 'Vcl.StdCtrls', ['^TOvc', '^TLabel'], False, Err),
+    'ANY pattern matching excludes');
+  Check('formtypes.excl.or.none',
+    not TypeIsExcluded('TPanel', 'Vcl.ExtCtrls', ['^TOvc', '^TLabel'], False, Err));
+  Check('formtypes.excl.blank.skipped',
+    not TypeIsExcluded('TPanel', 'Vcl.ExtCtrls', ['', '   '], False, Err),
+    'a blank condition row must not exclude everything');
+
+  // --- the standard checkbox is independent of the patterns.
+  Check('formtypes.excl.std.on',
+    TypeIsExcluded('TLabel', 'Vcl.StdCtrls', [], True, Err));
+  Check('formtypes.excl.std.off',
+    not TypeIsExcluded('TLabel', 'Vcl.StdCtrls', [], False, Err));
+  Check('formtypes.excl.std.spares.thirdparty',
+    not TypeIsExcluded('TOvcTable', 'ovcTable', [], True, Err),
+    'a third-party control survives the standard-controls box');
+  Check('formtypes.excl.std.unresolved',
+    not TypeIsExcluded('TMystery', '', [], True, Err),
+    'an unresolved unit must not be assumed standard');
+
+  // --- a malformed pattern reports and excludes NOTHING. It must never raise,
+  //     and AError must be set -- a silent fail-open would hide a dead condition.
+  Err := '';
+  Check('formtypes.excl.bad.nomatch',
+    not TypeIsExcluded('TOvcTable', 'ovcTable', ['(unclosed'], False, Err));
+  Check('formtypes.excl.bad.reports', Err <> '',
+    'a malformed regex must surface an error, not fail silently');
+  Err := '';
+  Check('formtypes.excl.bad.other.still.runs',
+    TypeIsExcluded('TOvcTable', 'ovcTable', ['(unclosed', '^TOvc'], False, Err),
+    'one bad condition must not disable the good ones');
+  Check('formtypes.excl.good.no.error',
+    not TypeIsExcluded('TPanel', 'Vcl.ExtCtrls', ['^TOvc'], False, Err) and (Err = ''));
+
+  // --- greying: two independent reasons, one override.
+  Row := Default(TFormTypeRow);
+  Check('formtypes.grey.none', not RowIsGreyed(Row));
+  Row.Excluded := True;
+  Check('formtypes.grey.excluded', RowIsGreyed(Row));
+  Row := Default(TFormTypeRow); Row.Ruled := True;
+  Check('formtypes.grey.ruled', RowIsGreyed(Row),
+    'a type we already have a rule for is greyed too');
+  Row.Reenabled := True;
+  Check('formtypes.grey.reenable.beats.ruled', not RowIsGreyed(Row));
+  Row := Default(TFormTypeRow); Row.Excluded := True; Row.Reenabled := True;
+  Check('formtypes.grey.reenable.beats.filter', not RowIsGreyed(Row),
+    'a manual re-enable must survive the filter that excluded it');
+  Row.Ruled := True;
+  Check('formtypes.grey.reenable.beats.both', not RowIsGreyed(Row));
+end;
+
+{ ConvRules.RuleCatalog -- the folder-wide index of what is already converted.
+  RC_BOOK mirrors the real convrules\BDE-to-FireDAC.rules shapes: qualified types,
+  and a header carrying extra uses-units after the target. }
+const
+  RC_BOOK =
+    '// a header comment'#13#10 +
+    '#convert Bde.DBTables.TTable -> FireDAC.Comp.Client.TFDTable, FireDAC.Stan.Intf, FireDAC.DApt'#13#10 +
+    '#link Active <- Active'#13#10 +
+    '#convert Vcl.Graphics.TFont -> Vcl.Graphics.TFont'#13#10 +
+    '#link Color <- Color'#13#10;
+
+procedure TestRuleCatalogParse;
+var
+  Cat  : TRuleCatalog;
+  E    : TRuleCatalogEntry;
+begin
+  Check('catalog.bare.qualified', BareTypeName('Bde.DBTables.TTable') = 'TTable',
+    BareTypeName('Bde.DBTables.TTable'));
+  Check('catalog.bare.plain', BareTypeName('TTable') = 'TTable');
+  Check('catalog.bare.empty', BareTypeName('') = '');
+
+  Cat := CatalogFromText(RC_BOOK, 'C:\rules\bde.rules');
+  Check('catalog.parse.count', Length(Cat) = 2,
+    Format('expected 2 #convert, got %d', [Length(Cat)]));
+
+  if Length(Cat) = 2 then
+  begin
+    Check('catalog.parse.from', Cat[0].FromType = 'Bde.DBTables.TTable', Cat[0].FromType);
+
+    // The header carries THREE comma-separated items after '->'; only the first is
+    // the target type, the rest are units to add. If they leak into ToType the
+    // panel will report a nonsense target and a later save would write it back.
+    Check('catalog.parse.to.strips.units',
+      Cat[0].ToType = 'FireDAC.Comp.Client.TFDTable', Cat[0].ToType);
+
+    Check('catalog.parse.path', Cat[0].FilePath = 'C:\rules\bde.rules', Cat[0].FilePath);
+
+    // Line 1 is the comment, so the first #convert is on line 2.
+    Check('catalog.parse.lineno', Cat[0].LineNo = 2,
+      Format('first #convert LineNo = %d, expected 2', [Cat[0].LineNo]));
+    Check('catalog.parse.lineno.second', Cat[1].LineNo = 4,
+      Format('second #convert LineNo = %d, expected 4', [Cat[1].LineNo]));
+    Check('catalog.parse.order', Cat[1].FromType = 'Vcl.Graphics.TFont', Cat[1].FromType);
+  end;
+
+  Check('catalog.parse.none', Length(CatalogFromText('// nothing here'#13#10, 'x')) = 0);
+  Check('catalog.parse.empty', Length(CatalogFromText('', 'x')) = 0);
+
+  // --- lookup is BARE-name based: the .dfm side is always bare.
+  Check('catalog.find.bare', FindRuleForType(Cat, 'TTable', E) and
+    (E.FromType = 'Bde.DBTables.TTable'), 'a bare DFM name must find a qualified rule');
+  Check('catalog.find.file', FindRuleForType(Cat, 'TTable', E) and
+    (E.FilePath = 'C:\rules\bde.rules'), 'the owning book is reported');
+  Check('catalog.find.ci', FindRuleForType(Cat, 'ttable', E), 'case-insensitive');
+  Check('catalog.find.qualified', FindRuleForType(Cat, 'Bde.DBTables.TTable', E),
+    'a qualified query works too');
+  Check('catalog.find.miss', not FindRuleForType(Cat, 'TOvcTable', E),
+    'an unconverted type must NOT be reported as ruled');
+  Check('catalog.find.empty', not FindRuleForType(nil, 'TTable', E));
+
+  Check('catalog.merge', Length(MergeCatalogs([Cat, Cat])) = 4);
+  Check('catalog.merge.none', Length(MergeCatalogs([])) = 0);
+end;
+
+procedure TestRuleCatalogIndex;
+var
+  Cat, Back: TRuleCatalog;
+  Txt      : string;
+  Dir, F   : string;
+  Errs     : TArray<string>;
+  E        : TRuleCatalogEntry;
+begin
+  Cat := CatalogFromText(RC_BOOK, 'C:\rules\bde.rules');
+  Txt := CatalogToIndexText(Cat);
+
+  Check('catalog.index.header', StartsStr(CATALOG_INDEX_HEADER, Txt),
+    'the index must announce its version');
+
+  Back := CatalogFromIndexText(Txt);
+  Check('catalog.index.roundtrip.count', Length(Back) = Length(Cat),
+    Format('%d out, %d back', [Length(Cat), Length(Back)]));
+  if (Length(Back) = 2) and (Length(Cat) = 2) then
+  begin
+    Check('catalog.index.roundtrip.from', Back[0].FromType = Cat[0].FromType);
+    Check('catalog.index.roundtrip.to',   Back[0].ToType   = Cat[0].ToType);
+    Check('catalog.index.roundtrip.path', Back[0].FilePath = Cat[0].FilePath);
+    Check('catalog.index.roundtrip.line', Back[0].LineNo   = Cat[0].LineNo);
+  end;
+
+  // A wrong/absent header refuses the WHOLE file. Half an index under-reports
+  // coverage, which reads as "no rule yet" and invites a duplicate.
+  Check('catalog.index.bad.header',
+    Length(CatalogFromIndexText('# something else'#13#10'A'#9'B'#9'C'#9'1'#13#10)) = 0,
+    'an unrecognised header must yield nothing, not a partial read');
+  Check('catalog.index.empty', Length(CatalogFromIndexText('')) = 0);
+  Check('catalog.index.short.line',
+    Length(CatalogFromIndexText(CATALOG_INDEX_HEADER + #13#10 + 'A'#9'B'#13#10)) = 0,
+    'a record without four fields is skipped');
+
+  // --- folder scan, against a real temp folder.
+  Dir := TPath.Combine(TPath.GetTempPath, 'convrules_cat_' + IntToStr(GetTickCount));
+  TDirectory.CreateDirectory(Dir);
+  try
+    F := TPath.Combine(Dir, 'a.rules');
+    TFile.WriteAllText(F, RC_BOOK);
+    TFile.WriteAllText(TPath.Combine(Dir, 'notes.txt'), 'ignored');
+
+    Cat := ScanRulesFolder(Dir, Errs);
+    Check('catalog.scan.count', Length(Cat) = 2,
+      Format('expected 2 from one book, got %d', [Length(Cat)]));
+    Check('catalog.scan.noerrors', Length(Errs) = 0);
+    Check('catalog.scan.path', (Length(Cat) > 0) and SameText(Cat[0].FilePath, F),
+      'entries carry the real file path');
+    Check('catalog.scan.ignores.other.ext', not FindRuleForType(Cat, 'ignored', E));
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+
+  Check('catalog.scan.missing.folder',
+    Length(ScanRulesFolder(TPath.Combine(TPath.GetTempPath, 'no_such_convrules_dir'), Errs)) = 0,
+    'a missing folder is empty, not an exception');
+end;
+
+{ The catalog against the REAL convrules\ folder this repo ships. A synthetic book
+  cannot show that ToType stays clean on headers carrying eleven trailing units,
+  which is exactly the shape BDE-to-FireDAC.rules is full of. Skips on a checkout
+  that has no convrules\ folder rather than failing. }
+procedure TestRuleCatalogRealFolder;
+var
+  Dir  : string;
+  Cat  : TRuleCatalog;
+  Errs : TArray<string>;
+  E    : TRuleCatalogEntry;
+  Bad  : string;
+  i    : Integer;
+begin
+  // The runner lives at <root>\src\tools\convrules-editor\tests\ -- climb 4.
+  Dir := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\convrules'));
+  if not TDirectory.Exists(Dir) then
+  begin
+    Skip('catalog.real', 'no convrules\ folder at ' + Dir);
+    Exit;
+  end;
+
+  Cat := ScanRulesFolder(Dir, Errs);
+  Check('catalog.real.nonempty', Length(Cat) > 0,
+    Format('scanned %s, got %d entries', [Dir, Length(Cat)]));
+  Check('catalog.real.noerrors', Length(Errs) = 0,
+    string.Join('; ', Errs));
+
+  // The units-leak guard, on real headers. '#convert Bde.DBTables.TTable ->
+  // FireDAC.Comp.Client.TFDTable, FireDAC.Stan.Intf, ...' must yield a bare type.
+  Bad := '';
+  for i := 0 to High(Cat) do
+    if (Pos(',', Cat[i].ToType) > 0) or (Pos(' ', Trim(Cat[i].ToType)) > 0) then
+    begin
+      Bad := Format('%s (line %d of %s)',
+        [Cat[i].ToType, Cat[i].LineNo, ExtractFileName(Cat[i].FilePath)]);
+      Break;
+    end;
+  Check('catalog.real.to.is.a.type', Bad = '',
+    'a ToType still carries uses-units: ' + Bad);
+
+  // Every entry must be attributable -- that is what makes a later save routable.
+  Bad := '';
+  for i := 0 to High(Cat) do
+    if (Trim(Cat[i].FromType) = '') or (Cat[i].FilePath = '') or (Cat[i].LineNo <= 0) then
+    begin
+      Bad := Format('entry %d is unattributable', [i]);
+      Break;
+    end;
+  Check('catalog.real.attributable', Bad = '', Bad);
+
+  // VARINSP.dfm carries TQuery and TTable, and the BDE book converts both -- this
+  // is the exact lookup the form-types panel does to grey a row.
+  Check('catalog.real.finds.TQuery', FindRuleForType(Cat, 'TQuery', E),
+    'the shipped BDE book converts Bde.DBTables.TQuery');
+  Check('catalog.real.finds.TTable', FindRuleForType(Cat, 'TTable', E));
+  Check('catalog.real.misses.TOvcTable', not FindRuleForType(Cat, 'TOvcTable', E),
+    'nothing converts TOvcTable yet -- it must NOT show as already ruled');
+end;
+
 procedure TestMappingGridHooks;
 var
   Book   : TArray<TRuleNode>;
@@ -4602,6 +4969,11 @@ begin
     TestMappingFold;
     TestMappingDivergentWhenFrom;
     TestMappingGridHooks;
+    TestFormTypesScan;
+    TestFormTypesFilter;
+    TestRuleCatalogParse;
+    TestRuleCatalogIndex;
+    TestRuleCatalogRealFolder;
 
     FreeAndNil(GParseBook);
 
