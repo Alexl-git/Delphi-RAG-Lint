@@ -4347,6 +4347,65 @@ begin
   end; // else
 end; // procedure
 
+{ ITEM 1e -- `find-callers` stops calling a WRITE and a same-named LOCAL a caller.
+
+  FindCallersByName is name-keyed and KIND-BLIND: it returns every ref carrying
+  the name, of any kind. That is deliberate and must stay so -- it is SHARED by
+  rename/refactor (which must rewrite every occurrence, writes included),
+  `usages` (which GROUPS by kind and therefore needs the writes), the dead-code
+  rules, the context bundler, and LSP/MCP references. The comment at
+  DRagLint.Doc.Facts.pas:2580 already records that excluding rows inside the
+  shared query breaks those callers, and screens locally instead. This does the
+  same thing for the same reason: a POST-FILTER on the `find-callers` VERB, not
+  a change to the store.
+
+  MEASURED on the session-60 fixture, five shapes of the name `Ticks`:
+
+    Consume(Ticks())  call   line 23  a real call        -> KEEP
+    N := Ticks;       read   line 30  paren-less call    -> KEEP
+    F := Ticks;       read   line 38  procedural VALUE   -> kept, see below
+    Ticks := 7;       write  line 46  same-named local   -> DROP
+    Consume(Ticks)    read   line 47  same-named local   -> DROP
+
+  Two rules, and neither is a heuristic:
+
+  * A WRITE is never a call. `Ticks := 7` assigns to something; it invokes
+    nothing, whatever the name is. The kind alone settles it, with no resolution.
+  * A READ whose enclosing routine DECLARES a local or parameter of that name is
+    a read of THAT, not of the routine. Delphi scoping says the inner
+    declaration wins. Answering "who calls X" with a reference to an unrelated
+    local that merely shares the name is a worse failure than missing a caller.
+
+  WHAT IS DELIBERATELY NOT FIXED HERE. `F := Ticks` takes a routine's ADDRESS --
+  the shape of every VCL event wiring, `Button.OnClick := HandleClick`. It stays
+  listed, because telling it apart from a paren-less call needs the reads bound
+  to symbols scope-aware, which is the resolver batch (R1/R2) and an owner
+  scheduling decision, not an afternoon. The guard asserts that shape SEPARATELY
+  so this note is honest about what it does and does not cover.
+
+  ONLY THE DIRECT ENCLOSING SCOPE is consulted. A nested routine reading an
+  outer routine's local is not caught. That direction is safe: it leaves an
+  over-report standing rather than removing a genuine call. }
+function DropRefsThatCannotBeCallers(const AStore: ISymbolStore;
+  const ARefs: TArray<TReference>): TArray<TReference>;
+var
+  R    : TReference;
+  Child: TSymbol   ;
+begin
+  Result:= nil;
+  if AStore = nil then Exit(ARefs);
+  for R in ARefs do
+  begin
+    if SameText(R.Kind, 'write') then Continue;
+    if SameText(R.Kind, 'read') and (R.EnclosingSymbolId > 0) then
+    begin
+      Child:= AStore.FindChildSymbolByName(R.EnclosingSymbolId, R.NameText);
+      if (Child.Id > 0) and (Child.Kind in [skLocalVar, skParam, skVarDecl, skConstDecl]) then Continue;
+    end;
+    Result:= Result + [R];
+  end;
+end;
+
 function DoQueryHints(const AArgs: TArgs): Integer; forward;
 
 // v0.16: query find --doc-tag X | --doc-contains Y | --no-docs [--kind K] [--public]
@@ -5544,6 +5603,7 @@ begin
       // v0.17: use context variant if --context N is provided
       if AArgs.ContextLines > 0 then Refs:= Store.FindCallersByNameWithContext(AArgs.Name, AArgs.ContextLines)
       else Refs:= Store.FindCallersByName(AArgs.Name);
+      Refs:= DropRefsThatCannotBeCallers(Store, Refs);
       if Length(Refs) > 0 then
       begin
         if AArgs.ContextLines > 0 then PrintReferencesWithContext(Store, Refs, AArgs.ContextLines, AArgs.AsJson)
