@@ -7790,6 +7790,21 @@ begin
                 go stale and the marker verified forever however the handler was
                 rewritten. See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
               Want:= TReviewMarkers.HashWindow(Lines, F.StartLine - 1);
+              { A WHOLE-ROUTINE METRIC REVIEW IS BOUND TO ITS NUMBER (T3).
+
+                For these seven rules the hash above is not enough on its own:
+                it covers the routine's DECLARATION LINE while the rule's subject
+                is the whole routine, so the marker survives any change to the
+                body. Measured: allow a 6-exit routine, add a seventh Exit, and
+                `lint` reported 0 findings and no stale hint -- the review said
+                "6 exits here is fine" and went on answering for 7.
+
+                Folding the metric into the hash INPUT makes it stale exactly
+                when the number moves, and not on every edit to the body. A
+                body-span hash would do the latter, flagging a renamed local
+                across all 58 markers in this class for no reason. }
+              var IsMetric: Boolean:= DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(F.RuleId);
+              if IsMetric then Want:= DRagLint.Lint.RuleCatalog.MetricHash(Want, F.Metric);
               if M.Hash = '' then
               begin
                 { Hand-written, no hash: honour it, but say that it cannot be
@@ -7852,6 +7867,17 @@ begin
                            'the wrong anchor and can never verify -- this is NOT evidence that the code changed. ' +
                            'Remove it and re-record with: allow --fix-line %d --fix-rule %s',
                            [M.RuleId, ML, F.StartLine, M.Hash, ML, F.StartLine, M.RuleId]))
+                else if IsMetric then
+                  { For a routine metric there IS one more thing worth saying, and
+                    it is the thing the reader needs: the LIVE number. (a) and (c)
+                    are still not distinguishable -- a pre-T3 marker on one of
+                    these rules mismatches for the scheme change alone -- so the
+                    two readings stay, with the measurement appended. }
+                  EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
+                    Format('dl:ok marker for "%s" records @%s but this routine now measures %d and hashes to @%s. ' +
+                           'Either the routine changed, or the marker predates the metric-bound hash -- this check ' +
+                           'cannot tell those apart. Re-review, then: allow --fix-line %d --fix-rule %s',
+                           [M.RuleId, M.Hash, F.Metric, Want, F.StartLine, M.RuleId]))
                 else
                   EmitHint(F.FilePath, F.StartLine, 'review-marker-stale',
                     Format('dl:ok marker for "%s" records @%s but line %d now hashes to @%s. Either the reviewed ' +
@@ -9687,6 +9713,9 @@ begin
         JObj.AddPair('end_line'  , TJSONNumber.Create(F.EndLine  ));
         JObj.AddPair('end_col'   , TJSONNumber.Create(F.EndCol   ));
         JObj.AddPair('message' , F.Message );
+        { Only for the whole-routine metric rules, and only when measured: an
+          absent key says "this rule has no metric", which a 0 would not. }
+        if F.Metric > 0 then JObj.AddPair('metric', TJSONNumber.Create(F.Metric));
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -20685,6 +20714,45 @@ begin
     See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
   var WinLines: TArray<string>:= Raw.Replace(#13#10, #10).Split([#10]);
   var WinHash : string        := TReviewMarkers.HashWindow(WinLines, AArgs.FixLine - 1);
+
+  { A WHOLE-ROUTINE METRIC REVIEW RECORDS THE NUMBER IT ACCEPTED (T3).
+
+    The checker binds these seven rules' hashes to the measured value, so the
+    writer must measure it too -- from the SAME file text -- or it writes a
+    marker that can never verify. Each checker is a static per-file function
+    needing no store, and threshold 1 makes it report every routine so the one at
+    FixLine is certain to be among them.
+
+    No finding at that line means this rule does not apply to that routine at
+    all, and writing a marker anyway would produce exactly the artefact this
+    command's round-trip check exists to prevent: a `dl:ok` that reads as a human
+    review and suppresses nothing. }
+  if DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(AArgs.FixRule) then
+  begin
+    var MetricFindings: TArray<TLintFinding>:= nil;
+    if      SameText(AArgs.FixRule, 'too-many-exit-points' ) then MetricFindings:= TAstChecker.CheckTooManyExitPoints    (AArgs.Target, 1)
+    else if SameText(AArgs.FixRule, 'cyclomatic-complexity') then MetricFindings:= TAstChecker.CheckCyclomaticComplexity (AArgs.Target, 1)
+    else if SameText(AArgs.FixRule, 'cognitive-complexity' ) then MetricFindings:= TAstChecker.CheckCognitiveComplexity  (AArgs.Target, 1)
+    else MetricFindings:= TAstChecker.CheckRoutineMetrics(AArgs.Target, 1, 1, 1, 1);
+
+    var FoundMetric: Boolean:= False;
+    for var MF: TLintFinding in MetricFindings do
+      if (MF.StartLine = AArgs.FixLine) and SameText(MF.RuleId, AArgs.FixRule) then
+      begin
+        WinHash:= DRagLint.Lint.RuleCatalog.MetricHash(WinHash, MF.Metric);
+        FoundMetric:= True;
+        Break;
+      end;
+    if not FoundMetric then
+    begin
+      Writeln(Format('Refusing to write: "%s" is a whole-routine metric rule and no routine at %s:%d ' +
+        'produces one. Its marker is hashed against the MEASURED VALUE, so a marker written here could ' +
+        'never verify and would silently suppress nothing. Pass the line the finding actually anchors on ' +
+        '(the routine header).', [AArgs.FixRule, AArgs.Target, AArgs.FixLine]));
+      Exit(2);
+    end;
+  end;
+
   NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '', WinHash);
   if NewLine = OldLine then
   begin

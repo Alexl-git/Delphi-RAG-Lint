@@ -2369,12 +2369,17 @@ var
     HP   : TTSPoint    ;
     F    : TLintFinding;
 
-    procedure Emit(const AId, AMsg: string);
+    { AMetric is the MEASURED VALUE the message quotes -- the parameter count,
+      the local count, the body line span, the nesting depth. It rides on the
+      finding so a `dl:ok` review of this routine can be bound to the number it
+      was granted for; see TLintFinding.Metric. }
+    procedure Emit(const AId, AMsg: string; AMetric: Integer);
     begin
       F:= Default(TLintFinding);
       F.RuleId  := AId;
       F.Severity:= 'info';
       F.Message := AMsg;
+      F.Metric  := AMetric;
       F.FilePath:= AFile;
       F.StartLine:= Integer(HP.Row   ) + 1;
       F.StartCol := Integer(HP.Column) + 1;
@@ -2394,22 +2399,22 @@ var
     Args:= Hdr.ChildByField('args');
     NP:= CountNames(Args, 'declArg');
     if (AMaxParams > 0) and (NP > AMaxParams) then
-      Emit('too-many-parameters', Format('Routine %s has %d parameters (max %d) -- consider grouping into a record', [Name, NP, AMaxParams]));
+      Emit('too-many-parameters', Format('Routine %s has %d parameters (max %d) -- consider grouping into a record', [Name, NP, AMaxParams]), NP);
 
     Loc:= ADefProc.ChildByField('local');
     NL:= CountNames(Loc, 'declVar');
     if (AMaxLocals > 0) and (NL > AMaxLocals) then
-      Emit('too-many-locals', Format('Routine %s declares %d local variables (max %d) -- consider extracting sub-routines', [Name, NL, AMaxLocals]));
+      Emit('too-many-locals', Format('Routine %s declares %d local variables (max %d) -- consider extracting sub-routines', [Name, NL, AMaxLocals]), NL);
 
     Body:= ADefProc.ChildByField('body');
     if not Body.IsNull then
     begin
       Lines:= Integer(Body.EndPoint.Row) - Integer(Body.StartPoint.Row) + 1;
       if (AMaxLines > 0) and (Lines > AMaxLines) then
-        Emit('method-too-long', Format('Routine %s body is %d lines (max %d) -- consider breaking it up', [Name, Lines, AMaxLines]));
+        Emit('method-too-long', Format('Routine %s body is %d lines (max %d) -- consider breaking it up', [Name, Lines, AMaxLines]), Lines);
       Nest:= MaxNest(Body, 0);
       if (AMaxNesting > 0) and (Nest > AMaxNesting) then
-        Emit('deep-nesting', Format('Routine %s nests control structures %d deep (max %d) -- flatten with early exits or sub-routines', [Name, Nest, AMaxNesting]));
+        Emit('deep-nesting', Format('Routine %s nests control structures %d deep (max %d) -- flatten with early exits or sub-routines', [Name, Nest, AMaxNesting]), Nest);
     end;
   end; // procedure
 
@@ -7829,6 +7834,7 @@ var
         F.RuleId  := 'too-many-exit-points';
         F.Severity:= 'info';
         F.Message := Format('Routine has %d Exit statements (max %d) -- consolidate exits or use guard clauses.', [NExit, AMaxExits]);
+        F.Metric  := NExit;   { binds a dl:ok review to the count it was granted for }
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
         F.StartCol := Integer(P.Column) + 1;
@@ -8151,6 +8157,7 @@ var
         F.RuleId  := 'cyclomatic-complexity';
         F.Severity:= 'info';
         F.Message := Format('Routine has cyclomatic complexity %d (max %d) -- consider extracting sub-routines.', [CC, AMaxComplexity]);
+        F.Metric  := CC;      { binds a dl:ok review to the score it was granted for }
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
         F.StartCol := Integer(P.Column) + 1;
@@ -8229,6 +8236,7 @@ var
         F.RuleId  := 'cognitive-complexity';
         F.Severity:= 'info';
         F.Message := Format('Routine cognitive complexity %d (max %d) -- deeply nested / branchy control flow is hard to follow; flatten or extract sub-routines.', [CC, AMaxScore]);
+        F.Metric  := CC;      { binds a dl:ok review to the score it was granted for }
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
         F.StartCol := Integer(P.Column) + 1;

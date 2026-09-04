@@ -10,7 +10,7 @@ interface
 
 uses
   System.SysUtils, System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.JSON, System.IOUtils;
+  System.JSON, System.IOUtils, System.Hash;
 
 const
   { THE complexity thresholds. ONE definition, read by BOTH the rule catalog
@@ -89,6 +89,23 @@ const
     'nil-comparison', 'public-writable-field', 'loop-control-flag',
     'mutable-global-variable', 'default-encoding-io', 'split-variable',
     'separate-query-from-modifier'];
+
+  { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
+    `allow` WRITER must agree on the list or a marker is written under one hash
+    scheme and verified under the other.
+
+    What they share: the finding anchors on the routine's HEADER line while its
+    subject is the entire routine, and its message quotes a NUMBER. That
+    combination is what made a `dl:ok` on one of them unable to go stale -- the
+    marker hash covers the declaration line, which does not change when the body
+    grows. Measured before the fix: allow a 6-exit routine, add a seventh Exit,
+    and `lint` reports nothing at all, neither the finding nor a stale marker.
+
+    duplicate-code is deliberately NOT here. It is block-scoped rather than
+    routine-scoped and carries no single metric its review is about. }
+  ROUTINE_METRIC_RULES: TArray<string> = [
+    'too-many-exit-points', 'cyclomatic-complexity', 'cognitive-complexity',
+    'method-too-long', 'too-many-locals', 'too-many-parameters', 'deep-nesting'];
 
 type
   /// <summary>A single configurable parameter of a rule (threshold or naming knob).</summary>
@@ -205,7 +222,41 @@ type
     class function ScmCategory(const AId: string): string; static;
   end;
 
+/// <summary>True when ARuleId is a whole-routine metric rule whose `dl:ok`
+/// review must be bound to the measured value.</summary>
+/// <param name="ARuleId">Rule id, compared case-insensitively.</param>
+/// <returns>True for the seven ids in ROUTINE_METRIC_RULES.</returns>
+function IsRoutineMetricRule(const ARuleId: string): Boolean;
+
+/// <summary>The marker hash for a routine-metric finding: the ordinary window
+/// hash, bound to the value the review was granted for.</summary>
+/// <param name="AWindowHash">TReviewMarkers.HashWindow over the anchor line.</param>
+/// <param name="AMetric">The finding's measured value (TLintFinding.Metric).</param>
+/// <returns>Four lowercase hex digits, the same shape HashWindow returns, so the
+/// marker GRAMMAR (`rule@hhhh`) is unchanged.</returns>
+/// <remarks>Lives here rather than in DRagLint.Lint.ReviewMarker deliberately:
+/// that unit is mirrored byte-for-byte into YADF's vendor tree and pinned by
+/// run_reviewmarker_yadf_mirror.ps1, so putting this there would drag an
+/// unrelated repository into the change. Only what the four digits are computed
+/// FROM changes -- the same kind of move f709bea already made once when HashLine
+/// became HashWindow.</remarks>
+function MetricHash(const AWindowHash: string; AMetric: Integer): string;
+
 implementation
+
+function IsRoutineMetricRule(const ARuleId: string): Boolean;
+var
+  R: string;
+begin
+  for R in ROUTINE_METRIC_RULES do
+    if SameText(R, ARuleId) then Exit(True);
+  Result:= False;
+end;
+
+function MetricHash(const AWindowHash: string; AMetric: Integer): string;
+begin
+  Result:= LowerCase(Copy(THashSHA2.GetHashString(AWindowHash + '|' + IntToStr(AMetric)), 1, 4));
+end;
 
 function MkParam(const AName, AType, ADefault: string): TRuleParam;
 begin

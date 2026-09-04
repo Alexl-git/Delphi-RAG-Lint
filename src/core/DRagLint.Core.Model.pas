@@ -540,6 +540,23 @@ type
       line whose content has moved on. Set it in any rule whose findings feed a
       fixer. }
     SymbolName: string;
+    { The MEASURED VALUE behind a whole-routine metric finding -- 6 for "has 6
+      Exit statements", 31 for a cyclomatic complexity of 31 -- and 0 for every
+      rule that is not one of those (see ROUTINE_METRIC_RULES).
+
+      It exists because a `dl:ok` review on such a rule could not go stale. The
+      marker's hash covers ONE LINE, the routine's declaration, while the rule's
+      subject is the whole routine: allow a 6-exit routine, add a seventh Exit
+      inside the body, and `lint` reports nothing at all -- not the finding, and
+      not a stale marker either. The review said "6 exits here is fine" and was
+      silently answering for 7.
+
+      Feeding the metric into the hash INPUT makes the marker stale exactly when
+      the number moves, and not on every edit to the body -- which a body-span
+      hash would do, flagging a renamed local across all 58 markers in this
+      class. The marker grammar is untouched; only what the four hex digits are
+      computed from changes. }
+    Metric: Integer;
   end;
 
   /// <remarks>

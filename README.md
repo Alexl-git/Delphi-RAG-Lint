@@ -670,6 +670,20 @@ assumed: 10 markers in a real file survived a `drag-lint format` run with
 whitespace as the only difference, and one-line `try ... except end;` statements
 were not rewrapped. (Splitting or joining a line *would* re-hash a marker; that
 is the boundary of the guarantee.)
+
+**Whole-routine metric reviews are bound to the number.** For the seven rules
+whose subject is an entire routine -- `too-many-exit-points`,
+`cyclomatic-complexity`, `cognitive-complexity`, `method-too-long`,
+`too-many-locals`, `too-many-parameters`, `deep-nesting` -- the marker's four hex
+digits are computed from the declaration line *and* the measured value. Without
+that, a `dl:ok` on one of them could never go stale: the marker hashes the
+routine header, which does not change when the body grows. Allow a 6-exit
+routine, add a seventh `Exit`, and `lint` used to report nothing at all --
+neither the finding nor a stale marker. It now reports both, and the hint names
+the live number. An unrelated body edit that leaves the metric where it was does
+*not* invalidate the review. The marker grammar is unchanged; `allow` refuses a
+line that produces no metric finding rather than writing a hash that could never
+verify, and `lint --json` carries a `metric` field on these findings.
 | [`proptree`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/proptree) `--qname <T>` | Recursive deep-property enumerator (foundation for component conversion) | `--depth N`, `--refs-as-leaves`, `--format text\|json` |
 | [`convert-scaffold`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-scaffold) `--from F --to T` | Auto-draft a valid conversion-rules file from the real F/T property trees | `--out <f>`, `--surface dfm\|pas` |
 | [`convert-validate`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-validate) `--rules <f>` | Validate a conversion-rules file against the real property trees | `--print-parsed` |
