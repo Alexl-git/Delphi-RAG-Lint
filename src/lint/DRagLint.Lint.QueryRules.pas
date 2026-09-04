@@ -64,6 +64,28 @@ type
         A rule that cannot express its own precondition cannot be calibrated,
         which is the same reasoning that added require_ancestor. }
       FRequireFileText: TArray<string>;
+      { Callee names whose ARGUMENTS this rule must not fire on. Empty = no
+        exemption (every pre-existing rule), so this changes nothing that does
+        not ask for it.
+
+        large-magic-number is the case that forced it. `EncodeDate(2026, 8, 11)`
+        was reported as a magic number whose remedy is to name the constant --
+        but the literal is a YEAR, and `YEAR_2026 = 2026` is a worse way of
+        writing 2026. DataCopy carried 16 of these. Reported 2026-08-31 and
+        accepted by the owner in the same reply.
+
+        WHY NOT exclude_if_ancestor. That tests an ancestor's NODE KIND, and the
+        kind here is `exprCall` -- shared by every call in the language, so
+        listing it would silence the rule almost everywhere. The distinguishing
+        fact is WHICH routine is being called, which is a node's TEXT, not its
+        kind.
+
+        WHY THE NEAREST ENCLOSING CALL, not any ancestor call. In
+        `EncodeDate(2026, 8, Foo(5000))` the 5000 is an argument of Foo and must
+        still fire; only the nearest exprArgs decides. Verified against a real
+        AST dump rather than assumed -- the grammar's node names have been wrong
+        in this repo's comments five times. }
+      FExcludeArgOf: TArray<string>;
       { True if the picked node (or any ancestor up to the root) is one of the
         node kinds in FExcludeAncestors -- used to suppress a match that sits in
         a structural context the rule should not flag (e.g. an integer literal
@@ -107,6 +129,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasRequiredAncestor(const ANode: TTSNode): Boolean;
+      /// <summary>True when the node sits in the argument list of a call whose
+      /// callee is named in <c>exclude_if_argument_of</c>.</summary>
+      /// <param name="ANode">The node the finding would be reported on.</param>
+      /// <param name="ASource">The file's bytes; the callee name is node TEXT,
+      /// so it cannot be answered from the tree shape alone.</param>
+      /// <returns>True to DROP the match. False when no exemption is declared,
+      /// which is every pre-existing rule.</returns>
+      /// <remarks>Only the NEAREST enclosing argument list is consulted, so a
+      /// literal nested in an inner call is judged by that inner callee. See
+      /// <c>FExcludeArgOf</c> for why this cannot be an ancestor-kind test.
+      /// Pure.</remarks>
+      function IsArgumentOfExcludedCallee(const ANode: TTSNode; const ASource: TBytes): Boolean;
     public
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
       /// <param name="AQuerySource"><!-- drag-lint:auto type -->const string</param>
@@ -381,6 +415,50 @@ begin
   end;
 end;
 
+{ AST SHAPE, DUMPED NOT GUESSED (tools\dumpnode, 2026-09-03):
+
+    exprCall  ChildCount=4 NamedChildCount=2
+      child[0] identifier  named=True   EncodeDate
+      child[1] (           named=False
+      child[2] exprArgs    named=True   2026, 8, 11
+      child[3] )           named=False
+
+  So the argument list is an `exprArgs` whose parent is the `exprCall`, and the
+  callee is that call's FIRST NAMED child. This repo's own comments have named
+  grammar nodes wrongly five times, which is why it was dumped.
+
+  The climb STOPS at the first exprArgs. `EncodeDate(2026, 8, Foo(5000))` dumps
+  as two nested exprCalls, and 5000's nearest exprArgs belongs to Foo -- so it
+  is judged against Foo and still fires. Walking all the way to the root would
+  exempt it, which would be a silent false negative inside the very shape this
+  exemption is narrowest about. }
+function TQueryRule.IsArgumentOfExcludedCallee(const ANode: TTSNode; const ASource: TBytes): Boolean;
+var
+  Cur   : TTSNode;
+  Call  : TTSNode;
+  Callee: string ;
+  Ex    : string ;
+begin
+  Result:= False;
+  { Not declared -> never runs. Every pre-existing rule takes this path. }
+  if Length(FExcludeArgOf) = 0 then Exit;
+  Cur:= ANode;
+  while not Cur.IsNull do
+  begin
+    if SameText(Cur.NodeType, 'exprArgs') then
+    begin
+      Call:= Cur.Parent;
+      if Call.IsNull or (not SameText(Call.NodeType, 'exprCall')) then Exit;
+      if Call.NamedChildCount = 0 then Exit;
+      Callee:= Trim(NodeText(Call.NamedChild(0), ASource));
+      for Ex in FExcludeArgOf do
+        if SameText(Callee, Ex) then Exit(True);
+      Exit; { nearest argument list decides -- see the header }
+    end;
+    Cur:= Cur.Parent;
+  end;
+end;
+
 { The literal a query's text must contain for it to be able to match -- see
   TQueryRule.RequiredText for why this exists and why it is this strict.
 
@@ -468,6 +546,15 @@ begin
       if Assigned(ExArr) then
         for ExVal in ExArr do
           FExcludeAncestors:= FExcludeAncestors + [ExVal.Value];
+      { Optional CALLEE exemption ("exclude_if_argument_of"): the match is
+        dropped when it sits in the argument list of a call to one of these
+        routines. large-magic-number lists the date constructors, so
+        `EncodeDate(2026, 8, 11)` is not told to name a constant for the year.
+        See FExcludeArgOf for why an ancestor-KIND test cannot express this. }
+      ExArr:= JSON.GetValue('exclude_if_argument_of') as TJSONArray;
+      if Assigned(ExArr) then
+        for ExVal in ExArr do
+          FExcludeArgOf:= FExcludeArgOf + [ExVal.Value];
       { Optional structural REQUIREMENT ("require_ancestor"): the match counts
         only inside one of these node kinds. E.g. concat-in-loop lists the three
         loop kinds, so `S := S + X` executed once no longer reports a quadratic
@@ -702,6 +789,9 @@ begin
         { Structural exemption (JSON "exclude_if_ancestor"): drop the match when the
           picked node lives inside one of the excluded node kinds. }
         if InExcludedAncestor(Picked) then Continue;
+        { Callee exemption (JSON "exclude_if_argument_of"): drop the match when
+          it is an argument of a call this rule declares uninteresting. }
+        if IsArgumentOfExcludedCallee(Picked, ASource) then Continue;
         if not HasRequiredAncestor(Picked) then Continue;
 
         Finding:= Default(TLintFinding);
