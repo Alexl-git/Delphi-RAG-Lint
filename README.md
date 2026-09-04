@@ -97,6 +97,8 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Who calls `X`? | `drag-lint query find-callers --name X --db <db>` |
 | Change `X` without reading the file | `drag-lint context --task "modify <Unit.TType.X>" --db <db> --format markdown` |
 | Is unit `U` part of project `P`? | `drag-lint query --name U --db <P.sqlite> --exact` |
+| What are the members of a type? | `drag-lint surface --qname <Unit.TType> --db <db>` |
+| Where does a DOC COMMENT say this? | `drag-lint query find --doc-contains "<phrase>" --db <db>` |
 | Where is this message / caption / SQL? | `drag-lint query --text "<phrase>" --db <db>` |
 | Which files reference unit `U`? | `drag-lint query unit-usage --unit U --db <db>` |
 | Which database covers this file? | `drag-lint resolve-dbs --in <U.pas>` |
