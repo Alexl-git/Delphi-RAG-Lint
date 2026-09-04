@@ -20597,6 +20597,134 @@ end; // function
   file -- line terminators, a missing final newline -- survives untouched. That
   matters because these sources are strict 7-bit ASCII + CRLF and a rewrite that
   "helpfully" normalises them shows up as a whole-file diff. }
+{ A SUPERSEDED MARKER ON THE SAME STATEMENT IS REPLACED, NOT JOINED BY A SECOND.
+
+  The defect this closes, measured 2026-09-03 on DataCopy's uFileUtils.pas and
+  reproduced here. A rule reports where a statement BEGINS; a trailing `//` can
+  only be written where it ENDS. On a WRAPPED statement an old marker therefore
+  sits on a different line from the one the report names, and `allow` -- doing
+  exactly what its own remedy line tells the operator to run -- wrote a second
+  marker at the anchor and left the first one dead:
+
+      Str := Str + Format(  // dl:ok concat-in-loop@ab38   <- written here
+        ' [%d]: %s', [I, X]); // dl:ok concat-in-loop@54b7  <- now "unused"
+
+  The finding IS suppressed and the stale hint IS gone, but the operator followed
+  the printed instruction and ended with a NEW hint plus two review records for
+  one review. That teaches people `review-marker-*` output is noise to work
+  around, which is the precise property the lint-clean standard exists to protect.
+
+  THE SPAN, AND WHY IT IS NOT THE FINDING'S. The checker matches a marker across
+  the finding's own StartLine..EndLine (commit f709bea). This command never runs
+  a rule, so it has no finding and no EndLine, and inventing a linter run here to
+  recover one would make `allow` cost a full file lint. Instead the span is taken
+  from the SOURCE: the anchor line, plus the continuation lines up to and
+  including the one that ends the statement. For the wrapped-statement shape --
+  the only shape that produces this defect -- the two coincide.
+
+  It is deliberately CONSERVATIVE where they might not. It stops at the first
+  statement terminator, so it can never run past the statement into an unrelated
+  one (the marker on a DIFFERENT statement stays untouched, which is this fix's
+  own control), it is capped so a malformed file cannot walk to EOF, and every
+  way it can be wrong makes it stop EARLY -- which is exactly today's behaviour.
+  A construct whose body carries its own `;` (an inline anonymous method)
+  therefore keeps the old two-marker outcome rather than risking a deletion
+  outside the statement. Termination is judged on the NORMALIZED line, so a `;`
+  inside a comment or a string literal does not end anything.
+
+  Removing rather than quieting `review-marker-unused` is the point: that hint is
+  CORRECT here -- the marker really is dead. It was the writer that left it.
+
+  Extracted from DoAllow rather than written inline: inline it pushed that
+  routine past method-too-long AND cyclomatic-complexity, and new code is held to
+  the whole rule set. }
+{ The `allow` dry-run preview: every edit --apply would make, and nothing else.
+
+  THE SUPERSEDED LINE IS SHOWN TOO, and that is the point of having this at all.
+  A preview that listed only the anchor would let --apply rewrite a second line
+  the operator never named and the dry-run never mentioned -- exactly the kind of
+  surprise this command is otherwise careful about (see the `///` refusal and the
+  round-trip check in DoAllow).
+
+  Extracted from DoAllow rather than left inline: inline, its two branches pushed
+  that routine over cyclomatic-complexity, and new code is held to the whole rule
+  set. }
+procedure PrintAllowPreview(const ATarget: string; AFixLine: Integer;
+  const AOldLine, ANewLine: string; const AWinLines: TArray<string>;
+  ASupLine: Integer; const ASupNew: string);
+begin
+  Writeln(Format('%s:%d (dry-run, pass --apply to write)', [ATarget, AFixLine]));
+  if ANewLine <> AOldLine then
+  begin
+    Writeln('  - ' + AOldLine);
+    Writeln('  + ' + ANewLine);
+  end;
+  if (ASupLine > 0) and (ASupLine <= Length(AWinLines)) then
+  begin
+    Writeln(Format('  superseding the marker on line %d (same statement):', [ASupLine]));
+    Writeln('  - ' + AWinLines[ASupLine - 1]);
+    Writeln('  + ' + ASupNew);
+  end;
+end;
+
+{ Replaces line ALineNo (1-based) of ARaw with ANewText, by BYTE OFFSET.
+
+  Offsets rather than ReadAllLines/WriteAllLines, for the same reason DoAllow
+  splices its own anchor line that way: every other byte in the file -- the line
+  terminators, a missing final newline -- survives untouched. These sources are
+  strict CRLF + 7-bit ASCII and a rewrite that "helpfully" normalises them shows
+  up as a whole-file diff.
+
+  A line number past the end is a no-op rather than an error: the caller found
+  this line by scanning the same text, so it cannot legitimately be out of range,
+  and silently doing nothing is the safe half of that impossible case. }
+procedure SpliceLineInto(var ARaw: string; ALineNo: Integer; const ANewText: string);
+var
+  P, N, LineEnd: Integer;
+begin
+  P:= 1;
+  N:= 1;
+  while (N < ALineNo) and (P <= Length(ARaw)) do
+  begin
+    if ARaw[P] = #10 then Inc(N);
+    Inc(P);
+  end;
+  if N <> ALineNo then Exit;
+  LineEnd:= P;
+  while (LineEnd <= Length(ARaw)) and not CharInSet(ARaw[LineEnd], [#13, #10]) do Inc(LineEnd);
+  ARaw:= Copy(ARaw, 1, P - 1) + ANewText + Copy(ARaw, LineEnd, MaxInt);
+end;
+
+function FindSupersededMarker(const AWinLines: TArray<string>; AFixLine: Integer;
+  const AFixRule, AAnchorLine: string; out ASupLine: Integer; out ASupNew: string): Boolean;
+const
+  { A wrapped statement is a handful of lines. The cap exists so a file the
+    normalizer cannot find a terminator in stops the walk instead of running to
+    EOF; it is a backstop, not a tuning knob. }
+  MAX_STATEMENT_SPAN_LINES = 40;
+begin
+  ASupLine:= 0;
+  ASupNew := '';
+  Result  := False;
+  { A statement that ENDS on the anchor line has no continuation to search, and
+    the marker (if any) is already on the line being rewritten. }
+  if Trim(TReviewMarkers.NormalizeLine(AAnchorLine)).EndsWith(';') then Exit;
+
+  for var SL: Integer:= AFixLine + 1 to Min(AFixLine + MAX_STATEMENT_SPAN_LINES, Length(AWinLines)) do
+  begin
+    var Cand: string:= TReviewMarkers.RemoveFrom(AWinLines[SL - 1], AFixRule);
+    if Cand <> AWinLines[SL - 1] then
+    begin
+      ASupLine:= SL;
+      ASupNew := Cand;
+      Exit(True);
+    end;
+    { Stop AFTER the terminator, never before it: the line that ends the
+      statement can carry the marker, and on a wrapped statement it usually does. }
+    if Trim(TReviewMarkers.NormalizeLine(AWinLines[SL - 1])).EndsWith(';') then Exit;
+  end;
+end;
+
 function DoAllow(const AArgs: TArgs): Integer;
 var
   Raw      : string ;
@@ -20753,8 +20881,14 @@ begin
     end;
   end;
 
+  { A superseded marker on the SAME STATEMENT is replaced, not joined by a
+    second one. See FindSupersededMarker for the defect and the span rule. }
+  var SupLine: Integer:= 0;
+  var SupNew : string := '';
+  FindSupersededMarker(WinLines, AArgs.FixLine, AArgs.FixRule, OldLine, SupLine, SupNew);
+
   NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '', WinHash);
-  if NewLine = OldLine then
+  if (NewLine = OldLine) and (SupLine = 0) then
   begin
     { Already reviewed and the hash still matches -- nothing to write, and the
       file is not touched, so an Allow on an already-clean finding cannot show up
@@ -20800,15 +20934,27 @@ begin
 
   if not AArgs.Apply then
   begin
-    Writeln(Format('%s:%d (dry-run, pass --apply to write)', [AArgs.Target, AArgs.FixLine]));
-    Writeln('  - ' + OldLine);
-    Writeln('  + ' + NewLine);
+    PrintAllowPreview(AArgs.Target, AArgs.FixLine, OldLine, NewLine, WinLines, SupLine, SupNew);
     Exit(0);
   end;
 
+  { THE SUPERSEDED LINE IS SPLICED FIRST, and the order is load-bearing rather
+    than incidental. Both edits are byte-offset splices into Raw (see the note on
+    this function: that is what keeps CRLF and a missing final newline intact).
+    The superseded line always sits AFTER the anchor, so rewriting it cannot move
+    LineStart/LineEnd; doing it the other way round would invalidate them by the
+    exact length difference of the marker just written. }
+  { No `if SupLine > 0` guard: SpliceLineInto is a no-op for a line number it
+    cannot reach, and 0 is one of those. One branch fewer, same behaviour. }
+  SpliceLineInto(Raw, SupLine, SupNew);
+
   Raw:= Copy(Raw, 1, LineStart - 1) + NewLine + Copy(Raw, LineEnd, MaxInt);
   TFile.WriteAllText(AArgs.Target, Raw, TEncoding.ANSI);
-  Writeln(Format('%s:%d allows "%s"', [AArgs.Target, AArgs.FixLine, AArgs.FixRule]));
+  if SupLine > 0 then
+    Writeln(Format('%s:%d allows "%s" (superseded the marker on line %d)',
+      [AArgs.Target, AArgs.FixLine, AArgs.FixRule, SupLine]))
+  else
+    Writeln(Format('%s:%d allows "%s"', [AArgs.Target, AArgs.FixLine, AArgs.FixRule]));
   Result:= 0;
 end; // function
 

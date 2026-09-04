@@ -310,6 +310,19 @@ type
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <summary>ALineText with the `dl:ok` entry for ARuleId removed. The
+    /// inverse of InsertInto, for superseding a review rather than adding a
+    /// second one beside it.</summary>
+    /// <param name="ALineText">One source line, without its line terminator.</param>
+    /// <param name="ARuleId">Rule id whose entry is removed; matched case-insensitively.</param>
+    /// <returns>The rewritten line. ALineText UNCHANGED when the line carries no
+    /// marker for ARuleId -- an unchanged result is how the caller learns this
+    /// was a no-op.</returns>
+    /// <remarks>Every surviving entry is re-emitted verbatim, hash included, so
+    /// removing one review can neither validate nor invalidate another. When the
+    /// last entry goes the `dl:ok` comment goes too, and the `//` with it if that
+    /// comment held nothing else. Pure.</remarks>
+    class function RemoveFrom(const ALineText, ARuleId: string): string; static;
     class function InsertInto(const ALineText, ARuleId, AReason: string;
       const AHashOverride: string = ''): string; static;
   end;
@@ -837,6 +850,78 @@ begin
   Comment:= Copy(ALineText, CStart, MaxInt);
   TagPos := Pos(REVIEW_MARK, LowerCase(Comment));
   Prefix := Copy(ALineText, 1, CStart + TagPos - 2);
+
+  Result:= TrimRight(Prefix + Body);
+end;
+
+class function TReviewMarkers.RemoveFrom(const ALineText, ARuleId: string): string;
+{ The inverse of InsertInto, and deliberately its mirror image: same Parse, same
+  rebuild loop, same Prefix arithmetic. A separate hand-rolled deletion would be
+  a second place that has to know how a marker is spelled, which is the one
+  property this unit exists to prevent.
+
+  Only ARuleId's entry goes. Every neighbour is re-emitted VERBATIM, hash
+  included -- deleting a superseded review must not silently re-validate, or
+  invalidate, a review of code nobody re-examined.
+
+  When the last entry goes, the `dl:ok` comment goes with it, and so does the
+  `//` that opened it -- but ONLY when that comment held nothing else. A line
+  reading `// see ticket 41 dl:ok foo` keeps `// see ticket 41`; a bare
+  `// dl:ok foo` leaves the code alone with no dangling `//`. The reason text
+  belongs to the marker, so it leaves with the last entry and is kept while any
+  entry remains. }
+var
+  Existing: TArray<TReviewMarker>;
+  Kept    : TArray<TReviewMarker>;
+  Tokens  : TArray<string>       ;
+  M       : TReviewMarker        ;
+  Found   : Boolean              ;
+  Body    : string               ;
+  Comment : string               ;
+  CStart  : Integer              ;
+  TagPos  : Integer              ;
+  Prefix  : string               ;
+begin
+  Result  := ALineText;
+  Existing:= Parse(ALineText);
+  if Length(Existing) = 0 then Exit;
+
+  Found:= False;
+  Kept := nil;
+  for M in Existing do
+    if SameText(M.RuleId, ARuleId) then Found:= True
+    else Kept:= Kept + [M];
+  { Nothing to remove is not an error, and must not rewrite the line: an
+    unchanged line is how the caller learns this was a no-op. }
+  if not Found then Exit;
+
+  CStart := LineCommentStart(ALineText);
+  Comment:= Copy(ALineText, CStart, MaxInt);
+  TagPos := Pos(REVIEW_MARK, LowerCase(Comment));
+  if (CStart = 0) or (TagPos = 0) then Exit;
+  Prefix := Copy(ALineText, 1, CStart + TagPos - 2);
+
+  if Length(Kept) = 0 then
+  begin
+    { Was there any other comment text before the tag? Prefix still carries the
+      `//`, so measure what sits BETWEEN the opener and the tag. }
+    if Trim(Copy(ALineText, CStart, TagPos - 1)) = '' then
+      Result:= TrimRight(Copy(ALineText, 1, CStart - 3))  { drop the `//` too }
+    else
+      Result:= TrimRight(Prefix);
+    Exit;
+  end;
+
+  { Joined rather than accumulated with `+` in the loop. InsertInto above builds
+    its body the accumulating way and carries `concat-in-loop` for it; this is
+    new code, so it is held to the whole rule set (the lint-clean standard),
+    and string.Join is what that rule's own message recommends. }
+  SetLength(Tokens, Length(Kept));
+  for var K: Integer:= 0 to High(Kept) do
+    Tokens[K]:= RuleToken(Kept[K].RuleId, Kept[K].Hash);
+  Body:= REVIEW_MARK + ' ' + string.Join(', ', Tokens);
+  if Trim(Kept[0].Reason) <> '' then
+    Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(Kept[0].Reason);
 
   Result:= TrimRight(Prefix + Body);
 end;
