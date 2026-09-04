@@ -1119,6 +1119,23 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindHelpersOfTypeSymbol(ATargetSymbolId: Int64): TArray<THelperEdge>;
+    /// <summary>Member names of every type helper DECLARED IN the given unit --
+    /// the methods and properties a `.ToUpper` / `.Contains` call site names
+    /// without naming anything else from that unit.</summary>
+    /// <param name="AUnitSymbolId">Symbol id of the unit (kind = skUnit).</param>
+    /// <returns>Bare member names, lowercased, deduplicated. Empty when the
+    /// unit declares no helper.</returns>
+    /// <remarks>Exists for unused-unit-in-uses, whose export surface is
+    /// otherwise the unit's interface-section children BY NAME. That is right
+    /// for ordinary types -- a method name is not addressable without its
+    /// receiver's type, and folding members in would keep any unit alive that
+    /// happened to export a symbol named `Add`. A HELPER member is the exception
+    /// and the reason for this method: it is invoked by bare name on a receiver
+    /// of the extended type, so `TPath.GetFileName(X).ToUpper` is a genuine use
+    /// of System.SysUtils while naming nothing from it. Measured on
+    /// library-Win64: 236 helper rows, System.SysUtils alone carrying 20 helpers
+    /// and 484 members.</remarks>
+    function FindHelperMemberNamesInUnit(AUnitSymbolId: Int64): TArray<string>;
     /// <param name="ATag"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>

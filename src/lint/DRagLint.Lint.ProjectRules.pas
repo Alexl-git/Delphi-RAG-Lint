@@ -1983,6 +1983,9 @@ var
   { unused-unit-in-uses: unit name -> lowercase set of the names it EXPORTS
     (its interface-section children). Owns its values. }
   ExportsOfUnit : TObjectDictionary<string, TDictionary<string, Boolean>>;
+  { unused-unit-in-uses severity split: unit name -> does it have an
+    initialization section? See the finding site for the measurement. }
+  UnitHasInit   : TDictionary<string, Boolean>      ;
   { Per-rule cost attribution, printed only under DRAGLINT_PROFILE. `lint-all`'s
     phase profiler can say "project-rules cost N seconds" but not WHICH of the
     seven rules in this pass spent it, and the answer decided the fix: on YADF,
@@ -2156,6 +2159,27 @@ var
             var LtPos: Integer:= Pos('<', Ch.Name);
             if LtPos > 1 then ATo.AddOrSetValue(LowerCase(Copy(Ch.Name, 1, LtPos - 1)), True);
           end;
+        { BLIND SPOT 1 (T4/U1): TYPE HELPER MEMBERS ARE PART OF THE SURFACE.
+
+          The loop above adds names, not members, and that is right for ordinary
+          types: a method name is not addressable without its receiver's type,
+          and folding members in would keep alive any unit that happens to export
+          something called `Add`. A HELPER member is the exception, and it is the
+          whole reason this rule was downgraded to `info` --
+
+              TPath.GetFileName(X).ToUpper.Contains(Y)
+
+          names nothing from System.SysUtils, yet ToUpper and Contains are
+          TStringHelper members declared there, and removing the import fails
+          with E2671. DataCopy MEASURED that: of 23 findings they compiled, 1
+          broke the build and 2 broke at runtime.
+
+          type_helpers has carried the data since c09715c (schema v15) --
+          library-Win64 holds 236 rows, System.SysUtils alone 20 helpers and 484
+          members -- so this is a read the rule was simply not doing. No
+          extractor change and no reindex. }
+        for var HName: string in AFrom.FindHelperMemberNamesInUnit(U.Id) do
+          ATo.AddOrSetValue(HName, True);   { already lowercased by the store }
         if ATo.Count > 0 then Break;   { first store that actually has it wins }
       end;
     end;
@@ -2167,6 +2191,40 @@ var
     CollectFrom(AStore, Result);
     if Result.Count = 0 then CollectFrom(ALibraryStore, Result);
     ExportsOfUnit.Add(AUnitName, Result);
+  end;
+
+  { Does the named unit have an `initialization` section?
+
+    The indexer emits one skInitialization child marker per unit that has one
+    (v0.41), so this is a child scan, not a re-parse -- and it is cached because
+    unused-unit-in-uses is already the most expensive rule in the pass. }
+  function UnitHasInitialization(const AUnitName: string): Boolean;
+    function LookIn(const AFrom: ISymbolStore; out AFound: Boolean): Boolean;
+    var
+      U, Ch: TSymbol;
+    begin
+      Result:= False; AFound:= False;
+      if AFrom = nil then Exit;
+      for U in AFrom.FindSymbolsByExactName(AUnitName) do
+      begin
+        if U.Kind <> skUnit then Continue;
+        Result:= True;   { the unit is in THIS store, so its answer is usable }
+        for Ch in AFrom.FindAllChildSymbols(U.Id) do
+          if Ch.Kind = skInitialization then begin AFound:= True; Break; end;
+        Break;
+      end;
+    end;
+  var
+    Cached, Found: Boolean;
+  begin
+    if UnitHasInit.TryGetValue(AUnitName, Cached) then Exit(Cached);
+    { "Seen in this store" and "has an initialization section" are different
+      answers, and collapsing them would make every library unit look
+      initialization-free to a project-only run. Ask the library store when the
+      project store does not carry the unit at all. }
+    if not LookIn(AStore, Found) then LookIn(ALibraryStore, Found);
+    Result:= Found;
+    UnitHasInit.Add(AUnitName, Result);
   end;
 
   { A referenced name, plus its GENERIC BASE.
@@ -2214,6 +2272,7 @@ begin
   PathOfFile := TDictionary<Int64, string>        .Create;
   UnitIndexed:= TDictionary<string, Boolean>      .Create;
   ExportsOfUnit:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
+  UnitHasInit  := TDictionary<string, Boolean>      .Create;
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
@@ -2399,11 +2458,37 @@ begin
                   warnings, which is this repo's own standing rule about a rule
                   that is on but permanently ignored.
 
-                  RESTORE TO WARNING once (a) helper-method calls resolve to their
-                  declaring unit, and (b) a class instantiated by the sibling DFM
-                  counts as a use of the unit that registers it. Both are filed. }
-                UF.Severity:= 'info';
-                UF.Message := Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. VERIFY BEFORE REMOVING: type-helper calls (.ToUpper/.Contains), classes instantiated only by the sibling .dfm, and units that work through their initialization section are all invisible to this check.', [U.UnitName]);
+                  BOTH NAMED BLIND SPOTS ARE NOW CLOSED. (b), the sibling-DFM
+                  one, shipped earlier -- see the B6 block above, which reads the
+                  DFM component's `signature` and was already removing ~23 of
+                  DataCopy's 66 findings. (a), the type-helper one, is closed by
+                  the FindHelperMemberNamesInUnit read in ExportNamesFor above.
+
+                  What remains is the THIRD hazard in DataCopy's list, and it is
+                  the one nothing in the index can settle: a unit whose only
+                  contribution is its `initialization` section. The compiler
+                  cannot catch it either -- EurekaLog's call-stack provider just
+                  silently stops registering.
+
+                  So the severity is PER FINDING rather than blanket, because a
+                  blanket answer in either direction is wrong: 1,899 of
+                  library-Win64's 5,671 units have an initialization section, so
+                  roughly a third of all imports carry the unverifiable risk and
+                  two thirds do not.
+
+                    no initialization section -> WARNING. Nothing invisible is
+                      left; the two blind spots that produced DataCopy's three
+                      bad calls are both read now.
+                    HAS an initialization section -> INFO, and the message says
+                      so by name. Removing it can break at RUNTIME after a
+                      perfectly clean build, which is precisely the finding that
+                      must not read as routine. }
+                var HasInit: Boolean:= UnitHasInitialization(U.UnitName);
+                if HasInit then UF.Severity:= 'info' else UF.Severity:= 'warning';
+                if HasInit then
+                  UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])
+                else
+                  UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
                 UF.FilePath := Path;
                 UF.StartLine:= U.StartLine;
                 UF.StartCol := U.StartCol;
@@ -2615,6 +2700,7 @@ begin
     RefdIds    .Free;
     UnitIndexed.Free;
     ExportsOfUnit.Free;
+    UnitHasInit.Free;
     PathOfFile .Free;
     StemsOfName.Free;
     Findings   .Free;

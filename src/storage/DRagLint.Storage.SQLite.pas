@@ -1888,6 +1888,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindHelpersOfTypeSymbol(ATargetSymbolId: Int64): TArray<THelperEdge>;
+      function FindHelperMemberNamesInUnit(AUnitSymbolId: Int64): TArray<string>;
 
       { v0.40.4: leaf accessor for utilities that need raw SQL access
       (uses-report walks the whole files + unit_uses tables). Not part
@@ -11032,6 +11033,43 @@ begin
     Q.ParamByName('target_symbol_id').AsLargeInt:= ATargetSymbolId;
     Q.Open;
     ReadHelperEdges(Q, List);
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindHelperMemberNamesInUnit(AUnitSymbolId: Int64): TArray<string>;
+{ One join, three hops: the unit's children that are HELPERS (present in
+  type_helpers by helper_symbol_id), then THEIR children -- the members a
+  helper call site names.
+
+  Keyed on the helper symbol's parent being the unit, so a helper declared in
+  another unit never leaks in even when both units are open in the same store.
+  Names come back lowercased because every consumer compares that way, and
+  DISTINCT because System.SysUtils alone has 20 helpers whose members overlap
+  (several declare ToString). }
+var
+  Q   : TFDQuery      ;
+  List: TList<string> ;
+begin
+  List:= TList<string>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT DISTINCT LOWER(m.name) AS n ' +
+                 'FROM type_helpers th ' +
+                 'JOIN symbols h ON h.id = th.helper_symbol_id ' +
+                 'JOIN symbols m ON m.parent_id = h.id ' +
+                 'WHERE h.parent_id = :unit_id AND m.name <> ''''';
+    Q.ParamByName('unit_id').AsLargeInt:= AUnitSymbolId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(Q.FieldByName('n').AsString);
+      Q.Next;
+    end;
     Result:= List.ToArray;
   finally
     Q.Free;

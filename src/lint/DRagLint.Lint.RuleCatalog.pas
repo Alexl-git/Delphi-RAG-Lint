@@ -426,7 +426,7 @@ begin
       registered classes, initialization-only units are all invisible to it).
       The emit site in DRagLint.Lint.ProjectRules carries the full reasoning and
       the two conditions for restoring it to warning. }
-    B('unused-unit-in-uses',   'project-wide', 'info',    'Unit in uses is never referenced');
+    B('unused-unit-in-uses',   'project-wide', 'warning', 'Unit in uses is never referenced'); { SEVERITY IS PER FINDING, and this is the higher of the two: warning when the named unit has no initialization section, info when it has one and removal could therefore fail at runtime after a clean build. The catalogue advertises the ceiling, since it describes a rule, not a finding. Measured: 1,899 of library-Win64's 5,671 units have an initialization section, so neither value is right for every finding }
     B('god-class',             'project-wide', 'info',    'Class has too many members/responsibilities');
     B('unused-public-symbol',  'project-wide', 'info',    'Public symbol is never referenced');
     B('unused-private-member', 'project-wide', 'warning', 'Private member is never referenced');
