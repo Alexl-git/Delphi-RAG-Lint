@@ -560,7 +560,8 @@ begin
   Writeln('  Which files reference unit U?         drag-lint query unit-usage --unit U --db <db>');
   Writeln('       ^ omit --in for the project-wide answer; add --in <F.pas> to ask about ONE file.');
   Writeln('       ^ for an RTL/VCL/third-party unit pass the platform library DB too');
-  Writeln('         (--db <proj> --db <library>); with the project DB alone it exits 2.');
+  Writeln('         (--db <proj> --db <library>) for the reference breakdown. With the project');
+  Writeln('         DB alone you still get the importer list; only the --in form exits 2.');
   Writeln('  Which database covers this file?      drag-lint resolve-dbs --in <U.pas>');
   Writeln('       ^ never guess a DB path. Also --project <P.dproj> and --platform <win32|win64>.');
   Writeln('  What is wrong with this file?         drag-lint lint <U.pas>');
@@ -4822,12 +4823,23 @@ var
 begin
   PathsToScan:= ResolveConsumerDbs(AArgs);
   ExportSyms := ResolveUnitExportSurface(PathsToScan, AArgs.UnitName);
-  if Length(ExportSyms) = 0 then
-  begin
-    Writeln('ERROR: no interface-section symbols found in unit: ', AArgs.UnitName);
-    Writeln('       The unit may not be indexed, or it contains no public symbols.');
-    Exit(2);
-  end;
+  { NO EXPORT SURFACE IS NOT NO ANSWER.
+
+    This used to exit 2 the moment the unit's interface symbols were missing --
+    which is the NORMAL case for an RTL/VCL/third-party unit when only the
+    project DB is open, because those units live in the platform library index.
+    The importer list was sitting in `unit_uses` the whole time (measured: 4
+    DataCopy files importing ExceptionLog7, 0 ms), and the caller was told
+    nothing and sent to grep.
+
+    So the empty surface is now carried as a MODE, not an exit: collect the
+    importers below, and if there are none, THEN it really is an unknown unit
+    and the error above still stands. What the degraded answer must not do is
+    report "0 refs" as though it had looked -- with no export surface every
+    count is structurally zero, and printing DEAD IMPORT for four live imports
+    is the most confidently wrong thing this verb could say. The rendering
+    below splits on ExportsKnown for exactly that reason. }
+  var ExportsKnown: Boolean := Length(ExportSyms) > 0;
 
   Hits:= nil;
   SeenPaths:= TDictionary<string, Boolean>.Create;
@@ -4869,10 +4881,16 @@ begin
         Hit.Section  := UnitUseSectionToStr(Use.Section);
         Hit.Refs     := 0;
         Hit.ExportsUsed:= 0;
-        Hit.FirstLine:= 0;
+        { With no export surface the reference scan below cannot run, so the one
+          line number we can honestly report is the `uses` clause itself. }
+        if ExportsKnown then Hit.FirstLine:= 0 else Hit.FirstLine:= Use.StartLine;
 
         var Used: TDictionary<string, Boolean> := TDictionary<string, Boolean>.Create;
         try
+          { Skipped entirely without an export surface -- not merely empty:
+            GetReferencesFromFile walks every reference in the file, and there is
+            nothing to match them against. }
+          if ExportsKnown then
           for var R: TReference in Store.GetReferencesFromFile(Use.FileId) do
             for var Sym: TSymbol in ExportSyms do
               if SameText(R.NameText, Sym.Name) or ReceiverNamesType(R.ReceiverText, Sym.Name) then
@@ -4897,6 +4915,17 @@ begin
     SeenPaths.Free;
   end;
 
+  { Only NOW is an empty answer really empty: no export surface AND no importer
+    anywhere is what "this unit is not in any open index" actually looks like. }
+  if (not ExportsKnown) and (Length(Hits) = 0) then
+  begin
+    Writeln('ERROR: no interface-section symbols found in unit: ', AArgs.UnitName);
+    Writeln('       The unit may not be indexed, or it contains no public symbols.');
+    Exit(2);
+  end;
+
+  const EXPORTS_NOT_HERE = 'exports not in this DB -- pass the platform library DB for the reference breakdown';
+
   var UsedFiles: Integer:= 0;
   for var H: TFileHit in Hits do if H.Refs > 0 then Inc(UsedFiles);
 
@@ -4909,9 +4938,18 @@ begin
         var O: TJSONObject:= TJSONObject.Create;
         O.AddPair('file', H.Path);
         O.AddPair('uses_section', H.Section);
-        O.AddPair('referenced', TJSONBool.Create(H.Refs > 0));
-        O.AddPair('ref_count', TJSONNumber.Create(H.Refs));
-        O.AddPair('exports_used', TJSONNumber.Create(H.ExportsUsed));
+        { A consumer must not be able to read the degraded answer as a measured
+          one, so the per-file reference fields are ABSENT rather than zero, and
+          exports_known says which shape this is. }
+        O.AddPair('exports_known', TJSONBool.Create(ExportsKnown));
+        if ExportsKnown then
+        begin
+          O.AddPair('referenced'  , TJSONBool.Create(H.Refs > 0)      );
+          O.AddPair('ref_count'   , TJSONNumber.Create(H.Refs)        );
+          O.AddPair('exports_used', TJSONNumber.Create(H.ExportsUsed) );
+        end
+        else
+          O.AddPair('note', EXPORTS_NOT_HERE);
         if H.FirstLine > 0 then O.AddPair('first_line', TJSONNumber.Create(H.FirstLine));
         Arr.AddElement(O);
       end;
@@ -4920,7 +4958,7 @@ begin
       Arr.Free;
     end;
   end
-  else
+  else if ExportsKnown then
   begin
     Writeln('unit: ', AArgs.UnitName, Format('  (%d export(s))', [Length(ExportSyms)]));
     for var H: TFileHit in Hits do
@@ -4930,6 +4968,17 @@ begin
         Writeln(Format('  %-70s uses(%s)  %d ref(s) to %d export(s), first line %d',
           [H.Path, H.Section, H.Refs, H.ExportsUsed, H.FirstLine]));
     Writeln(Format('%d of %d importing file(s) reference it', [UsedFiles, Length(Hits)]));
+  end
+  else
+  begin
+    { The degraded answer. It says WHO imports the unit and WHERE, and says
+      plainly that it did not look at what they reference -- never DEAD IMPORT,
+      which here would be an artefact of the missing surface rather than a fact
+      about the code. }
+    Writeln('unit: ', AArgs.UnitName, '  (' + EXPORTS_NOT_HERE + ')');
+    for var H: TFileHit in Hits do
+      Writeln(Format('  %-70s uses(%s)  line %d', [H.Path, H.Section, H.FirstLine]));
+    Writeln(Format('%d importing file(s); reference counts NOT computed', [Length(Hits)]));
   end;
   Result:= 0;
 end;

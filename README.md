@@ -120,7 +120,14 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 * `query unit-usage` without `--in` answers the project-wide question (which files
   reference the unit, and which merely IMPORT it); with `--in` it answers about one
   file. Its candidate set is the uses graph, since in Delphi you cannot name an
-  export without a uses entry.
+  export without a uses entry. For an RTL/VCL/third-party unit whose exports live
+  in the platform library index, the project DB alone still answers the
+  project-wide form: you get the importer list with the `uses` line, and an
+  explicit note that reference counts were NOT computed -- never `DEAD IMPORT`,
+  which without the export surface would be an artefact rather than a fact. Pass
+  the library DB as a second `--db` for the breakdown. The `--in` form still
+  exits 2, because "which of U's exports does this file use" is unanswerable
+  without U's exports.
 * `query --text` searches **string literals, DFM and SQL** - not comments and not
   source text. Use grep for those.
 * `lint <file>` is a strict **subset** of `lint-all`: project-wide rules
