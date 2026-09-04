@@ -111,6 +111,7 @@ type
     aikInstanceSkipped,      { whole instance skipped before any edit }
     aikFieldDeclNotRetyped,  { shared multi-declarator line, not retyped }
     aikUsesUnitUnresolved,   { no unit found declaring T, uses not added }
+    aikMappingSourceAbsent,  { #apply'd #mapping's source path not in the block }
     aikMappingNotApplied);   { #apply'd #mapping matched no value }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
@@ -392,7 +393,7 @@ const
     'unmapped-property', 'binary-type-mismatch', 'owned-part-unconverted',
     'link-stub-unfilled', 'collection-relocated', 'defaults-may-diverge',
     'cast-not-applied', 'instance-skipped', 'field-decl-not-retyped',
-    'uses-unit-unresolved', 'mapping-not-applied');
+    'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1198,9 +1199,25 @@ var
     { Stubs and Relocated used to live in Notes and were emitted with this same
       '%s: %s' shape -- keeping it means every existing text assertion still
       matches; only the KIND is newly distinguishable. }
-    FoldOne(AReport.Stubs,     aikLinkStubUnfilled,    '%s: %s');
-    FoldOne(AReport.Relocated, aikCollectionRelocated, '%s: %s');
-    FoldOne(AReport.Notes,     aikDefaultsMayDiverge,  '%s: %s');
+    FoldOne(AReport.Stubs,       aikLinkStubUnfilled,     '%s: %s');
+    FoldOne(AReport.Relocated,   aikCollectionRelocated,  '%s: %s');
+    FoldOne(AReport.MappingNotes, aikMappingSourceAbsent, '%s: %s');
+    FoldOne(AReport.Notes,       aikDefaultsMayDiverge,   '%s: %s');
+
+    { B4: an applied #mapping that matched nothing is REMAINDER, so it goes to
+      warnings (not reemit_notes) and carries the #apply line that requested it.
+      Typed from the start rather than added as prose and re-typed later. }
+    for var NA in AReport.NotApplied do
+    begin
+      var MIt: TApplyItem:= InstItem(aikMappingNotApplied, afWarnings,
+        Format('%s: line %d: #apply %s matched nothing -- %s = %s was left unmapped',
+          [Inst.InstanceName, NA.RuleLine, NA.MapName, NA.Path, NA.Value]));
+      MIt.FilePath:= ADfmPath;
+      MIt.Line    := ABlockLine;
+      MIt.Path    := NA.Path;
+      MIt.RuleLine:= NA.RuleLine;
+      Emit(MIt);
+    end;
   end;
 
   // -- surface #1: locate the published field decl 'Name: FromType;' via the

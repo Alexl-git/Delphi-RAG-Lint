@@ -247,6 +247,69 @@ Check 'owned-part-with-rule does NOT emit parent target TToC for the part' (-not
 Check 'owned-part-with-rule does NOT leave unconverted TOldCol2' (-not ($o12 -match 'object Col1: TOldCol2')) "out=$o12"
 Check 'owned-part-with-rule keeps Width = 5' ($o12 -match 'Width\s*=\s*5') "out=$o12"
 
+# --- Cases 13-15: #mapping / #apply -----------------------------------------
+# A #mapping is a named conditional value map applied by '#apply'. The three
+# cases below are the whole contract: a matching #when, the #else fallback, and
+# a value that matches neither.
+#
+# The mapping pass runs BEFORE the leaf loop. That ordering is load-bearing and
+# case 13 is what pins it: if it ran after, RemapLeaf would already have
+# recorded Mode as Dropped, and 'no bare Mode =' could not hold.
+$rMap = "#mapping ModeMap from U.TMode to U.TDst`r`n" +
+        "#mapping ModeMap #when Mode = omB -> Mode2 = nmB`r`n" +
+        "#mapping ModeMap #else -> Mode2 = nmDefault`r`n" +
+        "#convert TFromC -> TToC`r`n" +
+        "#apply ModeMap`r`n"
+
+# 13: the #when matches. The T side gets the mapped value, and the F leaf is
+# CONSUMED -- it must not also be re-emitted raw.
+$b13 = "object C1: TFromC`r`n  Mode = omB`r`nend`r`n"
+$o13 = Reemit $b13 $rMap 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'mapping #when exit 0' ($script:LastExit -eq 0) "out=$o13"
+Check 'mapping #when emits the mapped value Mode2 = nmB' ($o13 -match 'Mode2\s*=\s*nmB') "out=$o13"
+Check 'mapping #when consumes the F leaf (no bare Mode =)' `
+  (-not ($o13 -match '(?m)^\s*Mode\s*=')) "out=$o13"
+Check 'mapping #when reports nothing NOT-applied' ($o13 -match '"notApplied":\[\]') "out=$o13"
+
+# 14: no #when matches, but the source leaf is PRESENT -- the #else fires.
+$b14 = "object C1: TFromC`r`n  Mode = omA`r`nend`r`n"
+$o14 = Reemit $b14 $rMap 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'mapping #else exit 0' ($script:LastExit -eq 0) "out=$o14"
+Check 'mapping #else emits the fallback value Mode2 = nmDefault' `
+  ($o14 -match 'Mode2\s*=\s*nmDefault') "out=$o14"
+Check 'mapping #else reports nothing NOT-applied' ($o14 -match '"notApplied":\[\]') "out=$o14"
+
+# 15: no #when matches and there is NO #else -- REMAINDER. notApplied must name
+# the mapping, the #apply line, the path and the unmatched value, because that
+# is exactly what a human needs to fix the rule book.
+$rNoElse = "#mapping ModeMap from U.TMode to U.TDst`r`n" +
+           "#mapping ModeMap #when Mode = omB -> Mode2 = nmB`r`n" +
+           "#convert TFromC -> TToC`r`n" +
+           "#apply ModeMap`r`n"
+$b15 = "object C1: TFromC`r`n  Mode = omZ`r`nend`r`n"
+$o15 = Reemit $b15 $rNoElse 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'mapping unmatched exit 0' ($script:LastExit -eq 0) "out=$o15"
+Check 'mapping unmatched records notApplied naming the mapping' `
+  ($o15 -match '"mapName"\s*:\s*"ModeMap"') "out=$o15"
+Check 'mapping unmatched notApplied carries the unmatched value' `
+  ($o15 -match '"value"\s*:\s*"omZ"') "out=$o15"
+Check 'mapping unmatched notApplied carries the source path' `
+  ($o15 -match '"path"\s*:\s*"Mode"') "out=$o15"
+Check 'mapping unmatched notApplied carries the #apply rule line (4)' `
+  ($o15 -match '"ruleLine"\s*:\s*4') "out=$o15"
+Check 'mapping unmatched emits NO invented Mode2' (-not ($o15 -match 'Mode2')) "out=$o15"
+
+# 16: an #apply whose source path is absent from THIS block is informational,
+# not remainder -- and the #else must NOT fire, or it would invent a T value
+# from an F property the form never set.
+$b16 = "object C1: TFromC`r`n  Caption = 'x'`r`nend`r`n"
+$o16 = Reemit $b16 $rMap 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'mapping absent-source exit 0' ($script:LastExit -eq 0) "out=$o16"
+Check 'mapping absent-source records a mappingNote' `
+  ($o16 -match '"mappingNotes"\s*:\s*\[\s*"[^"]*ModeMap') "out=$o16"
+Check 'mapping absent-source reports nothing NOT-applied' ($o16 -match '"notApplied":\[\]') "out=$o16"
+Check 'mapping absent-source does NOT fire the #else' (-not ($o16 -match 'nmDefault')) "out=$o16"
+
 # --- Bad args ---
 $noOut = ((& $Exe convert-reemit 2>&1) -join "`n"); $noExit = $LASTEXITCODE
 Check 'no args exit 2' ($noExit -eq 2) "exit=$noExit"

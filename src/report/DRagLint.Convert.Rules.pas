@@ -48,11 +48,36 @@ type
   /// rkUse=#use (ADD a unit to the uses clause -- companion to #unuse).
   /// rkUseSwap=#useswap (replace Old with one-or-more New units; UnitName=Old,
   /// UnitsAdd=the New list; canonically #unuse Old + #use New...).
+  /// rkMapping=#mapping (one line of a named, reusable conditional value map --
+  /// a declaration, a #when branch, or a #else branch); rkApply=#apply (apply a
+  /// named mapping within the enclosing #convert block's scope).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Convert.Rules.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre, rkIgnore, rkUse, rkUseSwap);
+  TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre, rkIgnore, rkUse, rkUseSwap,
+               rkMapping, rkApply);
+
+  /// <summary>One '&lt;ToPath&gt; = &lt;Value&gt;' assignment from a #mapping
+  /// branch's set list.</summary>
+  /// <remarks>
+  /// ToPath keeps its dots -- 'Style.ModalResult.Default' is ONE path, never
+  /// segments. Value is the raw target value text, verbatim. An item with no
+  /// '=' yields a bare ToPath and an empty Value, which the editor accepts and
+  /// so must this.
+  ///
+  /// Structurally identical to the converter editor's ConvRules.Model.TSetPair,
+  /// and deliberately NOT shared with it: the two parsers ship independently
+  /// (see the grammar-parity note in ParseConversionRules), and the engine must
+  /// not take a dependency on an editor UI unit. The name differs so the two do
+  /// not collide at interface level -- both units are members of drag-lint.dproj,
+  /// so identical names would make TSetPair ambiguous by uses-clause order.
+  /// A change to one must be mirrored in the other.
+  /// </remarks>
+  TMappingSetPair = record
+    ToPath: string;
+    Value : string;
+  end;
 
   /// <summary>One parsed conversion rule. A flat record; only the fields relevant
   /// to <see cref="Kind"/> are populated (the rest stay '').</summary>
@@ -92,6 +117,25 @@ type
     /// performed by convert-apply, which refuses to rewrite a link carrying one
     /// rather than silently dropping the conversion.</summary>
     Cast    : string;
+    /// <summary>rkMapping/rkApply: the mapping's name. This is the ONLY thing
+    /// tying a declaration, its #when branches and its #else together -- they
+    /// are three flat sibling lines, not a nested block.</summary>
+    MapName : string;
+    /// <summary>rkMapping declaration only: the source enum type after 'from',
+    /// and the target class list after 'to' (top-level-comma split, so a generic
+    /// 'Unit.TList&lt;A, B&gt;' stays ONE entry).</summary>
+    MapFromType: string;
+    MapToTypes : TArray<string>;
+    /// <summary>rkMapping #when only: the condition '&lt;WhenFrom&gt; =
+    /// &lt;WhenValue&gt;'. A #when with no '=' leaves WhenValue empty and keeps
+    /// the whole condition in WhenFrom -- the editor accepts that shape, so the
+    /// engine must too (see ParseConversionRules' grammar-parity remark).</summary>
+    WhenFrom : string;
+    WhenValue: string;
+    /// <summary>rkMapping only: True for the '#else' branch.</summary>
+    IsElse   : Boolean;
+    /// <summary>rkMapping #when/#else: the assignments right of '-&gt;'.</summary>
+    Sets     : TArray<TMappingSetPair>;
   end;
 
   /// <summary>One parse-or-validation error, anchored to a source line.</summary>
@@ -353,6 +397,112 @@ var
     if Result then AArg:= Trim(Copy(Line, KLen + 1, MaxInt));
   end;
 
+  { -- #mapping helpers, PORTED VERBATIM from the converter editor
+    (ConvRules.Model.pas SplitTopLevelCommas / ParseSetList / SplitBareArrow).
+
+    THE ENGINE'S GRAMMAR MUST BE NO STRICTER THAN THE EDITOR'S. The editor
+    ROUND-TRIPS rule books: it parses a file, lets the user edit, and re-emits
+    every line. If the engine rejects a line the editor accepts, the editor's
+    save-validate fails and RULES ARE SILENTLY LOST. Two independent notions of
+    "is this well-formed" is the failure mode; one shared one is the fix. Any
+    change here must be mirrored there, and vice versa. }
+
+  { Split S on TOP-LEVEL commas. A comma nested in (), [] or <>, or inside a
+    quoted string, is part of one item and does not separate items -- so a
+    generic target class ('Unit.TList<A, B>') stays one entry. Blank items are
+    dropped. Tradeoff (the editor's, kept): '<' is treated as an opener, so an
+    unbalanced '<' would swallow the commas after it; generics are far likelier
+    here than a bare '<' in a class name or an enum value. }
+  function SplitTopLevelCommas(const S: string): TArray<string>;
+  var
+    L    : TList<string>;
+    i    : Integer      ;
+    Depth: Integer      ;
+    InStr: Boolean      ;
+    Start: Integer      ;
+    Item : string       ;
+  begin
+    L := TList<string>.Create;
+    try
+      Depth := 0;
+      InStr := False;
+      Start := 1;
+      for i := 1 to Length(S) do
+      begin
+        case S[i] of
+          '''': InStr := not InStr;
+          '(', '[', '<': if not InStr then Inc(Depth);
+          ')', ']', '>': if (not InStr) and (Depth > 0) then Dec(Depth);
+          ',':
+            if (not InStr) and (Depth = 0) then
+            begin
+              Item := Trim(Copy(S, Start, i - Start));
+              if Item <> '' then L.Add(Item);
+              Start := i + 1;
+            end;
+        end;
+      end;
+      Item := Trim(Copy(S, Start, MaxInt));
+      if Item <> '' then L.Add(Item);
+      Result := L.ToArray;
+    finally
+      L.Free;
+    end;
+  end;
+
+  { Parse a #mapping clause's set list -- '<ToPath> = <Value>[, ...]' -- into
+    pairs. Each item splits on its FIRST '=' so a value containing '=' survives
+    whole, and ToPath keeps its dots ('Style.ModalResult.Default' is one path,
+    never segments). An item with no '=' yields a bare ToPath with an empty
+    Value. }
+  function ParseSetList(const S: string): TArray<TMappingSetPair>;
+  var
+    L   : TList<TMappingSetPair>;
+    Item: string         ;
+    P   : Integer        ;
+    Pair: TMappingSetPair       ;
+  begin
+    L := TList<TMappingSetPair>.Create;
+    try
+      for Item in SplitTopLevelCommas(S) do
+      begin
+        P := Pos('=', Item);
+        if P > 0 then
+        begin
+          Pair.ToPath := Trim(Copy(Item, 1, P - 1));
+          Pair.Value  := Trim(Copy(Item, P + 1, MaxInt));
+        end
+        else
+        begin
+          Pair.ToPath := Item;
+          Pair.Value  := '';
+        end;
+        L.Add(Pair);
+      end;
+      Result := L.ToArray;
+    finally
+      L.Free;
+    end;
+  end;
+
+  { Split on the FIRST bare '->', with or without the surrounding spaces -- a
+    #mapping clause writes '#else -> x', where the arrow has no space to its
+    left. }
+  function SplitBareArrow(const S: string; out L, R: string): Boolean;
+  var
+    Q: Integer;
+  begin
+    L := '';
+    R := '';
+    Q := Pos('->', S);
+    Result := Q > 0;
+    if Result then
+    begin
+      L := Trim(Copy(S, 1, Q - 1));
+      R := Trim(Copy(S, Q + 2, MaxInt));
+    end;
+  end;
+
   procedure AddRule(const ARule: TConversionRule);
   var
     R: TConversionRule;
@@ -360,6 +510,97 @@ var
     R:= ARule;
     R.LineNo:= LineNo;
     Rules.Add(R);
+  end;
+
+  { Parse ONE '#mapping ...' line. AArg is everything after the directive.
+
+    Three FLAT SIBLING line forms, tied together only by <Name> -- there is no
+    nested block:
+      #mapping <Name> from <EnumType> to <Class>[, <Class> ...]   (declaration)
+      #mapping <Name> #when <Path> = <Value> -> <ToPath> = <V>[, ...]
+      #mapping <Name> #else -> <ToPath> = <V>[, ...]
+
+    Mirrors ConvRules.Model.pas's parser exactly, INCLUDING its tolerance: a
+    bare '#mapping Name', a '#when' with no '->', a '#else' with no '->' and a
+    declaration with no ' to ' must ALL parse as rules and never become
+    ParseErrors. See the grammar-parity note on the helpers above -- a stricter
+    engine makes the editor's save-validate fail and silently lose rules.
+
+    Extracted rather than inlined into the directive chain: as one more arm it
+    took ParseConversionRules' cognitive complexity from 173 to 309 (max 65). }
+  procedure ParseMappingDirective(const AArg: string);
+  var
+    M      : TConversionRule;
+    Rest   : string ;
+    Cond   : string ;
+    SetsTxt: string ;
+    SpPos  : Integer;
+    EqPos  : Integer;
+    ToPos  : Integer;
+  begin
+    M       := Default(TConversionRule);
+    M.Kind  := rkMapping;
+    M.LineNo:= LineNo;
+
+    SpPos:= Pos(' ', AArg);
+    if SpPos = 0 then
+    begin
+      { Name only. The tail round-trips from the source line. }
+      M.MapName:= AArg;
+      AddRule(M);
+      Exit;
+    end;
+
+    M.MapName:= Trim(Copy(AArg, 1, SpPos - 1));
+    Rest     := Trim(Copy(AArg, SpPos + 1, MaxInt));
+
+    if StartsText('#when', Rest) then
+    begin
+      Rest:= Trim(Copy(Rest, Length('#when') + 1, MaxInt));
+      { Branch on the RESULT: SplitBareArrow finalizes its out-mode strings to
+        '' before it runs, so on False they are empty rather than whatever was
+        there. A #when with no '->' must keep its condition. }
+      if not SplitBareArrow(Rest, Cond, SetsTxt) then
+      begin
+        Cond   := Rest;
+        SetsTxt:= '';
+      end;
+      EqPos:= Pos('=', Cond);
+      if EqPos > 0 then
+      begin
+        M.WhenFrom := Trim(Copy(Cond, 1, EqPos - 1));
+        M.WhenValue:= Trim(Copy(Cond, EqPos + 1, MaxInt));
+      end
+      else
+        M.WhenFrom:= Cond;
+      M.Sets:= ParseSetList(SetsTxt);
+      AddRule(M);
+      Exit;
+    end;
+
+    if StartsText('#else', Rest) then
+    begin
+      M.IsElse:= True;
+      Rest    := Trim(Copy(Rest, Length('#else') + 1, MaxInt));
+      if SplitBareArrow(Rest, Cond, SetsTxt) then
+        M.Sets:= ParseSetList(SetsTxt);
+      AddRule(M);
+      Exit;
+    end;
+
+    if StartsText('from ', Rest) then
+    begin
+      Rest := Trim(Copy(Rest, Length('from ') + 1, MaxInt));
+      ToPos:= Pos(' to ', LowerCase(Rest));
+      if ToPos > 0 then
+      begin
+        M.MapFromType:= Trim(Copy(Rest, 1, ToPos - 1));
+        M.MapToTypes := SplitTopLevelCommas(Copy(Rest, ToPos + Length(' to '), MaxInt));
+      end
+      else
+        M.MapFromType:= Rest;
+    end;
+    AddRule(M);
   end;
 
 var
@@ -505,26 +746,18 @@ begin
         R.Text:= Arg;
         AddRule(R);
       end
-      else if Directive('#mapping', Arg) or Directive('#apply', Arg) then
+      else if Directive('#mapping', Arg) then
+        ParseMappingDirective(Arg)
+      else if Directive('#apply', Arg) then
       begin
-        { RECOGNISED AND SKIPPED, deliberately -- no rule is emitted.
-
-          The converter editor authors '#mapping' / '#apply' (a reusable
-          conditional enum-to-property mapping, declared once and narrowed to a
-          source enum plus one or more target classes). Evaluating them needs
-          conditional PER-INSTANCE application, which is spec G6.1 and is not
-          implemented; convert-apply must therefore continue to ignore them.
-
-          What was wrong was not the deferral but the REJECTION: these fell
-          through to the unknown-directive arm below, so every save of a
-          well-formed rule book reported 'unknown directive: #mapping' and made
-          the feature look broken. Accepting them here decouples authoring from
-          application, letting the editor and the engine ship independently.
-
-          Emitting no rule is the point -- a rule kind would invite convert-apply
-          to act on a mapping it cannot correctly evaluate. See
-          docs\INBOX-Done\INBOX-converter-editor-phase-g-engine-findings.md and
-          docs\converter\convrules-dsl.md. }
+        { '#apply <Name>' -- apply a named mapping. Scope is resolved at re-emit
+          time (the nearest preceding #convert whose From type matches the
+          component), not here; the parser only captures the name. }
+        R:= Default(TConversionRule);
+        R.Kind   := rkApply;
+        R.LineNo := LineNo;
+        R.MapName:= Arg;
+        AddRule(R);
       end
       else if Line.StartsWith('#') then
       begin
@@ -577,6 +810,7 @@ var
   PE     : TRuleError      ;
   HaveTo : Boolean         ;
   HaveFrom: Boolean        ;
+  SP     : TMappingSetPair        ;
 
   procedure Add(ALineNo: Integer; const AMsg: string);
   var
@@ -590,6 +824,17 @@ var
   function IsStub(const APath: string): Boolean;
   begin
     Result:= Trim(APath) = STUB_MARKER;
+  end;
+
+  // True when some rkMapping line declares AName. Case-insensitive, matching
+  // how the rest of the DSL compares identifiers.
+  function MappingDeclared(const AName: string): Boolean;
+  var
+    M: TConversionRule;
+  begin
+    Result:= False;
+    for M in ARules.Rules do
+      if (M.Kind = rkMapping) and SameText(M.MapName, AName) then Exit(True);
   end;
 
 begin
@@ -621,6 +866,38 @@ begin
           if HaveTo and (not IsStub(R.ToPath)) and (R.ToPath <> '') and
              (not PathExists(AToTree, R.ToPath)) then
             Add(R.LineNo, Format('default ToPath not found in --to tree: %s', [R.ToPath]));
+        end;
+        rkMapping:
+        begin
+          { A #when branch's condition names a path in the F tree, and its set
+            list assigns paths in the T tree -- same checks, same stub/empty-tree
+            skips, as rkLink/rkDefault above. Nothing here validates the mapping
+            NAME: the three line forms are flat siblings, so a #when may legally
+            appear before its declaration. }
+          if HaveFrom and (R.WhenFrom <> '') and (not IsStub(R.WhenFrom)) and
+             (not PathExists(AFromTree, R.WhenFrom)) then
+            Add(R.LineNo, Format('mapping %s #when path not found in --from tree: %s',
+              [R.MapName, R.WhenFrom]));
+          if HaveTo then
+            for SP in R.Sets do
+              if (SP.ToPath <> '') and (not IsStub(SP.ToPath)) and
+                 (not PathExists(AToTree, SP.ToPath)) then
+                Add(R.LineNo, Format('mapping %s target path not found in --to tree: %s',
+                  [R.MapName, SP.ToPath]));
+        end;
+        rkApply:
+        begin
+          { An #apply naming a mapping that was never declared is the one error
+            worth raising here, and it needs no property tree -- so unlike every
+            check above it fires in tree-less (parse-only) mode too, which is the
+            mode the editor's save-validate runs in.
+
+            Mirrors the editor's mikUndefined. A DECLARATION is the 'from' form
+            (it is the line that says what the mapping IS); a bare '#mapping
+            Name' counts too, since the editor emits that while a rule is being
+            authored and rejecting it would fail the round-trip. }
+          if (R.MapName <> '') and (not MappingDeclared(R.MapName)) then
+            Add(R.LineNo, Format('apply names an undeclared mapping: %s', [R.MapName]));
         end;
         // rkConvert is informational; rkUnuse/rkRemove/rkMigrate/rkNote/rkPcre
         // carry no index-checkable paths in Batch 1 -- no checks.

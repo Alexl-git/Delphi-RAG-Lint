@@ -110,15 +110,39 @@ type
   /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
+  /// <summary>One applied #mapping that matched NOTHING: the source leaf was
+  /// present and carried a value, but no #when branch matched it and the
+  /// mapping had no #else to fall back to.</summary>
+  /// <remarks>
+  /// This is REMAINDER, and the reason the type exists: the value is still in
+  /// the F DFM, the operator asked for it to be mapped, and it was not. Left as
+  /// prose it is indistinguishable from an ordinary note, so it carries the
+  /// mapping's name, the #apply line that requested it, the source path and the
+  /// unmatched value -- everything needed to fix the rule book.
+  ///
+  /// A source leaf that is ABSENT is NOT recorded here: there was nothing to
+  /// map, which is an informational note, not unfinished work.
+  /// </remarks>
+  TReemitNotApplied = record
+    MapName : string;
+    RuleLine: Integer; { the #apply line that requested the mapping }
+    Path    : string;  { the F property path whose value went unmatched }
+    Value   : string;  { that value, verbatim }
+  end;
+
   TReemitReport = record
-    Dropped   : TArray<string>;
-    Ignored   : TArray<string>;
-    Mismatched: TArray<string>;
-    Created   : TArray<string>;
-    OwnedParts: TArray<string>;
-    Stubs     : TArray<string>;
-    Relocated : TArray<string>;
-    Notes     : TArray<string>;
+    Dropped    : TArray<string>;
+    Ignored    : TArray<string>;
+    Mismatched : TArray<string>;
+    Created    : TArray<string>;
+    OwnedParts : TArray<string>;
+    Stubs      : TArray<string>;
+    Relocated  : TArray<string>;
+    /// <summary>Informational: an applied mapping whose source path is not in
+    /// this block, so there was nothing to map.</summary>
+    MappingNotes: TArray<string>;
+    NotApplied  : TArray<TReemitNotApplied>;
+    Notes       : TArray<string>;
   end;
 
   /// <summary>The result of ReemitComponent: the emitted T object block plus the
@@ -534,6 +558,8 @@ var
   Created     : TArray<string>;
   Dropped     : TArray<string>;
   Ignored     : TArray<string>;
+  { F paths a #mapping has consumed -- see IsConsumed / ApplyMappings. }
+  ConsumedPaths: TArray<string>;
 
   // Find a #link whose FromPath equals AFromPath (the dotted lookup key -- a
   // top-level F property name, OR a 'SubObj.Leaf' path when the leaf lives
@@ -562,6 +588,50 @@ var
     Result:= False;
     for Q in ARules.Rules do
       if (Q.Kind = rkRemove) and SameText(Q.PropName, APropName) then Exit(True);
+  end;
+
+  // True when a #mapping already consumed this F path. Checked in RemapLeaf
+  // exactly like IsIgnored: the mapping has ALREADY written the T side, so
+  // re-emitting the raw F leaf would either duplicate it or, worse, overwrite
+  // the mapped value with the unmapped one.
+  function IsConsumed(const AFromPath: string): Boolean;
+  var S: string;
+  begin
+    Result:= False;
+    for S in ConsumedPaths do
+      if SameText(S, AFromPath) then Exit(True);
+  end;
+
+  // Resolve a dotted F path ('Style.Active.Mode') against the parsed F tree.
+  // Returns the leaf's verbatim ValueText. A dnkSubObject yields '' (it has no
+  // value of its own), so callers get True with an empty value -- present, but
+  // not a scalar.
+  function FindLeafValue(const ADottedPath: string; out AValue: string): Boolean;
+  var
+    Segs : TArray<string>;
+    Node : TDfmNode      ;
+    i, j : Integer       ;
+    Found: Boolean       ;
+  begin
+    Result:= False;
+    AValue:= '';
+    if (ADottedPath = '') or (not Assigned(FRoot)) then Exit;
+    Segs:= ADottedPath.Split(['.']);
+    Node:= FRoot;
+    for i:= 0 to High(Segs) do
+    begin
+      Found:= False;
+      for j:= 0 to Node.Children.Count - 1 do
+        if SameText(Node.Children[j].Name, Segs[i]) then
+        begin
+          Node := Node.Children[j];
+          Found:= True;
+          Break;
+        end;
+      if not Found then Exit(False);
+    end;
+    AValue:= Node.ValueText;
+    Result:= True;
   end;
 
   // True when ANY #link/#ignore/#remove rule's FromPath/PropName references a
@@ -602,10 +672,139 @@ var
   // AFromPath is the dotted RULE-LOOKUP key ('Caption' for a top-level leaf,
   // 'Font.Size' for a leaf one level inside a moved-depth F sub-object); ALeaf
   // supplies the actual DFM Kind/ValueText and its bare Name for report text.
+  { -- #mapping / #apply -------------------------------------------------------
+
+    A #mapping is a named, reusable conditional value map, authored as THREE
+    FLAT SIBLING line forms tied together only by its name:
+
+      #mapping M from <EnumType> to <Class>[, ...]      (declaration)
+      #mapping M #when <Path> = <Value> -> <ToPath> = <V>[, ...]
+      #mapping M #else                  -> <ToPath> = <V>[, ...]
+
+    and requested by '#apply M'. This pass runs BEFORE the step-4 leaf loop, not
+    after: RemapLeaf would otherwise already have recorded the source leaf as
+    Dropped, and a leaf cannot be un-dropped. }
+
+  // Is this #apply in scope for THIS block? Scope is the nearest PRECEDING
+  // #convert by line number: the apply belongs to that block, so it fires only
+  // when that #convert's From type is this block's class. An #apply with no
+  // preceding #convert at all is file-scope and applies to every block.
+  // Bare-tail compare, for the same reason the #convert gate uses it: a rule may
+  // write 'LibA.TSrcBtn' while the .dfm class token is always bare.
+  function ApplyInScope(const AApply: TConversionRule): Boolean;
+  var
+    Q       : TConversionRule;
+    BestLine: Integer        ;
+    BestFrom: string         ;
+  begin
+    BestLine:= -1;
+    BestFrom:= '';
+    for Q in ARules.Rules do
+      if (Q.Kind = rkConvert) and (Q.LineNo <= AApply.LineNo) and (Q.LineNo > BestLine) then
+      begin
+        BestLine:= Q.LineNo;
+        BestFrom:= Q.FromType;
+      end;
+    if BestLine < 0 then Exit(True); { file-scope }
+    Result:= SameText(BareTypeTail(BestFrom), FRoot.ClassName_);
+  end;
+
+  // Write one branch's assignments into the T tree. '???' is the scaffolder's
+  // explicit-unfilled stub and is skipped here exactly as #default skips it.
+  procedure ApplySets(const ASets: TArray<TMappingSetPair>);
+  var SP: TMappingSetPair;
+  begin
+    for SP in ASets do
+    begin
+      if (SP.ToPath = '') or (Trim(SP.ToPath) = '???') then Continue;
+      PlaceAtPath(TRoot, SP.ToPath, SP.Value, dnkScalar, Created);
+    end;
+  end;
+
+  // Evaluate one applied mapping against this block.
+  procedure EvaluateMapping(const AApply: TConversionRule);
+  var
+    Q       : TConversionRule ;
+    ElseRule: TConversionRule ;
+    SrcPath : string          ;
+    LeafVal : string          ;
+    Matched : Boolean         ;
+    HaveElse: Boolean         ;
+    NA      : TReemitNotApplied;
+  begin
+    SrcPath := '';
+    Matched := False;
+    HaveElse:= False;
+    ElseRule:= Default(TConversionRule);
+
+    { FIRST #when WINS -- branches are evaluated in source order and the search
+      stops at the first match, so an author can order specific before general. }
+    for Q in ARules.Rules do
+    begin
+      if (Q.Kind <> rkMapping) or (not SameText(Q.MapName, AApply.MapName)) then Continue;
+      if Q.IsElse then
+      begin
+        ElseRule:= Q;
+        HaveElse:= True;
+        Continue;
+      end;
+      if Q.WhenFrom = '' then Continue; { the declaration line carries no condition }
+      if SrcPath = '' then SrcPath:= Q.WhenFrom;
+      if Matched then Continue;
+      if FindLeafValue(Q.WhenFrom, LeafVal) and
+         SameText(Trim(LeafVal), Trim(Q.WhenValue)) then
+      begin
+        ApplySets(Q.Sets);
+        ConsumedPaths:= ConsumedPaths + [Q.WhenFrom];
+        Matched:= True;
+      end;
+    end;
+    if Matched then Exit;
+
+    { A declaration-only mapping (no #when at all) has no source path, so there
+      is nothing to evaluate and nothing to report. }
+    if SrcPath = '' then Exit;
+
+    if not FindLeafValue(SrcPath, LeafVal) then
+    begin
+      { ABSENT source: nothing to map. Informational, NOT remainder -- and the
+        reason #else is gated on presence: firing #else here would invent a T
+        value from an F property the form never set. }
+      Result.Report.MappingNotes:= Result.Report.MappingNotes +
+        [Format('mapping %s: source path %s is not present in this block -- nothing to map',
+          [AApply.MapName, SrcPath])];
+      Exit;
+    end;
+
+    if HaveElse and (Length(ElseRule.Sets) > 0) then
+    begin
+      ApplySets(ElseRule.Sets);
+      ConsumedPaths:= ConsumedPaths + [SrcPath];
+      Exit;
+    end;
+
+    { Present, unmatched, no #else -- REMAINDER. The value is still in the F DFM
+      and the operator asked for it to be mapped. }
+    NA.MapName := AApply.MapName;
+    NA.RuleLine:= AApply.LineNo;
+    NA.Path    := SrcPath;
+    NA.Value   := LeafVal;
+    Result.Report.NotApplied:= Result.Report.NotApplied + [NA];
+  end;
+
+  procedure ApplyMappings;
+  var Q: TConversionRule;
+  begin
+    for Q in ARules.Rules do
+      if (Q.Kind = rkApply) and (Q.MapName <> '') and ApplyInScope(Q) then
+        EvaluateMapping(Q);
+  end;
+
   procedure RemapLeaf(const ALeaf: TDfmNode; const AFromPath: string);
   var ToPath: string;
   begin
     if IsRemoved(AFromPath) then Exit; // #remove: ensure absent from T
+    if IsConsumed(AFromPath) then Exit; // a #mapping already wrote the T side
     if IsIgnored(AFromPath) then
     begin Ignored:= Ignored + [AFromPath]; Exit; end;
     if FindLinkFor(AFromPath, ToPath) then
@@ -761,6 +960,12 @@ begin
     TRoot.Kind      := dnkSubObject;
     TRoot.Name      := FRoot.Name;
     TRoot.ClassName_:= BareTypeTail(ToType);
+
+    // 3b. Apply #mapping/#apply BEFORE the leaf loop. Order is load-bearing:
+    // RemapLeaf below would already have recorded a mapped source leaf as
+    // Dropped, and a leaf cannot be un-dropped. Running first also lets
+    // RemapLeaf skip whatever a mapping consumed (IsConsumed).
+    ApplyMappings;
 
     // 4. Per top-level F leaf, remap. Nested sub-objects are classified as an
     // owned part (recurse via #convert) or a contained child (copied verbatim).

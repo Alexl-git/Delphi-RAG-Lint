@@ -323,6 +323,22 @@ Write-Ascii $rulesPath $RulesBody
 $castRulesPath = Join-Path $WorkDir 'rules-cast.txt'
 Write-Ascii $castRulesPath $CastRulesBody
 
+# Phase 6's rule book: an #apply whose mapping matches NOTHING. The fixture's
+# Edit1 has Caption = 'Hi'; the only #when tests for 'Nope' and there is no
+# #else, so the value is left unmapped -- the mapping-not-applied remainder.
+# The #apply sits AFTER the #convert deliberately: scope is the nearest
+# preceding #convert, so putting it first would make it file-scope instead.
+$MapRulesBody = @'
+#convert TOldEdit -> TNewEdit, NewEditUnit
+#mapping CapMap from U.TCapEnum to U.TNewEdit
+#mapping CapMap #when Caption = 'Nope' -> Text = 'X'
+#apply CapMap
+#link Style.Active.Font.Size <- Font.Size
+#link OnClick2 <- OnClick
+'@
+$mapRulesPath = Join-Path $WorkDir 'rules-mapping.txt'
+Write-Ascii $mapRulesPath $MapRulesBody
+
 # ---------------------------------------------------------------------------
 # Index the fixture (one shared index -- Phase 2/3 re-copy the fixture into
 # fresh dirs but the .pas/.dfm CONTENT is byte-identical each time, so the
@@ -334,10 +350,12 @@ $phase1 = Join-Path $WorkDir 'phase1-dryrun'
 $phase2 = Join-Path $WorkDir 'phase2-apply'
 $phase3 = Join-Path $WorkDir 'phase3-nosafety'
 $phase4 = Join-Path $WorkDir 'phase4-castskip'
+$phase6 = Join-Path $WorkDir 'phase6-mapping'
 New-Fixture $phase1
 New-Fixture $phase2
 New-Fixture $phase3
 New-Fixture $phase4
+New-Fixture $phase6
 $castBeforeBytes = [System.IO.File]::ReadAllBytes((Join-Path $phase4 'MyForm.pas'))
 
 $db = Join-Path $WorkDir 'convapply.sqlite'
@@ -832,6 +850,63 @@ if ($null -ne $castDoc) {
 }
 else {
   Check 'json: cast-run assertions were SKIPPED (document did not parse)' $false `
+    'fix the parse failure above'
+}
+
+# ===========================================================================
+# PHASE 6: an #apply that matches nothing is REMAINDER, typed and reported.
+#
+# The engine used to RECOGNISE AND SKIP #mapping/#apply, emitting no rule at
+# all -- so a rule book asking for a mapping got a clean exit 0 and no mapping,
+# silently. That is the defect this phase pins: not that mapping works, but
+# that a mapping which does NOT apply is REPORTED rather than swallowed.
+# ===========================================================================
+Write-Host ''
+Write-Host '=== Phase 6: #apply that matches nothing (mapping-not-applied) ===' -ForegroundColor Cyan
+
+Push-Location $phase6
+try {
+  $mapRaw  = (& $Exe convert-apply --unit 'MyForm.pas' --rules $mapRulesPath --db $db 2>&1) -join "`n"
+  $mapExit = $LASTEXITCODE
+  $mapJson = (& $Exe convert-apply --unit 'MyForm.pas' --rules $mapRulesPath --db $db --format json 2>$null) -join "`n"
+} finally { Pop-Location }
+Write-Host $mapRaw -ForegroundColor DarkGray
+
+Check 'mapping: dry-run exits 0' ($mapExit -eq 0) "exit=$mapExit"
+
+# TEXT surface: the Warnings block must name the mapping, or a human reading
+# the default output never learns the mapping did nothing.
+$mapWarnMatch = [regex]::Match($mapRaw, 'Warnings:([\s\S]*?)(\r?\n\r?\n|\z)')
+$mapWarn = if ($mapWarnMatch.Success) { $mapWarnMatch.Groups[1].Value } else { '' }
+Check 'mapping: Warnings block names the mapping (CapMap)' ($mapWarn -match 'CapMap') "block=$mapWarn"
+
+# TYPED surface.
+$mapDoc = $null
+try { $mapDoc = $mapJson | ConvertFrom-Json } catch { $mapDoc = $null }
+Check 'mapping: json parses' ($null -ne $mapDoc) `
+  "raw=$($mapJson.Substring(0, [Math]::Min(200, $mapJson.Length)))"
+if ($null -ne $mapDoc) {
+  $mna = @($mapDoc.items) | Where-Object { $_.kind -eq 'mapping-not-applied' }
+  Check 'mapping: a mapping-not-applied item is emitted' ($mna.Count -ge 1) "count=$($mna.Count)"
+  if ($mna.Count -ge 1) {
+    Check 'mapping: item is reported in the warnings field' ($mna[0].field -eq 'warnings') `
+      "field=$($mna[0].field)"
+    # rule_line must be the #apply line (4 in $MapRulesBody), not the mapping's
+    # own line -- the #apply is what requested the work that did not happen.
+    Check 'mapping: item rule_line is the #apply line (4)' ($mna[0].rule_line -eq 4) `
+      "rule_line=$($mna[0].rule_line)"
+    Check 'mapping: item names the source path (Caption)' ($mna[0].path -eq 'Caption') `
+      "path=$($mna[0].path)"
+  }
+  # The invariant must still hold once a new kind joins the vocabulary.
+  $six6 = @('converted','access_sites','creator_sites','todos','reemit_notes','warnings')
+  $sum6 = 0
+  foreach ($k in $six6) { $sum6 += @($mapDoc.$k).Count }
+  Check 'mapping: items.Count still equals the sum of the six arrays' `
+    (@($mapDoc.items).Count -eq $sum6) "items=$(@($mapDoc.items).Count) sum=$sum6"
+}
+else {
+  Check 'mapping: typed assertions were SKIPPED (document did not parse)' $false `
     'fix the parse failure above'
 }
 

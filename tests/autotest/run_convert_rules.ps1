@@ -252,6 +252,104 @@ $noRulesOut = ((& $Exe convert-validate 2>&1) -join "`n")
 $noRulesExit = $LASTEXITCODE
 Check 'missing --rules exit 2' ($noRulesExit -eq 2) "exit=$noRulesExit"
 
+# ---------------------------------------------------------------------------
+# #mapping / #apply parsing (B1) and validation (B2).
+#
+# These were RECOGNISED AND SKIPPED -- accepted so they stopped reporting
+# 'unknown directive', but emitting no rule at all. A rule book asking for a
+# mapping therefore got a clean exit 0 and no mapping, silently: the repro in
+# docs\INBOX-URGENT-engine-cannot-apply-mapping.md parsed 2 of its 6 directives.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '#mapping / #apply' -ForegroundColor Cyan
+
+# The INBOX repro book, verbatim: 6 directives, 3 of them #mapping, 1 #apply.
+$mapRules = "#mapping FontStyleMap from Vcl.Graphics.TFontStyle to Vcl.Graphics.TFont`r`n" +
+            "#mapping FontStyleMap #when Style = fsBold -> Height = 12`r`n" +
+            "#mapping FontStyleMap #else                -> Height = 8`r`n" +
+            "`r`n" +
+            "#convert Vcl.Graphics.TFont -> Vcl.Graphics.TFont`r`n" +
+            "  #apply FontStyleMap`r`n" +
+            "#link Color <- Color`r`n"
+$mapFile = Join-Path $WorkDir 'mapping-repro.rules'
+Write-Ascii $mapFile $mapRules
+$mapOut = (& $Exe convert-validate --rules $mapFile --print-parsed) -join "`n"
+Check 'mapping repro parses all 6 rules' ($mapOut -match 'parsed 6 rule\(s\)') "out=$mapOut"
+Check 'mapping declaration keeps its from/to types' `
+  ($mapOut -match 'mapping FontStyleMap from Vcl\.Graphics\.TFontStyle to Vcl\.Graphics\.TFont') "out=$mapOut"
+Check 'mapping #when keeps its condition AND its set list' `
+  ($mapOut -match 'mapping FontStyleMap #when Style = fsBold -> Height = 12') "out=$mapOut"
+Check 'mapping #else keeps its set list' `
+  ($mapOut -match 'mapping FontStyleMap #else -> Height = 8') "out=$mapOut"
+Check 'apply is parsed as its own rule' ($mapOut -match 'apply FontStyleMap') "out=$mapOut"
+
+# GRAMMAR PARITY WITH THE EDITOR. ConvRules.Model.pas accepts all four tolerant
+# forms below and RE-EMITS every line it parsed. If the engine were stricter,
+# the editor's save-validate would fail and RULES WOULD BE SILENTLY LOST. So
+# these must parse as rules, and must NOT become parse errors.
+$tolRules = "#mapping BareName`r`n" +
+            "#mapping NoArrow #when Style = fsBold`r`n" +
+            "#mapping NoArrowElse #else`r`n" +
+            "#mapping NoTo from Vcl.Graphics.TFontStyle`r`n"
+$tolFile = Join-Path $WorkDir 'mapping-tolerant.rules'
+Write-Ascii $tolFile $tolRules
+$tolOut = (& $Exe convert-validate --rules $tolFile --print-parsed) -join "`n"
+$tolExit = $LASTEXITCODE
+Check 'tolerant mapping forms all parse (4 rules)' ($tolOut -match 'parsed 4 rule\(s\)') "out=$tolOut"
+Check 'tolerant mapping forms are not errors (exit 0)' ($tolExit -eq 0) "exit=$tolExit; out=$tolOut"
+Check 'tolerant: bare #mapping Name keeps its name' ($tolOut -match 'mapping BareName') "out=$tolOut"
+Check 'tolerant: #when with no arrow KEEPS its condition' `
+  ($tolOut -match 'mapping NoArrow #when Style = fsBold') "out=$tolOut"
+
+# The '<' in a generic target is an opener, so a comma inside it must NOT split
+# the target list. Written WITHOUT a space after the comma on purpose: a wrong
+# split would rejoin with ', ' and INSERT one, which is the only way to tell the
+# two apart in this output.
+$genRules = "#mapping G1 from U.TEnum to U.TList<A,B>`r`n" +
+            "#mapping G2 from U.TEnum to U.TList<A,B>,U.TOther`r`n"
+$genFile = Join-Path $WorkDir 'mapping-generic.rules'
+Write-Ascii $genFile $genRules
+$genOut = (& $Exe convert-validate --rules $genFile --print-parsed) -join "`n"
+Check 'generic target stays ONE entry (no space re-inserted)' `
+  ($genOut -match 'mapping G1 from U\.TEnum to U\.TList<A,B>(\r|\n|$)') "out=$genOut"
+Check 'generic target + sibling splits at the TOP-LEVEL comma only' `
+  ($genOut -match 'mapping G2 from U\.TEnum to U\.TList<A,B>, U\.TOther') "out=$genOut"
+
+# B2: an #apply naming a mapping that was never declared is an error, and it
+# fires WITHOUT any property tree -- the mode the editor's save-validate uses.
+# The editor shows only the FIRST non-empty line of engine output on failure,
+# so the message must name the mapping there.
+$undecFile = Join-Path $WorkDir 'mapping-undeclared.rules'
+Write-Ascii $undecFile "#convert A -> B`r`n#apply Nope`r`n"
+$undecOut = ((& $Exe convert-validate --rules $undecFile 2>&1) -join "`n")
+$undecExit = $LASTEXITCODE
+Check 'undeclared #apply exits 1' ($undecExit -eq 1) "exit=$undecExit; out=$undecOut"
+Check 'undeclared #apply names the mapping' ($undecOut -match 'Nope') "out=$undecOut"
+# The editor shows the FIRST non-empty line of engine output on failure, so the
+# message has to be meaningful there. Read STDOUT ONLY: the engine also writes a
+# '(loaded defaults from ...)' note to stderr, and a merged capture interleaves
+# the two nondeterministically -- asserting against the merge makes this flaky.
+$undecStdout = (& $Exe convert-validate --rules $undecFile 2>$null) -join "`n"
+Check 'undeclared #apply says what is wrong on the FIRST stdout line' `
+  (($undecStdout -split "`n" | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1) -match 'undeclared mapping') `
+  "stdout=$undecStdout"
+
+# CONTROL: the same #apply with a declaration present must pass. Without this,
+# 'exit 1' above would also be satisfied by the validator rejecting every
+# #apply, or by it being broken in some unrelated way.
+$decFile = Join-Path $WorkDir 'mapping-declared.rules'
+Write-Ascii $decFile "#mapping Nope from U.TE to U.TC`r`n#convert A -> B`r`n#apply Nope`r`n"
+$decOut = ((& $Exe convert-validate --rules $decFile 2>&1) -join "`n")
+$decExit = $LASTEXITCODE
+Check 'declared #apply exits 0 (control)' ($decExit -eq 0) "exit=$decExit; out=$decOut"
+
+# A bare '#mapping Name' counts as a declaration: the editor emits that shape
+# while a rule is being authored, and rejecting it would fail the round-trip.
+$bareFile = Join-Path $WorkDir 'mapping-baredecl.rules'
+Write-Ascii $bareFile "#mapping Nope`r`n#convert A -> B`r`n#apply Nope`r`n"
+$bareOut = ((& $Exe convert-validate --rules $bareFile 2>&1) -join "`n")
+Check 'bare #mapping Name counts as a declaration' ($LASTEXITCODE -eq 0) "out=$bareOut"
+
 Write-Host 'convert-validate --rules <nonexistent>' -ForegroundColor Cyan
 $missOut = ((& $Exe convert-validate --rules (Join-Path $WorkDir 'does-not-exist.txt') 2>&1) -join "`n")
 $missExit = $LASTEXITCODE

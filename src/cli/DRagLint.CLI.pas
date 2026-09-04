@@ -19275,8 +19275,27 @@ var
       rkIgnore : Result:= 'ignore';
       rkUse    : Result:= 'use';
       rkUseSwap: Result:= 'useswap';
+      rkMapping: Result:= 'mapping';
+      rkApply  : Result:= 'apply';
     else        Result:= '?';
     end;
+  end;
+
+  // Render a #mapping branch's set list as 'A = 1, B = 2'. A pair with an empty
+  // Value prints as the bare ToPath -- the shape the editor's parser accepts and
+  // re-emits, so the printer must not invent an '=' that the source lacked.
+  function SetsSummary(const ASets: TArray<TMappingSetPair>): string;
+  var
+    Parts: TArray<string>;
+    P    : TMappingSetPair      ;
+  begin
+    Parts:= nil;
+    for P in ASets do
+      if P.Value = '' then
+        Parts:= Parts + [P.ToPath]
+      else
+        Parts:= Parts + [P.ToPath + ' = ' + P.Value];
+    Result:= String.Join(', ', Parts);
   end;
 
   // One-line summary of a parsed rule's key fields (for --print-parsed).
@@ -19303,6 +19322,21 @@ var
       rkIgnore : Result:= Format('ignore FromPath=%s', [R.FromPath]);
       rkUse    : Result:= Format('use %s', [R.UnitName]);
       rkUseSwap: Result:= Format('useswap %s -> %s', [R.UnitName, String.Join(', ', R.UnitsAdd)]);
+      { A #mapping is THREE flat sibling line forms sharing only <Name>, so the
+        summary must show WHICH form this line is -- a declaration, a #when or a
+        #else -- or a reader cannot tell a captured condition from a lost one.
+        Same lesson as the rkLink cast above: print the parts separately. }
+      rkMapping: if R.IsElse then
+                   Result:= Format('mapping %s #else -> %s', [R.MapName, SetsSummary(R.Sets)])
+                 else if R.WhenFrom <> '' then
+                   Result:= Format('mapping %s #when %s = %s -> %s',
+                              [R.MapName, R.WhenFrom, R.WhenValue, SetsSummary(R.Sets)])
+                 else if R.MapFromType <> '' then
+                   Result:= Format('mapping %s from %s to %s',
+                              [R.MapName, R.MapFromType, String.Join(', ', R.MapToTypes)])
+                 else
+                   Result:= Format('mapping %s', [R.MapName]);
+      rkApply  : Result:= Format('apply %s', [R.MapName]);
     else        Result:= KindStr(R.Kind);
     end;
   end;
@@ -19479,12 +19513,25 @@ begin
     JReport.AddPair('ownedParts', ArrJson(Res.Report.OwnedParts));
     JReport.AddPair('stubs',      ArrJson(Res.Report.Stubs));
     JReport.AddPair('relocated',  ArrJson(Res.Report.Relocated));
+    JReport.AddPair('mappingNotes', ArrJson(Res.Report.MappingNotes));
+    var JNotApplied: TJSONArray:= TJSONArray.Create;
+    for var NA in Res.Report.NotApplied do
+    begin
+      var JNA: TJSONObject:= TJSONObject.Create;
+      JNA.AddPair('mapName' , NA.MapName);
+      JNA.AddPair('ruleLine', TJSONNumber.Create(NA.RuleLine));
+      JNA.AddPair('path'    , NA.Path);
+      JNA.AddPair('value'   , NA.Value);
+      JNotApplied.AddElement(JNA);
+    end;
+    JReport.AddPair('notApplied', JNotApplied);
     { 'notes' deliberately stays the UNION of stubs + relocated + notes.
       DRagLint.Convert.DfmReemit split those two OUT of Notes so each entry can
       carry a stable kind instead of being classified by matching its prose; this
       key predates the split, so emitting the union keeps every existing consumer
       reading exactly what it read before. 'stubs'/'relocated' are additive. }
-    JReport.AddPair('notes',      ArrJson(Res.Report.Stubs + Res.Report.Relocated + Res.Report.Notes));
+    JReport.AddPair('notes',      ArrJson(Res.Report.Stubs + Res.Report.Relocated +
+                                          Res.Report.MappingNotes + Res.Report.Notes));
     JRoot.AddPair('report', JReport);
     Writeln(JRoot.ToJSON);
   finally
