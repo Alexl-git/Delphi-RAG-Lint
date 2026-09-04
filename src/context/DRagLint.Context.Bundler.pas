@@ -326,12 +326,24 @@ begin
     Result.HasDoc:= Result.Doc.HasContent;
   end;
 
-  // Class surface -- parent qname is everything before the last '.'
-  ParentQName:= AQName;
+  { Class surface. For a METHOD the surface wanted is its owning class, which is
+    everything before the last '.'. For a TYPE it is the type's OWN surface --
+    chopping the last segment there yields the UNIT, which has no class surface,
+    so `context --task "modify <Unit.TType>"` came back with no `## Class
+    surface` section at all: the one question a type-shaped task is asking (what
+    members does this thing have?) was the one the bundle did not answer, while
+    the same task aimed at any single method of that type answered it fine. }
   if AIncludeSurface then
   begin
-    if LastDelimiter('.', ParentQName) > 0 then ParentQName:= Copy(ParentQName, 1, LastDelimiter('.', ParentQName) - 1);
-    if ParentQName <> AQName then
+    if Sym.Kind in [skClass, skInterface, skRecord] then
+      ParentQName:= Sym.QualifiedName
+    else
+    begin
+      ParentQName:= AQName;
+      if LastDelimiter('.', ParentQName) > 0 then ParentQName:= Copy(ParentQName, 1, LastDelimiter('.', ParentQName) - 1);
+      if ParentQName = AQName then ParentQName:= '';  { no owner to describe }
+    end;
+    if ParentQName <> '' then
     begin
       Result.ClassSurface:= AStore.GetClassSurface(ParentQName, False, False);
       // Strip the auto-generated DFM component fields unless the caller asked
