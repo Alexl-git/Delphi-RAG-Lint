@@ -1018,6 +1018,19 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
+    /// <summary>The name-only leaves of AClassName's ancestor closure -- every
+    /// edge THIS index could not link to a defining symbol. Distinct, in walk
+    /// order. The other half of a SPLIT ANCESTRY CHAIN: when a project class
+    /// descends a library class, the project walk stops here, and these are the
+    /// names the climb must continue from in the library index.</summary>
+    /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
+    /// <remarks>Candidate-scoped identically to IsDescendantOf (same
+    /// TypeCandidateIds), so the two cannot disagree about which type the name
+    /// meant. Query-side reader: it writes nothing and never runs from a
+    /// resolve walk.</remarks>
+    function UnresolvedAncestorNames(const AClassName: string; AFileId: Int64): TArray<string>;
     /// <summary>Every class whose transitive ancestor set includes AAncestorName
     /// (the reverse of IsDescendantOf). Distinct class names, sorted. Backed by a
     /// single indexed lookup on type_ancestors.ancestor_name.</summary>

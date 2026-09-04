@@ -87,6 +87,10 @@ EXCLUDE countcalledges
 EXCLUDE dumpallcalledges
 EXCLUDE finddiresolvesites
 EXCLUDE finddiunresolved
+# Reports which ancestor edges this index left unresolved, so the ANCESTRY
+# BRIDGE in FlowChecks can continue the climb in the library index. It consumes
+# type_ancestors; it never writes it, and it runs from lint, never from a walk.
+EXCLUDE unresolvedancestornames
 
 # Asks whether call_edges must be rebuilt; it reads state and answers, and the
 # answer is acted on by ResolveCallTargets, which IS in the surface.

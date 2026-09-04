@@ -1768,6 +1768,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
+      /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+      /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
+      function UnresolvedAncestorNames(const AClassName: string; AFileId: Int64): TArray<string>;
       /// <param name="AAncestorName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed:
       /// List.ToStringArray.</returns>
@@ -10838,6 +10842,52 @@ begin
   for StartId in TypeCandidateIds(AClassName, AFileId) do
     for A in GetTransitiveAncestors(StartId) do
       if SameText(A.Name, AAncestorName) then Exit(True);
+end;
+
+{ The name-only leaves of AClassName's ancestor closure -- the OTHER half of the
+  answer IsDescendantOf gives.
+
+  IsDescendantOf returns a Boolean and therefore cannot distinguish "this class
+  is not a TComponent" from "this index does not know what its ancestor is". For
+  a SPLIT ANCESTRY CHAIN -- `TMyForm = class(TForm)` in a project unit, TForm in
+  Vcl.Forms -- those two answers are opposite in meaning and identical in value:
+  the project walk stops at TForm, which no project index can resolve, and
+  TMyForm does not exist in the library index at all, so BOTH stores say False
+  and an owner-parented form is reported as a leak.
+
+  This returns the names the climb must be CONTINUED from, so the caller can ask
+  the other store. It is the same move `Harvest` makes in AstChecks (search that
+  file for "THE ANCESTRY BRIDGE"); the with-statement surface builder needed it
+  first, and this is that mechanism expressed as a store primitive rather than a
+  second private copy of it.
+
+  Deliberately shares TypeCandidateIds with IsDescendantOf. The two are asked
+  about the SAME class name in the same breath at every call site, and a
+  candidate set that differed between them would make the bridge fire for a type
+  the descendant test never considered -- a divergence with no symptom until it
+  suppressed a real leak. }
+function TSQLiteSymbolStore.UnresolvedAncestorNames(const AClassName: string; AFileId: Int64): TArray<string>;
+var
+  StartId: Int64         ;
+  A      : TTypeAncestor ;
+  Seen   : TStringList   ;
+begin
+  Result:= nil;
+  Seen  := TStringList.Create;
+  try
+    Seen.CaseSensitive:= False;
+    Seen.Duplicates   := dupIgnore;
+    Seen.Sorted       := True;
+    for StartId in TypeCandidateIds(AClassName, AFileId) do
+      for A in GetTransitiveAncestors(StartId) do
+        if (not A.Resolved) and (Trim(A.Name) <> '') and (Seen.IndexOf(Trim(A.Name)) < 0) then
+        begin
+          Seen.Add(Trim(A.Name));
+          Result:= Result + [Trim(A.Name)];
+        end;
+  finally
+    Seen.Free;
+  end;
 end;
 
 function TSQLiteSymbolStore.ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;

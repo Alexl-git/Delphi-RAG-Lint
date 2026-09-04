@@ -365,6 +365,37 @@ begin
     if CA.VarIdx = ATargetIdx then Exit(True);
 end;
 
+{ THE ANCESTRY BRIDGE, for ownership. Same move as Harvest in AstChecks (search
+  that file for the phrase): when the PROJECT walk ends on an edge the project
+  index could not resolve, the climb continues BY NAME in the LIBRARY index.
+
+  Why neither store alone can answer. `TMyForm = class(TForm)` declared in a
+  project unit gives the project index an ancestor edge whose target -- TForm,
+  in Vcl.Forms -- it has never seen, so GetTransitiveAncestors stops there and
+  IsDescendantOf(TMyForm, TComponent) is False. Asking the LIBRARY index instead
+  fails for the opposite reason: TMyForm is not in it. Both answers are False,
+  both are honest about their own index, and together they said "not a
+  component" about a form. 3 of the 5 object-leak findings on this repo were
+  that shape, and every VCL-derived form in every project is a candidate for it.
+
+  The bridge only ever ADDS ownership detection, which only ever SUPPRESSES a
+  finding, so the risk it carries is a missed leak rather than a false one. That
+  is the direction this rule is already tuned for (see TypeCandidateIds' note:
+  "a false suppression costs a missed leak report, a false positive costs the
+  rule its credibility"). It is bounded to one hop by construction -- the
+  library store resolves its own ancestry internally, so there is nothing for a
+  second hop to bridge. }
+function DescendsViaSplitChain(const ATypeName: string; const AStore: ISymbolStore;
+  AFileId: Int64; const ALibStore: ISymbolStore): Boolean;
+var
+  Anc: string;
+begin
+  Result:= False;
+  if (ALibStore = nil) or (AStore = nil) then Exit;
+  for Anc in AStore.UnresolvedAncestorNames(ATypeName, AFileId) do
+    if ALibStore.IsDescendantOf(Anc, 'TComponent', 0) or SameText(Anc, 'TComponent') then Exit(True);
+end;
+
 function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;
   const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): Boolean;
 var
@@ -404,7 +435,8 @@ begin
     file's own resolution context); the library store is asked with 0, since a
     project file id names nothing in it. }
   if not (AStore.IsDescendantOf(TypeName, 'TComponent', AFileId)
-          or ((ALibStore <> nil) and ALibStore.IsDescendantOf(TypeName, 'TComponent', 0))) then Exit;
+          or ((ALibStore <> nil) and ALibStore.IsDescendantOf(TypeName, 'TComponent', 0))
+          or DescendsViaSplitChain(TypeName, AStore, AFileId, ALibStore)) then Exit;
   ArgsN := AConstructorNode.ChildByField('args');
   if ArgsN.IsNull or (ArgsN.NamedChildCount = 0) then Exit; { no AOwner arg at all }
   FirstArg := ArgsN.NamedChild(0);
