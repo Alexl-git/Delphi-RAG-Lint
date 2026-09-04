@@ -9181,8 +9181,30 @@ begin
 
   { 0: source-level review markers -- dl:ok suppression, plus the stale/unused
     hints. Deliberately ahead of the config filter so disabled rules' findings
-    still count as "the marker is doing something". }
-  AFindings:= ApplyLineMarkers(AFindings, AScannedFiles);
+    still count as "the marker is doing something".
+
+    DEFENCE IN DEPTH ON THE SCANNED SET (item 1b). The findings above have just
+    been scoped to the walk closure; the scanned set must obey the SAME scope or
+    review-marker-unused starts reporting markers in files this run drops. The
+    `lint` verb already hands over the kept set only, so this is normally a
+    no-op -- but the two are computed in different places, and "they agree
+    today" is not a property, it is an observation. Same argument the edit-side
+    filter (ScopeWalkEditsToClosure) is already written down for. }
+  var ScopedScan: TArray<string>:= AScannedFiles;
+  if Length(ScopedScan) > 0 then
+  begin
+    var ScanClosure: TDictionary<string, Boolean>:= nil;
+    if WalkClosure(AArgs, AStore, ScanClosure) then
+    try
+      var KeptScan: TArray<string>:= nil;
+      for var SFx: string in ScopedScan do
+        if ScanClosure.ContainsKey(LowerCase(ExpandFileName(SFx))) then KeptScan:= KeptScan + [SFx];
+      ScopedScan:= KeptScan;
+    finally
+      ScanClosure.Free;
+    end;
+  end;
+  AFindings:= ApplyLineMarkers(AFindings, ScopedScan);
 
   { 1: config -- severity remap + enable/disable filter. }
   Cfg:= LoadLintConfig(AArgs);
@@ -9660,6 +9682,16 @@ var
   { B8: files the directory walk SKIPPED without parsing. Kept because the
     skip must still be NAMED -- see the scope report in FinalizeAndOutput. }
   WalkSkipped : TArray<string>              ;
+  { Item 1b: the files this run actually EXAMINED, which is what makes
+    review-marker-unused and review-marker-malformed reachable from the `lint`
+    verb. FinalizeAndOutput's finding-driven line cache only ever holds files
+    that still PRODUCE findings, so a marker whose finding is gone -- exactly
+    the case the rule exists to catch -- is invisible without this list.
+
+    It is the KEPT set, never the raw walk: a directory walk reaches files no
+    project compiles (84 of ORM3 CLIENT's 284), and feeding those in here would
+    start reporting markers in files the run deliberately does not report on. }
+  ScannedFiles: TArray<string>              ;
 begin
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
@@ -9933,7 +9965,11 @@ begin
         charge and cannot fall out of step with the .scm corpus.
         See docs\INBOX-lint-rule-filter-leaks-other-rules.md. }
       var QueryFindings: TArray<TLintFinding>;
-      if TFile.Exists(EffPath) then QueryFindings:= Linter.LintFile(EffPath)
+      if TFile.Exists(EffPath) then
+      begin
+        QueryFindings:= Linter.LintFile(EffPath);
+        ScannedFiles:= [EffPath];
+      end
       else if TDirectory.Exists(EffPath) then
       begin
         { SCOPE THE WALK BEFORE IT PARSES (B8). The non-member DROP already
@@ -9946,23 +9982,44 @@ begin
           parsed produces no finding to infer it from. }
         var InClosure: TDictionary<string, Boolean>:= nil;
         var SkipList : TStringList:= TStringList.Create;
+        { Item 1b: the mirror of SkipList. The filter is the ONLY place that
+          sees every candidate and its verdict, so recording the kept names here
+          is what makes the scanned set equal the scoped set by construction --
+          rather than by two pieces of code agreeing about scope, which is how
+          they drift. }
+        var KeepList : TStringList:= TStringList.Create;
         try
           SkipList.Sorted:= True; SkipList.Duplicates:= dupIgnore; SkipList.CaseSensitive:= False;
-          if WalkClosure(AArgs, Store, InClosure) then
-            Linter.WalkFilter:=
-              function(AFile: string): Boolean
+          KeepList.Sorted:= True; KeepList.Duplicates:= dupIgnore; KeepList.CaseSensitive:= False;
+          var HaveClosure: Boolean:= WalkClosure(AArgs, Store, InClosure);
+          { ALWAYS assigned now, where it used to be assigned only when a
+            closure existed. With no closure the predicate returns True for
+            everything, so the walk is unchanged -- it just gets counted. An
+            unscoped walk (no --db, or no index covering the folder) is still a
+            real scope: it is "every file under this folder", and the markers in
+            those files are the markers this run examined. }
+          Linter.WalkFilter:=
+            function(AFile: string): Boolean
+            begin
+              if HaveClosure then
               begin
                 Result:= InClosure.ContainsKey(LowerCase(ExpandFileName(AFile)));
-                if not Result then SkipList.Add(AFile);
-              end;
+                if not Result then begin SkipList.Add(AFile); Exit; end;
+              end
+              else
+                Result:= True;
+              KeepList.Add(AFile);
+            end;
           try
             QueryFindings:= Linter.LintFolder(EffPath, True);
           finally
             Linter.WalkFilter:= nil;
           end;
-          WalkSkipped:= SkipList.ToStringArray;
+          WalkSkipped := SkipList.ToStringArray;
+          ScannedFiles:= KeepList.ToStringArray;
         finally
           SkipList.Free;
+          KeepList.Free;
           InClosure.Free;
         end;
       end
@@ -10400,8 +10457,12 @@ begin
       PER DECLARATION at ~16 ms each, so a 53-decl unit costs 0.83 s and a real
       DataCopy unit reached 8.75 s against the plugin's HARD 8 s timeout, whose
       failure branch shows NO diagnostics at all. Opt in with --project-rules.
-    * review-marker-unused -- must see every file before it can know a marker
-      matches nothing.
+    * review-marker-unused -- NO LONGER TRUE as of item 1b (2026-09-03). It is
+      reported here now: DoLint hands FinalizeAndOutput the scoped scanned set,
+      which is the whole of what the rule needed. Kept as a line in this list
+      only to say so, because the sentence below is a PRESCRIPTION the reader
+      acts on, and this repo has already shipped a runtime string that outlived
+      the behaviour it described.
     * cross-file duplicate-code and interface-reference-cycle -- no per-file
       answer can be correct.
     * exception-class enrichment -- a class's message routinely lives in a
@@ -10415,7 +10476,7 @@ begin
     if FlowStoreSeen then
       Writeln(ErrOutput,
         'drag-lint: note: project rules ran for this file. STILL NOT reported here: ' +
-        'doc-drift/missing-doc (pass --project-rules), review-marker-unused, cross-file ' +
+        'doc-drift/missing-doc (pass --project-rules), cross-file ' +
         'duplicate-code, interface-reference-cycle, exception-class enrichment, and ' +
         'unit-not-in-dpr without --project.')
     else
@@ -10447,11 +10508,32 @@ begin
         Findings[SiI].Message:= StringReplace(Findings[SiI].Message, EffPath, StandInLogical, [rfReplaceAll]);
     end;
 
+  { See the argument's comment below for why a stand-in run withholds this. }
+  var MarkerScanSet: TArray<string>:= ScannedFiles;
+  if StandInLogical <> '' then MarkerScanSet:= nil;
+
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
     procedure(ASurv: TArray<TLintFinding>) var FF: TLintFinding; begin for FF in ASurv do Writeln(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol,
             FF.Severity, FF.RuleId, FF.Message])); Writeln(Format('%d finding(s)', [Length(ASurv)])); end,
-    Store, nil, '', WalkSkipped
+    { Item 1b: the scanned set makes review-marker-unused and
+      review-marker-malformed reachable from `lint` at all. Both were structurally
+      impossible here -- this argument was nil -- so a file could carry a marker
+      that suppresses nothing, or a marker whose rule id is a typo, and the
+      per-file verb reported neither. See docs\INBOX-lint-verb-cannot-report-unused-markers.md.
+
+      >>> WITHHELD FOR A STAND-IN RUN, DELIBERATELY, AND THIS IS NOT TIMIDITY.
+      When StandInLogical <> '' the analysed path is a materialised snapshot in
+      this process's temp directory, and the loop above has ALREADY rewritten
+      every finding's path back to the buffer the user is looking at. Marker
+      findings are created INSIDE FinalizeAndOutput, after that rewrite, so they
+      would carry the snapshot path -- and a consumer maps a diagnostic to a
+      buffer BY PATH. The IDE would put marks in a file that is deleted moments
+      later. That is the precise failure the rewrite loop's own comment warns
+      about, and it is worse than the gap this closes, so the stand-in path
+      keeps the documented degraded behaviour until the rewrite and the marker
+      scan are ordered properly. }
+    Store, MarkerScanSet, '', WalkSkipped
   );
 end; // function
 
