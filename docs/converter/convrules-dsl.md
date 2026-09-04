@@ -463,28 +463,42 @@ It reports one warning per uncovered member, naming both
 Stated plainly so nobody files them as bugs, and so nobody believes the DSL does more than
 it does.
 
-1. **`convert-apply` does not evaluate `#mapping` / `#apply`.** Deferred by design --
-   spec G6.1. The editor authors rules the engine cannot yet apply. Conditional
-   application is genuinely new work: it must read EACH `.dfm` instance's own source value
-   and select the matching case, where the existing `#default` is the same for every
-   instance.
+1. ~~**`convert-apply` does not evaluate `#mapping` / `#apply`.**~~ **RESOLVED
+   2026-09-04.** The engine now parses, validates and APPLIES them.
 
-   The visible consequence today: the engine's parser
-   (`src\report\DRagLint.Convert.Rules.pas`) recognises 12 directives and **not** these
-   two, so `convert-validate` reports them as unknown. Saving a book that contains a
-   mapping puts that on the editor's status bar, e.g.
+   This entry had been stale twice over. It described the directives as *unknown* to the
+   parser, which stopped being true when they were made recognised-and-skipped; and
+   recognised-and-skipped was itself worse than the error it replaced, because a rule book
+   asking for a mapping then got a clean `exit 0` and no mapping, **silently**. The repro
+   in `docs\INBOX-URGENT-engine-cannot-apply-mapping.md` parsed 2 of its 6 directives.
 
-   ```
-   Saved my.rules (backup my.rules.bak). Validate: line 1: unknown directive: #mapping
-   ```
+   What happens now:
 
-   The file on disk is correct and complete; the message is the engine saying it has not
-   caught up. (Measured 2026-08-02: `convert-validate` exits 1 and prints
-   `line N: unknown directive: #mapping` / `#apply` for each such line.)
+   * All three `#mapping` line forms and `#apply` parse into rules (`rkMapping` /
+     `rkApply`). The repro parses 6 of 6.
+   * `convert-validate` checks a `#when` path against the `--from` tree and a set list
+     against the `--to` tree, and errors on an `#apply` naming a mapping that was never
+     declared.
+   * `convert-apply` evaluates the mapping per `.dfm` instance: first matching `#when`
+     wins, `#else` is the fallback, and the consumed source property is not also re-emitted
+     raw.
+   * `#else` fires **only when the source property is present** in that instance's block.
+     An absent source is an informational note -- firing `#else` there would invent a
+     target value from a property the form never set.
+   * An `#apply` that matches nothing is reported as REMAINDER, naming the mapping, the
+     `#apply` line, the source path and the unmatched value. See
+     `apply-remainder-contract.md`.
+
+   Still true: conditional application reads EACH instance's own source value, where
+   `#default` is the same for every instance.
 
 2. **`ValidateMappings` is never run over a whole book.** It is invoked only from the
-   mapping editor, over the mapping being edited. A broken `#apply` in a block you never
-   opened -- one naming a mapping that no longer exists, say -- reports clean.
+   mapping editor, over the mapping being edited.
+
+   Partly covered as of 2026-09-04: `convert-validate` now reports an `#apply` naming an
+   undeclared mapping anywhere in the book, and does so without needing property trees --
+   the mode the editor's save-validate runs in. What is still not checked book-wide is the
+   rest of `ValidateMappings`' surface.
 
 3. **A `#convert` block whose body maps nothing is DROPPED on save.**
    `TRuleBook.BlockMapsSomething` rescues a block containing at least one `#link`,

@@ -63,9 +63,10 @@
 //     enum types with no property that carries them (TUpdateKind, TUpdateAction,
 //     TDBScreenCursors), or classes with no published surface at all
 //     (TBlobStream, EDBEngineError). They are carried VERBATIM, not dropped.
-//   * convert-apply does not evaluate #mapping/#apply yet (DSL doc, Known limits
-//     #1), so a post-save `convert-validate` reports those two directives as
-//     unknown. The file is correct; the engine has not caught up.
+//   * (2026-09-04) convert-apply now DOES evaluate #mapping/#apply, and
+//     convert-validate no longer reports them as unknown. This note previously
+//     said the engine had not caught up; it has. See the DSL doc's Known
+//     limits #1 and docs\converter\apply-remainder-contract.md.
 //
 // Unit/file renames (uAD.inc -> FireDAC.inc and 210 more) are a DIFFERENT domain
 // and are deliberately NOT merged here -- see convrules\FireDAC_Rename_Units.rules.
