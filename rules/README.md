@@ -114,7 +114,7 @@ Works for both external `.scm` rules and the built-in checks.
 | `with-statement` | info | `with` statement makes symbol scope ambiguous |
 | `empty-procedure-body` | info | Empty `procedure`/`function` body (begin..end with no statements) |
 | `large-magic-number` | info | Numeric literal not in the common-constants allow-list |
-| `string-equality-comparison` | info | `=` comparison on expressions — fires on all `=` binary expressions until type-resolution is plumbed in (v0.19+) |
+| `string-equality-comparison` | info | **Off by default** (opt in via `--rule` or config `"enabled"`). `=` comparison on expressions — fires on all `=` binary expressions until type-resolution is plumbed in (v0.19+) |
 
 ## Shipped rules (v0.31)
 
@@ -154,7 +154,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `raise-bare-exception` | warning | `raise Exception.Create(...)` raises the root class -- use a subclass |
 | `reraise-loses-stack` | warning | `raise E;` resets the stack trace -- use a bare `raise;` |
 | `off-by-one-count` | warning | `for I := 0 to X.Count/Length(X)` runs one past the end |
-| `nil-comparison` | info | Prefer `Assigned(X)` over `X = nil` / `X <> nil` |
+| `nil-comparison` | info | **Off by default** (opt in via `--rule` or config `"enabled"`). Prefer `Assigned(X)` over `X = nil` / `X <> nil` |
 | `not-in-precedence` | warning | `not X in S` parses as `(not X) in S` -- write `not (X in S)` |
 | `classname-string-compare` | warning | `X.ClassName = 'TFoo'` is fragile -- use `is` / `InheritsFrom` |
 | `inline-assembly` | info | `asm ... end` block -- not portable across platforms |

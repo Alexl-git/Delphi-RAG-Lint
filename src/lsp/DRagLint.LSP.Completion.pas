@@ -234,6 +234,7 @@ implementation
 uses
   DRagLint.Doc.Regions
   , DRagLint.Core.LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
+  , DRagLint.Lint.RuleCatalog  { BUILTIN_RULES_OFF_BY_DEFAULT -- the CLI's default-off set }
   ;
 
 { TLspCompletion }
@@ -868,9 +869,38 @@ var
   CStart   : TJSONObject             ;
   CEnd     : TJSONObject             ;
   CRange   : TJSONObject             ;
+  { FP3c: the default-disabled set this surface must honour, exactly as
+    FinalizeAndOutput does for the CLI. }
+  DefOff   : TArray<string>          ;
+
+  { True when ARuleId ships OFF by default, so ShouldKeep may only publish it
+    when the project's drag-lint-lint.json opts back in via "enabled".
+
+    THE DEFECT THIS CLOSES: both ShouldKeep calls below passed a literal False
+    -- "no rule is default-disabled" -- so the LSP published every rule the CLI
+    hides. The IDE gutter reads THESE diagnostics (the live runner's 8 s budget
+    is missed on a repo this size), so the surface a human actually looks at was
+    the one surface with no default-off filter at all: 461
+    string-equality-comparison + 888 nil-comparison spurious marks on this repo. }
+  function IsDefaultDisabled(const ARuleId: string): Boolean;
+  var
+    DId: string;
+  begin
+    for DId in DefOff do
+      if SameText(DId, ARuleId) then Exit(True);
+    Result:= False;
+  end;
+
 begin
   Result:= TJSONArray.Create;
   if not TFile.Exists(AFile) then Exit;
+
+  { The two halves of the set, same as the CLI verbs: the .scm rules whose own
+    JSON says "enabled": false, plus the built-in ids the catalog marks off.
+    PROJECT_RULES_OFF_BY_DEFAULT is deliberately NOT here -- those rules are
+    emitted by the project verbs only and cannot reach this per-file path. }
+  DefOff:= BUILTIN_RULES_OFF_BY_DEFAULT;
+  if Assigned(ALinter) then DefOff:= DefOff + ALinter.DefaultDisabledRuleIds;
 
   { v0.77: honor an up-tree lint config so the IDE can disable noisy rules /
     override severities, matching the CLI. Empty path -> no-op default (keep all). }
@@ -904,7 +934,7 @@ begin
     end;
     for F in Findings do
     begin
-      if not Cfg.ShouldKeep(F.RuleId, False) then Continue; { config-disabled rule }
+      if not Cfg.ShouldKeep(F.RuleId, IsDefaultDisabled(F.RuleId)) then Continue; { config-disabled or off by default }
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
 
       DiagObj:= TJSONObject.Create;
@@ -971,7 +1001,7 @@ begin
   if SameText(ExtractFileExt(AFile), '.pas') or SameText(ExtractFileExt(AFile), '.inc') then
     for F in TCloneChecker.Check(AFile) do
     begin
-      if not Cfg.ShouldKeep(F.RuleId, False) then Continue; { config-disabled }
+      if not Cfg.ShouldKeep(F.RuleId, IsDefaultDisabled(F.RuleId)) then Continue; { config-disabled or off by default }
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
       DiagObj := TJSONObject.Create;
       StartObj:= TJSONObject.Create;

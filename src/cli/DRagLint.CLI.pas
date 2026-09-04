@@ -9943,84 +9943,22 @@ begin
       if Linter.ExternalRuleCount = 0 then Writeln(ErrOutput,
         'drag-lint: note: 0 external .scm rules loaded -- place a "rules" folder next to drag-lint.exe, or pass --rules-dir <path> (built-in checks still run).');
       DefDisabled:= Linter.DefaultDisabledRuleIds; // capture before Free
-      { v0.71: function-result-ignored ships OFF by default (FP-prone -- builders/
-        adders/runners legitimately discard results). Opt in via drag-lint-lint.json
-        "enabled": ["function-result-ignored"] or --rule function-result-ignored. }
-      if AArgs.Rule <> 'function-result-ignored' then DefDisabled:= DefDisabled + ['function-result-ignored'];
-      { v0.71: unsafe-typecast-without-is also OFF by default (an unguarded hard cast
-        is often provably safe to the author -> too noisy for the default set). }
-      if AArgs.Rule <> 'unsafe-typecast-without-is' then DefDisabled:= DefDisabled + ['unsafe-typecast-without-is'];
-      { v0.74: exhaustive-enum-case OFF by default (a case that intentionally handles
-        a subset of an enum with no else is common -> opt in for enum-heavy code). }
-      if AArgs.Rule <> 'exhaustive-enum-case' then DefDisabled:= DefDisabled + ['exhaustive-enum-case'];
-      { v0.82: interface-object-mixing OFF by default (#4 first cut -- a same-routine
-        object/interface dual-handle heuristic; conservative but still opt-in). }
-      if AArgs.Rule <> 'interface-object-mixing' then DefDisabled:= DefDisabled + ['interface-object-mixing'];
-      { v0.76: multiple-statements-per-line OFF by default (pure style). }
-      if AArgs.Rule <> 'multiple-statements-per-line' then DefDisabled:= DefDisabled + ['multiple-statements-per-line'];
-      { v0.79: magic-literal OFF by default (medium-FP -- opt in via
-        drag-lint-lint.json "enabled": ["magic-literal"] or --rule magic-literal). }
-      if AArgs.Rule <> 'magic-literal' then DefDisabled:= DefDisabled + ['magic-literal'];
-      { v0.79: boolean-flag-parameter OFF by default (Boolean flag params are
-        common in this codebase -- opt in via "enabled": ["boolean-flag-parameter"]
-        or --rule boolean-flag-parameter). }
-      if AArgs.Rule <> 'boolean-flag-parameter' then DefDisabled:= DefDisabled + ['boolean-flag-parameter'];
-      { commented-out-code OFF by default -- owner ruling 2026-08-13: parking code
-        or a debug Writeln behind a comment is a deliberate working habit here,
-        and the rule cannot tell that from an accident. It also cannot tell code
-        from PROSE ABOUT code (both YADF hits were a doc comment showing a
-        before/after example). Opt in via "enabled":["commented-out-code"]. }
-      if AArgs.Rule <> 'commented-out-code' then DefDisabled:= DefDisabled + ['commented-out-code'];
-      { string-equality-comparison + nil-comparison ship OFF here too, and they
-        HAVE to be listed on every surface separately: the per-file `lint`, the
-        `lint-project` and the `lint-all` verbs each build this list by hand, so
-        adding a rule to one leaves the same question answered differently
-        depending on which verb you came through. This one matters more than
-        most -- the per-file path is what the IDE plugin runs, so a rule
-        suppressed only in lint-all would still be the noisiest thing a human
-        actually sees.
-        Neither is a defect check: the first fires on EVERY string '=' and
-        cannot tell "meant case-insensitive" from "meant case-sensitive" (its
-        top sites are AST tag comparisons where SameText would be a BUG); the
-        second reports a style preference on every nil test. 406 and 311
-        findings on this repo alone. Opt in with --rule or config "enabled". }
-      if AArgs.Rule <> 'string-equality-comparison' then DefDisabled:= DefDisabled + ['string-equality-comparison'];
-      if AArgs.Rule <> 'nil-comparison' then DefDisabled:= DefDisabled + ['nil-comparison'];
-      { v0.79: public-writable-field OFF by default -- FP-sanity over src/ found
-        44 findings concentrated in 6/103 files, almost all intentional public
-        field-bag "record-like classes" (TCfgBlock/TCfg internal data carriers,
-        plugin form-helper classes) -- a deliberate codebase idiom, not scattered
-        accidental encapsulation breaks. Opt in via "enabled": ["public-writable-
-        field"] or --rule public-writable-field. }
-      if AArgs.Rule <> 'public-writable-field' then DefDisabled:= DefDisabled + ['public-writable-field'];
-      { v0.79: loop-control-flag OFF by default -- the riskiest heuristic of
-        the batch (a while/repeat condition identifier also reset to a bare
-        True/False inside the body). Opt in via "enabled": ["loop-control-
-        flag"] or --rule loop-control-flag. }
-      if AArgs.Rule <> 'loop-control-flag' then DefDisabled:= DefDisabled + ['loop-control-flag'];
-      { v0.80: mutable-global-variable OFF by default -- FP-sanity over src/ found
-        68 findings across 27/103 files (mostly legitimate G-prefixed plugin
-        singletons/caches) -- too common in this codebase to be ON. Opt in via
-        "enabled": ["mutable-global-variable"] or --rule mutable-global-variable. }
-      if AArgs.Rule <> 'mutable-global-variable' then DefDisabled:= DefDisabled + ['mutable-global-variable'];
-      { v0.81: default-encoding-io OFF by default -- FP-sanity over src/ found 65
-        findings across 16/103 files, mostly TFile.ReadAllText on known-ASCII
-        project/config files (dproj/json) -- a common, often-intentional pattern
-        in this codebase. Opt in via "enabled": ["default-encoding-io"] or
-        --rule default-encoding-io. }
-      if AArgs.Rule <> 'default-encoding-io' then DefDisabled:= DefDisabled + ['default-encoding-io'];
-      { v0.83: split-variable OFF by default -- M2 two-live-range flow signal
-        (a local reused for two unrelated purposes). Linear-routine-only, low-FP,
-        but a refactoring hint rather than a bug. Opt in via "enabled":
-        ["split-variable"] or --rule split-variable. }
-      if AArgs.Rule <> 'split-variable' then DefDisabled:= DefDisabled + ['split-variable'];
-      { v0.83: separate-query-from-modifier OFF by default -- Command-Query Separation
-        is inherently noisy (lazy-caching getters, fluent mutators). Conservative
-        field-write predicate keeps FP low, but ships OFF. Opt in via "enabled":
-        ["separate-query-from-modifier"] or --rule separate-query-from-modifier. }
-      if AArgs.Rule <> 'separate-query-from-modifier' then DefDisabled:= DefDisabled + ['separate-query-from-modifier'];
+      { The per-file rules that ship OFF by default. The sixteen ids and the
+        reason for each now live ONCE, in
+        DRagLint.Lint.RuleCatalog.BUILTIN_RULES_OFF_BY_DEFAULT.
+
+        They used to be written out by hand here AND in lint-all, and the LSP --
+        the surface the IDE gutter actually reads -- had no such list at all, so
+        it published every one of them: 1,349 spurious marks on this repo. That
+        is the third-copy disease PROJECT_RULES_OFF_BY_DEFAULT already records,
+        so the fix is the same one: one list, consumed by every surface.
+
+        The `--rule <id>` guard stays exactly as it was -- naming a rule
+        explicitly opts it back in for this run. }
+      for var BOff: string in BUILTIN_RULES_OFF_BY_DEFAULT do
+        if AArgs.Rule <> BOff then DefDisabled:= DefDisabled + [BOff];
       { The project-level rules T4 made reachable from this verb. Same guard
-        pattern as every line above: --rule <id> still opts one back in. }
+        pattern as the loop above: --rule <id> still opts one back in. }
       for var POff: string in PROJECT_RULES_OFF_BY_DEFAULT do
         if AArgs.Rule <> POff then DefDisabled:= DefDisabled + [POff];
       { --rule MUST gate the external query-rule pass too, not just the built-in
@@ -15464,51 +15402,33 @@ begin
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
   end;
 
-  { v0.71/v0.74/v0.79/v0.80/v0.81/v0.82: function-result-ignored + unsafe-typecast-without-is +
-    exhaustive-enum-case + multiple-statements-per-line + magic-literal +
-    boolean-flag-parameter + public-writable-field + loop-control-flag +
-    mutable-global-variable + repeated-type-switch + middle-man + default-encoding-io +
-    fan-out + fan-in + feature-envy + instability + split-variable +
-    separate-query-from-modifier + missing-doc
-    are OFF by default here too (opt in via config "enabled"). middle-man / fan-out /
-    fan-in / feature-envy / instability are emitted by TClassMetrics.Run above; catalog
-    False alone does not suppress CLI output, so they must be listed here for the
-    ShouldKeep filter to drop them by default. split-variable (flow) and
-    separate-query-from-modifier (AST) are emitted above -- same reasoning.
-    ADF Task 13 fix: missing-doc ships OFF (catalog default_enabled=false) but is
-    a PROJECT-level rule (TDocLintRules), so it is NOT in Linter.DefaultDisabledRuleIds
-    and would otherwise fire on every bare lint-all (the measured 1302-finding wave).
-    List it here so ShouldKeep drops it by default; config "enabled":["missing-doc"]
-    still overrides (opt-in). doc-drift stays ON -- do NOT list it. }
+  { The default-disabled set, in three parts and no hand-written copies:
+
+      ScmDefOff                     -- .scm rules whose own JSON says
+                                       "enabled": false.
+      PROJECT_RULES_OFF_BY_DEFAULT  -- middle-man / fan-out / fan-in /
+                                       feature-envy / instability (emitted by
+                                       TClassMetrics.Run above), repeated-type-
+                                       switch and missing-doc. A catalog
+                                       default_enabled=False does NOT suppress
+                                       CLI output on its own, so these must be
+                                       named for the ShouldKeep filter; missing-
+                                       doc in particular is a TDocLintRules
+                                       project rule absent from
+                                       Linter.DefaultDisabledRuleIds, and left
+                                       off this list it fires the measured
+                                       1302-finding wave on every bare lint-all.
+      BUILTIN_RULES_OFF_BY_DEFAULT  -- the sixteen per-file ids, defined once in
+                                       DRagLint.Lint.RuleCatalog with the reason
+                                       for each. This verb and `lint` used to
+                                       write them out separately, and the LSP
+                                       wrote no list at all.
+
+    Config "enabled":["<id>"] still overrides any of them (opt-in). doc-drift
+    stays ON -- do NOT add it. }
   Prof.Phase('finalize+output');
   Result:= FinalizeAndOutput(
-    AArgs, Findings, ScmDefOff + PROJECT_RULES_OFF_BY_DEFAULT + [
-      'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case', 'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter',
-      'public-writable-field', 'loop-control-flag', 'mutable-global-variable', 'default-encoding-io',
-      'interface-object-mixing', 'split-variable', 'separate-query-from-modifier',
-      { commented-out-code -- owner ruling 2026-08-13. Parking code, or commenting
-        out a debug Writeln that may be wanted again, is a deliberate habit here,
-        and the rule cannot distinguish that from an oversight. Nor can it tell
-        code from PROSE ABOUT code: both YADF hits were one doc comment showing a
-        before/after example of what the formatter does. Opt in per project with
-        "enabled":["commented-out-code"]. }
-      'commented-out-code',
-      { string-equality-comparison ships OFF for the same reason as the rest of
-        this list, and it is the largest single contributor the list has ever
-        had: 406 findings on drag-lint's own source. It fires on EVERY '=' whose
-        operands are both strings, which makes it a census of string comparisons
-        rather than a report of defects, and its top sites are AST node-type tag
-        comparisons (NT = 'exprUnary') where case-sensitivity is precisely what
-        is wanted -- SameText there would be a BUG. Catalog default_enabled=False
-        alone does not suppress CLI output, so it must be listed here too. }
-      'string-equality-comparison',
-      { nil-comparison ships OFF for the same reason: 311 findings, and its
-        message is "prefer Assigned(X) over X <> nil". Both forms are correct
-        Delphi and the codebase uses `<> nil` deliberately on non-object
-        pointers, where Assigned reads as an object test. It reports a STYLE
-        PREFERENCE on every nil test in the program, which is a census, not a
-        defect report. Opt in via "enabled" for a deliberate sweep. }
-      'nil-comparison'],
+    AArgs, Findings, ScmDefOff + PROJECT_RULES_OFF_BY_DEFAULT + BUILTIN_RULES_OFF_BY_DEFAULT,
     { The roll-up counts EVERY severity, not just error-vs-everything-else. It
       used to be `if error then Inc(EC) else Inc(WC)`, so a run of 62 hint + 138
       info + 79 warning reported "0 error(s), 279 warning(s)" -- the one number a
@@ -15613,22 +15533,31 @@ begin
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
   NoteIndexFreshnessOnce(Store, AArgs.DbPath);
-  { v0.80 review fix: repeated-type-switch is OFF by default (medium name-based FP --
-    see .superpowers/sdd/v080-task-4-report.md). Route through FinalizeAndOutput below
-    so the DefDisabled + ShouldKeep filter actually applies to lint-project output
-    (previously this command wrote Findings straight to stdout, unfiltered). }
+  { The project-level rules that ship OFF by default -- repeated-type-switch
+    (v0.80 review fix: medium name-based FP, see
+    .superpowers/sdd/v080-task-4-report.md) and missing-doc (ADF Task 13: a
+    TDocLintRules rule, so absent from Linter.DefaultDisabledRuleIds, and
+    without this it fires on every bare lint-project) among them. Routing them
+    through FinalizeAndOutput is what makes the ShouldKeep filter apply to this
+    verb's output at all; before v0.80 it wrote Findings straight to stdout.
+    doc-drift stays ON -- it is deliberately not in the list. }
   DefDisabled:= nil;
-  if AArgs.Rule <> 'repeated-type-switch' then DefDisabled:= DefDisabled + ['repeated-type-switch'];
-  { ADF Task 13 fix: missing-doc ships OFF by default (catalog default_enabled=false)
-    but is a PROJECT-level rule (TDocLintRules), not in Linter.DefaultDisabledRuleIds,
-    so without this it fires on every bare lint-project. Add it to the default-disabled
-    set here too; the --rule guard keeps explicit --rule missing-doc opt-in-able, and
-    config "enabled":["missing-doc"] still overrides via ShouldKeep. doc-drift stays ON. }
-  if AArgs.Rule <> 'missing-doc' then DefDisabled:= DefDisabled + ['missing-doc'];
-  { Same reasoning, same trap: commented-out-code is a BUILT-IN, so the
-    catalogue's default_enabled=false does not reach DefDisabled on its own.
-    See DoLint for the owner ruling this encodes. }
-  if AArgs.Rule <> 'commented-out-code' then DefDisabled:= DefDisabled + ['commented-out-code'];
+  for var POff: string in PROJECT_RULES_OFF_BY_DEFAULT do
+    if AArgs.Rule <> POff then DefDisabled:= DefDisabled + [POff];
+  { Same reasoning, same trap: a BUILT-IN's catalogue default_enabled=false does
+    not reach DefDisabled on its own. This line used to name commented-out-code
+    alone, which made it a one-element hand-written copy of the list `lint` and
+    `lint-all` each wrote out in full -- the drift channel where the same
+    question gets a different answer depending on which verb you came through.
+    It is the whole set now, from the one definition in the rule catalog.
+
+    None of the other fifteen is reachable from this verb's rule set today (it
+    runs the project rules, interface cycles, layering, used-unit-resolvable,
+    missing-doc and doc-drift -- no per-file checker), so this is defence in
+    depth rather than a behaviour change: verified by diffing lint-project's
+    full output over this repo's own DB across the change, 929 lines identical. }
+  for var BOff: string in BUILTIN_RULES_OFF_BY_DEFAULT do
+    if AArgs.Rule <> BOff then DefDisabled:= DefDisabled + [BOff];
   { Same sibling resolver as DoLintAll -- `lint-project --rule unused-public-symbol`
     must answer the shared-unit question the same way the full run does, or the
     two entry points disagree about whether a routine is dead. }

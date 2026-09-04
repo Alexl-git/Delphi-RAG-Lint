@@ -27,6 +27,69 @@ const
   DEFAULT_COGNITIVE_THRESHOLD  = 65 ; // was 25; median flagged value was 40
   DEFAULT_METHOD_TOO_LONG      = 250; // was 120; median flagged body was 182
 
+const
+  { THE PER-FILE RULES THAT SHIP OFF BY DEFAULT, IN ONE PLACE.
+
+    A catalog entry's default_enabled=False does NOT suppress output on its own:
+    every surface that reports findings has to hand these ids to
+    TLintConfig.ShouldKeep as the "default-disabled" set, or the rule is
+    published anyway. The CLI's `lint` and `lint-all` verbs each wrote that list
+    out by hand, and the LSP -- a THIRD surface, and the one the IDE gutter
+    actually reads -- wrote no list at all: DRagLint.LSP.Completion passed a
+    literal False for every rule. Measured on this repo, that published 461
+    string-equality-comparison plus 888 nil-comparison marks that the CLI hides,
+    1,349 spurious gutter marks whose only effect is to teach a reader to skim.
+
+    So it is ONE list, and it lives in the catalog -- the unit that already owns
+    rule ids and is a leaf, so the CLI, the LSP and anything later can all see
+    it. This is the same ruling PROJECT_RULES_OFF_BY_DEFAULT records in
+    DRagLint.CLI for the project-level rules; those stay there because only the
+    project verbs can emit them, whereas every id below is reachable from a
+    single-file lint.
+
+    Why each one is off (the reasons the two CLI copies carried):
+      function-result-ignored     FP-prone -- builders/adders/runners legitimately
+                                  discard a result.
+      unsafe-typecast-without-is  an unguarded hard cast is usually provably safe
+                                  to the author.
+      exhaustive-enum-case        handling a deliberate subset with no else is
+                                  ordinary.
+      interface-object-mixing     first-cut same-routine dual-handle heuristic.
+      multiple-statements-per-line pure style.
+      magic-literal               medium-FP; floods legacy code.
+      boolean-flag-parameter      a common, deliberate idiom here.
+      commented-out-code          owner ruling 2026-08-13: parking code is a
+                                  working habit, and the rule cannot tell code
+                                  from PROSE ABOUT code.
+      string-equality-comparison  a CENSUS, not a defect check -- it fires on
+                                  every string '=' and cannot tell "meant
+                                  case-insensitive" from "meant case-sensitive";
+                                  its top sites are AST tag comparisons where
+                                  SameText would be a BUG. 406 findings here.
+      nil-comparison              reports a STYLE PREFERENCE on every nil test;
+                                  `<> nil` is deliberate on non-object pointers.
+                                  311 findings here.
+      public-writable-field       measured 44 findings in 6/103 files, almost all
+                                  intentional record-like data carriers.
+      loop-control-flag           the riskiest heuristic of its batch.
+      mutable-global-variable     68 findings across 27/103 files, mostly
+                                  legitimate singletons/caches.
+      default-encoding-io         65 findings, mostly ReadAllText on known-ASCII
+                                  project/config files.
+      split-variable              a refactoring hint, not a bug.
+      separate-query-from-modifier CQS is inherently noisy (lazy getters, fluent
+                                  mutators).
+
+    Every one of them is opt-in, unchanged: `--rule <id>` on the CLI, or
+    "enabled":["<id>"] in drag-lint-lint.json, which ShouldKeep honours. }
+  BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string> = [
+    'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case',
+    'interface-object-mixing', 'multiple-statements-per-line', 'magic-literal',
+    'boolean-flag-parameter', 'commented-out-code', 'string-equality-comparison',
+    'nil-comparison', 'public-writable-field', 'loop-control-flag',
+    'mutable-global-variable', 'default-encoding-io', 'split-variable',
+    'separate-query-from-modifier'];
+
 type
   /// <summary>A single configurable parameter of a rule (threshold or naming knob).</summary>
   /// <remarks>
@@ -501,6 +564,14 @@ begin
           if (Obj.GetValue('enabled') <> nil) then
             Sc.DefaultEnabled:= not SameText(Obj.GetValue('enabled').Value, 'false')
           else Sc.DefaultEnabled:= True;
+          { An .scm sidecar that forgets "enabled": false is still OFF if the
+            engine's shared list says so. nil-comparison is exactly that case:
+            its JSON says nothing, so `rules --json` advertised
+            default_enabled=true for a rule every lint verb hides -- and the
+            plugin's Options page, which ticks its checkboxes from this field,
+            showed it ON. The catalogue is what a user reads to find out what
+            runs; it does not get to disagree with what runs. }
+          if MatchStr(Id, BUILTIN_RULES_OFF_BY_DEFAULT) then Sc.DefaultEnabled:= False;
           Sc.Params:= nil;
           ById.Add(Id, Sc); Order.Add(Id);
         finally
