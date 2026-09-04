@@ -1247,6 +1247,28 @@ begin
     begin
       if LinkRule.Kind <> rkLink then Continue;
       if (LinkRule.ToPath = '') or (LinkRule.FromPath = '') then Continue;
+      { A CAST IS NOT YET PERFORMED, SO THE RENAME IS REFUSED RATHER THAN
+        HALF-APPLIED. This surface rewrites the member IDENTIFIER at an access
+        site: `obj.Old` -> `obj.New`. A rule carrying `: Round` says the VALUE
+        also needs converting, and this code cannot do that. Renaming without it
+        would emit source that compiles and is numerically wrong -- the worst
+        possible outcome, and strictly worse than the defect this cast handling
+        was added to fix.
+
+        Before the FromPath split landed, `: Round` was swallowed into FromPath
+        and matched no member, so nothing was rewritten by accident. Making the
+        path resolve correctly therefore OPENS this hazard, and this guard is
+        what keeps it closed. It is loud (a warning naming the rule and its cast)
+        rather than silent, because a skipped conversion the operator never hears
+        about is the same class of defect. }
+      if LinkRule.Cast <> '' then
+      begin
+        Warnings.Add(Format('line %d: #link %s <- %s : %s SKIPPED on the .pas side -- ' +
+          'the cast is not applied by convert-apply, and renaming without it would produce ' +
+          'wrong values. Convert this access site by hand.',
+          [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast]));
+        Continue;
+      end;
       if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
       if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
 

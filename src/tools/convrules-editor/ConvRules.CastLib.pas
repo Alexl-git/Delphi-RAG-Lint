@@ -4,9 +4,21 @@ unit ConvRules.CastLib;
 
   A .castlib defines named CLASS casts (TPicture -> TdxSmartGlyph, ...) that the
   scalar TCastFn enum cannot express. Each cast lists the From types it accepts, the
-  To type(s) it yields, and realization hints (dfm strategy, pas template, todo text)
-  the ENGINE convert-apply consumes -- the editor only needs name/accepts/yields to
-  decide castability and emit the '#link ... : <name>' suffix.
+  To type(s) it yields, and realization hints (dfm strategy, pas template, todo text).
+  The editor uses name/accepts/yields to decide castability and emit the
+  '#link ... : <name>' suffix.
+
+  THE REALIZATION HINTS ARE EDITOR-SIDE ONLY, as of 2026-09-04. This comment used
+  to say the engine's convert-apply consumes them. It does not, and never has:
+  nothing under src\report\ or src\cli\ reads a .castlib at all. Spec item G6.3
+  asked for exactly this -- "correct the comment or build the consumer; do not
+  leave it asserting both" -- and the comment was left asserting both for a month.
+
+  What the engine DOES do, since 2026-09-04: its rule parser now splits the
+  `: CastName` suffix off FromPath instead of swallowing it (which used to make
+  valid lines fail validation), and convert-apply REFUSES to rewrite a .pas
+  access site for a link that carries a cast, warning instead of renaming without
+  performing the conversion. Building the hint consumer remains open work.
 
   Pure + headless (no VCL, no engine, no process spawn) so it is unit-tested against
   inline fixtures. }

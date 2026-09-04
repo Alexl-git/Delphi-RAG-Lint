@@ -87,6 +87,11 @@ type
     UnitsAdd: TArray<string>;
     DfmOnly : Boolean;
     LineNo  : Integer;
+    /// <summary>rkLink only: the optional `: CastFn` suffix on the FromPath side
+    /// ('' = identity). Captured so it stops corrupting FromPath; NOT yet
+    /// performed by convert-apply, which refuses to rewrite a link carrying one
+    /// rather than silently dropping the conversion.</summary>
+    Cast    : string;
   end;
 
   /// <summary>One parse-or-validation error, anchored to a source line.</summary>
@@ -280,6 +285,41 @@ begin
   AOld:= Trim(S);
 end;
 
+{ Splits the optional `: CastFn` suffix off a #link FromPath.
+
+  WHY THIS EXISTS. The engine's parser had no cast field at all, so
+  `#link Size <- Size : Round` produced the literal FromPath `Size : Round`,
+  which resolves against nothing -- and validation then reported the user's
+  VALID line as a missing path:
+
+      line 6: link FromPath not found in --from tree: Size : Round
+
+  That fires on `convrules\sample.rules`, a file this repo SHIPS.
+  `--print-parsed` made it worse by echoing `link Size <- Size : Round`, which
+  reads as though the cast had been captured; it was echoing the corruption.
+
+  THE PREDICATE IS THE EDITOR'S, DELIBERATELY. ConvRules.Model.pas already
+  parses and re-emits this suffix correctly (search that unit for `N.Cast`), and
+  the editor ROUND-TRIPS rule books. Two different notions of "is this a cast"
+  would mean the editor and the engine disagree about the same file, and the
+  failure mode of that is silent DATA LOSS on save -- so this mirrors it exactly
+  rather than inventing a second rule: split on the LAST colon, and accept the
+  tail only when it is a single bare identifier (no space, no dot, no '<'). A
+  path that merely contains a colon is therefore left alone. }
+procedure SplitCastSuffix(var APath: string; out ACast: string);
+var
+  ColonAt: Integer;
+  Tail   : string ;
+begin
+  ACast:= '';
+  ColonAt:= LastDelimiter(':', APath);
+  if ColonAt <= 0 then Exit;
+  Tail:= Trim(Copy(APath, ColonAt + 1, MaxInt));
+  if (Tail = '') or (Pos(' ', Tail) > 0) or (Pos('.', Tail) > 0) or (Pos('<', Tail) > 0) then Exit;
+  ACast:= Tail;
+  APath:= Trim(Copy(APath, 1, ColonAt - 1));
+end;
+
 function ParseConversionRules(const AText: string): TConversionRuleSet;
 var
   Lines : TArray<string>       ;
@@ -427,6 +467,7 @@ begin
         begin
           R.ToPath  := Trim(Copy(Arg, 1, ArrPos - 1));
           R.FromPath:= Trim(Copy(Arg, ArrPos + Length(ARROW_LINK), MaxInt));
+          SplitCastSuffix(R.FromPath, R.Cast);
         end
         else
         begin

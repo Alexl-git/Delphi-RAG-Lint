@@ -1,7 +1,17 @@
 # Shipped class-cast library for the conversion editor.
 # Each 'cast <Name> ... end' block defines a class-to-class cast the DSL names as the
-# '#link To <- From : <Name>' suffix. Realization hints (dfm/compat/pas/todo) are
-# consumed by the engine convert-apply; the editor uses name/accepts/yields.
+# '#link To <- From : <Name>' suffix. The editor uses name/accepts/yields.
+#
+# The realization hints (dfm/compat/pas/todo) are EDITOR-SIDE ONLY as of 2026-09-04.
+# This header used to say the engine's convert-apply consumes them. It does not, and
+# never has -- nothing under srceport\ or src\cli\ reads a .castlib. Spec item G6.3
+# asked for the comment to be corrected or the consumer built; the comment is now
+# correct and building the consumer remains open work.
+#
+# Since 2026-09-04 the engine DOES split the ': <Name>' suffix off the #link FromPath
+# (it used to swallow it and then report the valid line as a missing path), and
+# convert-apply refuses to rewrite a .pas access site for a link carrying a cast
+# rather than renaming without performing the conversion.
 # Strict 7-bit ASCII, CRLF.
 
 cast AssignGraphic

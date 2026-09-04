@@ -19289,7 +19289,14 @@ var
                             IfThen(Length(R.UnitsAdd) > 0, ' [+' + String.Join(',', R.UnitsAdd) + ']', '')]);
       rkConvert: Result:= Format('convert %s -> %s%s', [R.FromType, R.ToType,
                             IfThen(Length(R.UnitsAdd) > 0, ' [+' + String.Join(',', R.UnitsAdd) + ']', '')]);
-      rkLink   : Result:= Format('link %s <- %s', [R.ToPath, R.FromPath]);
+      { The cast is printed as a SEPARATE, LABELLED field, not re-joined onto
+        FromPath with ' : '. Re-joining is what this printer used to do by
+        accident -- it echoed the corrupted FromPath as `link Size <- Size :
+        Round`, which reads exactly like a captured cast and is why the parser
+        defect survived a review of this very output. A reader must be able to
+        tell "the cast was captured" from "the path swallowed it". }
+      rkLink   : Result:= Format('link %s <- %s%s', [R.ToPath, R.FromPath,
+                            IfThen(R.Cast <> '', ' [cast ' + R.Cast + ']', '')]);
       rkDefault: Result:= Format('default %s = %s', [R.ToPath, R.Value]);
       rkNote   : Result:= Format('note %s', [R.Text]);
       rkPcre   : Result:= Format('pcre %s -> %s', [R.Search, R.Replace]);
