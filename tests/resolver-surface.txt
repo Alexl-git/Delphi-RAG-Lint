@@ -78,6 +78,7 @@ EXCLUDE resolvesecs
 # `query`, the doc engine or the IDE, never from a walk.
 EXCLUDE findhelpersoftype
 EXCLUDE findhelpersoftypesymbol
+EXCLUDE findhelpermembernamesinunit
 EXCLUDE readhelperedges
 EXCLUDE findresolvedcallers
 EXCLUDE findunresolvednamecallers
