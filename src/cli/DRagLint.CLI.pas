@@ -19202,6 +19202,13 @@ begin
         JN.AddPair('visibility'    , N.Visibility);
         JN.AddPair('is_writable'   , TJSONBool.Create(N.IsWritable));
         JN.AddPair('member_kind'   , N.MemberKind);
+        { The `default` clause. ADDITIVE to proptree/2. has_default=false covers
+          `nodefault`, a bare `default;` (the default-ARRAY-PROPERTY directive,
+          which carries no value) and no clause at all -- in every one of those
+          the property is always streamed, so its absence from a .dfm is
+          genuinely unknown rather than "at its default". }
+        JN.AddPair('has_default'   , TJSONBool.Create(N.HasDefault));
+        JN.AddPair('default_value' , N.DefaultValue);
         JProps.AddElement(JN);
       end;
       JRoot.AddPair('properties', JProps);

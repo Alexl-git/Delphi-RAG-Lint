@@ -96,6 +96,30 @@ type
     Visibility  : string;   // proptree/2: effective (most-derived) visibility; '' if unresolvable
     IsWritable  : Boolean;  // proptree/2: REAL writability -- property leaves from resolved prop_access (R1/Task 6: ro=>false, rw/wo=>true, ''/NULL=>true back-compat); field leaves from R4 (false only for a class const)
     MemberKind  : string;   // proptree/2: 'property' or 'field' (R4: field/const leaves)
+    /// <summary>The value of the property's `default` clause, and whether it
+    /// has one at all.</summary>
+    /// <remarks>
+    /// WHY THIS EXISTS. A `.dfm` is SPARSE: Delphi streams a published property
+    /// only when its value DIFFERS from the `default` declared on it. So a
+    /// property missing from a `.dfm` block is not missing information -- it is
+    /// an UNREAD value, and this is where the reader gets it
+    /// (DRagLint.Convert.DfmReemit, which is pure and cannot look it up itself).
+    ///
+    /// HasDefault is False for `nodefault`, for a bare `default;` (that is the
+    /// DEFAULT ARRAY PROPERTY directive, which carries no value), and for a
+    /// declaration with no clause at all. In every one of those cases the
+    /// property is always streamed, so its absence from a `.dfm` is genuinely
+    /// unknown rather than "at its default" -- do NOT invent a value.
+    ///
+    /// Resolved at QUERY time by reading the declaring source line via the
+    /// symbol's file id + StartLine..EndLine, the same way GetClassSurface
+    /// does. It is deliberately NOT indexed: storing it would change extraction
+    /// and cost a DRAGLINT_EXTRACTOR_VERSION bump, which re-parses every
+    /// database. DefaultValue is the raw token text, verbatim and untranslated
+    /// ('True', 'bsSingle', '-1').
+    /// </remarks>
+    HasDefault  : Boolean;
+    DefaultValue: string;
   end;
 
   /// <summary>Tuning knobs for BuildPropTree.</summary>
@@ -247,6 +271,17 @@ function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
   const AOpts: TPropTreeOptions): TPropTree;
 
 implementation
+
+uses
+  System.IOUtils,  { TFile -- reading a declaring line for its `default` clause }
+  System.StrUtils; { PosEx }
+
+type
+  /// <summary>What a property declaration says about its `default`.</summary>
+  /// <remarks>Three outcomes, deliberately: collapsing dcAbsent into
+  /// dcNoDefault is what made a BARE REDECLARATION ('property AutoSize;',
+  /// which keeps the ancestor's default) report as having none.</remarks>
+  TDefaultClause = (dcAbsent, dcNoDefault, dcValue);
 
 // Parse the bare type token out of a property Signature. Handles a leading
 // ": " (some rows carry it, some do not) and stops at the first whitespace,
@@ -475,6 +510,121 @@ var
   // store, so --no-write-back (a read-only store handle) is unaffected.
   ChainCache: TDictionary<Int64 , TArray<TSymbol>>; // class id -> its resolved chain
   TypeCache : TDictionary<string, TSymbol        >; // 'lowername|scopefileid' -> resolved class
+  // file id -> that file's lines, read ONCE per query. The `default` clause is
+  // not indexed (storing it would change extraction and cost an extractor-version
+  // bump, which re-parses every database), so it is read from the declaring
+  // source line -- the same trick GetClassSurface uses. One read per FILE, not
+  // per property.
+  LineCache : TDictionary<Int64 , TArray<string> >;
+
+  // The declaring source text of ASym, StartLine..EndLine joined with a space.
+  // Empty when the file is unreadable or the range is nonsense -- an empty
+  // result means "unknown", never "no default".
+  function DeclTextOf(const ASym: TSymbol): string;
+  var
+    Lines: TArray<string>;
+    Path : string        ;
+    Span : TArray<string>;
+    i, Lo, Hi: Integer   ;
+  begin
+    Result:= '';
+    if ASym.FileId <= 0 then Exit;
+    if not LineCache.TryGetValue(ASym.FileId, Lines) then
+    begin
+      Lines:= nil;
+      Path := AStore.GetFilePath(ASym.FileId);
+      if (Path <> '') and TFile.Exists(Path) then
+        try
+          Lines:= TFile.ReadAllLines(Path, TEncoding.ANSI);
+        except  // dl:ok try-except-swallowed@bbcc -- nothing to log to; BuildPropTree is a pure query, and HasDefault=False already means "unknown"
+          on E: Exception do
+            { A source file that exists but cannot be READ (locked by the IDE,
+              permissions, a bad encoding) must degrade this ONE property to
+              "default unknown" -- it must not abort the whole property-tree
+              query, which answers many other questions that do not need the
+              file at all. There is nothing to log to: BuildPropTree is a pure
+              query with no report channel. The effect is visible to callers as
+              HasDefault=False, which they already treat as "do not invent a
+              value", so the failure is conservative rather than silent. }
+            Lines:= nil;
+        end;
+      LineCache.Add(ASym.FileId, Lines);
+    end;
+    if Length(Lines) = 0 then Exit;
+    Lo:= ASym.StartLine;
+    Hi:= ASym.EndLine;
+    if Hi < Lo then Hi:= Lo;
+    if (Lo < 1) or (Lo > Length(Lines)) then Exit;
+    if Hi > Length(Lines) then Hi:= Length(Lines);
+    SetLength(Span, Hi - Lo + 1);
+    for i:= Lo to Hi do
+      Span[i - Lo]:= Lines[i - 1];
+    Result:= Trim(string.Join(' ', Span));
+  end;
+
+  // True when ALow_ has AWord as a whole word starting at APos (so 'default'
+  // inside 'nodefault' or 'DefaultDrawing' does not match).
+  function IsWholeWordAt(const ALow: string; APos, ALen: Integer): Boolean;
+  begin
+    Result:= ((APos = 1) or (not CharInSet(ALow[APos - 1], ['a'..'z', '0'..'9', '_']))) and
+             ((APos + ALen > Length(ALow)) or
+              (not CharInSet(ALow[APos + ALen], ['a'..'z', '0'..'9', '_'])));
+  end;
+
+  function HasWholeWord(const ALow, AWord: string): Boolean;
+  var P: Integer;
+  begin
+    Result:= False;
+    P:= 1;
+    repeat
+      P:= PosEx(AWord, ALow, P);
+      if P = 0 then Exit(False);
+      if IsWholeWordAt(ALow, P, Length(AWord)) then Exit(True);
+      Inc(P, Length(AWord));
+    until False;
+  end;
+
+  // Classifies a property declaration's `default` clause. THREE outcomes, not
+  // two -- collapsing them is what made bare redeclarations report no default:
+  //
+  //   dcValue    -- `default <X>`; AValue is the raw token, verbatim.
+  //   dcNoDefault-- `nodefault`. An EXPLICIT cancellation of an inherited
+  //                 default (real and common: `property Color nodefault;`).
+  //                 It must STOP the ancestor walk, not continue it.
+  //   dcAbsent   -- no clause at all. For a BARE REDECLARATION
+  //                 (`property AutoSize;`, used to raise visibility) Delphi
+  //                 keeps the ancestor's default, so the caller walks UP.
+  //                 A bare `default;` lands here too: that is the default-ARRAY-
+  //                 PROPERTY directive and carries no value; array properties
+  //                 are not DFM-streamed, so walking up is harmless.
+  function ClassifyDefaultClause(const ADeclText: string; out AValue: string): TDefaultClause;
+  var
+    LowText: string ;
+    P, i, j: Integer;
+    Tok    : string ;
+  begin
+    AValue := '';
+    LowText:= LowerCase(ADeclText);
+    if ADeclText = '' then Exit(dcAbsent);
+    if HasWholeWord(LowText, 'nodefault') then Exit(dcNoDefault);
+
+    P:= 1;
+    repeat
+      P:= PosEx('default', LowText, P);
+      if P = 0 then Exit(dcAbsent);
+      if IsWholeWordAt(LowText, P, 7) then Break;
+      Inc(P, 7);
+    until False;
+
+    i:= P + 7;
+    while (i <= Length(ADeclText)) and CharInSet(ADeclText[i], [' ', #9]) do Inc(i);
+    j:= i;
+    while (j <= Length(ADeclText)) and (not CharInSet(ADeclText[j], [' ', #9, ';'])) do Inc(j);
+    Tok:= Trim(Copy(ADeclText, i, j - i));
+    if Tok = '' then Exit(dcAbsent); { bare `default;` -- array-property directive }
+    AValue:= Tok;
+    Result:= dcValue;
+  end;
 
   // True when a class symbol is a mere forward declaration ('TFoo = class;')
   // rather than the real body. A forward decl spans a single line and carries no
@@ -524,6 +674,44 @@ var
       Body:= ResolveClassByQName(ASym.QualifiedName);
       if (Body.Id > 0) and not IsForwardDeclClass(Body) then Result:= Body;
     end;
+  end;
+
+  // The default that actually governs streaming for APropName on AClass.
+  //
+  // Starts at the most-derived declaration and walks the ancestor chain while
+  // each declaration is a bare redeclaration -- MIRRORS ResolveInheritedType /
+  // ResolveInheritedVisibility / the prop_access resolution, which resolve the
+  // same way for the same reason. `nodefault` anywhere on the way down stops the
+  // walk with "no default", because that is exactly what it means.
+  function ResolveDefaultFor(const AClass, AProp: TSymbol; const APropName: string;
+    out AValue: string): Boolean;
+  var
+    Anc   : TArray<TTypeAncestor>;
+    A     : TTypeAncestor        ;
+    AncSym: TSymbol              ;
+    Child : TSymbol              ;
+    Cls   : TDefaultClause       ;
+  begin
+    AValue:= '';
+    Cls:= ClassifyDefaultClause(DeclTextOf(AProp), AValue);
+    if Cls = dcValue     then Exit(True);
+    if Cls = dcNoDefault then Exit(False);
+
+    Anc:= AStore.GetTransitiveAncestors(AClass.Id);
+    for A in Anc do
+    begin
+      if not (A.Resolved and (A.SymbolId > 0)) then Continue;
+      AncSym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
+      if AncSym.Id <= 0 then Continue;
+      Child:= AStore.FindChildSymbolByName(AncSym.Id, APropName);
+      if (Child.Id <= 0) or (Child.Kind <> skProperty) then Continue;
+      Cls:= ClassifyDefaultClause(DeclTextOf(Child), AValue);
+      if Cls = dcValue     then Exit(True);
+      if Cls = dcNoDefault then Exit(False);
+      { dcAbsent: another bare redeclaration -- keep climbing. }
+    end;
+    AValue:= '';
+    Result:= False;
   end;
 
   // THE scope-aware name -> class step. One definition, three callers: the
@@ -1174,6 +1362,15 @@ var
       if Node.Visibility = '' then
         Node.Visibility:= ResolveInheritedVisibility(AClass, Prop.Name);
 
+      { The `default` clause, read from the declaring line. Prop is already the
+        most-derived declaration (CollectProps shadowing), so this is the default
+        that actually governs streaming for this class. A redeclaration without a
+        clause deliberately yields HasDefault=False rather than inheriting the
+        ancestor's: Delphi treats a bare redeclaration as reasserting the
+        ancestor's default, but proving that needs an ancestor walk this pass does
+        not do, and inventing a value is the one thing worse than reporting none. }
+      Node.HasDefault:= ResolveDefaultFor(AClass, Prop, Prop.Name, Node.DefaultValue);
+
       // Normalize at the single point where the effective value is finalized
       // (covers BOTH the own-declaration and the ancestor-walk paths above):
       // the parser's Modifiers carries a 'strict ' prefix for 'strict private'/
@@ -1382,6 +1579,7 @@ begin
   Visited   := TDictionary<string, Boolean>.Create;
   ChainCache:= TDictionary<Int64 , TArray<TSymbol>>.Create;
   TypeCache := TDictionary<string, TSymbol        >.Create;
+  LineCache := TDictionary<Int64 , TArray<string> >.Create;
   Truncated := False;
   try
     Result.RootType:= Root.Name;
@@ -1390,6 +1588,7 @@ begin
     Result.Nodes    := Nodes.ToArray;
     Result.Truncated:= Truncated;
   finally
+    LineCache .Free;
     TypeCache .Free;
     ChainCache.Free;
     Nodes     .Free;

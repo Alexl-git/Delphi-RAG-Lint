@@ -278,5 +278,100 @@ if (($null -ne $defTree) -and ($null -ne $refTree)) {
   Check 'proptree TRefHost (both modes) parse as JSON' $false "def=$defRaw`nref=$refRaw"
 }
 
+# ---------------------------------------------------------------------------
+# The `default` clause (proptree/2, additive keys has_default + default_value).
+#
+# WHY IT IS IN THE TREE AT ALL: a .dfm is SPARSE -- Delphi streams a published
+# property only when its value DIFFERS from the `default` declared on it. So a
+# property missing from a .dfm block is not missing information, it is an UNREAD
+# value, and DRagLint.Convert.DfmReemit (which is PURE and cannot look anything
+# up) reads it from here.
+#
+# Four cases, and the distinction between the last two is the whole point:
+#   default <X>          -> has_default, value X
+#   nodefault            -> NO default, and it STOPS the ancestor walk
+#   bare redeclaration   -> keeps the ANCESTOR's default (walk up)
+#   no clause anywhere   -> no default (always streamed; absence is UNKNOWN)
+# ---------------------------------------------------------------------------
+$DefBody = @'
+unit DefFix;
+
+interface
+
+type
+  TMode = (omA, omB);
+
+  TDefBase = class
+  private
+    FFlag: Boolean;
+    FMode: TMode;
+    FCap : string;
+    FNone: Integer;
+  published
+    property Flag: Boolean read FFlag write FFlag default True;
+    property Mode: TMode read FMode write FMode default omA;
+    property Cap: string read FCap write FCap;
+    property None: Integer read FNone write FNone;
+  end;
+
+  TDefChild = class(TDefBase)
+  published
+    property Flag;                 // bare redeclaration -- keeps TDefBase's default True
+    property Mode nodefault;       // explicitly cancels the inherited default
+  end;
+
+implementation
+
+end.
+'@
+Write-Ascii (Join-Path $work 'DefFix.pas') $DefBody
+$idx2 = & $Exe index $work --db $db 2>&1
+Check 'default-clause: reindex exits 0' ($LASTEXITCODE -eq 0) "$($idx2 -join ' | ')"
+
+$defJson = (& $Exe proptree --qname 'DefFix.TDefChild' --format json --db $db 2>$null) -join "`n"
+$defDoc = $null
+try { $defDoc = $defJson | ConvertFrom-Json } catch { $defDoc = $null }
+Check 'default-clause: proptree parses' ($null -ne $defDoc) "raw=$defJson"
+if ($null -ne $defDoc) {
+  function Prop($n) { @($defDoc.properties) | Where-Object { $_.path -eq $n } | Select-Object -First 1 }
+
+  # Inherited, carries a real default.
+  $pCap = Prop 'Cap'; $pNone = Prop 'None'; $pFlag = Prop 'Flag'; $pMode = Prop 'Mode'
+
+  Check 'default-clause: bare redeclaration INHERITS the ancestor default (Flag=True)' `
+    ($null -ne $pFlag -and $pFlag.has_default -eq $true -and $pFlag.default_value -eq 'True') `
+    "has=$($pFlag.has_default) val=$($pFlag.default_value)"
+
+  # nodefault must STOP the walk -- not fall through to TDefBase's 'default omA'.
+  Check 'default-clause: nodefault cancels the inherited default (Mode)' `
+    ($null -ne $pMode -and $pMode.has_default -eq $false -and $pMode.default_value -eq '') `
+    "has=$($pMode.has_default) val=$($pMode.default_value)"
+
+  # A string property cannot carry `default`; absence here is genuinely unknown.
+  Check 'default-clause: a property with no clause has no default (Cap)' `
+    ($null -ne $pCap -and $pCap.has_default -eq $false) "has=$($pCap.has_default)"
+  Check 'default-clause: an ordinal with no clause has no default (None)' `
+    ($null -ne $pNone -and $pNone.has_default -eq $false) "has=$($pNone.has_default)"
+
+  # POSITIVE CONTROL: without this, every assertion above is satisfied by the
+  # resolver returning False for everything.
+  $anyDefault = @(@($defDoc.properties) | Where-Object { $_.has_default -eq $true }).Count
+  Check 'default-clause: POSITIVE CONTROL -- at least one property DOES resolve a default' `
+    ($anyDefault -ge 1) "count=$anyDefault"
+}
+
+# The base class read directly: its own declarations, no walking involved.
+$baseJson = (& $Exe proptree --qname 'DefFix.TDefBase' --format json --db $db 2>$null) -join "`n"
+$baseDoc = $null
+try { $baseDoc = $baseJson | ConvertFrom-Json } catch { $baseDoc = $null }
+if ($null -ne $baseDoc) {
+  $bMode = @($baseDoc.properties) | Where-Object { $_.path -eq 'Mode' } | Select-Object -First 1
+  Check 'default-clause: enum default is captured verbatim (Mode=omA)' `
+    ($bMode.has_default -eq $true -and $bMode.default_value -eq 'omA') `
+    "has=$($bMode.has_default) val=$($bMode.default_value)"
+} else {
+  Check 'default-clause: base proptree parses' $false "raw=$baseJson"
+}
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
