@@ -297,6 +297,14 @@ $RulesBody = @'
 #link OnClick2 <- OnClick
 '@
 
+# Phase 4 only. Identical to $RulesBody but for the ': Round' cast suffix.
+$CastRulesBody = @'
+#convert TOldEdit -> TNewEdit, NewEditUnit
+#link Text <- Caption : Round
+#link Style.Active.Font.Size <- Font.Size
+#link OnClick2 <- OnClick
+'@
+
 function New-Fixture([string]$dir) {
   New-Item -ItemType Directory $dir -Force | Out-Null
   Write-Ascii (Join-Path $dir 'OldEditUnit.pas') $OldEditBody
@@ -309,6 +317,12 @@ function New-Fixture([string]$dir) {
 $rulesPath = Join-Path $WorkDir 'rules.txt'
 Write-Ascii $rulesPath $RulesBody
 
+# Phase 4's rule book: byte-identical to $RulesBody except for the ': Round'
+# cast suffix on the Text <- Caption line. Keeping every other line the same is
+# what makes Phase 1 a valid control for Phase 4 -- the ONLY variable is the cast.
+$castRulesPath = Join-Path $WorkDir 'rules-cast.txt'
+Write-Ascii $castRulesPath $CastRulesBody
+
 # ---------------------------------------------------------------------------
 # Index the fixture (one shared index -- Phase 2/3 re-copy the fixture into
 # fresh dirs but the .pas/.dfm CONTENT is byte-identical each time, so the
@@ -319,9 +333,12 @@ Write-Ascii $rulesPath $RulesBody
 $phase1 = Join-Path $WorkDir 'phase1-dryrun'
 $phase2 = Join-Path $WorkDir 'phase2-apply'
 $phase3 = Join-Path $WorkDir 'phase3-nosafety'
+$phase4 = Join-Path $WorkDir 'phase4-castskip'
 New-Fixture $phase1
 New-Fixture $phase2
 New-Fixture $phase3
+New-Fixture $phase4
+$castBeforeBytes = [System.IO.File]::ReadAllBytes((Join-Path $phase4 'MyForm.pas'))
 
 $db = Join-Path $WorkDir 'convapply.sqlite'
 Write-Host 'Indexing convert-apply fixture (all phases)' -ForegroundColor Cyan
@@ -636,6 +653,73 @@ Check 'no-backup: no recovery.txt' (-not (Test-Path (Join-Path $phase3 'recovery
 
 Assert-AsciiCrlf $p3Pas
 Assert-AsciiCrlf $p3Dfm
+
+# ===========================================================================
+# PHASE 4: a #link carrying a ': Cast' is SKIPPED on the .pas side, and warns.
+#
+# This is the guard commit 7acbe6c recorded as OWED ("NOT covered by a guard
+# yet: the convert-apply skip-and-warn path").
+#
+# Why the skip exists: surface #4 rewrites a member IDENTIFIER at each access
+# site ('obj.Caption' -> 'obj.Text'). A rule carrying ': Round' says the VALUE
+# also needs converting, and convert-apply cannot do that. Before the FromPath
+# cast split landed, ': Round' was swallowed into FromPath, matched no member,
+# and nothing was rewritten by accident. Making the path resolve correctly
+# therefore OPENED the hazard of renaming a property while silently dropping
+# the value conversion -- source that compiles and is numerically wrong. The
+# skip-and-warn is what keeps that closed, so it needs a guard of its own.
+#
+# POSITIVE CONTROL: Phase 1 runs this SAME fixture with a cast-free rule book
+# and asserts >= 2 replace-to-Text edits. So 'exactly 0 here' cannot be passing
+# because the access-site surface is dead -- Phase 1 proves it is alive. The
+# two phases differ only by the ': Round' suffix on one rule line.
+#
+# Its own dir + own rules file: Phases 1-3 assert byte-exact things about their
+# fixtures ('delete lines 2..8', exactly one TODO), so they must not be touched.
+# ===========================================================================
+Write-Host ''
+Write-Host '=== Phase 4: #link with a cast is skipped on the .pas side ===' -ForegroundColor Cyan
+
+Push-Location $phase4
+try {
+  $castRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $castRulesPath --db $db 2>&1) -join "`n"
+  $castExit = $LASTEXITCODE
+} finally { Pop-Location }
+Write-Host $castRaw -ForegroundColor DarkGray
+
+# A skipped rule is NOT a failure: the rest of the conversion still applies.
+Check 'cast: dry-run exits 0' ($castExit -eq 0) "exit=$castExit"
+
+Check 'cast: warns that the link was SKIPPED on the .pas side' `
+  ($castRaw -match 'SKIPPED on the \.pas side') "raw=$castRaw"
+
+# The warning must NAME the rule, its line and its cast -- a bare "skipped"
+# leaves the operator with nothing to act on, which is the defect this warning
+# exists to prevent.
+$warnBlockMatch = [regex]::Match($castRaw, 'Warnings:([\s\S]*?)(\r?\n\r?\n|\z)')
+$warnBlock = if ($warnBlockMatch.Success) { $warnBlockMatch.Groups[1].Value } else { '' }
+Check 'cast: warning names the cast (Round)' ($warnBlock -match 'Round') "block=$warnBlock"
+Check 'cast: warning names the rule (Text <- Caption)' `
+  ($warnBlock -match 'Text\s*<-\s*Caption') "block=$warnBlock"
+Check 'cast: warning names the rule line number' ($warnBlock -match 'line \d+') "block=$warnBlock"
+
+# The whole point: NO access site was rewritten to Text. Phase 1's '>= 2' on the
+# identical fixture is the control that makes this 0 meaningful.
+$castTextReplaceCount = ([regex]::Matches($castRaw, '->\s*"Text"')).Count
+Check 'cast: ZERO replace-to-Text edits (rename refused, not half-applied)' `
+  ($castTextReplaceCount -eq 0) "count=$castTextReplaceCount; raw=$castRaw"
+
+# The cast only disables THIS link's .pas rewrite. The instance itself must
+# still convert, or the skip would have quietly cost the whole conversion.
+Check 'cast: the instance is still converted (Edit1 TOldEdit -> TNewEdit)' `
+  ($castRaw -match 'Edit1:\s*TOldEdit\s*->\s*TNewEdit') "raw=$castRaw"
+
+# Dry-run: nothing written.
+$castAfter = [System.IO.File]::ReadAllBytes((Join-Path $phase4 'MyForm.pas'))
+$castUnchanged = ($castBeforeBytes.Length -eq $castAfter.Length) -and
+                 (-not (Compare-Object $castBeforeBytes $castAfter -SyncWindow 0))
+Check 'cast: MyForm.pas byte-unchanged after dry-run' $castUnchanged `
+  "before=$($castBeforeBytes.Length)B after=$($castAfter.Length)B"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
