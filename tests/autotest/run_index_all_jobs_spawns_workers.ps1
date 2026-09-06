@@ -213,7 +213,30 @@ Check 'no section was parsed under --resolve-only' (
 Remove-Dbs
 $roCfg = Probe-Run 'jobs3-resolveonly-config' @('--jobs','3','--config',$cfgPath,'--resolve-only')
 Check 'resolve-only run with explicit --config succeeded' ($roCfg.Exit -eq 0) "exit=$($roCfg.Exit)"
-Check 'it went parallel (so the flag really had to travel)' ($roCfg.MaxProcs -gt 1) "max=$($roCfg.MaxProcs)"
+# WHY THIS ONE LEG CANNOT USE THE PROCESS COUNT (measured 2026-09-05, session 70)
+# ------------------------------------------------------------------------------
+# Every other leg here samples the process table, and must: they run real work
+# for ~5 s, so the sampler takes ~17 polls and reliably measures max=4. THIS leg
+# is the opposite -- Remove-Dbs has just run and --resolve-only skips the walk,
+# so there is nothing to parse and the whole run lasts 235-780 ms. One
+# Get-CimInstance call with a CommandLine filter costs about that much on its
+# own, so the sampler gets EXACTLY ONE poll, landing at a random instant.
+#
+# That is a coin flip, and the recorded history is exactly a coin flip: this
+# assertion measured 2, 2, 4, 2, 3 (passing) and then 1 and 0 across seven
+# batteries, with NO engine change in between. max=0 is the tell -- a run that
+# had gone sequential would still show its own parent, so 0 cannot mean
+# "sequential", only "not sampled".
+#
+# The run really is parallel: its stdout is three processes interleaving into
+# one pipe, splicing words mid-token, and it ends with the parallel path's own
+# summary line. So assert THAT instead. It is deterministic, and it is not the
+# weak "the note is gone" test this suite's header warns about -- the summary is
+# printed only by the parallel path, which part B pins from the other side by
+# requiring --jobs 1 NOT to print it.
+Check 'it went parallel (so the flag really had to travel)' (
+  $roCfg.Out -match 'parallel build: 3/3 sections OK \(jobs=3\)') `
+  "sampled max=$($roCfg.MaxProcs) (NOT asserted on -- see the comment above)"
 $roCfgCounts = @($SECTIONS | ForEach-Object { File-Count $_ })
 Check 'no section was parsed under --config --resolve-only' (
   (@($roCfgCounts | Where-Object { $_ -ne 0 }).Count -eq 0)) `
