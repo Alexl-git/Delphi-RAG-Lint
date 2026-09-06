@@ -3,6 +3,88 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### C1b: the flow oracles now live on the store, and the flow checker is 36% faster
+
+C1a (v1.10.0-alpha) memoised the three flow oracles that had no cache at all,
+but every memo was a LOCAL of `TFlowChecker.Check` -- which runs once per FILE,
+so each file re-paid every cold miss. C1b moves them onto the symbol store
+(`ISymbolStore.FlowOracles`, a `TFlowOracleCache` created and freed with the
+store and cleared where `FAnchorCache` is cleared), so a callee resolved once is
+resolved for every file that calls it.
+
+Measured on ORM3 (566 files, the attribution corpus -- a small corpus cannot
+size a large one, and this repo understated the win by 3x):
+
+```
+FlowChecker.Check     35.89 s -> 22.99 s   (-35.9%,  63.4 -> 40.6 ms/file)
+  oracle owns         17.58 s ->  8.27 s   misses 3968 -> 1327  (26.9% -> 9.0%)
+  oracle param-mode    4.41 s ->  0.96 s   misses 7045 -> 2133  (10.3% -> 3.1%)
+lint-all TOTAL       251.67 s -> 236.70 s  (-5.9%)
+```
+
+The three TYPE oracles (record-def, record-type, managed-type) did not move at
+all, and that is by construction rather than a disappointment: their keys carry
+a FILE ID, so there is nothing for a store-lifetime memo to share. They were
+lifted anyway, because a file id means nothing except relative to the store that
+issued it -- keeping them in a process-wide global would have let two stores
+collide on the same integer.
+
+`oracle owns` is the honest asterisk. Its misses fell 67% while its SECONDS fell
+53%, and on this repo's smaller corpus they fell 41% for a 5% time saving: the
+misses that C1b removes are the CHEAP repeats, and what remains are the ones
+that force a fresh parse of the callee's declaring unit. The plan's headline
+("46.88 s of a 71.54 s checker") was the size of the SLOT, not the size of the
+prize.
+
+### A self-check for the memo, and the defect it caught
+
+`DRAGLINT_VERIFY_ORACLE=1` recomputes every cache HIT through the uncached path
+and raises `EFlowOracleMismatch` on disagreement; `=break` corrupts the cached
+answer first so the check is SEEN to fail. Both are documented in
+`docs\AI-USAGE.md`, which now has an environment-variable section -- it had
+none, so the sibling `DRAGLINT_VERIFY_GEN` had gone undocumented too.
+
+**It earned itself on the first real run.** On DataCopy it raised three times on
+key `copy#0`, cached `pmConst` against a fresh `pmUnknown`. The cause was in
+this change: the param-mode key lower-cased the callee name, but the answer is
+computed from `FindSymbolsByExactName`, which matches BYTE-EXACTLY first and
+only falls back to a case-insensitive lookup when that finds nothing. So
+`Copy(...)` and `copy(...)` resolve to different symbol sets -- and DataCopy
+writes both spellings, 93 and 44 call sites. The key was LESS SPECIFIC than the
+thing it cached. It is now case-sensitive, matching `owns`.
+
+That defect was already latent at C1a's per-file scope; it needed both spellings
+in ONE file to bite. What matters is how it was found: **the byte-identical A/B
+passed on all three corpora WITH the bug present.** An A/B can only see entries
+the linted files happened to exercise consistently, which is exactly why a
+persisting memo needed a verifier and a per-file one did not.
+
+The other four keys were audited against the same question and are sound: `owns`
+was already case-sensitive over the same lookup, and the three type keys carry
+raw type text where their computations trim or fold it, so those keys are MORE
+specific than their answers.
+
+### Gates
+
+* **Byte-identical** `lint-all` output, OLD vs NEW, on all three corpora
+  (this repo, DataCopy, ORM3 -- 56,486 findings on ORM3).
+* **Zero** `EFlowOracleMismatch` under `DRAGLINT_VERIFY_ORACLE=1` on all three,
+  with the verified report byte-identical to the plain one (a raise makes
+  `lint-all` SKIP the file, so a mismatch would show up as a shorter report even
+  if nobody read stderr).
+* `tests\autotest\run_flow_oracle_memo.ps1` -- new, and RED-CHECKED against the
+  unfixed engine before being trusted: it fails there with misses scaling
+  exactly 3x (2 -> 6 for both oracles, one caller unit to three) and with the
+  `=break` fault going uncaught. Its fixture calls shared callees from three
+  byte-identical caller units, so V2 measures cache LIFETIME rather than fixture
+  size.
+* This repo's own report is unchanged at **3874 findings (22/1413/2431/8)** --
+  the new code adds none.
+* No extractor change: `DRAGLINT_EXTRACTOR_VERSION` does not move and **no index
+  re-parses**.
+
 ## v1.10.0-alpha -- 2026-09-06
 
 **The release where a `.dfm` stopped being read as a complete document.** Delphi

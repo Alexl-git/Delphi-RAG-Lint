@@ -817,6 +817,30 @@ exception to note: the dock's saved naming presets (`naming.presets` in
 `drag-lint-lint.json`, added v0.99) are IDE-written and IDE-read only -- the
 CLI does not yet consume that key.
 
+## 5c. Environment variables (diagnostics)
+
+These are **not CLI flags** and so do not appear in `--help`. They exist for
+diagnosing the engine itself; none of them changes which findings you get,
+except where noted. All are read once per process.
+
+| Variable | Values | What it does |
+|---|---|---|
+| `DRAGLINT_PROFILE` | `1` | Prints a phase-by-phase timing breakdown to **stderr** at the end of a run (per-rule seconds, the flowchecker sub-breakdown, and the five `oracle ...` rows with call/miss counts). Findings and `--output` are unaffected. |
+| `DRAGLINT_VERIFY_GEN` | `1`, `break` | Self-check for the per-block gen-set memo in definite-assignment. `1` recomputes each memoised transfer directly and raises `EDefAsgnGenMismatch` on disagreement. `break` corrupts the checked value first, so the check MUST fire -- the positive control. Costs roughly what the memo saves. |
+| `DRAGLINT_VERIFY_ORACLE` | `1`, `break` | Self-check for the store-lifetime **flow-oracle** memo (owns, param-mode, record-def, record-type, managed-type). `1` recomputes every cache hit through the uncached path and raises `EFlowOracleMismatch` on disagreement; `break` corrupts the cached answer first so the check is SEEN to fail. Use it after changing anything those oracles read. |
+| `DRAGLINT_DEBUG` | `1` | Extra internal tracing to stderr. |
+| `DRAGLINT_FIXDOC_TRACE` | `1` | Traces the doc-fix/autodoc rewrite path. |
+| `DRAGLINT_NO_SCOPED_RESOLVE` | `1` | Disables the scoped call-resolution pass (falls back to the whole-index pass). Diagnostic only -- it is slower and can change resolution. |
+| `DRAGLINT_SCOPED_RESOLVE_ADDITIONS` | path | Writes the call edges the scoped pass ADDED, for A/B work. |
+| `DRAGLINT_SCOPED_RESOLVE_REMOVALS` | path | Writes the call edges the scoped pass REMOVED, for A/B work. |
+
+The two `VERIFY_*` pairs follow one rule that is worth stating: a verifier that
+has never been observed to fail is indistinguishable from one that was never
+wired up. That is why each has a `break` mode, and why the guards that use them
+(`tests\autotest\run_defasgn_gen_memo.ps1`,
+`tests\autotest\run_flow_oracle_memo.ps1`) assert BOTH that a clean run is clean
+and that an injected fault is caught.
+
 ## 6. Bonus: the graph viewer (optional, experimental)
 
 There is a companion **standalone VCL graph viewer** over the same index:

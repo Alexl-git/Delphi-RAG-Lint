@@ -28,6 +28,17 @@ uses
   DRagLint.Hover.Renderer;
 
 type
+  /// <summary>Raised by the DRAGLINT_VERIFY_ORACLE self-check when a
+  /// store-lifetime flow-oracle memo disagrees with a fresh computation.</summary>
+  /// <remarks>
+  /// Never raised in normal operation -- the check runs only when the env var
+  /// is set, and it fires only when a memoised answer has stopped matching the
+  /// uncached path, which is a code or invalidation defect rather than a data
+  /// condition. DRAGLINT_VERIFY_ORACLE=break injects a fault so the check is
+  /// SEEN to fail; run_flow_oracle_memo.ps1 asserts both directions.
+  /// </remarks>
+  EFlowOracleMismatch = class(Exception);
+
   /// <summary>Flow-sensitive checks over a single file's routines.</summary>
   TFlowChecker = class
   public
@@ -223,19 +234,135 @@ var
   AFileId is in the key even though it is constant within one Check. It costs
   nothing, it documents what the entry is actually scoped to, and it is what
   lets C1b lift these to store lifetime by deleting the Clear call rather than
-  by redesigning the key. }
-  GRecTypeMemo: TDictionary<string, Boolean>;
-  GManagedMemo: TDictionary<string, Boolean>;
+  by redesigning the key.
+
+  C1b DID EXACTLY THAT. With a store the answers now live in AStore.FlowOracles
+  and survive the file, which is the whole of C1b's prize. What remains here is
+  the STORE-FREE FALLBACK, and it is needed for exactly ONE oracle:
+  IsManagedType is the only one reachable with AStore = nil (its name-heuristic
+  path). IsRecordType returns False without a store and so never memoises
+  without one, and the other three are only wired up when a store is present.
+  The fallback keeps C1a's per-file lifetime exactly, because without a store
+  there is no lifecycle to hang invalidation on. }
+  GManagedMemoLocal: TDictionary<string, Boolean>;
 
 function OracleMemoKey(AFileId: Int64; const AText: string): string;
 begin
   Result:= IntToStr(AFileId) + '#' + AText;
 end;
 
+{ The managed-type memo: the STORE's when there is one (C1b, lives as long as
+  the store), else the per-file fallback above. One function rather than an
+  inlined conditional at each site, so "which cache am I in?" has exactly one
+  answer. }
+function ManagedMemo(const AStore: ISymbolStore): TDictionary<string, Boolean>;
+begin
+  if Assigned(AStore) then Result:= AStore.FlowOracles.Managed else Result:= GManagedMemoLocal;
+end;
+
+{ Empties the STORE-FREE fallback only. Called at TFlowChecker.Check entry, as
+  in C1a -- but it deliberately no longer reaches a store-backed memo, because
+  surviving the file IS C1b. A store's memo is invalidated by the store, on the
+  same path as FAnchorCache (TSQLiteSymbolStore.ResolveAncestry). }
 procedure ClearOracleMemos;
 begin
-  GRecTypeMemo.Clear;
-  GManagedMemo.Clear;
+  GManagedMemoLocal.Clear;
+end;
+
+{ DRAGLINT_VERIFY_ORACLE turns on the flow-oracle self-check (C1b).
+
+    1      -- on every cache HIT, recompute through the uncached path and raise
+              EFlowOracleMismatch if the two disagree.
+    break  -- the same, but CORRUPT the cached answer first, so the check MUST
+              fire. This is the self-check's POSITIVE CONTROL.
+
+  `break` exists for the reason DRAGLINT_VERIFY_GEN's does, and the reason is
+  sharper here: C1a's memos were cleared at every Check entry, so a stale answer
+  was structurally impossible and a byte-identical A/B was a sufficient gate.
+  C1b's memos persist across files and for the life of a store, so an A/B proves
+  only that the answers agree on the corpora that were linted -- it cannot see an
+  entry that is correct on every file linted and wrong on one that was not. This
+  check is what turns that from unobserved into checked, and `break` is what
+  proves the check is wired up at all. A verifier never observed to fail is
+  indistinguishable from one that was never wired up, and this repo has shipped
+  that mistake twice.
+
+  Costs exactly what the memo saves, so it is gated. Read once and cached. }
+var
+  GVerifyOracle: Integer = -1;   { -1 unread | 0 off | 1 check | 2 check + inject }
+
+function VerifyOracleMode: Integer;
+var V: string;
+begin
+  if GVerifyOracle < 0 then
+  begin
+    V:= LowerCase(GetEnvironmentVariable('DRAGLINT_VERIFY_ORACLE'));
+    if V = 'break' then GVerifyOracle:= 2
+    else if V = '1' then GVerifyOracle:= 1
+    else GVerifyOracle:= 0;
+  end;
+  Result:= GVerifyOracle;
+end;
+
+{ True when the caller may answer from ACached -- a real hit, not being verified.
+
+  Under verify a hit returns FALSE, which sends the caller through its normal
+  uncached computation, and sets AVerifying so the caller's finally compares the
+  two. ACached is corrupted here under =break; the corruption stays in this OUT
+  parameter and is never written back to the dictionary, so a =break run cannot
+  poison the cache it is testing. }
+function OracleHit(ACache: TDictionary<string, Boolean>; const AKey: string;
+  out ACached, AVerifying: Boolean): Boolean;
+begin
+  AVerifying:= False;
+  Result    := ACache.TryGetValue(AKey, ACached);
+  if Result and (VerifyOracleMode > 0) then
+  begin
+    if VerifyOracleMode = 2 then ACached:= not ACached; { positive control }
+    AVerifying:= True;
+    Result    := False;
+  end;
+end;
+
+procedure OracleCheck(AVerifying, ACached, AFresh: Boolean; const AOracle, AKey: string);
+begin
+  if AVerifying and (ACached <> AFresh) then
+    raise EFlowOracleMismatch.CreateFmt(
+      '%s: cached %s but a fresh computation says %s, for key "%s". The ' +
+      'store-lifetime memo (C1b) is serving a stale or wrongly shared answer.',
+      [AOracle, BoolToStr(ACached, True), BoolToStr(AFresh, True), AKey]);
+end;
+
+{ The param-mode oracle answers with an ENUM, so it needs its own pair of the
+  two above. Same contract exactly. The =break corruption moves the value to a
+  DIFFERENT mode rather than negating a boolean, which is the same idea: make
+  the cached answer one the fresh computation cannot agree with. Stored as
+  Ord(TParamMode) because TFlowOracleCache lives in DRagLint.Core.Interfaces,
+  which must not depend on the analysis layer where the enum is declared. }
+function OracleHitPM(ACache: TDictionary<string, Integer>; const AKey: string;
+  out ACached: TParamMode; out AVerifying: Boolean): Boolean;
+var V: Integer;
+begin
+  AVerifying:= False;
+  ACached   := pmUnknown;
+  Result    := ACache.TryGetValue(AKey, V);
+  if Result then ACached:= TParamMode(V);
+  if Result and (VerifyOracleMode > 0) then
+  begin
+    if VerifyOracleMode = 2 then
+      if ACached = pmUnknown then ACached:= pmVar else ACached:= pmUnknown;
+    AVerifying:= True;
+    Result    := False;
+  end;
+end;
+
+procedure OracleCheckPM(AVerifying: Boolean; ACached, AFresh: TParamMode; const AKey: string);
+begin
+  if AVerifying and (ACached <> AFresh) then
+    raise EFlowOracleMismatch.CreateFmt(
+      'oracle param-mode: cached mode %d but a fresh computation says %d, for ' +
+      'key "%s". The store-lifetime memo (C1b) is serving a stale or wrongly ' +
+      'shared answer.', [Ord(ACached), Ord(AFresh), AKey]);
 end;
 
 { Charge (now - AStart - AExclude) to AOracle and count the call. AMiss marks a
@@ -299,19 +426,23 @@ end;
   function-result-not-set, matching W1036. Store-exact when present, name
   heuristic otherwise. }
 function IsManagedType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
-var Cat: TTypeCategory; T: string; T0, E0: Int64; Miss: Boolean; MK: string;
+var
+  Cat: TTypeCategory; T: string; T0, E0: Int64; Miss: Boolean; MK: string;
+  Memo: TDictionary<string, Boolean>; Cached, Verifying: Boolean;
 begin
   T0 := TStopwatch.GetTimeStamp; Miss := False;
   E0 := GOracleT[ORACLE_MANAGED]; { see the finally: this function RECURSES }
   MK := OracleMemoKey(AFileId, ATypeText);
+  Memo := ManagedMemo(AStore); { C1b: the store's, or the store-free fallback }
   try
   { Guard BLOCK, not `if hit then Exit`. The Exit form would take this routine
     from 5 exit points to 6 and trip too-many-exit-points -- a new finding in
-    new code, which the lint-clean standard does not allow. On a hit Result is
-    already set by TryGetValue and the finally still runs. }
-  if not GManagedMemo.TryGetValue(MK, Result) then
+    new code, which the lint-clean standard does not allow. On a hit the answer
+    comes from Cached and the finally still runs. }
+  if OracleHit(Memo, MK, Cached, Verifying) then Result := Cached
+  else
   begin
-  Miss := True;
+  if not Verifying then Miss := True;
   if AStore <> nil then
   begin
     Cat := AStore.ResolveTypeCategory(ATypeText, AFileId);
@@ -351,8 +482,12 @@ begin
   finally
     { The answer is stored HERE because this function returns through six
       different Exit(...) paths; storing at each one is how a path gets missed.
-      Only on a miss -- re-storing a hit would be harmless but pointless. }
-    if Miss then GManagedMemo.AddOrSetValue(MK, Result);
+      Only on a miss -- re-storing a hit would be harmless but pointless.
+      The verify check sits on the same finally for the same reason: it must see
+      whatever Result the function is actually about to return, by whichever
+      path. Under verify Miss stays False, so the entry is checked, not rewritten. }
+    OracleCheck(Verifying, Cached, Result, 'oracle managed-type', MK);
+    if Miss then Memo.AddOrSetValue(MK, Result);
     { RECURSES for static arrays (it re-asks about the ELEMENT type), so the
       nested frames' time is subtracted here. Without this a two-deep array
       type is charged twice and the slot can outgrow the phase containing it. }
@@ -396,17 +531,19 @@ end;
 /// store this returns False, which is today's (pre-fix) behaviour, so the
 /// store-free lint path cannot silently over-suppress.</remarks>
 function IsRecordType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
-var T0: Int64; Miss: Boolean; K: string;
+var T0: Int64; Miss, Cached, Verifying: Boolean; K: string;
 begin
-  T0 := TStopwatch.GetTimeStamp; Miss := False;
+  T0 := TStopwatch.GetTimeStamp; Miss := False; Verifying := False; Cached := False;
   try
     Result := False;
     if AStore = nil then Exit;
     K := OracleMemoKey(AFileId, ATypeText);
-    if GRecTypeMemo.TryGetValue(K, Result) then Exit;
-    Miss := True;
+    { C1b: the store's memo, so this survives the file. }
+    if OracleHit(AStore.FlowOracles.RecType, K, Cached, Verifying) then Exit(Cached);
+    if not Verifying then Miss := True;
     Result := AStore.ResolveTypeCategory(ATypeText, AFileId) = tcRecord;
-    GRecTypeMemo.AddOrSetValue(K, Result);
+    OracleCheck(Verifying, Cached, Result, 'oracle record-type', K);
+    if Miss then AStore.FlowOracles.RecType.AddOrSetValue(K, Result);
   finally
     OracleTick(ORACLE_RECTYPE, T0, 0, Miss);
   end;
@@ -2074,12 +2211,9 @@ var
   Findings: TList<TLintFinding>;
   Procs: TArray<TTSNode>;
   PI: Integer;
-  OwnCache: TDictionary<string, Boolean>;
-  RecDefCache: TDictionary<string, Boolean>;
   OwnsOracle: TCallArgOwns;
   RecMethodDef: TRecordMethodDefPredicate;
   ParamMode   : TParamModeLookup;
-  ParamModeCache: TDictionary<string, TParamMode>;
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
   var F: TLintFinding;
@@ -2811,12 +2945,12 @@ begin
   PF := TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Findings := TList<TLintFinding>.Create;
-  OwnCache := TDictionary<string, Boolean>.Create;
-  RecDefCache := TDictionary<string, Boolean>.Create;
-  { C1a: the two unit-level type memos are scoped to THIS Check. Clearing
-    at entry is what keeps them safe -- AStore and AFileId are fixed for
-    one Check but differ between them, and a stale entry from another
-    file/store would be a wrong answer, not a slow one. }
+  { C1b: this now clears ONLY the store-free managed-type fallback. With a store
+    every oracle memo belongs to the store and deliberately OUTLIVES this Check
+    -- that is the whole change. What made C1a's per-file clear necessary (a
+    stale entry from another file or store being a wrong answer, not a slow one)
+    is answered instead by putting the memo where the file ids come from and
+    invalidating it on the store's own ResolveAncestry path. }
   ClearOracleMemos;
   { Interprocedural object-leak: with a store, the escape analysis asks this oracle
     whether a callee OWNS its argument. True (owns/unknown) keeps the conservative
@@ -2825,17 +2959,25 @@ begin
     OwnsOracle :=
       function(const ACalleeName: string; AArgIdx: Integer): Boolean
       var
-        Key, CPath, PName: string; B, Ambig, Have: Boolean; Syms: TArray<TSymbol>;
+        Key, CPath, PName: string; Ambig, Have: Boolean; Syms: TArray<TSymbol>;
         RSym: TSymbol; I: Integer; FId: Int64; CPF: TParsedFile; DP: TTSNode;
-        T0: Int64; Miss: Boolean;
+        T0: Int64; Miss, Cached, Verifying: Boolean;
+        Owns: TDictionary<string, Boolean>;
       begin
-        T0 := TStopwatch.GetTimeStamp; Miss := False;
+        T0 := TStopwatch.GetTimeStamp; Miss := False; Verifying := False; Cached := False;
         try
         Result := True; { conservative default: owns/unknown -> escape }
+        { C1b: the STORE's memo, so a callee resolved once is resolved for every
+          file that calls it. NO file id in the key, and that is deliberate --
+          this oracle resolves the callee by global name through the store and
+          reads its declaring source; nothing in the answer depends on which
+          file is being linted. Case-SENSITIVE on the callee, unchanged: D4
+          keeps normalising as a separate, A/B-gated change. }
+        Owns := AStore.FlowOracles.Owns;
         Key := ACalleeName + '#' + IntToStr(AArgIdx);
-        if OwnCache.TryGetValue(Key, B) then Exit(B);
-        Miss := True; { OwnCache is a local of Check, so this is a per-FILE miss }
-        OwnCache.AddOrSetValue(Key, True); { pre-seed (guards re-entry) }
+        if OracleHit(Owns, Key, Cached, Verifying) then Exit(Cached);
+        if not Verifying then Miss := True;
+        Owns.AddOrSetValue(Key, True); { pre-seed (guards re-entry) }
         Syms := AStore.FindSymbolsByExactName(ACalleeName);
         { resolve to a single routine: an interface forward-decl + its impl share a
           file (fine); only routines spanning DIFFERENT files are truly ambiguous. }
@@ -2857,8 +2999,13 @@ begin
         PName := ParamNameAtIndex(DP, AArgIdx, CPF.Src);
         if PName = '' then Exit;
         Result := not ParamClearlyNonOwning(DP, PName, CPF.Src); { non-owning -> False (leak) }
-        OwnCache.AddOrSetValue(Key, Result);
+        Owns.AddOrSetValue(Key, Result);
         finally
+          { In the finally because this closure returns through six Exit paths.
+            The early ones leave the pre-seeded True in place, which is both the
+            conservative answer and what Result carries -- so the check compares
+            like with like on every path. }
+          OracleCheck(Verifying, Cached, Result, 'oracle owns', Key);
           OracleTick(ORACLE_OWNS, T0, 0, Miss);
         end;
       end
@@ -2887,15 +3034,22 @@ begin
   if AStore <> nil then
     RecMethodDef :=
       function(const ATypeText, AMemberName: string): Boolean
-      var RecSym, MemSym: TSymbol; T0, E0: Int64; Miss: Boolean; DK: string;
+      var
+        RecSym, MemSym: TSymbol; T0, E0: Int64; Miss, Cached, Verifying: Boolean;
+        DK: string;
       begin
-        T0 := TStopwatch.GetTimeStamp; Miss := False;
+        T0 := TStopwatch.GetTimeStamp; Miss := False; Verifying := False; Cached := False;
         E0 := GOracleT[ORACLE_RECTYPE]; { subtracted below -- see the finally }
-        DK := ATypeText + '#' + AMemberName;
+        { C1b: THE FILE ID IS NOW LOAD-BEARING. At C1a's per-file lifetime the
+          key could omit it, because AFileId could not vary within one Check.
+          At store lifetime it can and does, and ResolveTypeNameToClass prefers
+          a same-file declaration -- so without the file id two units declaring
+          different records of the same name would share one answer. }
+        DK := OracleMemoKey(AFileId, ATypeText + '#' + AMemberName);
         try
         Result := False;
-        if RecDefCache.TryGetValue(DK, Result) then Exit;
-        Miss := True;
+        if OracleHit(AStore.FlowOracles.RecDef, DK, Cached, Verifying) then Exit(Cached);
+        if not Verifying then Miss := True;
         if not IsRecordType(ATypeText, AStore, AFileId) then Exit;
         RecSym := AStore.ResolveTypeNameToClass(Trim(ATypeText), AFileId);
         if RecSym.Id <= 0 then Exit;
@@ -2908,9 +3062,10 @@ begin
         finally
           { Stored in the finally for the same reason as IsManagedType: this
             closure returns through four Exit paths and storing at each is how
-            one gets missed. RecDefCache is a local of Check, so it needs no
-            file id in the key -- AFileId cannot vary within one Check. }
-          if Miss then RecDefCache.AddOrSetValue(DK, Result);
+            one gets missed. The verify check sits here for the same reason --
+            it must see the Result actually being returned, by whichever path. }
+          OracleCheck(Verifying, Cached, Result, 'oracle record-def', DK);
+          if Miss then AStore.FlowOracles.RecDef.AddOrSetValue(DK, Result);
           { RecMethodDef CALLS IsRecordType, which bills its own slot. Subtract
             it or the same work is charged to both rows and they stop being a
             partition of the phase above them. }
@@ -2993,15 +3148,51 @@ begin
           Result := True;
         end;
 
-      var T0: Int64; Miss: Boolean;
+      var T0: Int64; Miss, Verifying: Boolean; Cached: TParamMode;
       begin
-        T0 := TStopwatch.GetTimeStamp; Miss := False;
+        T0 := TStopwatch.GetTimeStamp; Miss := False; Verifying := False; Cached := pmUnknown;
         try
         Result := pmUnknown;
         if ACalleeName = '' then Exit;
-        Key := LowerCase(ACalleeName) + '#' + IntToStr(AIndex);
-        if ParamModeCache.TryGetValue(Key, Result) then Exit;
-        Miss := True; { ParamModeCache is a local of Check -> a per-FILE miss }
+        { THE KEY IS CASE-SENSITIVE, and it was NOT before C1b. This is the one
+          place the plan's section 7 was wrong, and DRAGLINT_VERIFY_ORACLE=1 is
+          what proved it: on DataCopy it raised three times on key "copy#0",
+          cached pmConst against a fresh pmUnknown.
+
+          The mechanism: the answer below is computed from
+          FindSymbolsByExactName, which matches BYTE-EXACTLY first and only
+          falls back to a case-insensitive lookup when that finds nothing -- so
+          `Copy(...)` and `copy(...)` genuinely resolve to different symbol
+          sets, and the "all matches must agree" rule can collapse one of them
+          to pmUnknown. DataCopy writes both spellings (93 and 44 call sites).
+          A LowerCase key therefore shared one entry between two computations
+          that do not agree: the key was LESS SPECIFIC than the thing it caches.
+
+          That was already true at C1a's per-file scope -- it just needed both
+          spellings in ONE file to bite. Store lifetime makes it bite across
+          files, which is exactly the class of defect a corpus A/B cannot see
+          and the verify mode exists to catch: the A/B was byte-identical on all
+          three corpora WITH the bug present.
+
+          The other four oracle keys were audited against this same question and
+          are sound: owns is already case-sensitive over the same lookup, and
+          the three type keys carry the raw type text where their computations
+          trim or fold it, so those keys are MORE specific than their answers. }
+        Key := ACalleeName + '#' + IntToStr(AIndex);
+        { C1b: the STORE's memo. No file id in the key -- like the owns oracle,
+          this resolves the callee by global name and reads its signature, so
+          nothing in the answer depends on which file is being linted.
+
+          THE ONE CONSTRAINT, and it is documented rather than keyed (ruled
+          2026-09-06): the answer below falls back to ALibStore when AStore is
+          silent, so it is a function of BOTH stores while this cache is keyed
+          by AStore alone. Sound because every CLI verb builds its own store and
+          passes one fixed pairing -- check-ast opens its own store and passes
+          no library store at all. A future host that reuses ONE store across
+          both pairings must add the library store's identity to this key.
+          See TFlowOracleCache in DRagLint.Core.Interfaces. }
+        if OracleHitPM(AStore.FlowOracles.ParamMd, Key, Cached, Verifying) then Exit(Cached);
+        if not Verifying then Miss := True;
         try
           { INTRINSICS ANSWER ONLY IN THE var/out DIRECTION, and that restriction
             was bought with a corpus A/B, not reasoned out.
@@ -3073,7 +3264,8 @@ begin
           end;
           if Any then Result := Seen else Result := pmUnknown;
         finally
-          ParamModeCache.AddOrSetValue(Key, Result);
+          OracleCheckPM(Verifying, Cached, Result, Key);
+          AStore.FlowOracles.ParamMd.AddOrSetValue(Key, Ord(Result));
         end;
         finally
           OracleTick(ORACLE_PARAM, T0, 0, Miss);
@@ -3082,25 +3274,19 @@ begin
   else
     ParamMode := nil;
 
-  ParamModeCache := TDictionary<string, TParamMode>.Create;
   try
     Procs := CfgFindProcs(PF.Tree.RootNode);
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);
     Result := Findings.ToArray;
   finally
     Findings.Free;
-    OwnCache.Free;
-    ParamModeCache.Free;
-    RecDefCache.Free;
   end;
 end;
 
 initialization
-  GRecTypeMemo:= TDictionary<string, Boolean>.Create;
-  GManagedMemo:= TDictionary<string, Boolean>.Create;
+  GManagedMemoLocal:= TDictionary<string, Boolean>.Create;
 
 finalization
-  GRecTypeMemo.Free;
-  GManagedMemo.Free;
+  GManagedMemoLocal.Free;
 
 end.

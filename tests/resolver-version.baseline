@@ -44,4 +44,32 @@
 #
 #   Superseded: 1.0.0-alpha|ae753fb79518fac5b932d8e9f6d78fc0fce625248ae44c846ac4ae6a57b805be
 
-1.1.0-alpha|790d7011021acd549cc6420b02884df7470eef4c6a9ece2163405a6fdac3dfa9
+# 2026-09-06 (C1b): HASH UPDATED, VERSION DELIBERATELY NOT BUMPED -- this is the
+#   "genuinely cannot affect what is derived" case the header describes, and it
+#   is recorded here in full because the header also says the failure mode of
+#   getting it wrong is SILENT.
+#
+#   What changed inside the surface: ONE line was added to ResolveAncestry,
+#   `FFlowOracles.Clear;`, beside the existing `FAnchorCache.Clear;`. Nothing
+#   else in the manifest's routines was touched. (The other edits to
+#   Storage.SQLite.pas in the same commit -- a field, its create/free, and a
+#   one-line getter -- are all OUTSIDE every listed routine.)
+#
+#   Why it cannot change what is derived, checked rather than asserted:
+#   FFlowOracles is a TFlowOracleCache, the C1b store-lifetime memo for the five
+#   LINT-time flow oracles. Its contents are read in exactly one unit,
+#   DRagLint.Diagnostics.FlowChecks.pas, and only from TFlowChecker.Check's
+#   dynamic extent. Inside Storage.SQLite.pas the object is only declared,
+#   created, freed, returned by FlowOracles, and cleared here. No resolve
+#   routine reads it, so ResolveAncestry writes exactly the type_ancestors rows
+#   it wrote before. Verified by enumerating every reference to FlowOracles /
+#   FFlowOracles in src\ (18 sites; 10 in FlowChecks, 8 structural in storage).
+#
+#   Bumping instead would have forced a re-resolve of every index for a cleared
+#   dictionary -- precisely the OVER-BILLING that splitting this stamp from
+#   DRAGLINT_EXTRACTOR_VERSION exists to end, and the same reason
+#   ResolveLog/ResolveSecs are EXCLUDEd from the surface.
+#
+#   Superseded: 1.1.0-alpha|790d7011021acd549cc6420b02884df7470eef4c6a9ece2163405a6fdac3dfa9
+
+1.1.0-alpha|3be00d360f91f38761edeb97760b40607a28bce7f24044608cfa9d361399c21e

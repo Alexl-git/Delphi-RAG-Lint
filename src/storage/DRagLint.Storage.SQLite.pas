@@ -178,6 +178,15 @@ type
       FAnchorCache           : TDictionary<Int64, string>; // file id -> '' | 'Vcl' | 'FMX'
       FDerivingAnchor        : Boolean;                    // re-entrancy guard
 
+      { C1b: the flow oracles' store-lifetime memo. Rides the SAME invalidation
+        as FAnchorCache above -- ResolveAncestry clears both -- because both are
+        pure derivations of tables that pass rewrites. Declared here rather than
+        in the checker so that a file id in a key can only ever mean a file id
+        of THIS store. See TFlowOracleCache for the one documented constraint
+        (param-mode is a function of the project store AND the library store,
+        and is keyed by the project store alone). }
+      FFlowOracles           : TFlowOracleCache;
+
       { RESOLVE SCOPE -- what this store instance has written since it opened,
         recorded so ResolveCallTargets can re-resolve the affected refs instead
         of all of them. Measured motive: on the 2.09 GB Win32 library index,
@@ -1553,6 +1562,14 @@ type
       /// </remarks>
       procedure PutSymbolFacts(const AFacts: TSymbolFacts);
 
+      /// <summary>This store's flow-oracle memo (C1b). Never nil; the store
+      /// owns it and frees it.</summary>
+      /// <returns>FFlowOracles, created in the constructor.</returns>
+      /// <remarks>
+      /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FlowOracles</para>
+      /// </remarks>
+      function FlowOracles: TFlowOracleCache;
+
       // v0.40.4: uses-clause persistence + queries
       /// <summary><!-- drag-lint:auto -->v0.40.4: uses-clause persistence + queries</summary>
       /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
@@ -2709,6 +2726,7 @@ begin
   FReadOnly      := AReadOnly;
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
+  FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
   FDerivingAnchor:= False;
   { Resolve scope -- see the field block. Empty means "this instance has written
     nothing", which ScopedResolveIsSound reads as "cannot scope". }
@@ -2853,6 +2871,7 @@ begin
   FQGetFileUnitUses.Free;
   FQFindUsersOfUnit.Free;
   FAnchorCache.Free;
+  FFlowOracles.Free;
   if Assigned(FConn) then
   begin
     if FConn.Connected then FConn.Close;
@@ -6940,6 +6959,11 @@ begin
   end; // try
 end; // function
 
+function TSQLiteSymbolStore.FlowOracles: TFlowOracleCache;
+begin
+  Result:= FFlowOracles;
+end; // function
+
 procedure TSQLiteSymbolStore.PutSymbolFacts(const AFacts: TSymbolFacts);
 // Helper: assign a nullable text param without changing its pre-declared
 // DataType (mirrors UpsertSymbolDoc.SetNullableText -- AsString would
@@ -9794,6 +9818,13 @@ begin
   EdgeRows := 0;
   EdgeBound:= 0;
   FAnchorCache.Clear;
+  { C1b: the flow oracles read ResolveTypeCategory / ResolveTypeNameToClass /
+    symbol signatures, all of which this pass rewrites. Same reasoning as the
+    anchor cache above, and the same one-line answer: drop the derivations
+    before the rebuild rather than serve a pre-rebuild answer afterwards.
+    Nothing in this pass calls a flow oracle, so it cannot be re-poisoned
+    between here and the commit. }
+  FFlowOracles.Clear;
   NameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FileUnit   := TDictionary<Int64, string>.Create;
   FileUses   := TObjectDictionary<Int64, TDictionary<string, Boolean>>.Create([doOwnsValues]);

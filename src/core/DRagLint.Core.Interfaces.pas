@@ -4,6 +4,7 @@ interface
 
 uses
   System.SysUtils
+  , System.Generics.Collections
   , DRagLint.Core.Model
   , DRagLint.Preprocess.Types
   ;
@@ -63,6 +64,70 @@ type
     /// </remarks>
     class function Create: TWalkFilter; static;
   end; // record
+
+  /// <summary>Store-lifetime memo for the five TFlowChecker flow oracles
+  /// (C1b, docs\PLAN-flowchecker-transfer.md section 7).</summary>
+  /// <remarks>
+  /// <para>OWNED BY THE STORE, AND THAT IS THE INVALIDATION ARGUMENT. Every
+  /// answer here is derived from what one store instance holds -- symbol rows,
+  /// signatures, ancestry -- so the store's own lifecycle is the one place
+  /// where invalidation is already solved. Cleared where FAnchorCache is
+  /// cleared (TSQLiteSymbolStore.ResolveAncestry), which is the pass that
+  /// rewrites the tables these answers are read from.</para>
+  /// <para>WHY NOT A PROCESS-WIDE MEMO: RecDef/RecType/Managed keys carry a
+  /// FILE ID, and a file id means nothing except relative to the store that
+  /// issued it. A global memo would let two stores collide on the same
+  /// integer; this cannot.</para>
+  /// <para>KNOWN CONSTRAINT -- ParamMd IS A FUNCTION OF TWO STORES. The
+  /// param-mode oracle falls back to the LIBRARY store when the project store
+  /// is silent, so its answer depends on the (AStore, ALibStore) pair while
+  /// this cache is keyed by AStore alone. Sound today because every caller
+  /// builds a fresh store per verb (drag-lint check-ast passes no library
+  /// store and opens its own store), so no instance is ever reused across a
+  /// different pairing. A future long-lived host that reuses ONE store across
+  /// both pairings must key this cache by the library store's identity too --
+  /// otherwise lint-all could inherit check-ast's library-free answers and
+  /// silently report FEWER findings. Ruled 2026-09-06: documented, not keyed.</para>
+  /// <para>ParamMd stores Ord(TParamMode); the enum lives in
+  /// DRagLint.Analysis.Flow.Lattices, which this unit must not depend on.</para>
+  /// <para>Not thread-safe; one store instance belongs to one thread.</para>
+  /// </remarks>
+  TFlowOracleCache = class
+  strict private
+    FOwns   : TDictionary<string, Boolean>;
+    FParamMd: TDictionary<string, Integer>;
+    FRecDef : TDictionary<string, Boolean>;
+    FRecType: TDictionary<string, Boolean>;
+    FManaged: TDictionary<string, Boolean>;
+  public
+    /// <summary>Constructor. Creates the five empty maps; the instance owns
+    /// them and frees them.</summary>
+    constructor Create;
+    /// <summary>Frees the five maps.</summary>
+    destructor Destroy; override;
+    /// <summary>Empties every map. Called when the store invalidates the tables
+    /// these answers derive from.</summary>
+    procedure Clear;
+    { READ-ONLY properties over the maps, not public fields. The CONTENTS are
+      meant to be mutated by the oracles -- that is the point -- but the map
+      objects themselves are owned here and must never be swapped out from
+      under the store that frees them. }
+    /// <summary>callee name + '#' + arg index -> the argument escapes/is owned.
+    /// Case-SENSITIVE on the callee, matching the case-sensitive symbol lookup
+    /// the answer is computed from.</summary>
+    property Owns   : TDictionary<string, Boolean> read FOwns;
+    /// <summary>callee name + '#' + index -> Ord(TParamMode). Case-SENSITIVE
+    /// for the same reason as Owns; see the param-mode oracle for what a
+    /// case-folded key cost.</summary>
+    property ParamMd: TDictionary<string, Integer> read FParamMd;
+    /// <summary>file id + '#' + type text + '#' + member -> member is a callable
+    /// record method. The file id is load-bearing: see the remarks.</summary>
+    property RecDef : TDictionary<string, Boolean> read FRecDef;
+    /// <summary>file id + '#' + type text -> the type resolves to a record.</summary>
+    property RecType: TDictionary<string, Boolean> read FRecType;
+    /// <summary>file id + '#' + type text -> the type is compiler-managed.</summary>
+    property Managed: TDictionary<string, Boolean> read FManaged;
+  end;
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -1942,6 +2007,14 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure PutSymbolFacts(const AFacts: TSymbolFacts);
+    /// <summary>This store's flow-oracle memo, created with the store and
+    /// living exactly as long as it. Never nil.</summary>
+    /// <returns>The store's own TFlowOracleCache; the store owns it and the
+    /// caller must NOT free it.</returns>
+    /// <remarks>C1b. The cache is cleared by the store itself when a pass
+    /// invalidates the tables the answers derive from -- callers neither clear
+    /// it nor reason about its lifetime. See TFlowOracleCache.</remarks>
+    function FlowOracles: TFlowOracleCache;
   end;
 
   /// <remarks>
@@ -2233,6 +2306,37 @@ begin
   Result:= Default(TWalkFilter);
   Result.SqlOnlyMS:= True;
   Result.MaxFileKB:= 2048;
+end;
+
+{ ----- TFlowOracleCache ----- }
+
+constructor TFlowOracleCache.Create;
+begin
+  inherited Create;
+  FOwns   := TDictionary<string, Boolean>.Create;
+  FParamMd:= TDictionary<string, Integer>.Create;
+  FRecDef := TDictionary<string, Boolean>.Create;
+  FRecType:= TDictionary<string, Boolean>.Create;
+  FManaged:= TDictionary<string, Boolean>.Create;
+end;
+
+destructor TFlowOracleCache.Destroy;
+begin
+  FOwns.Free;
+  FParamMd.Free;
+  FRecDef.Free;
+  FRecType.Free;
+  FManaged.Free;
+  inherited Destroy;
+end;
+
+procedure TFlowOracleCache.Clear;
+begin
+  FOwns.Clear;
+  FParamMd.Clear;
+  FRecDef.Clear;
+  FRecType.Clear;
+  FManaged.Clear;
 end;
 
 end.
