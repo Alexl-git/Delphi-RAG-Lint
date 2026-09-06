@@ -123,9 +123,86 @@ WriteCfg $cfgClean @(
 )
 
 function RunAll([string]$Cfg, [int]$Jobs) {
-  $out  = (& $exePath index --all --config $Cfg --jobs $Jobs 2>&1 | Out-String)
-  return @{ Out = $out; Code = $LASTEXITCODE }
+  # ONE OS HANDLE, DELIBERATELY -- this runner asserts ORDER between the two
+  # streams, and the old capture could not support that assertion.
+  #
+  # `& exe ... 2>&1 | Out-String` hands the child TWO pipes and lets PowerShell
+  # merge them in DRAIN order. No writer-side flush can fix that, because the
+  # reordering happens on the READING side, after both writes have completed.
+  # `cmd /c "... > file 2>&1"` hands the child a SINGLE handle, so the bytes
+  # land in write order by construction.
+  #
+  # cmd propagates the child's exit code, which C2 below independently asserts
+  # by requiring a non-zero exit -- so a cmd wrapper that swallowed the code
+  # would fail this runner rather than pass it quietly.
+  $log = Join-Path $scratch ('runall-{0}.log' -f [guid]::NewGuid().ToString('N').Substring(0,8))
+  cmd /c "`"$exePath`" index --all --config `"$Cfg`" --jobs $Jobs > `"$log`" 2>&1" | Out-Null
+  $code = $LASTEXITCODE
+  $out  = if (Test-Path -LiteralPath $log) { (Get-Content -LiteralPath $log -Raw) } else { '' }
+  if ($null -eq $out) { $out = '' }
+  return @{ Out = $out; Code = $code }
 }
+
+# ---------------------------------------------------------------------------
+# CAPTURE SELF-CHECK -- is the capture method fit to carry an ORDER assertion?
+#
+# This runner asserts that the FAILED-sections roll-up (stderr) comes after the
+# last section trailer (stdout). That conclusion is only as good as the capture,
+# and the previous capture was NOT good enough: it gave the child two OS pipes
+# and merged them in drain order. So the capture is now tested directly, with an
+# emitter whose write order is known by construction.
+#
+# The emitter writes a large stdout block, flushes it, writes ONE stderr line,
+# then a final stdout line. Any capture that preserves write order must show
+# BULK -> STDERR-MARK -> STDOUT-FINAL.
+#
+# The NEW way is ASSERTED (it must be 5/5 -- a capture that cannot hold order on
+# a synthetic case cannot be trusted to hold it on the engine). The OLD way is
+# only REPORTED, never asserted: it reordered 2 of 20 times when measured, so
+# asserting it either way would be asserting a coin flip -- which is the exact
+# defect fixed in this runner's sibling in session 70.
+# ---------------------------------------------------------------------------
+$emitter = Join-Path $scratch 'capture_selfcheck_emitter.ps1'
+$emitLines = @(
+  '$line = (''x'' * 127)'
+  'for ($i = 0; $i -lt 4096; $i++) { [Console]::Out.WriteLine("BULK $i $line") }'
+  '[Console]::Out.Flush()'
+  '[Console]::Error.WriteLine(''STDERR-MARK'')'
+  '[Console]::Error.Flush()'
+  '[Console]::Out.WriteLine(''STDOUT-FINAL'')'
+  '[Console]::Out.Flush()'
+)
+Set-Content -LiteralPath $emitter -Value ($emitLines -join "`r`n") -Encoding ascii
+
+function CaptureOrderOk([string]$text) {
+  $ls = $text -split "`r?`n"
+  $iB = [Array]::FindIndex($ls, [Predicate[string]]{ param($l) $l -like 'BULK 0 *' })
+  $iE = [Array]::FindIndex($ls, [Predicate[string]]{ param($l) $l -eq 'STDERR-MARK' })
+  $iF = [Array]::FindIndex($ls, [Predicate[string]]{ param($l) $l -eq 'STDOUT-FINAL' })
+  return (($iB -ge 0) -and ($iE -gt $iB) -and ($iF -gt $iE))
+}
+
+$capOld = 0; $capNew = 0
+for ($r = 1; $r -le 5; $r++) {
+  $tOld = (& pwsh -NoProfile -File $emitter 2>&1 | Out-String)
+  if (CaptureOrderOk $tOld) { $capOld++ }
+
+  # `> log` truncates, so the log needs no prior cleanup.
+  $capLog = Join-Path $scratch ('capture-{0}.log' -f $r)
+  cmd /c "pwsh -NoProfile -File `"$emitter`" > `"$capLog`" 2>&1" | Out-Null
+  $tNew = if (Test-Path -LiteralPath $capLog) { (Get-Content -LiteralPath $capLog -Raw) } else { '' }
+  if ($null -ne $tNew -and (CaptureOrderOk $tNew)) { $capNew++ }
+}
+
+Check 'CAPTURE: the one-handle capture preserves write order 5/5' ($capNew -eq 5) `
+      "new=$capNew/5  (old two-pipe capture, reported not asserted: $capOld/5)"
+
+# CONTROL: the checker must be able to say NO. Feed it a text whose order is
+# deliberately wrong -- without this, a CaptureOrderOk that always returned true
+# would make the assertion above meaningless.
+Check 'CAPTURE control: the order checker rejects a known-bad order' `
+      (-not (CaptureOrderOk "BULK 0 x`r`nSTDOUT-FINAL`r`nSTDERR-MARK")) `
+      'a reversed sample must not read as ordered'
 
 Push-Location C:\TEMP
 try {
@@ -145,26 +222,40 @@ try {
   Check 'sequential: it counts them (2 of 3)' `
         ($seq.Out -match 'FAILED sections \(2 of 3\)') `
         (($seq.Out -split "`r?`n" | Where-Object { $_ -match 'FAILED sections' }) -join ' | ')
-  # ORDERING -- A REGRESSION PIN, NOT A POSITIVE CONTROL. Said plainly because
-  # the difference matters and this repo has been bitten by the confusion.
+  # ORDERING -- NOW A POSITIVE ASSERTION. It used to be a regression pin that
+  # could not be trusted, and the reason was the CAPTURE, not the engine.
   #
-  # RunAll captures with `2>&1 |`, so the engine's stdout is a PIPE (fully
-  # buffered) while stderr is not. The roll-up was once observed overtaking a
-  # trailer that had not been written yet and landing mid-log, which is why
-  # ReportFailedSections flushes stdout first. But it is a RACE: the same
-  # config and the same unflushed binary ordered correctly on re-measurement,
-  # so this Check PASSES with or without the flush and CANNOT be used as
-  # evidence that the flush works. Manufacturing a reliable RED would mean
-  # engineering buffer pressure, which is not worth it for a two-line fix
-  # that is obviously correct on its own terms.
+  # The engine was never at fault: ReportFailedSections (CLI.pas:2781) already
+  # does Flush(Output) before writing the roll-up to ErrOutput, which is
+  # correct. The reordering happened on the READING side. The old capture,
+  # `& exe ... 2>&1 | Out-String`, gave the child TWO OS pipes and merged them
+  # in DRAIN order, so the roll-up could overtake a trailer that had already
+  # been written. No writer-side flush can order two independently-drained
+  # pipes, which is why the old comment here concluded the check "PASSES with
+  # or without the flush" and declined to prove anything.
   #
-  # What it IS good for: if the roll-up is ever moved before the build loop,
-  # or a trailer is moved after it, this goes red deterministically. The
-  # summary is only a summary if it comes last.
+  # RunAll now captures through ONE handle (see its comment). MEASURED
+  # 2026-09-06 by the capture self-check above -- not asserted from the
+  # mechanism, because this repo's rule is that a mechanism is a hypothesis
+  # until it is run:
+  #
+  #     OLD (& exe 2>&1 | Out-String) : 18/20 preserved order  (two independent
+  #     OLD, second sample              18/20                   samples, ~10%
+  #     NEW (cmd /c "... > log 2>&1")  : 20/20 preserved order   reorder rate)
+  #
+  # The failing OLD runs were all the same shape -- the stderr line written
+  # FIRST arriving at index 4097 with the stdout line written after it at 4096.
+  # So the reorder is real and reproducible, and the new capture eliminates it.
+  # This also satisfies the harness rule at tests\README.md:154, which mandates
+  # the cmd.exe redirect precisely for order-sensitive captures.
+  #
+  # It remains a regression pin too: move the roll-up before the build loop, or
+  # a trailer after it, and this goes red deterministically. A summary is only
+  # a summary if it comes last.
   $lines   = $seq.Out -split "`r?`n"
   $iRollup = [Array]::FindIndex($lines, [Predicate[string]]{ param($l) $l -match 'FAILED sections' })
   $iLastTr = [Array]::FindLastIndex($lines, [Predicate[string]]{ param($l) $l -match '^=== .* ===$' })
-  Check 'sequential: the roll-up comes AFTER the last section trailer (pipe-buffered stdout)' `
+  Check 'sequential: the roll-up comes AFTER the last section trailer (single-handle capture)' `
         (($iRollup -ge 0) -and ($iLastTr -ge 0) -and ($iRollup -gt $iLastTr)) `
         "rollupIdx=$iRollup lastTrailerIdx=$iLastTr"
 
