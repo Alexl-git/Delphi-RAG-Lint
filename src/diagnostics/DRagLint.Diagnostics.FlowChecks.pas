@@ -67,6 +67,19 @@ type
     /// <summary>Routines analysed since process start -- the denominator for a
     /// per-routine cost.</summary>
     class function RoutinesAnalysed: Int64; static;
+    /// <summary>Seconds spent inside flow ORACLE AOracle (Step 0 of
+    /// docs\PLAN-flowchecker-transfer.md). Nested time is excluded, so the
+    /// slots partition rather than overlap.</summary>
+    class function OracleSeconds(AOracle: Integer): Double; static;
+    /// <summary>Calls made to oracle AOracle.</summary>
+    class function OracleCalls(AOracle: Integer): Int64; static;
+    /// <summary>Calls to AOracle that did NOT come back from a cache -- the
+    /// size of the prize a store-lifetime memo would claim.</summary>
+    class function OracleMisses(AOracle: Integer): Int64; static;
+    /// <summary>The name of oracle AOracle, for a profile line.</summary>
+    class function OracleName(AOracle: Integer): string; static;
+    /// <summary>How many oracle slots there are.</summary>
+    class function OracleCount: Integer; static;
   end;
 
 implementation
@@ -145,6 +158,95 @@ begin
   Result:= GFlowRoutines;
 end;
 
+{ ---------------------------------------------------------------------------
+  STEP 0 INSTRUMENTATION (docs\PLAN-flowchecker-transfer.md sec. 6).
+
+  The C1 candidate is a store-lifetime memo for the flow ORACLES. Its whole case
+  rests on an INFERENCE from a table -- a 95x gap between two calls of the same
+  walk -- and this repo's record on GUESSED flow-perf targets is 100% failure.
+  So the oracles are measured before anything is cached, and the plan's kill
+  gate is arithmetic on these numbers: oracle seconds must reach 50% of
+  (DefAsgn solve + replay + escape solve) or C1 dies here.
+
+  MISSES are the interesting column, not calls. OwnsOracle and ParamMode ALREADY
+  memoise -- but their caches are locals of TFlowChecker.Check, which runs once
+  per FILE, so every file pays its own cold misses. That per-file rebuild is
+  exactly what C1 would remove, so "misses" is the size of the prize and "calls"
+  only says how often the existing cache earns its keep.
+
+  Accumulation is unconditional and PRINTING is gated on DRAGLINT_PROFILE --
+  the same rule as FlowPhaseTicks and TDataFlowStats: the measured code has to
+  be the shipped code, or the measurement describes a build nobody runs.
+
+  THE EXCLUDE KEEPS IT A PARTITION. RecMethodDef CALLS IsRecordType, so without
+  subtracting the nested time record-def would be charged twice and the two rows
+  could sum past the phase that contains them. FlowTick above carries the same
+  mechanism for the same reason, and its comment records what happened when it
+  did not: a 121.12 s total against a 114.38 s slot, which is precisely how a
+  profile aims an optimisation at the wrong target. --------------------------- }
+const
+  ORACLE_OWNS     = 0;
+  ORACLE_PARAM    = 1;
+  ORACLE_RECDEF   = 2;
+  ORACLE_MANAGED  = 3;
+  ORACLE_RECTYPE  = 4;
+  ORACLE_SLOTS    = 5;
+  ORACLE_NAMES: array[0..ORACLE_SLOTS - 1] of string = (
+    'oracle owns', 'oracle param-mode', 'oracle record-def',
+    'oracle managed-type', 'oracle record-type');
+
+var
+  GOracleT    : array[0..ORACLE_SLOTS - 1] of Int64;
+  GOracleCalls: array[0..ORACLE_SLOTS - 1] of Int64;
+  GOracleMiss : array[0..ORACLE_SLOTS - 1] of Int64;
+
+{ Charge (now - AStart - AExclude) to AOracle and count the call. AMiss marks a
+  call that did NOT come back from an existing cache -- for the two oracles that
+  have no cache of their own it is always True, which reads correctly: every
+  call is a full computation. }
+procedure OracleTick(AOracle: Integer; AStart, AExclude: Int64; AMiss: Boolean);
+begin
+  if (AOracle < 0) or (AOracle >= ORACLE_SLOTS) then Exit;
+  Inc(GOracleT[AOracle], (TStopwatch.GetTimeStamp - AStart) - AExclude);
+  Inc(GOracleCalls[AOracle]);
+  if AMiss then Inc(GOracleMiss[AOracle]);
+end;
+
+class function TFlowChecker.OracleSeconds(AOracle: Integer): Double;
+begin
+  Result:= 0;
+  if (AOracle < 0) or (AOracle >= ORACLE_SLOTS) then Exit;
+  Result:= GOracleT[AOracle] / TStopwatch.Frequency;
+end;
+
+class function TFlowChecker.OracleCalls(AOracle: Integer): Int64;
+begin
+  Result:= 0;
+  if (AOracle < 0) or (AOracle >= ORACLE_SLOTS) then Exit;
+  Result:= GOracleCalls[AOracle];
+end;
+
+class function TFlowChecker.OracleMisses(AOracle: Integer): Int64;
+begin
+  Result:= 0;
+  if (AOracle < 0) or (AOracle >= ORACLE_SLOTS) then Exit;
+  Result:= GOracleMiss[AOracle];
+end;
+
+class function TFlowChecker.OracleName(AOracle: Integer): string;
+begin
+  Result:= '';
+  if (AOracle < 0) or (AOracle >= ORACLE_SLOTS) then Exit;
+  Result:= ORACLE_NAMES[AOracle];
+end;
+
+class function TFlowChecker.OracleCount: Integer;
+begin
+  Result:= ORACLE_SLOTS;
+end;
+
+
+
 function NodeStr(const N: TTSNode; const ASrc: TBytes): string;
 var S, E, L: Integer;
 begin
@@ -159,8 +261,11 @@ end;
   function-result-not-set, matching W1036. Store-exact when present, name
   heuristic otherwise. }
 function IsManagedType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
-var Cat: TTypeCategory; T: string;
+var Cat: TTypeCategory; T: string; T0, E0: Int64;
 begin
+  T0 := TStopwatch.GetTimeStamp;
+  E0 := GOracleT[ORACLE_MANAGED]; { see the finally: this function RECURSES }
+  try
   if AStore <> nil then
   begin
     Cat := AStore.ResolveTypeCategory(ATypeText, AFileId);
@@ -196,6 +301,12 @@ begin
   { I-prefixed interface convention: 'I' + uppercase letter }
   if (Length(ATypeText) >= 2) and (ATypeText[1] = 'I') and ATypeText[2].IsUpper then Exit(True);
   Result := False;
+  finally
+    { RECURSES for static arrays (it re-asks about the ELEMENT type), so the
+      nested frames' time is subtracted here. Without this a two-deep array
+      type is charged twice and the slot can outgrow the phase containing it. }
+    OracleTick(ORACLE_MANAGED, T0, GOracleT[ORACLE_MANAGED] - E0, True);
+  end;
 end;
 
 { Interface-typed subset of IsManagedType, for not-assigned-interface: store-exact
@@ -234,10 +345,16 @@ end;
 /// store this returns False, which is today's (pre-fix) behaviour, so the
 /// store-free lint path cannot silently over-suppress.</remarks>
 function IsRecordType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
+var T0: Int64;
 begin
-  Result := False;
-  if AStore = nil then Exit;
-  Result := AStore.ResolveTypeCategory(ATypeText, AFileId) = tcRecord;
+  T0 := TStopwatch.GetTimeStamp;
+  try
+    Result := False;
+    if AStore = nil then Exit;
+    Result := AStore.ResolveTypeCategory(ATypeText, AFileId) = tcRecord;
+  finally
+    OracleTick(ORACLE_RECTYPE, T0, 0, True);
+  end;
 end;
 
 /// <summary>Tests whether AConstructorNode (an already-confirmed constructor
@@ -2648,10 +2765,14 @@ begin
       var
         Key, CPath, PName: string; B, Ambig, Have: Boolean; Syms: TArray<TSymbol>;
         RSym: TSymbol; I: Integer; FId: Int64; CPF: TParsedFile; DP: TTSNode;
+        T0: Int64; Miss: Boolean;
       begin
+        T0 := TStopwatch.GetTimeStamp; Miss := False;
+        try
         Result := True; { conservative default: owns/unknown -> escape }
         Key := ACalleeName + '#' + IntToStr(AArgIdx);
         if OwnCache.TryGetValue(Key, B) then Exit(B);
+        Miss := True; { OwnCache is a local of Check, so this is a per-FILE miss }
         OwnCache.AddOrSetValue(Key, True); { pre-seed (guards re-entry) }
         Syms := AStore.FindSymbolsByExactName(ACalleeName);
         { resolve to a single routine: an interface forward-decl + its impl share a
@@ -2675,6 +2796,9 @@ begin
         if PName = '' then Exit;
         Result := not ParamClearlyNonOwning(DP, PName, CPF.Src); { non-owning -> False (leak) }
         OwnCache.AddOrSetValue(Key, Result);
+        finally
+          OracleTick(ORACLE_OWNS, T0, 0, Miss);
+        end;
       end
   else
     OwnsOracle := nil;
@@ -2701,8 +2825,11 @@ begin
   if AStore <> nil then
     RecMethodDef :=
       function(const ATypeText, AMemberName: string): Boolean
-      var RecSym, MemSym: TSymbol;
+      var RecSym, MemSym: TSymbol; T0, E0: Int64;
       begin
+        T0 := TStopwatch.GetTimeStamp;
+        E0 := GOracleT[ORACLE_RECTYPE]; { subtracted below -- see the finally }
+        try
         Result := False;
         if not IsRecordType(ATypeText, AStore, AFileId) then Exit;
         RecSym := AStore.ResolveTypeNameToClass(Trim(ATypeText), AFileId);
@@ -2713,6 +2840,12 @@ begin
         MemSym := AStore.FindChildSymbolByName(RecSym.Id, AMemberName);
         if MemSym.Id <= 0 then Exit;
         Result := CanBeCallTarget(MemSym.Kind);
+        finally
+          { RecMethodDef CALLS IsRecordType, which bills its own slot. Subtract
+            it or the same work is charged to both rows and they stop being a
+            partition of the phase above them. }
+          OracleTick(ORACLE_RECDEF, T0, GOracleT[ORACLE_RECTYPE] - E0, True);
+        end;
       end
   else
     RecMethodDef := nil;
@@ -2790,11 +2923,15 @@ begin
           Result := True;
         end;
 
+      var T0: Int64; Miss: Boolean;
       begin
+        T0 := TStopwatch.GetTimeStamp; Miss := False;
+        try
         Result := pmUnknown;
         if ACalleeName = '' then Exit;
         Key := LowerCase(ACalleeName) + '#' + IntToStr(AIndex);
         if ParamModeCache.TryGetValue(Key, Result) then Exit;
+        Miss := True; { ParamModeCache is a local of Check -> a per-FILE miss }
         try
           { INTRINSICS ANSWER ONLY IN THE var/out DIRECTION, and that restriction
             was bought with a corpus A/B, not reasoned out.
@@ -2867,6 +3004,9 @@ begin
           if Any then Result := Seen else Result := pmUnknown;
         finally
           ParamModeCache.AddOrSetValue(Key, Result);
+        end;
+        finally
+          OracleTick(ORACLE_PARAM, T0, 0, Miss);
         end;
       end
   else

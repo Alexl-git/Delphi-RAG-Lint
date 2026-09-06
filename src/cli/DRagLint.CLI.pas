@@ -15357,6 +15357,30 @@ begin
           [LS.Name, LS.SolveSeconds, LS.Visits / Max(Int64(1), LS.Blocks),
            100 * LS.TransferSeconds / Max(0.000001, LS.SolveSeconds), LS.Solves]));
     end;
+
+    { THE FLOW ORACLES -- Step 0 of docs\PLAN-flowchecker-transfer.md.
+
+      The C1 candidate (a store-lifetime oracle memo) rests on an INFERENCE
+      from the lattice table rather than on a measurement, and this repo has
+      never once guessed a flow-perf target correctly. So the decision is made
+      from these four rows against the kill line in section 6: oracle seconds
+      must reach 50% of (DefAsgn solve + replay + escape solve), or C1 dies.
+
+      MISSES, not calls, are the number that matters. `owns` and `param-mode`
+      already memoise -- into dictionaries that are LOCALS of TFlowChecker.
+      Check, which runs once per FILE. Every file therefore re-pays its own
+      cold misses, and removing exactly that is what C1 would buy. Printed even
+      when the rows are boring: a measurement that only appears when it
+      supports the hypothesis is not a measurement. }
+    var OracleTot: Double:= 0;
+    for var OI:= 0 to TFlowChecker.OracleCount - 1 do
+      OracleTot:= OracleTot + TFlowChecker.OracleSeconds(OI);
+    if OracleTot > 0 then
+      for var OI:= 0 to TFlowChecker.OracleCount - 1 do
+        Writeln(ErrOutput, Format('      %-26s %8.2f s  (%d call(s), %d miss(es), %.1f%% miss)',
+          [TFlowChecker.OracleName(OI), TFlowChecker.OracleSeconds(OI),
+           TFlowChecker.OracleCalls(OI), TFlowChecker.OracleMisses(OI),
+           100 * TFlowChecker.OracleMisses(OI) / Max(Int64(1), TFlowChecker.OracleCalls(OI))]));
     Writeln(ErrOutput, Format('    %-28s %8.2f s', ['(sum of the slots above)', (ScanTot + GScanAppend) / TStopwatch.Frequency]));
     { SESSION 36 (P3): the .scm half broken down PER RULE. The aggregate is the
       largest single item left in lint-all, but "114 queries cost 54 s" is not
