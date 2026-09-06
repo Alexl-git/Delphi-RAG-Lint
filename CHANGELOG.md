@@ -3,6 +3,85 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.10.0-alpha -- 2026-09-05
+
+**The release where a `.dfm` stopped being read as a complete document.** Delphi
+does not stream a published property whose value equals its declared `default`,
+so an ABSENT property is not an unknown -- most of the time it is a value that
+can be read straight off the declaration. The converter had been treating absent
+as unknown, which made it pessimistic about exactly the properties that are most
+often at their default.
+
+**No schema change, no extractor change.** Schema 21,
+`DRAGLINT_EXTRACTOR_VERSION` `1.10.0-alpha` and `DRAGLINT_RESOLVER_VERSION`
+`1.1.0-alpha` are all untouched: everything below is resolved at QUERY time, so
+**no index re-parses** because of this release.
+
+> Note for anyone reading the two version strings side by side: as of this
+> release `DRAGLINT_VERSION` and `DRAGLINT_EXTRACTOR_VERSION` are BOTH the
+> string `1.10.0-alpha`, and that is a coincidence, not a coupling. They are
+> independent constants -- the extractor one moved on its own schedule and last
+> changed in the 2026-08-30 extractor batch. Do not infer from the match that
+> bumping one bumps the other.
+
+### A .dfm is SPARSE
+
+`#default` is a real fallback again. A source property that is absent because it
+sits at its declared default now RESOLVES, and the resolved value is emitted
+explicitly rather than silently dropped. Two new report kinds carry it:
+`default-superseded` and `default-resolved`.
+
+`#when` now matches a resolved default exactly as it matches a streamed value,
+so a mapping over an enum finally fires on that enum's own default.
+**`mapping-source-absent` is correspondingly NARROWED** to the only case where
+nothing can honestly be said: absent, and no clause to resolve it to.
+
+**This reverses the `#else` gating that downstream rule books were told about on
+2026-09-04.** `#else` now fires only when the source is absent AND has no usable
+default. A `#when` written to catch "the enum is at its default" by way of
+`#else` will stop firing -- write the default as an explicit `#when` arm.
+
+`stored` is honoured. `Vcl.Controls.pas` declares
+`Color ... stored IsColorStored default clWindow`; with `ParentColor` set,
+`Color` is omitted regardless of value, so resolving it to the declared default
+would write a wrong value AND clear the inheritance.
+
+### Enum casts EXECUTE, and `.castlib` has a grammar
+
+A `#link` carrying a `: Cast` suffix now translates its value through the
+`.castlib`'s `enum` blocks instead of copying it verbatim. The `.castlib` parser
+moved into the engine so it can read one, and a new `--castlib <file>` flag on
+`convert-apply` and `convert-reemit` names it. **Without `--castlib`, a
+cast-bearing `#link` passes the value through UNCHANGED.** A value with no `map`
+and no `else` reports the new `enum-cast-unmapped` kind.
+
+### `--castlib` is now in README and AI-USAGE, where it was missing
+
+The flag shipped in `--help` but appeared in neither `README.md` nor
+`docs/AI-USAGE.md`, so a reader of either could not discover that a cast-bearing
+`#link` silently passes its value through without it. Both now document it.
+
+> `convert-reemit` remains deliberately undocumented, and this release does NOT
+> change that. It is classified as an internal stage of the conversion pipeline
+> in `run_docs_sync_guard.ps1`'s `$UndocumentedOnPurpose` list. That guard is
+> two-directional and refused an attempt to document it during this release --
+> correctly. **Open question for the owner**, not decided here: session 69 gave
+> `convert-reemit` a user-facing `--castlib` flag and the converter team may now
+> want to run it directly to debug a rule. If so, it should be promoted to the
+> public surface and the exemption dropped; until someone decides that, it stays
+> internal.
+
+### Fixes
+
+* Four ways default-resolution wrote WRONG values into a form, two of them
+  reproduced by running the engine at exit 0: owned-part recursion resolved a
+  child `#link` against the PARENT's defaults, set defaults were truncated into
+  malformed DFM, and `#remove` was not honoured.
+* `overwrite-before-read` now counts a read inside a NESTED routine.
+* `run_index_all_jobs_spawns_workers` asserted a coin flip: it sampled the
+  process table on a run lasting 235-780 ms, while one sample costs about as
+  much, so it got exactly one poll. It now asserts the parallel path's own
+  summary line, which is deterministic.
 ## v1.9.0-alpha -- 2026-08-31
 
 **The release where three checks stopped asking for things the caller could not
