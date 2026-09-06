@@ -20,6 +20,16 @@ Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 Built on [`tree-sitter-delphi13`](https://github.com/Alexl-git/tree-sitter-delphi13)
 (sibling project) and a vendored Pascal binding for libtree-sitter.
 
+> **Background reading -- why that foundation.**
+> **["Three Ways to Read Delphi"](docs/PARSING-LAYERS.md)** compares a raw lexer,
+> DelphiAST and tree-sitter as three answers to one question: *what should happen
+> when the source does not fit?* Covers the conditional-compilation fork, byte-exact
+> round-trip fidelity, and three case studies -- including where a hand-written AST
+> still wins.
+> Also as styled HTML -- [`docs/PARSING-LAYERS.html`](docs/PARSING-LAYERS.html)
+> ([rendered](https://htmlpreview.github.io/?https://github.com/Alexl-git/Delphi-RAG-Lint/blob/main/docs/PARSING-LAYERS.html))
+> -- and Word, [`docs/PARSING-LAYERS.docx`](docs/PARSING-LAYERS.docx).
+
 **Companion:** [`Delphi-RAG-Lint-Graph`](https://github.com/Alexl-git/Delphi-RAG-Lint-Graph)
 ? a standalone VCL viewer (Win64) that turns this index into an interactive symbol
 graph: UML class boxes, a **Code Flow View** that renders your DocInsight comments,
