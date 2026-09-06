@@ -1623,6 +1623,12 @@ const
   SCAN_TYPE_KEY     = 'scan_type';
   SCAN_TYPE_PROJECT = 'project';
   SCAN_TYPE_LIBRARY = 'library';
+  { How many rows a PROJECT scan found outside its own compile closure. Written
+    by DoIndex, read by the freshness note below so the advice it gives can be
+    honest: `index --project` never visits a non-member, so for those rows the
+    note's own remedy cannot work and only --rebuild can. Absent/'' means
+    "unknown" (a DB written before this existed), which reads as zero. }
+  OUT_OF_CLOSURE_KEY = 'out_of_closure_count';
 
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
 
@@ -1672,6 +1678,30 @@ begin
       ' Answers may be stale -- this is a PROJECT index, so refresh it with:' +
       ' drag-lint index --project <file.dproj> --db %s   (or: drag-lint index --all --only <Section>)',
       [Rep.Changed, Rep.Checked, Extra, ADbPath]));
+
+    { THE ADVICE ABOVE CAN BE IMPOSSIBLE TO FOLLOW, AND SAYING SO IS THE POINT.
+
+      A project DB can hold rows that are NOT project members -- historically
+      from a folder target aimed at a project DB, which widened the scope
+      permanently. index --project walks the compile closure, so it never
+      visits those rows and can never refresh them; and EvictOutOfScopeFiles is
+      bounded to ProjectScopeRoots, so it never removes them either. They are
+      immortal, they are counted by the freshness sweep above, and following
+      the note's own instruction does NOTHING -- which is exactly the reported
+      symptom (INBOX-project-db-permanently-stale, defect 1: 81 of 199 rows on
+      this repo's own self-index).
+
+      A standing note nobody can clear is worse than no note: it trains the
+      reader to skim every freshness warning, including the ones that matter.
+      So when the DB knows it has such rows, the note names the only remedy
+      that actually works for them. }
+    var OutOfClosure: Integer:= StrToIntDef(AStore.GetMetaValue(OUT_OF_CLOSURE_KEY), 0);
+    if OutOfClosure > 0 then
+      Writeln(ErrOutput, Format(
+        'drag-lint: note: %d of those indexed file(s) lie OUTSIDE this project''s compile closure.' +
+        ' They are not project members, so index --project never visits them and CANNOT clear this note.' +
+        ' If the changed file(s) are among them, rebuild the scope: drag-lint index --project <file.dproj> --db %s --rebuild',
+        [OutOfClosure, ADbPath]));
   end
   else
   begin
@@ -4070,6 +4100,54 @@ begin
         PrintSweepSample(Evicted, '  ');
       end;
     end;
+    { OUT-OF-CLOSURE ROWS: REPORT THEM, because eviction deliberately will not.
+
+      EvictOutOfScopeFiles above is bounded to ProjectScopeRoots -- the
+      directories of the closure files plus the project dir -- and its own
+      remark says why on purpose: "another project's units, indexed into the
+      same .sqlite from a directory this scope never mentions, lie outside every
+      root and are never considered". That protection predates the
+      one-DB-per-project ruling and is still the right default, because a
+      shared DB must not have another project's rows silently deleted.
+
+      The consequence is that such rows are IMMORTAL and INVISIBLE. `index
+      --project` walks the compile closure so it never refreshes them; eviction
+      never removes them; and the freshness sweep still COUNTS them, so the
+      linter prints "N file(s) changed" for ever and the remedy it advises does
+      nothing. That is the reported symptom, and on this repo's own self-index
+      it is 81 of 199 rows (54 src\delphi-plugin, 19 src\tools, 8 src\config --
+      three other projects' units, none of them in the CLI's closure).
+
+      So: SAY SO, and do not delete. Deleting reverses a documented protection
+      and changes the lint-all denominator, which is an owner's call, not this
+      function's. The count is also stamped into the DB so the freshness note
+      can be honest about what --project is able to fix.
+
+      The folder-into-project REFUSAL now stops new widening, so these rows are
+      legacy. Reported only when there are some: a correct DB says nothing. }
+    if AArgs.ProjectPath <> '' then
+    begin
+      var ClosureSet: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+      try
+        for var CF in Folders do
+          ClosureSet.AddOrSetValue(LowerCase(CF), True);
+        var Outside: TArray<string>:= nil;
+        for var Stamp in Store.GetAllFileStamps do
+          if not ClosureSet.ContainsKey(LowerCase(Stamp.Path)) then
+            Outside:= Outside + [Stamp.Path];
+        Store.SetMetaValue(OUT_OF_CLOSURE_KEY, IntToStr(Length(Outside)));
+        if Length(Outside) > 0 then
+        begin
+          Writeln(Format('scope: %d indexed file(s) are outside this project''s compile closure ' +
+            '(NOT evicted -- they lie outside every eviction root; pass --rebuild to drop them):',
+            [Length(Outside)]));
+          PrintSweepSample(Outside, '  ');
+        end;
+      finally
+        ClosureSet.Free;
+      end;
+    end;
+
 
     { v0.40.4: post-pass resolves target_file_id for every unit_uses row.
       Done here (not inside the per-file transaction) because resolution
