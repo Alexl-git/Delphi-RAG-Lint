@@ -309,6 +309,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 | `uses-audit <unit.pas>` | interface->impl `uses` moves + unused units (report only) |
 | `uses-fix <unit.pas> --project P` | compiler-verified `uses` cleanup (`--remove-unused`) |
 | `format <file>` | reformat via YADF (`--yadf-path`) |
+| `shared-unit --in <file.pas>` | read or extend the `dl:shared` marker that declares a unit shared by several projects (`--add-project <name>`; dry-run without `--apply`, `--json`) |
 
 **Docs (DocInsight generation)**
 | Verb | What it does |
@@ -518,6 +519,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 | `forms-csv --project P --db DB` | test-helper form-navigation CSV, one row per form |
 | `import-log <logfile>` | ingest a dcc/msbuild log into the index |
 | `export enums\|obsidian` | export enums (firebird-sql/csv/json/delphi-const) or an Obsidian vault |
+| `migrate-dbs` | move project indexes into each project's own `_D-RAG` folder, the one-DB-per-project layout. Dry-run by default; `--apply` performs the moves (`--config <drag-lint.json>`) |
 | `top` / `schema` / `sql` / `diff` | (also above) index introspection |
 
 **Servers**

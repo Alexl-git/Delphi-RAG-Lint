@@ -871,6 +871,101 @@ Check 'every verb the table recommends is accepted by the CLI' ($badVerbs.Count 
 Check 'negative control: an invented question is not in the set' `
   (-not ($helpQ -contains (Normalize-Q 'How do I summon a dragon?')))
 
+# ---------------------------------------------------------------------------
+# CHECK 7 -- every --help verb is NAMED in README.md and docs\AI-USAGE.md
+#
+# Checks 1-6 hold --help against the CODE and against the COMMON QUESTIONS
+# table. Nothing held the two PROSE surfaces against the verb list, yet the
+# DOCS-IN-SYNC rule names all three: "--help, README.md, and docs\AI-USAGE.md
+# are part of the product".
+#
+# This closes the gap that rule was written for. Session 70 found --castlib in
+# neither README nor AI-USAGE while --help documented it -- and found it BY
+# HAND, which is the failure mode: silence. Measured 2026-09-06: --help lists 80
+# verbs, README names all 80, AI-USAGE was missing exactly `migrate-dbs` and
+# `shared-unit`.
+#
+# SCOPE IS DELIBERATE: VERBS ONLY, NOT FLAGS. At flag level README lacks 16 and
+# AI-USAGE 39 of 144 distinct --flags -- 55 doc lines of churn now, plus a
+# maintenance cost on every new flag forever. That is an owner decision with a
+# price attached, not a guard to switch on quietly. The counts are recorded here
+# so the decision can be made on numbers rather than on appetite.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '-- check 7: every --help verb is named in README and AI-USAGE' -ForegroundColor Cyan
+
+# A verb that --help documents but the prose docs deliberately omit goes here,
+# WITH a reason, and is asserted in BOTH directions below -- exactly like
+# $UndocumentedOnPurpose. That two-way assertion is not ceremony: it caught a
+# wrong "fix" in session 70, when convert-reemit's absence looked like the very
+# defect this file exists to prevent and documenting it correctly FAILED.
+# Empty today, because every help verb is in both docs.
+$HelpOnlyOnPurpose = [ordered]@{}
+
+# FAIL-OPEN CONTROL. A help parse that yielded nothing makes every "is it
+# documented?" test below trivially true, so this check would PASS while
+# asserting nothing. Check 1 asserts this too; it is repeated because THIS
+# check's conclusion depends on it independently.
+Check 'check 7 has a verb list to work with' ($helpVerbs.Count -gt 20) `
+  "($($helpVerbs.Count) verb(s))"
+
+function Doc-Names-Token([string]$haystack, [string]$token) {
+  # A word boundary that understands hyphenated verbs: `lint` must NOT be
+  # satisfied by `lint-all`, and `index` must not be satisfied by `--index-only`.
+  return ($haystack -match ('(^|[^a-z-])' + [regex]::Escape($token) + '([^a-z-]|$)'))
+}
+
+$verbDocs = [ordered]@{
+  'README.md'        = (Join-Path $Repo 'README.md')
+  'docs\AI-USAGE.md' = (Join-Path $Repo 'docs\AI-USAGE.md')
+}
+
+foreach ($docName in $verbDocs.Keys) {
+  $docPath = $verbDocs[$docName]
+  if (-not (Test-Path -LiteralPath $docPath)) {
+    Check "$docName exists" $false "not found at $docPath"
+    continue
+  }
+  $docText = Get-Content -LiteralPath $docPath -Raw
+
+  $absent = @($helpVerbs | Where-Object {
+    (-not (Doc-Names-Token $docText $_)) -and (-not $HelpOnlyOnPurpose.Contains($_))
+  })
+  Check "every --help verb is named in $docName" ($absent.Count -eq 0) `
+    ("missing: " + ($absent -join ' '))
+
+  # POSITIVE CONTROL: the comparison must be CAPABLE of reporting an absence.
+  # A token that cannot be in the doc must come back absent through the SAME
+  # matcher -- without it, a matcher that always answers "present" passes.
+  $ghost = 'zz-not-a-verb-' + ([guid]::NewGuid().ToString('N').Substring(0,8))
+  Check "positive control: an invented verb is reported absent from $docName" `
+    (-not (Doc-Names-Token $docText $ghost)) "control token: $ghost"
+}
+
+# --- 7a: the exemption list cannot outlive what it exempts, either way -------
+# Direction 1: an entry that is no longer a --help verb is stale.
+$staleHelpOnly = @($HelpOnlyOnPurpose.Keys | Where-Object { $helpVerbs -notcontains $_ })
+Check 'every $HelpOnlyOnPurpose entry is still a --help verb' ($staleHelpOnly.Count -eq 0) `
+  $(if ($staleHelpOnly.Count -gt 0) { "stale: $($staleHelpOnly -join ' ')" }
+    else { "($($HelpOnlyOnPurpose.Count) exemption(s))" })
+
+# Direction 2: an entry that HAS since been documented in BOTH docs is stale
+# too. Without this direction the list quietly degrades into a suppression file.
+$nowInDocs = @($HelpOnlyOnPurpose.Keys | Where-Object {
+  $v = $_
+  $hits = @($verbDocs.Values | Where-Object { Test-Path -LiteralPath $_ } |
+            Where-Object { Doc-Names-Token (Get-Content -LiteralPath $_ -Raw) $v })
+  $hits.Count -eq $verbDocs.Count
+})
+Check 'no $HelpOnlyOnPurpose entry is already in both docs' ($nowInDocs.Count -eq 0) `
+  ("documented after all: " + ($nowInDocs -join ' '))
+
+if ($HelpOnlyOnPurpose.Count -gt 0) {
+  Write-Host '  verbs deliberately absent from the prose docs:' -ForegroundColor DarkGray
+  foreach ($k in $HelpOnlyOnPurpose.Keys) {
+    Write-Host ("    {0,-22} {1}" -f $k, $HelpOnlyOnPurpose[$k]) -ForegroundColor DarkGray
+  }
+}
 Write-Host ''
 if ($script:Failed) { Write-Host 'DOCS SYNC GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'DOCS SYNC GUARD: PASS' -ForegroundColor Green
