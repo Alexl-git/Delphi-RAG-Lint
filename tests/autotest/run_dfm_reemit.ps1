@@ -6,7 +6,8 @@
   blocks + rules strings and asserts on the emitted T DFM text + the report JSON.
   Covers: 1:1 rename, moved-depth create, event map, #ignore, unmapped-drop,
   #default, collection relocate, binary same-type vs mismatch, owned-part w/ and
-  w/o rule, contained child, and an identity round-trip.
+  w/o rule, contained child, an identity round-trip, #mapping/#apply, and
+  (cases 17-19) #default as a FALLBACK that never clobbers a carried value.
 #>
 [CmdletBinding()]
 param(
@@ -131,6 +132,38 @@ type
     property Enabled: Boolean read FEnabled write FEnabled;
     property Data: TData2 read FData write FData;
     property Layout: TLayout2 read FLayout write FLayout;
+  end;
+
+  { D2/D3/D4: a pair whose published properties carry `default` clauses, which
+    is what makes a .dfm SPARSE. Chosen so the three cases are distinguishable:
+      Mode  default dmA  vs  Mode2 default dmC  -- F's default is NOT T's, so
+                                                   dropping it CHANGES the value
+      Same  default True vs  Same2 default True -- equal, so only an EXPLICIT
+                                                   emission proves D3
+      Plain no clause    vs  Plain2 no clause   -- always streamed, so absence
+                                                   is genuinely UNKNOWN }
+  TDefMode = (dmA, dmB, dmC);
+
+  TFromD = class(TPersistent)
+  private
+    FMode : TDefMode;
+    FSame : Boolean;
+    FPlain: Integer;
+  published
+    property Mode : TDefMode read FMode  write FMode  default dmA;
+    property Same : Boolean  read FSame  write FSame  default True;
+    property Plain: Integer  read FPlain write FPlain;
+  end;
+
+  TToD = class(TPersistent)
+  private
+    FMode2 : TDefMode;
+    FSame2 : Boolean;
+    FPlain2: Integer;
+  published
+    property Mode2 : TDefMode read FMode2  write FMode2  default dmC;
+    property Same2 : Boolean  read FSame2  write FSame2  default True;
+    property Plain2: Integer  read FPlain2 write FPlain2;
   end;
 
 implementation
@@ -309,6 +342,209 @@ Check 'mapping absent-source records a mappingNote' `
   ($o16 -match '"mappingNotes"\s*:\s*\[\s*"[^"]*ModeMap') "out=$o16"
 Check 'mapping absent-source reports nothing NOT-applied' ($o16 -match '"notApplied":\[\]') "out=$o16"
 Check 'mapping absent-source does NOT fire the #else' (-not ($o16 -match 'nmDefault')) "out=$o16"
+
+# --- Cases 17-19: #default must NOT clobber a value a rule already carried ---
+# D0. Both the rkDefault doc ("set a target property to a value WHEN NO SOURCE
+# MAPS") and step 5's own comment ("T-only props") say #default is a FALLBACK.
+# The code tested neither: it looped every rkDefault and called PlaceAtPath
+# unconditionally, AFTER the step-4 leaf loop had written whatever #link and
+# #mapping carried across. Last writer won, and #default was always last -- so
+# a rule book stating both `#link X <- X` and `#default X = ...` (the natural
+# way to write "use the source value, or Zzz if there isn't one") silently
+# discarded the form's real value, exit 0, no warning.
+#
+# The superseded #default is REPORTED, not skipped in silence: a rule the
+# operator wrote that did nothing should say so, on the same reasoning that
+# produced notApplied for #mapping.
+#
+# Case 18 is the POSITIVE CONTROL. Without it, "the source wins" is equally
+# satisfied by #default being broken outright.
+
+# 17: source PRESENT -> the SOURCE value wins, and the #default is reported.
+$b17 = "object C1: TFromC`r`n  Caption = 'Hi'`r`nend`r`n"
+$r17 = "#convert TFromC -> TToC`r`n#link Text <- Caption`r`n#default Text = 'Zzz'`r`n"
+$o17 = Reemit $b17 $r17 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'default-superseded exit 0' ($script:LastExit -eq 0) "out=$o17"
+$j17 = $o17 | ConvertFrom-Json
+Check 'default-superseded keeps the SOURCE value Text = ''Hi''' `
+  ($j17.dfm -match "Text\s*=\s*'Hi'") "dfm=$($j17.dfm)"
+Check 'default-superseded does NOT write the #default value into the DFM' `
+  (-not ($j17.dfm -match 'Zzz')) "dfm=$($j17.dfm)"
+# Normalise a MISSING key to an EMPTY array. Two traps here, BOTH hit while
+# RED-checking this guard against the unfixed build:
+#   * indexing $null throws, and under $ErrorActionPreference='Stop' that aborts
+#     the whole runner mid-file while STILL exiting 0 -- a guard that cannot
+#     report is worse than one that fails;
+#   * @($null).Count is 1, not 0, so a bare @() wrapper made "records exactly
+#     one" PASS against a build that recorded nothing at all -- an assertion
+#     incapable of failing.
+# Where-Object drops the $null, so both the count and the index are honest.
+$ds17 = @($j17.report.defaultsSuperseded | Where-Object { $null -ne $_ })
+$d17  = if ($ds17.Count -gt 0) { $ds17[0] } else { $null }
+Check 'default-superseded records exactly one superseded #default' `
+  ($ds17.Count -eq 1) "out=$o17"
+Check 'default-superseded names the T path' `
+  ($null -ne $d17 -and $d17.path -eq 'Text') "out=$o17"
+Check 'default-superseded carries the #default rule line (3)' `
+  ($null -ne $d17 -and $d17.ruleLine -eq 3) "out=$o17"
+Check 'default-superseded carries the value that WON' `
+  ($null -ne $d17 -and $d17.existing -match 'Hi') "out=$o17"
+Check 'default-superseded carries the ignored default value' `
+  ($null -ne $d17 -and $d17.value -match 'Zzz') "out=$o17"
+
+# 18: POSITIVE CONTROL -- a T-only #default with no rule carrying that path is
+# the whole point of #default and must still fire, reporting nothing.
+$b18 = "object C1: TFromC`r`n  Caption = 'Hi'`r`nend`r`n"
+$r18 = "#convert TFromC -> TToC`r`n#link Text <- Caption`r`n#default Enabled = False`r`n"
+$o18 = Reemit $b18 $r18 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'T-only #default exit 0' ($script:LastExit -eq 0) "out=$o18"
+$j18 = $o18 | ConvertFrom-Json
+Check 'T-only #default still fires (Enabled = False)' `
+  ($j18.dfm -match 'Enabled\s*=\s*False') "dfm=$($j18.dfm)"
+Check 'T-only #default keeps the linked Text = ''Hi''' `
+  ($j18.dfm -match "Text\s*=\s*'Hi'") "dfm=$($j18.dfm)"
+Check 'T-only #default reports nothing superseded' `
+  (@($j18.report.defaultsSuperseded | Where-Object { $null -ne $_ }).Count -eq 0) "out=$o18"
+
+# 19: the #link names a source the block does NOT set, so nothing was carried
+# and the #default is the only value there is -- it must fire.
+$b19 = "object C1: TFromC`r`n  Hint = 'x'`r`nend`r`n"
+$r19 = "#convert TFromC -> TToC`r`n#link Text <- Caption`r`n#default Text = 'Zzz'`r`n"
+$o19 = Reemit $b19 $r19 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'absent-source #default exit 0' ($script:LastExit -eq 0) "out=$o19"
+$j19 = $o19 | ConvertFrom-Json
+Check 'absent-source #default fires (Text = ''Zzz'')' `
+  ($j19.dfm -match "Text\s*=\s*'Zzz'") "dfm=$($j19.dfm)"
+Check 'absent-source #default reports nothing superseded' `
+  (@($j19.report.defaultsSuperseded | Where-Object { $null -ne $_ }).Count -eq 0) "out=$o19"
+
+# --- Cases 20-21: the same rule, on a DOTTED path -------------------------
+# Cases 17-19 only ever name a top-level leaf, so they never exercise the walk.
+# A dotted path is where the read-only half of FindAtPath earns its keep: the
+# intermediates Style/Active/Font exist ONLY because the #link created them, and
+# a presence test that created its own intermediates (as PlaceAtPath does) would
+# report every #default as superseded by the node the test itself just made.
+# Case 21 is the control that separates "the walk found the carried value" from
+# "the walk always finds something".
+
+# 20: dotted #link carried Size = 12; the dotted #default must not overwrite it.
+$b20 = "object C1: TFromC`r`n  object Font: TFont2`r`n    Size = 12`r`n  end`r`nend`r`n"
+$r20 = "#convert TFromC -> TToC`r`n#link Style.Active.Font.Size <- Font.Size`r`n#default Style.Active.Font.Size = 99`r`n"
+$o20 = Reemit $b20 $r20 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'dotted default-superseded exit 0' ($script:LastExit -eq 0) "out=$o20"
+$j20 = $o20 | ConvertFrom-Json
+$ds20 = @($j20.report.defaultsSuperseded | Where-Object { $null -ne $_ })
+$d20  = if ($ds20.Count -gt 0) { $ds20[0] } else { $null }
+Check 'dotted: the carried Size = 12 survives' ($j20.dfm -match 'Size\s*=\s*12') "dfm=$($j20.dfm)"
+Check 'dotted: the #default 99 is NOT written' (-not ($j20.dfm -match 'Size\s*=\s*99')) "dfm=$($j20.dfm)"
+Check 'dotted: exactly one superseded #default' ($ds20.Count -eq 1) "out=$o20"
+Check 'dotted: the report names the FULL dotted path' `
+  ($null -ne $d20 -and $d20.path -eq 'Style.Active.Font.Size') "out=$o20"
+Check 'dotted: the report carries the value that won (12)' `
+  ($null -ne $d20 -and $d20.existing -match '12') "out=$o20"
+
+# 21: CONTROL -- the same dotted #default with nothing carrying that path must
+# still fire, creating the intermediates itself.
+$b21 = "object C1: TFromC`r`nend`r`n"
+$r21 = "#convert TFromC -> TToC`r`n#default Style.Active.Font.Size = 99`r`n"
+$o21 = Reemit $b21 $r21 'ReemitFix.TFromC' 'ReemitFix.TToC'
+Check 'dotted control exit 0' ($script:LastExit -eq 0) "out=$o21"
+$j21 = $o21 | ConvertFrom-Json
+Check 'dotted control: the #default fires (Size = 99)' `
+  ($j21.dfm -match 'Size\s*=\s*99') "dfm=$($j21.dfm)"
+Check 'dotted control: the intermediates were created' `
+  ($j21.dfm -match 'object Style' -and $j21.dfm -match 'object Active') "dfm=$($j21.dfm)"
+Check 'dotted control: nothing reported superseded' `
+  (@($j21.report.defaultsSuperseded | Where-Object { $null -ne $_ }).Count -eq 0) "out=$o21"
+
+# --- Cases 22-26: a SPARSE .dfm -- an absent property is an UNREAD value ----
+# Delphi omits a published property whose value equals the `default` declared on
+# it. So a property missing from a block is not missing INFORMATION; the value
+# is in the declaration, and D1 resolved it onto the prop tree. These cases pin
+# that the engine now reads it (D2/D4) and writes the target EXPLICITLY (D3).
+#
+# The trap they exist to prevent: F's default and T's default are different
+# values that merely share a property name. Carrying nothing across does not
+# "keep the default" -- it silently swaps dmA for dmC.
+
+# 22 (D2): the mapping's #when names a value the block does NOT stream, because
+# that IS the property's default. The branch must fire.
+$rDef = "#mapping DM from ReemitFix.TDefMode to ReemitFix.TToD`r`n" +
+        "#mapping DM #when Mode = dmA -> Mode2 = dmB`r`n" +
+        "#convert TFromD -> TToD`r`n" +
+        "#apply DM`r`n"
+$b22 = "object C1: TFromD`r`nend`r`n"
+$o22 = Reemit $b22 $rDef 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'sparse mapping exit 0' ($script:LastExit -eq 0) "out=$o22"
+$j22 = $o22 | ConvertFrom-Json
+Check 'sparse mapping: the #when fires on the resolved default (Mode2 = dmB)' `
+  ($j22.dfm -match 'Mode2\s*=\s*dmB') "dfm=$($j22.dfm)"
+Check 'sparse mapping: no absent-source note is reported' `
+  (@($j22.report.mappingNotes | Where-Object { $null -ne $_ }).Count -eq 0) "out=$o22"
+
+# 23 (CONTROL): the same shape on a property with NO default clause. Such a
+# property is ALWAYS streamed, so its absence is genuinely unknown -- the engine
+# must still refuse to invent a value. Without this, case 22 is equally
+# satisfied by "resolve everything absent to something".
+$rPlain = "#mapping PM from ReemitFix.TDefMode to ReemitFix.TToD`r`n" +
+          "#mapping PM #when Plain = 5 -> Plain2 = 7`r`n" +
+          "#convert TFromD -> TToD`r`n" +
+          "#apply PM`r`n"
+$b23 = "object C1: TFromD`r`nend`r`n"
+$o23 = Reemit $b23 $rPlain 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'no-default-clause exit 0' ($script:LastExit -eq 0) "out=$o23"
+$j23 = $o23 | ConvertFrom-Json
+Check 'no-default-clause: NOTHING is invented for Plain2' `
+  (-not ($j23.dfm -match 'Plain2')) "dfm=$($j23.dfm)"
+Check 'no-default-clause: the absent-source note still fires, and says why' `
+  (@($j23.report.mappingNotes) -match 'no default clause') "out=$o23"
+
+# 24 (D4): a #link whose SOURCE is absent-because-default. F defaults to dmA and
+# T defaults to dmC, so emitting nothing would silently change the value. The
+# resolved value must be written.
+$b24 = "object C1: TFromD`r`nend`r`n"
+$r24 = "#convert TFromD -> TToD`r`n#link Mode2 <- Mode`r`n"
+$o24 = Reemit $b24 $r24 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'link-default exit 0' ($script:LastExit -eq 0) "out=$o24"
+$j24 = $o24 | ConvertFrom-Json
+$dr24 = @($j24.report.defaultsResolved | Where-Object { $null -ne $_ })
+Check 'link-default: F''s resolved default is written (Mode2 = dmA)' `
+  ($j24.dfm -match 'Mode2\s*=\s*dmA') "dfm=$($j24.dfm)"
+Check 'link-default: T''s OWN default is NOT what lands (not dmC)' `
+  (-not ($j24.dfm -match 'dmC')) "dfm=$($j24.dfm)"
+Check 'link-default: the resolution is reported' ($dr24.Count -eq 1) "out=$o24"
+Check 'link-default: the report names source, target and value' `
+  ($dr24.Count -eq 1 -and $dr24[0].fromPath -eq 'Mode' -and `
+   $dr24[0].toPath -eq 'Mode2' -and $dr24[0].value -eq 'dmA') "out=$o24"
+# The blanket 'defaults may diverge' warning fired on EVERY F<>T conversion and
+# could not be acted on. With nothing left unresolved it must be silent.
+Check 'link-default: the blanket divergence warning is GONE' `
+  (-not (@($j24.report.notes) -match 'may diverge')) "notes=$($j24.report.notes -join ' | ')"
+
+# 25 (D3): F's default and T's default are the SAME value here, so leaving the
+# property absent would still be correct today -- and would rot the moment
+# either declaration changes. It must be emitted EXPLICITLY. Delphi trims it on
+# the next save, so verbosity costs nothing.
+$b25 = "object C1: TFromD`r`nend`r`n"
+$r25 = "#convert TFromD -> TToD`r`n#link Same2 <- Same`r`n"
+$o25 = Reemit $b25 $r25 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'explicit-emit exit 0' ($script:LastExit -eq 0) "out=$o25"
+$j25 = $o25 | ConvertFrom-Json
+Check 'explicit-emit: written even though it equals T''s own default' `
+  ($j25.dfm -match 'Same2\s*=\s*True') "dfm=$($j25.dfm)"
+
+# 26: the narrowed divergence note. A rule-referenced source that is absent AND
+# has no default clause is the one case that genuinely remains unknown -- and
+# the note must NAME it rather than gesture at the whole class pair.
+$b26 = "object C1: TFromD`r`nend`r`n"
+$r26 = "#convert TFromD -> TToD`r`n#link Plain2 <- Plain`r`n"
+$o26 = Reemit $b26 $r26 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'unresolved-note exit 0' ($script:LastExit -eq 0) "out=$o26"
+$j26 = $o26 | ConvertFrom-Json
+Check 'unresolved-note: nothing is invented for Plain2' `
+  (-not ($j26.dfm -match 'Plain2')) "dfm=$($j26.dfm)"
+Check 'unresolved-note: the note names the offending property' `
+  (@($j26.report.notes) -match 'Plain') "notes=$($j26.report.notes -join ' | ')"
 
 # --- Bad args ---
 $noOut = ((& $Exe convert-reemit 2>&1) -join "`n"); $noExit = $LASTEXITCODE

@@ -19532,6 +19532,28 @@ begin
       JNotApplied.AddElement(JNA);
     end;
     JReport.AddPair('notApplied', JNotApplied);
+    var JSuperseded: TJSONArray:= TJSONArray.Create;
+    for var DS in Res.Report.DefaultsSuperseded do
+    begin
+      var JDS: TJSONObject:= TJSONObject.Create;
+      JDS.AddPair('path'    , DS.Path);
+      JDS.AddPair('value'   , DS.Value);
+      JDS.AddPair('existing', DS.Existing);
+      JDS.AddPair('ruleLine', TJSONNumber.Create(DS.RuleLine));
+      JSuperseded.AddElement(JDS);
+    end;
+    JReport.AddPair('defaultsSuperseded', JSuperseded);
+    var JResolved: TJSONArray:= TJSONArray.Create;
+    for var DR in Res.Report.DefaultsResolved do
+    begin
+      var JDR: TJSONObject:= TJSONObject.Create;
+      JDR.AddPair('fromPath', DR.FromPath);
+      JDR.AddPair('toPath'  , DR.ToPath);
+      JDR.AddPair('value'   , DR.Value);
+      JDR.AddPair('ruleLine', TJSONNumber.Create(DR.RuleLine));
+      JResolved.AddElement(JDR);
+    end;
+    JReport.AddPair('defaultsResolved', JResolved);
     { 'notes' deliberately stays the UNION of stubs + relocated + notes.
       DRagLint.Convert.DfmReemit split those two OUT of Notes so each entry can
       carry a stable kind instead of being classified by matching its prose; this

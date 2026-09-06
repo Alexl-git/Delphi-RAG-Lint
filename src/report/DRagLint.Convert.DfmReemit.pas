@@ -97,8 +97,11 @@ type
   /// OwnedParts=nested owned parts (fields/columns) needing their own #convert
   /// rules (WARN). Stubs=#link targets still spelled '???' (an unfilled rule, so
   /// the F value was NOT carried over). Relocated=collections moved verbatim to a
-  /// new ToPath (INFO). Notes=everything else, currently only the F/T default-
-  /// divergence warning. Each entry is an ASCII, human-readable string.
+  /// new ToPath (INFO). DefaultsSuperseded=#default rules that did NOT fire
+  /// because a #link/#mapping had already carried a value onto that target path
+  /// (WARN: a rule the operator wrote did nothing). Notes=everything else,
+  /// currently only the F/T default-divergence warning. Each string entry is
+  /// ASCII and human-readable.
   ///
   /// Stubs/Relocated were split OUT of Notes so a consumer can assign each entry a
   /// stable kind without matching on its prose (DRagLint.Convert.Apply's typed
@@ -130,6 +133,46 @@ type
     Value   : string;  { that value, verbatim }
   end;
 
+  /// <summary>One #default that did NOT fire because a #link or #mapping had
+  /// already carried a value onto the same target path.</summary>
+  /// <remarks>
+  /// #default is a FALLBACK -- "set a target property WHEN NO SOURCE MAPS"
+  /// (DRagLint.Convert.Rules, rkDefault). A rule book that states both
+  /// `#link X &lt;- X` and `#default X = ...` is the natural way to write "use
+  /// the source value, or this if there isn't one", and the source must win.
+  ///
+  /// It is recorded rather than skipped in silence for the same reason
+  /// TReemitNotApplied exists: the operator wrote a rule that did nothing, and
+  /// only the rule book can say which of the two they meant. Existing carries
+  /// the value that WON so the report can be read without the .dfm to hand.
+  /// </remarks>
+  TReemitDefaultSuperseded = record
+    Path     : string;  { the T property path the #default named }
+    Value    : string;  { the value the #default asked for, and did NOT write }
+    Existing : string;  { the value already at that path, which WON }
+    RuleLine : Integer; { the #default line, so the rule book can be fixed }
+  end;
+
+  /// <summary>One F property the block does not stream because it sits at its
+  /// declared default, whose resolved value a rule carried into T anyway.</summary>
+  /// <remarks>
+  /// A `.dfm` is SPARSE, so this is a value that was always there to be read --
+  /// not an invention. Before this existed the property simply vanished and the
+  /// T side adopted T's OWN default, a DIFFERENT value that merely shares a
+  /// name; that is what `defaults-may-diverge` warned about and could not fix.
+  ///
+  /// Reported because the value is written into the `.dfm` without appearing in
+  /// the source `.dfm`, and an operator diffing the two would otherwise have no
+  /// account of where it came from. Informational, not remainder: the work was
+  /// DONE, this says so.
+  /// </remarks>
+  TReemitDefaultResolved = record
+    FromPath: string;  { the F property that was absent }
+    ToPath  : string;  { where its resolved value was written }
+    Value   : string;  { F's declared default, verbatim }
+    RuleLine: Integer; { the #link that carried it }
+  end;
+
   TReemitReport = record
     Dropped    : TArray<string>;
     Ignored    : TArray<string>;
@@ -142,6 +185,12 @@ type
     /// this block, so there was nothing to map.</summary>
     MappingNotes: TArray<string>;
     NotApplied  : TArray<TReemitNotApplied>;
+    /// <summary>Remainder: #default rules skipped because the target path was
+    /// already carried by a #link or #mapping.</summary>
+    DefaultsSuperseded: TArray<TReemitDefaultSuperseded>;
+    /// <summary>Informational: F properties absent from the block because they
+    /// sit at their declared default, whose value was resolved and carried.</summary>
+    DefaultsResolved  : TArray<TReemitDefaultResolved>;
     Notes       : TArray<string>;
   end;
 
@@ -484,6 +533,41 @@ begin
   Result:= Child;
 end;
 
+// Return the node already sitting at ADottedPath under ARoot, or nil.
+//
+// The read-only twin of PlaceAtPath, and it must stay that way: #default asks
+// "is this path already carried?" BEFORE deciding to write, so a lookup that
+// created its intermediates would manufacture the very node it is testing for
+// and every #default would then look superseded by itself.
+function FindAtPath(const ARoot: TDfmNode; const ADottedPath: string): TDfmNode;
+var
+  Segs : TArray<string>;
+  Cur  : TDfmNode;
+  i, j : Integer;
+  Found: Boolean;
+begin
+  Result:= nil;
+  Segs:= ADottedPath.Split(['.']);
+  if Length(Segs) = 0 then Exit;
+  Cur:= ARoot;
+  for i:= 0 to High(Segs) - 1 do // intermediates must be sub-objects, as in PlaceAtPath
+  begin
+    Found:= False;
+    for j:= 0 to Cur.Children.Count - 1 do
+      if SameText(Cur.Children[j].Name, Segs[i]) and
+         (Cur.Children[j].Kind = dnkSubObject) then
+      begin
+        Cur  := Cur.Children[j];
+        Found:= True;
+        Break;
+      end;
+    if not Found then Exit; // an absent intermediate means the leaf is absent too
+  end;
+  for j:= 0 to Cur.Children.Count - 1 do
+    if SameText(Cur.Children[j].Name, Segs[High(Segs)]) then
+      Exit(Cur.Children[j]);
+end;
+
 // Deep-copy a TDfmNode subtree (for verbatim copies of contained children /
 // unconverted owned parts / relocated collections).
 function CloneNode(const ASrc: TDfmNode): TDfmNode;
@@ -534,6 +618,34 @@ begin
   Result:= '';
   for N in ATree.Nodes do
     if SameText(N.Path, AName) then Exit(N.TypeName);
+end;
+
+// The value a property sits at when the .dfm does NOT stream it, or False when
+// there is no such value.
+//
+// A .dfm is SPARSE: Delphi omits a published property whose value equals the
+// `default` declared on it. So an absent property is an UNREAD value, not a
+// missing one, and this is where the reader gets it -- DfmReemit is pure and
+// cannot read a declaration line, so BuildPropTree resolved it at query time
+// (TPropNode.HasDefault/DefaultValue).
+//
+// False means the declaration has NO usable default -- `nodefault`, a bare
+// `default;` (the default-ARRAY-PROPERTY directive, which carries no value), or
+// no clause at all. Such a property is ALWAYS streamed, so its absence is
+// genuinely unknown and the caller must not invent a value for it.
+function LeafDefaultOf(const ATree: TPropTree; const AName: string;
+  out AValue: string): Boolean;
+var N: TPropNode;
+begin
+  Result:= False;
+  AValue:= '';
+  for N in ATree.Nodes do
+    if SameText(N.Path, AName) then
+    begin
+      if not N.HasDefault then Exit(False);
+      AValue:= N.DefaultValue;
+      Exit(True);
+    end;
 end;
 
 // 2a-i deterministic owned-part signal: a `#note owned:<ClassName>` in the rules
@@ -632,6 +744,21 @@ var
     end;
     AValue:= Node.ValueText;
     Result:= True;
+  end;
+
+  // FindLeafValue, plus the SPARSE-.dfm fallback (D2): when the block does not
+  // carry the leaf, the value is the one its declaration defaults to.
+  //
+  // A #when/#else matches a resolved default exactly as it matches a streamed
+  // value -- that is the point, and the reason a mapping over an enum finally
+  // fires on the enum's own default. Callers deliberately CANNOT tell the two
+  // apart: the only case that must behave differently is a leaf that is absent
+  // AND has no `default` clause, which is not "at its default" but UNKNOWN, and
+  // that is exactly what a False result already means.
+  function ResolveLeafValue(const ADottedPath: string; out AValue: string): Boolean;
+  begin
+    if FindLeafValue(ADottedPath, AValue) then Exit(True);
+    Result:= LeafDefaultOf(AFromTree, ADottedPath, AValue);
   end;
 
   // True when ANY #link/#ignore/#remove rule's FromPath/PropName references a
@@ -751,7 +878,9 @@ var
       if Q.WhenFrom = '' then Continue; { the declaration line carries no condition }
       if SrcPath = '' then SrcPath:= Q.WhenFrom;
       if Matched then Continue;
-      if FindLeafValue(Q.WhenFrom, LeafVal) and
+      { D2: an ABSENT leaf resolves to its declared default before matching, so
+        a #when written against an enum's own default finally fires. }
+      if ResolveLeafValue(Q.WhenFrom, LeafVal) and
          SameText(Trim(LeafVal), Trim(Q.WhenValue)) then
       begin
         ApplySets(Q.Sets);
@@ -765,13 +894,20 @@ var
       is nothing to evaluate and nothing to report. }
     if SrcPath = '' then Exit;
 
-    if not FindLeafValue(SrcPath, LeafVal) then
+    if not ResolveLeafValue(SrcPath, LeafVal) then
     begin
-      { ABSENT source: nothing to map. Informational, NOT remainder -- and the
-        reason #else is gated on presence: firing #else here would invent a T
-        value from an F property the form never set. }
+      { UNKNOWN source: absent from the block AND with no `default` clause to
+        resolve it to, so the property is always streamed and its absence really
+        does mean "the form never set it". Informational, NOT remainder -- and
+        the reason #else stays gated on this: firing #else here would invent a T
+        value out of nothing.
+
+        D2 NARROWED this. It used to fire for every absent leaf, which was wrong
+        for the common case: a SPARSE .dfm omits a property sitting at its
+        declared default, so most absent leaves DO have a value and now resolve
+        to it above. What is left is the genuinely unknown remainder. }
       Result.Report.MappingNotes:= Result.Report.MappingNotes +
-        [Format('mapping %s: source path %s is not present in this block -- nothing to map',
+        [Format('mapping %s: source path %s is not in this block and its declaration has no default clause -- nothing to map',
           [AApply.MapName, SrcPath])];
       Exit;
     end;
@@ -908,10 +1044,20 @@ var
 var
   i: Integer;
   Leaf: TDfmNode;
+  Existing  : TDfmNode;                  { step 5: the node a #default would overwrite }
+  Superseded: TReemitDefaultSuperseded;
+  ResolvedVal: string;                   { step 4b: F's declared default, resolved }
+  Resolved   : TReemitDefaultResolved;
+  { step 4b: rule-referenced F paths absent from the block with NO default
+    clause -- genuinely unknown, and all step 6 still warns about. }
+  Unresolved : TArray<string>;
 begin
   Result:= Default(TReemitResult);
   FRoot := nil; TRoot:= nil;
-  Created:= nil; Dropped:= nil; Ignored:= nil;
+  Created   := nil;
+  Dropped   := nil;
+  Ignored   := nil;
+  Unresolved:= nil;
 
   // 1. Parse the F block FIRST (moved ahead of the #convert gate below): the gate
   // needs FRoot.ClassName_ to pick the RIGHT #convert when the rule set holds more
@@ -976,23 +1122,118 @@ begin
       else RemapLeaf(Leaf, Leaf.Name);
     end;
 
-    // 5. Apply #default (T-only props).
+    // 4b. Carry F properties the block does NOT stream because they sit at
+    // their declared default (D4), writing the resolved value EXPLICITLY (D3).
+    //
+    // Step 4 walks only the leaves that ARE in the block, so an absent-because-
+    // default property never reached it and its value was silently dropped. The
+    // T side then adopted T's OWN default -- a DIFFERENT value that merely
+    // shares a property name. That is exactly what the `defaults-may-diverge`
+    // note warned about and could not fix.
+    //
+    // Scope is RULE-REFERENCED ONLY, and the reason is CONSISTENCY, not diff
+    // size: an F property that is PRESENT but named by no rule is already
+    // dropped and reported as unmapped -- the rules decide what carries over --
+    // so an F property that is ABSENT and named by no rule must behave the
+    // same. Emitting unreferenced properties would invent policy the rule book
+    // never stated.
+    //
+    // The value is written even when it MAY equal T's default (D3). Verbosity
+    // is safe: Delphi trims a redundant default the next time it saves the
+    // form, whereas leaving the property absent silently adopts a value nobody
+    // chose.
+    //
+    // Runs AFTER step 4 so a streamed value always wins, and BEFORE step 5 so
+    // #default stays the fallback it claims to be -- a path resolved here is
+    // now "carried", which is precisely why D0 had to land first.
+    for R in ARules.Rules do
+    begin
+      if (R.Kind <> rkLink) or (R.FromPath = '') then Continue;
+      if Trim(R.ToPath) = '???' then Continue;  // unfilled stub; step 4 reports it
+      if IsIgnored(R.FromPath) then Continue;
+      if IsConsumed(R.FromPath) then Continue;  // a #mapping already spoke for it
+      if FindLeafValue(R.FromPath, ResolvedVal) then Continue; // present -> step 4 handled it
+      if not LeafDefaultOf(AFromTree, R.FromPath, ResolvedVal) then
+      begin
+        // Absent AND no `default` clause: such a property is ALWAYS streamed,
+        // so its absence is genuinely unknown. Do NOT invent a value -- record
+        // it, and let step 6 name it instead of warning about everything.
+        //
+        // But ONLY when the property is actually F's. A rule set carries every
+        // #convert in the book, and an owned part's rules travel with the
+        // parent's (HandleNested passes the FULL set down), so this loop sees
+        // #links naming properties of OTHER classes entirely. Those say nothing
+        // about this block, and counting them would make the divergence note
+        // list a child's every property while converting the parent.
+        // LeafTypeOf returns '' only when the path is not on F at all.
+        if LeafTypeOf(AFromTree, R.FromPath) <> '' then
+          Unresolved:= Unresolved + [R.FromPath];
+        Continue;
+      end;
+      // Never clobber a value already on the target: two #links can name the
+      // same ToPath, and a STREAMED value must outrank a resolved default --
+      // the same precedence D0 established for #default.
+      if Assigned(FindAtPath(TRoot, R.ToPath)) then Continue;
+      PlaceAtPath(TRoot, R.ToPath, ResolvedVal, dnkScalar, Created);
+      Resolved:= Default(TReemitDefaultResolved);
+      Resolved.FromPath:= R.FromPath;
+      Resolved.ToPath  := R.ToPath;
+      Resolved.Value   := ResolvedVal;
+      Resolved.RuleLine:= R.LineNo;
+      Result.Report.DefaultsResolved:= Result.Report.DefaultsResolved + [Resolved];
+    end;
+
+    // 5. Apply #default -- a FALLBACK, so it fires only where nothing else has
+    // already put a value.
+    //
+    // This used to call PlaceAtPath unconditionally, and it runs AFTER the
+    // step-4 leaf loop and after ApplyMappings, so last-writer-wins made
+    // #default beat every #link and #mapping. A rule book stating both
+    // `#link X <- X` and `#default X = ...` -- the natural way to write "use
+    // the source value, or this if there isn't one" -- silently discarded the
+    // form's real value, exit 0 and no warning. Both doc claims already said
+    // otherwise (rkDefault: "when no source maps"; this step: "T-only props"),
+    // so the code was brought to the docs rather than the reverse.
+    //
+    // A superseded #default is REPORTED, not dropped in silence: the operator
+    // wrote a rule that did nothing, and only they can say which of the two
+    // they meant. Same reasoning as TReemitNotApplied.
     for R in ARules.Rules do
       if R.Kind = rkDefault then
       begin
         if Trim(R.ToPath) = '???' then Continue;
+        Existing:= FindAtPath(TRoot, R.ToPath);
+        if Assigned(Existing) then
+        begin
+          Superseded:= Default(TReemitDefaultSuperseded);
+          Superseded.Path    := R.ToPath;
+          Superseded.Value   := R.Value;
+          Superseded.Existing:= Existing.ValueText;
+          Superseded.RuleLine:= R.LineNo;
+          Result.Report.DefaultsSuperseded:= Result.Report.DefaultsSuperseded + [Superseded];
+          Continue;
+        end;
         PlaceAtPath(TRoot, R.ToPath, R.Value, dnkScalar, Created);
       end;
 
-    // 6. Divergence-risk Note (Controller decision 4): when F and T are different
-    // types, a property absent from the F DFM (== F default) may adopt a DIFFERENT
-    // T default when re-emitted absent. 2a-i cannot resolve this (indexer has no
-    // default values -- Batch 2a-0); warn the user it MAY happen.
-    if (AFromTree.RootType <> '') and (AToTree.RootType <> '') and
-       (not SameText(AFromTree.RootType, AToTree.RootType)) then
+    // 6. Divergence-risk Note. This used to fire on EVERY F<>T conversion, on
+    // the stated grounds that the indexer had no default values, so an absent
+    // property "may" adopt a different T default and the user should verify.
+    //
+    // D1/D4 removed the premise: the defaults ARE resolvable now, and step 4b
+    // carries every rule-referenced one across explicitly. A blanket warning
+    // that fires when nothing is wrong is the shape this repo has repeatedly
+    // paid for -- it teaches the reader to skim.
+    //
+    // So it now fires only for the case that genuinely remains: a rule-
+    // referenced F property that is absent from the block AND whose declaration
+    // has no `default` clause to resolve it to. Those are always streamed, so
+    // their absence is unexplained, and the note NAMES them instead of gesturing
+    // at the whole class pair.
+    if Length(Unresolved) > 0 then
       Result.Report.Notes:= Result.Report.Notes +
-        [Format('property defaults may diverge between %s and %s -- values not present in the F DFM adopt the T default (verify; full default fidelity pending Batch 2a-0)',
-          [AFromTree.RootType, AToTree.RootType])];
+        [Format('property defaults may diverge between %s and %s -- %s absent from the F DFM with no default clause to resolve, so the T default applies (verify)',
+          [AFromTree.RootType, AToTree.RootType, string.Join(', ', Unresolved)])];
 
     // Fold the local accumulators into the report (do NOT clobber Task-6 appends).
     Result.Report.Created:= Result.Report.Created + Created;

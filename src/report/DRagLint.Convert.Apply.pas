@@ -112,7 +112,9 @@ type
     aikFieldDeclNotRetyped,  { shared multi-declarator line, not retyped }
     aikUsesUnitUnresolved,   { no unit found declaring T, uses not added }
     aikMappingSourceAbsent,  { #apply'd #mapping's source path not in the block }
-    aikMappingNotApplied);   { #apply'd #mapping matched no value }
+    aikMappingNotApplied,    { #apply'd #mapping matched no value }
+    aikDefaultSuperseded,    { #default skipped -- a rule already carried that path }
+    aikDefaultResolved);     { F prop absent-because-default; its value was carried }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -393,7 +395,8 @@ const
     'unmapped-property', 'binary-type-mismatch', 'owned-part-unconverted',
     'link-stub-unfilled', 'collection-relocated', 'defaults-may-diverge',
     'cast-not-applied', 'instance-skipped', 'field-decl-not-retyped',
-    'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied');
+    'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
+    'default-superseded', 'default-resolved');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1217,6 +1220,40 @@ var
       MIt.Path    := NA.Path;
       MIt.RuleLine:= NA.RuleLine;
       Emit(MIt);
+    end;
+
+    { D0: a #default that did NOT fire because a #link/#mapping had already
+      carried a value onto that path. Remainder for the same reason
+      mapping-not-applied is: the operator wrote a rule that did nothing, and
+      only the rule book can say which of the two they meant. Nothing was LOST
+      -- the source value is the one that survived -- so the text names both. }
+    for var DS in AReport.DefaultsSuperseded do
+    begin
+      var DIt: TApplyItem:= InstItem(aikDefaultSuperseded, afWarnings,
+        Format('%s: line %d: #default %s = %s did not fire -- a rule already carried %s',
+          [Inst.InstanceName, DS.RuleLine, DS.Path, DS.Value, DS.Existing]));
+      DIt.FilePath:= ADfmPath;
+      DIt.Line    := ABlockLine;
+      DIt.Path    := DS.Path;
+      DIt.RuleLine:= DS.RuleLine;
+      Emit(DIt);
+    end;
+
+    { D4: an F property the .dfm did not stream because it sits at its declared
+      default, carried across explicitly. INFORMATIONAL, not remainder -- the
+      work was done. It is reported because the value appears in the output
+      .dfm without appearing in the input one, and an operator diffing the two
+      deserves an account of where it came from. }
+    for var DR in AReport.DefaultsResolved do
+    begin
+      var RIt: TApplyItem:= InstItem(aikDefaultResolved, afReemitNotes,
+        Format('%s: %s was absent from the DFM (at its declared default %s) -- carried to %s explicitly',
+          [Inst.InstanceName, DR.FromPath, DR.Value, DR.ToPath]));
+      RIt.FilePath:= ADfmPath;
+      RIt.Line    := ABlockLine;
+      RIt.Path    := DR.FromPath;
+      RIt.RuleLine:= DR.RuleLine;
+      Emit(RIt);
     end;
   end;
 

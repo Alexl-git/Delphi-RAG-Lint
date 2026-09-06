@@ -339,6 +339,20 @@ $MapRulesBody = @'
 $mapRulesPath = Join-Path $WorkDir 'rules-mapping.txt'
 Write-Ascii $mapRulesPath $MapRulesBody
 
+# Phase 7's rule book: a #default on a path a #link ALREADY carries. The
+# fixture's Edit1 has Caption = 'Hi' and the #link moves it to Text, so the
+# #default has nothing left to do -- it must not fire, and it must be REPORTED.
+# The #default sits on line 3 and that is the rule_line the item must carry.
+$DefRulesBody = @'
+#convert TOldEdit -> TNewEdit, NewEditUnit
+#link Text <- Caption
+#default Text = 'Zzz'
+#link Style.Active.Font.Size <- Font.Size
+#link OnClick2 <- OnClick
+'@
+$defRulesPath = Join-Path $WorkDir 'rules-default.txt'
+Write-Ascii $defRulesPath $DefRulesBody
+
 # ---------------------------------------------------------------------------
 # Index the fixture (one shared index -- Phase 2/3 re-copy the fixture into
 # fresh dirs but the .pas/.dfm CONTENT is byte-identical each time, so the
@@ -351,11 +365,13 @@ $phase2 = Join-Path $WorkDir 'phase2-apply'
 $phase3 = Join-Path $WorkDir 'phase3-nosafety'
 $phase4 = Join-Path $WorkDir 'phase4-castskip'
 $phase6 = Join-Path $WorkDir 'phase6-mapping'
+$phase7 = Join-Path $WorkDir 'phase7-default'
 New-Fixture $phase1
 New-Fixture $phase2
 New-Fixture $phase3
 New-Fixture $phase4
 New-Fixture $phase6
+New-Fixture $phase7
 $castBeforeBytes = [System.IO.File]::ReadAllBytes((Join-Path $phase4 'MyForm.pas'))
 
 $db = Join-Path $WorkDir 'convapply.sqlite'
@@ -465,14 +481,27 @@ $creatorBlock = if ($creatorBlockMatch.Success) { $creatorBlockMatch.Groups[1].V
 Check 'CreatorSites block names the retyped ctor TOldEdit.Create -> TNewEdit.Create' `
   ($creatorBlock -match 'TOldEdit\.Create\s*->\s*TNewEdit\.Create') "block=$creatorBlock"
 
-# ReemitNotes carries the DFM re-emit's per-instance notes. The F/T default-
-# divergence note fires whenever the F and T root types differ (they do here:
-# TOldEdit -> TNewEdit), so this block is non-empty for this fixture.
+# ReemitNotes carries the DFM re-emit's per-instance notes.
+#
+# This block used to be proved non-empty by the F/T default-divergence note,
+# which fired on EVERY conversion whose root types differ -- as these do
+# (TOldEdit -> TNewEdit). D2/D4 NARROWED that note to the one case that is
+# genuinely unknown: a rule-referenced source absent from the DFM with no
+# `default` clause to resolve it to. This fixture streams every source its
+# rules name, so the note is now correctly SILENT, and asserting it still fires
+# would be asserting the old contract.
+#
+# The block is still non-empty on its own merits: the moved-depth #link
+# synthesises Style/Active/Font and each creation is reported. Pinning that
+# instead is strictly stronger -- it names real content rather than a warning
+# that fired regardless.
 Check 'dry-run output has a ReemitNotes: block' ($applyRaw -match 'ReemitNotes:') "raw=$applyRaw"
 $reemitBlockMatch = [regex]::Match($applyRaw, 'ReemitNotes:([\s\S]*?)(\r?\n\r?\n|\z)')
 $reemitBlock = if ($reemitBlockMatch.Success) { $reemitBlockMatch.Groups[1].Value } else { '' }
-Check 'ReemitNotes block carries the F/T default-divergence note' `
-  ($reemitBlock -match 'defaults may diverge') "block=$reemitBlock"
+Check 'ReemitNotes block reports the synthesized intermediates' `
+  ($reemitBlock -match 'created Style') "block=$reemitBlock"
+Check 'the blanket divergence note is silent when every source resolved' `
+  (-not ($reemitBlock -match 'defaults may diverge')) "block=$reemitBlock"
 
 # Blocks are blank-line separated so a 'Heading:(...)(blank|end)' slice returns
 # THAT block only. Without the separator every such slice ran to end-of-output,
@@ -907,6 +936,83 @@ if ($null -ne $mapDoc) {
 }
 else {
   Check 'mapping: typed assertions were SKIPPED (document did not parse)' $false `
+    'fix the parse failure above'
+}
+
+# ===========================================================================
+# PHASE 7: a #default on a path a #link already carries does NOT fire, and the
+# skipped rule is reported (default-superseded).
+#
+# #default is documented on both sides as a FALLBACK -- "set a target property
+# when NO SOURCE MAPS". The engine tested neither claim: it wrote
+# unconditionally AFTER the leaf loop, so #default beat every #link and the
+# form's real value vanished with exit 0 and no warning. This phase pins BOTH
+# halves -- the source value survives, AND the dead rule is surfaced through
+# the typed apply/1 item rather than only inside convert-reemit's own report.
+# ===========================================================================
+Write-Host ''
+Write-Host '=== Phase 7: #default superseded by a #link (default-superseded) ===' -ForegroundColor Cyan
+
+Push-Location $phase7
+try {
+  $defRaw  = (& $Exe convert-apply --unit 'MyForm.pas' --rules $defRulesPath --db $db 2>&1) -join "`n"
+  $defExit = $LASTEXITCODE
+  $defJson = (& $Exe convert-apply --unit 'MyForm.pas' --rules $defRulesPath --db $db --format json 2>$null) -join "`n"
+} finally { Pop-Location }
+Write-Host $defRaw -ForegroundColor DarkGray
+
+Check 'default: dry-run exits 0' ($defExit -eq 0) "exit=$defExit"
+
+# TEXT surface: a human reading the default output must learn the #default was
+# ignored, or the rule book keeps a line that silently does nothing.
+$defWarnMatch = [regex]::Match($defRaw, 'Warnings:([\s\S]*?)(\r?\n\r?\n|\z)')
+$defWarn = if ($defWarnMatch.Success) { $defWarnMatch.Groups[1].Value } else { '' }
+Check 'default: Warnings block reports the ignored #default' `
+  ($defWarn -match 'did not fire') "block=$defWarn"
+
+$defDoc = $null
+try { $defDoc = $defJson | ConvertFrom-Json } catch { $defDoc = $null }
+Check 'default: json parses' ($null -ne $defDoc) `
+  "raw=$($defJson.Substring(0, [Math]::Min(200, $defJson.Length)))"
+if ($null -ne $defDoc) {
+  $dsu = @($defDoc.items) | Where-Object { $_.kind -eq 'default-superseded' }
+  Check 'default: a default-superseded item is emitted' ($dsu.Count -ge 1) "count=$($dsu.Count)"
+  if ($dsu.Count -ge 1) {
+    Check 'default: item is reported in the warnings field' ($dsu[0].field -eq 'warnings') `
+      "field=$($dsu[0].field)"
+    # rule_line is the #default line (3 in $DefRulesBody) -- the line to delete.
+    Check 'default: item rule_line is the #default line (3)' ($dsu[0].rule_line -eq 3) `
+      "rule_line=$($dsu[0].rule_line)"
+    Check 'default: item names the target path (Text)' ($dsu[0].path -eq 'Text') `
+      "path=$($dsu[0].path)"
+    Check 'default: item text names BOTH the ignored value and the winner' `
+      ($dsu[0].text -match 'Zzz' -and $dsu[0].text -match 'Hi') "text=$($dsu[0].text)"
+  }
+  # The source value must actually survive into the re-emitted block. This is
+  # the half that matters to the operator: reporting the skip is no use if the
+  # value was clobbered anyway.
+  #
+  # Scope the search to the .dfm edit plan ONLY. The whole-output search that
+  # stood here first was unsound in the "must NOT appear" direction: the new
+  # warning line itself reads "#default Text = 'Zzz' did not fire", so a
+  # correct engine failed its own assertion. A negative assertion has to be
+  # scoped to the surface it is actually about.
+  $dfmMatch = [regex]::Match($defRaw, "(?m)^File: MyForm\.dfm\r?\n([\s\S]*?)^File: ")
+  $dfmTxt = if ($dfmMatch.Success) { $dfmMatch.Groups[1].Value } else { '' }
+  Check 'default: the .dfm edit plan was located' ($dfmTxt -ne '') "raw=$defRaw"
+  Check 'default: the SOURCE value reaches the T block' ($dfmTxt -match "Text = 'Hi'") `
+    "dfm=$dfmTxt"
+  Check 'default: the #default value is NOT written into the T block' `
+    (-not ($dfmTxt -match 'Zzz')) "dfm=$dfmTxt"
+
+  $six7 = @('converted','access_sites','creator_sites','todos','reemit_notes','warnings')
+  $sum7 = 0
+  foreach ($k in $six7) { $sum7 += @($defDoc.$k).Count }
+  Check 'default: items.Count still equals the sum of the six arrays' `
+    (@($defDoc.items).Count -eq $sum7) "items=$(@($defDoc.items).Count) sum=$sum7"
+}
+else {
+  Check 'default: typed assertions were SKIPPED (document did not parse)' $false `
     'fix the parse failure above'
 }
 
