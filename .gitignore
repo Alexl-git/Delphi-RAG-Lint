@@ -150,5 +150,10 @@ build/release-artifacts*/
 *.dfm.bak
 
 # The packaged VS Code extension. A 468 KB binary per version has no place in
-# the history; rebuild it with `npm run package` in editorsscode\drag-lint.
+# the history; rebuild it with `npm run package` in editors\vscode\drag-lint.
 dist/
+
+# Word owner-lock files. They appear beside any .docx that is open, and this
+# repo now SHIPS .docx deliverables, so a stray ~$ file next to one is normal
+# and must never be committed.
+~$*
