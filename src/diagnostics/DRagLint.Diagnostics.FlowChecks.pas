@@ -2303,6 +2303,20 @@ var
                 Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars); { whole-var only }
                 if (Tgt >= 0) and (Vars.Get(Tgt).Kind = vkLocal)
                    and ReadAny[Tgt] and (not Live[Tgt])
+                   { A CAPTURED local is read where liveness cannot look. The CFG
+                     deliberately does not descend into a nested routine (see
+                     DRagLint.Analysis.Cfg), and a nested routine closes over the
+                     enclosing locals -- so a store consumed only in there looks
+                     dead and is not. Captured records exactly that reference,
+                     and write-only-local below already honours it for the same
+                     reason; this check simply never asked.
+
+                     It matters because the false positive fires precisely when
+                     someone does what method-too-long and cyclomatic-complexity
+                     ASK for: in Delphi the cheapest correct extraction is a
+                     nested routine, since it closes over the locals and so needs
+                     no parameters and cannot trip too-many-parameters. }
+                   and (not Vars.Get(Tgt).Captured)
                    { Two shapes liveness calls dead that are not: a nil-init
                      guarding an exception path (deleting it CRASHES), and
                      `X := nil` on an interface local (that store IS the release,

@@ -1517,25 +1517,16 @@ begin
   { PasStore: whichever --db actually has AUnitPas indexed -- every unit-scoped
     lookup below (PasFileSyms, PasFileId, and everything keyed off PasFileId)
     goes through THIS SAME store, since an id is only meaningful within the
-    store that produced it.
-
-    The two dl:ok markers below are a RULE defect, not a code smell.
-    overwrite-before-read does not count a read that happens inside a NESTED
-    routine, and after the A1 extraction PasFileSyms is read only by
-    PlanFieldRetype and PasFileId only by PlanCreatorSites/PlanAccessSites. The
-    controlled comparison is 15 lines down: DfmFileSyms has the identical
-    assign-then-fallback shape and is NOT flagged, purely because its read sits
-    in the main body. Repro + expected/actual: docs\INBOX-overwrite-before-read-
-    nested-routine-reads.md. Remove these markers when that is fixed. }
+    store that produced it. }
   PasStore:= StoreForFile(AUnitPas);
   PasFileSyms:= PasStore.FindSymbolsByFile(AUnitPas);
   if Length(PasFileSyms) = 0 then
-    PasFileSyms:= PasStore.FindSymbolsByFile(TPath.GetFullPath(AUnitPas));  // dl:ok overwrite-before-read@2936 -- read in nested PlanFieldRetype; rule ignores nested reads
+    PasFileSyms:= PasStore.FindSymbolsByFile(TPath.GetFullPath(AUnitPas));
 
   { surface #5 needs the .pas file's own refs (GetReferencesFromFile is
     keyed by file id, not path) to find construction sites. }
   PasFileId:= PasStore.FindFileIdByPath(AUnitPas);
-  if PasFileId <= 0 then PasFileId:= PasStore.FindFileIdByPath(TPath.GetFullPath(AUnitPas));  // dl:ok overwrite-before-read@4116 -- read in nested PlanCreatorSites/PlanAccessSites
+  if PasFileId <= 0 then PasFileId:= PasStore.FindFileIdByPath(TPath.GetFullPath(AUnitPas));
 
   var DfmStore: ISymbolStore:= StoreForFile(ADfmPath);
   DfmFileSyms:= DfmStore.FindSymbolsByFile(ADfmPath);

@@ -2,3 +2,12 @@
 overwrite-before-read 7
 # x := 2 is read by Writeln -> not a dead store
 !overwrite-before-read 8
+# cap := 2 is consumed ONLY inside the nested routine UseIt. The CFG deliberately
+# does not descend into a nested routine, so liveness cannot see that read; the
+# Captured flag is what records it. Reporting this manufactures a dead-store
+# warning on exactly the refactoring method-too-long asks for.
+!overwrite-before-read 41
+# dead := 1 is overwritten by dead := 2 before any read, and UseIt never mentions
+# `dead` -- so the suppression above must be per-VARIABLE, not "any routine that
+# contains a nested routine is exempt". This is the control for that.
+overwrite-before-read 42
