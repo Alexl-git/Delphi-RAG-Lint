@@ -320,6 +320,32 @@ type
     property Mode nodefault;       // explicitly cancels the inherited default
   end;
 
+  TOpt  = (oA, oB, oC);
+  TOpts = set of TOpt;
+
+  { Two shapes the first cut of this feature got wrong, both pervasive in the
+    real VCL. Their values are only ever CONSUMED by convert-reemit, so a
+    tokeniser bug here surfaces as a malformed .dfm rather than a wrong query. }
+  TDefEdge = class
+  private
+    FAnchors: TOpts;
+    FColor  : Integer;
+    FKeep   : Boolean;
+    FPlain  : Integer;
+  published
+    { A SET default contains a space, so stopping the token at the first space
+      truncated it to `[oA,` -- a malformed value once it is emitted. }
+    property Anchors: TOpts read FAnchors write FAnchors default [oA, oB];
+    { A conditional `stored` DESTROYS the sparse-DFM premise: with ParentColor
+      set, Vcl.Controls' Color is omitted regardless of its value, so absence
+      does NOT mean "at the default". There is no usable default here. }
+    property Color: Integer read FColor write FColor stored IsColorStored default 7;
+    { `stored True` is the explicit form of the normal case and stays usable. }
+    property Keep: Boolean read FKeep write FKeep stored True default True;
+    { control: an ordinary default alongside the two above. }
+    property Plain: Integer read FPlain write FPlain default 3;
+  end;
+
 implementation
 
 end.
@@ -371,6 +397,45 @@ if ($null -ne $baseDoc) {
     "has=$($bMode.has_default) val=$($bMode.default_value)"
 } else {
   Check 'default-clause: base proptree parses' $false "raw=$baseJson"
+}
+
+# --- Set defaults, and `stored` as a veto on the sparse-DFM premise ----------
+# These two shapes are pervasive in the VCL and both were wrong in the first
+# cut. They matter because convert-reemit EMITS default_value into a .dfm: a
+# truncated set is a malformed form file, and a conditionally-stored property
+# read as "at its default" writes a value the form never had.
+$edgeJson = (& $Exe proptree --qname 'DefFix.TDefEdge' --format json --db $db 2>$null) -join "`n"
+$edgeDoc = $null
+try { $edgeDoc = $edgeJson | ConvertFrom-Json } catch { $edgeDoc = $null }
+if ($null -ne $edgeDoc) {
+  $eAnchors = @($edgeDoc.properties) | Where-Object { $_.path -eq 'Anchors' } | Select-Object -First 1
+  $eColor   = @($edgeDoc.properties) | Where-Object { $_.path -eq 'Color'   } | Select-Object -First 1
+  $eKeep    = @($edgeDoc.properties) | Where-Object { $_.path -eq 'Keep'    } | Select-Object -First 1
+  $ePlain   = @($edgeDoc.properties) | Where-Object { $_.path -eq 'Plain'   } | Select-Object -First 1
+
+  # A set default must survive WHOLE. `-eq` not `-match`: the bug produced the
+  # PREFIX '[oA,', which any substring assertion would happily accept.
+  Check 'default-clause: a SET default is captured whole, not truncated at the space' `
+    ($null -ne $eAnchors -and $eAnchors.has_default -eq $true -and `
+     $eAnchors.default_value -eq '[oA, oB]') `
+    "has=$($eAnchors.has_default) val='$($eAnchors.default_value)'"
+
+  # A conditional `stored` means absence carries NO information, so there is no
+  # usable default even though a `default` clause is present two tokens away.
+  Check 'default-clause: `stored <fn>` vetoes the default entirely (Color)' `
+    ($null -ne $eColor -and $eColor.has_default -eq $false -and $eColor.default_value -eq '') `
+    "has=$($eColor.has_default) val='$($eColor.default_value)'"
+
+  # CONTROLS. Without these, the veto above is equally satisfied by "any
+  # property mentioning `stored`, or indeed everything, resolves to nothing".
+  Check 'default-clause: CONTROL -- `stored True` keeps its default (Keep)' `
+    ($null -ne $eKeep -and $eKeep.has_default -eq $true -and $eKeep.default_value -eq 'True') `
+    "has=$($eKeep.has_default) val='$($eKeep.default_value)'"
+  Check 'default-clause: CONTROL -- a plain default beside them is unaffected (Plain=3)' `
+    ($null -ne $ePlain -and $ePlain.has_default -eq $true -and $ePlain.default_value -eq '3') `
+    "has=$($ePlain.has_default) val='$($ePlain.default_value)'"
+} else {
+  Check 'default-clause: edge-case proptree parses' $false "raw=$edgeJson"
 }
 
 Write-Host ''

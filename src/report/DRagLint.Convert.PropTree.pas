@@ -601,12 +601,48 @@ var
   var
     LowText: string ;
     P, i, j: Integer;
+    Depth  : Integer; { bracket nesting while capturing a SET default }
     Tok    : string ;
   begin
     AValue := '';
     LowText:= LowerCase(ADeclText);
     if ADeclText = '' then Exit(dcAbsent);
     if HasWholeWord(LowText, 'nodefault') then Exit(dcNoDefault);
+
+    { A `stored` clause other than `stored True` DESTROYS the sparse-DFM premise,
+      so there is no usable default here even when a `default` clause is present.
+
+      "absent ==> the value equals the declared default" holds only for a
+      property that is streamed unconditionally. The VCL's own Color is the
+      case that matters -- Vcl.Controls.pas:1996 declares it
+
+        property Color: TColor read FColor write SetColor
+          stored IsColorStored default clWindow;
+
+      With ParentColor=True, IsColorStored is False and Color is omitted
+      REGARDLESS of its value. Reading that absence as clWindow and then writing
+      it across is doubly wrong: the value may be different, and TControl.SetColor
+      clears FParentColor, so the converted control silently stops inheriting its
+      parent's colour. DevExpress carries many `stored IsXStored` pairs too.
+
+      dcAbsent is the honest answer -- "cannot tell" -- and the caller already
+      treats that as unknown and reports it rather than inventing a value.
+      `stored True` is the explicit form of the default and stays usable. }
+    P:= 1;
+    repeat
+      P:= PosEx('stored', LowText, P);
+      if P = 0 then Break;
+      if IsWholeWordAt(LowText, P, 6) then
+      begin
+        i:= P + 6;
+        while (i <= Length(LowText)) and CharInSet(LowText[i], [' ', #9]) do Inc(i);
+        j:= i;
+        while (j <= Length(LowText)) and (not CharInSet(LowText[j], [' ', #9, ';'])) do Inc(j);
+        if not SameText(Copy(ADeclText, i, j - i), 'True') then Exit(dcAbsent);
+        Break;
+      end;
+      Inc(P, 6);
+    until False;
 
     P:= 1;
     repeat
@@ -618,6 +654,36 @@ var
 
     i:= P + 7;
     while (i <= Length(ADeclText)) and CharInSet(ADeclText[i], [' ', #9]) do Inc(i);
+
+    { A SET default is a bracketed list and contains spaces:
+      `property Anchors: TAnchors ... default [akLeft, akTop];`. Stopping at the
+      first space truncated it to `[akLeft,` -- harmless while nothing emitted
+      the value, and a MALFORMED .dfm once D3 started writing it out. Set
+      defaults are pervasive in the VCL (Anchors, BorderIcons, Options...), so
+      this is the common case, not an exotic one.
+
+      An UNBALANCED bracket yields dcAbsent rather than a partial token: an
+      unreadable declaration is unknown, and inventing half a value is the one
+      outcome worse than admitting we cannot tell. }
+    if (i <= Length(ADeclText)) and (ADeclText[i] = '[') then
+    begin
+      Depth:= 0;
+      j:= i;
+      while j <= Length(ADeclText) do
+      begin
+        if ADeclText[j] = '[' then Inc(Depth)
+        else if ADeclText[j] = ']' then
+        begin
+          Dec(Depth);
+          if Depth = 0 then Break;
+        end;
+        Inc(j);
+      end;
+      if (Depth <> 0) or (j > Length(ADeclText)) then Exit(dcAbsent);
+      AValue:= Trim(Copy(ADeclText, i, j - i + 1));
+      Exit(dcValue);
+    end;
+
     j:= i;
     while (j <= Length(ADeclText)) and (not CharInSet(ADeclText[j], [' ', #9, ';'])) do Inc(j);
     Tok:= Trim(Copy(ADeclText, i, j - i));

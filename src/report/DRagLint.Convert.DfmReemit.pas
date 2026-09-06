@@ -672,6 +672,12 @@ var
   Ignored     : TArray<string>;
   { F paths a #mapping has consumed -- see IsConsumed / ApplyMappings. }
   ConsumedPaths: TArray<string>;
+  { True when AFromTree/AToTree actually describe THIS block's class pair.
+    HandleNested re-enters this function for an owned part with the PARENT's
+    trees, and a default read from the wrong class is a wrong VALUE, not a
+    missing one -- so every default-resolution path is gated on this. Declared
+    here, ahead of the nested routines, because ResolveLeafValue reads it. }
+  TreesDescribeThisBlock: Boolean;
 
   // Find a #link whose FromPath equals AFromPath (the dotted lookup key -- a
   // top-level F property name, OR a 'SubObj.Leaf' path when the leaf lives
@@ -758,6 +764,11 @@ var
   function ResolveLeafValue(const ADottedPath: string; out AValue: string): Boolean;
   begin
     if FindLeafValue(ADottedPath, AValue) then Exit(True);
+    { Same gate as step 4b: in the owned-part recursion AFromTree describes the
+      PARENT, so resolving a default from it would answer with another class's
+      value. Falling back to "absent" there is correct -- it is what the engine
+      did before D2, and it reports rather than invents. }
+    if not TreesDescribeThisBlock then Exit(False);
     Result:= LeafDefaultOf(AFromTree, ADottedPath, AValue);
   end;
 
@@ -1107,6 +1118,16 @@ begin
     TRoot.Name      := FRoot.Name;
     TRoot.ClassName_:= BareTypeTail(ToType);
 
+    { Do the supplied trees describe THIS block? The caller builds them for the
+      top-level instance, and HandleNested then re-enters here for each owned
+      part WITHOUT rebuilding them (a pure unit cannot -- it has no store), so
+      in that pass they belong to the parent. Compared on the F side against the
+      block's own DFM class, which is always bare. An empty RootType means the
+      class never resolved, and answering from an empty tree is no better than
+      answering from the wrong one. }
+    TreesDescribeThisBlock:= (AFromTree.RootType <> '') and
+      SameText(BareTypeTail(AFromTree.RootType), BareTypeTail(FRoot.ClassName_));
+
     // 3b. Apply #mapping/#apply BEFORE the leaf loop. Order is load-bearing:
     // RemapLeaf below would already have recorded a mapped source leaf as
     // Dropped, and a leaf cannot be un-dropped. Running first also lets
@@ -1146,13 +1167,42 @@ begin
     // Runs AFTER step 4 so a streamed value always wins, and BEFORE step 5 so
     // #default stays the fallback it claims to be -- a path resolved here is
     // now "carried", which is precisely why D0 had to land first.
+    //
+    // GATED ON TreesDescribeThisBlock. HandleNested re-enters this function for
+    // an owned part with the FULL rule set and the PARENT's trees, and a rule
+    // set carries every #convert in the book with no per-rule scoping. Without
+    // the gate this loop resolved every #link in the book against whichever
+    // tree it was handed, which on a real block produced three distinct wrong
+    // emissions at once: the parent's property written INTO the part (a
+    // property the part's class does not have -- EReadError on load), and the
+    // part's own #link resolved against the PARENT's default, silently
+    // carrying the wrong value. Both exit 0.
+    //
+    // So an owned part simply does not get default-resolution until the caller
+    // can supply the part's OWN trees -- which a PURE unit cannot build. Losing
+    // the D4 benefit inside owned parts is a great deal better than corrupting
+    // them, and step 4 still carries every value the part actually streams.
+    if TreesDescribeThisBlock then
     for R in ARules.Rules do
     begin
       if (R.Kind <> rkLink) or (R.FromPath = '') then Continue;
       if Trim(R.ToPath) = '???' then Continue;  // unfilled stub; step 4 reports it
       if IsIgnored(R.FromPath) then Continue;
+      { #remove means the property must be ABSENT from T. RemapLeaf checks it
+        first of all; without the same check here, a removed property's fate
+        depended on whether it happened to sit at its default -- streamed, it
+        was removed; absent, it was resurrected. }
+      if IsRemoved(R.FromPath) then Continue;
       if IsConsumed(R.FromPath) then Continue;  // a #mapping already spoke for it
       if FindLeafValue(R.FromPath, ResolvedVal) then Continue; // present -> step 4 handled it
+      { The TARGET must be a real property of T. A rule set carries every
+        #convert in the book and #link has no per-rule scoping, so a rule
+        belonging to another conversion can name a FromPath this class happens
+        to share -- and writing its ToPath here would emit a property T does not
+        have, which is an EReadError when the form loads. Step 4 was shielded
+        from this by needing the property to be streamed; 4b needs only that it
+        be defaulted, so it must check for itself. }
+      if LeafTypeOf(AToTree, R.ToPath) = '' then Continue;
       if not LeafDefaultOf(AFromTree, R.FromPath, ResolvedVal) then
       begin
         // Absent AND no `default` clause: such a property is ALWAYS streamed,

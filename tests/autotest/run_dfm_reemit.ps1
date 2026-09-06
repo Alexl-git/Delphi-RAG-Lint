@@ -143,16 +143,31 @@ type
       Plain no clause    vs  Plain2 no clause   -- always streamed, so absence
                                                    is genuinely UNKNOWN }
   TDefMode = (dmA, dmB, dmC);
+  TOptD    = (odA, odB, odC);
+  TOptsD   = set of TOptD;
 
   TFromD = class(TPersistent)
   private
     FMode : TDefMode;
     FSame : Boolean;
     FPlain: Integer;
+    FAnchors: TOptsD;
+    FGuarded: Integer;
+    FVisible: Boolean;
   published
     property Mode : TDefMode read FMode  write FMode  default dmA;
     property Same : Boolean  read FSame  write FSame  default True;
     property Plain: Integer  read FPlain write FPlain;
+    { a SET default -- contains a space, so a token-to-first-space reader
+      truncates it to `[odA,` and emits a malformed .dfm }
+    property Anchors: TOptsD read FAnchors write FAnchors default [odA, odB];
+    { a CONDITIONALLY STORED property -- omitted regardless of value, so its
+      absence carries no information and there is no usable default }
+    property Guarded: Integer read FGuarded write FGuarded stored IsGuardedStored default 7;
+    { shares a name with TOldColD.Visible below, and DISAGREES on the default.
+      That is what makes the owned-part case a wrong-VALUE test, not just a
+      wrong-place test. }
+    property Visible: Boolean read FVisible write FVisible default False;
   end;
 
   TToD = class(TPersistent)
@@ -160,10 +175,37 @@ type
     FMode2 : TDefMode;
     FSame2 : Boolean;
     FPlain2: Integer;
+    FAnchors2: TOptsD;
+    FGuarded2: Integer;
   published
     property Mode2 : TDefMode read FMode2  write FMode2  default dmC;
     property Same2 : Boolean  read FSame2  write FSame2  default True;
     property Plain2: Integer  read FPlain2 write FPlain2;
+    property Anchors2: TOptsD  read FAnchors2 write FAnchors2 default [odC];
+    property Guarded2: Integer read FGuarded2 write FGuarded2 default 1;
+    { NOTE: TToD deliberately has NO `Shown`. A #link naming Shown belongs to
+      the owned part's #convert, and applying it here must emit nothing. }
+  end;
+
+  { An owned part with its OWN #convert. Visible/Shown deliberately default
+    True, against TFromD.Visible's False, so resolving the part's #link from
+    the PARENT's tree produces a visibly wrong value rather than a coincidence. }
+  TOldColD = class(TPersistent)
+  private
+    FWidth  : Integer;
+    FVisible: Boolean;
+  published
+    property Width  : Integer read FWidth   write FWidth;
+    property Visible: Boolean read FVisible write FVisible default True;
+  end;
+
+  TNewColD = class(TPersistent)
+  private
+    FWidth: Integer;
+    FShown: Boolean;
+  published
+    property Width: Integer read FWidth write FWidth;
+    property Shown: Boolean read FShown write FShown default True;
   end;
 
 implementation
@@ -545,6 +587,81 @@ Check 'unresolved-note: nothing is invented for Plain2' `
   (-not ($j26.dfm -match 'Plain2')) "dfm=$($j26.dfm)"
 Check 'unresolved-note: the note names the offending property' `
   (@($j26.report.notes) -match 'Plain') "notes=$($j26.report.notes -join ' | ')"
+
+# --- Cases 27-30: the four ways default-resolution wrote WRONG values --------
+# Found by review after cases 22-26 were green, which is the point: every one of
+# these emits a bad value into a real form file at exit 0, and cases 22-26 are
+# structurally blind to all of them (single-class rule books, no set default, no
+# `stored` clause, no #remove).
+
+# 27: an owned part with its OWN #convert. HandleNested re-enters the engine
+# with the FULL rule set and the PARENT's trees -- a pure unit cannot rebuild
+# them -- so resolving defaults there answered from the wrong class. Three
+# distinct wrong emissions came out of this one block:
+#   * the parent's Mode2 written INTO the part (TNewColD has no Mode2 -> the
+#     form raises EReadError on load);
+#   * the part's own `#link Shown <- Visible` resolved against TFromD.Visible
+#     (default False) instead of TOldColD.Visible (default True) -- a silently
+#     WRONG value, which is worse than a loud one;
+#   * `Shown` written onto the PARENT, whose TToD has no such property.
+$b27 = "object C1: TFromD`r`n  object Col1: TOldColD`r`n    Width = 5`r`n  end`r`nend`r`n"
+$r27 = "#convert TFromD -> TToD`r`n#link Mode2 <- Mode`r`n" +
+       "#convert TOldColD -> TNewColD`r`n#link Width <- Width`r`n#link Shown <- Visible`r`n"
+$o27 = Reemit $b27 $r27 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'owned-part exit 0' ($script:LastExit -eq 0) "out=$o27"
+$j27 = $o27 | ConvertFrom-Json
+$col27 = [regex]::Match($j27.dfm, '(?s)object Col1: TNewColD(.*?)\r?\n  end')
+$col27Body = if ($col27.Success) { $col27.Groups[1].Value } else { '' }
+Check 'owned-part: the part block was located' ($col27Body -ne '') "dfm=$($j27.dfm)"
+Check 'owned-part: the part keeps its own streamed Width = 5' `
+  ($col27Body -match 'Width\s*=\s*5') "part=$col27Body"
+Check 'owned-part: the PARENT''s property is NOT injected into the part' `
+  (-not ($col27Body -match 'Mode2')) "part=$col27Body"
+Check 'owned-part: the part does NOT get a value resolved from the PARENT''s tree' `
+  (-not ($col27Body -match 'Shown')) "part=$col27Body"
+Check 'owned-part: a part-only target is NOT written onto the parent (TToD has no Shown)' `
+  (-not ($j27.dfm -match '(?m)^  Shown\s*=')) "dfm=$($j27.dfm)"
+# CONTROL: the parent's OWN link must still resolve, or this case is satisfied
+# by default-resolution being switched off everywhere.
+Check 'owned-part: CONTROL -- the parent''s own default still resolves (Mode2 = dmA)' `
+  ($j27.dfm -match '(?m)^  Mode2\s*=\s*dmA') "dfm=$($j27.dfm)"
+
+# 28: a SET default. `default [odA, odB]` contains a space; reading the value as
+# "up to the first space" truncated it to `[odA,`, which is not loadable DFM.
+# Assert the WHOLE literal -- a substring match would accept the prefix.
+$b28 = "object C1: TFromD`r`nend`r`n"
+$r28 = "#convert TFromD -> TToD`r`n#link Anchors2 <- Anchors`r`n"
+$o28 = Reemit $b28 $r28 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'set-default exit 0' ($script:LastExit -eq 0) "out=$o28"
+$j28 = $o28 | ConvertFrom-Json
+Check 'set-default: the whole set literal is emitted, not a truncated prefix' `
+  ($j28.dfm -match '(?m)^\s*Anchors2\s*=\s*\[odA, odB\]\s*$') "dfm=$($j28.dfm)"
+
+# 29: a CONDITIONALLY STORED source. `stored IsGuardedStored` means the property
+# is omitted regardless of its value, so absence does NOT mean "at the default"
+# and nothing may be carried. The VCL case this stands for is Color/ParentColor,
+# where writing the resolved default also CLEARS the inheritance.
+$b29 = "object C1: TFromD`r`nend`r`n"
+$r29 = "#convert TFromD -> TToD`r`n#link Guarded2 <- Guarded`r`n"
+$o29 = Reemit $b29 $r29 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'stored-veto exit 0' ($script:LastExit -eq 0) "out=$o29"
+$j29 = $o29 | ConvertFrom-Json
+Check 'stored-veto: nothing is carried for a conditionally-stored source' `
+  (-not ($j29.dfm -match 'Guarded2')) "dfm=$($j29.dfm)"
+Check 'stored-veto: it is REPORTED as unresolved rather than dropped in silence' `
+  (@($j29.report.notes) -match 'may diverge.*Guarded') "notes=$($j29.report.notes -join ' | ')"
+
+# 30: #remove must beat default-resolution. RemapLeaf checks it first for a
+# streamed leaf; without the same check here a removed property was resurrected
+# whenever it happened to sit at its default -- so its fate depended on the
+# value it held, which is the one thing #remove is supposed to make irrelevant.
+$b30 = "object C1: TFromD`r`nend`r`n"
+$r30 = "#convert TFromD -> TToD`r`n#link Mode2 <- Mode`r`n#remove Mode`r`n"
+$o30 = Reemit $b30 $r30 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'remove-beats-default exit 0' ($script:LastExit -eq 0) "out=$o30"
+$j30 = $o30 | ConvertFrom-Json
+Check 'remove-beats-default: the removed property is not resurrected' `
+  (-not ($j30.dfm -match 'Mode2')) "dfm=$($j30.dfm)"
 
 # --- Bad args ---
 $noOut = ((& $Exe convert-reemit 2>&1) -join "`n"); $noExit = $LASTEXITCODE
