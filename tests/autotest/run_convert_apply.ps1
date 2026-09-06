@@ -164,10 +164,17 @@ type
     FCaption: string;
     FFont: TFont2;
     FOnClick: TNotifyEvent;
+    FEnabled: Boolean;
+    FHint: string;
   published
     property Caption: string read FCaption write FCaption;
     property Font: TFont2 read FFont write FFont;
     property OnClick: TNotifyEvent read FOnClick write FOnClick;
+    { Phase 8: absent from MyForm.dfm because it sits at its declared default,
+      so its value is READABLE and must be carried across explicitly. }
+    property Enabled: Boolean read FEnabled write FEnabled default True;
+    { Phase 8 control: absent with NO default clause, so genuinely unknown. }
+    property Hint: string read FHint write FHint;
   end;
 
 implementation
@@ -212,10 +219,16 @@ type
     FText: string;
     FStyle: TStyle2;
     FOnClick2: TNotifyEvent;
+    FEnabled2: Boolean;
+    FHint2: string;
   published
     property Text: string read FText write FText;
     property Style: TStyle2 read FStyle write FStyle;
     property OnClick2: TNotifyEvent read FOnClick2 write FOnClick2;
+    { Phase 8. Enabled2's default deliberately DISAGREES with TOldEdit.Enabled's,
+      so carrying nothing across would silently change the value. }
+    property Enabled2: Boolean read FEnabled2 write FEnabled2 default False;
+    property Hint2: string read FHint2 write FHint2;
   end;
 
 implementation
@@ -353,6 +366,19 @@ $DefRulesBody = @'
 $defRulesPath = Join-Path $WorkDir 'rules-default.txt'
 Write-Ascii $defRulesPath $DefRulesBody
 
+# Phase 8's rule book. Enabled is absent from MyForm.dfm because it sits at its
+# declared default (True); TNewEdit.Enabled2 defaults to False, so carrying
+# nothing across would silently flip it. Hint is absent with NO default clause,
+# which is the genuinely-unknown case the narrowed divergence note still names.
+$ResolvedRulesBody = @'
+#convert TOldEdit -> TNewEdit, NewEditUnit
+#link Text <- Caption
+#link Enabled2 <- Enabled
+#link Hint2 <- Hint
+'@
+$resolvedRulesPath = Join-Path $WorkDir 'rules-resolved.txt'
+Write-Ascii $resolvedRulesPath $ResolvedRulesBody
+
 # ---------------------------------------------------------------------------
 # Index the fixture (one shared index -- Phase 2/3 re-copy the fixture into
 # fresh dirs but the .pas/.dfm CONTENT is byte-identical each time, so the
@@ -366,12 +392,14 @@ $phase3 = Join-Path $WorkDir 'phase3-nosafety'
 $phase4 = Join-Path $WorkDir 'phase4-castskip'
 $phase6 = Join-Path $WorkDir 'phase6-mapping'
 $phase7 = Join-Path $WorkDir 'phase7-default'
+$phase8 = Join-Path $WorkDir 'phase8-resolved'
 New-Fixture $phase1
 New-Fixture $phase2
 New-Fixture $phase3
 New-Fixture $phase4
 New-Fixture $phase6
 New-Fixture $phase7
+New-Fixture $phase8
 $castBeforeBytes = [System.IO.File]::ReadAllBytes((Join-Path $phase4 'MyForm.pas'))
 
 $db = Join-Path $WorkDir 'convapply.sqlite'
@@ -1013,6 +1041,80 @@ if ($null -ne $defDoc) {
 }
 else {
   Check 'default: typed assertions were SKIPPED (document did not parse)' $false `
+    'fix the parse failure above'
+}
+
+# ===========================================================================
+# PHASE 8: a source absent BECAUSE it sits at its declared default is carried
+# across explicitly, and reported as `default-resolved`.
+#
+# This is the apply/1 surface for the sparse-DFM work. Phase 7 covers the kind
+# next to it (`default-superseded`), but nothing exercised THIS one: the item
+# loop in Convert.Apply could have been deleted entirely and every assertion in
+# this runner would still have passed. Computed-then-discarded is the exact
+# shape session 68's A1 was about, so it gets its own end-to-end check.
+#
+# Hint is the control that keeps the claim honest: absent with NO default
+# clause, so it must NOT be carried, and must instead be NAMED by the narrowed
+# divergence note.
+# ===========================================================================
+Write-Host ''
+Write-Host '=== Phase 8: absent-because-default is carried (default-resolved) ===' -ForegroundColor Cyan
+
+Push-Location $phase8
+try {
+  $resRaw  = (& $Exe convert-apply --unit 'MyForm.pas' --rules $resolvedRulesPath --db $db 2>&1) -join "`n"
+  $resExit = $LASTEXITCODE
+  $resJson = (& $Exe convert-apply --unit 'MyForm.pas' --rules $resolvedRulesPath --db $db --format json 2>$null) -join "`n"
+} finally { Pop-Location }
+Write-Host $resRaw -ForegroundColor DarkGray
+
+Check 'resolved: dry-run exits 0' ($resExit -eq 0) "exit=$resExit"
+
+$resDoc = $null
+try { $resDoc = $resJson | ConvertFrom-Json } catch { $resDoc = $null }
+Check 'resolved: json parses' ($null -ne $resDoc) `
+  "raw=$($resJson.Substring(0, [Math]::Min(200, $resJson.Length)))"
+if ($null -ne $resDoc) {
+  $dr = @($resDoc.items) | Where-Object { $_.kind -eq 'default-resolved' }
+  Check 'resolved: a default-resolved item is emitted' ($dr.Count -eq 1) "count=$($dr.Count)"
+  if ($dr.Count -ge 1) {
+    Check 'resolved: it is informational (reemit_notes, not warnings)' `
+      ($dr[0].field -eq 'reemit_notes') "field=$($dr[0].field)"
+    Check 'resolved: it names the SOURCE property (Enabled)' ($dr[0].path -eq 'Enabled') `
+      "path=$($dr[0].path)"
+    # rule_line is the #link that carried it -- line 3 of $ResolvedRulesBody.
+    Check 'resolved: rule_line is the #link that carried it (3)' ($dr[0].rule_line -eq 3) `
+      "rule_line=$($dr[0].rule_line)"
+    Check 'resolved: the text names the resolved value and both paths' `
+      ($dr[0].text -match 'True' -and $dr[0].text -match 'Enabled2') "text=$($dr[0].text)"
+  }
+
+  # The value must actually land in the .dfm plan. Reporting it is no use if
+  # nothing was written -- and TNewEdit.Enabled2 defaults to False, so an absent
+  # property here would silently mean the opposite of what the form said.
+  $dfmM = [regex]::Match($resRaw, "(?m)^File: MyForm\.dfm\r?\n([\s\S]*?)^File: ")
+  $dfmB = if ($dfmM.Success) { $dfmM.Groups[1].Value } else { '' }
+  Check 'resolved: the .dfm edit plan was located' ($dfmB -ne '') "raw=$resRaw"
+  Check 'resolved: F''s resolved default is written explicitly (Enabled2 = True)' `
+    ($dfmB -match 'Enabled2\s*=\s*True') "dfm=$dfmB"
+
+  # CONTROL: Hint has no default clause, so it is genuinely unknown.
+  Check 'resolved: CONTROL -- a source with no default clause is NOT carried' `
+    (-not ($dfmB -match 'Hint2')) "dfm=$dfmB"
+  $dv = @($resDoc.items) | Where-Object { $_.kind -eq 'defaults-may-diverge' }
+  Check 'resolved: CONTROL -- the narrowed divergence note fires and NAMES it' `
+    ($dv.Count -ge 1 -and ($dv[0].text -match 'Hint')) `
+    "count=$($dv.Count) text=$($dv[0].text)"
+
+  $six8 = @('converted','access_sites','creator_sites','todos','reemit_notes','warnings')
+  $sum8 = 0
+  foreach ($k in $six8) { $sum8 += @($resDoc.$k).Count }
+  Check 'resolved: items.Count still equals the sum of the six arrays' `
+    (@($resDoc.items).Count -eq $sum8) "items=$(@($resDoc.items).Count) sum=$sum8"
+}
+else {
+  Check 'resolved: typed assertions were SKIPPED (document did not parse)' $false `
     'fix the parse failure above'
 }
 
