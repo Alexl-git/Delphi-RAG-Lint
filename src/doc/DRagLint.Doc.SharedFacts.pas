@@ -123,9 +123,21 @@ type
     /// <param name="AStore">The current project's index. Not owned.</param>
     /// <param name="AUnitPath">Absolute path of the declaring unit; decides
     /// whether the unit is marked.</param>
-    /// <returns>True to report `doc-drift`. Identical to a whitespace-collapsed
-    /// byte compare on an unmarked unit, on a truncated list, and on any block
-    /// this unit cannot confidently parse.</returns>
+    /// <returns>True to report `doc-drift`.</returns>
+    /// <remarks>
+    /// <para>An INBOUND list (`Called from:`, `Used by:`, `Used in units:`) is
+    /// compared as a SET for EVERY unit -- owner ruling 2026-09-06, "order is
+    /// not important, we should compare parts". Reordering entries is therefore
+    /// not drift. Everything else in the block keeps the whitespace-collapsed
+    /// byte compare, as does a TRUNCATED list (a `(+N more)` window is not the
+    /// list, so set difference over it is unsound in both directions) and any
+    /// block this unit cannot confidently parse.</para>
+    /// <para>An entry the FRESH render found and the source does not record is
+    /// drift for every unit -- that is how a new caller gets written down. The
+    /// reverse, an entry only the SOURCE records, is forgiven only on a unit
+    /// marked `dl:shared`, where another project may legitimately have written
+    /// it; on an unmarked unit it is a stale entry and still drift.</para>
+    /// </remarks>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
@@ -549,6 +561,7 @@ end;
   ordering legal without relocating working code. }
 function UnitVouchable(const AStore: ISymbolStore; const AEntry: string): Boolean; forward;
 function LabelContent(const AText, ALabel: string): string; forward;
+function ParaLabelCount(const AText, ALabel: string): Integer; forward;
 
 { The raw block text with ALabel's whole <para> element removed.
 
@@ -657,11 +670,59 @@ var
   E             : string;
   I             : Integer;
   StoredCmp     : string;
+  IsShared      : Boolean;
 begin
-  { An unmarked unit with nothing unvouchable in its block is not part of this
-    feature, and keeps the byte compare that shipped before it existed. }
-  if not Participates(AStore, AUnitPath, AStored) then
-    Exit(CollapseWs(AStored) <> CollapseWs(AFresh));
+  { OWNER RULING 2026-09-06: "Order is not important. We should compare parts.
+    I.e. all parts (lines) are there and not missing, then the Documentation is
+    OK. If unit is used by several projects then the order might change and
+    this is OK."
+
+    So an INBOUND list is compared as a SET for EVERY unit, not only for one
+    that opted into `dl:shared`. This routine already knew how -- the
+    StoredSet/FreshSet comparison below has been doing exactly that for shared
+    units since 2026-08-13 -- and the only thing that kept an ordinary unit on a
+    whole-block byte compare was the early Exit that used to stand here.
+
+    WHAT PROMPTED IT, measured 2026-09-06: `document --apply` rewrote
+    TDocParamNote's block by SWAPPING TWO `Used by:` entries and changing
+    nothing else. doc-drift then called the block stale and FIXABLE while
+    `document --qname` said "up to date (no change)" -- the checker and the
+    writer disagreeing about a block whose CONTENT was never wrong. Restoring
+    the original order by hand cleared the finding, which is what proves the
+    order was the whole of it.
+
+    WHAT DOES NOT CHANGE, and must not:
+      * the RESIDUAL (Calls:, Complexity:, everything that is not an inbound
+        label) keeps byte-compare semantics -- order-insensitivity was ruled for
+        used-by, and nothing about it makes a wrong Calls: line right;
+      * an entry the FRESH render found and the source does not record is still
+        drift, unconditionally, for every unit. That asymmetry is how a
+        genuinely new caller gets written down;
+      * the forgiveness for an entry the SOURCE records and this index cannot
+        see stays gated on `dl:shared` participation. A unit that never opted in
+        has no cross-project story, so a stored-only entry there is a stale
+        entry, not a foreign one -- graded strictly, exactly as the byte compare
+        graded it before. }
+  IsShared:= Participates(AStore, AUnitPath, AStored);
+
+  { A DUPLICATED INBOUND LABEL CANNOT BE SET-COMPARED, so it keeps the byte
+    compare -- the fail-safe direction this unit's header requires ("if a block
+    cannot be parsed confidently ... the answer is the byte compare").
+
+    ParseBlock keys its map by LABEL, so a block carrying two `Called from:`
+    <para> elements collapses to ONE entry set and the other simply disappears
+    from the comparison. Under a whole-block byte compare that never mattered;
+    under a set compare it means an entire injected line can go unreported.
+
+    NOT hypothetical: run_doc_drift_unseen_units' CONTROL-1 plants exactly this
+    shape -- a second `Called from:` para naming an in-scope ghost -- and it
+    went green against the set compare until this guard was added. That control
+    exists because the surrounding forgiveness rules are easy to widen into
+    "reports nothing", and it caught this on the first battery. }
+  for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
+    if (ParaLabelCount(AStored, INBOUND_LABELS[I]) > 1) or
+       (ParaLabelCount(AFresh,  INBOUND_LABELS[I]) > 1) then
+      Exit(CollapseWs(AStored) <> CollapseWs(AFresh));
 
   { TAKE OUT ANY LABEL THIS INDEX CANNOT PRODUCE, BEFORE THE PARSE.
 
@@ -677,6 +738,7 @@ begin
     the same blind spot as an unseen caller. A label BOTH sides render is still
     compared normally, and every other residual fact is untouched. }
   StoredCmp:= AStored;
+  if IsShared then
   for I:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
     if (LabelContent(AStored, UNVOUCHABLE_LABELS[I]) <> '') and
        (LabelContent(AFresh,  UNVOUCHABLE_LABELS[I]) =  '') then
@@ -693,7 +755,7 @@ begin
         defect (the writer's half is guarded in TDocumenter). Only forgiven when
         the stored block carries entries that ONLY another project could have
         written; a block with nothing foreign in it is still graded normally. }
-      if (FRes = '') and (FIn.Count = 0) and (SIn.Count > 0)
+      if IsShared and (FRes = '') and (FIn.Count = 0) and (SIn.Count > 0)
          and HoldsForeignInboundEntries(AStored, AStore, AUnitPath) then Exit(False);
 
       { Everything that is not an inbound fact keeps byte-compare semantics --
@@ -735,7 +797,14 @@ begin
             nothing -- which is why the closure test carries the decision. }
           for E in SE do
             if not FreshSet.ContainsKey(LowerCase(E)) then
+            begin
+              { A unit that never opted into `dl:shared` has no cross-project
+                story, so a stored-only entry is a STALE entry, not a foreign
+                one -- graded strictly, exactly as the byte compare graded it
+                before the ruling generalised the set comparison. }
+              if not IsShared then Exit(True);
               if UnitVouchable(AStore, E) or IsUncertainEntry(E) then Exit(True);
+            end;
         finally
           FreshSet.Free;
           StoredSet.Free;
@@ -1021,6 +1090,31 @@ begin
       if Names.ContainsKey(Copy(S, 1, I - 1)) then Exit(True);
 
   Result:= False;
+end;
+
+{ How many times ALabel occurs in AText.
+
+  EXISTS FOR ONE JOB: telling BlockDrifted that a block carries the SAME inbound
+  label twice, which ParseBlock cannot represent -- its map is keyed by label, so
+  the second <para> silently replaces or drops the first. A whole-block byte
+  compare never cared; a SET compare would quietly stop seeing one of them.
+
+  Deliberately counts the LABEL TEXT rather than parsing <para> elements: the
+  stored block arrives flattened (the doc parser turns newlines into spaces), so
+  element boundaries are exactly what is not reliable here. Over-counting is the
+  safe direction anyway -- it costs a byte compare, which is this unit's
+  documented fallback for anything it cannot read confidently. }
+function ParaLabelCount(const AText, ALabel: string): Integer;
+var P: Integer;
+begin
+  Result:= 0;
+  if (AText = '') or (ALabel = '') then Exit;
+  P:= Pos(ALabel, AText);
+  while P > 0 do
+  begin
+    Inc(Result);
+    P:= PosEx(ALabel, AText, P + Length(ALabel));
+  end;
 end;
 
 { The content a label carries in a flattened block, or '' when the label is

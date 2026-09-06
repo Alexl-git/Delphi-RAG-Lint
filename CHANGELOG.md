@@ -5,6 +5,70 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### doc-drift compares an inbound list as a SET, so reordering is not drift
+
+Owner ruling, 2026-09-06: *"Order is not important. We should compare parts.
+I.e. all parts (lines) are there and not missing, then the Documentation is OK.
+If unit is used by several projects then the order might change and this is
+OK."*
+
+What prompted it: `document --apply` rewrote a facts block by SWAPPING TWO
+`Used by:` entries and changing nothing else, after which `doc-drift` called the
+block stale and FIXABLE while `document --qname` said "up to date (no change)" --
+the checker and the writer disagreeing about a block whose CONTENT was never
+wrong. Restoring the original order by hand cleared the finding, which is what
+proved the order was the whole of it.
+
+`TSharedFacts.BlockDrifted` already knew how to do this: it has compared inbound
+lists as SETS since 2026-08-13, for units marked `dl:shared`. The only thing
+keeping every other unit on a whole-block byte compare was an early `Exit`. That
+`Exit` is gone, so the set comparison is now what every unit gets.
+
+Three things deliberately did NOT change, and the new guard pins each:
+
+* an entry the FRESH render found and the source does not record is drift, for
+  every unit -- that asymmetry is how a genuinely new caller gets written down;
+* the reverse (an entry only the SOURCE records) is still forgiven ONLY on a
+  `dl:shared` unit, where another project may legitimately have written it. On
+  an unmarked unit it is a stale entry, and is still drift;
+* the RESIDUAL -- `Calls:`, `Complexity:`, everything that is not an inbound
+  label -- keeps byte-compare semantics. Order-insensitivity was ruled for
+  used-by; nothing about it makes a wrong `Calls:` line right.
+
+A DUPLICATED inbound label falls back to the byte compare. `ParseBlock` keys its
+map by LABEL, so a block carrying two `Called from:` elements collapses to ONE
+entry set and the other silently leaves the comparison -- harmless under a
+whole-block byte compare, a hole under a set compare. NOT hypothetical:
+`run_doc_drift_unseen_units`' CONTROL-1 plants exactly that shape and went RED
+on the first battery after the set compare landed, which is what that control
+exists for. Falling back is this unit's documented direction ("if a block cannot
+be parsed confidently ... the answer is the byte compare").
+
+New guard `tests\autotest\run_doc_drift_order_insensitive.ps1`, RED-checked: on
+the pre-change engine exactly ONE assertion fails (the reordering one) and all
+FOUR controls still pass -- dropped entry, invented entry, duplicated label, and
+a tampered non-inbound line -- so the widening is not the drift rule being
+switched off.
+
+**A PREDICTION THIS REFUTES.** The note carrying the 1229-edit autodoc backlog
+recorded a guess that an unknown but possibly large share of those edits were
+pure reorderings, so this fix might shrink the sweep substantially. Measured:
+
+```
+  pre-A1 engine          1229 edits / 91 files
+  with A1                1243 edits / 92 files
+  with A1 + this fix     1228 edits / 91 files
+```
+
+**One edit.** The fix is in the CHECKER; the 1229 comes from the WRITER, which
+decides to propose an edit by byte-comparing its merged output. Making the
+checker order-insensitive does not stop the writer re-emitting a list in a
+different order, so the sweep is the same size it was and the writer's churn is
+still unsolved. Recorded in the backlog note rather than left as a hope.
+
+On this repo the change removes exactly one finding: 3874 -> 3873
+(doc-drift 617 -> 616).
+
 ### A raised exception now documents its MESSAGE, not just its class
 
 `TCompileChecker.SpawnAndCapture` documented itself as "Raises Exception" and
@@ -45,7 +109,7 @@ deliberately not a superstring of `AUTO_MARK`, which means every consumer must
 search for it explicitly -- `RegionFullyEngineOwned` did not, and a comment whose
 only content was a mined exception survived after its `raise` was deleted.
 
-New guard `testsutodocun_doc_exception_message.ps1`, RED-checked against the
+New guard `tests\autodoc\run_doc_exception_message.ps1`, RED-checked against the
 pre-change engine. It pins the limits as well as the wins: a message on a later
 line than the `raise` (the case the cross-line scan state exists for) IS
 captured; a `raise` inside `{ }` or after `//` is NOT (this repo has fabricated
