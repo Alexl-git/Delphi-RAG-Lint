@@ -200,6 +200,44 @@ var
   GOracleCalls: array[0..ORACLE_SLOTS - 1] of Int64;
   GOracleMiss : array[0..ORACLE_SLOTS - 1] of Int64;
 
+{ C1a (docs\PLAN-flowchecker-transfer.md, Step 0 result): memos for the two type
+  predicates, which Step 0 measured at a 100% MISS RATE -- 46,236 and 34,394
+  full recomputations of ResolveTypeCategory in one lint-all, 22.41 s between
+  them, with no cache of any kind.
+
+  SCOPE IS ONE FILE, deliberately, and that is why these are safe. Both
+  functions are called ONLY from inside TFlowChecker.Check's dynamic extent
+  (three call sites plus IsManagedType's own element-type recursion), Check
+  runs once per file with a FIXED AStore and AFileId, and ClearOracleMemos
+  empties both at its entry. So nothing survives a file, and no answer can be
+  carried across a different store -- which is the correctness question that
+  makes the store-lifetime step (C1b) a bigger change than this one.
+
+  The key CASE-SENSITIVELY includes the type text as written, plus the file id.
+  Delphi type names are case-insensitive, so folding case would hit more often
+  -- and would also change which answers are shared. This change is gated on a
+  BYTE-IDENTICAL lint-all, so it takes the conservative key: a missed hit costs
+  time, a wrongly shared hit costs correctness. Normalising is a separate change
+  with its own A/B, exactly as section 7 says for the owns key.
+
+  AFileId is in the key even though it is constant within one Check. It costs
+  nothing, it documents what the entry is actually scoped to, and it is what
+  lets C1b lift these to store lifetime by deleting the Clear call rather than
+  by redesigning the key. }
+  GRecTypeMemo: TDictionary<string, Boolean>;
+  GManagedMemo: TDictionary<string, Boolean>;
+
+function OracleMemoKey(AFileId: Int64; const AText: string): string;
+begin
+  Result:= IntToStr(AFileId) + '#' + AText;
+end;
+
+procedure ClearOracleMemos;
+begin
+  GRecTypeMemo.Clear;
+  GManagedMemo.Clear;
+end;
+
 { Charge (now - AStart - AExclude) to AOracle and count the call. AMiss marks a
   call that did NOT come back from an existing cache -- for the two oracles that
   have no cache of their own it is always True, which reads correctly: every
@@ -261,11 +299,19 @@ end;
   function-result-not-set, matching W1036. Store-exact when present, name
   heuristic otherwise. }
 function IsManagedType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
-var Cat: TTypeCategory; T: string; T0, E0: Int64;
+var Cat: TTypeCategory; T: string; T0, E0: Int64; Miss: Boolean; MK: string;
 begin
-  T0 := TStopwatch.GetTimeStamp;
+  T0 := TStopwatch.GetTimeStamp; Miss := False;
   E0 := GOracleT[ORACLE_MANAGED]; { see the finally: this function RECURSES }
+  MK := OracleMemoKey(AFileId, ATypeText);
   try
+  { Guard BLOCK, not `if hit then Exit`. The Exit form would take this routine
+    from 5 exit points to 6 and trip too-many-exit-points -- a new finding in
+    new code, which the lint-clean standard does not allow. On a hit Result is
+    already set by TryGetValue and the finally still runs. }
+  if not GManagedMemo.TryGetValue(MK, Result) then
+  begin
+  Miss := True;
   if AStore <> nil then
   begin
     Cat := AStore.ResolveTypeCategory(ATypeText, AFileId);
@@ -301,11 +347,16 @@ begin
   { I-prefixed interface convention: 'I' + uppercase letter }
   if (Length(ATypeText) >= 2) and (ATypeText[1] = 'I') and ATypeText[2].IsUpper then Exit(True);
   Result := False;
+  end;
   finally
+    { The answer is stored HERE because this function returns through six
+      different Exit(...) paths; storing at each one is how a path gets missed.
+      Only on a miss -- re-storing a hit would be harmless but pointless. }
+    if Miss then GManagedMemo.AddOrSetValue(MK, Result);
     { RECURSES for static arrays (it re-asks about the ELEMENT type), so the
       nested frames' time is subtracted here. Without this a two-deep array
       type is charged twice and the slot can outgrow the phase containing it. }
-    OracleTick(ORACLE_MANAGED, T0, GOracleT[ORACLE_MANAGED] - E0, True);
+    OracleTick(ORACLE_MANAGED, T0, GOracleT[ORACLE_MANAGED] - E0, Miss);
   end;
 end;
 
@@ -345,15 +396,19 @@ end;
 /// store this returns False, which is today's (pre-fix) behaviour, so the
 /// store-free lint path cannot silently over-suppress.</remarks>
 function IsRecordType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
-var T0: Int64;
+var T0: Int64; Miss: Boolean; K: string;
 begin
-  T0 := TStopwatch.GetTimeStamp;
+  T0 := TStopwatch.GetTimeStamp; Miss := False;
   try
     Result := False;
     if AStore = nil then Exit;
+    K := OracleMemoKey(AFileId, ATypeText);
+    if GRecTypeMemo.TryGetValue(K, Result) then Exit;
+    Miss := True;
     Result := AStore.ResolveTypeCategory(ATypeText, AFileId) = tcRecord;
+    GRecTypeMemo.AddOrSetValue(K, Result);
   finally
-    OracleTick(ORACLE_RECTYPE, T0, 0, True);
+    OracleTick(ORACLE_RECTYPE, T0, 0, Miss);
   end;
 end;
 
@@ -2020,6 +2075,7 @@ var
   Procs: TArray<TTSNode>;
   PI: Integer;
   OwnCache: TDictionary<string, Boolean>;
+  RecDefCache: TDictionary<string, Boolean>;
   OwnsOracle: TCallArgOwns;
   RecMethodDef: TRecordMethodDefPredicate;
   ParamMode   : TParamModeLookup;
@@ -2756,6 +2812,12 @@ begin
   if PF.Tree = nil then Exit;
   Findings := TList<TLintFinding>.Create;
   OwnCache := TDictionary<string, Boolean>.Create;
+  RecDefCache := TDictionary<string, Boolean>.Create;
+  { C1a: the two unit-level type memos are scoped to THIS Check. Clearing
+    at entry is what keeps them safe -- AStore and AFileId are fixed for
+    one Check but differ between them, and a stale entry from another
+    file/store would be a wrong answer, not a slow one. }
+  ClearOracleMemos;
   { Interprocedural object-leak: with a store, the escape analysis asks this oracle
     whether a callee OWNS its argument. True (owns/unknown) keeps the conservative
     escape; False (clearly non-owning unit proc) lets a real leak surface. }
@@ -2825,12 +2887,15 @@ begin
   if AStore <> nil then
     RecMethodDef :=
       function(const ATypeText, AMemberName: string): Boolean
-      var RecSym, MemSym: TSymbol; T0, E0: Int64;
+      var RecSym, MemSym: TSymbol; T0, E0: Int64; Miss: Boolean; DK: string;
       begin
-        T0 := TStopwatch.GetTimeStamp;
+        T0 := TStopwatch.GetTimeStamp; Miss := False;
         E0 := GOracleT[ORACLE_RECTYPE]; { subtracted below -- see the finally }
+        DK := ATypeText + '#' + AMemberName;
         try
         Result := False;
+        if RecDefCache.TryGetValue(DK, Result) then Exit;
+        Miss := True;
         if not IsRecordType(ATypeText, AStore, AFileId) then Exit;
         RecSym := AStore.ResolveTypeNameToClass(Trim(ATypeText), AFileId);
         if RecSym.Id <= 0 then Exit;
@@ -2841,10 +2906,15 @@ begin
         if MemSym.Id <= 0 then Exit;
         Result := CanBeCallTarget(MemSym.Kind);
         finally
+          { Stored in the finally for the same reason as IsManagedType: this
+            closure returns through four Exit paths and storing at each is how
+            one gets missed. RecDefCache is a local of Check, so it needs no
+            file id in the key -- AFileId cannot vary within one Check. }
+          if Miss then RecDefCache.AddOrSetValue(DK, Result);
           { RecMethodDef CALLS IsRecordType, which bills its own slot. Subtract
             it or the same work is charged to both rows and they stop being a
             partition of the phase above them. }
-          OracleTick(ORACLE_RECDEF, T0, GOracleT[ORACLE_RECTYPE] - E0, True);
+          OracleTick(ORACLE_RECDEF, T0, GOracleT[ORACLE_RECTYPE] - E0, Miss);
         end;
       end
   else
@@ -3021,7 +3091,16 @@ begin
     Findings.Free;
     OwnCache.Free;
     ParamModeCache.Free;
+    RecDefCache.Free;
   end;
 end;
+
+initialization
+  GRecTypeMemo:= TDictionary<string, Boolean>.Create;
+  GManagedMemo:= TDictionary<string, Boolean>.Create;
+
+finalization
+  GRecTypeMemo.Free;
+  GManagedMemo.Free;
 
 end.
