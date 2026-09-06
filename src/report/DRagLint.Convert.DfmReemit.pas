@@ -25,6 +25,7 @@ uses
   System.SysUtils,
   System.Generics.Collections,
   DRagLint.Convert.Rules,
+  DRagLint.Convert.CastLib,
   DRagLint.Convert.PropTree;
 
 type
@@ -150,6 +151,27 @@ type
     RuleLine: Integer; { the #link that carried it }
   end;
 
+  /// <summary>One value a named ENUM cast could not translate: no `map` pair
+  /// matched it and the cast declares no `else`.</summary>
+  /// <remarks>
+  /// REMAINDER, and nothing is written for it. The alternative would be to copy
+  /// the source member name straight through, which is worse than useless here:
+  /// the target is a DIFFERENT enum type, so the name is either not a member of
+  /// it at all (the form fails to load) or -- far worse -- happens to BE one and
+  /// silently means something else.
+  ///
+  /// Carries the cast's name and the offending value so the fix is a one-line
+  /// `map` addition to the .castlib, and the rule line so the operator can find
+  /// the `#link ... : Cast` that asked for it.
+  /// </remarks>
+  TReemitEnumUnmapped = record
+    CastName: string;  { the enum cast named by the #link's ': Cast' suffix }
+    FromPath: string;  { the F property whose value went untranslated }
+    ToPath  : string;  { where it would have been written }
+    Value    : string; { the source member name, verbatim }
+    RuleLine: Integer; { the #link line }
+  end;
+
   /// <summary>A structured report of what the re-emit did and what needs human
   /// attention. WARN-level: Dropped, Mismatched, OwnedParts. Silent: Ignored (an
   /// acknowledged #ignore).</summary>
@@ -207,6 +229,9 @@ type
     /// <summary>Informational: F properties absent from the block because they
     /// sit at their declared default, whose value was resolved and carried.</summary>
     DefaultsResolved  : TArray<TReemitDefaultResolved>;
+    /// <summary>Remainder: values a named enum cast could not translate, so
+    /// nothing was written for them.</summary>
+    EnumUnmapped      : TArray<TReemitEnumUnmapped>;
     Notes       : TArray<string>;
   end;
 
@@ -291,7 +316,8 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
-  const AFromTree, AToTree: TPropTree): TReemitResult;
+  const AFromTree, AToTree: TPropTree;
+  const ACastLib: TCastLib): TReemitResult;
 
 implementation
 
@@ -677,7 +703,8 @@ begin
 end;
 
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
-  const AFromTree, AToTree: TPropTree): TReemitResult;
+  const AFromTree, AToTree: TPropTree;
+  const ACastLib: TCastLib): TReemitResult;
 var
   FRoot, TRoot: TDfmNode;
   R           : TConversionRule;
@@ -688,6 +715,10 @@ var
   Ignored     : TArray<string>;
   { F paths a #mapping has consumed -- see IsConsumed / ApplyMappings. }
   ConsumedPaths: TArray<string>;
+  { Values an enum cast could not translate. An OUTER local because the nested
+    ApplyEnumCast cannot reach the function Result; folded into the report at
+    the end with Created/Dropped/Ignored. }
+  EnumUnmapped : TArray<TReemitEnumUnmapped>;
   { True when AFromTree/AToTree actually describe THIS block's class pair.
     HandleNested re-enters this function for an owned part with the PARENT's
     trees, and a default read from the wrong class is a wrong VALUE, not a
@@ -706,6 +737,64 @@ var
     for Q in ARules.Rules do
       if (Q.Kind = rkLink) and SameText(Q.FromPath, AFromPath) then
       begin AToPath:= Q.ToPath; Exit(True); end;
+  end;
+
+  // The ': CastName' suffix on the #link that FindLinkFor would pick, or ''.
+  // Deliberately repeats FindLinkFor's search rather than widening its
+  // signature: both take the FIRST rkLink matching the path, so they cannot
+  // disagree about which rule they are describing.
+  function LinkCastFor(const AFromPath: string; out ARuleLine: Integer): string;
+  var Q: TConversionRule;
+  begin
+    Result:= '';
+    ARuleLine:= 0;
+    for Q in ARules.Rules do
+      if (Q.Kind = rkLink) and SameText(Q.FromPath, AFromPath) then
+      begin
+        ARuleLine:= Q.LineNo;
+        Exit(Q.Cast);
+      end;
+  end;
+
+  // Translate AValue through the ENUM cast named by a #link's ': Cast' suffix.
+  //
+  // Returns the value to write. AWrite is False when the cast is an enum cast
+  // that could not translate this value -- no `map` matched and no `else` --
+  // and the caller must then write NOTHING and let the recorded remainder speak.
+  // Copying the source member through would be worse than useless: the target
+  // is a different enum type, so the name either is not a member of it (the form
+  // fails to load) or happens to be one and quietly means something else.
+  //
+  // A cast name that is not an enum block is left alone: it is a CLASS cast,
+  // whose realization is still editor-side, and the value passes through exactly
+  // as it did before enum casts existed.
+  function ApplyEnumCast(const AFromPath, AToPath, AValue: string;
+    out AWrite: Boolean): string;
+  var
+    CastName: string;
+    RuleLine: Integer;
+    Def     : TEnumDef;
+    Mapped  : string;
+    Rec     : TReemitEnumUnmapped;
+  begin
+    AWrite:= True;
+    Result:= AValue;
+    CastName:= LinkCastFor(AFromPath, RuleLine);
+    if CastName = '' then Exit;
+    if not FindEnumCast(ACastLib, CastName, Def) then Exit; // class cast, or unknown
+    if EnumCastValue(Def, AValue, Mapped) then Exit(Mapped);
+    Rec:= Default(TReemitEnumUnmapped);
+    Rec.CastName:= CastName;
+    Rec.FromPath:= AFromPath;
+    Rec.ToPath  := AToPath;
+    Rec.Value   := AValue;
+    Rec.RuleLine:= RuleLine;
+    { Accumulated in an OUTER local, not Result.Report: inside a nested routine
+      `Result` is this function's own string result. Folded in at the end
+      alongside Created/Dropped/Ignored. }
+    EnumUnmapped:= EnumUnmapped + [Rec];
+    AWrite:= False;
+    Result:= '';
   end;
 
   function IsIgnored(const AFromPath: string): Boolean;
@@ -1006,7 +1095,15 @@ var
         PlaceAtPath(TRoot, ToPath, ALeaf.ValueText, dnkBinary, Created);
         Exit;
       end;
-      PlaceAtPath(TRoot, ToPath, ALeaf.ValueText, ALeaf.Kind, Created);
+      { An ENUM cast named by this #link's ': Cast' suffix translates the VALUE.
+        Until now the suffix was parsed, validated and then ignored on the DFM
+        side, so `#link Mode2 <- Mode : ButtonLayout` copied the source member
+        name into a target of a DIFFERENT enum type. }
+      var CastWrite: Boolean;
+      var CastVal: string;
+      CastVal:= ApplyEnumCast(AFromPath, ToPath, ALeaf.ValueText, CastWrite);
+      if not CastWrite then Exit; // untranslatable; recorded as remainder
+      PlaceAtPath(TRoot, ToPath, CastVal, ALeaf.Kind, Created);
       Exit;
     end;
     // UNMAPPED + present in the DFM == non-default -> genuine potential loss.
@@ -1038,7 +1135,7 @@ var
     begin
       // OWNED part with a rule -> recurse. Re-emit the part block by round-
       // tripping it: emit the sub-object as its own block, re-run ReemitComponent.
-      PartResult:= ReemitComponent(EmitBlock(ASub, 0), ARules, AFromTree, AToTree);
+      PartResult:= ReemitComponent(EmitBlock(ASub, 0), ARules, AFromTree, AToTree, ACastLib);
       if PartResult.Ok then
       begin
         // Re-parse the converted part text back into a node and graft it.
@@ -1088,10 +1185,11 @@ var
 begin
   Result:= Default(TReemitResult);
   FRoot := nil; TRoot:= nil;
-  Created   := nil;
-  Dropped   := nil;
-  Ignored   := nil;
-  Unresolved:= nil;
+  Created     := nil;
+  Dropped     := nil;
+  Ignored     := nil;
+  Unresolved  := nil;
+  EnumUnmapped:= nil;
 
   // 1. Parse the F block FIRST (moved ahead of the #convert gate below): the gate
   // needs FRoot.ClassName_ to pick the RIGHT #convert when the rule set holds more
@@ -1247,6 +1345,11 @@ begin
       // same ToPath, and a STREAMED value must outrank a resolved default --
       // the same precedence D0 established for #default.
       if Assigned(FindAtPath(TRoot, R.ToPath)) then Continue;
+      { A resolved default goes through the same enum cast a streamed value
+        would: the value's PROVENANCE does not change what type it must become. }
+      var DefWrite: Boolean;
+      ResolvedVal:= ApplyEnumCast(R.FromPath, R.ToPath, ResolvedVal, DefWrite);
+      if not DefWrite then Continue; // untranslatable; recorded as remainder
       PlaceAtPath(TRoot, R.ToPath, ResolvedVal, dnkScalar, Created);
       Resolved:= Default(TReemitDefaultResolved);
       Resolved.FromPath:= R.FromPath;
@@ -1312,6 +1415,7 @@ begin
     Result.Report.Created:= Result.Report.Created + Created;
     Result.Report.Dropped:= Result.Report.Dropped + Dropped;
     Result.Report.Ignored:= Result.Report.Ignored + Ignored;
+    Result.Report.EnumUnmapped:= Result.Report.EnumUnmapped + EnumUnmapped;
     Result.DfmText:= EmitBlock(TRoot, 0);
     Result.Ok:= True;
   finally

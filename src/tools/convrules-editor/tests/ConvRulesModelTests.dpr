@@ -16,7 +16,7 @@ uses
   ConvRules.Mappings in '..\ConvRules.Mappings.pas',
   ConvRules.Units in '..\ConvRules.Units.pas',
   ConvRules.Casts in '..\ConvRules.Casts.pas',
-  ConvRules.CastLib in '..\ConvRules.CastLib.pas',
+  DRagLint.Convert.CastLib in '..\..\..\report\DRagLint.Convert.CastLib.pas',
   ConvRules.BlockFile in '..\ConvRules.BlockFile.pas',
   ConvRules.BlockOps in '..\ConvRules.BlockOps.pas',
   ConvRules.WorkingSet in '..\ConvRules.WorkingSet.pas',

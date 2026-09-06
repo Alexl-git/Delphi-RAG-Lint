@@ -143,6 +143,10 @@ type
       Plain no clause    vs  Plain2 no clause   -- always streamed, so absence
                                                    is genuinely UNKNOWN }
   TDefMode = (dmA, dmB, dmC);
+  { D5: a DIFFERENT enum type for the target side. An enum cast exists precisely
+    because the two sides are different types whose members correspond by
+    MEANING -- casting TDefMode to TDefMode would prove nothing. }
+  TDstMode = (xmA, xmB, xmC);
   TOptD    = (odA, odB, odC);
   TOptsD   = set of TOptD;
 
@@ -177,11 +181,13 @@ type
     FPlain2: Integer;
     FAnchors2: TOptsD;
     FGuarded2: Integer;
+    FMode3   : TDstMode;
   published
     property Mode2 : TDefMode read FMode2  write FMode2  default dmC;
     property Same2 : Boolean  read FSame2  write FSame2  default True;
     property Plain2: Integer  read FPlain2 write FPlain2;
     property Anchors2: TOptsD  read FAnchors2 write FAnchors2 default [odC];
+    property Mode3   : TDstMode read FMode3 write FMode3;
     property Guarded2: Integer read FGuarded2 write FGuarded2 default 1;
     { NOTE: TToD deliberately has NO `Shown`. A #link naming Shown belongs to
       the owned part's #convert, and applying it here must emit nothing. }
@@ -662,6 +668,83 @@ Check 'remove-beats-default exit 0' ($script:LastExit -eq 0) "out=$o30"
 $j30 = $o30 | ConvertFrom-Json
 Check 'remove-beats-default: the removed property is not resurrected' `
   (-not ($j30.dfm -match 'Mode2')) "dfm=$($j30.dfm)"
+
+# --- Cases 31-34: ENUM CASTS (D5) -------------------------------------------
+# `#link To <- From : CastName` was parsed and validated since 7acbe6c and then
+# IGNORED on the DFM side: the source member name was copied verbatim into a
+# property of a DIFFERENT enum type. The .castlib `enum` block had no parser and
+# no consumer at all -- a declared block kind the splitter could move around as
+# opaque text and nothing could read.
+#
+# Values are matched by NAME, never by ordinal: two enums being converted are
+# different types whose members correspond by meaning, and equal ordinals across
+# unrelated types are a coincidence.
+
+function ReemitCast($blockBody, $rulesBody, $castBody, $from, $to) {
+  $bf = Join-Path $WorkDir 'block.dfm'; Write-Ascii $bf $blockBody
+  $rf = Join-Path $WorkDir 'rules.txt'; Write-Ascii $rf $rulesBody
+  $cf = Join-Path $WorkDir 'casts.castlib'; Write-Ascii $cf $castBody
+  Push-Location $WorkDir
+  try {
+    $out = (& $Exe convert-reemit --from-block $bf --rules $rf --from $from --to $to --db $db --castlib $cf) -join "`n"
+    $script:LastExit = $LASTEXITCODE
+  } finally { Pop-Location }
+  return $out
+}
+
+$castMapped = "enum ModeCast`r`n  from ReemitFix.TDefMode`r`n  to ReemitFix.TDstMode`r`n  map dmA -> xmA`r`n  map dmB -> xmB`r`nend`r`n"
+$castElse   = "enum ModeCast`r`n  from ReemitFix.TDefMode`r`n  to ReemitFix.TDstMode`r`n  map dmA -> xmA`r`n  else xmC`r`nend`r`n"
+$rCast      = "#convert TFromD -> TToD`r`n#link Mode3 <- Mode : ModeCast`r`n"
+
+# 31: a mapped value is TRANSLATED, not copied.
+$b31 = "object C1: TFromD`r`n  Mode = dmB`r`nend`r`n"
+$o31 = ReemitCast $b31 $rCast $castMapped 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'enum-cast exit 0' ($script:LastExit -eq 0) "out=$o31"
+$j31 = $o31 | ConvertFrom-Json
+Check 'enum-cast: the value is translated to the TARGET member (xmB)' `
+  ($j31.dfm -match 'Mode3\s*=\s*xmB') "dfm=$($j31.dfm)"
+Check 'enum-cast: the SOURCE member name is not copied through' `
+  (-not ($j31.dfm -match 'dmB')) "dfm=$($j31.dfm)"
+Check 'enum-cast: nothing reported unmapped' `
+  (@($j31.report.enumUnmapped | Where-Object { $null -ne $_ }).Count -eq 0) "out=$o31"
+
+# 32: a value no `map` covers, with no `else`. Nothing may be written -- passing
+# the source member through would put a member of ONE enum into a property of
+# ANOTHER, which either fails to load or quietly means something else.
+$b32 = "object C1: TFromD`r`n  Mode = dmC`r`nend`r`n"
+$o32 = ReemitCast $b32 $rCast $castMapped 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'enum-cast-unmapped exit 0' ($script:LastExit -eq 0) "out=$o32"
+$j32 = $o32 | ConvertFrom-Json
+Check 'enum-cast-unmapped: NOTHING is written for the untranslatable value' `
+  (-not ($j32.dfm -match 'Mode3')) "dfm=$($j32.dfm)"
+$eu32 = @($j32.report.enumUnmapped | Where-Object { $null -ne $_ })
+Check 'enum-cast-unmapped: it is REPORTED, not dropped in silence' ($eu32.Count -eq 1) "out=$o32"
+Check 'enum-cast-unmapped: the report names the cast and the offending value' `
+  ($eu32.Count -eq 1 -and $eu32[0].castName -eq 'ModeCast' -and $eu32[0].value -eq 'dmC') "out=$o32"
+Check 'enum-cast-unmapped: it carries the #link rule line (2)' `
+  ($eu32.Count -eq 1 -and $eu32[0].ruleLine -eq 2) "out=$o32"
+
+# 33: the same unmapped value, with an `else`. The fallback fires.
+$o33 = ReemitCast $b32 $rCast $castElse 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'enum-cast-else exit 0' ($script:LastExit -eq 0) "out=$o33"
+$j33 = $o33 | ConvertFrom-Json
+Check 'enum-cast-else: the fallback member is written (xmC)' `
+  ($j33.dfm -match 'Mode3\s*=\s*xmC') "dfm=$($j33.dfm)"
+Check 'enum-cast-else: nothing reported unmapped' `
+  (@($j33.report.enumUnmapped | Where-Object { $null -ne $_ }).Count -eq 0) "out=$o33"
+
+# 34: CONTROL -- a cast name the .castlib does not define as an enum block (a
+# CLASS cast, or a typo) must leave the value ALONE rather than swallow it.
+# Without this, cases 31-33 are equally satisfied by an engine that drops every
+# cast-bearing value on the floor.
+$rUnknown = "#convert TFromD -> TToD`r`n#link Mode3 <- Mode : NoSuchCast`r`n"
+$o34 = ReemitCast $b31 $rUnknown $castMapped 'ReemitFix.TFromD' 'ReemitFix.TToD'
+Check 'enum-cast-unknown exit 0' ($script:LastExit -eq 0) "out=$o34"
+$j34 = $o34 | ConvertFrom-Json
+Check 'enum-cast-unknown: an unknown cast passes the value through verbatim' `
+  ($j34.dfm -match 'Mode3\s*=\s*dmB') "dfm=$($j34.dfm)"
+Check 'enum-cast-unknown: and reports nothing unmapped' `
+  (@($j34.report.enumUnmapped | Where-Object { $null -ne $_ }).Count -eq 0) "out=$o34"
 
 # --- Bad args ---
 $noOut = ((& $Exe convert-reemit 2>&1) -join "`n"); $noExit = $LASTEXITCODE

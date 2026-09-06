@@ -17,7 +17,7 @@ uses
   ConvRules.Model in 'ConvRules.Model.pas',
   ConvRules.Units in 'ConvRules.Units.pas',
   ConvRules.Casts in 'ConvRules.Casts.pas',
-  ConvRules.CastLib in 'ConvRules.CastLib.pas',
+  DRagLint.Convert.CastLib in '..\..\report\DRagLint.Convert.CastLib.pas',
   ConvRules.Engine in 'ConvRules.Engine.pas',
   ConvRules.Platform in 'ConvRules.Platform.pas',
   ConvRules.BlockFile in 'ConvRules.BlockFile.pas',

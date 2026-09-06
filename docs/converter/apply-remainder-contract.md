@@ -95,6 +95,7 @@ not an expected mode.
 | `mapping-not-applied` | warnings | an applied `#mapping` matched nothing |
 | `default-superseded` | warnings | a `#default` did not fire -- a `#link`/`#mapping` already carried that path |
 | `default-resolved` | reemit_notes | a source property absent because it sits at its declared `default`; its value was resolved and carried explicitly |
+| `enum-cast-unmapped` | warnings | a `#link`'s enum cast had no `map` for this value and no `else`, so nothing was written |
 
 `ApplyItemKindName` is the single source of these spellings; nothing emits a
 literal.
@@ -208,6 +209,52 @@ same way. Emitting unreferenced properties would invent policy the rule book
 never stated.
 
 `default-resolved` needs your sign-off like the two kinds above it.
+
+### Enum casts are now EXECUTED, and the `.castlib` `enum` block has a grammar
+
+`enum <Name> ... end` was a declared `.castlib` block kind with no parser and no
+consumer -- the block splitter could move it around as opaque text and nothing
+could read what was inside. In parallel, `#link To <- From : CastName` was
+parsed and validated and then **ignored on the DFM side**, so the source member
+name was copied verbatim into a property of a different enum type.
+
+Both halves are closed. Pass `--castlib <file>` and a `#link` carrying a cast
+suffix now translates the value:
+
+```
+enum ButtonLayout
+  from Vcl.Buttons.TButtonLayout
+  to   dxCore.TdxButtonLayout
+  map  blGlyphLeft -> dxblGlyphLeft
+  map  blGlyphRight -> dxblGlyphRight
+  else dxblGlyphLeft
+  todo 'verify the positions at runtime'
+end
+```
+
+The grammar deliberately mirrors the two DSLs it sits between, so there is
+nothing new to learn: `from`/`to` match `#mapping <Name> from <T> to <T>`, the
+`->` in `map` matches a `#when ... -> ...` branch, and `else` matches `#else`.
+One pair per line, so the file stays diffable and a tool can append a line
+without rewriting one.
+
+**Matching is by NAME, never by ordinal.** Two enums being converted are
+different types whose members correspond by MEANING; equal ordinals across
+unrelated types are a coincidence, not evidence. (The index does store a correct
+ordinal for every member, explicit-valued ones included, so an editor may use it
+as a SUGGESTION -- never as the rule.)
+
+**Without an `else`, an unmatched value is NOT written** and is reported as
+`enum-cast-unmapped`, carrying the cast name, the offending value and the
+`#link` line so the fix is a one-line `map`. Passing the source member through
+would put a member of one enum into a property of another: either the form
+fails to load, or -- worse -- the name happens to be a member of the target too
+and quietly means something else.
+
+A cast name that is not an `enum` block is left alone. It is a CLASS cast, whose
+realization stays editor-side, and the value passes through exactly as before.
+
+`enum-cast-unmapped` needs your sign-off like the kinds above it.
 
 ### `dropped-dfm-property` is RESERVED and not emitted
 

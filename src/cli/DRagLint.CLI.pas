@@ -167,6 +167,7 @@ uses
   , DRagLint.Report    .RCallTree
   , DRagLint.Convert   .PropTree
   , DRagLint.Convert   .Rules
+  , DRagLint.Convert   .CastLib
   , DRagLint.Convert   .DfmReemit
   , DRagLint.Convert   .Apply
   , DRagLint.Convert   .Backup
@@ -499,6 +500,7 @@ type
     // (the reFind-superset DSL file). PrintParsed dumps the parsed rules (parse-
     // only diagnostics). --from/--to reuse CallFrom/RenameTo (the From/To types).
     RulesFile     : string ; // --rules <file>  (conversion-rules DSL)
+    CastLibFile   : string ; // --castlib <file>  (class + enum cast library)
     PrintParsed   : Boolean; // --print-parsed  (dump parsed rule count + lines)
     // Track 3 Batch 2a-i (Task 8): convert-reemit HIDDEN test verb. FromBlockFile
     // is the --from-block path (one F DFM `object` block, verbatim text).
@@ -779,7 +781,7 @@ begin
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose)');
+  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose; --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -1276,6 +1278,11 @@ begin
     else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
+    else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)
+    begin
+      Inc(i);
+      Result.CastLibFile:= ParamStr(i);
+    end
     else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
     else if (A = '--task') and (i < ParamCount) then
@@ -19505,7 +19512,7 @@ begin
   FromTree:= TreeFor(AArgs.CallFrom); // --from reuses CallFrom
   ToTree  := TreeFor(AArgs.RenameTo); // --to   reuses RenameTo
 
-  Res:= ReemitComponent(BlockText, Rules, FromTree, ToTree);
+  Res:= ReemitComponent(BlockText, Rules, FromTree, ToTree, ParseCastLib(AArgs.CastLibFile));
 
   JRoot:= TJSONObject.Create;
   try
@@ -19554,6 +19561,18 @@ begin
       JResolved.AddElement(JDR);
     end;
     JReport.AddPair('defaultsResolved', JResolved);
+    var JEnumUn: TJSONArray:= TJSONArray.Create;
+    for var EU in Res.Report.EnumUnmapped do
+    begin
+      var JEU: TJSONObject:= TJSONObject.Create;
+      JEU.AddPair('castName', EU.CastName);
+      JEU.AddPair('fromPath', EU.FromPath);
+      JEU.AddPair('toPath'  , EU.ToPath);
+      JEU.AddPair('value'   , EU.Value);
+      JEU.AddPair('ruleLine', TJSONNumber.Create(EU.RuleLine));
+      JEnumUn.AddElement(JEU);
+    end;
+    JReport.AddPair('enumUnmapped', JEnumUn);
     { 'notes' deliberately stays the UNION of stubs + relocated + notes.
       DRagLint.Convert.DfmReemit split those two OUT of Notes so each entry can
       carry a stable kind instead of being classified by matching its prose; this
@@ -20205,7 +20224,7 @@ begin
 
   if (AArgs.GhostUnit = '') or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--format json]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--format json]');
     Exit(2);
   end;
   UnitPas:= AArgs.GhostUnit;
@@ -20325,7 +20344,8 @@ begin
     end;
   end;
 
-  PlanRes:= BuildApplyPlan(Stores, UnitPas, DfmPath, Rules, AArgs.OnlySections);
+  PlanRes:= BuildApplyPlan(Stores, UnitPas, DfmPath, Rules, AArgs.OnlySections,
+    ParseCastLib(AArgs.CastLibFile));
   if not PlanRes.Ok then
   begin
     if UseJson then

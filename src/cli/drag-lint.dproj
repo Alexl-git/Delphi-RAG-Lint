@@ -1,4 +1,4 @@
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{9ECF674F-154F-4413-B44B-C1D3A7EAA640}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
@@ -208,6 +208,7 @@
         <DCCReference Include="..\report\DRagLint.Report.RCallTree.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.PropTree.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.Rules.pas"/>
+        <DCCReference Include="..\report\DRagLint.Convert.CastLib.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.DfmReemit.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.Apply.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.Backup.pas"/>

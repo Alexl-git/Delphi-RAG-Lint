@@ -57,6 +57,7 @@ uses
   DRagLint.Core.Model,
   DRagLint.Convert.Rules,
   DRagLint.Convert.DfmReemit,
+  DRagLint.Convert.CastLib,
   DRagLint.Convert.PropTree,
   DRagLint.Refactor.TextEdit;
 
@@ -116,7 +117,8 @@ type
                                has no usable default to resolve it to }
     aikMappingNotApplied,    { #apply'd #mapping matched no value }
     aikDefaultSuperseded,    { #default skipped -- a rule already carried that path }
-    aikDefaultResolved);     { F prop absent-because-default; its value was carried }
+    aikDefaultResolved,      { F prop absent-because-default; its value was carried }
+    aikEnumCastUnmapped);    { an enum cast had no map for this value and no else }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -325,7 +327,8 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>;
+  const ACastLib: TCastLib): TApplyResult;
 
 /// <summary>Scans a .dfm's component headers (top-level and nested) and
 /// returns the instances that should be converted: those whose class matches
@@ -398,7 +401,7 @@ const
     'link-stub-unfilled', 'collection-relocated', 'defaults-may-diverge',
     'cast-not-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
-    'default-superseded', 'default-resolved');
+    'default-superseded', 'default-resolved', 'enum-cast-unmapped');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1065,7 +1068,8 @@ begin
 end;
 
 function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>;
+  const ACastLib: TCastLib): TApplyResult;
 var
   DfmText     : string;
   DfmLines    : TArray<string>;
@@ -1256,6 +1260,24 @@ var
       RIt.Path    := DR.FromPath;
       RIt.RuleLine:= DR.RuleLine;
       Emit(RIt);
+    end;
+
+    { D5: a value a named ENUM cast could not translate -- no `map` matched and
+      the cast declares no `else`. REMAINDER, and nothing was written for it:
+      copying the source member through would put a member of ONE enum type into
+      a property of ANOTHER, which either fails to load or silently means
+      something else. Carries the cast name and the offending value, so the fix
+      is a one-line `map` in the .castlib. }
+    for var EU in AReport.EnumUnmapped do
+    begin
+      var EIt: TApplyItem:= InstItem(aikEnumCastUnmapped, afWarnings,
+        Format('%s: line %d: enum cast %s has no mapping for %s = %s and no else -- %s not written',
+          [Inst.InstanceName, EU.RuleLine, EU.CastName, EU.FromPath, EU.Value, EU.ToPath]));
+      EIt.FilePath:= ADfmPath;
+      EIt.Line    := ABlockLine;
+      EIt.Path    := EU.FromPath;
+      EIt.RuleLine:= EU.RuleLine;
+      Emit(EIt);
     end;
   end;
 
@@ -1590,7 +1612,7 @@ begin
       var BlockText: string:= String.Join(#13#10, DfmLines, BlockStart - 1, BlockEnd - BlockStart + 1);
       var FromTree: TPropTree:= TreeFor(Inst.FromType);
       var ToTree  : TPropTree:= TreeFor(Inst.ToType);
-      var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ARules, FromTree, ToTree);
+      var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ARules, FromTree, ToTree, ACastLib);
       if not ReemitRes.Ok then
       begin
         It:= InstItem(aikInstanceSkipped, afWarnings,

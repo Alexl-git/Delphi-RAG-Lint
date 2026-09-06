@@ -19,7 +19,7 @@ uses
   Winapi.Windows, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls,
   Vcl.ExtCtrls, Vcl.Grids, Vcl.Dialogs, Vcl.Menus, Vcl.Graphics, Vcl.Themes,
   ConvRules.Model, ConvRules.Casts, ConvRules.Engine, ConvRules.Platform,
-  ConvRules.CastLib, ConvRules.Theme, ConvRules.OpenSourceClient,
+  DRagLint.Convert.CastLib, ConvRules.Theme, ConvRules.OpenSourceClient,
   ConvRules.Mappings, ConvRules.MappingForm,
   ConvRules.FormTypes, ConvRules.RuleCatalog;
 

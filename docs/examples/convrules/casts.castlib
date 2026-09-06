@@ -4,7 +4,7 @@
 #
 # The realization hints (dfm/compat/pas/todo) are EDITOR-SIDE ONLY as of 2026-09-04.
 # This header used to say the engine's convert-apply consumes them. It does not, and
-# never has -- nothing under srceport\ or src\cli\ reads a .castlib. Spec item G6.3
+# never has -- nothing under srceport\ or src\cli\ reads a .castlib. Spec item G6.3
 # asked for the comment to be corrected or the consumer built; the comment is now
 # correct and building the consumer remains open work.
 #
@@ -21,4 +21,36 @@ cast AssignGraphic
   compat  png, bmp
   pas     '{dst}.Assign({src});'
   todo    'transfer image from {src} by hand (TBitmap/TPicture -> TdxSmartGlyph)'
+end
+
+# ---------------------------------------------------------------------------
+# ENUM casts. Named by the same '#link To <- From : <Name>' suffix as a class
+# cast, and EXECUTED by the engine: convert-apply/convert-reemit translate the
+# .dfm value member by member when the rule book names the cast and the run is
+# given --castlib.
+#
+# Grammar, chosen to mirror the two DSLs it sits between so there is nothing new
+# to learn: 'from'/'to' match '#mapping <Name> from <T> to <T>', the '->' in a
+# 'map' line matches a '#when ... -> ...' branch, and 'else' matches '#else'.
+# One pair per line, so the file stays diffable and a tool can append a line
+# without rewriting one.
+#
+# MATCHING IS BY NAME, NOT ORDINAL. Two enums being converted are different
+# types whose members correspond by MEANING; equal ordinals across unrelated
+# types are a coincidence, not evidence.
+#
+# Without an 'else', a value no 'map' line covers is NOT written and is reported
+# as `enum-cast-unmapped`. That is deliberate: the target is a different enum
+# type, so passing the source member name through either fails to load or
+# quietly means something else.
+# ---------------------------------------------------------------------------
+
+enum ButtonLayout
+  from Vcl.Buttons.TButtonLayout
+  to   dxCore.TdxButtonLayout
+  map  blGlyphLeft -> dxblGlyphLeft
+  map  blGlyphRight -> dxblGlyphRight
+  map  blGlyphTop -> dxblGlyphTop
+  map  blGlyphBottom -> dxblGlyphBottom
+  todo 'verify the four positions against the target control at runtime'
 end
