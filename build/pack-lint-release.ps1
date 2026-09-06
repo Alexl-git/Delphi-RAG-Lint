@@ -41,6 +41,15 @@ foreach ($plat in 'win64','win32') {
   Copy-Item (Join-Path $repo "rules\README.md") (Join-Path $stg "rules")
   foreach ($f in 'README.md','CHANGELOG.md','LICENSE','INSTALL.md') { Copy-Item (Join-Path $repo $f) $stg }
   if (Test-Path (Join-Path $repo "docs\AI-USAGE.md")) { Copy-Item (Join-Path $repo "docs\AI-USAGE.md") (Join-Path $stg "docs") }
+  # "Three Ways to Read Delphi" -- background on the parsing layer this engine is
+  # built on. Shipped in BOTH forms on purpose: the .md renders anywhere, and the
+  # .html is the styled version the article was authored as, which is the one worth
+  # reading offline. NOT copied blind -- a missing file here would fail the pack.
+  foreach ($a in 'PARSING-LAYERS.md','PARSING-LAYERS.html') {
+    $src = Join-Path $repo "docs\$a"
+    if (Test-Path $src) { Copy-Item $src (Join-Path $stg "docs") }
+    else { Write-Host "  WARNING: docs\$a is missing -- not in this release" -ForegroundColor Yellow }
+  }
   Copy-Item (Join-Path $repo "docs\lint\REPORT-1-delphi-lint-landscape.md") (Join-Path $stg "docs\lint")
   Copy-Item (Join-Path $repo "docs\lint\REPORT-2-draglint-implementation-plan.md") (Join-Path $stg "docs\lint")
   $z = Join-Path $rel "drag-lint-v$Version-$plat.zip"
