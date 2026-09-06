@@ -106,12 +106,14 @@ type
     aikOwnedPartUnconverted, { nested owned part needing its own #convert }
     aikLinkStubUnfilled,     { #link ToPath still spelled '???' }
     aikCollectionRelocated,  { collection moved verbatim to a new path (info) }
-    aikDefaultsMayDiverge,   { F/T differ, absent values adopt the T default }
+    aikDefaultsMayDiverge,   { a rule-referenced source is absent AND has no
+                               usable default, so the T default applies }
     aikCastNotApplied,       { #link carrying a cast, refused on the .pas side }
     aikInstanceSkipped,      { whole instance skipped before any edit }
     aikFieldDeclNotRetyped,  { shared multi-declarator line, not retyped }
     aikUsesUnitUnresolved,   { no unit found declaring T, uses not added }
-    aikMappingSourceAbsent,  { #apply'd #mapping's source path not in the block }
+    aikMappingSourceAbsent,  { #apply'd #mapping's source is not in the block AND
+                               has no usable default to resolve it to }
     aikMappingNotApplied,    { #apply'd #mapping matched no value }
     aikDefaultSuperseded,    { #default skipped -- a rule already carried that path }
     aikDefaultResolved);     { F prop absent-because-default; its value was carried }

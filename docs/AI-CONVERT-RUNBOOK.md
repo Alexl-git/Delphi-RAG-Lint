@@ -1,4 +1,4 @@
-# AI Runbook: Converting a Delphi Component with `drag-lint convert-apply`
+﻿# AI Runbook: Converting a Delphi Component with `drag-lint convert-apply`
 
 Audience: an AI coding agent (or a developer driving one) asked to convert a
 Delphi component from one type to another on a real form -- for example
@@ -305,11 +305,21 @@ drag-lint convert-apply     --unit <Form.pas> --rules c.rules --db <appdb> --db 
   the F and T leaf types are the *same*; otherwise it's flagged, not translated.
 - **Split / merge.** One source component -> several targets (or vice versa) is
   deferred.
-- **Default-value fidelity in one edge case.** A property ABSENT from the DFM
-  equals the source's default; if the source default differs from the target
-  default, re-emit currently adopts the target default. convert-apply emits a
-  divergence note when F/T types differ. (Full fidelity is the deferred `2a-0`
-  parser change.)
+- **Default-value fidelity -- SHIPPED, with two named exceptions.** A property
+  ABSENT from the DFM is an UNREAD value, not a missing one: a `.dfm` is sparse,
+  so Delphi omits a property sitting at its declared `default`. A rule-referenced
+  source that is absent-because-default now has its value resolved and written
+  into the target **explicitly** (`default-resolved`), because F's default and
+  T's default are different values that merely share a property name. Resolved at
+  query time from the declaring line -- the index does NOT capture `default`
+  specifiers and the old `2a-0` parser change was not needed.
+  The two cases still reported rather than carried, both deliberate: a property
+  with no `default` clause (always streamed, so its absence is genuinely
+  unknown), and one whose `stored` clause is not `stored True` (omitted
+  regardless of value -- see the contract's `stored` section). Those are what the
+  narrowed `defaults-may-diverge` note now names.
+  Owned parts are the remaining limitation: the re-emit recursion is handed the
+  parent's property trees, so default-resolution is skipped inside a part.
 - **Semantics behind an access rewrite.** Surface #4 renames `.AsInteger` ->
   `.Value` at the token level per your `#link`; if the *semantics* differ
   (integer vs float), the compiler or your tests must catch it. This is why the

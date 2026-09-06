@@ -86,33 +86,6 @@ type
     property Children: TObjectList<TDfmNode> read FChildren;
   end;
 
-  /// <summary>A structured report of what the re-emit did and what needs human
-  /// attention. WARN-level: Dropped, Mismatched, OwnedParts. Silent: Ignored (an
-  /// acknowledged #ignore).</summary>
-  /// <remarks>
-  /// Dropped=unmapped F props/events with a NON-default value (potential
-  /// loss). Ignored=#ignore'd F props (acknowledged, no warn). Mismatched=binary/
-  /// complex values whose F/T resolved types differ (WARN, not copied). Created=
-  /// intermediate T sub-objects synthesized for moved-depth (Style/Active/Font).
-  /// OwnedParts=nested owned parts (fields/columns) needing their own #convert
-  /// rules (WARN). Stubs=#link targets still spelled '???' (an unfilled rule, so
-  /// the F value was NOT carried over). Relocated=collections moved verbatim to a
-  /// new ToPath (INFO). DefaultsSuperseded=#default rules that did NOT fire
-  /// because a #link/#mapping had already carried a value onto that target path
-  /// (WARN: a rule the operator wrote did nothing). Notes=everything else,
-  /// currently only the F/T default-divergence warning. Each string entry is
-  /// ASCII and human-readable.
-  ///
-  /// Stubs/Relocated were split OUT of Notes so a consumer can assign each entry a
-  /// stable kind without matching on its prose (DRagLint.Convert.Apply's typed
-  /// TApplyItem). The convert-reemit JSON still emits 'notes' as the UNION of the
-  /// three, so existing consumers keep seeing what they saw; 'stubs' and
-  /// 'relocated' are additive keys.
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas)</para>
-  /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
   /// <summary>One applied #mapping that matched NOTHING: the source leaf was
   /// present and carried a value, but no #when branch matched it and the
   /// mapping had no #else to fall back to.</summary>
@@ -123,8 +96,12 @@ type
   /// mapping's name, the #apply line that requested it, the source path and the
   /// unmatched value -- everything needed to fix the rule book.
   ///
-  /// A source leaf that is ABSENT is NOT recorded here: there was nothing to
-  /// map, which is an informational note, not unfinished work.
+  /// A source leaf that is absent AND has no usable default is NOT recorded
+  /// here: there was nothing to map, which is an informational note
+  /// (mapping-source-absent), not unfinished work. One that is absent because
+  /// it sits at its declared default IS recorded, and Value carries that
+  /// resolved default -- a value the operator asked to be mapped and which was
+  /// not, even though it never appeared in the .dfm text.
   /// </remarks>
   TReemitNotApplied = record
     MapName : string;
@@ -173,6 +150,44 @@ type
     RuleLine: Integer; { the #link that carried it }
   end;
 
+  /// <summary>A structured report of what the re-emit did and what needs human
+  /// attention. WARN-level: Dropped, Mismatched, OwnedParts. Silent: Ignored (an
+  /// acknowledged #ignore).</summary>
+  /// <remarks>
+  /// Dropped=unmapped F props/events with a NON-default value (potential
+  /// loss). Ignored=#ignore'd F props (acknowledged, no warn). Mismatched=binary/
+  /// complex values whose F/T resolved types differ (WARN, not copied). Created=
+  /// intermediate T sub-objects synthesized for moved-depth (Style/Active/Font).
+  /// OwnedParts=nested owned parts (fields/columns) needing their own #convert
+  /// rules (WARN). Stubs=#link targets still spelled '???' (an unfilled rule, so
+  /// the F value was NOT carried over). Relocated=collections moved verbatim to a
+  /// new ToPath (INFO). DefaultsSuperseded=#default rules that did NOT fire
+  /// because a #link/#mapping had already carried a value onto that target path
+  /// (WARN: a rule the operator wrote did nothing). DefaultsResolved=F
+  /// properties absent from the block because they sit at their declared
+  /// default, whose value was resolved and carried across explicitly (INFO: the
+  /// work WAS done -- this is the only account of a value that appears in the
+  /// output and not the input). MappingNotes=an applied #mapping whose source is
+  /// absent AND has no usable default (INFO). NotApplied=an applied #mapping
+  /// that matched nothing (REMAINDER). Notes=everything else, currently only the
+  /// narrowed F/T default-divergence warning. Each string entry is ASCII and
+  /// human-readable.
+  ///
+  /// This block was an ORPHAN until 2026-09-05: it sat above TReemitNotApplied's
+  /// own doc comment, three records away from the type it describes, so Help
+  /// Insight showed none of it on TReemitReport. If you add a record here, put
+  /// it ABOVE this block, not between it and the record.
+  ///
+  /// Stubs/Relocated were split OUT of Notes so a consumer can assign each entry a
+  /// stable kind without matching on its prose (DRagLint.Convert.Apply's typed
+  /// TApplyItem). The convert-reemit JSON still emits 'notes' as the UNION of the
+  /// three, so existing consumers keep seeing what they saw; 'stubs' and
+  /// 'relocated' are additive keys.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReemitReport = record
     Dropped    : TArray<string>;
     Ignored    : TArray<string>;
@@ -182,7 +197,8 @@ type
     Stubs      : TArray<string>;
     Relocated  : TArray<string>;
     /// <summary>Informational: an applied mapping whose source path is not in
-    /// this block, so there was nothing to map.</summary>
+    /// this block AND has no usable default to resolve it to, so there was
+    /// genuinely nothing to map.</summary>
     MappingNotes: TArray<string>;
     NotApplied  : TArray<TReemitNotApplied>;
     /// <summary>Remainder: #default rules skipped because the target path was
@@ -800,12 +816,19 @@ var
   // no rule is therefore a genuine potential loss -> Dropped (WARN), never a
   // silent default-drop.
   //
-  // DEFAULT-OVERLAY SEAM (Controller decision 2, Batch 2a-0 plugs in here): the
-  // F-default-vs-T-default divergence for properties ABSENT from the DFM is a
-  // known gap. When 2a-0 lands (indexer captures `default` specifiers), the
-  // caller will materialize F's absent-but-non-T-default properties and inject
-  // them as synthetic leaves BEFORE this loop -- RemapLeaf needs NO change then.
-  // 2a-i only sees what is in the DFM.
+  // DEFAULT OVERLAY -- CLOSED, and NOT the way this seam predicted.
+  //
+  // This said Batch 2a-0 would teach the INDEXER to capture `default`
+  // specifiers, after which the caller would inject synthetic leaves before
+  // this loop. Neither happened, and neither was needed: BuildPropTree resolves
+  // the clause at QUERY time from the declaring line (no extraction change, so
+  // no DRAGLINT_EXTRACTOR_VERSION bump, which would re-parse every database),
+  // and the values are carried by step 4b AFTER this loop rather than injected
+  // before it -- so a STREAMED value always outranks a resolved default without
+  // needing a precedence rule.
+  //
+  // This loop is therefore still correct as written: it sees only what is in
+  // the DFM, which is exactly its job.
 
   // AFromPath is the dotted RULE-LOOKUP key ('Caption' for a top-level leaf,
   // 'Font.Size' for a leaf one level inside a moved-depth F sub-object); ALeaf

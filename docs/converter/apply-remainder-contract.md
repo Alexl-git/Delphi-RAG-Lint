@@ -153,8 +153,30 @@ database). Three outcomes, not two:
 | declaration | resolved default |
 |---|---|
 | `property P: T ... default <X>;` | `<X>` |
+| `property P: T ... default [a, b];` | the whole set literal, brackets included |
 | `property P;` (bare redeclaration) | whatever the **ancestor** declared -- pervasive in the VCL |
 | `nodefault`, a bare `default;` (the default-ARRAY-PROPERTY directive), or no clause | **none** -- the property is ALWAYS streamed, so its absence is genuinely unknown |
+| **anything with `stored <expr>` other than `stored True`** | **none** -- see below |
+
+### `stored` is a veto, and it is why this is not just "read the default"
+
+The premise "absent ⇒ the value equals the declared default" holds only for a
+property that is streamed **unconditionally**. The VCL's own `Color` is the case
+that matters -- `Vcl.Controls.pas:1996`:
+
+```pascal
+property Color: TColor read FColor write SetColor
+  stored IsColorStored default clWindow;
+```
+
+With `ParentColor` set, `IsColorStored` is False and `Color` is omitted
+**regardless of its value**. Reading that absence as `clWindow` and carrying it
+across would be wrong twice over: the value may differ, and `TControl.SetColor`
+clears `FParentColor`, so the converted control silently stops inheriting its
+parent's colour. DevExpress carries many `stored IsXStored` pairs too.
+
+So a `stored` clause that is not literally `stored True` yields **no usable
+default**, and the property is reported as unresolved rather than guessed at.
 
 Consequences you will see in `apply/1`:
 
@@ -216,9 +238,12 @@ line to delete or rethink.
 * Three flat sibling line forms, tied together only by the mapping's name.
 * First matching `#when` wins; branches are evaluated in source order.
 * A consumed source property is **not** also re-emitted raw.
-* `#else` fires only when the source property is PRESENT. An absent source
+* `#else` fires when the source property is PRESENT **or resolves to its
+  declared default**. Only a source that is absent AND has no usable default
   yields `mapping-source-absent`; firing `#else` there would invent a target
-  value from a property the form never set.
+  value out of nothing. **This reverses what we told you on 2026-09-04** (`#else`
+  fires only when PRESENT) -- the sparse-DFM ruling changed it, and an absent
+  property at its declared default is a value that was always there to be read.
 * `#apply` scope is the nearest PRECEDING `#convert` by line number, matched on
   its bare From type. An `#apply` with no preceding `#convert` is file-scope.
 * A source property that is present but matches no branch, with no `#else`, is

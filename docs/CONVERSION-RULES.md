@@ -1,4 +1,4 @@
-# Conversion Rules DSL (Track 3, Batch 1)
+﻿# Conversion Rules DSL (Track 3, Batch 1)
 
 `drag-lint`'s component-conversion foundation: an **index-driven** way to plan a
 component/type migration (for example `TDBEdit` -> `TcxDBEdit`, or any
@@ -478,11 +478,21 @@ know which MEMBER was accessed on which receiver. Ref-gap G adds a
 receivers (tightly gated to avoid flooding), which the applier queries -- scoped
 to the converted instance -- to find exactly those sites.
 
-**Known gap -- property-default divergence:** a property ABSENT from the F DFM
-equals F's default (DFM omits defaults). If F's default differs from T's default,
-re-emitting it as also-absent silently adopts T's default. The engine warns when
-F and T types differ, but full fidelity needs the index to capture `default`
-specifiers -- a future **Batch 2a-0** (a supervised core-parser change).
+**Property-default divergence -- CLOSED.** A property ABSENT from the F DFM is
+an UNREAD value, not a missing one: a `.dfm` is sparse, so Delphi omits a
+property whose value equals its declared `default`. A rule-referenced source
+that is absent-because-default now has its value resolved and written into the
+target **explicitly**, since F's default and T's default are different values
+that merely share a name. It cost no parser change and no index change: the
+`default` clause is read at query time from the declaring line, so the
+anticipated **Batch 2a-0** was never needed.
+
+Two cases are still reported instead of carried, and both are deliberate --
+a property with no `default` clause is always streamed, so its absence is
+genuinely unknown; and one whose `stored` clause is not `stored True` is
+omitted regardless of its value, so its absence says nothing either. The
+`defaults-may-diverge` note now fires only for those and NAMES them, instead of
+firing on every conversion whose types differ.
 
 ## Tests
 
