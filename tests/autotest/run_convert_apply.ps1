@@ -379,6 +379,87 @@ $ResolvedRulesBody = @'
 $resolvedRulesPath = Join-Path $WorkDir 'rules-resolved.txt'
 Write-Ascii $resolvedRulesPath $ResolvedRulesBody
 
+# Phase 9's fixture: an OWNED PART with its own #convert, so HandleNested
+# recurses and produces a report OF ITS OWN. Before the fold this phase pins,
+# only Created and Dropped came back from that recursion and the other eleven
+# arrays were discarded -- a remainder found inside a part never reached the
+# caller at all.
+$PartUnitBody = @'
+unit PartUnit;
+
+interface
+
+uses
+  Classes;
+
+type
+  TOldCol = class(TComponent)
+  private
+    FWidth: Integer;
+  published
+    property Width: Integer read FWidth write FWidth;
+  end;
+
+  TNewCol = class(TComponent)
+  private
+    FWidth: Integer;
+  published
+    property Width: Integer read FWidth write FWidth;
+  end;
+
+implementation
+
+end.
+'@
+
+$PartFormBody = @'
+unit PartForm;
+
+interface
+
+uses
+  Classes, OldEditUnit, PartUnit;
+
+type
+  TPartForm = class(TForm)
+    Edit1: TOldEdit;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+
+# Col1 is an owned part of Edit1 and carries Width = 5. The part-level
+# #default Width = 99 is therefore SUPERSEDED by the part-level #link, and the
+# part-level #apply matches nothing (the mapping tests for 999, not 5).
+# Both remainders are discovered INSIDE the part.
+$PartFormDfm = @'
+object PartForm: TPartForm
+  object Edit1: TOldEdit
+    Caption = 'Hi'
+    object Col1: TOldCol
+      Width = 5
+    end
+  end
+end
+'@
+
+$PartRulesBody = @'
+#convert TOldEdit -> TNewEdit, NewEditUnit
+#link Text <- Caption
+#convert TOldCol -> TNewCol, PartUnit
+#link Width <- Width
+#default Width = 99
+#mapping ColMap from PartUnit.TColEnum to PartUnit.TNewCol
+#mapping ColMap #when Width = '999' -> Width = '1'
+#apply ColMap
+'@
+$partRulesPath = Join-Path $WorkDir 'rules-part.txt'
+Write-Ascii $partRulesPath $PartRulesBody
+
 # ---------------------------------------------------------------------------
 # Index the fixture (one shared index -- Phase 2/3 re-copy the fixture into
 # fresh dirs but the .pas/.dfm CONTENT is byte-identical each time, so the
@@ -393,6 +474,7 @@ $phase4 = Join-Path $WorkDir 'phase4-castskip'
 $phase6 = Join-Path $WorkDir 'phase6-mapping'
 $phase7 = Join-Path $WorkDir 'phase7-default'
 $phase8 = Join-Path $WorkDir 'phase8-resolved'
+$phase9 = Join-Path $WorkDir 'phase9-ownedpart'
 New-Fixture $phase1
 New-Fixture $phase2
 New-Fixture $phase3
@@ -400,6 +482,12 @@ New-Fixture $phase4
 New-Fixture $phase6
 New-Fixture $phase7
 New-Fixture $phase8
+New-Item -ItemType Directory $phase9 -Force | Out-Null
+Write-Ascii (Join-Path $phase9 'OldEditUnit.pas') $OldEditBody
+Write-Ascii (Join-Path $phase9 'NewEditUnit.pas') $NewEditBody
+Write-Ascii (Join-Path $phase9 'PartUnit.pas')    $PartUnitBody
+Write-Ascii (Join-Path $phase9 'PartForm.pas')    $PartFormBody
+Write-Ascii (Join-Path $phase9 'PartForm.dfm')    $PartFormDfm
 $castBeforeBytes = [System.IO.File]::ReadAllBytes((Join-Path $phase4 'MyForm.pas'))
 
 $db = Join-Path $WorkDir 'convapply.sqlite'
@@ -1119,4 +1207,97 @@ else {
 }
 
 Write-Host ''
+
+# ===========================================================================
+# PHASE 9: remainders found inside an OWNED PART reach apply/1 -- exactly once.
+#
+# WHY THIS PHASE EXISTS, and what it refutes.
+#
+# INBOX-nested-part-report-is-mostly-discarded observes, correctly, that
+# HandleNested (Convert.DfmReemit.pas) folds only 2 of TReemitReport's 13
+# arrays up from a converted owned part. It concludes that remainders found
+# inside a part are DISCARDED and never reach the caller. Measured 2026-09-06,
+# that conclusion does not hold for apply/1, and this phase pins why.
+#
+# BuildApplyPlan iterates the instances discovered in the .dfm, and an owned
+# part carrying its own #convert IS one of them -- it does not need a .pas
+# field declaration to be found (this fixture's Col1 has none, and is still
+# converted; the "could not locate field declaration" warning is that half
+# reporting itself). So the part's report reaches apply/1 through the instance
+# loop, under the part's OWN name, whether or not HandleNested folds anything.
+#
+# The fold was implemented and measured before being reverted. It did not add
+# the missing items -- they were already there -- it added a SECOND copy of
+# each under the parent's name with a 'Col1.' prefix, so one remainder was
+# reported twice under two different path conventions. That is the ambiguity
+# the note wants removed, not a fix for it.
+#
+# What genuinely IS lost is the convert-reemit verb's own report, which calls
+# ReemitComponent directly with no instance loop above it. Which surface should
+# own part remainders is a design question that changes a contract the
+# converter team consumes, so it is theirs and the owner's, not a drive-by.
+#
+# THE DUPLICATE ASSERTION BELOW IS THE POINT. It goes RED the moment anyone
+# re-applies the fold: with it, each kind's count was 2 rather than 1.
+# ===========================================================================
+Write-Host ''
+Write-Host '=== Phase 9: owned-part remainders reach apply/1 exactly once ===' -ForegroundColor Cyan
+
+Push-Location $phase9
+try {
+  $partRaw  = (& $Exe convert-apply --unit 'PartForm.pas' --rules $partRulesPath --db $db 2>&1) -join "`n"
+  $partExit = $LASTEXITCODE
+  $partJson = (& $Exe convert-apply --unit 'PartForm.pas' --rules $partRulesPath --db $db --format json 2>$null) -join "`n"
+} finally { Pop-Location }
+Write-Host $partRaw -ForegroundColor DarkGray
+
+Check 'part: dry-run exits 0' ($partExit -eq 0) "exit=$partExit"
+
+$partDoc = $null
+try { $partDoc = $partJson | ConvertFrom-Json } catch { $partDoc = $null }
+Check 'part: json parses' ($null -ne $partDoc) `
+  "raw=$($partJson.Substring(0, [Math]::Min(300, $partJson.Length)))"
+
+if ($null -ne $partDoc) {
+  # --- the #default superseded INSIDE the part reaches apply/1 --------------
+  $pdsu = @($partDoc.items) | Where-Object { $_.kind -eq 'default-superseded' }
+  Check 'part: the part''s superseded #default reaches apply/1' `
+    ($pdsu.Count -ge 1) "count=$($pdsu.Count)"
+  Check 'part: it is reported EXACTLY ONCE (re-applying the HandleNested fold makes this 2)' `
+    ($pdsu.Count -eq 1) "count=$($pdsu.Count) -- a second copy means the same remainder is being reported twice under two path conventions"
+  if ($pdsu.Count -ge 1) {
+    # The path is the part-LOCAL leaf, because the item comes from converting
+    # the part as its own instance. Pinned as the current convention so a change
+    # to it is a deliberate act rather than a silent one.
+    Check 'part: its path is the part-local leaf (Width), the part being its own instance' `
+      ($pdsu[0].path -eq 'Width') "path=$($pdsu[0].path)"
+  }
+
+  # --- the #apply that matched nothing INSIDE the part ----------------------
+  $pna = @($partDoc.items) | Where-Object { $_.kind -eq 'mapping-not-applied' }
+  Check 'part: the part''s unmatched #apply reaches apply/1' `
+    ($pna.Count -ge 1) "count=$($pna.Count)"
+  Check 'part: it too is reported EXACTLY ONCE' `
+    ($pna.Count -eq 1) "count=$($pna.Count)"
+
+  # --- CONTROL: the part really is nested, not a form field -----------------
+  # If Col1 were declared in PartForm.pas this phase would prove nothing about
+  # nested parts -- it would just be a second ordinary instance. The fixture's
+  # own warning is the evidence, and it is asserted rather than assumed.
+  Check 'part CONTROL: Col1 is NOT declared in the .pas, so it is genuinely a nested part' `
+    ($partRaw -match 'could not locate field declaration "Col1: TOldCol"') `
+    'the fixture must not quietly acquire a Col1 field declaration'
+
+  # --- CONTROL: the six-array invariant still reconciles --------------------
+  $six9 = @('converted','access_sites','creator_sites','todos','reemit_notes','warnings')
+  $sum9 = 0
+  foreach ($k in $six9) { $sum9 += @($partDoc.$k).Count }
+  Check 'part: items.Count still equals the sum of the six arrays' `
+    (@($partDoc.items).Count -eq $sum9) "items=$(@($partDoc.items).Count) sum=$sum9"
+}
+else {
+  Check 'part: typed assertions were SKIPPED (document did not parse)' $false `
+    'fix the parse failure above'
+}
+
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
