@@ -56,6 +56,28 @@ type
     Confidence: string;
   end;
 
+  /// <summary>One mined `raise` with the message literal it was constructed
+  /// with, when there is one.</summary>
+  /// <remarks>
+  /// Message is the FIRST string literal after `.Create(` / `.CreateFmt(`, and
+  /// is EMPTY whenever the raise carries no literal the miner is willing to
+  /// claim -- a bare `raise E;`, a re-raise, a message built by concatenation
+  /// or from a variable. Empty means "no message captured", never "no message
+  /// exists": callers must render the class alone in that case, exactly as
+  /// they did before messages were mined at all.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CollectRaiseDetail (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineRaisesDetailed (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TRaiseDetail = record
+    /// <summary>The exception class name as written at the raise site.</summary>
+    ExcClass: string;
+    /// <summary>The first string literal of the constructor call, unquoted and
+    /// with Pascal's doubled '' collapsed. Empty when none was captured.</summary>
+    Message : string;
+  end;
+
   /// <summary>Index-grounded facts about one symbol, for the managed
   /// DocInsight remarks block. All lists are capped for display; the *Total
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
@@ -70,6 +92,15 @@ type
     Calls          : TArray<string>     ;
     UsedInUnits    : TArray<string>     ;
     Raises         : TArray<string>     ;
+    /// <summary>The same raises as Raises, each paired with its message literal
+    /// where one was captured. PARALLEL to Raises, deliberately not a
+    /// replacement: Doc.Drift.BodyRaises and ddExceptionNotRaised consume
+    /// Raises as a deduped set of CLASS NAMES, and widening that would change
+    /// what those rules compare.</summary>
+    /// <remarks>Not deduped by class: two raises of one class with different
+    /// messages are two entries, because the emit side picks the first entry
+    /// carrying a message and a dedupe would decide that arbitrarily.</remarks>
+    RaisesDetailed : TArray<TRaiseDetail>;
     ReturnType     : string             ;
     // v(item1 T8): distinct return-expression RHS strings mined from the
     // function's body via the hover MineReturnExpressions miner (DRagLint.
@@ -501,8 +532,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+34 more)</para>
-    /// <para>Complexity: 72 (cyclomatic, outer body), 992 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+35 more)</para>
+    /// <para>Complexity: 72 (cyclomatic, outer body), 996 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -537,9 +568,36 @@ type
     /// <seealso cref="DRagLint.Doc.Facts.CollectRaiseClass"/>
     /// <seealso cref="DRagLint.Doc.Facts.SourceLines"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineRaisesDetailed"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineRaises(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
+    /// <summary>The same body scan as MineRaises, but keeping the message
+    /// literal each raise was constructed with.</summary>
+    /// <param name="AStore">Store used to resolve the symbol's file path.</param>
+    /// <param name="ASym">The routine whose implementation body is scanned.</param>
+    /// <returns>One entry per `raise` site, in source order, NOT deduped.
+    /// Empty when the symbol has no body -- the same "never looked" state
+    /// MineRaises returns, and callers must not read it as "raises nothing".</returns>
+    /// <remarks>
+    /// PARALLEL TO MineRaises, NOT A WIDENING OF IT. Doc.Drift.BodyRaises and
+    /// ddExceptionNotRaised consume MineRaises as a deduped, case-insensitive
+    /// SET of class names; changing that shape would change which findings
+    /// those rules produce. This routine exists so the message can be mined
+    /// without touching them.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseDetail, DRagLint.Doc.Facts.SourceLines, Min</para>
+    /// <para>Returns: nil; Acc.ToArray</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Doc.Facts.CollectRaiseDetail"/>
+    /// <seealso cref="DRagLint.Doc.Facts.SourceLines"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineRaises"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function MineRaisesDetailed(const AStore: ISymbolStore; const ASym: TSymbol): TArray<TRaiseDetail>;
   end;
 
 /// <summary>Per-section cost of every TDocFactsBuilder.Build call so far, as two
@@ -1308,40 +1366,83 @@ end;
 // prose is even likelier to fool this one, since "we raise EFoo when ..." inside
 // a block comment names a class that is never raised, and the result is not a
 // noisy fact line but a FABRICATED <exception cref> tag.
+{ THE COMMENT STATE MACHINE, shared by both raise scanners.
+
+  It was copied into CollectRaiseDetail when that was written, and the linter
+  said so immediately: a 189-token duplicate-code finding against this very
+  block, plus too-many-exit-points on the copy. Both are fixed by having ONE
+  copy and calling it twice, which is what duplicate-code is for.
+
+  CONTRACT: returns True when it CONSUMED characters, so the caller re-enters
+  its loop with AIdx advanced. Returns False when the position is ordinary code
+  -- and ALSO when a `//` ends the line, with ALineEnded set, because a `//`
+  consumes nothing.
+
+  THAT LAST CASE IS LOAD-BEARING. Returning True for `//` advances AIdx by
+  nothing and sends the caller straight back to the same index forever: a
+  lint-all spun at 100% CPU on 15 MB for ten minutes before it was killed.
+  Stating the contract in terms of CONSUMPTION rather than "did I handle it"
+  is what makes the right answer obvious.
+
+  SINGLE EXIT by construction (an if/else chain, no Exit at all) -- the copy
+  this replaces had six and tripped too-many-exit-points. }
+function AdvanceCommentState(const ALine: string; var AIdx: Integer;
+  var AScan: TBodyScanState; out ALineEnded: Boolean): Boolean;
+var N: Integer;
+begin
+  N := Length(ALine);
+  ALineEnded := False;
+  Result := True;
+  if AScan.InBrace > 0 then
+  begin
+    if ALine[AIdx] = '}' then Dec(AScan.InBrace);
+    Inc(AIdx);
+  end
+  else if AScan.InStarParen then
+  begin
+    if (ALine[AIdx] = '*') and (AIdx < N) and (ALine[AIdx + 1] = ')') then
+    begin
+      AScan.InStarParen := False;
+      Inc(AIdx, 2);
+    end
+    else Inc(AIdx);
+  end
+  else if ALine[AIdx] = '{' then
+  begin
+    Inc(AScan.InBrace);
+    Inc(AIdx);
+  end
+  else if (ALine[AIdx] = '(') and (AIdx < N) and (ALine[AIdx + 1] = '*') then
+  begin
+    AScan.InStarParen := True;
+    Inc(AIdx, 2);
+  end
+  else if (ALine[AIdx] = '/') and (AIdx < N) and (ALine[AIdx + 1] = '/') then
+  begin
+    ALineEnded := True;
+    Result := False; { consumed nothing -- see the header }
+  end
+  else
+    Result := False;
+end;
+
 procedure CollectRaiseClass(const ALine: string; AAcc: TStringList; var AState: TBodyScanState);
 var
   I, N, J, K : Integer;
   Ident      : string ;
+  LineEnded  : Boolean;
 begin
   I:= 1;
   N:= Length(ALine);
   while I <= N do
   begin
-    if AState.InBrace > 0 then
-    begin
-      if ALine[I] = '}' then Dec(AState.InBrace);
-      Inc(I);
-      Continue;
-    end;
-    if AState.InStarParen then
-    begin
-      if (ALine[I] = '*') and (I < N) and (ALine[I + 1] = ')') then
-      begin
-        AState.InStarParen:= False;
-        Inc(I, 2);
-        Continue;
-      end;
-      Inc(I);
-      Continue;
-    end;
-    if ALine[I] = '{' then begin Inc(AState.InBrace); Inc(I); Continue; end;
-    if (ALine[I] = '(') and (I < N) and (ALine[I + 1] = '*') then
-    begin
-      AState.InStarParen:= True;
-      Inc(I, 2);
-      Continue;
-    end;
-    if (ALine[I] = '/') and (I < N) and (ALine[I + 1] = '/') then Break;
+    { Was five inlined comment branches here; they are now AdvanceCommentState,
+      shared with CollectRaiseDetail. Behaviour is unchanged -- same tests, same
+      order of checks -- and the gate is that this repo's own lint report keeps
+      the SAME doc-drift count, since ddExceptionNotRaised is downstream of this
+      scanner. }
+    if AdvanceCommentState(ALine, I, AState, LineEnded) then Continue;
+    if LineEnded then Break;
     if ALine[I] = '''' then
     begin
       Inc(I);
@@ -1376,6 +1477,185 @@ begin
         end;
       end;
       I:= J;
+      Continue;
+    end;
+    Inc(I);
+  end;
+end;
+
+{ THE MESSAGE HALF OF THE RAISE SCAN (INBOX-report-exceptions-raised-and-handled,
+  ask 1). Deliberately a SECOND scanner rather than a widening of
+  CollectRaiseClass: that one feeds Doc.Drift's ddExceptionNotRaised through a
+  deduped, case-insensitive SET of class names, and this one must keep source
+  order and duplicates so a class raised twice with two messages stays two
+  facts.
+
+  WHY IT NEEDS STATE ACROSS LINES. The raise it exists to describe is routinely
+  wrapped:
+
+      raise Exception.CreateFmt('CreateProcessW failed: %d',
+                                [GetLastError]);
+
+  so the literal can sit on a later line than the `raise`. The comment state was
+  already carried across lines for exactly this reason; this adds the pending
+  raise beside it.
+
+  WHAT IT WILL NOT CLAIM, and why each is deliberate:
+    * a literal that does not follow `.Ident(` -- so `raise EFoo;` never adopts
+      the string from whatever statement comes next. SawCtorParen gates it.
+    * anything past the statement's `;` -- Pending is dropped there.
+    * anything more than BUDGET_LINES beyond the raise. A wrapped constructor is
+      one or two lines; a literal further away is somebody else's.
+    * a concatenated or computed message. The FIRST literal is taken verbatim,
+      so `'a' + Foo` yields 'a'. That is a partial answer rather than a wrong
+      one, and the guard pins it as observed behaviour rather than aspiration. }
+const
+  RAISE_DETAIL_BUDGET_LINES = 3;
+
+type
+  TRaiseDetailState = record
+    Scan        : TBodyScanState; { comment depth, exactly as CollectRaiseClass }
+    Pending     : Integer;        { index in AAcc awaiting a message; -1 = none }
+    SawCtorParen: Boolean;        { passed `.Ident(` for that pending raise }
+    Budget      : Integer;        { lines left in which the literal may appear }
+  end;
+
+// Reads one Pascal string literal starting at AIdx (which must be the opening
+// quote) and returns its VALUE with doubled '' collapsed to a single quote.
+// AIdx is advanced past the closing quote.
+function ReadPascalLiteral(const ALine: string; var AIdx: Integer): string;
+var N: Integer; Sb: TStringBuilder;
+begin
+  N := Length(ALine);
+  Sb := TStringBuilder.Create;
+  try
+    Inc(AIdx); { past the opening quote }
+    while AIdx <= N do
+    begin
+      if ALine[AIdx] = '''' then
+      begin
+        if (AIdx < N) and (ALine[AIdx + 1] = '''') then
+        begin Sb.Append(''''); Inc(AIdx, 2); end
+        else begin Inc(AIdx); Break; end;
+      end
+      else begin Sb.Append(ALine[AIdx]); Inc(AIdx); end;
+    end;
+    Result := Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+end;
+
+{ The comment half of the scan, lifted out of CollectRaiseDetail.
+
+  EXTRACTED FOR COMPLEXITY, and the linter is the reason it is stated: with
+  these branches inline, CollectRaiseDetail measured cyclomatic 39 (max 30) and
+  cognitive 77 (max 65) -- new code is held to the whole rule set, so the fix is
+  to extract rather than to annotate.
+
+  Returns True when it CONSUMED characters and the caller should re-enter its
+  loop; AIdx is advanced. Returns False when the position is ordinary code, or
+  when a `//` ends the line -- in that case ALineEnded is set and the caller
+  must stop scanning the line.
+
+  THE `//` CASE MUST RETURN FALSE, and this is not a style point: a `//` advances
+  AIdx by nothing, so a True there sends the caller straight back into its loop
+  at the same index forever. That is exactly what happened -- a lint-all spun at
+  100% CPU on 15 MB for ten minutes before it was killed. `Result := True` as the
+  default plus an early Exit is what made it easy to write; the contract is now
+  stated in terms of CONSUMPTION, which is the property the caller depends on. }
+procedure CollectRaiseDetail(const ALine: string; AAcc: TList<TRaiseDetail>;
+  var AState: TRaiseDetailState);
+var
+  I, N, J, K: Integer;
+  Ident     : string ;
+  LineEnded : Boolean;
+
+  procedure DropPending;
+  begin
+    AState.Pending := -1;
+    AState.SawCtorParen := False;
+  end;
+
+  procedure SetPendingMessage(const AMsg: string);
+  var D: TRaiseDetail;
+  begin
+    if (AState.Pending < 0) or (AState.Pending >= AAcc.Count) then Exit;
+    D := AAcc[AState.Pending];          { TList<T> hands back a COPY for a record }
+    D.Message := AMsg;
+    AAcc[AState.Pending] := D;
+    DropPending;
+  end;
+
+begin
+  { A pending raise ages by one line at the START of each new line, so the
+    budget counts LINES SINCE the raise rather than lines scanned. }
+  if AState.Pending >= 0 then
+  begin
+    Dec(AState.Budget);
+    if AState.Budget < 0 then DropPending;
+  end;
+
+  I := 1;
+  N := Length(ALine);
+  while I <= N do
+  begin
+    if AdvanceCommentState(ALine, I, AState.Scan, LineEnded) then Continue;
+    if LineEnded then Break;
+    if ALine[I] = '''' then
+    begin
+      var Lit: string := ReadPascalLiteral(ALine, I);
+      if (AState.Pending >= 0) and AState.SawCtorParen then SetPendingMessage(Lit);
+      Continue;
+    end;
+    { End of statement: whatever the pending raise was going to say, it is not
+      in the next statement. }
+    if ALine[I] = ';' then
+    begin
+      if AState.Pending >= 0 then DropPending;
+      Inc(I);
+      Continue;
+    end;
+    if IsIdentStart(ALine[I]) then
+    begin
+      J := I;
+      while (J <= N) and IsIdentPart(ALine[J]) do Inc(J);
+      Ident := Copy(ALine, I, J - I);
+      if SameText(Ident, 'raise') then
+      begin
+        { A new raise abandons any pending one -- `raise A; raise B.Create('x')`
+          must not give A the message that belongs to B. }
+        DropPending;
+        K := J;
+        while (K <= N) and (ALine[K] = ' ') do Inc(K);
+        if (K <= N) and IsIdentStart(ALine[K]) then
+        begin
+          var E: Integer := K;
+          while (E <= N) and IsIdentPart(ALine[E]) do Inc(E);
+          var D: TRaiseDetail;
+          D.ExcClass := Copy(ALine, K, E - K);
+          D.Message  := '';
+          AAcc.Add(D);
+          AState.Pending      := AAcc.Count - 1;
+          AState.SawCtorParen := False;
+          AState.Budget       := RAISE_DETAIL_BUDGET_LINES;
+          I := E;
+          Continue;
+        end;
+        { `raise;` -- a bare re-raise. Nothing to name, nothing to describe. }
+        I := J;
+        Continue;
+      end;
+      { `.Ident(` after a pending raise opens the constructor whose first
+        literal we are willing to take. }
+      if AState.Pending >= 0 then
+      begin
+        K := J;
+        while (K <= N) and (ALine[K] = ' ') do Inc(K);
+        if (K <= N) and (ALine[K] = '(') and (I > 1) and (ALine[I - 1] = '.') then
+          AState.SawCtorParen := True;
+      end;
+      I := J;
       Continue;
     end;
     Inc(I);
@@ -1963,6 +2243,26 @@ begin
     Result:= RaiseSet.ToStringArray;
   finally
     RaiseSet.Free;
+  end;
+end;
+
+class function TDocFactsBuilder.MineRaisesDetailed(const AStore: ISymbolStore;
+  const ASym: TSymbol): TArray<TRaiseDetail>;
+begin
+  Result:= nil;
+  { Same bodyless carve-out as MineRaises, and for the same reason: empty here
+    means "never looked", not "provably raises nothing". }
+  if (ASym.ImplStartLine <= 0) or (ASym.ImplEndLine < ASym.ImplStartLine) then Exit;
+  var Acc: TList<TRaiseDetail>:= TList<TRaiseDetail>.Create;
+  try
+    var Src: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error }
+    var State: TRaiseDetailState:= Default(TRaiseDetailState);
+    State.Pending:= -1; { Default() would leave 0, which names a real entry }
+    for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src)) do
+      CollectRaiseDetail(Src[Ln - 1], Acc, State);
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
   end;
 end;
 
@@ -2662,6 +2962,10 @@ begin
   // <exception cref> check in Doc.Drift can ask the same question of a CALLEE
   // without building that callee's whole fact set. One miner, not two.
   Result.Raises:= MineRaises(AStore, ASym);
+  { Ask 1 of INBOX-report-exceptions-raised-and-handled: the same sites again,
+    keeping the message. Two scans rather than one because the two consumers
+    want different shapes -- see MineRaisesDetailed's remarks. }
+  Result.RaisesDetailed:= MineRaisesDetailed(AStore, ASym);
 
   // Deprecated: ground-truth 'deprecated' directive detection (see
   // DetectDeprecated's header comment for the source/probe rationale).

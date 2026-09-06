@@ -5,6 +5,58 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### A raised exception now documents its MESSAGE, not just its class
+
+`TCompileChecker.SpawnAndCapture` documented itself as "Raises Exception" and
+threw away the only useful half. The raise miner now keeps the message literal,
+so the generated tag reads:
+
+```
+<exception cref="Exception">CreatePipe failed; CreateProcessW failed: %d</exception>
+```
+
+ALL the messages for a class, not the first. One `<exception cref>` is emitted
+per class, but a routine routinely raises one class from several places --
+SpawnAndCapture raises `Exception` twice. Taking the first would pick by source
+order, and a reader seeing one message would reasonably conclude it was the only
+one.
+
+`TDocFactsBuilder.MineRaisesDetailed` is a SECOND miner, parallel to
+`MineRaises` rather than a widening of it: `MineRaises` feeds Doc.Drift's
+`ddExceptionNotRaised` as a deduped, case-insensitive SET of class names, and
+changing that shape would change which findings that rule produces.
+
+**The message needed its own ownership marker, and that is the whole story of
+this change.** Ruling D-4 decides who owns an `<exception>` body by EMPTINESS:
+marked-and-blank is the engine's (regenerate it, and delete it when the `raise`
+goes away), marked-with-text is a human's (keep the words, drop the marker). The
+moment the engine wrote a message into that body, its own output became
+indistinguishable from a human's -- pass 2 took the preserve path, re-emitted the
+tag without its marker, the file changed on every run, and a deleted `raise` no
+longer deleted its tag. `run_doc_exception_cref` caught all three.
+
+That is the same breakage `DESIGN-2026-08-10` records for typed `<param>`
+bodies, with the same cause -- ownership INFERRED from content rather than
+stated -- and it takes the same fix: a second explicit marker,
+`AUTO_EXC = '<!-- drag-lint:auto exc -->'`, meaning engine-owned regardless of
+what follows. **D-4 is untouched** and still governs a plain `AUTO_MARK` tag, so
+a human's text inside one is as safe as it was. Like `AUTO_TYPE`, `AUTO_EXC` is
+deliberately not a superstring of `AUTO_MARK`, which means every consumer must
+search for it explicitly -- `RegionFullyEngineOwned` did not, and a comment whose
+only content was a mined exception survived after its `raise` was deleted.
+
+New guard `testsutodocun_doc_exception_message.ps1`, RED-checked against the
+pre-change engine. It pins the limits as well as the wins: a message on a later
+line than the `raise` (the case the cross-line scan state exists for) IS
+captured; a `raise` inside `{ }` or after `//` is NOT (this repo has fabricated
+an `<exception cref>` from commented-out code before); and a concatenated or
+`Format(...)` message captures the first literal verbatim, recorded as observed
+behaviour so the day it changes the test says what changed.
+`run_doc_exception_cref` gained an assertion that the message is carried, so it
+now fails against an engine that silently stopped mining.
+
+This repo's own report is unchanged at 3874 findings (22/1413/2431/8).
+
 ### C1b: the flow oracles now live on the store, and the flow checker is 36% faster
 
 C1a (v1.10.0-alpha) memoised the three flow oracles that had no cache at all,

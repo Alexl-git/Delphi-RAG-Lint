@@ -115,8 +115,18 @@ try {
   # --- generation ----------------------------------------------------------
   Check 'Fresh gets <exception cref="EFreshError">' `
     ($text -match '<exception cref="EFreshError">') $text
+  # TWO ownership markers are engine-owned as of the mined-raise-message work:
+  # AUTO_MARK for a tag with no message, AUTO_EXC for one carrying the message.
+  # AUTO_EXC has to be a separate marker because ruling D-4 reads a NON-BLANK
+  # AUTO_MARK body as a human's text -- see AUTO_EXC's own remarks. So assert
+  # OWNERSHIP rather than one literal...
   Check '  ...and it carries the engine ownership marker' `
-    ($text -match '<exception cref="EFreshError"><!-- drag-lint:auto --></exception>') $text
+    ($text -match '<exception cref="EFreshError"><!-- drag-lint:auto( exc)? -->') $text
+  # ...and then assert the stronger property that is now true: this raise HAS a
+  # message, so the tag must carry it. Without this the check above would also
+  # pass against an engine that had silently stopped mining messages.
+  Check '  ...and the mined raise message is carried' `
+    ($text -match '<exception cref="EFreshError"><!-- drag-lint:auto exc -->boom</exception>') $text
   Check 'TwoKinds gets a tag for EAlpha' ($text -match '<exception cref="EAlpha">')
   Check 'TwoKinds gets a tag for EBeta'  ($text -match '<exception cref="EBeta">')
 

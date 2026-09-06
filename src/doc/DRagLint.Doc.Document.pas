@@ -645,7 +645,16 @@ begin
       Continue;
     end;
     if Pos(AUTO_END, L) > 0 then Exit(False); // stray END with no opening BEGIN -- ambiguous, fail closed
-    if Pos(AUTO_MARK, L) = 0 then Exit(False);
+    { AUTO_EXC counts as engine-owned here, and it has to be searched for
+      EXPLICITLY: it is deliberately not a superstring of AUTO_MARK, so a line
+      carrying only the mined-raise marker scores Pos(AUTO_MARK) = 0 and would
+      fail the region closed. That is precisely the trap AUTO_TYPE's own header
+      records ("without this, every typed <param> survived --strip"), and it
+      showed up here as a comment whose ONLY content was a mined <exception>
+      surviving after its `raise` was deleted -- the tag froze instead of being
+      removed, which is the behaviour ruling D-4's emptiness test used to give
+      for free. }
+    if (Pos(AUTO_MARK, L) = 0) and (Pos(AUTO_EXC, L) = 0) then Exit(False);
     Inc(I);
   end;
   Result:= True;
