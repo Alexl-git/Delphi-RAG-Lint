@@ -1,0 +1,699 @@
+<title>Three Ways to Read Delphi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+:root{
+  --paper:#EFF2F5;
+  --surface:#F7F9FB;
+  --surface-sunk:#E4E9EE;
+  --ink:#141C24;
+  --ink-soft:#3A4753;
+  --muted:#5C6976;
+  --rule:#D3DAE1;
+  --rule-soft:#E1E6EB;
+  --accent:#2B4C82;
+  --lex:#9A6B0F;
+  --ast:#9E3535;
+  --ts:#176E5F;
+  --lex-wash:#F3EADA;
+  --ast-wash:#F5E4E4;
+  --ts-wash:#DFEDEA;
+  --good:#176E5F;
+  --warn:#9A6B0F;
+  --bad:#9E3535;
+
+  --f-display:"IBM Plex Serif",Georgia,"Times New Roman",serif;
+  --f-body:"IBM Plex Sans","Segoe UI",Helvetica,Arial,sans-serif;
+  --f-mono:"IBM Plex Mono","Cascadia Mono",Consolas,"Courier New",monospace;
+
+  --measure:68ch;
+  --wide:1080px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#10161C;
+    --surface:#171F27;
+    --surface-sunk:#0B1015;
+    --ink:#E3E9EF;
+    --ink-soft:#C2CCD6;
+    --muted:#8B99A6;
+    --rule:#2A3540;
+    --rule-soft:#212B34;
+    --accent:#7FA8E0;
+    --lex:#D9A23D;
+    --ast:#E07070;
+    --ts:#3FB89F;
+    --lex-wash:#2A2113;
+    --ast-wash:#2C1A1A;
+    --ts-wash:#12261F;
+    --good:#3FB89F;
+    --warn:#D9A23D;
+    --bad:#E07070;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#10161C;
+  --surface:#171F27;
+  --surface-sunk:#0B1015;
+  --ink:#E3E9EF;
+  --ink-soft:#C2CCD6;
+  --muted:#8B99A6;
+  --rule:#2A3540;
+  --rule-soft:#212B34;
+  --accent:#7FA8E0;
+  --lex:#D9A23D;
+  --ast:#E07070;
+  --ts:#3FB89F;
+  --lex-wash:#2A2113;
+  --ast-wash:#2C1A1A;
+  --ts-wash:#12261F;
+  --good:#3FB89F;
+  --warn:#D9A23D;
+  --bad:#E07070;
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--f-body);
+  font-size:17px;
+  line-height:1.62;
+  margin:0;
+  padding:0 24px 96px;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:var(--wide);margin:0 auto}
+.col{max-width:var(--measure)}
+
+/* ---------- masthead ---------- */
+.masthead{
+  padding:56px 0 32px;
+  border-bottom:1px solid var(--rule);
+  display:flex;flex-direction:column;gap:20px;
+}
+.eyebrow{
+  font-family:var(--f-mono);
+  font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);
+}
+h1{
+  font-family:var(--f-display);
+  font-weight:600;
+  font-size:clamp(38px,6vw,62px);
+  line-height:1.04;
+  letter-spacing:-.015em;
+  margin:0;
+  text-wrap:balance;
+}
+.standfirst{
+  font-size:20px;line-height:1.55;color:var(--ink-soft);
+  max-width:60ch;margin:0;
+}
+.standfirst em{color:var(--ink);font-style:italic}
+.byline{
+  display:flex;flex-wrap:wrap;gap:8px 22px;
+  font-family:var(--f-mono);font-size:12.5px;color:var(--muted);
+  padding-top:4px;
+}
+
+/* ---------- generic prose ---------- */
+h2{
+  font-family:var(--f-display);
+  font-weight:600;font-size:clamp(25px,3vw,33px);
+  line-height:1.18;letter-spacing:-.01em;
+  margin:0 0 6px;text-wrap:balance;
+}
+h3{
+  font-family:var(--f-display);
+  font-weight:600;font-size:20px;line-height:1.3;
+  margin:0 0 6px;text-wrap:balance;
+}
+p{margin:0 0 18px;max-width:var(--measure)}
+section{padding:52px 0 0}
+.sec-head{display:flex;flex-direction:column;gap:4px;margin-bottom:26px}
+.sec-num{
+  font-family:var(--f-mono);font-size:12px;letter-spacing:.14em;
+  color:var(--muted);text-transform:uppercase;
+}
+code{
+  font-family:var(--f-mono);font-size:.88em;
+  background:var(--surface-sunk);
+  padding:1px 5px;border-radius:3px;
+  color:var(--ink);
+}
+a{color:var(--accent)}
+strong{font-weight:600}
+ul,ol{max-width:var(--measure);padding-left:22px;margin:0 0 18px}
+li{margin-bottom:9px}
+li::marker{color:var(--muted)}
+
+/* ---------- layer identity ---------- */
+.layer-cards{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(275px,1fr));
+  gap:1px;background:var(--rule);
+  border:1px solid var(--rule);
+}
+.lcard{
+  background:var(--surface);
+  padding:24px 22px 26px;
+  display:flex;flex-direction:column;gap:11px;
+  border-top:3px solid var(--hue);
+}
+.lcard.lex{--hue:var(--lex)}
+.lcard.ast{--hue:var(--ast)}
+.lcard.ts{--hue:var(--ts)}
+.lcard .tag{
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--hue);font-weight:500;
+}
+.lcard h3{margin:0;font-size:19px}
+.lcard .what{font-size:15px;color:var(--ink-soft);line-height:1.5;margin:0}
+.lcard dl{margin:6px 0 0;display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:13.5px}
+.lcard dt{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding-top:2px}
+.lcard dd{margin:0;color:var(--ink)}
+
+/* ---------- pipeline ---------- */
+.pipe{
+  border:1px solid var(--rule);
+  background:var(--surface);
+  padding:6px 0;
+}
+.prow{
+  display:flex;align-items:center;gap:0;
+  padding:20px 24px;
+  border-left:3px solid var(--hue);
+  overflow-x:auto;
+}
+.prow + .prow{border-top:1px solid var(--rule-soft)}
+.prow.lex{--hue:var(--lex)}
+.prow.ast{--hue:var(--ast)}
+.prow.ts{--hue:var(--ts)}
+.plabel{
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--hue);font-weight:500;
+  min-width:104px;flex-shrink:0;padding-right:14px;
+}
+.pflow{display:flex;align-items:center;gap:10px;flex-wrap:nowrap}
+.box{
+  font-family:var(--f-mono);font-size:12.5px;
+  padding:7px 12px;border:1px solid var(--rule);
+  background:var(--paper);border-radius:2px;white-space:nowrap;
+  color:var(--ink);
+}
+.box.stage{background:var(--surface-sunk);font-weight:500}
+.box.out{border-color:var(--hue);color:var(--hue);font-weight:500}
+.box.fail{border-color:var(--bad);color:var(--bad);border-style:dashed}
+.arrow{color:var(--muted);font-family:var(--f-mono);font-size:13px;flex-shrink:0}
+
+/* ---------- matrix ---------- */
+.scroll{overflow-x:auto;border:1px solid var(--rule);background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:14.5px}
+th,td{text-align:left;padding:13px 16px;vertical-align:top;border-bottom:1px solid var(--rule-soft)}
+thead th{
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;
+  font-weight:500;background:var(--surface-sunk);border-bottom:1px solid var(--rule);
+  position:sticky;top:0;
+}
+thead th.c-lex{color:var(--lex)}
+thead th.c-ast{color:var(--ast)}
+thead th.c-ts{color:var(--ts)}
+tbody th{
+  font-weight:500;font-size:14px;color:var(--ink);
+  width:23%;background:var(--surface-sunk);
+}
+tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
+td .num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-weight:500}
+.verdict{
+  display:inline-block;font-family:var(--f-mono);font-size:10.5px;
+  letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;
+  border-radius:2px;margin-bottom:5px;font-weight:500;
+}
+.v-good{background:var(--ts-wash);color:var(--good)}
+.v-warn{background:var(--lex-wash);color:var(--warn)}
+.v-bad{background:var(--ast-wash);color:var(--bad)}
+td p{margin:0;font-size:13.5px;line-height:1.45;color:var(--ink-soft);max-width:none}
+
+/* ---------- code ---------- */
+pre{
+  font-family:var(--f-mono);font-size:13px;line-height:1.62;
+  background:var(--surface-sunk);
+  border:1px solid var(--rule);
+  border-left:3px solid var(--hue,var(--rule));
+  padding:16px 18px;margin:0 0 18px;
+  overflow-x:auto;
+}
+pre.lex{--hue:var(--lex)}
+pre.ast{--hue:var(--ast)}
+pre.ts{--hue:var(--ts)}
+pre code{background:none;padding:0;font-size:inherit}
+.cap{
+  font-family:var(--f-mono);font-size:12px;color:var(--muted);
+  margin:-10px 0 24px;max-width:var(--measure);line-height:1.5;
+}
+
+/* ---------- callout ---------- */
+.note{
+  border-left:3px solid var(--accent);
+  background:var(--surface);
+  padding:18px 20px;margin:0 0 22px;max-width:var(--measure);
+}
+.note p:last-child{margin-bottom:0}
+.note .nlabel{
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--accent);display:block;margin-bottom:7px;font-weight:500;
+}
+
+/* ---------- case study ---------- */
+.case{
+  border:1px solid var(--rule);background:var(--surface);
+  padding:24px 24px 8px;margin-bottom:22px;
+  border-top:3px solid var(--hue);
+}
+.case.lex{--hue:var(--lex)}
+.case.ast{--hue:var(--ast)}
+.case.ts{--hue:var(--ts)}
+.case .ctag{
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--hue);font-weight:500;display:block;margin-bottom:6px;
+}
+.case h3{margin-bottom:10px}
+.case p{max-width:none;font-size:15.5px}
+.facts{
+  display:flex;flex-wrap:wrap;gap:0;
+  border-top:1px solid var(--rule-soft);
+  margin-top:4px;
+}
+.fact{padding:14px 26px 16px 0;min-width:150px}
+.fact .fv{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:22px;font-weight:500;color:var(--hue);display:block;line-height:1.2}
+.fact .fk{font-size:12.5px;color:var(--muted);display:block;margin-top:3px}
+
+/* ---------- decision list ---------- */
+.decide{counter-reset:d;display:flex;flex-direction:column;gap:0;border:1px solid var(--rule);background:var(--surface)}
+.step{display:flex;gap:18px;padding:20px 22px}
+.step + .step{border-top:1px solid var(--rule-soft)}
+.step .q{
+  counter-increment:d;font-family:var(--f-mono);font-size:12px;color:var(--muted);
+  flex-shrink:0;padding-top:3px;
+}
+.step .q::before{content:"Q" counter(d)}
+.step .body{display:flex;flex-direction:column;gap:5px}
+.step .body p{margin:0;font-size:15px}
+.step .ans{font-size:14px;color:var(--ink-soft)}
+.step .ans b{font-weight:600}
+.step .ans b.lex{color:var(--lex)}
+.step .ans b.ast{color:var(--ast)}
+.step .ans b.ts{color:var(--ts)}
+
+footer{
+  margin-top:64px;padding-top:24px;border-top:1px solid var(--rule);
+  font-family:var(--f-mono);font-size:12.5px;color:var(--muted);
+  max-width:var(--measure);line-height:1.6;
+}
+
+@media (max-width:640px){
+  body{font-size:16px;padding:0 18px 72px}
+  .masthead{padding:40px 0 26px}
+  .fact{min-width:120px}
+  tbody th{width:auto}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Delphi tooling &middot; parsing layers</span>
+  <h1>Three Ways to Read Delphi</h1>
+  <p class="standfirst">A raw lexer, DelphiAST, and tree-sitter-delphi13 are not three grades of the same tool. They are three different answers to one question: <em>what should happen when the source doesn&rsquo;t fit?</em> That answer, far more than raw capability, decides which one your tool should be built on.</p>
+  <div class="byline">
+    <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
+    <span>Measured on real corpora, not benchmarks</span>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; The layers</span>
+    <h2>What each one actually hands you</h2>
+  </div>
+  <p>Every Delphi tool that reads source code sits on one of three foundations. They differ in what they produce, but the consequential difference is what they <em>discard</em> &mdash; and how loudly they fail when the input contains something they weren&rsquo;t taught.</p>
+
+  <div class="layer-cards">
+    <div class="lcard lex">
+      <span class="tag">Layer 1 &middot; Lexer</span>
+      <h3>The token stream</h3>
+      <p class="what">A hand-tuned scanner that turns bytes into a flat sequence of typed tokens. It knows that <code>begin</code> is a keyword and <code>&lt;</code> is a symbol. It knows nothing about what they mean together.</p>
+      <dl>
+        <dt>Output</dt><dd>Flat list, source order</dd>
+        <dt>Keeps</dt><dd>Every byte &mdash; comments, whitespace, directives</dd>
+        <dt>Discards</dt><dd>All structure</dd>
+        <dt>On bad input</dt><dd>Nothing happens. There is no &ldquo;bad input.&rdquo;</dd>
+      </dl>
+    </div>
+    <div class="lcard ast">
+      <span class="tag">Layer 2 &middot; DelphiAST</span>
+      <h3>The abstract syntax tree</h3>
+      <p class="what">A recursive-descent parser over that same token stream, building a semantic tree of units, types, methods and expressions. Grammar knowledge is encoded in hand-written Object Pascal.</p>
+      <dl>
+        <dt>Output</dt><dd>Tree of <code>TSyntaxNode</code></dd>
+        <dt>Keeps</dt><dd>Meaning and nesting</dd>
+        <dt>Discards</dt><dd>Layout, most trivia</dd>
+        <dt>On bad input</dt><dd>Raises. The normal return path yields nothing.</dd>
+      </dl>
+    </div>
+    <div class="lcard ts">
+      <span class="tag">Layer 3 &middot; Tree-sitter</span>
+      <h3>The concrete syntax tree</h3>
+      <p class="what">A generated GLR parser with an external scanner, optionally fronted by a preprocessor that resolves conditional compilation before the grammar ever sees the text.</p>
+      <dl>
+        <dt>Output</dt><dd>Full CST, every token a node</dd>
+        <dt>Keeps</dt><dd>Structure <em>and</em> exact spans</dd>
+        <dt>Discards</dt><dd>Nothing positional</dd>
+        <dt>On bad input</dt><dd>Localises damage into <code>ERROR</code> nodes and continues.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; Shape</span>
+    <h2>Three pipelines, three failure surfaces</h2>
+  </div>
+  <p>Drawn side by side, the architectural difference is easier to see than to argue about. Note where each pipeline has a place for things to go wrong.</p>
+
+  <div class="pipe">
+    <div class="prow lex">
+      <span class="plabel">Lexer</span>
+      <div class="pflow">
+        <span class="box">source bytes</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box stage">TmwPasLex</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box out">token stream</span>
+      </div>
+    </div>
+    <div class="prow ast">
+      <span class="plabel">DelphiAST</span>
+      <div class="pflow">
+        <span class="box">source bytes</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box stage">TmwPasLex</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box stage">TmwSimplePasPar</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box out">TSyntaxNode tree</span>
+        <span class="arrow">&nbsp;or&nbsp;</span>
+        <span class="box fail">exception &middot; 0 nodes</span>
+      </div>
+    </div>
+    <div class="prow ts">
+      <span class="plabel">Tree-sitter</span>
+      <div class="pflow">
+        <span class="box">source bytes</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box stage">preprocessor</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box stage">pure grammar</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box out">CST</span>
+        <span class="arrow">+</span>
+        <span class="box fail">ERROR nodes</span>
+      </div>
+    </div>
+  </div>
+  <p class="cap">The dashed boxes are the failure surfaces. DelphiAST&rsquo;s is unit-sized and terminal; tree-sitter&rsquo;s is node-sized and survivable; the lexer has none, because it never makes a claim that could be wrong.</p>
+
+  <p>That last point is worth dwelling on. A lexer cannot be wrong about grammar because it never asserts any. This is simultaneously its greatest strength and the reason it cannot answer most interesting questions.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; The matrix</span>
+    <h2>Where they genuinely differ</h2>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Dimension</th>
+          <th scope="col" class="c-lex">Raw lexer</th>
+          <th scope="col" class="c-ast">DelphiAST</th>
+          <th scope="col" class="c-ts">Tree-sitter&nbsp;+&nbsp;pp</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Behaviour on a construct it doesn&rsquo;t know</th>
+          <td><span class="verdict v-good">Unaffected</span><p>Unknown syntax is still just tokens. Output is unchanged.</p></td>
+          <td><span class="verdict v-bad">Total loss</span><p>Raises <code>ESyntaxTreeException</code>. The return value is nothing; a partial tree survives only on the exception object, and few callers look.</p></td>
+          <td><span class="verdict v-good">Localised</span><p>Damage is confined to <code>ERROR</code> nodes; the rest of the file still parses.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Byte-exact round trip</th>
+          <td><span class="verdict v-good">Guaranteed</span><p>Every byte is in some token. Re-emit and you get the file back.</p></td>
+          <td><span class="verdict v-bad">Impossible</span><p>Trivia and layout are abstracted away by design.</p></td>
+          <td><span class="verdict v-good">Yes, raw</span><p>Spans cover the source exactly &mdash; but see the preprocessor caveat below.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Structural questions <span style="color:var(--muted)">(&ldquo;which methods does this class declare?&rdquo;)</span></th>
+          <td><span class="verdict v-bad">You build it</span><p>Answerable only by writing your own parser on top.</p></td>
+          <td><span class="verdict v-good">Native</span><p>This is precisely what it exists to answer.</p></td>
+          <td><span class="verdict v-good">Native</span><p>Plus a query language over the tree.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Incremental re-parse on edit</th>
+          <td><span class="verdict v-warn">Cheap anyway</span><p>Re-lexing is fast enough that incrementality rarely matters.</p></td>
+          <td><span class="verdict v-bad">None</span><p>Full re-parse of the unit on every change.</p></td>
+          <td><span class="verdict v-good">Designed in</span><p>Re-parses only the edited subtree &mdash; the reason editors adopt it.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Conditional compilation</th>
+          <td><span class="verdict v-warn">Visible, unresolved</span><p>Directives arrive as ordinary tokens. You see all branches and decide nothing.</p></td>
+          <td><span class="verdict v-warn">Single view</span><p>Resolved against one define set; the alternatives are gone.</p></td>
+          <td><span class="verdict v-good">Explicit stage</span><p>A separate, swappable pass. See section 04.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Measured coverage on real Delphi 13</th>
+          <td><span class="verdict v-good">n/a &mdash; total</span><p>Tokenising cannot fail on well-formed text.</p></td>
+          <td><span class="verdict v-warn">Unpublished</span><p>No corpus figure is maintained; gaps surface as user reports.</p></td>
+          <td><span class="verdict v-good"><span class="num">100.000%</span></span><p>On deduplicated, valid-Delphi-13 files. <span class="num">99.82%</span> across all corpus rows.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Cost to embed</th>
+          <td><span class="verdict v-good">Two units</span><p>Pure Object Pascal. Compiles into your exe, no runtime.</p></td>
+          <td><span class="verdict v-good">A handful of units</span><p>Pure Object Pascal, same story.</p></td>
+          <td><span class="verdict v-warn">Native library</span><p>C runtime plus a generated parser; the preprocessor is a second component.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Grammar maintenance when the language moves</th>
+          <td><span class="verdict v-good">Add a keyword</span><p>New syntax is usually just new token kinds.</p></td>
+          <td><span class="verdict v-warn">Hand-edit the parser</span><p>Recursive descent by hand; changes are localised but manual.</p></td>
+          <td><span class="verdict v-warn">Grammar + conflicts</span><p>A rule change can cascade through the GLR tables.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Name resolution, types, scoping</th>
+          <td><span class="verdict v-bad">None</span><p>&mdash;</p></td>
+          <td><span class="verdict v-warn">Partial</span><p>Structure only; no cross-unit symbol resolution.</p></td>
+          <td><span class="verdict v-bad">None</span><p>A CST is syntax. Semantics are a layer you build above it.</p></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; The fork in the road</span>
+    <h2>Conditional compilation is the real dividing line</h2>
+  </div>
+  <p>Most comparisons of Pascal parsers stop at grammar coverage. In practice the thing that decides architecture is <code>{$IFDEF}</code>, because Delphi&rsquo;s preprocessor can split the source <em>mid-expression</em>:</p>
+
+  <pre class="ts"><code>LSASL := {$IFDEF HAS_GENERICS_TList}LSASLList.Items[i]{$ELSE}LSASLList.Strings[i]{$ENDIF};</code></pre>
+  <p class="cap">Neither branch is a complete statement. A parser that treats the directive block as one opaque unit sees a hole exactly where it needs an expression.</p>
+
+  <p>There are three viable responses, and each layer takes a different one.</p>
+
+  <h3>Read through it in the scanner</h3>
+  <p>The tree-sitter-delphi13 grammar uses a &ldquo;THEN-wins&rdquo; external scanner: the <code>{$IFDEF}</code> branch flows out as <em>ordinary tokens</em>, the <code>{$ELSE}</code> branch is swallowed as one opaque tail, and the directive markers themselves are emitted as whitespace-like extras. The parser sees the line above as simply <code>LSASLList.Items[i]</code> with two invisible markers around it. Self-contained, no external stage &mdash; and worth <strong><span class="num">98.6%</span></strong> on its own.</p>
+
+  <h3>Resolve it before parsing</h3>
+  <p>The alternative is to make preprocessing an explicit first pass: expand <code>{$I}</code> include chains, evaluate <code>{$IF defined()}</code> expressions against a define profile, and emit resolved text. The grammar downstream is then <em>simpler</em>, because it can drop preprocessor tokens entirely. That is the <code>preprocessor &rarr; pure</code> pipeline, and it is what reaches <strong><span class="num">100.000%</span></strong> on valid Delphi 13.</p>
+
+  <div class="note">
+    <span class="nlabel">The measured result</span>
+    <p>Splitting preprocessing from parsing was worth more than five percentage points over the best single-pass approach &mdash; a larger gain than any individual grammar fix. The pattern generalises to any language with cpp-style conditional compilation.</p>
+  </div>
+
+  <h3>Don&rsquo;t resolve it at all</h3>
+  <p>The lexer&rsquo;s answer is to hand you the directives as tokens and let you decide. For a formatter this is not a limitation but the entire requirement: a formatter must preserve <em>both</em> branches, because it is rewriting the file for a compiler that will resolve them later.</p>
+
+  <p>Which brings us to the trade-off that is easy to miss.</p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Consideration</th>
+          <th scope="col" class="c-ts">Raw &rarr; full grammar</th>
+          <th scope="col" class="c-ts">Preprocessor &rarr; pure grammar</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Corpus pass rate</th>
+          <td><span class="num">~98.2%</span></td>
+          <td><span class="num">~99.3%</span> &mdash; and higher on later grammars</td>
+        </tr>
+        <tr>
+          <th scope="row">Symbol coverage across <code>{$IFDEF}</code></th>
+          <td><span class="verdict v-good">All branches</span><p>Every platform&rsquo;s symbols land in the index.</p></td>
+          <td><span class="verdict v-warn">Active branch only</span><p>More accurate per configuration, but narrower.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Span fidelity to the original file</th>
+          <td><span class="verdict v-good">1:1</span><p>Offsets map straight back to source.</p></td>
+          <td><span class="verdict v-bad">Needs a source map</span><p>Dropped branches change file length. Don&rsquo;t improvise this.</p></td>
+        </tr>
+        <tr>
+          <th scope="row">Per-file cost</th>
+          <td><span class="verdict v-good">In-process</span><p>One library call.</p></td>
+          <td><span class="verdict v-warn">An extra pass</span><p>Trivial in-process; expensive if it means spawning a subprocess per file.</p></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>For a cross-platform symbol index, &ldquo;all branches&rdquo; may be a <em>feature</em> worth more than the extra percentage point &mdash; you want <code>WIN32</code> and <code>POSIX</code> symbols both findable. For a linter that must report accurate line numbers on the code as actually compiled, the source map is non-negotiable. These are genuinely different products, and the honest answer is that they can coexist as two modes.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">05 &mdash; In practice</span>
+    <h2>When to reach for each</h2>
+  </div>
+
+  <div class="case lex">
+    <span class="ctag">Case study &middot; Lexer</span>
+    <h3>A formatter should not use a parser</h3>
+    <p>YADF, a Delphi source formatter, links exactly two units from the DelphiAST distribution: <code>SimpleParser.Lexer.pas</code> and <code>SimpleParser.Lexer.Types.pas</code>. It never touches <code>TPasSyntaxTreeBuilder</code>. The drive loop is the whole interface:</p>
+    <pre class="lex"><code>Lex := TmwPasLex.Create;
+while Lex.TokenID &lt;&gt; ptNull do
+begin
+  T.Kind := Lex.TokenID;
+  ...
+  Lex.Next;
+end;</code></pre>
+    <p>On top of that sits a 332-line token layer and a 6,400-line layout engine that builds its own bracket-and-block grouping. That sounds like duplicated effort until you consider the requirement: a formatter must round-trip <em>every</em> byte, must preserve both arms of an <code>{$IFDEF}</code>, and must never refuse to format a file because of an unfamiliar construct. An AST throws all three away in its first step.</p>
+    <p>The payoff is concrete. When a parser bug was reported against DelphiAST &mdash; a generic constructor with a defaulted generic-typed parameter, <code>constructor Create(AFinProc: TProc&lt;T&gt; = nil)</code>, causing the unit to parse to zero nodes &mdash; the formatter was structurally immune. It doesn&rsquo;t link the parser. Round-trip verification on that exact construct passes byte-for-byte.</p>
+    <div class="facts">
+      <div class="fact"><span class="fv">2</span><span class="fk">units linked</span></div>
+      <div class="fact"><span class="fv">332</span><span class="fk">lines of token layer</span></div>
+      <div class="fact"><span class="fv">0</span><span class="fk">exposure to parser bugs</span></div>
+    </div>
+  </div>
+
+  <div class="case ts">
+    <span class="ctag">Case study &middot; Tree-sitter</span>
+    <h3>An indexer must survive the code it cannot read</h3>
+    <p>A symbol index over a large codebase has an unavoidable property: some files will not parse. Vendored third-party sources, work in progress, generated code, files targeting an older compiler. The question is what happens to those files.</p>
+    <p>With an all-or-nothing parser, an unparseable file contributes <em>nothing</em> &mdash; and worse, does so silently. That is exactly the failure mode reported against DelphiAST: units matching a common generic pattern parsed to zero nodes and were quietly dropped, leaving whole libraries unsearchable with no error surfaced to the user. An index that silently omits things is worse than one that is simply incomplete, because you cannot tell the difference between &ldquo;no results&rdquo; and &ldquo;not indexed.&rdquo;</p>
+    <p>Tree-sitter&rsquo;s error recovery changes the economics. A file with one unrecognised construct still yields every symbol outside it. Combined with incremental re-parsing, this is also what makes editor integration viable: you cannot re-parse a 9,000-line unit on every keystroke, but you can re-parse the subtree the user just edited.</p>
+    <div class="facts">
+      <div class="fact"><span class="fv">100.000%</span><span class="fk">valid Delphi 13, deduped</span></div>
+      <div class="fact"><span class="fv">23,385</span><span class="fk">files in corpus</span></div>
+      <div class="fact"><span class="fv">30</span><span class="fk">residual failures, all invalid source</span></div>
+    </div>
+  </div>
+
+  <div class="case ast">
+    <span class="ctag">Case study &middot; DelphiAST</span>
+    <h3>Where a hand-written AST still wins</h3>
+    <p>None of the above makes DelphiAST a bad choice. It occupies a real niche, and two properties keep it there.</p>
+    <p>First, it is <strong>pure Object Pascal</strong>. It compiles into your executable with no native library, no build-time code generation, no C toolchain, no deployment story beyond adding units to a <code>.dpr</code>. For an IDE expert, a build-step tool, or anything that must ship as a single exe, that is worth a great deal.</p>
+    <p>Second, its output is an <strong>abstract</strong> tree, not a concrete one. A CST faithfully contains every semicolon and every comma; when you are walking it looking for method declarations, that fidelity is noise you must filter. DelphiAST hands you a tree already shaped like the questions you want to ask.</p>
+    <p>The condition is that you control the input. For one-shot analysis of a codebase you own &mdash; generating documentation, extracting a class model, a migration script over your own units &mdash; a hard failure on an unexpected construct is a perfectly acceptable, even desirable, contract: it tells you loudly that your assumptions broke. It is when the input is arbitrary and the failure is silent that the model stops working.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">06 &mdash; Where each one breaks</span>
+    <h2>The honest weaknesses</h2>
+  </div>
+
+  <h3>The lexer makes you build a parser eventually</h3>
+  <p>Every non-trivial lexer-based tool reinvents structure. YADF&rsquo;s 6,400-line layout engine <em>is</em> a parser &mdash; a specialised, error-tolerant, layout-preserving one. If your tool needs to know that a given <code>&lt;</code> opens a generic parameter list rather than being a less-than operator, the lexer will not tell you, and resolving it correctly is genuinely hard. Choose this layer when byte fidelity is the requirement, not because it looks simpler.</p>
+
+  <h3>DelphiAST&rsquo;s failure mode is the whole file</h3>
+  <p>The severity here is easy to underestimate. It is not that a hard-to-parse construct produces a slightly wrong node &mdash; it is that a single unfamiliar token anywhere in a unit costs you the entire unit. Combined with a language that gains syntax every release, and with the fact that most embedding tools catch the exception and move on, this yields silent, spreading blind spots.</p>
+  <p>There is a partial mitigation worth knowing about: <code>ESyntaxTreeException</code> carries the tree built so far on its <code>SyntaxTree</code> property, so a caller who catches that specific class can recover everything parsed before the failure point rather than nothing. Almost nobody does &mdash; the common shape is <code>on E: Exception</code>, which throws that salvage away. If you build on DelphiAST, catch the specific class, keep the partial tree, and above all <em>count</em> your parse failures. A blind spot you can measure is an inconvenience; one you cannot is a correctness bug in every answer the tool gives.</p>
+
+  <h3>Tree-sitter gives you syntax, and stops there</h3>
+  <p>A CST is not a semantic model. It will not resolve <code>TFoo</code> to a declaration in another unit, will not tell you a type, will not track scopes. That layer is yours to build, and it is usually larger than the parsing work it sits on. There are two further costs: <code>ERROR</code> nodes can mask real problems if you don&rsquo;t measure them, and grammar changes can cascade unpredictably through GLR conflict tables &mdash; a fix that looks local can cost thousands of files. It also brings a native library into a Delphi build, which is a real deployment consideration.</p>
+
+  <h3>And the preprocessor adds a stage that can lie</h3>
+  <p>Resolving <code>{$IFDEF}</code> before parsing is measurably the best route to coverage, but it introduces a translation between what the parser saw and what is on disk. Every offset the tool reports must be mapped back. Skip the source map and you get a tool that is more accurate about syntax while being wrong about <em>where</em> &mdash; the worst combination for anything that reports diagnostics to a human.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">07 &mdash; Choosing</span>
+    <h2>Four questions, in order</h2>
+  </div>
+  <p>The questions are ordered deliberately: the first one that gets a hard answer settles the choice, because it constrains the others.</p>
+
+  <div class="decide">
+    <div class="step">
+      <span class="q"></span>
+      <div class="body">
+        <p>Must your output be able to reproduce the input byte-for-byte?</p>
+        <p class="ans">If yes &mdash; formatter, rewriter, refactoring tool that edits in place &mdash; take the <b class="lex">lexer</b> and stop. No AST will preserve what you need, and a CST will make you reconstruct trivia you could have simply kept.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="q"></span>
+      <div class="body">
+        <p>Is the input arbitrary code you do not control?</p>
+        <p class="ans">If yes &mdash; an indexer, a linter run across vendored sources, editor tooling &mdash; you need error recovery, so take <b class="ts">tree-sitter</b>. An all-or-nothing parser will silently drop files, and you will not find out.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="q"></span>
+      <div class="body">
+        <p>Does it need to keep up with a human typing?</p>
+        <p class="ans">If yes, incremental re-parsing is not optional and only <b class="ts">tree-sitter</b> offers it. Full re-parse per keystroke does not scale past small units.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="q"></span>
+      <div class="body">
+        <p>Otherwise: do you own the input, and must this ship as one executable?</p>
+        <p class="ans">Then <b class="ast">DelphiAST</b> is the pragmatic choice. Pure Pascal, an already-abstract tree, no native dependency &mdash; and a loud failure on unexpected syntax is a reasonable contract when the code is yours.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">08 &mdash; In combination</span>
+    <h2>The layered answer</h2>
+  </div>
+  <p>Framing this as a three-way choice is a simplification that mature tools abandon. The layers compose, and the interesting systems use more than one.</p>
+  <p>A formatter reads through the <strong>lexer</strong> for fidelity, but may consult a <strong>tree-sitter</strong> parse to answer a structural question it cannot decide from tokens &mdash; is this <code>&lt;</code> a generic bracket? &mdash; without ever letting the tree touch its output. An indexer parses with <strong>tree-sitter</strong> for coverage while keeping a <strong>preprocessor</strong> stage switchable, so it can offer both all-branch symbol coverage and per-configuration accuracy as separate modes. A code generator that owns its inputs can happily use <strong>DelphiAST</strong> for a clean semantic tree while the linter beside it uses something more forgiving.</p>
+  <p>The failure to avoid is picking the most capable layer by default. A parser is not a better lexer &mdash; it is a lexer that has thrown away the things a formatter needs, in exchange for answering questions a formatter never asks. Decide what your tool must do when the source doesn&rsquo;t fit, and the layer follows.</p>
+</section>
+
+<footer>
+  Figures cited from the tree-sitter-delphi13 corpus reports (v1.2.2) and measured line counts in the DelphiAST and YADF sources. Pass rates are corpus measurements against dcc32 cross-checks, not synthetic benchmarks. The DelphiAST parser defect described is the generic-constructor default-parameter case reported in 2026.
+</footer>
+
+</div>
