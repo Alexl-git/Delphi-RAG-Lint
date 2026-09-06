@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## v1.10.0-alpha -- 2026-09-05
+## v1.10.0-alpha -- 2026-09-06
 
 **The release where a `.dfm` stopped being read as a complete document.** Delphi
 does not stream a published property whose value equals its declared `default`,
@@ -23,6 +23,69 @@ often at their default.
 > independent constants -- the extractor one moved on its own schedule and last
 > changed in the 2026-08-30 extractor batch. Do not infer from the match that
 > bumping one bumps the other.
+
+### lint-all is 17% faster, and the flow checker 42%
+
+`FlowChecker.Check` was 38.3% of a `lint-all` run. It is now **26.6%**.
+
+Profiling the five flow ORACLES -- the store-backed predicates the dataflow
+lattices ask about ownership, parameter modes and type categories -- found
+**three of them with no cache at all**, at a 100% miss rate. `IsRecordType`
+recomputed `ResolveTypeCategory` **46,236 times** in a single run of this repo's
+own corpus. Memoising them within a file:
+
+```
+FlowChecker.Check   123.79 s -> 71.54 s   (-42.2%)
+lint-all TOTAL      322.88 s -> 268.68 s  (-16.8%)
+```
+
+The largest single component was one nobody had predicted: the
+`definite-assignment replay` phase fell **32.56 s -> 1.46 s**, having been
+almost entirely oracle traffic rather than replay work.
+
+**Findings are byte-identical.** The change was gated on a full `lint-all`
+output comparison across the corpus -- same findings, same order, same summary
+line. The memos are scoped to one file and cleared on entry to each file's
+check, so no answer can cross a file or a database.
+
+The profiling counters ship enabled and print under `DRAGLINT_PROFILE`; only the
+printing is gated, so the measured code is the shipped code.
+
+### A project index now tells you when it holds rows it cannot refresh
+
+A project database can contain files that are not members of that project --
+historically from pointing a folder scan at a project DB, which widened its
+scope permanently. Two individually correct behaviours combined badly:
+`index --project` walks the compile closure, so it never visits a non-member;
+and eviction is deliberately bounded to the project's own roots, so a shared
+database never has another project's rows silently deleted.
+
+The result was a freshness warning that could never be cleared, on every run,
+advising a command that could not possibly work. On this repo's own self-index
+that was **81 of 199 rows**.
+
+`index --project` now reports them, without deleting anything:
+
+```
+scope: 81 indexed file(s) are outside this project's compile closure
+(NOT evicted -- they lie outside every eviction root; pass --rebuild to drop them):
+```
+
+and the freshness note is honest about its own limits, naming `--rebuild` as the
+only remedy that applies to those rows. Nothing is deleted: dropping them
+changes what `lint-all` reports on, which is the operator's decision, and
+`--rebuild` remains the way to make it.
+
+### Guard and tooling fixes
+
+* **`--help` verbs are now held against `README.md` and `docs\AI-USAGE.md`.**
+  The docs-in-sync rule always named all three surfaces, but nothing checked the
+  two prose ones against the verb list -- which is how `--castlib` came to be
+  documented in `--help` and neither doc. Two verbs (`migrate-dbs`,
+  `shared-unit`) were missing from AI-USAGE and are now documented.
+* A test that asserts the ORDER of two output streams was reading them through
+  two OS pipes merged in drain order, which reordered about 10% of the time.
+  It now captures through a single handle.
 
 ### A .dfm is SPARSE
 
