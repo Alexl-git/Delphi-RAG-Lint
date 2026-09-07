@@ -26,7 +26,7 @@ type
   /// <summary>Classification of a folder relative to the index manifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.CovKindColor (Config.IndexesFrame.pas), declaration (DRagLint.Index.Coverage.pas)</para>
+  /// <para>Used by: Config.IndexesFrame.TIndexesFrame.CovKindColor (Config.IndexesFrame.pas), declaration (Config.IndexesFrame.pas), declaration (DRagLint.Index.Coverage.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCoverageKind = (
@@ -44,7 +44,7 @@ type
   /// <summary>Coverage classification result for one immediate child folder.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), declaration (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.RefreshCoverage (Config.IndexesFrame.pas), declaration (DRagLint.Index.Coverage.pas) (+1 more)</para>
+  /// <para>Used by: Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.RefreshCoverage (Config.IndexesFrame.pas), declaration (Config.IndexesFrame.pas), declaration (DRagLint.Index.Coverage.pas), DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas) (+1 more)</para>
   /// <para>Used in units: Config.IndexesFrame, DRagLint.CLI, DRagLint.Index.Coverage</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -78,7 +78,7 @@ type
 /// 5. ckUnassigned - none of the above.
 /// Not thread-safe; call from the owning thread only.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren (Config.IndexesFrame.pas) ?</para>
+/// <para>Called from: Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren (Config.IndexesFrame.pas) ?, DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Index.Coverage.IsBuiltinPrune, DRagLint.Index.Coverage.IsUnderRoot, DRagLint.Index.Coverage.NormPath, DRagLint.Index.Glob.TGlob.Matches, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths, LowerCase</para>
 /// <para>Returns: nil; Results.ToArray</para>
 /// <para>Complexity: 21 (cyclomatic, outer body), 185 lines (full implementation)</para>
@@ -97,7 +97,7 @@ function ComputeCoverage(const AManifest: TIndexManifest; const ARoot: string; A
 /// <returns>'indexed', 'overlap', 'excluded', 'library', or 'unassigned'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren (Config.IndexesFrame.pas) ?</para>
+/// <para>Called from: Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren (Config.IndexesFrame.pas) ?, DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas)</para>
 /// <para>Returns: 'indexed'; 'overlap'; 'excluded'; 'library'; 'unassigned'</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->

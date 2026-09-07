@@ -35,7 +35,7 @@ type
   /// <summary>One item in a reconcile report.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), declaration (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDpr (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDproj (DRagLint.Index.Reconcile.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.EditDpr (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDproj (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

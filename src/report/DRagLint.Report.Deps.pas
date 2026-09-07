@@ -13,7 +13,7 @@ type
   /// group.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsGroup = (dgRTL, dgDevExpress, dgSpring4D, dgFireDAC, dgOther, dgUnknown);

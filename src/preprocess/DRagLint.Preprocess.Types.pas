@@ -25,7 +25,7 @@ type
   /// offsets into the input; Line is 0-based (matches lexer.js lineAt).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), declaration (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Preprocess.Lexer.pas), DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Preprocess, DRagLint.Preprocess.Lexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -44,7 +44,7 @@ type
   /// integer (for {$IF CompilerVersion >= 37} style checks).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.SetPreprocess (DRagLint.Core.Indexer.pas) (+9 more)</para>
+  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.SetPreprocess (DRagLint.Core.Indexer.pas) (+9 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Diagnostics.ParseCache, DRagLint.Index.Closure, DRagLint.Preprocess, DRagLint.Preprocess.Profile, DRagLint.Preprocess.Types</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -78,7 +78,7 @@ type
   /// (opt-in, matching preprocess.js options.tolerances).
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), declaration (DRagLint.Preprocess.Types.pas), DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Preprocess.Types.pas), DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Preprocess, DRagLint.Preprocess.Types</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

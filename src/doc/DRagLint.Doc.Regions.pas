@@ -178,7 +178,7 @@ const
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverPlain (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas) (+9 more)</para>
+  /// <para>Used by: DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverPlain (DRagLint.Hover.Renderer.pas) (+9 more)</para>
   /// <para>Used in units: DRagLint.Context.Bundler, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Regions, DRagLint.Hover.Renderer, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -493,7 +493,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.EscXmlAttr, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.AppendFact, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinEsc, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.MoreSuffix, Format, IsCertain, SameText</para>
-    /// <para>Complexity: 21 (cyclomatic, outer body), 289 lines (full implementation)</para>
+    /// <para>Complexity: 21 (cyclomatic, outer body), 317 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
     /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
@@ -714,7 +714,7 @@ type
     /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.StripForDisplay (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas) ? (+1 more)</para>
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.StripForDisplay (DRagLint.Doc.Regions.pas) (+1 more)</para>
     /// <para>Calls: Copy, StartsStr, TrimLeft</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>

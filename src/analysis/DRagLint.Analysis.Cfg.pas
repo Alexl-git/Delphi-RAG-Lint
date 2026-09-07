@@ -22,7 +22,7 @@ type
   /// reads are not trusted (a `with` aliases fields), so definite-assignment
   /// ignores their uses and liveness treats them as using everything.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.AddItem (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.AddItem (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -51,7 +51,7 @@ type
   /// have empty `Items`. `EntryDefs` names vars defined unconditionally on
   /// entry to this block (used for the `foreach` iterator).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas) (+8 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas) (+8 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Flow.Lattices, DRagLint.Analysis.Liveness, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -118,7 +118,7 @@ type
   /// the routine contains `goto`/labels/`asm` and analyses must bail (return no
   /// findings) -- the graph would otherwise need unsound edges.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver&lt;TValue&gt;.Solve (DRagLint.Analysis.DataFlow.pas) (+5 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.Cfg.TBuilderState.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver&lt;TValue&gt;.Solve (DRagLint.Analysis.DataFlow.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Liveness, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -124,7 +124,7 @@ type
   /// <summary>One catalogued rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), declaration (DRagLint.Lint.RuleCatalog.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.RuleCatalog.pas), DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

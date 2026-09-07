@@ -14,7 +14,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), declaration (DRagLint.Resolver.TypeAt.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.ResolveMemberScope (DRagLint.Resolver.TypeAt.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Resolver.TypeAt.pas), DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.ResolveMemberScope (DRagLint.Resolver.TypeAt.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.Resolver.TypeAt</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

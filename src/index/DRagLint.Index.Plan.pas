@@ -21,7 +21,7 @@ type
   /// <summary>How a manifest section's file set is gathered.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.PlanModeDisplayStr (Config.IndexesFrame.pas), declaration (DRagLint.Index.Plan.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
+  /// <para>Used by: Config.IndexesFrame.TIndexesFrame.PlanModeDisplayStr (Config.IndexesFrame.pas), declaration (Config.IndexesFrame.pas), declaration (DRagLint.Index.Plan.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPlanSectionMode = (
@@ -36,7 +36,7 @@ type
   /// expansion of a library section).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview (Config.IndexesFrame.pas) (+6 more)</para>
+  /// <para>Used by: Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview (Config.IndexesFrame.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) (+6 more)</para>
   /// <para>Used in units: Config.IndexesFrame, DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -62,7 +62,7 @@ type
   /// <summary>Complete concrete build plan resolved from a TIndexManifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview (Config.IndexesFrame.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) (+3 more)</para>
+  /// <para>Used by: Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview (Config.IndexesFrame.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) (+3 more)</para>
   /// <para>Used in units: Config.IndexesFrame, DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

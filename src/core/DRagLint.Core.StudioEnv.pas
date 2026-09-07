@@ -71,7 +71,7 @@ type
   /// cache is kept -- a cached root would go stale across an install without
   /// any way to notice.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas) (+2 more)</para>
+  /// <para>Used by: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Proxy, DRagLint.Project.Resolver</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

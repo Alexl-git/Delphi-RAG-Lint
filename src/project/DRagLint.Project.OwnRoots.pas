@@ -76,7 +76,7 @@ type
     /// DRagLint.Storage.FileMembership.NormalizeForLookup: forward slashes
     /// folded to backslashes, compared case-insensitively.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
+    /// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
     /// <para>Calls: ExpandFileName, StartsText, StringReplace</para>
     /// <para>Returns: True; False</para>
     /// <para>Reads: FActive, FRoots</para>

@@ -31,7 +31,7 @@ type
   /// level deep) All $(BDS) and similar macros are expanded.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas) (+19 more)</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+19 more)</para>
   /// <para>Used in units: Config.IndexesFrame, Config.SettingsFrame, DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan, DragLint.Plugin.OptionsFrames</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

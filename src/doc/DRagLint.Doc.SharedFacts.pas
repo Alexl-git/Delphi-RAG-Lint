@@ -108,8 +108,8 @@ type
   /// changes for anyone who has not opted in. Not thread-safe: the closure set
   /// is cached in class state, keyed on the store it was built from.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-  /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift</para>
+  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Regions, DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedFacts = class
@@ -171,12 +171,12 @@ type
     /// Order changes only on marked units.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
-    /// <para>Calls: CompareText, Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.ExtractBlockBody, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf (+8 more)</para>
+    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin (+9 more)</para>
     /// <para>Returns: ADocText; Lines.Text</para>
-    /// <para>Complexity: 27 (cyclomatic, outer body), 190 lines (full implementation)</para>
+    /// <para>Complexity: 28 (cyclomatic, outer body), 200 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.ExtractBlockBody"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.FenceBounds"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.LabelContent"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
@@ -188,9 +188,10 @@ type
     /// <summary>True when the stored block holds inbound entries this project
     /// cannot see, so deleting or replacing it would destroy another project's
     /// contribution.</summary>
-    /// <param name="AStoredRemarks">The existing parsed remarks.</param>
+    /// <param name="AStoredBody"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AStore">The current project's index. Not owned.</param>
     /// <param name="AUnitPath">Absolute path of the declaring unit.</param>
+    /// <param name="AStoredRemarks">The existing parsed remarks.</param> <!-- drag-lint: param no longer exists -->
     /// <returns>False on an unmarked unit, on an unparseable block, and
     /// whenever every stored entry is either inside this closure or flagged
     /// uncertain -- i.e. it answers True only when there is something here that
@@ -201,6 +202,11 @@ type
     /// are downstream of decisions taken before they are consulted: the checker
     /// exits on the residual compare ('Pure' vs '') and the writer emits a pure
     /// tekDeleteLines. Both now ask this first.
+    /// <!-- drag-lint:auto -->It cannot extract for itself, because its two callers hold different
+    /// things: TDocumenter has the whole stored remarks, while BlockDrifted has already extracted a
+    /// body. A StoredBlockBody call in here returns '' for the second one -- silently switching OFF
+    /// the empty-render forgiveness, so a block naming a unit the index cannot see starts reporting
+    /// drift. Caught by run_doc_drift_unseen_units (CASE-A) and run_doc_drift_extra_stores (#3).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas)</para>
     /// <para>Calls: DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitVouchable</para>
@@ -271,22 +277,47 @@ type
     /// <param name="X">A rendered entry, e.g. 'A.B.Foo (A.B.pas)'.</param>
     /// <param name="Y">The entry to compare it against.</param>
     /// <returns>&lt;0, 0 or &gt;0, as CompareText.</returns>
-    /// <remarks>THE writer's order and THE merge's order must be one function.
+    /// <remarks>
+    /// THE writer's order and THE merge's order must be one function.
     /// While the render joined in store order and the merge re-joined sorted,
     /// every type block was written once one way and once the other -- a
     /// one-time reorder of ~130 inbound lines in this repo that looked like
     /// non-determinism. Two comparators is the mirrored-predicate trap; there
-    /// is deliberately only one, and both callers route through it.</remarks>
+    /// is deliberately only one, and both callers route through it.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Calls: CompareText</para>
+    /// <para>Returns: CompareText(X, Y)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CompareInboundEntries(const X, Y: string): Integer; static;
 
     /// <summary>The engine-owned body of a STORED doc block: the text strictly
     /// between the BEGIN and END markers, or '' when there is no such pair.</summary>
     /// <param name="AText">Stored remarks, exactly as they appear in source.</param>
     /// <returns>The fenced body, or '' when the block has never been written.</returns>
-    /// <remarks>Exposed because the CALLER must decide whether it holds whole
+    /// <remarks>
+    /// Exposed because the CALLER must decide whether it holds whole
     /// remarks or an already-extracted body -- see HoldsForeignInboundEntries.
     /// Returning '' for unfenced text is the point, not an edge case: it is what
-    /// stops a human's prose from being parsed as facts.</remarks>
+    /// stops a human's prose from being parsed as facts.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Returns: DRagLint.Doc.SharedFacts.StoredBlockBody(AText)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function StoredBlockBody(const AText: string): string; static;
   end;
 

@@ -861,7 +861,7 @@ type
       /// grammar by CheckCyclomaticComplexity's own tests (tests\lint\cyclomatic-
       /// complexity.pas/.expected).
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit (DRagLint.Diagnostics.AstChecks.pas) ?</para>
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit (DRagLint.Diagnostics.AstChecks.pas) ?, DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas)</para>
       /// <para>Calls: DRagLint.Diagnostics.AstChecks.CyclomaticCountDecisions</para>
       /// <para>Returns: 1 + CyclomaticCountDecisions(ABody)</para>
       /// <para>Pure</para>

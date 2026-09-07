@@ -317,4 +317,40 @@
 #
 #   Superseded: 1.10.0-alpha|32a9ffadea89833a06e141527ae053419124e759cffe8007ae58d113032fd231
 
-1.10.0-alpha|67c2c588351ad638e978b632cd0184b7745f29c8a3cd33e98196b4551e709f9b
+# 2026-09-07 (2nd): hash updated WITHOUT a version bump, per the rule above --
+#   and it is the FOURTH `document --project` sweep to land here, which is now
+#   the point worth reading rather than the entry itself.
+#
+#   WHAT CHANGED: the session-76 sweep, run after the fact-terminator fix
+#   (2e5abfe). ELEVEN files of the hashed surface carry managed DocInsight
+#   blocks and were rewritten -- mostly one-time reordering of inbound lists
+#   into the canonical order the writer now emits.
+#
+#   PROVEN comment-only, not asserted. `git diff -U0 2e5abfe` over exactly the
+#   four hashed roots, classifying every added/removed line:
+#
+#       doc-comment (///) lines changed :  56
+#       NON-doc lines changed           :   0
+#
+#   Zero. No declaration moved, no code changed. A `///` comment cannot change
+#   what the parser sees in a byte sequence, so no stored parse becomes stale.
+#
+#   AND THIS SWEEP REACHED A PROVEN FIXED POINT, which the b42a7e7 sweep did
+#   not: run, reindex, run again -> `1248 public decl(s), nothing to document`,
+#   with a SHA-256 over every .pas under src\ byte-identical before and after
+#   the second pass. That check is what this repo learned to do after a sweep
+#   cleared on a metric whose exclusions hid two corruptions.
+#
+#   THE RECURRING TAX IS NOW FOUR SWEEPS OLD. The 2026-09-07 entry above said
+#   that if it kept happening the honest fix is to hash the surface with `///`
+#   lines stripped. That is still the right answer and still a deliberate
+#   change to this guard's definition of identity -- it must not be made as a
+#   side effect of a sweep, and it is not being made here. It is filed rather
+#   than done.
+#
+#   The same warning as every entry above: if a future edit to these files ever
+#   influences what is indexed, the version MUST move.
+#
+#   Superseded: 1.10.0-alpha|67c2c588351ad638e978b632cd0184b7745f29c8a3cd33e98196b4551e709f9b
+
+1.10.0-alpha|02c80791a48b50c8fda23c93444bf3e14fe6d4285303e1043f70cee05370be2d

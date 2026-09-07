@@ -23,7 +23,7 @@ type
   /// id, severity, message.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.Destroy (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), declaration (DRagLint.Lint.QueryRules.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.Linter.pas), declaration (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.Destroy (DRagLint.Lint.Linter.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.Lint.Linter, DRagLint.Lint.QueryRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

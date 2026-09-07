@@ -50,7 +50,7 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->Invalid JSON in workspace config: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?, DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas) ? (+1 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) ?, DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas) ? (+1 more)</para>
       /// <para>Calls: Default, TJSONArray, TJSONObject</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>
       /// <para>Touches: file system</para>
@@ -63,7 +63,7 @@ type
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?</para>
+      /// <para>Called from: DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?, DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas) ?</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.FindWorkspaceRoot"/>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile"/>

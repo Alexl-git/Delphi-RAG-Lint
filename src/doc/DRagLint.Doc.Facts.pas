@@ -83,7 +83,7 @@ type
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), declaration (DRagLint.Doc.Regions.pas) (+5 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), declaration (DRagLint.Doc.Regions.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -437,7 +437,7 @@ type
   /// call every real one stale. Construct with Make or Defaults, never with
   /// Default(); Normalized() is the backstop for anything that slips through.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas), declaration (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), declaration (DRagLint.Doc.Facts.pas) (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Drift.pas), declaration (DRagLint.Doc.Facts.pas), DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

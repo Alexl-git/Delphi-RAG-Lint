@@ -43,7 +43,7 @@ type
   /// <summary>The set of helper methods requested for one generation run.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumHelperMethods = set of TEnumHelperMethod;
@@ -56,7 +56,7 @@ type
   /// hand if members are added).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TToStringMode = (tsmRtti, tsmCase);
@@ -224,7 +224,7 @@ type
     /// not resolve to exactly one skEnum symbol.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?</para>
+    /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.EnumHelper.DetectExplicitOrdinal, DRagLint.Refactor.EnumHelper.ReadDeclSpan</para>
     /// <para>Returns: Default(TEnumHelperResolve)</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)</para>

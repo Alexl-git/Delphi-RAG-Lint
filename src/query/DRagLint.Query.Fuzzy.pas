@@ -49,7 +49,7 @@ function FuzzyMaxDistanceFor(const APattern: string): Integer;
 /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.EnsureTrigramTablePopulated (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbol (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindByNameLike (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.EnsureTrigramTablePopulated (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindByNameLike (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbol (DRagLint.Storage.SQLite.pas)</para>
 /// <para>Calls: Copy, LowerCase</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->

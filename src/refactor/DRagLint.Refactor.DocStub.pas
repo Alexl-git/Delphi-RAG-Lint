@@ -14,7 +14,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoGenerateDocs (DRagLint.CLI.pas), declaration (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.DocStub.pas), DRagLint.CLI.DoGenerateDocs (DRagLint.CLI.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocStubFormat = (dsfXmlDoc, dsfPasDoc);

@@ -34,7 +34,7 @@ uses
 /// (ASCII is valid UTF-8, so this returns the input unchanged). Pure function;
 /// thread-safe (no shared state; the CP1252 encoding it allocates is freed).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.Core.Encoding.IsValidUtf8, Move</para>
 /// <para>Complexity: 14 (cyclomatic, outer body), 43 lines (full implementation)</para>
 /// <para>Pure</para>

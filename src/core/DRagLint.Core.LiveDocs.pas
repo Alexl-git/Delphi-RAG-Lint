@@ -44,7 +44,7 @@ type
   /// be pure cost. If a threaded host is ever added, wrap the class in a lock
   /// rather than making the callers defensive.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) (+6 more)</para>
+  /// <para>Used by: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas) (+6 more)</para>
   /// <para>Used in units: DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -92,7 +92,7 @@ type
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas), DRagLint.Core.LiveDocs.TLiveDocuments.Remove (DRagLint.Core.LiveDocs.pas) ?</para>
+      /// <para>Called from: DRagLint.Core.LiveDocs.TLiveDocuments.Remove (DRagLint.Core.LiveDocs.pas) ?, DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>

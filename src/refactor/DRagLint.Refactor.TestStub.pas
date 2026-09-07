@@ -39,7 +39,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas), declaration (DRagLint.Refactor.TestStub.pas), DRagLint.Refactor.TestStub.TTestStubGenerator.Generate (DRagLint.Refactor.TestStub.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.TestStub.pas), DRagLint.CLI.DoGenerateTest (DRagLint.CLI.pas), DRagLint.Refactor.TestStub.TTestStubGenerator.Generate (DRagLint.Refactor.TestStub.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTestFramework = (tfDUnitX, tfDUnit);
