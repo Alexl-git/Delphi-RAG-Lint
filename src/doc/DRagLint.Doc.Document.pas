@@ -686,6 +686,73 @@ end;
 // loop is duplicated; the PREDICATE has a single declaration. That is the point:
 // the T3j defect (register S1) was a third copy of this window that omitted the
 // guard while a comment claimed it matched.
+// v(session 73): narrows a STACKED region to its TRAILING doc block.
+//
+// TDocCommentScanner merges every run of adjacent /// lines into ONE region
+// (MergeAdjacentSameKind), so two complete doc blocks written back to back with
+// no blank line between them arrive here as a single region. Attributing all of
+// it to the declaration below means regenerating DELETES the other block: that
+// is the 128-authored-lines-across-20-files data loss measured in
+// docs\INBOX-autodoc-strips-authored-prose-from-a-record.md. The shape exists
+// in this repo's own src\ -- e.g. CheckMutableGlobalVars' block sits above
+// CheckWithHiding's, because its own declaration is BELOW both.
+//
+// The block boundary is a top-level <summary>: a well-formed DocInsight block
+// opens with one, so a region carrying TWO or more has more than one block in
+// it and only the LAST belongs to this declaration. Everything above the last
+// <summary> is left exactly as it is -- not deleted, not re-emitted, not
+// re-attributed. The engine cannot know which declaration that text belongs to,
+// and preserving it is the only safe answer.
+//
+// Deliberately NOT fixed in the scanner. DRagLint.Parser.DocComments is on the
+// extractor hash surface (src\parser), so splitting regions there bumps
+// DRAGLINT_EXTRACTOR_VERSION and re-parses EVERY database -- hours -- to change
+// something only the doc WRITE path gets wrong. Index-time attribution is
+// unaffected by this defect: it reads, it does not rewrite.
+//
+// Fires only at count >= 2. A single-block region is untouched, which keeps
+// blocks that legitimately open with something other than <summary> (a bare
+// <remarks>, an <inheritdoc/>) on exactly their historic path.
+//
+// RawText carries one entry per source line, joined by sLineBreak by
+// MergeAdjacentSameKind, so dropping N leading entries advances StartLine by
+// exactly N. EndLine is untouched.
+function NarrowToTrailingDocBlock(const ARegion: TDocCommentRegion): TDocCommentRegion;
+var
+  Lines : TArray<string>;
+  I     : Integer       ;
+  Count : Integer       ;
+  LastIx: Integer       ;
+  Buf   : string        ;
+begin
+  Result:= ARegion;
+  if ARegion.Kind <> dckTripleSlash then Exit;
+
+  Lines := RawCommentLines(ARegion.RawText);
+  Count := 0;
+  LastIx:= -1;
+  for I:= 0 to High(Lines) do
+    // '</summary>' cannot match: the substring sought has 's' immediately
+    // after '<', so only an OPENING tag is counted. LowerCase rather than
+    // ContainsText so this unit does not take a System.StrUtils dependency for
+    // one comparison.
+    if Pos('<summary', LowerCase(Lines[I])) > 0 then
+    begin
+      Inc(Count);
+      LastIx:= I;
+    end;
+
+  if (Count < 2) or (LastIx <= 0) then Exit;
+
+  Buf:= '';
+  for I:= LastIx to High(Lines) do
+    if Buf = '' then Buf:= Lines[I]
+    else Buf:= Buf + sLineBreak + Lines[I];
+
+  Result.RawText  := Buf;
+  Result.StartLine:= ARegion.StartLine + LastIx;
+end;
+
 function FindDocRegionAbove(ADocRegions: System.Generics.Collections.TList<TDocCommentRegion>;
   ASymStartLine: Integer; AAllowGap: Integer; ACaptureLoose: Boolean;
   const ASymStartLines: TArray<Integer>): TDocCommentRegion;
@@ -717,7 +784,9 @@ begin
   // Doc.Strip copying the window above WITHOUT this guard.
   if HasBest and (not NoDeclarationInGap(Best.EndLine, ASymStartLine, ASymStartLines)) then
     HasBest:= False;
-  if HasBest then Result:= Best
+  // v(session 73): a merged run of /// lines can hold MORE THAN ONE doc block.
+  // Only the trailing one is this declaration's; see NarrowToTrailingDocBlock.
+  if HasBest then Result:= NarrowToTrailingDocBlock(Best)
   else
   begin
     FillChar(Result, SizeOf(Result), 0);

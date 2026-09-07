@@ -280,21 +280,40 @@ try {
      ((Count-Of $after.TwoSinceAndTwoSummary '<summary>First summary here.</summary>') -eq 1) -and
      ((Count-Of $after.TwoSinceAndTwoSummary '<summary>Second summary here.</summary>') -eq 1)) `
     $after.TwoSinceAndTwoSummary
-  # Position, which is what a carried-over counter would move. Each tag's
-  # ordinal-1 occurrence keeps its own MODELED slot (summary first, since near
-  # the end -- MergeComment's fixed order), and BOTH surplus lines land together
-  # in the contiguous residual run after every modeled tag, in SOURCE order
-  # (since 2.0 was written above summary "Second"). A carried-over counter would
-  # push one of the ordinal-1 occurrences into that residual run instead.
+  # Position. RE-PINNED session 73, and the direction REVERSED deliberately.
+  #
+  # This used to assert the ENGINE'S canonical order: each tag's ordinal-1
+  # occurrence in its modeled slot (summary first, since near the end), both
+  # surplus lines in the residual run after them. That held because the whole
+  # comment was one region the engine rewrote end to end.
+  #
+  # NarrowToTrailingDocBlock (DRagLint.Doc.Document) now attributes only the
+  # TRAILING doc block to the declaration, because a region carrying two or more
+  # top-level <summary> tags cannot be told apart from two stacked blocks -- and
+  # guessing wrong there DESTROYS a neighbouring declaration's authored prose
+  # (INBOX-autodoc-strips-authored-prose-from-a-record: 128 lines across 20
+  # files). This shape has two summaries, so it takes that path, and everything
+  # above the last <summary> is now left exactly where the author put it.
+  #
+  # So SOURCE order is the assertion, and it is STRICTLY STRONGER than the one
+  # it replaces: the old check allowed the engine to move four lines about as
+  # long as their relative slots matched, this one pins them where the author
+  # wrote them. It also agrees with the owner's 2026-09-06 ruling that order is
+  # not the contract and content is.
+  #
+  # E''1 and E''2 above are untouched and still carry the substance: all four
+  # tags survive, each exactly once. A carried-over occurrence counter -- the
+  # defect this E'' group exists to catch -- would still fail them by dropping
+  # or duplicating a tag.
   $eIdx = @{}
   foreach ($needle in @('<summary>First summary here.</summary>','<since>1.0</since>',
                         '<summary>Second summary here.</summary>','<since>2.0</since>')) {
     $eIdx[$needle] = $after.TwoSinceAndTwoSummary.IndexOf($needle)
   }
-  Check "E''3: both ordinal-1 occurrences keep their MODELED slots, then both surplus lines follow in source order" `
-    (($eIdx['<summary>First summary here.</summary>'] -lt $eIdx['<since>1.0</since>']) -and
-     ($eIdx['<since>1.0</since>'] -lt $eIdx['<since>2.0</since>']) -and
-     ($eIdx['<since>2.0</since>'] -lt $eIdx['<summary>Second summary here.</summary>'])) `
+  Check "E''3: all four tags stay in the order the AUTHOR wrote them" `
+    (($eIdx['<since>1.0</since>'] -lt $eIdx['<since>2.0</since>']) -and
+     ($eIdx['<since>2.0</since>'] -lt $eIdx['<summary>First summary here.</summary>']) -and
+     ($eIdx['<summary>First summary here.</summary>'] -lt $eIdx['<summary>Second summary here.</summary>'])) `
     $after.TwoSinceAndTwoSummary
 
   # =====================================================================
@@ -404,14 +423,22 @@ try {
   # reason above (their surplus is never carried through, so it is gone by the
   # time --strip runs). Pinned below in their own right rather than excluded
   # quietly.
-  # TwoSinceAndTwoSummary is a third kind of non-round-trip, and a third
-  # PRE-EXISTING reason: its tags are not written in MergeComment's canonical
-  # emission order, and `document --apply` canonicalizes order for every comment
-  # it repairs -- no marker records a reorder, so --strip cannot undo one. All
-  # four tags and their exact texts survive; only the order is the engine's.
+  # TwoSinceAndTwoSummary USED to be a third kind of non-round-trip: its tags
+  # are not in MergeComment's canonical emission order, `document --apply`
+  # canonicalized order for every comment it repaired, and no marker records a
+  # reorder, so --strip could not undo one.
+  #
+  # PIN RETIRED session 73. NarrowToTrailingDocBlock leaves everything above the
+  # last top-level <summary> untouched, so this shape now returns to EXACTLY
+  # what the author wrote and belongs in the round-trip set below. That is the
+  # stronger assertion, not a relaxed one -- "does not round-trip" is satisfied
+  # by any difference at all, including a destructive one; `-ceq $pristine`
+  # admits nothing. Retiring it here rather than leaving a passing-by-luck pin
+  # is deliberate: a pin that no longer describes the engine is how a guard
+  # starts protecting the wrong thing.
   # (guards.TwoSinceTags is the same shape; that runner just does not strip.)
   $noRoundTrip = @('PrefixProseEmptySummary','PrefixProseBlankSummaryExotic',
-                   'TwoRemarksNoFacts','TwoRemarksWithFacts','TwoSinceAndTwoSummary')
+                   'TwoRemarksNoFacts','TwoRemarksWithFacts')
   $roundTripShapes = @($pat.Keys | Where-Object { $noRoundTrip -notcontains $_ })
   foreach ($k in $roundTripShapes) {
     Check "ROUND-TRIP: $k returns to EXACTLY what the author wrote" `
@@ -452,15 +479,9 @@ try {
     TwoRemarksNoFacts   = "/// <remarks>`n/// First remarks.`n/// </remarks>"
     TwoRemarksWithFacts = "/// <remarks>`n/// First remarks.`n/// </remarks>"
   }
-  Check 'ROUND-TRIP (pinned pre-existing): TwoSinceAndTwoSummary does NOT round-trip -- the engine canonicalized tag ORDER' `
-    ($stripped.TwoSinceAndTwoSummary -cne $pristine.TwoSinceAndTwoSummary) `
-    ("stripped=[" + $stripped.TwoSinceAndTwoSummary + "]")
-  Check 'ROUND-TRIP: ...but ALL FOUR of its tags survive the round-trip, texts intact -- only the order is the engine''s' `
-    ($stripped.TwoSinceAndTwoSummary -ceq ("/// <summary>First summary here.</summary>`n" +
-                                           "/// <since>1.0</since>`n" +
-                                           "/// <since>2.0</since>`n" +
-                                           "/// <summary>Second summary here.</summary>")) `
-    ("stripped=[" + $stripped.TwoSinceAndTwoSummary + "]")
+  # TwoSinceAndTwoSummary's two pins were deleted here in session 73 -- it is in
+  # $roundTripShapes now and gets the exact-equality check above. See the
+  # $noRoundTrip comment for why.
   foreach ($k in @('TwoRemarksNoFacts','TwoRemarksWithFacts')) {
     Check "ROUND-TRIP (pinned loss): $k does NOT round-trip -- its surplus <remarks> was never carried through" `
       ($stripped[$k] -cne $pristine[$k]) ("stripped=[" + $stripped[$k] + "]")
