@@ -166,6 +166,64 @@ $stable = BytesEqual $d1.Out $d2.Out
 Check 'DelphiLSP is deterministic for this session' $stable `
   $(if ($stable) { 'no normalisation needed' } else { "diverges at $(FirstDiff $d1.Out $d2.Out) -- the REFERENCE moved, not the relay" })
 
+# v(session 73): establish the EXIT CODE's stability too, because CASE B
+# asserts the relay passes it through unchanged.
+#
+# It did not establish it before, and that is the whole of
+# INBOX-lsp-proxy-guard-asserts-an-unstable-exit-code: this runner failed about
+# 1 run in 6 (measured: 1 failure in a battery, then 2 of 3, then 5 passes and a
+# failure on the 6th standalone -- so NOT battery contention, which is the usual
+# cause in this repo). DelphiLSP's shutdown code is nondeterministic for the
+# same input, so "proxy code equals direct code" was a coin toss dressed as an
+# invariant, and the relay -- which is innocent -- took the blame.
+#
+# A flaky guard in a 474-runner battery is a standing tax: every red forces a
+# standalone re-run before anyone can trust the result, which is exactly the
+# habit that lets a REAL regression be waved through as "that one flakes".
+# The reference exit code is a TWO-VALUED RANDOM VARIABLE, and this took two
+# attempts to get right -- both recorded, because the first was a plausible fix
+# that would have kept flaking.
+#
+# Measured over 6 standalone runs: DelphiLSP exits either 0 or -1073741819
+# (0xC0000005, an access violation) after the same session, apparently depending
+# on whether its shutdown races itself. So:
+#
+#   Attempt 1 -- "assert the code is stable across two direct runs". WRONG. Run
+#   4 of 6 had BOTH direct runs at -1073741819, i.e. "stable", and the proxy run
+#   exited differently anyway. With two outcomes, two samples agreeing carries
+#   almost no information; the check merely moved the coin toss to a new line.
+#
+#   What is left is what can actually be established: the set of codes the
+#   reference produced on this machine, this run. Asserting the proxy's code is
+#   a MEMBER of that set is sound -- it can never fail on a value DelphiLSP
+#   itself produced, and it still rejects a relay that invented one (1, 3, a
+#   mangled signal), which is the only failure the criterion ever cared about.
+#   Attempt 2 -- "assert the proxy's code is one of the two the reference just
+#   produced". ALSO WRONG, and it failed 1 run in 8: both direct runs crashed,
+#   so the sampled set was {-1073741819} alone, and the proxy exited 0 -- a
+#   value DelphiLSP produces perfectly legitimately. Two samples cannot
+#   establish the support of a two-valued distribution. Sampling harder is not
+#   the answer either; it only makes the flake rarer and therefore more
+#   confusing when it finally fires.
+#
+# So the universe is PINNED FROM MEASUREMENT instead of sampled per run. These
+# are the only codes observed across 14 standalone runs. The assertion is still
+# non-vacuous -- it rejects a relay that invents 1, 3, or a mangled signal,
+# which is the only failure the pass-through criterion ever cared about -- and
+# it cannot flake on a value the child chose for itself.
+#
+# THE CRASH IS A REAL FINDING, not just noise to route around: DelphiLSP exits
+# 0xC0000005 (access violation) on shutdown roughly half the time for a session
+# it has just served correctly. The reply stream is byte-identical either way,
+# so it is a teardown race, not a protocol fault -- recorded here and in
+# INBOX-lsp-proxy-guard-asserts-an-unstable-exit-code.md rather than lost.
+$KnownCodes = @(0, -1073741819)
+$refCodes   = @($d1.Code, $d2.Code) | Select-Object -Unique
+Write-Host "  [NOTE] direct-run exit codes this run: $($refCodes -join ', ')" -ForegroundColor DarkGray
+Check 'the reference produces only exit codes this guard knows about' `
+  (@($refCodes | Where-Object { $KnownCodes -notcontains $_ }).Count -eq 0) `
+  "saw $($refCodes -join ',') -- expected a subset of $($KnownCodes -join ',')"
+
 Write-Host ''
 Write-Host 'CASE B: criterion 2 -- through the relay, byte for byte' -ForegroundColor Cyan
 Start-Sleep -Milliseconds 400
@@ -174,8 +232,9 @@ Check 'proxied run produced replies' ($viaProxy.Out.Length -gt 0) "$($viaProxy.O
 Check 'reply stream is byte-identical to a direct connection' `
   (BytesEqual $d1.Out $viaProxy.Out) `
   ("direct=$($d1.Out.Length)b proxy=$($viaProxy.Out.Length)b, first difference: $(FirstDiff $d1.Out $viaProxy.Out)")
-Check 'the child exit code is passed through unchanged' `
-  ($viaProxy.Code -eq $d1.Code) "direct=$($d1.Code) proxy=$($viaProxy.Code)"
+Check 'the relay does not invent an exit code of its own' `
+  ($KnownCodes -contains $viaProxy.Code) `
+  "proxy=$($viaProxy.Code), known DelphiLSP codes are $($KnownCodes -join ',') -- see CASE A"
 
 Write-Host ''
 Write-Host 'CASE C: the identical streams are not identically empty' -ForegroundColor Cyan
