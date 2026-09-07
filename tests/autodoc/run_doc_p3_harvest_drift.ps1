@@ -86,7 +86,7 @@ function Get-Block([string]$db, [string]$path, [string]$name) {
 # absent. Spans lines: EmitTagged re-prefixes continuation lines with ///.
 function Get-Summary([string]$block) {
   $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' -replace '</?para>','' }) -join ' '
-  $m = [regex]::Match($flat, '<summary>(?:<!-- drag-lint:auto -->)?\s*(.*?)\s*</summary>')
+  $m = [regex]::Match($flat, '<summary>(?:<!-- drag-lint:auto(?: sum)? -->)?\s*(.*?)\s*</summary>')
   if ($m.Success) { return ($m.Groups[1].Value -replace '\s+',' ').Trim() } else { return '' }
 }
 
@@ -102,7 +102,7 @@ function Has-SummaryTag([string]$block) {
 # its <returns> and its facts fence, so a whole-block search answers a different
 # question than the one being asked (Task 8, finding 2).
 function Test-SummaryMarked([string]$block) {
-  return ([bool](((($block -split "`n") -join ' ') -match '<summary><!-- drag-lint:auto -->')))
+  return ([bool](((($block -split "`n") -join ' ') -match '<summary><!-- drag-lint:auto sum -->')))
 }
 
 # doc-drift for one qname, as raw JSON lines joined.
@@ -241,7 +241,7 @@ Check 'STEP 4: Drifting is untouched by Vanishing''s removal' `
 # report -- even though the source // comment still yields a DIFFERENT harvest.
 # ===========================================================================
 Set-Text $tgt (([IO.File]::ReadAllText($tgt)) -replace `
-  '<summary><!-- drag-lint:auto -->Original prose, SECOND version\.</summary>', `
+  '<summary><!-- drag-lint:auto sum -->Original prose, SECOND version\.</summary>', `
   '<summary>Human owns this now.</summary>')
 & $exePath index $sc --db $db 2>$null | Out-Null
 

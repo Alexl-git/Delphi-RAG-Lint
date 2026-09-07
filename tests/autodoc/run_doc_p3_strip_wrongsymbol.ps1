@@ -228,7 +228,7 @@ Check 'A CRITICAL: the file is BYTE-IDENTICAL to the pristine fixture -- Alpha''
 $afterBetaLines = [IO.File]::ReadAllLines($A.Target)
 $alphaBlockAfterBeta = Get-DocBlockAbove $afterBetaLines '^function Alpha\(AValue: Integer\): Integer;'
 Check 'A CRITICAL: Alpha''s marked <summary> survives' `
-  ($null -ne $alphaBlockAfterBeta -and $alphaBlockAfterBeta -match [regex]::Escape('<summary><!-- drag-lint:auto -->Engine summary for Alpha.</summary>')) $alphaBlockAfterBeta
+  ($null -ne $alphaBlockAfterBeta -and $alphaBlockAfterBeta -match [regex]::Escape('<summary><!-- drag-lint:auto sum -->Engine summary for Alpha.</summary>')) $alphaBlockAfterBeta
 Check 'A CRITICAL: Alpha''s AUTO_BEGIN..AUTO_END facts fence survives' `
   ($null -ne $alphaBlockAfterBeta -and $alphaBlockAfterBeta -match [regex]::Escape('drag-lint:auto BEGIN') -and $alphaBlockAfterBeta -match [regex]::Escape('drag-lint:auto END')) $alphaBlockAfterBeta
 Check 'A CRITICAL: both declarations survive intact' `

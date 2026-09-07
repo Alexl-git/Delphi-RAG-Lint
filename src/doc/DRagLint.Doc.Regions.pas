@@ -129,6 +129,52 @@ const
   /// </remarks>
   AUTO_EXC   = '<!-- drag-lint:auto exc -->';
 
+  /// <summary>Ownership marker for a &lt;summary&gt; body that is the engine's
+  /// HARVESTED source-comment prose, as opposed to words a human typed inside
+  /// the engine's tag.</summary>
+  /// <remarks>
+  /// THE THIRD TIME THIS EXACT PROBLEM HAS BEEN SOLVED THE SAME WAY, and the
+  /// first two (AUTO_TYPE, AUTO_EXC) both say why in their own headers: the
+  /// moment the engine writes real PROSE into a tag, its output stops being
+  /// distinguishable from a human's, and any ownership rule keyed on CONTENT
+  /// becomes a guess. State it lexically instead.
+  ///
+  /// What went wrong without it (session 74). &lt;summary&gt; carried only the
+  /// bare AUTO_MARK, so these two were the same string to the engine:
+  ///
+  ///   * a developer's 53 words typed into an engine stub whose HTML comment
+  ///     they never removed -- ruling D-4 says that is a HUMAN's text; and
+  ///   * the engine's OWN harvested prose whose source comment has since been
+  ///     deleted -- which must be REMOVED, and whose removal doc-drift
+  ///     announces ("has no source comment left to harvest").
+  ///
+  /// Reading the marker as "always mine" destroyed the first (reproduced on
+  /// real source: DRagLint.Lint.Linter.pas lost 53 words on the 91-file
+  /// sweep). Reading it as "the human's whenever it has words" broke the
+  /// second (reproduced by run_doc_p3_harvest_drift STEP 4). Neither reading
+  /// is available while one marker means both things.
+  ///
+  /// CONTRACT, matching AUTO_TYPE's and AUTO_EXC's: this marker means
+  /// engine-owned, full stop -- refreshed by apply while the source comment
+  /// yields something, REMOVED when it stops, deleted by strip, whatever body
+  /// follows it. A human takes ownership by replacing the body AND the marker,
+  /// or simply by deleting the marker. A plain AUTO_MARK &lt;summary&gt; holding
+  /// authored words now gets D-4's protection instead (kept, unmarked).
+  ///
+  /// MIGRATION IS AUTOMATIC AND IS NOT CONTENT-KEYED, which matters because a
+  /// content compare is the thing AUTO_TYPE exists to avoid. A legacy
+  /// bare-AUTO_MARK summary whose source comment STILL yields a harvest simply
+  /// takes MergeComment's ordinary refill arm and is re-emitted under this
+  /// marker -- so it stays engine-owned without anything comparing strings.
+  /// Only the genuinely ambiguous legacy case (bare marker, no harvest left)
+  /// falls through, and it fails SAFE: the words are kept.
+  ///
+  /// Deliberately NOT a superstring of AUTO_MARK, so a consumer searching for
+  /// AUTO_MARK cannot match this by accident -- the same property AUTO_TYPE
+  /// and AUTO_EXC each document, and for the same reason.
+  /// </remarks>
+  AUTO_SUM   = '<!-- drag-lint:auto sum -->';
+
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -629,6 +675,23 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsEngineOwnedTagText(const S: string): Boolean;
+
+    /// <summary>True when S is the engine's own HARVESTED &lt;summary&gt; prose
+    /// -- i.e. it carries AUTO_SUM.</summary>
+    /// <remarks>
+    /// Decided LEXICALLY by the marker, for the reason AUTO_SUM's header gives
+    /// at length: a bare AUTO_MARK could not tell the engine's harvested prose
+    /// apart from words a human typed into an engine stub, and each misreading
+    /// destroyed something real.
+    ///
+    /// A CLASS FUNCTION RATHER THAN A NESTED ONE, deliberately, and this file
+    /// has the scar that says why: Doc.Drift needs the SAME test MergeComment
+    /// uses to predict whether an apply will REMOVE a summary, and
+    /// hand-expanding such a test in that unit is exactly how it silently
+    /// desynced from MergeComment once already (see IsEngineOwnedTagText, which
+    /// was promoted for the same reason, and check 9's own comment in Drift).
+    /// </remarks>
+    class function IsEngineSummaryBody(const S: string): Boolean;
     /// <summary>Removes a leading AUTO_MARK, if present, from S -- and, either
     /// way, also removes any leading whitespace: the TrimLeft this performs is
     /// UNCONDITIONAL, not gated on the marker being found, so S is NOT
@@ -1804,9 +1867,10 @@ end;
 class function TDocRegions.IsManagedText(const S: string): Boolean;
 begin
   { AUTO_TYPE counts: it is engine-generated content by definition (see the
-    constant), so every consumer that asks "did we write this?" must say yes. }
+    constant), so every consumer that asks "did we write this?" must say yes.
+    AUTO_SUM (v(SESSION 74)) counts for exactly the same reason. }
   Result:= StartsStr(AUTO_MARK, TrimLeft(S)) or StartsStr(AUTO_TYPE, TrimLeft(S))
-        or StartsStr(AUTO_EXC, TrimLeft(S));
+        or StartsStr(AUTO_EXC, TrimLeft(S))  or StartsStr(AUTO_SUM, TrimLeft(S));
 end;
 
 // v(ADP3 T3, promoted to a class function in v(ADP3 T9)): True when S is
@@ -1828,6 +1892,11 @@ begin
   Result:= IsManagedText(S) or SameText(Trim(S), 'TODO: describe.');
 end;
 
+class function TDocRegions.IsEngineSummaryBody(const S: string): Boolean;
+begin
+  Result:= StartsStr(AUTO_SUM, TrimLeft(S));
+end;
+
 class function TDocRegions.StripMark(const S: string): string;
 begin
   Result:= TrimLeft(S);
@@ -1836,7 +1905,9 @@ begin
   else if StartsStr(AUTO_TYPE, Result) then
     Result:= Copy(Result, Length(AUTO_TYPE) + 1, MaxInt)
   else if StartsStr(AUTO_EXC, Result) then
-    Result:= Copy(Result, Length(AUTO_EXC) + 1, MaxInt);
+    Result:= Copy(Result, Length(AUTO_EXC) + 1, MaxInt)
+  else if StartsStr(AUTO_SUM, Result) then
+    Result:= Copy(Result, Length(AUTO_SUM) + 1, MaxInt);
 end;
 
 class function TDocRegions.IsManagedDesc(const S: string): Boolean;
@@ -1862,6 +1933,7 @@ class function TDocRegions.StripForDisplay(const S: string): string;
 begin
   Result:= StripMark(S);
   Result:= StringReplace(Result, AUTO_MARK,  '', [rfReplaceAll]);
+  Result:= StringReplace(Result, AUTO_SUM,   '', [rfReplaceAll]);
   Result:= StringReplace(Result, AUTO_BEGIN, '', [rfReplaceAll]);
   Result:= StringReplace(Result, AUTO_END,   '', [rfReplaceAll]);
   Result:= Trim(Result);
@@ -2416,7 +2488,11 @@ var
     // The budget subtracts the prefix (every line carries it) and the closing
     // tag (the last line carries it, and reserving it for all lines is the
     // cheap, still-idempotent over-approximation).
-    if Pos(AUTO_MARK, AOpen) > 0 then
+    // AUTO_SUM (v(SESSION 74)) wraps too: a harvested <summary> is engine
+    // PROSE, which is exactly what this budget exists for. Omitting it here
+    // would leave harvested summaries unwrapped the moment they stopped
+    // carrying AUTO_MARK, silently reintroducing the 759-column lines B8 fixed.
+    if (Pos(AUTO_MARK, AOpen) > 0) or (Pos(AUTO_SUM, AOpen) > 0) then
       Norm:= WrapEngineProse(Norm,
                DOC_WRAP_COLS - Length(APrefix) - Length(AClose),
                DOC_WRAP_COLS - Length(APrefix) - Length(AClose) - Length(AOpen));
@@ -3006,8 +3082,11 @@ begin
       // the harvester (v(ADP3 T7)) supplied text, and <param> never (see the
       // spec's out-of-scope note on <param> harvesting -- a fresh comment
       // never carries a <param> skeleton at all).
+      // v(SESSION 74): AUTO_SUM -- harvested prose is the engine's, and saying
+      // so lexically is what lets a later run REMOVE it when the source comment
+      // goes away without also deleting words a human typed (see AUTO_SUM).
       if AFacts.HarvestedSummary <> '' then
-        Sb.AppendLine(EmitTagged('<summary>' + AUTO_MARK, AFacts.HarvestedSummary, '</summary>'));
+        Sb.AppendLine(EmitTagged('<summary>' + AUTO_SUM, AFacts.HarvestedSummary, '</summary>'));
       // v(PHASE A3, ruling D-3): STRUCTURE ALWAYS. The comment above used to
       // read "and <param> never", on the ground that no harvester for parameter
       // descriptions existed. One does now, and more importantly the omission
@@ -3094,10 +3173,53 @@ begin
     if StandaloneSummary.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw))
        and (not IsBlankBody(SummaryRaw)) then
       Sb.AppendLine(EmitTagged('<summary>', SummaryRaw, '</summary>'))
+    // v(SESSION 74): AUTO_SUM, not AUTO_MARK. This arm is also the MIGRATION
+    // for every legacy bare-AUTO_MARK summary: reaching it means the source
+    // comment still yields prose, so the tag is the engine's, and it is
+    // re-emitted under the marker that says so. Nothing compares strings to
+    // decide that -- see AUTO_SUM's header for why a content compare was not
+    // an option.
     else if AFacts.HarvestedSummary <> '' then
-      Sb.AppendLine(EmitTagged('<summary>' + AUTO_MARK, AFacts.HarvestedSummary, '</summary>'));
-    // else: engine-owned-and-empty, or genuinely absent, and nothing
-    // harvested -- omit the tag entirely (v(ADP3 T3)).
+      Sb.AppendLine(EmitTagged('<summary>' + AUTO_SUM, AFacts.HarvestedSummary, '</summary>'))
+    // v(SESSION 74, owner ruling 2026-09-06 -- D-4 WINS OVER THE T3 DEVIATION).
+    //
+    // The arm below splits what a single bare AUTO_MARK used to conflate, and
+    // getting EITHER side wrong was reproduced before this code existed:
+    //
+    //   * AUTO_SUM + no harvest left  -> the engine's own harvested prose whose
+    //     source comment was DELETED. It must be OMITTED -- that removal is a
+    //     designed, announced behaviour ("has no source comment left to harvest
+    //     -- it will be REMOVED"), pinned by run_doc_p3_harvest_drift STEP 4.
+    //     This is what the `not IsEngineSummaryBody` clause excludes; without
+    //     it the engine's own stale prose is promoted to human-owned and the
+    //     removal silently stops working.
+    //   * AUTO_MARK + authored words  -> a human typed into an engine stub
+    //     without removing its HTML comment. D-4 calls that the human's text.
+    //     Deleting it cost 53 words out of DRagLint.Lint.Linter.pas on the real
+    //     91-file sweep, which is what kept that sweep blocked.
+    //
+    // ORDER IS THE WHOLE MECHANISM. The refill arm above runs FIRST, so the
+    // engine keeps (and re-marks) its tag whenever it still has something to
+    // say; only then does ownership get decided, and only for words the engine
+    // cannot replace.
+    //
+    // IsManagedText, deliberately, and NOT IsEngineOwnedRegardlessOfContent:
+    // the latter also answers True for the legacy 'TODO: describe.' sentinel,
+    // which is a stub and must keep being deleted (run_doc_no_todo).
+    //
+    // The marker is DROPPED, which is the second half of D-4 ("keep the
+    // words, drop the marker") and is load-bearing rather than cosmetic:
+    // leaving it would re-arm this same deletion on the next run. Ownership
+    // transfers once, and visibly in the diff. Emitting without a marker also
+    // routes past EmitTagged's WrapEngineProse call, so a human's own line
+    // breaks are not reflowed to the engine's column budget.
+    else if StandaloneSummary.HasSummaryTag and IsManagedText(SummaryRaw)
+       and (not IsEngineSummaryBody(SummaryRaw))
+       and (not IsBlankBody(SummaryRaw)) then
+      Sb.AppendLine(EmitTagged('<summary>', Trim(StripMark(SummaryRaw)), '</summary>'));
+    // else: engine-owned-and-EMPTY, or genuinely absent, and nothing
+    // harvested -- omit the tag entirely (v(ADP3 T3), narrowed above from
+    // "engine-owned" to "engine-owned and holding no authored words").
 
     // <deprecated/>: v(ADP3 T3b; review Important 2 -- message preserved).
     // Fixed order (see this function's own header remarks): <summary> ->

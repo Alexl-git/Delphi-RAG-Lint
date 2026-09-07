@@ -78,7 +78,7 @@ function Get-DocBlockAtLine([string[]]$lines, [int]$declLine1) {
 # is absent. Spans lines: EmitTagged re-prefixes continuation lines with ///.
 function Get-Summary([string]$block) {
   $flat = ($block -split "`n" | ForEach-Object { $_ -replace '^\s*///\s?','' -replace '</?para>','' }) -join ' '
-  $m = [regex]::Match($flat, '<summary>(?:<!-- drag-lint:auto -->)?\s*(.*?)\s*</summary>')
+  $m = [regex]::Match($flat, '<summary>(?:<!-- drag-lint:auto(?: sum)? -->)?\s*(.*?)\s*</summary>')
   if ($m.Success) { return ($m.Groups[1].Value -replace '\s+',' ').Trim() } else { return '' }
 }
 
@@ -137,7 +137,7 @@ $wantAlpha = 'True for a 7-bit ASCII letter (A-Z / a-z). Shared by the include-d
 Check 'HARVEST: IsAsciiAlpha''s summary is the whole comment, wrapped lines joined with single spaces' `
   ((Get-Summary $blkAlpha) -eq $wantAlpha) ("got=[" + (Get-Summary $blkAlpha) + "]")
 Check 'HARVEST: that summary carries the provenance marker (engine-owned, so --strip and drift can find it)' `
-  ($blkAlpha -match '<summary><!-- drag-lint:auto -->') ($blkAlpha -replace "`n",' | ')
+  ($blkAlpha -match '<summary><!-- drag-lint:auto sum -->') ($blkAlpha -replace "`n",' | ')
 
 # --- (2) COPY, NEVER MOVE: the original // comment is still there. ----------
 foreach ($orig in @(

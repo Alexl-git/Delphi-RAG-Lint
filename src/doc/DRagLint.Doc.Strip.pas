@@ -290,6 +290,7 @@ var
   MarkPos    : Integer;
   MarkLen    : Integer;  { length of whichever ownership marker matched }
   IsTypeMark : Boolean;  { True when it was AUTO_TYPE, not AUTO_MARK }
+  IsSumMark  : Boolean;  { True when it was AUTO_SUM  -- the engine's harvested summary }
   Closer     : string;
   RemarksOpen: Integer;
   Empty      : Boolean;
@@ -325,14 +326,18 @@ begin
     end;
 
     // Rule 1: a marked <summary>/<param>/<returns> tag, single- or multi-line.
-    // TWO ownership markers are recognised: AUTO_MARK, and AUTO_TYPE for a
-    // <param> whose body is the engine's declared-type baseline. AUTO_TYPE is
-    // NOT a superstring of AUTO_MARK, so it must be searched for explicitly --
-    // without this, every typed <param> survived --strip and the round-trip test
-    // failed (the file did not return to its pre-apply bytes).
+    // THREE ownership markers are recognised: AUTO_MARK; AUTO_TYPE for a
+    // <param> whose body is the engine's declared-type baseline; and, since
+    // v(SESSION 74), AUTO_SUM for a <summary> whose body is the engine's
+    // harvested source-comment prose. None of the three is a superstring of
+    // AUTO_MARK, so each must be searched for explicitly -- without this,
+    // every typed <param> survived --strip and the round-trip test failed (the
+    // file did not return to its pre-apply bytes). AUTO_SUM would have failed
+    // the same way, leaving every harvested summary behind.
     MarkPos:= Pos(AUTO_MARK, Line);
     MarkLen:= Length(AUTO_MARK);
     IsTypeMark:= False;
+    IsSumMark := False;
     if MarkPos = 0 then
     begin
       MarkPos:= Pos(AUTO_TYPE, Line);
@@ -340,6 +345,15 @@ begin
       begin
         MarkLen   := Length(AUTO_TYPE);
         IsTypeMark:= True;
+      end;
+    end;
+    if MarkPos = 0 then
+    begin
+      MarkPos:= Pos(AUTO_SUM, Line);
+      if MarkPos > 0 then
+      begin
+        MarkLen  := Length(AUTO_SUM);
+        IsSumMark:= True;
       end;
     end;
     if MarkPos > 0 then
@@ -360,14 +374,25 @@ begin
           // PRESERVED (marker stripped) by the write path, not owned by the
           // engine; strip must leave it COMPLETELY alone (marker included)
           // too, or the two verbs diverge (apply keeps the text, strip
-          // deletes the whole tag). <summary>/<returns> are UNCHANGED:
-          // marked always means engine-owned there, stripped
-          // unconditionally regardless of content.
+          // deletes the whole tag). <returns> is UNCHANGED: marked always
+          // means engine-owned there, stripped unconditionally regardless of
+          // content.
           // ... but that exception is about a HUMAN's text sitting inside an
           // AUTO_MARK tag. An AUTO_TYPE body is the engine's own declared-type
-          // baseline, so it is deleted unconditionally, exactly like <summary>:
-          // apply regenerates it, strip removes it, and the two verbs agree.
-          if SameText(Closer, '</param>') and (not IsTypeMark)
+          // baseline, so it is deleted unconditionally: apply regenerates it,
+          // strip removes it, and the two verbs agree.
+          //
+          // v(SESSION 74): <summary> JOINS THE EXCEPTION, on exactly the same
+          // terms, because the write path changed underneath it. A bare
+          // AUTO_MARK <summary> with a non-empty body is now PRESERVED by
+          // apply (ruling D-4 -- keep the words, drop the marker), so strip
+          // deleting the tag would make --strip a second way to destroy the
+          // very 53 words the apply-side fix just rescued. AUTO_SUM is
+          // excluded from the exception (IsSumMark): that body IS the engine's
+          // own harvested prose, so it is deleted unconditionally, exactly as
+          // AUTO_TYPE is.
+          if ((SameText(Closer, '</param>')   and (not IsTypeMark))
+           or (SameText(Closer, '</summary>') and (not IsSumMark)))
              and (not TagBodyIsEmpty(ALines, I, J, MarkPos + MarkLen, Closer)) then
           begin
             I:= J + 1;

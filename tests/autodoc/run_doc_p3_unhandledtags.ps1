@@ -194,7 +194,7 @@ try {
   Check '3. HasValueTag: exactly ONE <value> tag (preserved, not duplicated)' `
     ($null -ne $valueTagBlockAfter -and (([regex]::Matches($valueTagBlockAfter, '<value[ >]')).Count -eq 1))
   Check '3. HasValueTag FIXED (T7): the decl now carries a harvested <summary> where it previously had none' `
-    ($null -ne $valueTagBlockAfter -and $valueTagBlockAfter.Contains('<summary><!-- drag-lint:auto -->'))
+    ($null -ne $valueTagBlockAfter -and $valueTagBlockAfter.Contains('<summary><!-- drag-lint:auto sum -->'))
 
   # 4. HasSinceSeeAlsoExampleDeprecated: all four tags survive, verbatim, in
   # Task 3b's fixed emission order (no <exception> on this decl, so:

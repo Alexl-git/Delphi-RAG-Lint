@@ -27,7 +27,7 @@ unit strip_wrongsymbol;
 
 interface
 
-/// <summary><!-- drag-lint:auto -->Engine summary for Alpha.</summary>
+/// <summary><!-- drag-lint:auto sum -->Engine summary for Alpha.</summary>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Complexity: 1
@@ -36,16 +36,16 @@ interface
 function Alpha(AValue: Integer): Integer;
 function Beta(AValue: Integer): Integer;
 
-/// <summary><!-- drag-lint:auto -->Engine summary for Gamma.</summary>
+/// <summary><!-- drag-lint:auto sum -->Engine summary for Gamma.</summary>
 
 function Gamma(AValue: Integer): Integer;
 
-/// <summary><!-- drag-lint:auto -->Engine summary for Epsilon.</summary>
+/// <summary><!-- drag-lint:auto sum -->Engine summary for Epsilon.</summary>
 
 
 function Epsilon(AValue: Integer): Integer;
 
-/// <summary><!-- drag-lint:auto -->Engine summary for Zeta.</summary>
+/// <summary><!-- drag-lint:auto sum -->Engine summary for Zeta.</summary>
 // an ordinary comment line -- not blank, and not a declaration
 function Zeta(AValue: Integer): Integer;
 

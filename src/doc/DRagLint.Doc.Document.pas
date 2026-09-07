@@ -654,7 +654,12 @@ begin
       surviving after its `raise` was deleted -- the tag froze instead of being
       removed, which is the behaviour ruling D-4's emptiness test used to give
       for free. }
-    if (Pos(AUTO_MARK, L) = 0) and (Pos(AUTO_EXC, L) = 0) then Exit(False);
+    { AUTO_SUM (v(SESSION 74)) joins the list for exactly the reason the block
+      above gives for AUTO_EXC: it is deliberately not a superstring of
+      AUTO_MARK either, so a comment whose only content is a harvested
+      <summary> would otherwise score Pos(AUTO_MARK) = 0 and fail closed. }
+    if (Pos(AUTO_MARK, L) = 0) and (Pos(AUTO_EXC, L) = 0)
+       and (Pos(AUTO_SUM, L) = 0) then Exit(False);
     Inc(I);
   end;
   Result:= True;

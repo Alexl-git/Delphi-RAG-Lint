@@ -2,9 +2,38 @@
   run_doc_p3_markededit.ps1 -- Auto-Document Phase 3, Task 3 (review follow-up,
   Finding 1 -- REVISED after the coordinator's own reversal, round 2):
   a marked tag carrying real post-marker content is preserved (marker
-  stripped) for <param> ONLY. <summary>/<returns> revert to the ORIGINAL
-  Task 3 rule: marked means engine-owned, full stop, regardless of what
-  follows the marker.
+  stripped) for <param> and -- since session 74 -- <summary>. <returns>
+  still follows the ORIGINAL Task 3 rule: marked means engine-owned, full
+  stop, regardless of what follows the marker.
+
+  ============================================================================
+  SESSION 74 (owner ruling, 2026-09-06): <summary> MOVED SIDES. READ THIS
+  BEFORE "RESTORING" ASSERTION 1.
+  ============================================================================
+  The rule below -- "<summary> reverts to marked-means-engine-owned" -- was a
+  deliberate, twice-adjudicated decision, and it was WRONG in a way no fixture
+  could show. On the real 91-file sweep it deleted 53 words of a developer's
+  prose out of DRagLint.Lint.Linter.pas (HarvestExceptions): someone had typed
+  into an engine stub without removing its HTML comment, which is precisely the
+  shape ruling D-4 calls a HUMAN's text. That was 53 of the 54 authored words
+  the sweep still destroyed after session 73's stacked-region fix, and it is
+  what kept the sweep blocked.
+
+  The owner decided D-4 wins. The engine may now drop a marked <summary> ONLY
+  when it holds no authored words -- i.e. when it is blank, or when the engine
+  has something harvested to refill it with. Words it CANNOT replace are the
+  human's: keep them, drop the marker.
+
+  WHAT DID NOT CHANGE, and why the reasoning below is still worth reading:
+  <returns> keeps the old rule (assertion 3), because the engine always has its
+  own mined content to write there -- the "a human edit is not separable from
+  the source changing" argument still holds when there IS competing engine
+  text. It is only the nothing-to-refill-with case that changed. The narrower
+  rule and its regression guard live in run_doc_p3_marked_prose_survives.ps1,
+  which also pins that a REFILLABLE marked summary still refreshes (102 of
+  those existed in src\ at the time, none with a blank body -- a blanket
+  reading would have frozen every one).
+  ============================================================================
 
   History: an earlier round of this fix tried to preserve marked+content for
   ALL THREE tags via an exact-string compare against freshly generated text
@@ -38,10 +67,10 @@
       a fresh-to-repair transition, and idempotency holds.
 
   Drives `index` -> `document --unit --apply` and asserts:
-    1. Foo's <summary> is GONE entirely -- marked, engine-owned, nothing
-       harvested to refill it (v(ADP3 T3) omit-when-empty); the human's
-       typed sentence is NOT preserved (this is the plan's own recorded,
-       deliberate deviation, not a bug).
+    1. Foo's <summary> SURVIVES with the human's typed sentence, UNMARKED --
+       marked, but holding authored words the engine has nothing to refill it
+       with, so D-4 governs (session 74; this assertion previously pinned the
+       exact opposite -- see the banner above before changing it back).
     2. Foo's <param name="AValue"> SURVIVES with its typed sentence,
        UNMARKED (marker stripped) -- the one narrow exception.
     3. Foo's <returns> is REGENERATED to the engine's own mined Observed
@@ -105,10 +134,16 @@ try {
   $fooBlock = Get-DocBlockAbove $lines '^function Foo\(AValue: Integer\): Integer;'
   Check 'Foo decl found' ($null -ne $fooBlock)
 
-  Check '1. Foo <summary> is GONE (marked = engine-owned regardless of content; nothing harvested)' `
-    ($null -eq $fooBlock -or (-not ($fooBlock -match '<summary>')))
-  Check "1. Foo's typed summary sentence does NOT survive anywhere (deliberate, plan-sanctioned loss)" `
-    (-not ($lines -join "`n").Contains('A developer typed this after the marker.'))
+  # v(SESSION 74) -- REVERSED BY OWNER RULING, deliberately. See this file's
+  # header. Was: "Foo's <summary> is GONE, and the typed sentence does not
+  # survive anywhere (plan-sanctioned loss)". The plan's sanction did not
+  # survive contact with real source: the same arm deleted 53 words out of
+  # DRagLint.Lint.Linter.pas on the 91-file sweep. D-4 now governs, and the
+  # engine may only drop a marked <summary> that holds no authored words.
+  Check '1. Foo <summary> SURVIVES with its typed sentence (D-4: marked + authored = the human''s)' `
+    ($null -ne $fooBlock -and ($fooBlock -match '<summary>') -and ($fooBlock -match 'A developer typed this after the marker\.'))
+  Check "1. Foo's <summary> is now UNMARKED -- ownership transferred, so the next run cannot re-delete it" `
+    ($null -ne $fooBlock -and (-not ($fooBlock -match [regex]::Escape('<summary>' + $MARK))))
 
   Check '2. Foo <param name="AValue"> SURVIVES with its typed text, unmarked (the one exception)' `
     (($lines | Where-Object { $_.Trim() -eq '/// <param name="AValue">Also typed after the marker.</param>' }).Count -eq 1)

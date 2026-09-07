@@ -1132,7 +1132,16 @@ begin
     begin
       var CurSummary: string:= CollapseAllWhitespace(TDocRegions.StripMark(ADoc.Summary));
       var FreshHarv : string:= CollapseAllWhitespace(Facts.HarvestedSummary);
-      if (CurSummary <> '') and (FreshHarv = '') then
+      // v(SESSION 74): the removal prediction is gated on AUTO_SUM, because
+      // that is now exactly when MergeComment actually removes. A bare
+      // AUTO_MARK <summary> holding authored words is PRESERVED by apply
+      // (ruling D-4), so predicting "it will be REMOVED" for one would be a
+      // false finding of the most alarming kind -- it tells a developer their
+      // prose is about to be deleted when it is not. TDocRegions.
+      // IsEngineSummaryBody rather than a local marker test, for the
+      // desync reason this check's own header records.
+      if (CurSummary <> '') and (FreshHarv = '')
+         and TDocRegions.IsEngineSummaryBody(ADoc.Summary) then
         Findings.Add(MakeFinding(ddHarvestDrift,
           Format('managed <summary> on "%s" has no source comment left to harvest -- ' +
                  'it will be REMOVED (doc has: "%s")', [ASym.QualifiedName, CurSummary]),
