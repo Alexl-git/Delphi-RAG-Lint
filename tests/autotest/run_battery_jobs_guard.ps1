@@ -181,6 +181,66 @@ Check 'every rules-writer carries dl:serial' ($unquarantined.Count -eq 0) `
   ("unquarantined: " + (($unquarantined | ForEach-Object { $_.Name }) -join ', '))
 
 Write-Host ''
+Write-Host 'No two runners share a FIXED scratch directory' -ForegroundColor Cyan
+# THE QUESTION THE 2026-08-30 CENSUS DID NOT ASK.
+#
+# That census established "zero runners write the staged exe" (check 3 above)
+# and was read as clearing the tree for parallelism. It cleared exactly what it
+# asked. A runner that wipes its own scratch directory recursively at startup
+# is perfectly safe alone and destroys a sibling's fixtures mid-run if the two
+# happen to have picked the same fixed name.
+#
+# Measured 2026-09-07 across 481 runners: 444 distinct literal scratch names,
+# and exactly ONE genuine collision -- run_helper_edges.ps1 and
+# run_helper_method_edges.ps1 both on $env:TEMP\drag-lint-helper-edges, added
+# 2026-08-30, i.e. AFTER the census that had cleared the tree. Renamed in the
+# same change as this check. One collision is a rename; the absence of a check
+# is why nobody noticed for a week.
+#
+# Deliberately narrow: only FIXED literal names under a temp root. A directory
+# built with a GUID or a PID is unique by construction and is skipped, so this
+# cannot nag about the safe idiom.
+$scratchRe = '(?:\$env:TEMP|\$env:TMP|C:\\TEMP)\\([A-Za-z0-9._-]+)'
+$byName    = @{}
+foreach ($f in @(Get-ChildItem -Path $testsRoot -Recurse -File -Filter 'run_*.ps1')) {
+  $inBlockComment = $false
+  foreach ($line in (Get-Content -LiteralPath $f.FullName)) {
+    # COMMENTS ARE NOT CODE. Caught red-handed the first time this ran: the
+    # block comment above NAMES the colliding directory, so the scan reported
+    # this very guard as one of the two owners. A text scan that cannot tell
+    # prose from code is the recurring shape of a false finding in this repo.
+    if ($inBlockComment) { if ($line -match '#>') { $inBlockComment = $false }; continue }
+    if ($line -match '<#') { if ($line -notmatch '#>') { $inBlockComment = $true }; continue }
+    if ($line -match '^\s*#') { continue }
+    # A GUID/PID on the same line makes the path unique per run, not fixed.
+    if ($line -match 'Guid|GetRandomFileName|\$PID|ProcessId') { continue }
+    foreach ($m in [regex]::Matches($line, $scratchRe)) {
+      $name = $m.Groups[1].Value.ToLowerInvariant()
+      if (-not $byName.ContainsKey($name)) { $byName[$name] = New-Object 'System.Collections.Generic.HashSet[string]' }
+      [void]$byName[$name].Add($f.Name)
+    }
+  }
+}
+$shared = @($byName.GetEnumerator() | Where-Object { $_.Value.Count -gt 1 })
+# A collision between two runners that are BOTH quarantined can never happen in
+# parallel, so it is not a defect -- report it, do not fail on it.
+$unsafe = @($shared | Where-Object {
+  $owners = @($_.Value)
+  $parallel = @($owners | Where-Object {
+    $path = @(Get-ChildItem -Path $testsRoot -Recurse -File -Filter $_ | Select-Object -First 1).FullName
+    $path -and ((SerialReason $path) -eq '')
+  })
+  $parallel.Count -gt 1
+})
+Check 'the scratch-path scan found paths at all (vacuity)' ($byName.Count -gt 0) `
+  "distinct fixed scratch names: $($byName.Count) -- 0 would mean the regex stopped matching and this check proves nothing"
+Check 'no fixed scratch directory is shared by two parallel-eligible runners' ($unsafe.Count -eq 0) `
+  (($unsafe | ForEach-Object { "$($_.Key) <- " + (@($_.Value) -join ', ') }) -join ' ; ')
+if ($shared.Count -gt $unsafe.Count) {
+  Write-Host ("  [note] $($shared.Count - $unsafe.Count) shared name(s) are safe because their owners are all dl:serial") -ForegroundColor DarkGray
+}
+
+Write-Host ''
 Write-Host 'POSITIVE CONTROL -- a planted unmarked proxy runner makes this FAIL' -ForegroundColor Cyan
 # Without this, every assertion above passes when the marker regex matches
 # nothing at all.

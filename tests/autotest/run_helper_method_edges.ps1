@@ -32,7 +32,14 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\drag-lint-helper-edges"
+  # NOT 'drag-lint-helper-edges' -- that is run_helper_edges.ps1's directory,
+  # and this runner wipes its WorkDir recursively at startup (line ~47). Two
+  # runners sharing one fixed scratch name means whichever starts second
+  # deletes the other's fixtures mid-run. Measured 2026-09-07: this was the
+  # ONLY genuine collision among 444 distinct literal scratch names across 481
+  # runners, and it was introduced on 2026-08-30, after the census that had
+  # cleared the tree. run_battery_jobs_guard.ps1 now asserts uniqueness.
+  [string]$WorkDir = "$env:TEMP\drag-lint-helper-method-edges"
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
