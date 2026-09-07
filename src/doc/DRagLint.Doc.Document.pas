@@ -1145,7 +1145,8 @@ begin
       Reported as daUnchanged, not daRemoved: nothing was removed, and D1's
       whole point is that a deletion must stay distinguishable from a repair. }
     if Existing.HasContent and RegionFullyEngineOwned(Region.RawText)
-       and TSharedFacts.HoldsForeignInboundEntries(Existing.Remarks, AStore, Path) then
+       and TSharedFacts.HoldsForeignInboundEntries(
+             TSharedFacts.StoredBlockBody(Existing.Remarks), AStore, Path) then
     begin
       Result.Action:= daUnchanged;
       Exit;

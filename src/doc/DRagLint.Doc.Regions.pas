@@ -828,7 +828,10 @@ uses
   // heuristic. No circularity: this unit does not depend on DRagLint.Doc.Regions.
   DRagLint.Parser.DocComments,
   // v(ADP3 T3b review, Critical 1 fix): StripElement's TRegEx.
-  System.RegularExpressions;
+  System.RegularExpressions,
+  // JoinRefs sorts its rendered entries through the ONE shared comparator, so
+  // the writer and the merge cannot drift into two orders again.
+  System.Generics.Collections, System.Generics.Defaults, DRagLint.Doc.SharedFacts;
 
 // v(ADP3 T7): emits AHarvested (harvested prose beyond the first paragraph)
 // into an already-open <remarks> element, one APrefix-prefixed line per line,
@@ -2221,22 +2224,50 @@ var
   // uniformly uncertain in the first place -- is the D5 follow-up; Confidence
   // itself, the Facts builder's certain-before-uncertain ORDERING, the display
   // cap and the '(+N more)' suffix are all untouched.
+  { CANONICAL ORDER, AND THE SORT RUNS AFTER THE CAP.
+
+    Order. The fresh render used to join in STORE order while the merge path
+    re-joined the same entries SORTED, so a type block was written one way on
+    its first apply and the other way on its second -- ~130 inbound lines in
+    this repo, and it read as the writer being non-deterministic. Both sides
+    now route through TSharedFacts.CompareInboundEntries, so the merge is a
+    no-op on text this function produced.
+
+    AFTER the cap, not before, and this is the load-bearing half. A is ALREADY
+    truncated by the caller; sorting the entries here reorders what is shown
+    without changing WHICH callers are shown. Sorting before the cap would
+    silently change the membership of every truncated line in every repo --
+    a content change dressed up as a formatting one.
+
+    Entry strings are built BEFORE the sort because the ' ?' suffix depends on
+    the whole-list Mixed survey, so an entry cannot be rendered in isolation. }
   function JoinRefs(const A: TArray<TDocFactRef>): string;
-  var i: Integer; AnyCertain, AnyUncertain, Mixed: Boolean;
+  var
+    i: Integer;
+    AnyCertain, AnyUncertain, Mixed: Boolean;
+    Rendered: TArray<string>;
   begin
-    Result:= '';
     AnyCertain  := False;
     AnyUncertain:= False;
     for i:= 0 to High(A) do
       if IsCertain(A[i]) then AnyCertain:= True else AnyUncertain:= True;
     Mixed:= AnyCertain and AnyUncertain;
+
+    SetLength(Rendered, Length(A));
     for i:= 0 to High(A) do
     begin
-      if i > 0 then Result:= Result + ', ';
-      Result:= Result + EscXml(A[i].Display) + ' (' + EscXml(A[i].Location) + ')';
+      Rendered[i]:= EscXml(A[i].Display) + ' (' + EscXml(A[i].Location) + ')';
       if Mixed and not IsCertain(A[i]) then
-        Result:= Result + ' ?';
+        Rendered[i]:= Rendered[i] + ' ?';
     end;
+
+    TArray.Sort<string>(Rendered, TComparer<string>.Construct(
+      function(const X, Y: string): Integer
+      begin
+        Result:= TSharedFacts.CompareInboundEntries(X, Y);
+      end));
+
+    Result:= string.Join(', ', Rendered);
   end;
   // v(PHASE C, B8): the single emission point for a facts-block line.
   //

@@ -125,7 +125,7 @@ type
     /// whether the unit is marked.</param>
     /// <returns>True to report `doc-drift`.</returns>
     /// <remarks>
-    /// <para>An INBOUND list (`Called from: `, `Used by:`, `Used in units:`) is
+    /// <para>An INBOUND list (`Called from:`, `Used by:`, `Used in units:`) is
     /// compared as a SET for EVERY unit -- owner ruling 2026-09-06, "order is
     /// not important, we should compare parts". Reordering entries is therefore
     /// not drift. Everything else in the block keeps the whitespace-collapsed
@@ -138,8 +138,7 @@ type
     /// marked `dl:shared`, where another project may legitimately have written
     /// it; on an unmarked unit it is a stale entry and still drift.</para>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Used by: `
-    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), `</para>
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
     /// <para>Calls: DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutParaLabel, LowerCase</para>
     /// <para>Returns: CollapseWs(AStored) &lt;&gt; CollapseWs(AFresh); False</para>
     /// <para>Complexity: 27 (cyclomatic, outer body), 161 lines (full implementation)</para>
@@ -214,7 +213,7 @@ type
     /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function HoldsForeignInboundEntries(const AStoredRemarks: string;
+    class function HoldsForeignInboundEntries(const AStoredBody: string;
       const AStore: ISymbolStore; const AUnitPath: string): Boolean;
 
     /// <summary>True when regenerating this block would DELETE stored fact
@@ -241,7 +240,7 @@ type
     /// production AND tests therefore regenerates to a strict subset, for ever,
     /// with no code change involved.</para>
     /// <para>TWO SHAPES, MEASURED, and the second is the larger loss.
-    /// `Called from: ` / `, ` / `Used by:` / `Used in units:` are NARROWED entry by
+    /// `Called from:` / `Used by:` / `Used in units:` are NARROWED entry by
     /// entry. `Covered by:` is DELETED WHOLE -- it names tests by definition, so
     /// a closure index reproduces none of it, and it is not in INBOUND_LABELS,
     /// so the entry-level forgiveness never sees it. On DataCopy one such line
@@ -253,9 +252,7 @@ type
     /// run_doc_drift_unseen_units.ps1 and it is what stops this predicate from
     /// degenerating into "never fixable".</para>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Used in units: ` are NARROWED entry by entry. `
-    /// Used by: ` / `
-    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), ` / `</para>
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
     /// <para>Calls: DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase, Trim</para>
     /// <para>Returns: False; True</para>
     /// <para>Complexity: 12 (cyclomatic, outer body), 88 lines (full implementation)</para>
@@ -269,6 +266,28 @@ type
     /// </remarks>
     class function RegenerationDropsUnvouchable(const AStored, AFresh: string;
       const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+
+    /// <summary>Orders one rendered inbound entry against another.</summary>
+    /// <param name="X">A rendered entry, e.g. 'A.B.Foo (A.B.pas)'.</param>
+    /// <param name="Y">The entry to compare it against.</param>
+    /// <returns>&lt;0, 0 or &gt;0, as CompareText.</returns>
+    /// <remarks>THE writer's order and THE merge's order must be one function.
+    /// While the render joined in store order and the merge re-joined sorted,
+    /// every type block was written once one way and once the other -- a
+    /// one-time reorder of ~130 inbound lines in this repo that looked like
+    /// non-determinism. Two comparators is the mirrored-predicate trap; there
+    /// is deliberately only one, and both callers route through it.</remarks>
+    class function CompareInboundEntries(const X, Y: string): Integer; static;
+
+    /// <summary>The engine-owned body of a STORED doc block: the text strictly
+    /// between the BEGIN and END markers, or '' when there is no such pair.</summary>
+    /// <param name="AText">Stored remarks, exactly as they appear in source.</param>
+    /// <returns>The fenced body, or '' when the block has never been written.</returns>
+    /// <remarks>Exposed because the CALLER must decide whether it holds whole
+    /// remarks or an already-extracted body -- see HoldsForeignInboundEntries.
+    /// Returning '' for unfenced text is the point, not an edge case: it is what
+    /// stops a human's prose from being parsed as facts.</remarks>
+    class function StoredBlockBody(const AText: string): string; static;
   end;
 
 implementation
@@ -390,20 +409,99 @@ begin
   end;
 end;
 
-{ The managed block's BODY -- what lies between the BEGIN and END markers.
-  Returns AText unchanged when there are no markers, which is the right answer for
-  a freshly rendered block that has not been wrapped in them yet. }
-function ExtractBlockBody(const AText: string): string;
+{ The managed block's body as it exists in ALREADY STORED text -- and '' when
+  there is no BEGIN..END pair at all.
+
+  IT REPLACED A FORGIVING TWIN. The previous ExtractBlockBody returned AText
+  unchanged when there were no markers -- right for a freshly RENDERED block that
+  has not been wrapped yet, and exactly wrong applied to STORED text, which was
+  its only remaining caller: a declaration that has never been documented
+  has no fence, so the whole of the human's remarks was handed to the fact
+  parser, and a human's backticked MENTION of a label -- '(`Called from:`,
+  `Used by:`)' -- was read as a fact and merged in as real entries. That reaches
+  a FIXED POINT on the first apply and never heals, and it wrote three junk fact
+  lines into this repo's own source in the b42a7e7 sweep.
+
+  THE FENCE IS THE SCOPE. It is the same lexical-ownership rule AUTO_SUM /
+  AUTO_TYPE / AUTO_EXC apply to tags: inside the markers is the engine's, outside
+  is the human's, and a label outside them is prose. }
+function StoredBlockBody(const AText: string): string;
 var
   B, E: Integer;
 begin
-  Result:= AText;
+  Result:= '';
   B:= Pos(AUTO_BEGIN, AText);
   if B = 0 then Exit;
   Inc(B, Length(AUTO_BEGIN));
   E:= PosEx(AUTO_END, AText, B);
   if E = 0 then Exit;
   Result:= Copy(AText, B, E - B);
+end;
+
+{ Could this text BE the name of a caller in some other project?
+
+  A foreign entry is preserved precisely because THIS index cannot check it, so
+  the default is to keep it -- but that fail-safe only makes sense for text that
+  could be a name at all. 'Used by: `' cannot be a caller in any project, in any
+  language, ever; preserving it forever is not caution, it is a fixed point that
+  never heals. Three such lines reached this repo's own committed source.
+
+  DELIBERATELY A REJECTION TEST, NOT AN ACCEPTANCE TEST, and that asymmetry is
+  the whole design. A wrong REJECT silently deletes a caller only another
+  project can see, which nothing can recover; a wrong ACCEPT preserves one junk
+  line, which the fence scoping already stops being created. So this asks only
+  'could this be a name', and an acceptance whitelist was tried first and
+  discarded: it spelled out the character set of a qualified name and thereby
+  rejected the OVERLOAD form this repo renders in its own source --
+  'DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)'. Escaped
+  generics ('TFoo&lt;T&gt;') would have been the next casualty.
+
+  A name is therefore anything that STARTS like an identifier and contains no
+  whitespace and no backtick. Every junk entry observed fails on the first
+  character or on a space; every real entry passes. }
+function PlausibleEntry(const AEntry: string): Boolean;
+var
+  S: string ;
+  I: Integer;
+  P: Integer;
+begin
+  Result:= False;
+  S:= Trim(AEntry);
+  if EndsText(UNCERTAIN_SUFFIX, S) then
+    S:= TrimRight(Copy(S, 1, Length(S) - Length(UNCERTAIN_SUFFIX)));
+
+  { drop the parenthesised location, which legitimately holds no spaces either }
+  P:= LastDelimiter('(', S);
+  if (P > 0) and (LastDelimiter(')', S) > P) then S:= TrimRight(Copy(S, 1, P - 1));
+
+  if S = '' then Exit;
+  if not CharInSet(S[1], ['A'..'Z', 'a'..'z', '_']) then Exit;
+  for I:= 1 to Length(S) do
+    if CharInSet(S[I], [#9, #10, #13, ' ', '`']) then Exit;
+  Result:= True;
+end;
+
+{ The line indexes of the managed fence in ALines: the first line holding the
+  BEGIN marker and the first line at or after it holding END, or -1 for either
+  when absent.
+
+  THE FENCE IS THE SCOPE, on the text being written as well as on the text
+  already stored. Rewriting a line merely because it CONTAINS a label is what
+  put a space inside a human's backticks -- '`Called from: `' -- when their
+  prose only MENTIONED one. Outside the markers a label is text.
+
+  Extracted rather than inlined because MergeInboundFacts is already at the
+  cyclomatic and cognitive limits, and this scan pushed it over both (33/30 and
+  67/65, measured). }
+procedure FenceBounds(const ALines: TStrings; out ABeginAt, AEndAt: Integer);
+var
+  I: Integer;
+begin
+  ABeginAt:= -1;
+  AEndAt  := -1;
+  for I:= 0 to ALines.Count - 1 do
+    if (ABeginAt < 0) and (Pos(AUTO_BEGIN, ALines[I]) > 0) then ABeginAt:= I
+    else if (ABeginAt >= 0) and (AEndAt < 0) and (Pos(AUTO_END, ALines[I]) > 0) then AEndAt:= I;
 end;
 
 function IsTruncated(const AContent: string): Boolean;
@@ -512,6 +610,32 @@ begin
   end;
 end;
 
+{ Where a fact's content ENDS: the earlier of the next label and the next tag,
+  or one past the end of AFlat when there is neither.
+
+  BOTH terminators are required, and this is the third time this repo has had to
+  promote a hand-expanded twin into a shared function. A fact's content is plain
+  text: JoinRefs and JoinEsc escape every rendered entry, so a stored inbound
+  line can carry '&lt;' but never a raw '<' outside a tag. A '<' after a label
+  therefore ALWAYS begins the next element -- most often a <seealso .../>, which
+  survives the <para> strip and is not in ALL_LABELS. Stopping only at the next
+  label made a label followed by crefs run to the end of the block and swallow
+  them, and the swallowed blob then read as an entry no index could vouch for.
+  That one over-long slice was four filed defects: the growing
+  `<para>Used in units: X, X <seealso/>...</para>`, a decayed type's facts block
+  that could never be reaped, a phantom block the checker could not even see,
+  and the one-time reordering of every inbound list. See
+  tests\autodoc\run_doc_fact_terminator.ps1. }
+function FactContentEnd(const AFlat: string; AFrom: Integer): Integer;
+var
+  TagAt: Integer;
+begin
+  Result:= NextLabelPos(AFlat, AFrom);
+  if Result = 0 then Result:= Length(AFlat) + 1;
+  TagAt:= PosEx('<', AFlat, AFrom);
+  if (TagAt > 0) and (TagAt < Result) then Result:= TagAt;
+end;
+
 { Splits a block -- flattened or multi-line, both work -- into the three inbound
   facts plus a RESIDUAL holding everything else, collapsed. The residual is what
   keeps intrinsic facts on byte-compare semantics. }
@@ -555,8 +679,7 @@ begin
         Break;
       end;
       Sb.Append(Copy(Text, Pos1, LP - Pos1));
-      Stop:= NextLabelPos(Text, LP + Length(Lab));
-      if Stop = 0 then Stop:= Length(Text) + 1;
+      Stop:= FactContentEnd(Text, LP + Length(Lab));
       AInbound.AddOrSetValue(Lab, Trim(Copy(Text, LP + Length(Lab), Stop - LP - Length(Lab))));
       Pos1:= Stop;
     end;
@@ -831,7 +954,15 @@ begin
   end;
 end;
 
-class function TSharedFacts.HoldsForeignInboundEntries(const AStoredRemarks: string;
+{ TAKES THE BLOCK BODY, NOT THE WHOLE REMARKS -- the CALLER extracts.
+
+  It cannot extract for itself, because its two callers hold different things:
+  TDocumenter has the whole stored remarks, while BlockDrifted has already
+  extracted a body. A StoredBlockBody call in here returns '' for the second
+  one -- silently switching OFF the empty-render forgiveness, so a block naming
+  a unit the index cannot see starts reporting drift. Caught by
+  run_doc_drift_unseen_units (CASE-A) and run_doc_drift_extra_stores (#3). }
+class function TSharedFacts.HoldsForeignInboundEntries(const AStoredBody: string;
   const AStore: ISymbolStore; const AUnitPath: string): Boolean;
 var
   SIn : TFactMap;
@@ -842,9 +973,9 @@ var
   I   : Integer ;
 begin
   Result:= False;
-  if not Participates(AStore, AUnitPath, AStoredRemarks) then Exit;
+  if not Participates(AStore, AUnitPath, AStoredBody) then Exit;
 
-  ParseBlock(AStoredRemarks, SIn, SRes);
+  ParseBlock(AStoredBody, SIn, SRes);
   try
     for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
     begin
@@ -880,6 +1011,9 @@ var
   Suffix    : string;   { the fact line's closing </para>, if P8 wrapped it }
   Changed   : Boolean;
   BeginAt   : Integer;
+  EndAt     : Integer;
+  LastAt    : Integer;
+  FirstAt   : Integer;
 
   { The entries STORED holds that this project cannot see -- exactly the set
     BlockDrifted forgives. If the two ever disagree, the writer rewrites a block
@@ -896,6 +1030,7 @@ var
       for E in AAlready do Seen.AddOrSetValue(LowerCase(E), 1);
       for E in SplitEntries(AStoredContent) do
         if (not Seen.ContainsKey(LowerCase(E))) and
+           PlausibleEntry(E) and
            (not UnitVouchable(AStore, E)) and
            (not IsUncertainEntry(E)) then
         begin
@@ -921,7 +1056,7 @@ var
       L.Sort(TComparer<string>.Construct(
         function(const X, Y: string): Integer
         begin
-          Result:= CompareText(X, Y);
+          Result:= TSharedFacts.CompareInboundEntries(X, Y);
         end));
       Result:= string.Join(', ', L.ToArray);
     finally
@@ -932,7 +1067,7 @@ var
 begin
   Result:= ADocText;
   if (AStore = nil) or (AStoredRemarks = '') then Exit;
-  if not Participates(AStore, AUnitPath, AStoredRemarks) then Exit;
+  if not Participates(AStore, AUnitPath, StoredBlockBody(AStoredRemarks)) then Exit;
 
   { PARSE THE BLOCK BODY, NOT THE WHOLE REMARKS. The remarks continue past
     AUTO_END, and ParseBlock ends a fact at the next LABEL -- so when the last
@@ -948,25 +1083,31 @@ begin
     The unit test missed it because every fixture block ended with 'Pure', which
     IS a label, so the slice stopped in time -- see the regression fixture whose
     block ends on the inbound line itself. }
-  ParseBlock(ExtractBlockBody(AStoredRemarks), SIn, SRes);
+  ParseBlock(StoredBlockBody(AStoredRemarks), SIn, SRes);
   try
     { A block may carry NOTHING but an unvouchable label -- a `Covered by:` with
       no inbound entries at all -- and that block still has something to
       preserve, so the inbound count alone cannot decide there is no work. }
     if (SIn.Count = 0) and
-       (not BlockHoldsUnvouchable(AStore, ExtractBlockBody(AStoredRemarks))) then Exit;
+       (not BlockHoldsUnvouchable(AStore, StoredBlockBody(AStoredRemarks))) then Exit;
 
     Changed:= False;
     Lines  := TStringList.Create;
     Handled:= TDictionary<string, Byte>.Create;
     try
       Lines.Text:= ADocText;   { TStringList round-trips the trailing EOL state }
-      BeginAt   := -1;
+      FenceBounds(Lines, BeginAt, EndAt);
+      { An EMPTY RANGE rather than a guarded loop: wrapping the loop in
+        'if BeginAt >= 0' costs a nesting level, and this routine is at the
+        deep-nesting limit. No fence -> FirstAt 0, LastAt -1 -> nothing runs. }
+      if BeginAt >= 0 then FirstAt:= BeginAt + 1 else FirstAt:= 0;
+      if EndAt >= 0 then LastAt:= EndAt - 1
+      else if BeginAt >= 0 then LastAt:= Lines.Count - 1
+      else LastAt:= -1;
 
-      for I:= 0 to Lines.Count - 1 do
+      for I:= FirstAt to LastAt do
       begin
         Line:= Lines[I];
-        if (BeginAt < 0) and (Pos(AUTO_BEGIN, Line) > 0) then BeginAt:= I;
 
         for J:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
         begin
@@ -1039,7 +1180,7 @@ begin
         for J:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
         begin
           Lab:= UNVOUCHABLE_LABELS[J];
-          SC := LabelContent(ExtractBlockBody(AStoredRemarks), Lab);
+          SC := LabelContent(StoredBlockBody(AStoredRemarks), Lab);
           if SC = '' then Continue;
           if LabelContent(ADocText, Lab) <> '' then Continue;
           Prefix:= Copy(Lines[BeginAt], 1, Pos(AUTO_BEGIN, Lines[BeginAt]) - 1);
@@ -1129,31 +1270,32 @@ begin
 end;
 
 { The content a label carries in a flattened block, or '' when the label is
-  absent. Slices to the NEXT label of any kind, exactly as ParseBlock does, so a
-  label sitting between two others is not swallowed. }
+  absent. Slices with FactContentEnd, exactly as ParseBlock does, so a label
+  sitting between two others -- or followed by crefs -- is not swallowed.
+
+  This function carried the tag-stop clause privately for a while and ParseBlock
+  did not, which is precisely how the two drifted apart. They now share it. }
 function LabelContent(const AText, ALabel: string): string;
 var
-  P, Stop, TagAt: Integer;
-  Flat          : string;
+  P, Stop: Integer;
+  Flat   : string;
 begin
   Result:= '';
   Flat  := CollapseWs(AText.Replace('<para>', '').Replace('</para>', ''));
   P     := Pos(ALabel, Flat);
   if P = 0 then Exit;
-  Stop:= NextLabelPos(Flat, P + Length(ALabel));
-  if Stop = 0 then Stop:= Length(Flat) + 1;
-
-  { STOP AT THE NEXT TAG AS WELL AS THE NEXT LABEL. <seealso .../> survives the
-    <para> strip above and is not in ALL_LABELS, so a label followed by crefs
-    had no next label at all and the content ran to the end of the block --
-    swallowing the crefs. The writer's carry-over then emitted
-    `<para>Covered by: X <seealso/> <seealso/></para>` and duplicated the crefs
-    below it. A fact's content is plain text; a '<' after it begins the next
-    element. }
-  TagAt:= PosEx('<', Flat, P + Length(ALabel));
-  if (TagAt > 0) and (TagAt < Stop) then Stop:= TagAt;
-
+  Stop:= FactContentEnd(Flat, P + Length(ALabel));
   Result:= Trim(Copy(Flat, P + Length(ALabel), Stop - P - Length(ALabel)));
+end;
+
+class function TSharedFacts.StoredBlockBody(const AText: string): string;
+begin
+  Result:= DRagLint.Doc.SharedFacts.StoredBlockBody(AText);
+end;
+
+class function TSharedFacts.CompareInboundEntries(const X, Y: string): Integer;
+begin
+  Result:= CompareText(X, Y);
 end;
 
 class function TSharedFacts.RegenerationDropsUnvouchable(const AStored, AFresh: string;

@@ -64,6 +64,48 @@ function Get-Violations([string[]]$lines, [string]$file) {
   return ,$out
 }
 
+# SHAPE 2 (session 76) -- a fact line that could only have come from a human's
+# prose. A generated inbound entry is a qualified name and an optional
+# '(file.pas)'; it can never contain a backtick, and it can never contain a
+# marker comment. Both mean the fact parse ran outside the fence and merged the
+# human's words in as entries -- which reaches a FIXED POINT on the first apply
+# and so never heals on its own.
+#
+# SCOPED TO THE FENCE, not to '///'. That is a stronger boundary than shape 1's
+# and it is required here: DRagLint.Doc.SharedFacts.pas quotes this very shape
+# on a '///'-prefixed line INSIDE a brace comment while explaining the fix
+# (search 'YadfMain'), so a '///'-anchored scan flags the explanation and the
+# guard becomes a liar about its own repo. Only text between AUTO_BEGIN and
+# AUTO_END is engine-owned, and the quoted example is not inside a real fence.
+function Get-FenceViolations([string[]]$lines, [string]$file) {
+  $out = @(); $inFence = $false
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    $l = $lines[$i]
+    if ($l -match '///.*drag-lint:auto BEGIN') { $inFence = $true; continue }
+
+    # A line that is BOTH a fact and a terminator is the YADF shape -- the END
+    # marker swallowed into the fact's own content -- so it must be judged
+    # BEFORE it is allowed to close the fence, or the worst case is the one case
+    # that escapes. (Caught by this guard's own positive control.)
+    #
+    # It must still be inside an OPENED fence to count. The brace comment at
+    # DRagLint.Doc.SharedFacts.pas:1031 quotes exactly this shape, END marker
+    # and all, with no BEGIN above it -- judging a stray END line on its own
+    # flags that explanation and the guard starts lying about its own repo.
+    $isEnd = $l -match '///.*drag-lint:auto END'
+    $hit = $false
+    if ($inFence -and ($l.TrimStart() -match '^///')) {
+      $text = ($l -replace '^\s*///\s*', '') -replace '^<para>', ''
+      if ($text -match '^(Called from|Used by|Used in units):') {
+        if ($text -match '[`]' -or $text -match '<!--') { $hit = $true }
+      }
+    }
+    if ($hit) { $out += ("{0}:{1}" -f $file, ($i + 1)) }
+    if ($isEnd) { $inFence = $false }
+  }
+  return , $out
+}
+
 Write-Host ''
 Write-Host '=== a managed <para> never contains a <seealso> ===' -ForegroundColor Cyan
 
@@ -72,11 +114,16 @@ $files = Get-ChildItem -Path $root -Recurse -Filter *.pas -File
 Check 'found .pas files to scan (guard is not vacuous)' ($files.Count -gt 0) "$($files.Count) file(s)"
 
 $violations = @()
+$fenceViolations = @()
 foreach ($f in $files) {
-  $violations += Get-Violations ([IO.File]::ReadAllLines($f.FullName)) $f.FullName
+  $lines = [IO.File]::ReadAllLines($f.FullName)
+  $violations      += Get-Violations      $lines $f.FullName
+  $fenceViolations += Get-FenceViolations $lines $f.FullName
 }
 Check 'no <seealso> is swallowed inside a <para>' ($violations.Count -eq 0) `
   ($(if ($violations.Count) { "`n        " + ($violations -join "`n        ") } else { '' }))
+Check 'no fact line inside a fence carries a backtick or a marker' ($fenceViolations.Count -eq 0) `
+  ($(if ($fenceViolations.Count) { "`n        " + ($fenceViolations -join "`n        ") } else { '' }))
 
 # --- POSITIVE CONTROL -------------------------------------------------------
 # The scan must be able to SEE the shape, or "0 violations" means nothing. Both
@@ -95,5 +142,28 @@ Check 'POSITIVE CONTROL: the swallowed shape IS detected' `
   ((Get-Violations $bad 'synthetic').Count -eq 1)
 Check 'POSITIVE CONTROL: correct sibling layout and a brace comment are NOT flagged' `
   ((Get-Violations $good 'synthetic').Count -eq 0)
+
+# Shape 2 needs its own controls: the scan must SEE a junk fact line, must not
+# flag the same text outside a fence, and must not flag a clean fact line.
+$badFence = @(
+  '  /// <!-- drag-lint:auto BEGIN -->',
+  '  /// Used by: `',
+  '  /// <para>Called from: A.B.Foo (A.B.pas), `</para>',
+  '  /// Used in units: X <!-- drag-lint:auto END -->',
+  '  /// <!-- drag-lint:auto END -->'
+)
+$goodFence = @(
+  '  /// <!-- drag-lint:auto BEGIN -->',
+  '  /// <para>Called from: A.B.Foo (A.B.pas)</para>',
+  '  /// <para>Used in units: A.B</para>',
+  '  /// <!-- drag-lint:auto END -->',
+  '  /// <para>Prose that mentions `Used by:` AFTER the fence is the human''s.</para>',
+  '      /// Used by: ` -- quoted inside a brace comment, no fence around it'
+)
+Check 'POSITIVE CONTROL: a junk fact line inside a fence IS detected' `
+  ((Get-FenceViolations $badFence 'synthetic').Count -eq 3) `
+  ("got " + (Get-FenceViolations $badFence 'synthetic').Count + ' of 3')
+Check 'POSITIVE CONTROL: clean facts, and label text OUTSIDE a fence, are NOT flagged' `
+  ((Get-FenceViolations $goodFence 'synthetic').Count -eq 0)
 
 if($script:Failed){ Write-Host 'PARA/SEEALSO CONTAINMENT: FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PARA/SEEALSO CONTAINMENT: PASS' -ForegroundColor Green; exit 0 }
