@@ -2957,43 +2957,73 @@ end;
   compiler_findings later. Uses the same detached CreateProcessW pattern as
   InvokeLintBuffer (no wait, no captured output -- unlike RunAndCaptureStdout,
   which blocks). Silently no-ops if no project/db is resolvable. }
-procedure SpawnRefreshFindings(const AProj, ADb: string; AFull: Boolean);
+{ v(SESSION 74): ENQUEUED, not spawned -- and the RENAME is deliberate, because
+  the old name is what made the defect hard to see. Every sibling heavy path
+  (yadfproject:, autodoc:, reindex:, lint-all:) already went through the R2 job
+  queue; this one alone called CreateProcessW inline, so it had no job, hence no
+  CoalesceKey, hence nothing that COULD coalesce. A reader auditing "do we
+  coalesce refresh sweeps?" would look for a bad key and find no key at all.
+
+  WHAT THE BYPASS COST, measured from a live session and recorded at the
+  idle-tick call site below: 32 detached spawns, ~20 of them inside 9 seconds.
+  refresh-findings RECOMPILES UNITS, so each one is real CPU, not a cheap probe.
+  The LSP happened to start into that load and its `initialize` took 101 s
+  against a 45 s client timeout -- surfacing to the user as "LSP initialize
+  handshake failed", a message about a handshake that had in fact SUCCEEDED.
+
+  Gating that call site on the ghost-check latch (2026-08-17) reduced the rate
+  but could not fix the shape: nothing stopped two refreshes overlapping on the
+  same DB, and nothing stopped one colliding with a reindex or lint-all holding
+  the WAL lock. Going through the queue fixes both at once -- the queue
+  serialises against those siblings, and CoalesceKey collapses a burst of saves
+  into ONE pending sweep per database.
+
+  Call from the MAIN thread (TDragLintJobQueue.Enqueue requires it). Both call
+  sites qualify: the SaveNotifier compile hook and the IDE idle tick. }
+procedure EnqueueRefreshFindings(const AProj, ADb: string; AFull: Boolean);
 var
-  ExePath : string             ;
-  CmdLine : string             ;
-  CmdLineW: array of WideChar  ;
-  SI      : TStartupInfoW      ;
-  PI      : TProcessInformation;
+  CmdLine: string;
+  DbName : string;
+  Job    : TDragLintJob;
 begin
   if (AProj = '') or (ADb = '') then
   begin
-    DebugLog(Format('SpawnRefreshFindings: SKIP (proj="%s" db="%s")', [AProj, ADb]));
+    DebugLog(Format('EnqueueRefreshFindings: SKIP (proj="%s" db="%s")', [AProj, ADb]));
     Exit;
   end;
-  ExePath:= DLExe64;
-
-  FillChar(SI, SizeOf(SI), 0);
-  SI.cb:= SizeOf(SI);
-  FillChar(PI, SizeOf(PI), 0);
   CmdLine:= Format('"%s" refresh-findings --project "%s" --db "%s"%s',
-    [ExePath, AProj, ADb, IfThen(AFull, ' --full', '')]);
-  { Task 6 fix: log the spawn so it is VISIBLE in the plugin log which DB the
-    sweep targets (previously invisible -- a wrong-DB sweep looked like no sweep). }
-  DebugLog('SpawnRefreshFindings: ' + CmdLine);
+    [DLExe64, AProj, ADb, IfThen(AFull, ' --full', '')]);
+  { Task 6 fix: log it so it is VISIBLE in the plugin log which DB the sweep
+    targets (previously invisible -- a wrong-DB sweep looked like no sweep). }
+  DebugLog('EnqueueRefreshFindings: ' + CmdLine);
+  DbName:= ExtractFileName(ADb);
   { Into the TELEMETRY log as well, not only the plugin log, so it lands on the
-    SAME timeline as the cache writes. This process is DETACHED and nothing
-    waits for it: it rewrites the findings the engine then reads, so a publish
-    landing mid-rewrite is a candidate explanation for a diagnostic set that
-    shrinks between refreshes. Correlating the two needs one file, not two. }
-  DLT('refresh', Format('SPAWN (detached, not awaited) full=%s db=%s proj=%s',
-    [BoolToStr(AFull, True), ExtractFileName(ADb), ExtractFileName(AProj)]));
-  SetLength(CmdLineW, Length(CmdLine) + 1);
-  Move(PChar(CmdLine)^, CmdLineW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
-  if CreateProcessW(nil, @CmdLineW[0], nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
-  begin
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-  end;
+    SAME timeline as the cache writes. The wording is part of the fix: this line
+    used to read "SPAWN (detached, not awaited)", which was true and was exactly
+    the behaviour being removed. A log that still said SPAWN would hide the
+    change from the next person reading these two timelines together. }
+  DLT('refresh', Format('ENQUEUE (queued, coalesced) full=%s db=%s proj=%s',
+    [BoolToStr(AFull, True), DbName, ExtractFileName(AProj)]));
+
+  Job:= TDragLintJob.Create;
+  Job.Kind       := jkGeneric;
+  Job.Title      := 'Refresh Findings ' + ChangeFileExt(ExtractFileName(AProj), '');
+  { THE COALESCE KEY IS PER-DATABASE, not per-project and not per-file. The
+    collision this exists to prevent is two sweeps writing compiler_findings in
+    the same DB; two projects that resolve to one DB must therefore share a key,
+    and the same project reached by different paths must not produce two. }
+  Job.CoalesceKey:= 'refresh-findings:' + LowerCase(ADb);
+  Job.CmdLine    := CmdLine;
+  Job.TimeoutMs  := 300000;  { recompiles the closure; advisory for a non-streaming job }
+  Job.OnDone     :=
+    procedure(AExit: Integer; AOut: string)
+    begin
+      { Closing the other half of the visibility gap: the spawn was not only
+        uncoalesced, it was unobserved -- nothing ever recorded that a sweep had
+        FINISHED, so a refresh that failed and one that never ran looked alike. }
+      DLT('refresh', Format('DONE exit=%d db=%s', [AExit, DbName]));
+    end;
+  JobQueue.Enqueue(Job);
 end; // procedure
 
 { v0.47: assigned to the SaveNotifier's compile hook. After a .pas is saved and
@@ -3004,10 +3034,13 @@ procedure TriggerCompileOnSave(const AFile: string);
 begin
   if not SameText(ExtractFileExt(AFile), '.pas') then Exit;
   RunCompileDiagnoseAsync(GetActiveProjectFile, False);
-  { Task 6: ADD-alongside spawn -- keeps the persistent compiler_findings DB
+  { Task 6: ADD-alongside sweep -- keeps the persistent compiler_findings DB
     fresh on every save, independent of (and in addition to) the pane-publish
-    compile-check above. Fire-and-forget; does not block the save. }
-  SpawnRefreshFindings(GetActiveProjectFile, ResolvePrimaryIndexDb, False);
+    compile-check above. v(SESSION 74): QUEUED rather than fire-and-forget, so
+    holding Ctrl+S down no longer starts a recompile per keystroke -- the
+    CoalesceKey collapses the burst to one pending sweep. Still does not block
+    the save: Enqueue returns immediately, the queue's worker thread runs it. }
+  EnqueueRefreshFindings(GetActiveProjectFile, ResolvePrimaryIndexDb, False);
 end;
 
 function DLActivePas(out APath: string): Boolean; forward;
@@ -3017,11 +3050,13 @@ function DLActivePas(out APath: string): Boolean; forward;
   currently-open .pas so the freshly-swept findings appear WITHOUT the user
   re-opening or re-saving the file.
 
-  Why a dedicated waiter instead of the fire-and-forget SpawnRefreshFindings:
-  auto-refresh needs to know WHEN the sweep is done. SpawnRefreshFindings
-  detaches and returns immediately (correct for the per-save spawn -- the save
-  itself already re-reads the DB). The sweep touches every unit, so nothing
-  re-reads the DB afterwards on its own; we must wait, then poke the LSP.
+  Why a dedicated waiter instead of EnqueueRefreshFindings: auto-refresh needs
+  to know WHEN the sweep is done, and needs to act on the UI thread afterwards.
+  EnqueueRefreshFindings returns as soon as the job is queued (correct for the
+  per-save sweep -- the save itself already re-reads the DB), and its own
+  completion may be superseded by coalescing, which is exactly the property this
+  path must not have. The sweep touches every unit, so nothing re-reads the DB
+  afterwards on its own; we must wait, then poke the LSP.
 
   The poke is TriggerDiagnosticsOnSave(activePas): it sends textDocument/didSave
   to the running LSP, which re-queries compiler_findings from the just-swept DB
@@ -6178,11 +6213,10 @@ begin
     begin
       Result:= False;
       try Result:= RunGhostCheckAsync(False); except end;
-      { Task 6: ADD-alongside spawn on the SAME idle trigger -- keeps
-        compiler_findings fresh as the user edits, not just on save. Detached
-        + fire-and-forget, so it cannot slow down or block the ghost-check
-        above. '' guards inside SpawnRefreshFindings make this a silent no-op
-        when no project is open.
+      { Task 6: ADD-alongside sweep on the SAME idle trigger -- keeps
+        compiler_findings fresh as the user edits, not just on save. Queued, so
+        it cannot slow down or block the ghost-check above. '' guards inside
+        EnqueueRefreshFindings make this a silent no-op when no project is open.
 
         2026-08-17 -- GATED ON Result, WHICH IT WAS NOT. RunGhostCheckAsync is
         single-flight: when a check is already in flight it returns False and
@@ -6200,9 +6234,17 @@ begin
         the debounce gates the TICK, not this call, so it never applied here.
 
         Gating on Result means exactly one refresh per ghost check that
-        actually ran, which was the original intent. }
+        actually ran, which was the original intent.
+
+        v(SESSION 74) -- AND THE GATE WAS ONLY HALF THE FIX, which is worth
+        stating because the 2026-08-17 note above reads as if it closed this.
+        Gating reduced the RATE; it could not stop two refreshes overlapping on
+        one database, nor one colliding with a reindex holding the WAL lock.
+        Enqueueing does both: the queue serialises against those siblings, and
+        the per-DB CoalesceKey means a burst of idle ticks leaves ONE pending
+        sweep instead of N running ones. }
       if Result then
-        try SpawnRefreshFindings(GetActiveProjectFile, ResolvePrimaryIndexDb, False); except end;
+        try EnqueueRefreshFindings(GetActiveProjectFile, ResolvePrimaryIndexDb, False); except end;
     end;
     { v0.47: best-effort crash recovery on startup -- if a project is already open,
     restore any file left overlaid by a crashed ghost-check (no prompt; only posts
