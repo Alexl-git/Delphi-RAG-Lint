@@ -132,8 +132,73 @@ function log(msg) {
   if (engineLog) engineLog.appendLine('[' + new Date().toISOString() + '] ' + msg);
 }
 
-function privateEngineDir() {
+function engineRootDir() {
   return path.join(extContext.globalStorageUri.fsPath, 'engine');
+}
+
+// ONE DIRECTORY PER BUILD, and that is the whole fix for the multi-window
+// collision.
+//
+// The old layout put the copy at engine\drag-lint.exe -- one path, rewritten in
+// place on every new build. With two or more windows open that rewrite is an
+// EBUSY against a sibling window's running language server, the copy is
+// abandoned, and (because the stamp file was cleared first) the copy is left
+// looking permanently stale without ever being able to catch up. Measured on
+// this machine 2026-09-07: the copy was 1.9.0-alpha from five days and two
+// releases earlier, its .engine-stamp was gone, and the three lsp --stdio
+// children had all started in the same second -- the signature of exactly that
+// race, with nothing on screen saying so. `Update Engine Copy Now` could not
+// fix it either: it stops only THIS window's client.
+//
+// A new build now lands in a directory NOTHING holds, so the copy cannot
+// collide. Each window keeps running the directory it started from until it
+// exits, and old directories are pruned by whichever window activates next.
+// The cost is transient, not per-window: two builds' worth of disk until the
+// old servers exit, rather than a copy per window.
+function dirNameForStamp(stamp) {
+  // stampOf yields 'mtimeMs:size'; ':' is illegal in a Windows path component.
+  return 'b' + String(stamp).replace(/[^0-9A-Za-z]+/g, '-');
+}
+
+function privateEngineDir(stamp) {
+  if (!stamp) return engineRootDir();
+  return path.join(engineRootDir(), dirNameForStamp(stamp));
+}
+
+// Best effort by design. A directory a SIBLING WINDOW is still running from
+// cannot be removed, and that EBUSY is the expected case, not an error -- the
+// window that activates after that server exits will get it. Also clears the
+// LEGACY flat layout (files sitting directly in engine\), which is why this
+// does not filter to directories.
+function pruneOldEngineDirs(keepDir) {
+  const root = engineRootDir();
+  let entries = [];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (e) { return; }
+  for (const entry of entries) {
+    const p = path.join(root, entry.name);
+    if (keepDir && path.resolve(p) === path.resolve(keepDir)) continue;
+    try { fs.rmSync(p, { recursive: true, force: true }); } catch (e) { /* still held */ }
+  }
+}
+
+// The most recently written copy of `exeName` under any build directory, or ''.
+// Used only as a fallback when a fresh copy fails outright: running a slightly
+// old copy beats refusing to start.
+function newestEngineExe(exeName) {
+  const root = engineRootDir();
+  let best = '';
+  let bestT = -1;
+  let entries = [];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (e) { return ''; }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const p = path.join(root, entry.name, exeName);
+    try {
+      const st = fs.statSync(p);
+      if (st.mtimeMs > bestT) { bestT = st.mtimeMs; best = p; }
+    } catch (e) { /* not a build dir */ }
+  }
+  return best;
 }
 
 // mtime+size, not a content hash: this runs on every activation, and hashing
@@ -162,47 +227,79 @@ function mirrorEngine(force) {
     return { exe: '', refreshed: false, reason: 'engine source not found at "' + source + '"' };
   }
   const srcDir = path.dirname(source);
-  const dstDir = privateEngineDir();
-  const dstExe = path.join(dstDir, path.basename(source));
-  const stampFile = path.join(dstDir, '.engine-stamp');
+  const exeName = path.basename(source);
 
   let want = '';
   try { want = stampOf(source); } catch (e) { want = ''; }
-  let have = '';
-  try { have = fs.readFileSync(stampFile, 'utf8').trim(); } catch (e) { have = ''; }
+  if (!want) return { exe: '', refreshed: false, reason: 'could not stat the engine source' };
 
-  if (!force && want && want === have && fs.existsSync(dstExe)) {
+  const dstDir = privateEngineDir(want);
+  const dstExe = path.join(dstDir, exeName);
+
+  // The DIRECTORY NAME IS THE STAMP, so "have we already copied this build" is
+  // a path test and no stamp file is needed.
+  //
+  // But EXISTENCE IS NOT SUFFICIENCY, and this repo has been bitten by exactly
+  // that: a rules\ directory that existed and was EMPTY answered every question
+  // wrongly and silently. A half-written directory under a build's own name
+  // would be permanently believed. So the copy is assembled in a TEMP directory
+  // and renamed into place -- a directory under the real name is complete by
+  // construction, and an interrupted copy leaves only a .tmp- sibling that the
+  // next prune removes.
+  if (!force && fs.existsSync(dstExe)) {
+    pruneOldEngineDirs(dstDir);
     return { exe: dstExe, refreshed: false, reason: 'already current' };
   }
 
+  const tmpDir = dstDir + '.tmp-' + process.pid + '-' + Date.now();
   try {
-    fs.mkdirSync(dstDir, { recursive: true });
-    // The stamp is cleared FIRST. If the copy dies halfway -- exe replaced,
-    // rules half-written -- a stamp still claiming "current" would make every
-    // later activation skip the repair and run a mismatched engine for ever.
-    try { fs.unlinkSync(stampFile); } catch (e) { /* absent is fine */ }
+    // Reaching here with the directory already present means either force, or a
+    // directory that exists WITHOUT the exe -- which a published directory
+    // never is, so it was damaged from outside. Both cases want it gone before
+    // the rename, and if a live server holds it the rename below fails and the
+    // existing copy is adopted, which is this same build anyway.
+    try { fs.rmSync(dstDir, { recursive: true, force: true }); } catch (e) { /* held */ }
 
-    fs.copyFileSync(source, dstExe);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.copyFileSync(source, path.join(tmpDir, exeName));
     for (const f of ENGINE_FILES) {
       const s = path.join(srcDir, f);
-      if (fs.existsSync(s)) fs.copyFileSync(s, path.join(dstDir, f));
+      if (fs.existsSync(s)) fs.copyFileSync(s, path.join(tmpDir, f));
     }
     for (const d of ENGINE_DIRS) {
       const s = path.join(srcDir, d);
       if (!fs.existsSync(s)) continue;
-      // Removed first: a rule deleted upstream would otherwise linger here for
-      // ever, and the copy would lint by rules the engine no longer ships.
-      try { fs.rmSync(path.join(dstDir, d), { recursive: true, force: true }); } catch (e) { /* best effort */ }
-      copyTree(s, path.join(dstDir, d));
+      // No remove-first dance any more: the temp directory starts empty, so a
+      // rule deleted upstream cannot linger by construction rather than by a
+      // step somebody has to remember.
+      copyTree(s, path.join(tmpDir, d));
     }
-    if (want) fs.writeFileSync(stampFile, want, 'utf8');
+
+    try {
+      fs.renameSync(tmpDir, dstDir);
+    } catch (e) {
+      // Another window published this same build first (or still holds the
+      // directory from a force). Its content is this build by construction, so
+      // adopt it rather than fight for the name.
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e2) { /* best effort */ }
+      if (fs.existsSync(dstExe)) {
+        pruneOldEngineDirs(dstDir);
+        return { exe: dstExe, refreshed: false, reason: 'another window published this build first' };
+      }
+      throw e;
+    }
+
+    pruneOldEngineDirs(dstDir);
     return { exe: dstExe, refreshed: true, reason: '' };
   } catch (e) {
     const why = (e && e.message) || String(e);
-    // EBUSY/EPERM here is another VS Code window holding the copy. Keeping the
-    // one already on disk is strictly better than failing to start.
-    if (fs.existsSync(dstExe)) {
-      return { exe: dstExe, refreshed: false, reason: 'keeping the existing copy: ' + why };
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e2) { /* best effort */ }
+    // Running a slightly older copy beats refusing to start -- and unlike the
+    // old layout, an older copy is still on disk under its own name instead of
+    // having been overwritten halfway.
+    const fallback = newestEngineExe(exeName);
+    if (fallback) {
+      return { exe: fallback, refreshed: false, reason: 'keeping an existing copy: ' + why };
     }
     return { exe: '', refreshed: false, reason: why };
   }
@@ -473,5 +570,8 @@ module.exports.__test = {
   mirrorEngine,
   resolveExe,
   privateEngineDir,
+  engineRootDir,
+  pruneOldEngineDirs,
+  newestEngineExe,
   setContext(ctx, channel) { extContext = ctx; engineLog = channel; }
 };

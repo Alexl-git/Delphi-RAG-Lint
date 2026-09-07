@@ -129,6 +129,43 @@ runs that. The consequences are worth stating plainly:
   do want the copy current immediately. It stops the server, re-copies, and
   restarts.
 
+### One directory per build (extension v1.6)
+
+The copy no longer lives at a single path that each new build overwrites. It
+lives in `globalStorage\...\engine\b<mtime>-<size>\`, **one directory per
+build**, and old directories are pruned by whichever window activates after the
+server holding them has exited.
+
+This is not tidiness; it fixes a failure that had no way out. With two or more
+windows open, refreshing the copy meant overwriting an exe a sibling window's
+language server was running -- an `EPERM`/`EBUSY` the extension caught and
+reported as *"keeping the existing copy"*, having already deleted the stamp file
+that recorded which build the copy was. Measured on this machine on
+2026-09-07: the copy was **1.9.0-alpha, five days and two releases behind**, its
+`.engine-stamp` was gone, and the three `lsp --stdio` children had all started
+in the same second -- the signature of several windows restoring at once and
+colliding. Nothing on screen said so, and **Update Engine Copy Now could not fix
+it either**, because it stops only the client in *its own* window.
+
+A new build now lands in a directory nothing holds, so the copy cannot collide.
+Each window keeps running the directory it started from until it exits. The disk
+cost is transient -- two builds' worth until the old servers go -- not one copy
+per window.
+
+Two details worth knowing:
+
+* the directory is assembled under a `.tmp-` name and **renamed into place**, so
+  a directory under a build's own name is complete by construction. A published
+  directory that is missing its exe is treated as damaged and rebuilt, never
+  believed;
+* the old flat layout (files directly in `engine\`) is removed by the first
+  prune, so upgrading needs no manual cleanup.
+
+Guarded by `tests\vscode\engine-copy-harness.js`, which now locks the
+destination two ways -- a process CWD to block removal, a read-only exe to block
+overwriting -- because the previous harness never locked it at all, and so had
+no assertion that could have caught any of this.
+
 The copy is the exe plus what the language server actually needs beside it:
 `drag-lint.json` (the DB manifest -- every path in it is absolute, so a
 relocated copy resolves to exactly the same databases), the three tree-sitter

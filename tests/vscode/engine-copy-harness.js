@@ -84,11 +84,16 @@ fs.writeFileSync(path.join(srcDir, 'dclDragLintWizard.bpl'), 'bpl');
 T.setContext({ globalStorageUri: { fsPath: storeDir } }, null);
 settings = { engineSource: srcExe, engineUpdate: 'onActivate', serverPath: '' };
 
-const dstDir = T.privateEngineDir();
-const dstExe = path.join(dstDir, 'drag-lint.exe');
+// ONE DIRECTORY PER BUILD (session 76), so the copy's path is no longer a
+// constant -- it is derived from whatever mirrorEngine just published. A
+// harness that kept a fixed dstDir would silently test the wrong directory
+// after the very first new build.
+let dstDir = '';
+let dstExe = '';
+function adopt(r) { dstExe = r.exe; dstDir = r.exe ? path.dirname(r.exe) : ''; return r; }
 
 // --- 1: POSITIVE CONTROL ----------------------------------------------------
-let r = T.mirrorEngine(false);
+let r = adopt(T.mirrorEngine(false));
 check('first mirror reports refreshed', r.refreshed === true, r.reason);
 check('the copy exists and is NOT the source path', r.exe === dstExe && fs.existsSync(dstExe), r.exe);
 check('the copied exe has the source content', fs.readFileSync(dstExe, 'utf8') === 'BUILD-1');
@@ -106,35 +111,95 @@ check('the BPL and graph exe were NOT copied',
       !fs.existsSync(path.join(dstDir, 'dclDragLintWizard.bpl')));
 
 // --- 2: it does not re-copy an unchanged engine -----------------------------
-r = T.mirrorEngine(false);
+r = adopt(T.mirrorEngine(false));
 check('an unchanged source is not re-copied', r.refreshed === false && r.reason === 'already current', r.reason);
 
 // --- 3: a new build IS picked up --------------------------------------------
 fs.writeFileSync(srcExe, 'BUILD-2-LONGER');
-r = T.mirrorEngine(false);
+r = adopt(T.mirrorEngine(false));
 check('a changed source is copied', r.refreshed === true, r.reason);
 check('and the copy now has the new content', fs.readFileSync(dstExe, 'utf8') === 'BUILD-2-LONGER');
 
 // --- 4: a rule deleted upstream must not linger -----------------------------
 fs.unlinkSync(path.join(srcDir, 'rules', 'b.scm'));
 fs.writeFileSync(srcExe, 'BUILD-3');
-T.mirrorEngine(false);
+adopt(T.mirrorEngine(false));
 check('a rule deleted upstream disappears from the copy',
       !fs.existsSync(path.join(dstDir, 'rules', 'b.scm')),
       'a copy that only ever adds would lint by rules the engine no longer ships');
 check('and the surviving rule is still there', fs.existsSync(path.join(dstDir, 'rules', 'a.scm')));
 
 // --- 5: force ---------------------------------------------------------------
-r = T.mirrorEngine(true);
+r = adopt(T.mirrorEngine(true));
 check('force re-copies even when current', r.refreshed === true, r.reason);
 
-// --- 6: a half-finished copy REPAIRS itself ---------------------------------
-// The stamp is written last and cleared first precisely so this cannot wedge.
-// Simulate the interrupted state: stamp says current, exe is gone.
+// --- 6: a DAMAGED published directory REPAIRS itself ------------------------
+// Since session 76 a published directory is complete by construction (assembled
+// in a temp dir, renamed into place), so this is no longer the interrupted-copy
+// case -- it is a directory damaged from OUTSIDE. It must still not wedge: the
+// directory name alone says "this build is here", and believing that with the
+// exe missing would leave the extension permanently unable to start.
 fs.unlinkSync(dstExe);
-r = T.mirrorEngine(false);
-check('a missing exe under a current stamp is repaired, not skipped',
+r = adopt(T.mirrorEngine(false));
+check('a build directory missing its exe is repaired, not believed',
       r.refreshed === true && fs.existsSync(dstExe), r.reason);
+
+
+// --- 9: ONE DIRECTORY PER BUILD --------------------------------------------
+// The property the whole change rests on. Two builds must not share a path,
+// or the copy is a rewrite-in-place again and the collision comes back.
+fs.writeFileSync(srcExe, 'BUILD-9-A');
+const dirA = path.dirname(adopt(T.mirrorEngine(false)).exe);
+fs.writeFileSync(srcExe, 'BUILD-9-B-DIFFERENT-LENGTH');
+const dirB = path.dirname(adopt(T.mirrorEngine(false)).exe);
+check('two different builds live in DIFFERENT directories', dirA !== dirB, dirA + ' vs ' + dirB);
+check('and the new directory has the new content',
+      fs.readFileSync(path.join(dirB, 'drag-lint.exe'), 'utf8') === 'BUILD-9-B-DIFFERENT-LENGTH');
+check('the superseded directory is pruned once nothing holds it', !fs.existsSync(dirA), dirA);
+
+// --- 10: THE COLLISION -- a locked copy must not block a new build ----------
+// This is the failure the old layout had and the old harness never asserted:
+// none of its checks ever locked the destination. On this machine the real
+// consequence was a private copy stuck two releases behind, with its stamp file
+// deleted and no way to recover while two windows were open.
+//
+// HOW THE DIRECTORY IS HELD MATTERS. The obvious simulation -- fs.openSync on
+// the copied exe -- does NOT hold it: Node opens with delete sharing, so the
+// prune removed the directory anyway and the assertion failed against correct
+// code. A process's CURRENT DIRECTORY is something Windows genuinely refuses to
+// remove, so that is the lock used here. (A real holder is the loaded image of
+// a running lsp --stdio, which this stands in for.)
+// TWO locks, because the old layout fails in two different places and one
+// simulation only reaches one of them:
+//   * the CURRENT DIRECTORY stops the directory being REMOVED (the prune path);
+//   * a READ-ONLY exe stops it being OVERWRITTEN (the copy path) -- which is
+//     the EBUSY a live language server actually produced.
+// Checked: with only the chdir, 'a NEW build publishes' passed against the OLD
+// code too, because overwriting the exe in place still worked. An assertion
+// that cannot fail is the thing this repo keeps having to re-learn.
+const heldDir = dirB;
+const heldExe = path.join(heldDir, 'drag-lint.exe');
+const cwd0 = process.cwd();
+process.chdir(heldDir);
+fs.chmodSync(heldExe, 0o444);
+try {
+  fs.writeFileSync(srcExe, 'BUILD-10-WHILE-THE-OLD-ONE-IS-HELD');
+  r = adopt(T.mirrorEngine(false));
+  check('a NEW build publishes even while the previous copy is held',
+        r.refreshed === true && fs.existsSync(r.exe), r.reason);
+  check('and it did NOT land on the held path', path.dirname(r.exe) !== heldDir, r.exe);
+  check('and the new copy really has the new content',
+        fs.readFileSync(r.exe, 'utf8') === 'BUILD-10-WHILE-THE-OLD-ONE-IS-HELD');
+  check('pruning a HELD directory is survived, not thrown',
+        fs.existsSync(heldDir), 'the held directory should still be there, skipped by the prune');
+} finally {
+  process.chdir(cwd0);
+  try { fs.chmodSync(heldExe, 0o666); } catch (e) { /* already gone */ }
+}
+// Once the holder lets go, the next activation cleans up after it.
+adopt(T.mirrorEngine(false));
+check('the held directory is pruned on the NEXT activation, after the holder exits',
+      !fs.existsSync(heldDir), heldDir);
 
 // --- 7: a missing source is reported, not silently tolerated ----------------
 settings = { engineSource: path.join(srcDir, 'no-such.exe'), engineUpdate: 'onActivate', serverPath: '' };
