@@ -3,7 +3,75 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.10.1-alpha -- 2026-09-07
+
+
+**Upgrade if you use `document --apply`.** v1.10.0-alpha and every release
+before it could DELETE documentation you wrote. Two independent defects did it,
+both fixed here, both reproduced on real source before a line was changed.
+
+### `document --apply` no longer deletes prose a human wrote
+
+Two shapes destroyed authored text. Neither announced itself: the run reported
+success, and the words were simply gone from the next diff.
+
+**1. A stacked doc region swallowed its neighbour's prose.** Two `///` blocks
+with no blank line between them were read as one, and the second declaration's
+authored text was absorbed and lost.
+
+**2. A `<summary>` carrying the engine's marker but holding YOUR words was
+deleted outright.** If you typed into a generated stub without removing its
+`<!-- drag-lint:auto -->` comment -- the ordinary thing to do -- the engine read
+the marker as proof the tag was its own, found it had nothing to refill the tag
+with, and removed the whole thing. Measured on this repo's own source: 53 words
+of a developer's explanation, gone in one sweep.
+
+The fix is a new ownership marker, `<!-- drag-lint:auto sum -->` (`AUTO_SUM`),
+which says "this summary's body is the engine's HARVESTED prose". That
+distinction was not expressible before, and without it two situations are the
+same string:
+
+| you see | what it means | correct behaviour |
+|---|---|---|
+| marker + your words | you typed into a stub | **KEEP the words, drop the marker** |
+| marker + harvested prose whose source comment was deleted | the engine's own text, now orphaned | **REMOVE it** |
+
+Reading the old marker either way broke one of them, which is why this needed a
+marker and not a smarter guess. It is the third time the same answer has been
+reached here, after `AUTO_TYPE` and `AUTO_EXC`.
+
+**Nothing is asked of you.** Existing marked summaries migrate on the next run
+with no content comparison and no edits to your source: a summary whose comment
+still yields a harvest simply takes the ordinary refill path and comes back
+re-marked. Measured on this repo: 103 of 103 migrated. Only the genuinely
+ambiguous case (marker present, nothing left to harvest) falls through, and it
+fails SAFE -- your words are kept.
+
+`--strip` follows the same rule, so it cannot become a second route to the same
+loss.
+
+### `query find --decl-contains` -- search the declaring source line
+
+Finds clauses the extractor does not model, by searching the DECLARING SOURCE
+LINE rather than the symbol table. 97 matches in 298,982 candidates on the
+Win32 library index in 18.9 s.
+
+### IDE plugin: save-triggered refreshes are queued, not spawned
+
+`refresh-findings` was launched detached from both the save hook and the idle
+tick, with nothing to coalesce or serialise it. A measured live session showed
+**32 spawns, ~20 of them inside 9 seconds**; since each one recompiles units,
+the LSP started into that load and its `initialize` took 101 s against a 45 s
+timeout -- surfacing as *"LSP initialize handshake failed"*, about a handshake
+that had actually succeeded.
+
+It now goes through the job queue with a per-database coalesce key, so a burst
+of saves collapses to one pending sweep and cannot collide with a reindex
+holding the WAL lock.
+
+Also in the plugin: the caret line selects its corresponding finding in the
+drag-lint panel.
+
 
 ### doc-drift compares an inbound list as a SET, so reordering is not drift
 
@@ -184,6 +252,21 @@ specific than their answers.
 
 ### Gates
 
+* Full battery **479 pass / 0 fail / 0 timeout of 479**, 30.7 min.
+* The autodoc fix was RED-CHECKED against the unfixed build, and its guard
+  carries a positive control asserting the engine still writes its facts in the
+  same run -- without which an engine that documented NOTHING would have passed.
+* Two guards that pinned the OLD `<summary>` behaviour as deliberate were
+  reversed on an explicit owner ruling and re-pinned to the new rule, with the
+  reasoning recorded in each. Neither was weakened.
+* The 91-file documentation sweep over this repo's own `src\` was re-run and
+  measured at **0 authored words lost**, down from 154 and then 54 in the two
+  preceding attempts. The metric carries its own positive control.
+* No extractor or resolver change: neither `DRAGLINT_EXTRACTOR_VERSION` nor
+  `DRAGLINT_RESOLVER_VERSION` moves, and **no index re-parses are owed**. Both
+  surface digests were re-baselined without a version bump, having been proven
+  comment-only (253 and 633 doc lines changed, zero code lines).
+
 * **Byte-identical** `lint-all` output, OLD vs NEW, on all three corpora
   (this repo, DataCopy, ORM3 -- 56,486 findings on ORM3).
 * **Zero** `EFlowOracleMismatch` under `DRAGLINT_VERIFY_ORACLE=1` on all three,
@@ -200,6 +283,16 @@ specific than their answers.
   the new code adds none.
 * No extractor change: `DRAGLINT_EXTRACTOR_VERSION` does not move and **no index
   re-parses**.
+
+### Known issues
+
+* A managed facts block can name users of a type that no longer exist;
+  `doc-drift` reports it as `fixable` and the fix does not clear it. Affects
+  classes/records/interfaces, not enums.
+* A managed `<para>` can swallow the `<seealso>` tags below it and grow on each
+  run. Seen once across this repo's `src\`; repaired here, engine fix pending.
+* Repeated `document --apply --reindex` runs reorder inbound lists once before
+  settling. Cosmetic -- membership and truncation are unaffected.
 
 ## v1.10.0-alpha -- 2026-09-06
 
