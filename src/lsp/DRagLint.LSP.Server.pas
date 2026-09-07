@@ -208,6 +208,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  StoresForFile(const APath: string): TArray<ISymbolStore>;
+      function  EphemeralLeads(const AStores: TArray<ISymbolStore>): Boolean;
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: nil;
       /// TJSONObject(Parsed).</returns>
       /// <remarks>
@@ -1328,11 +1329,22 @@ begin
     Ident:= IdentifierAtPosition(Path, Line, Col);
     if Ident <> '' then
     begin
-      { v0.40.3: iterate every store, accumulate definitions. }
-      for var StIdx:= 0 to High(FStores) do
+      { v0.40.3: iterate every store, accumulate definitions.
+
+        THROUGH StoresForFile, exactly as ComputeHover does. Hover was taught to
+        put a loose file's own unit in front of the library; F12 was not, so
+        hovering a symbol named the local declaration and pressing F12 on the
+        same symbol jumped into the RTL. Measured on the guard fixture: Apply in
+        an unowned unit returned FarAwayLib.pas and never LooseUnit.pas. }
+      var DefStores: TArray<ISymbolStore>:= StoresForFile(Path);
+      for var StIdx:= 0 to High(DefStores) do
       begin
-        Symbols:= FStores[StIdx].FindSymbolsByExactName(Ident);
-        for Sym in Symbols do Arr.AddElement(LocationFromSymbol(Sym, FStores[StIdx]));
+        Symbols:= DefStores[StIdx].FindSymbolsByExactName(Ident);
+        for Sym in Symbols do Arr.AddElement(LocationFromSymbol(Sym, DefStores[StIdx]));
+        { The file's own declaration wins outright -- see EphemeralLeads. A name
+          the loose unit does NOT declare finds nothing here and falls through to
+          the library, which is how a library-only symbol stays reachable. }
+        if (StIdx = 0) and (Length(Symbols) > 0) and EphemeralLeads(DefStores) then Break;
       end;
     end;
     Reply.AddPair('result', Arr);
@@ -1395,16 +1407,27 @@ begin
     Ident:= IdentifierAtPosition(Path, Line, Col);
     if Ident <> '' then
     begin
-      { v0.40.3: iterate every store for both callers and declarations. }
-      for var StIdx:= 0 to High(FStores) do
+      { v0.40.3: iterate every store for both callers and declarations.
+        Through StoresForFile for the same reason HandleDefinition does. }
+      var RefStores: TArray<ISymbolStore>:= StoresForFile(Path);
+      for var StIdx:= 0 to High(RefStores) do
       begin
-        Refs:= FStores[StIdx].FindCallersByName(Ident);
-        for R in Refs do Arr.AddElement(LocationFromRef(R, FStores[StIdx]));
+        Refs:= RefStores[StIdx].FindCallersByName(Ident);
+        for R in Refs do Arr.AddElement(LocationFromRef(R, RefStores[StIdx]));
         if IncludeDecl then
         begin
-          Symbols:= FStores[StIdx].FindSymbolsByExactName(Ident);
-          for Sym in Symbols do Arr.AddElement(LocationFromSymbol(Sym, FStores[StIdx]));
+          Symbols:= RefStores[StIdx].FindSymbolsByExactName(Ident);
+          for Sym in Symbols do Arr.AddElement(LocationFromSymbol(Sym, RefStores[StIdx]));
         end;
+        { NO early Break here, unlike HandleDefinition, and the difference is
+          deliberate. 'Go to definition' wants the ONE declaration the reader is
+          standing on; 'find all references' wants BREADTH, so stopping at the
+          first store that answered would drop exactly what was asked for.
+          Measured while writing this: with the Break in, references on a
+          library-only routine returned the loose file's call site and silently
+          LOST the library declaration that includeDeclaration had requested.
+          The defect being fixed here is that the loose unit's own refs were
+          MISSING, not that the other stores' were present. }
       end;
     end;
     Reply.AddPair('result', Arr);
@@ -1674,6 +1697,21 @@ begin
     end;
   end; // try
 end; // function
+
+{ Does AStores lead with the ephemeral single-unit store -- i.e. was this list
+  built for a file NO configured index owns?
+
+  Callers use it to let the file's OWN declaration win outright. Accumulating
+  across every store is right for a multi-DB project, where the same name
+  legitimately lives in several project databases; it is wrong for a loose file,
+  where the library's namesakes are noise in front of the declaration the reader
+  is standing on. Scoped deliberately: for a file some index DOES own,
+  StoresForFile returns FStores unchanged, this returns False, and every request
+  behaves exactly as it did before. }
+function TLSPServer.EphemeralLeads(const AStores: TArray<ISymbolStore>): Boolean;
+begin
+  Result:= (FEphemStore <> nil) and (Length(AStores) > 0) and (AStores[0] = FEphemStore);
+end;
 
 function TLSPServer.StoresForFile(const APath: string): TArray<ISymbolStore>;
 var
@@ -2624,7 +2662,11 @@ begin
       single-store callers" and this was one of them: the declaring type of a
       local/param is routinely in a different --db than the file being edited,
       so a single-store lookup returned an empty item list. }
-    Items:= TLspCompletion.BuildCompletionItems(FStores, Path, Line, Col);
+    { StoresForFile, not FStores: in a file no index owns, the receiver's type
+      is declared in that file and nowhere else, so a member list built from the
+      configured stores alone came back EMPTY -- measured 0 items after
+      'LThing.' on the guard fixture. }
+    Items:= TLspCompletion.BuildCompletionItems(StoresForFile(Path), Path, Line, Col);
     WrapObj:= TJSONObject.Create;
     WrapObj.AddPair('isIncomplete', TJSONBool.Create(False));
     WrapObj.AddPair('items' , Items  );

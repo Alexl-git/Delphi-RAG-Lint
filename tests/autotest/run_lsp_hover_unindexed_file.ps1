@@ -123,10 +123,20 @@ type
     procedure ProjectOwnMethod(ACount: Integer);
   end;
 
+procedure DriveProject;
+
 implementation
 
 procedure TProjectThing.ProjectOwnMethod(ACount: Integer);
 begin
+end;
+
+procedure DriveProject;
+var
+  PThing: TProjectThing;
+begin
+  PThing := TProjectThing.Create;
+  PThing.ProjectOwnMethod(1);
 end;
 
 end.
@@ -144,6 +154,7 @@ type
   TLooseThing = class
   public
     procedure Apply(ALooseArg: Integer);
+    procedure LooseOnlyMember(AZ: Integer);
   end;
 
 procedure DriveLoose;
@@ -154,6 +165,10 @@ uses
   FarAwayLib;
 
 procedure TLooseThing.Apply(ALooseArg: Integer);
+begin
+end;
+
+procedure TLooseThing.LooseOnlyMember(AZ: Integer);
 begin
 end;
 
@@ -234,6 +249,42 @@ function Invoke-Hover([string]$File, [int]$Line0, [int]$Char0) {
   return '<NO REPLY>'
 }
 
+
+# A request of ANY method, returning the parsed `result` plus the raw stdout.
+# Kept beside Invoke-Hover rather than replacing it: Invoke-Hover returns the
+# rendered markdown string, which is what every hover assertion below reads, and
+# rewriting those to dig through an object would be churn on the half of this
+# guard that already works.
+function Invoke-Req([string]$File, [string]$Method, $Extra, [int]$Line0, [int]$Char0) {
+  $uri  = 'file:///' + ($File -replace '\\', '/')
+  $text = [System.IO.File]::ReadAllText($File)
+  $p = @{ textDocument = @{ uri = $uri }; position = @{ line = $Line0; character = $Char0 } }
+  if ($Extra) { foreach ($k in $Extra.Keys) { $p[$k] = $Extra[$k] } }
+  $msgs  = Frame @{ jsonrpc = '2.0'; id = 1; method = 'initialize'; params = @{ processId = $null; rootUri = $null; capabilities = @{} } }
+  $msgs += Frame @{ jsonrpc = '2.0'; method = 'initialized'; params = @{} }
+  $msgs += Frame @{ jsonrpc = '2.0'; method = 'textDocument/didOpen';
+                    params = @{ textDocument = @{ uri = $uri; languageId = 'pascal'; version = 1; text = $text } } }
+  $msgs += Frame @{ jsonrpc = '2.0'; id = 2; method = $Method; params = $p }
+  $msgs += Frame @{ jsonrpc = '2.0'; id = 3; method = 'shutdown'; params = @{} }
+
+  $inF = Join-Path $WorkDir 'in.txt'; $outF = Join-Path $WorkDir 'out.txt'; $errF = Join-Path $WorkDir 'err.txt'
+  [System.IO.File]::WriteAllText($inF, $msgs, (New-Object System.Text.ASCIIEncoding))
+  Start-Process $Exe -ArgumentList @('lsp', '--db', $projDb, '--db', $libDb) -WorkingDirectory $WorkDir `
+    -RedirectStandardInput $inF -RedirectStandardOutput $outF -RedirectStandardError $errF `
+    -NoNewWindow -Wait | Out-Null
+  $raw = [System.IO.File]::ReadAllText($outF)
+  $script:LastRaw = $raw
+  foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
+    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    if ($o.id -eq 2) { return $o.result }
+  }
+  return $null
+}
+function UriList($result) {
+  if ($null -eq $result) { return @() }
+  return @(@($result) | ForEach-Object { [string]$_.uri })
+}
+
 # ---- PC1: the owned path is untouched ----
 Write-Host ''
 Write-Host 'PC1: POSITIVE CONTROL -- hover in an INDEXED file' -ForegroundColor Cyan
@@ -286,6 +337,79 @@ Check 'loose source byte-identical after hovering' `
 $strays = @(Get-ChildItem "$WorkDir\loose" -File | Where-Object { $_.Name -ne 'LooseUnit.pas' })
 Check 'no ephemeral database dropped beside the user source' `
   ($strays.Count -eq 0) "found: $($strays.Name -join ',')"
+
+# ===========================================================================
+# DEFINITION / REFERENCES / COMPLETION -- session 76.
+#
+# Hover was taught to put a loose file's own unit in front of the library;
+# these three were not. So hovering a symbol named the local declaration and
+# then pressing F12 on the SAME symbol jumped into the RTL -- which is worse
+# than the original defect, because the two answers disagree and the popup
+# looked authoritative in both.
+#
+# RED against the build before this change, measured on this fixture:
+#   definition  on Apply in the loose file -> FarAwayLib.pas (never LooseUnit)
+#   references  on Apply in the loose file -> 1 hit, FarAwayLib.pas only
+#   completion  after 'LThing.'            -> 0 items
+# with every control below already green.
+# ===========================================================================
+
+$dotCol   = $looseLines[$callLine].IndexOf('.') + 1   # 0-based char just AFTER the dot
+$projLines2 = ([System.IO.File]::ReadAllText($projFile)) -split "`r?`n"
+$pDotLn   = [Array]::FindIndex($projLines2, [Predicate[string]]{ param($x) $x -like '*PThing.ProjectOwnMethod(1);*' })
+$pDotCol  = $projLines2[$pDotLn].IndexOf('.') + 1
+
+Write-Host ''
+Write-Host 'DEFINITION in the UNINDEXED file' -ForegroundColor Cyan
+$dPc = @(UriList (Invoke-Req $projFile 'textDocument/definition' $null $projLine $projCol))
+Check 'PC: definition in an INDEXED file still resolves to that file' `
+  (($dPc.Count -eq 1) -and ($dPc[0] -like '*ProjUnit.pas')) "got: $($dPc -join ', ')"
+
+$dFix = @(UriList (Invoke-Req $looseFile 'textDocument/definition' $null $callLine $callCol))
+Check 'definition on the loose Apply resolves to the LOOSE file' `
+  (($dFix.Count -gt 0) -and ($dFix[0] -like '*LooseUnit.pas')) "got: $($dFix -join ', ')"
+Check 'definition on the loose Apply does NOT offer the library namesake' `
+  ((@($dFix | Where-Object { $_ -like '*FarAwayLib.pas' }).Count -eq 0)) "got: $($dFix -join ', ')"
+Check 'NC2: no indexer progress line on the protocol channel (definition path)' `
+  ($script:LastRaw -notmatch '->\s+\d+\s+symbols') `
+  'a second entry point is a second chance to forget the stdout redirect'
+
+$dNc = @(UriList (Invoke-Req $looseFile 'textDocument/definition' $null $libOnlyLn $libOnlyCol))
+Check 'NC: a LIBRARY-ONLY name still resolves to the library from a loose file' `
+  (($dNc.Count -eq 1) -and ($dNc[0] -like '*FarAwayLib.pas')) "got: $($dNc -join ', ')"
+
+Write-Host ''
+Write-Host 'REFERENCES in the UNINDEXED file' -ForegroundColor Cyan
+$ctx  = @{ context = @{ includeDeclaration = $true } }
+$rFix = @(UriList (Invoke-Req $looseFile 'textDocument/references' $ctx $callLine $callCol))
+Check 'references on the loose Apply include the LOOSE file' `
+  (@($rFix | Where-Object { $_ -like '*LooseUnit.pas' }).Count -ge 2) "got: $($rFix -join ', ')"
+
+# BREADTH CONTROL. This one exists because the first cut of the fix DID break
+# early once the loose store answered -- which read as "the local hits win" and
+# silently dropped what includeDeclaration had asked for. Go-to-definition wants
+# ONE answer; find-all-references wants breadth, and the two must not share a
+# rule. Measured while writing this, not imagined.
+Check 'BREADTH CONTROL: references still reach the OTHER stores' `
+  (@($rFix | Where-Object { $_ -like '*FarAwayLib.pas' }).Count -ge 1) "got: $($rFix -join ', ')"
+
+$rNc = @(UriList (Invoke-Req $looseFile 'textDocument/references' $ctx $libOnlyLn $libOnlyCol))
+Check 'NC: references on a library-only name keep BOTH the loose call site and the library declaration' `
+  ((@($rNc | Where-Object { $_ -like '*LooseUnit.pas'  }).Count -ge 1) -and
+   (@($rNc | Where-Object { $_ -like '*FarAwayLib.pas' }).Count -ge 1)) "got: $($rNc -join ', ')"
+
+Write-Host ''
+Write-Host 'COMPLETION in the UNINDEXED file' -ForegroundColor Cyan
+$cFix  = Invoke-Req $looseFile 'textDocument/completion' $null $callLine $dotCol
+$cLbls = @(); if ($null -ne $cFix) { $cLbls = @(@($cFix.items) | ForEach-Object { [string]$_.label }) }
+Check 'completion after the receiver dot offers the loose type members' `
+  (($cLbls -contains 'Apply') -and ($cLbls -contains 'LooseOnlyMember')) `
+  "got $($cLbls.Count) item(s): $($cLbls -join ', ')"
+
+$cPc  = Invoke-Req $projFile 'textDocument/completion' $null $pDotLn $pDotCol
+$cPcL = @(); if ($null -ne $cPc) { $cPcL = @(@($cPc.items) | ForEach-Object { [string]$_.label }) }
+Check 'PC: completion in an INDEXED file is unaffected' `
+  ($cPcL -contains 'ProjectOwnMethod') "got $($cPcL.Count) item(s): $($cPcL -join ', ')"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
