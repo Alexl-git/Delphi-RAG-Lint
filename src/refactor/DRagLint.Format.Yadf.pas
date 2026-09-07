@@ -12,7 +12,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), declaration (DRagLint.Format.Yadf.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Format.Yadf.pas), DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Format.Yadf</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -33,10 +33,10 @@ type
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AYadfPath"><!-- drag-lint:auto type -->const string = ''</param>
       /// <returns><!-- drag-lint:auto type -->TFormatResult</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->File not found: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenWritableStore (DRagLint.CLI.pas) ? (+119 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ?, DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ? (+130 more)</para>
       /// <para>Calls: DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture"/>
@@ -60,7 +60,7 @@ type
       /// <param name="ATimeoutMs"><!-- drag-lint:auto type -->DWORD</param>
       /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1; -2; Integer(ExitCode).</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->CreatePipe failed; CreateProcessW failed: %d</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>

@@ -35,10 +35,16 @@ uses
 
 type
   /// <summary>One named class cast from the .castlib.</summary>
-  /// <remarks>Accepts/Yields are bare type names, matched case-insensitively by
+  /// <remarks>
+  /// Accepts/Yields are bare type names, matched case-insensitively by
   /// EXACT name (no ancestry walk in v1 -- list the concrete types). Dfm/Compat/
   /// PasTemplate/Todo are engine realization hints; the editor stores them verbatim
-  /// and does not interpret them.</remarks>
+  /// and does not interpret them.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ClassCastFor (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas)</para>
+  /// <para>Used in units: ConvRules.CastLib, ConvRules.MainForm, ConvRulesModelTests, DRagLint.Convert.CastLib</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCastDef = record
     Name       : string;
     Accepts    : TArray<string>;
@@ -51,6 +57,12 @@ type
 
   /// <summary>One member pair of an enum cast: the source member name and the
   /// target member name it becomes.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.EnumCastValue (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.CastLib</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumPair = record
     FromMember: string;
     ToMember  : string;
@@ -61,32 +73,32 @@ type
   /// <remarks>
   /// The grammar mirrors the two DSLs it sits between, deliberately, so an
   /// author already writing rule books has nothing new to learn:
-  ///
   /// <code>
   /// enum ButtonLayout
-  ///   from Abcbtn.TabcButtonLayout
-  ///   to   Vcl.Buttons.TButtonLayout
-  ///   map  ablGlyphLeft -&gt; blGlyphLeft
-  ///   map  ablGlyphRight -&gt; blGlyphRight
-  ///   else blGlyphLeft
-  ///   todo 'ablGlyphTop has no counterpart'
+  /// from Abcbtn.TabcButtonLayout
+  /// to Vcl.Buttons.TButtonLayout
+  /// map ablGlyphLeft -&gt; blGlyphLeft
+  /// map ablGlyphRight -&gt; blGlyphRight
+  /// else blGlyphLeft
+  /// todo 'ablGlyphTop has no counterpart'
   /// end
   /// </code>
-  ///
   /// `from`/`to` match `#mapping &lt;Name&gt; from &lt;T&gt; to &lt;T&gt;`;
   /// the `-&gt;` in `map` matches a `#when ... -&gt; ...` branch; `else` matches
   /// `#else`. One pair per line so the file stays diffable and the editor can
   /// append a line without rewriting one.
-  ///
   /// MATCHING IS BY NAME, NOT ORDINAL, and that is a deliberate rule rather
   /// than a limitation. Two enums being converted are different types whose
   /// members correspond by MEANING; equal ordinals across unrelated types are a
   /// coincidence, not evidence. (The index does store a correct ordinal for
   /// every member, explicit-valued ones included, so ordinal remains available
   /// as an editor SUGGESTION -- never as the rule.)
-  ///
   /// Fallback is '' when the block declares no `else`, and an unmatched value
   /// is then reported rather than guessed at.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.FindEnumCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.CastLib</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumDef = record
     Name    : string;
@@ -98,6 +110,12 @@ type
   end;
 
   /// <summary>Everything one .castlib file declares.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.CastLib.pas), declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.CastLib.ParseCastLib (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCastLib = record
     Casts: TArray<TCastDef>;
     Enums: TArray<TEnumDef>;
@@ -106,28 +124,93 @@ type
 /// <summary>PURE: parse .castlib text into cast definitions. Tolerant -- skips blank
 /// lines, '#' comments, and unknown keys; a malformed block (missing name or 'end')
 /// is dropped without aborting the rest of the file.</summary>
+/// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TArray&lt;TCastDef&gt; -- Observed:
+/// ParseCastLibText(AText).Casts.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Convert.CastLib.ParseCastLibText</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Convert.CastLib.ParseCastLibText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadCastLibText(const AText: string): TArray<TCastDef>;
 
 /// <summary>PURE: parse .castlib text into BOTH block kinds.</summary>
-/// <remarks>Same tolerance as LoadCastLibText, which is now a thin wrapper over
-/// this so the two can never disagree about the block grammar.</remarks>
+/// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TCastLib -- Observed: Default(TCastLib).</returns>
+/// <remarks>
+/// Same tolerance as LoadCastLibText, which is now a thin wrapper over
+/// this so the two can never disagree about the block grammar.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.CastLib.LoadCastLibText (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLib (DRagLint.Convert.CastLib.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Convert.CastLib.SplitArrow, DRagLint.Convert.CastLib.SplitList, DRagLint.Convert.CastLib.Unquote, LowerCase, Pos, Trim</para>
+/// <para>Complexity: 26 (cyclomatic, outer body), 98 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Convert.CastLib.SplitArrow"/>
+/// <seealso cref="DRagLint.Convert.CastLib.SplitList"/>
+/// <seealso cref="DRagLint.Convert.CastLib.Unquote"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseCastLibText(const AText: string): TCastLib;
 
 /// <summary>Read + parse a .castlib file. Returns [] when APath is empty or missing
 /// (class casts simply unavailable -- never raises).</summary>
 /// <param name="APath">Absolute path to the .castlib, or '' for none.</param>
+/// <returns><!-- drag-lint:auto -->TArray&lt;TCastDef&gt; -- Observed:
+/// ParseCastLib(APath).Casts.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Convert.CastLib.ParseCastLib</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Convert.CastLib.ParseCastLib"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadCastLib(const APath: string): TArray<TCastDef>;
 
 /// <summary>Read + parse a .castlib file into both block kinds. Returns an empty
 /// record when APath is empty or missing -- never raises.</summary>
+/// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TCastLib -- Observed: Default(TCastLib);
+/// ParseCastLibText(TFile.ReadAllText(APath)).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.CastLib.LoadCastLib (DRagLint.Convert.CastLib.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.CastLib.ParseCastLibText</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Convert.CastLib.ParseCastLibText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseCastLib(const APath: string): TCastLib;
 
 /// <summary>The name of the class cast whose Accepts contains AFrom AND Yields
 /// contains ATo (case-insensitive), or '' when no cast bridges the pair.</summary>
+/// <param name="ADefs"><!-- drag-lint:auto type -->const TArray&lt;TCastDef&gt;</param>
+/// <param name="AFrom"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ATo"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Convert.CastLib.Has</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Convert.CastLib.Has"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ClassCastFor(const ADefs: TArray<TCastDef>; const AFrom, ATo: string): string;
 
 /// <summary>Find the enum cast named AName (case-insensitive).</summary>
+/// <param name="ALib"><!-- drag-lint:auto type -->const TCastLib</param>
+/// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ADef"><!-- drag-lint:auto type -->out TEnumDef</param>
 /// <returns>True and fills ADef when found.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: Default, SameText</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: ADef (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindEnumCast(const ALib: TCastLib; const AName: string;
   out ADef: TEnumDef): Boolean;
 
@@ -139,6 +222,14 @@ function FindEnumCast(const ALib: TCastLib; const AName: string;
 /// False means the value is unmapped AND there is no fallback -- the caller must
 /// REPORT that rather than emit anything, because inventing a member of the
 /// target enum is how a form acquires a value nobody chose.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: SameText, Trim</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: AResult (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EnumCastValue(const ADef: TEnumDef; const AValue: string;
   out AResult: string): Boolean;
 

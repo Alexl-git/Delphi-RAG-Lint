@@ -79,7 +79,7 @@ type
   /// into an absolute source line (ImplStartLine + LineOffset) for navigation.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Hover.Returns.pas), DRagLint.Hover.Returns.MineReturnExpressionsEx (DRagLint.Hover.Returns.pas), DRagLint.Hover.Returns.MineReturnExpressions (DRagLint.Hover.Returns.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Hover.Returns.pas), DRagLint.Hover.Returns.MineReturnExpressions (DRagLint.Hover.Returns.pas), DRagLint.Hover.Returns.MineReturnExpressionsEx (DRagLint.Hover.Returns.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
   /// <para>Used in units: DRagLint.Hover.Returns, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -171,7 +171,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

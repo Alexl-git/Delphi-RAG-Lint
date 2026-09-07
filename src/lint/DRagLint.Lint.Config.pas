@@ -42,7 +42,7 @@ type
   /// PMyType / FMyField / pMyParam, PascalCase, lowercase keywords).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Diagnostics.NamingChecks.pas), DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check (DRagLint.Diagnostics.NamingChecks.pas), declaration (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), declaration (DRagLint.Refactor.NamingFix.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Diagnostics.NamingChecks.pas), declaration (DRagLint.Lint.Config.pas), declaration (DRagLint.Refactor.NamingFix.pas), DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check (DRagLint.Diagnostics.NamingChecks.pas), DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas)</para>
   /// <para>Used in units: DRagLint.Diagnostics.NamingChecks, DRagLint.Lint.Config, DRagLint.Refactor.NamingFix</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -58,7 +58,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TNamingConfig</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.DoScanAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ? (+42 more)</para>
+    /// <para>Called from: DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ?, DRagLint.CLI.DoTodos (DRagLint.CLI.pas) ? (+52 more)</para>
     /// <para>Pure</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -73,8 +73,8 @@ type
   /// default.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) (+4 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ClassMetrics, DRagLint.Lint.Config, DRagLint.LSP.Completion</para>
+  /// <para>Used by: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) (+11 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ClassMetrics, DRagLint.Lint.Config, DRagLint.LSP.Completion, DragLint.Plugin.LintOptionsFrame</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLintConfig = record
@@ -104,7 +104,7 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.Config.TLintConfig.IsAutoFix (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.ShouldKeep (DRagLint.Lint.Config.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.ErrorSignatures (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveEndpointIds (DRagLint.CLI.pas) ? (+2 more)</para>
+    /// <para>Called from: DRagLint.Lint.Config.TLintConfig.IsAutoFix (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.ShouldKeep (DRagLint.Lint.Config.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.ErrorSignatures (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveEndpointIds (DRagLint.CLI.pas) ? (+3 more)</para>
     /// <para>Calls: SameText, Trim</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
@@ -143,8 +143,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Calls: DRagLint.Lint.Config.TLintConfig.ApplyNamingObject, DRagLint.Lint.Config.TLintConfig.SetSeverityPair, SameText, StrToIntDef</para>
-    /// <para>Complexity: 19 (cyclomatic, outer body), 77 lines (full implementation)</para>
-    /// <para>Reads: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues   Writes: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues, ExceptionsUnit</para>
+    /// <para>Complexity: 20 (cyclomatic, outer body), 80 lines (full implementation)</para>
+    /// <para>Reads: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues   Writes: FDisabled, FEnabled, FAutoFix, FExcludePaths, FThreshNames, FThreshValues, ExceptionsUnit, ExceptionsRoot</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplyNamingObject"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetSeverityPair"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
@@ -183,7 +183,7 @@ type
     /// <returns><!-- drag-lint:auto -->TLintConfig -- Observed: Default(TLintConfig).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Create (DragLint.Plugin.LintOptionsFrame.pas) ?, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig (DragLint.Plugin.LintOptionsFrame.pas) ?, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ProfileSelected (DragLint.Plugin.LintOptionsFrame.pas) ?</para>
     /// <para>Calls: DRagLint.Lint.Config.TNamingConfig.Default</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Lint.Config.TNamingConfig.Default"/>
@@ -219,7 +219,7 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.Lint.Config.TLintConfig.IsEnabled (DRagLint.Lint.Config.pas)</para>
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.Lint.Config.TLintConfig.IsEnabled (DRagLint.Lint.Config.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas) ?</para>
     /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Contains</para>
     /// <para>Reads: FDisabled, FEnabled</para>
     /// <para>Pure</para>
@@ -253,7 +253,7 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: Contains(FAutoFix, ARuleId).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas) ?</para>
     /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Contains</para>
     /// <para>Reads: FAutoFix</para>
     /// <para>Pure</para>
@@ -277,7 +277,7 @@ type
     /// suppression, because vendored code is not this codebase's quality
     /// signal for ANY rule.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
+    /// <para>Called from: DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
     /// <para>Calls: LowerCase, MatchesMask, StringReplace</para>
     /// <para>Returns: False; True</para>
     /// <para>Reads: FExcludePaths</para>
@@ -296,7 +296,7 @@ type
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: ADefault.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.ClassMetrics.TClassMetrics.Run (DRagLint.Lint.ClassMetrics.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
+    /// <para>Called from: DRagLint.Lint.ClassMetrics.TClassMetrics.Run (DRagLint.Lint.ClassMetrics.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas) ?</para>
     /// <para>Calls: SameText</para>
     /// <para>Reads: FThreshNames, FThreshValues</para>
     /// <para>Pure</para>
@@ -455,6 +455,7 @@ type
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Writes: FAutoFix</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddAutoFix"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AddDisabled"/>

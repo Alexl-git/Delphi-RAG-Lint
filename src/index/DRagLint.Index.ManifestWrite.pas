@@ -70,7 +70,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas), declaration (DRagLint.Index.ManifestWrite.pas), DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Index.ManifestWrite.pas), DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas), DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.ManifestWrite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

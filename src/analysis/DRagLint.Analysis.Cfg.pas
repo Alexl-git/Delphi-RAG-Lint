@@ -22,7 +22,7 @@ type
   /// reads are not trusted (a `with` aliases fields), so definite-assignment
   /// ignores their uses and liveness treats them as using everything.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.AddItem (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.AddItem (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -35,7 +35,7 @@ type
   /// reaches after the loop, for the loop-var-after-loop check.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas)</para>
   /// <para>Used in units: DRagLint.Analysis.Cfg</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -51,7 +51,7 @@ type
   /// have empty `Items`. `EntryDefs` names vars defined unconditionally on
   /// entry to this block (used for the `foreach` iterator).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas) (+6 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas) (+8 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Flow.Lattices, DRagLint.Analysis.Liveness, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -62,7 +62,7 @@ type
     EntryDefs: TArray<string>;
     Succ     : TList<Integer>;
     Pred     : TList<Integer>;
-    /// <summary><!-- drag-lint:auto -->TCfgBlock</summary>
+    /// <summary><!-- drag-lint:auto sum -->TCfgBlock</summary>
     /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -131,7 +131,7 @@ type
     Src        : TBytes;
     Skipped    : Boolean;
     ForVars    : TList<TCfgForVar>;
-    /// <summary><!-- drag-lint:auto -->TCfg</summary>
+    /// <summary><!-- drag-lint:auto sum -->TCfg</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas)</para>
@@ -219,13 +219,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
-    /// <para>Calls: DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm, DRagLint.Analysis.Cfg.TBuilderState.Create, DRagLint.Analysis.Cfg.TBuilderState.EmitStmt, DRagLint.Analysis.Cfg.TCfg.Create</para>
+    /// <para>Calls: DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm, DRagLint.Analysis.Cfg.TBuilderState.Create, DRagLint.Analysis.Cfg.TBuilderState.EmitStmt, DRagLint.Analysis.Cfg.TCfg.Create, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
     /// <para>Owns returned: new (caller owns)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TBuilderState.Create"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TBuilderState.EmitStmt"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Create"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Build(const AProc: TTSNode; const ASrc: TBytes): TCfg;
@@ -262,10 +263,14 @@ function CfgFindProcs(const ARoot: TTSNode): TArray<TTSNode>;
 /// <para>The name test is case-INSENSITIVE: Delphi identifiers are, and `Exit`
 /// is written both ways in the same file.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Transfer (DRagLint.Analysis.Flow.Lattices.pas)</para>
-/// <para>Calls: DRagLint.Analysis.Cfg.LowerText</para>
+/// <para>Called from: DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect (DRagLint.Analysis.Flow.Lattices.pas)</para>
+/// <para>Calls: DRagLint.Analysis.Cfg.LowerText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Analysis.Cfg.LowerText"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsValuedExit(const ANode: TTSNode; const ASrc: TBytes): Boolean;
@@ -288,6 +293,17 @@ function IsValuedExit(const ANode: TTSNode; const ASrc: TBytes): Boolean;
 /// DRagLint.Diagnostics.FlowChecks, where an except handler ending in
 /// <c>Continue</c> means the code after the try is unreachable on the exception
 /// path.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas), DRagLint.Diagnostics.FlowChecks.OverwrittenInsideFollowingTry.HasTopLevelTransfer (DRagLint.Diagnostics.FlowChecks.pas)</para>
+/// <para>Calls: DRagLint.Analysis.Cfg.LowerText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+/// <para>Returns: ''; LowerText(C, ASrc)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Analysis.Cfg.LowerText"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function StatementKeyword(const ANode: TTSNode; const ASrc: TBytes): string;
 

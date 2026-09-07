@@ -111,8 +111,8 @@ type
   /// <summary>A single configurable parameter of a rule (threshold or naming knob).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), declaration (DRagLint.Lint.RuleCatalog.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog</para>
+  /// <para>Used by: declaration (DRagLint.Lint.RuleCatalog.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog, DragLint.Plugin.LintOptionsFrame</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleParam = record
@@ -141,7 +141,7 @@ type
   /// <summary>Per-category and total rule counts for the catalog summary.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), declaration (DRagLint.Lint.RuleCatalog.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize (DRagLint.Lint.RuleCatalog.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.RuleCatalog.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.Summarize (DRagLint.Lint.RuleCatalog.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -182,8 +182,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas)</para>
-    /// <para>Calls: CompareText, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, ParamStr, SameText</para>
-    /// <para>Complexity: 14 (cyclomatic, outer body), 80 lines (full implementation)</para>
+    /// <para>Calls: CompareText, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, MatchStr, ParamStr, SameText</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 88 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry"/>
@@ -226,6 +226,14 @@ type
 /// review must be bound to the measured value.</summary>
 /// <param name="ARuleId">Rule id, compared case-insensitively.</param>
 /// <returns>True for the seven ids in ROUTINE_METRIC_RULES.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: False</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsRoutineMetricRule(const ARuleId: string): Boolean;
 
 /// <summary>The marker hash for a routine-metric finding: the ordinary window
@@ -234,12 +242,20 @@ function IsRoutineMetricRule(const ARuleId: string): Boolean;
 /// <param name="AMetric">The finding's measured value (TLintFinding.Metric).</param>
 /// <returns>Four lowercase hex digits, the same shape HashWindow returns, so the
 /// marker GRAMMAR (`rule@hhhh`) is unchanged.</returns>
-/// <remarks>Lives here rather than in DRagLint.Lint.ReviewMarker deliberately:
+/// <remarks>
+/// Lives here rather than in DRagLint.Lint.ReviewMarker deliberately:
 /// that unit is mirrored byte-for-byte into YADF's vendor tree and pinned by
 /// run_reviewmarker_yadf_mirror.ps1, so putting this there would drag an
 /// unrelated repository into the change. Only what the four digits are computed
 /// FROM changes -- the same kind of move f709bea already made once when HashLine
-/// became HashWindow.</remarks>
+/// became HashWindow.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, IntToStr, LowerCase</para>
+/// <para>Returns: LowerCase(Copy(THashSHA2.GetHashString(AWindowHash + '|' + IntToStr(AMetric)), 1, 4))</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MetricHash(const AWindowHash: string; AMetric: Integer): string;
 
 implementation

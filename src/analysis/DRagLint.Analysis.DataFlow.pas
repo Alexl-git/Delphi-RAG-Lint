@@ -67,10 +67,11 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: DRagLint.Analysis.Cfg.TCfg.BlockCount</para>
-    /// <para>Complexity: 17 (cyclomatic, outer body), 64 lines (full implementation)</para>
+    /// <para>Calls: DRagLint.Analysis.Cfg.TCfg.BlockCount, DRagLint.Analysis.DataFlow.DataFlowRecordSolve</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 84 lines (full implementation)</para>
     /// <para>Mutates: AIn (out), AOut (out)</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.DataFlowRecordSolve"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Solve(const ACfg: TCfg; const AAnalysis: IDataFlowAnalysis<TValue>;
@@ -88,11 +89,14 @@ type
   /// lattice work instead -- which is what TransferSeconds against SolveSeconds
   /// separates. The repo's record on GUESSED flow-perf targets is 100% failure;
   /// this makes the next attempt aimed.
-  ///
   /// Accumulation is unconditional -- a handful of increments per block visit
   /// and two timestamp reads per Transfer, which walks an AST -- and only the
   /// PRINTING is gated on DRAGLINT_PROFILE. Same rule as FlowPhaseTicks: the
   /// measured code has to be the shipped code.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.Analysis.DataFlow, DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDataFlowStats = record
     /// <summary>Solve calls that ran. A Skipped CFG exits before counting.</summary>
@@ -127,6 +131,10 @@ type
   /// per-block transfer pays in proportion to THAT lattice's own re-visit ratio,
   /// not the pooled one. An aggregate of 2.388 is consistent with one lattice at
   /// 1.0 and another at 6.0, in which case memoising the first buys nothing.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.DataFlow.DataFlowLatticeStats (DRagLint.Analysis.DataFlow.pas)</para>
+  /// <para>Used in units: DRagLint.Analysis.DataFlow</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDataFlowLatticeStat = record
     /// <summary>Class name of the IDataFlowAnalysis implementation.</summary>
@@ -170,6 +178,10 @@ function DataFlowLatticeStats: TArray<TDataFlowLatticeStat>;
 /// variables therefore does not compile, however natural it looks. The counters
 /// stay private to the implementation and this is their one door.
 /// Not thread-safe, and deliberately so -- see the counter block's remarks.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver&lt;TValue&gt;.Solve (DRagLint.Analysis.DataFlow.pas)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure DataFlowRecordSolve(const AName: string; ABlocks, AVisits, AReenqueues,
   AJoins, ATransfers, AComparisons, ASolveTicks, ATransferTicks: Int64);

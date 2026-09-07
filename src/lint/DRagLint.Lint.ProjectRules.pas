@@ -68,13 +68,14 @@ type
     /// unused-unit-in-uses: a project store cannot see System.IniFiles, so
     /// without this the rule's own "is the unit indexed?" gate answered False
     /// for every RTL/VCL import and the rule reported ZERO, everywhere.</param>
+    /// <param name="AOptInRules"><!-- drag-lint:auto type -->const TArray&lt;string&gt; = nil</param>
     /// <returns>Findings across the whole index (file paths + lines); empty if none.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ASiblingStore, ChangeFileExt, CollectFrom, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower (+27 more)</para>
-    /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; nil; Findings.ToArray</para>
-    /// <para>Complexity: 50 (cyclomatic, outer body), 554 lines (full implementation)</para>
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+    /// <para>Calls: ASiblingStore, ChangeFileExt, CollectFrom, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower (+34 more)</para>
+    /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Found; nil; Findings.ToArray</para>
+    /// <para>Complexity: 59 (cyclomatic, outer body), 754 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>

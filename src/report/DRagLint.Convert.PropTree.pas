@@ -83,7 +83,7 @@ type
   /// recovered from the nearest visibility-bearing sibling instead of being
   /// fabricated.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), declaration (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.BuildPropTree.Walk (DRagLint.Convert.PropTree.pas) (+1 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.LeafDefaultOf (DRagLint.Convert.DfmReemit.pas), declaration (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -161,7 +161,7 @@ type
   /// have recursed further.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit.TreeFor (DRagLint.CLI.pas) (+9 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules</para>
+  /// <para>Used in units: ConvRules.Engine, ConvRules.MainForm, ConvRules.MappingForm, ConvRules.Mappings, ConvRulesModelTests, DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.PropTree, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropTree = record
@@ -260,11 +260,12 @@ type
 /// Not thread-safe with respect to concurrent mutation of the store.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree (DRagLint.CLI.pas) (+1 more)</para>
-/// <para>Calls: AddId, BodyOf, ClassChain, Climb, ClimbFrom, ClosureClassIds, CollectFields, CollectProps, CrossesGuiFramework, Default (+21 more)</para>
+/// <para>Calls: AddId, BodyOf, CharInSet, ClassChain, ClassifyDefaultClause, Climb, ClimbFrom, ClosureClassIds, CollectFields, CollectProps (+30 more)</para>
 /// <para>Returns: List.ToArray; Climb(AClass); Ids.ToArray; Default(TPropTree)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.PropTree.BuildPropTree.ResolveClassByQName"/>
 /// <seealso cref="DRagLint.Convert.PropTree.BuildPropTree.Walk"/>
+/// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Create"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;

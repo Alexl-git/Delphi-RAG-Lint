@@ -63,7 +63,7 @@ type
   /// generics.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas), declaration (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.ClassifyDiChain (DRagLint.Parser.SpringDI.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.SpringDI.ClassifyDiChain (DRagLint.Parser.SpringDI.pas)</para>
   /// <para>Used in units: DRagLint.Parser.Delphi13, DRagLint.Parser.SpringDI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

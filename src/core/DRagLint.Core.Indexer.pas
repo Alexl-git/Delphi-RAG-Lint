@@ -24,8 +24,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TIndexer = class(TInterfacedObject, IIndexer)
@@ -165,7 +165,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ShouldPruneDir      (const ADir : string): Boolean;
-      /// <summary><!-- drag-lint:auto -->v0.42: SQL files are scanned only when they
+      /// <summary><!-- drag-lint:auto sum -->v0.42: SQL files are scanned only when they
       /// match the MS*.SQL convention (the Micronite Firebird DDL scripts) -- per user,
       /// those are the only SQL files worth indexing. Every other .sql is skipped so the
       /// index isn't polluted by ad-hoc query scripts. Non-.sql files always pass this
@@ -274,6 +274,7 @@ type
       /// <param name="AParsers"><!-- drag-lint:auto type -->const TArray&lt;IParser&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Indexer.TIndexer.Create/3</para>
       /// <para>Overload 2 of 2</para>
       /// <para>constructor</para>
@@ -315,7 +316,7 @@ type
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DateTimeToUnix, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ReportProgress, DRagLint.Core.Indexer.TIndexer.ResolveEnclosingSymbolId, DRagLint.Core.Indexer.TIndexer.SliceBodyLines, DRagLint.Core.Interfaces.IParser.LanguageName (+31 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.IndexFile</para>
       /// <para>Complexity: 29 (cyclomatic, outer body), 377 lines (full implementation)</para>

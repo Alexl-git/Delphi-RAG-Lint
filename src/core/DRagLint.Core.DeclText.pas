@@ -31,17 +31,58 @@ uses
 type
   /// <summary>Recovers the declaring source text of a symbol, caching each
   /// file's lines so a sweep over many symbols reads every file once.</summary>
-  /// <remarks>Query-scoped and single-threaded. Borrows the store; owns only
+  /// <remarks>
+  /// Query-scoped and single-threaded. Borrows the store; owns only
   /// its cache. Never raises: an unreadable file answers '' for every symbol
-  /// in it, and '' means UNKNOWN -- never "the clause is absent".</remarks>
+  /// in it, and '' means UNKNOWN -- never "the clause is absent".
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.PropTree</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDeclTextReader = class
   strict private
     FStore: ISymbolStore                     ;
     FLines: TDictionary<Int64, TArray<string>>;
+    /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: nil;
+    /// TFile.ReadAllLines(Path, TEncoding.ANSI).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Core.DeclText.TDeclTextReader.TextOf (DRagLint.Core.DeclText.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
+    /// <para>Reads: FLines, FStore</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Create"/>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Destroy"/>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.TextOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LinesOf(AFileId: Int64): TArray<string>;
   public
     /// <summary>Binds the reader to a store. AStore is borrowed, not owned.</summary>
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.BuildPropTree (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FStore, FLines</para>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Destroy"/>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.LinesOf"/>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.TextOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AStore: ISymbolStore);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FLines</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Create"/>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.LinesOf"/>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.TextOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
 
     /// <summary>ASym's declaring source, StartLine..EndLine joined with a
@@ -49,9 +90,20 @@ type
     /// <param name="ASym">The symbol whose declaration is wanted.</param>
     /// <returns>The declaration text, or '' when the file is unreadable, the
     /// symbol has no file, or the line range is nonsense.</returns>
-    /// <remarks>'' is UNKNOWN. A caller must never read it as evidence that a
+    /// <remarks>
+    /// '' is UNKNOWN. A caller must never read it as evidence that a
     /// clause is absent -- that conflation is what made a bare redeclaration
-    /// ('property AutoSize;') report as having no default.</remarks>
+    /// ('property AutoSize;') report as having no default.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.BuildPropTree.DeclTextOf (DRagLint.Convert.PropTree.pas) ?</para>
+    /// <para>Calls: DRagLint.Core.DeclText.TDeclTextReader.LinesOf, Trim</para>
+    /// <para>Returns: ''; Trim(string.Join(' ', Span))</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.LinesOf"/>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Create"/>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TextOf(const ASym: TSymbol): string;
   end;
 

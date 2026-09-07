@@ -110,7 +110,7 @@ type
   /// still reports its extent so a caller can say WHICH comment it declined,
   /// and so Task 9's strip round-trip has the range to delete.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas), declaration (DRagLint.Doc.Harvest.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Harvest.pas), DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.Harvest</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

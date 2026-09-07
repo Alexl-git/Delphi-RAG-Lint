@@ -76,7 +76,7 @@ type
       // blanked to spaces, offsets 1:1). When disabled -- or on a per-file
       // preprocess exception (logged once) -- returns AContent unchanged so the
       // caller falls back to the old all-branch scan for that file.
-      /// <summary><!-- drag-lint:auto -->Run the directive preprocessor over AContent
+      /// <summary><!-- drag-lint:auto sum -->Run the directive preprocessor over AContent
       /// under FProfile when FPreprocessEnabled, returning the resolved text
       /// (inactive-branch bytes blanked to spaces, offsets 1:1). When disabled -- or on a
       /// per-file preprocess exception (logged once) -- returns AContent unchanged so the
@@ -102,8 +102,8 @@ type
       // ---- unit-file resolution helpers ----------------------------------------
 
       // Return True if AFile is rooted under any library root (case-insensitive).
-      /// <summary><!-- drag-lint:auto -->Return True if AFile is rooted under any library
-      /// root (case-insensitive).</summary>
+      /// <summary><!-- drag-lint:auto sum -->Return True if AFile is rooted under any
+      /// library root (case-insensitive).</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
@@ -123,9 +123,9 @@ type
 
       // Search ASearchPaths for <AUnitName>.pas (case-insensitive first-file-wins).
       // Returns the full absolute path, or '' if not found.
-      /// <summary><!-- drag-lint:auto -->Search ASearchPaths for &lt;AUnitName&gt;.pas
-      /// (case-insensitive first-file-wins). Returns the full absolute path, or '' if not
-      /// found.</summary>
+      /// <summary><!-- drag-lint:auto sum -->Search ASearchPaths for
+      /// &lt;AUnitName&gt;.pas (case-insensitive first-file-wins). Returns the full
+      /// absolute path, or '' if not found.</summary>
       /// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASearchPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
@@ -144,9 +144,9 @@ type
 
       // Search ASearchPaths + the dir of AFromFile for AIncName (as-given, then
       // relative to each search path).  Returns absolute path or ''.
-      /// <summary><!-- drag-lint:auto -->Search ASearchPaths + the dir of AFromFile for
-      /// AIncName (as-given, then relative to each search path). Returns absolute path or
-      /// ''.</summary>
+      /// <summary><!-- drag-lint:auto sum -->Search ASearchPaths + the dir of AFromFile
+      /// for AIncName (as-given, then relative to each search path). Returns absolute
+      /// path or ''.</summary>
       /// <param name="AIncName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFromDir"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASearchPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
@@ -169,9 +169,9 @@ type
       // Parse the .dpr `uses` clause: fill AUnitNames (name) + AUnitFiles
       // (the `in 'path'` specifier when given, or '' when not).
       // Both lists are parallel (same index).
-      /// <summary><!-- drag-lint:auto -->Parse the .dpr `uses` clause: fill AUnitNames
-      /// (name) + AUnitFiles (the `in 'path'` specifier when given, or '' when not). Both
-      /// lists are parallel (same index).</summary>
+      /// <summary><!-- drag-lint:auto sum -->Parse the .dpr `uses` clause: fill
+      /// AUnitNames (name) + AUnitFiles (the `in 'path'` specifier when given, or '' when
+      /// not). Both lists are parallel (same index).</summary>
       /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AUnitNames"><!-- drag-lint:auto type -->TStringList</param>
@@ -191,8 +191,8 @@ type
       procedure ParseDprUses(const AContent, ABaseDir: string; AUnitNames, AUnitFiles: TStringList);
 
       // Return the `<DCCReference Include="...">` file paths from a .dproj.
-      /// <summary><!-- drag-lint:auto -->Return the `&lt;DCCReference Include="..."&gt;`
-      /// file paths from a .dproj.</summary>
+      /// <summary><!-- drag-lint:auto sum -->Return the `&lt;DCCReference
+      /// Include="..."&gt;` file paths from a .dproj.</summary>
       /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFiles"><!-- drag-lint:auto type -->TStringList</param>
@@ -210,7 +210,7 @@ type
       procedure ParseDprojRefs(const AContent, ABaseDir: string; AFiles: TStringList);
 
       // Read search paths from the .dproj's DCC_UnitSearchPath tags.
-      /// <summary><!-- drag-lint:auto -->Read search paths from the .dproj's
+      /// <summary><!-- drag-lint:auto sum -->Read search paths from the .dproj's
       /// DCC_UnitSearchPath tags.</summary>
       /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
@@ -235,10 +235,10 @@ type
       // that `uses`/`{$I}` scanning does not pick up identifiers inside them.
       // Does NOT strip // comments (they end at EOL, and our regex won't cross
       // lines for uses-identifiers anyway).
-      /// <summary><!-- drag-lint:auto -->Strip block comments { } and (* *) and string
-      /// literals from AText so that `uses`/`{$I}` scanning does not pick up identifiers
-      /// inside them. Does NOT strip // comments (they end at EOL, and our regex won't
-      /// cross lines for uses-identifiers anyway).</summary>
+      /// <summary><!-- drag-lint:auto sum -->Strip block comments { } and (* *) and
+      /// string literals from AText so that `uses`/`{$I}` scanning does not pick up
+      /// identifiers inside them. Does NOT strip // comments (they end at EOL, and our
+      /// regex won't cross lines for uses-identifiers anyway).</summary>
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
       /// <remarks>
@@ -257,7 +257,7 @@ type
 
       // Scan AText for uses-clause identifiers (both interface and implementation
       // sections).  Returns a list of dotted unit names.
-      /// <summary><!-- drag-lint:auto -->Scan AText for uses-clause identifiers (both
+      /// <summary><!-- drag-lint:auto sum -->Scan AText for uses-clause identifiers (both
       /// interface and implementation sections). Returns a list of dotted unit names.</summary>
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
@@ -276,7 +276,7 @@ type
       function ExtractUses(const AText: string): TArray<string>;
 
       // Scan AText for {$I filename} / {$INCLUDE filename} directives.
-      /// <summary><!-- drag-lint:auto -->Scan AText for {$I filename} / {$INCLUDE
+      /// <summary><!-- drag-lint:auto sum -->Scan AText for {$I filename} / {$INCLUDE
       /// filename} directives.</summary>
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
@@ -344,7 +344,7 @@ type
       /// <param name="AExclude">Glob patterns for "stale" files (still included in
       /// closure but warned). Pass [] for no exclusion warnings.</param>
       /// <returns>TClosureResult with deduped Files list and Warnings.</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->Project file not found: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas) (+1 more)</para>

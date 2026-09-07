@@ -37,7 +37,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), declaration (DRagLint.Sql.OrmLinker.pas), DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Sql.OrmLinker.pas), DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Sql.OrmLinker</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

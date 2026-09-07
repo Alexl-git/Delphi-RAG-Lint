@@ -12,7 +12,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas)</para>
   /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Doc.Document</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -40,8 +40,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.NormalizeContainerBody (DRagLint.Doc.Regions.pas) (+2 more)</para>
-  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Doc.Document, DRagLint.Doc.Regions</para>
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.NormalizeContainerBody (DRagLint.Doc.Regions.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Wiki</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocCommentParser = class
@@ -111,7 +111,7 @@ type
       /// </remarks>
       class function ParseLoose(const ARaw: string)                          : TParsedDoc; static;
 
-      /// <summary><!-- drag-lint:auto -->TDocCommentParser</summary>
+      /// <summary><!-- drag-lint:auto sum -->TDocCommentParser</summary>
       /// <param name="ALine"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
@@ -159,7 +159,7 @@ type
       /// would silently read the wrong characters. ONE definition, matching the
       /// same reasoning as EnsureParserRegexes' single set of patterns.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.StandaloneBodyOf (DRagLint.Doc.Regions.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)</para>
+      /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.StandaloneBodyOf (DRagLint.Doc.Regions.pas), DRagLint.Doc.Wiki.TWikiParser.Walk (DRagLint.Doc.Wiki.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)</para>
       /// <para>Calls: DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix"/>

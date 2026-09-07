@@ -51,9 +51,15 @@ uses
 
 type
   /// <summary>Raised when the guard cannot install itself on a connection.</summary>
-  /// <remarks>Distinct class on purpose: the verb catches THIS and refuses to
+  /// <remarks>
+  /// Distinct class on purpose: the verb catches THIS and refuses to
   /// run the query, which must not be confused with an error raised by the
-  /// query itself.</remarks>
+  /// query itself.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.Sql.Guarded.TSqlGuard.Create (DRagLint.Sql.Guarded.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Sql.Guarded</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ESqlGuardError = class(Exception);
 
   /// <summary>Installs an SQLite authorizer and a progress (time-cap) handler
@@ -68,9 +74,12 @@ type
   /// including ATTACH, DETACH and PRAGMA. The first denial is remembered so
   /// the caller can report WHICH action was refused instead of SQLite's bare
   /// "not authorized".
-  ///
   /// Not thread-safe: the hooks are per-connection and the recorded state is
   /// per-instance. Create it, run one query, free it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoSql (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSqlGuard = class
     private
@@ -82,8 +91,40 @@ type
       FDeniedCode : Integer        ;
       FDeniedName : string         ;
       FPrevNOpers : Integer        ;
+      /// <param name="ADB"><!-- drag-lint:auto type -->TSQLiteDatabase</param>
+      /// <param name="ACode"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AArg1"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AArg2"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AArg3"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AArg4"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AResult"><!-- drag-lint:auto type -->var Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: SameText, Trim</para>
+      /// <para>Reads: FDenied, FDeniedName   Writes: FDenied, FDeniedCode, FDeniedName</para>
+      /// <para>Mutates: AResult (var)</para>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Create"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Destroy"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.ElapsedMs"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Explain"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.HandleProgress"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleAuthorize(ADB: TSQLiteDatabase; ACode: Integer;
         const AArg1, AArg2, AArg3, AArg4: string; var AResult: Integer);
+      /// <param name="ADB"><!-- drag-lint:auto type -->TSQLiteDatabase</param>
+      /// <param name="ACancel"><!-- drag-lint:auto type -->var Boolean</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FClock, FTimeoutMs   Writes: FTimedOut</para>
+      /// <para>Mutates: ACancel (var)</para>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Create"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Destroy"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.ElapsedMs"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Explain"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.HandleAuthorize"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleProgress(ADB: TSQLiteDatabase; var ACancel: Boolean);
     public
       /// <summary>Installs both hooks on AConn's native SQLite handle.</summary>
@@ -97,20 +138,70 @@ type
       /// reached (connection not open, or a non-SQLite driver). The guard
       /// FAILS CLOSED: the caller must abandon the query, not run it
       /// unguarded.</exception>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoSql (DRagLint.CLI.pas)</para>
+      /// <para>Calls: TObject, TSQLiteDatabase</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FNative   Writes: FTimeoutMs, FTimedOut, FDenied, FDeniedCode, FDeniedName, FNative, FPrevNOpers, FClock</para>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Destroy"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.ElapsedMs"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Explain"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.HandleAuthorize"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.HandleProgress"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AConn: TFDConnection; ATimeoutMs: Integer);
 
       /// <summary>Removes both hooks and restores the previous progress
       /// granularity.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FNative, FPrevNOpers</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Create"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.ElapsedMs"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Explain"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.HandleAuthorize"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.HandleProgress"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
 
       /// <summary>Human-readable account of why the query was stopped.</summary>
       /// <returns>A single line naming the denied action (with its argument)
       /// or the elapsed time cap; empty when neither happened.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoSql (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Sql.Guarded.SqlActionName, Format</para>
+      /// <para>Reads: FTimedOut, FTimeoutMs, FDenied, FDeniedCode, FDeniedName</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Sql.Guarded.SqlActionName"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Create"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Destroy"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.ElapsedMs"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.HandleAuthorize"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Explain: string;
 
       /// <summary>Milliseconds elapsed since the guard was installed.</summary>
       /// <returns>Wall-clock milliseconds; the value the time cap is compared
       /// against.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoSql (DRagLint.CLI.pas)</para>
+      /// <para>Returns: FClock.ElapsedMilliseconds</para>
+      /// <para>Reads: FClock</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Create"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Destroy"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Explain"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.HandleAuthorize"/>
+      /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.HandleProgress"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ElapsedMs: Int64;
 
       /// <summary>True when the time cap elapsed and the query was
@@ -126,6 +217,15 @@ type
 /// <returns>The action's name (e.g. 'ATTACH'), or 'action &lt;n&gt;' for a code
 /// this build does not know -- a newer SQLite may add codes, and an unnamed
 /// code must still be reportable.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Sql.Guarded.TSqlGuard.Explain (DRagLint.Sql.Guarded.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: 'CREATE INDEX'; 'CREATE TABLE'; 'CREATE TEMP INDEX'; 'CREATE TEMP TABLE'; 'CREATE TEMP TRIGGER'; 'CREATE TEMP VIEW'</para>
+/// <para>Complexity: 34 (cyclomatic, outer body), 39 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SqlActionName(ACode: Integer): string;
 
 /// <summary>Rejects anything that is not exactly one SQL statement.</summary>
@@ -141,6 +241,13 @@ function SqlActionName(ACode: Integer): string;
 /// second one. The scan skips single-quoted strings, double-quoted and
 /// bracketed and backticked identifiers, -- line comments and block comments,
 /// so a semicolon inside any of those does not count.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoSql (DRagLint.CLI.pas)</para>
+/// <para>Calls: CharInSet, StringReplace, Trim</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 30 (cyclomatic, outer body), 80 lines (full implementation)</para>
+/// <para>Mutates: AReason (out)</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsSingleStatement(const ASql: string; out AReason: string): Boolean;
 

@@ -31,7 +31,7 @@ type
       // Compare .dproj <DCCReference Include="..."/> entries vs the matching
       // .dpr/.dpk's `uses` clause. Returns findings for every unit that is
       // present on one side but not the other.
-      /// <summary><!-- drag-lint:auto -->Compare .dproj &lt;DCCReference
+      /// <summary><!-- drag-lint:auto sum -->Compare .dproj &lt;DCCReference
       /// Include="..."/&gt; entries vs the matching .dpr/.dpk's `uses` clause. Returns
       /// findings for every unit that is present on one side but not the other.</summary>
       /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
@@ -65,7 +65,7 @@ type
       /// <returns>One warning per unresolvable used unit.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
       /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems, ExtractFileName, Format, LowerCase, StartsText</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Complexity: 10 (cyclomatic, outer body), 163 lines (full implementation)</para>

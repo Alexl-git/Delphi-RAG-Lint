@@ -34,7 +34,7 @@ type
   /// id is unknown deliberately carries no line, and the JSON renderer must
   /// omit the pair rather than emit 0.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.NameCallersForName (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used by: DRagLint.Query.Callers.NameCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas)</para>
   /// <para>Used in units: DRagLint.Query.Callers</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -33,6 +33,11 @@ type
   /// ehmFromInteger construct an enum value from an ordinal (with range
   /// checking); ehmToString/ehmFromString convert to/from a display string
   /// (see TToStringMode for the ToString strategy).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumHelperMethod = (ehmToByte, ehmFromByte, ehmToInteger, ehmFromInteger, ehmToString, ehmFromString);
 
   /// <summary>The set of helper methods requested for one generation run.</summary>
@@ -62,7 +67,7 @@ type
   /// must not act on it.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <para>Used in units: DRagLint.Refactor.EnumHelper</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -132,7 +137,7 @@ type
   /// live on TEnumHelperResolve).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <para>Used in units: DRagLint.Refactor.EnumHelper</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -171,7 +176,7 @@ type
   /// reason and no edits.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.EnumHelper.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.EnumHelper</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

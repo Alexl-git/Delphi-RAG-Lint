@@ -62,11 +62,22 @@ const
 type
   /// <summary>Three outcomes, and folding any two together is worse than not
   /// checking at all.</summary>
-  /// <remarks>fvUnknown exists so "I cannot tell" never renders as "fresh".
-  /// It is the honest answer for an index written before the stamp existed.</remarks>
+  /// <remarks>
+  /// fvUnknown exists so "I cannot tell" never renders as "fresh".
+  /// It is the honest answer for an index written before the stamp existed.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.Freshness.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFreshnessVerdict = (fvFresh, fvStale, fvUnknown);
 
   /// <summary>What one freshness sweep found.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.Freshness.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas), DRagLint.Index.Freshness.ProbeIndexFreshness (DRagLint.Index.Freshness.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Freshness</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFreshnessReport = record
     /// <summary>fvStale iff at least one still-present file's mtime differs.</summary>
     Verdict : TFreshnessVerdict;
@@ -90,9 +101,19 @@ type
 /// <param name="AMaxExamples">How many changed paths to keep for the message.</param>
 /// <returns>A report; fvUnknown when the DB carries no INDEXED_AT_KEY stamp,
 /// because an index written before this existed cannot be judged.</returns>
-/// <remarks>One query plus one stat per row. Never raises: an unreadable path
+/// <remarks>
+/// One query plus one stat per row. Never raises: an unreadable path
 /// counts as Missing, on the principle that a freshness check must not be able
-/// to break the command it is advising.</remarks>
+/// to break the command it is advising.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas)</para>
+/// <para>Calls: DateTimeToUnix, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, FileAge</para>
+/// <para>Returns: Default(TFreshnessReport)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProbeIndexFreshness(const AStore: ISymbolStore;
   AMaxExamples: Integer = 3): TFreshnessReport;
 
@@ -101,12 +122,20 @@ function ProbeIndexFreshness(const AStore: ISymbolStore;
 /// <param name="AReport">A report from ProbeIndexFreshness.</param>
 /// <param name="ADbPath">Database path, named so the reader knows which index.</param>
 /// <returns>Empty for fvFresh and for fvUnknown -- see the remarks.</returns>
-/// <remarks>fvUnknown returns EMPTY on purpose, and that is the one place this
+/// <remarks>
+/// fvUnknown returns EMPTY on purpose, and that is the one place this
 /// unit bends the "never fold UNKNOWN into FRESH" rule: every index built before
 /// the stamp existed is fvUnknown, so speaking would put a line on every command
 /// until the whole tree is reindexed, and a warning that always fires is one
 /// nobody reads. The verdict is still fvUnknown in the record for any caller
-/// that wants to render it; only this convenience line stays quiet.</remarks>
+/// that wants to render it; only this convenience line stays quiet.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: ''</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FreshnessNote(const AReport: TFreshnessReport; const ADbPath: string): string;
 
 implementation

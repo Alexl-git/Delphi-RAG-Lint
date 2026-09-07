@@ -19,7 +19,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -44,14 +44,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Copy, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolSlice, FillChar, LastDelimiter, Pos, SameText</para>
-      /// <para>Complexity: 20 (cyclomatic, outer body), 130 lines (full implementation)</para>
+      /// <para>Calls: Copy, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+7 more)</para>
+      /// <para>Complexity: 27 (cyclomatic, outer body), 223 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Context.Bundler.StripDfmFields"/>
+      /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(
@@ -75,8 +75,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, FormatDateTime</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 90 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, FormatDateTime, IfThen</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 123 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
@@ -91,8 +91,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Format, IfThen</para>
+      /// <para>Calls: DRagLint.Core.Model.JsonEscape, Format, IfThen</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderMarkdown"/>

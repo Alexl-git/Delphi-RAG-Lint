@@ -21,7 +21,7 @@ type
   /// <summary>How a manifest section's file set is gathered.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.Plan.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
+  /// <para>Used by: declaration (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.PlanModeDisplayStr (Config.IndexesFrame.pas), declaration (DRagLint.Index.Plan.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPlanSectionMode = (
@@ -36,8 +36,8 @@ type
   /// expansion of a library section).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
+  /// <para>Used by: DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview (Config.IndexesFrame.pas) (+6 more)</para>
+  /// <para>Used in units: Config.IndexesFrame, DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPlanSection = record
@@ -62,8 +62,8 @@ type
   /// <summary>Complete concrete build plan resolved from a TIndexManifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) (+3 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
+  /// <para>Used by: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview (Config.IndexesFrame.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) (+3 more)</para>
+  /// <para>Used in units: Config.IndexesFrame, DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TIndexPlan = record
@@ -90,7 +90,7 @@ type
 /// DedupAgainst='*' -> union of ALL other sections' roots.
 /// Not thread-safe; call from a single thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas) (+1 more)</para>
 /// <para>Calls: Default, DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.TIndexManifest.FindSection, DRagLint.Index.Plan.BuildFilter, DRagLint.Index.Plan.ClassifyMode, DRagLint.Index.Plan.CollectRootsByName, DRagLint.Index.Plan.CollectRootsExcept, DRagLint.Index.Plan.ExpandDbPath, DRagLint.Index.Plan.PlatformAllowed, DRagLint.Index.Plan.ResolveRoots, DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms, DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths</para>
 /// <para>Returns: Default(TIndexPlan)</para>
 /// <para>Complexity: 13 (cyclomatic, outer body), 126 lines (full implementation)</para>

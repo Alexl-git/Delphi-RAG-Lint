@@ -40,7 +40,7 @@ type
   /// AnchorIsValid for what it verifies and why a substring test alone is not
   /// enough. Set BOTH fields to arm it; ExpectLine = 0 is unguarded.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.CLI.DoSafeDelete (DRagLint.CLI.pas) (+34 more)</para>
+  /// <para>Used by: DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits.BuildUsesEdit (DRagLint.CLI.pas), DRagLint.CLI.ScopeWalkEditsToClosure (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas) (+40 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Diagnostics.AstChecks, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Doc.Strip, DRagLint.Lint.DocRules, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.NamingFix, DRagLint.Refactor.TextEdit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -58,7 +58,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ReportStrip (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas) (+7 more)</para>
+  /// <para>Used by: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ReportStrip (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas) (+8 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -82,7 +82,7 @@ type
     /// write path re-serializes through a TStringList (ANSI + CRLF normalization),
     /// so an unconditional rewrite would modify a file that no edit had changed.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+3 more)</para>
+    /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+3 more)</para>
     /// <para>Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3</para>
     /// <para>Overload 1 of 2</para>
     /// <para>Pure</para>
@@ -137,7 +137,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -181,7 +181,7 @@ type
     /// <returns><!-- drag-lint:auto -->TArray&lt;TTextEdit&gt; -- Observed: nil; [Edit].</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/5 (DRagLint.Refactor.TextEdit.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas), DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/5 (DRagLint.Refactor.TextEdit.pas)</para>
     /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, ExtractFileName, LowerCase, SameText, Trim</para>
     /// <para>Overload 2 of 2</para>
     /// <para>Complexity: 29 (cyclomatic, outer body), 140 lines (full implementation)</para>

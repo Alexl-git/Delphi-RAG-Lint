@@ -48,7 +48,7 @@ type
 
 // Signature parser helpers. Exported so DRagLint.Doc.Regions / .Document can
 // reuse the same param-list extraction the generate-docs stub uses.
-/// <summary><!-- drag-lint:auto -->Signature parser helpers. Exported so
+/// <summary><!-- drag-lint:auto sum -->Signature parser helpers. Exported so
 /// DRagLint.Doc.Regions / .Document can reuse the same param-list extraction the
 /// generate-docs stub uses.</summary>
 /// <param name="ASig"><!-- drag-lint:auto type -->const string</param>
@@ -62,9 +62,9 @@ type
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExtractParamList(const ASig: string): string;
-/// <summary><!-- drag-lint:auto -->ParseParamNames: parses a param-list string such as
-/// "const A, B: string; C: Boolean; D: Integer" and returns an array of bare param names
-/// (A, B, C, D). Handles const/var/out/in prefixes and grouped names (A, B: T).</summary>
+/// <summary><!-- drag-lint:auto sum -->ParseParamNames: parses a param-list string such
+/// as "const A, B: string; C: Boolean; D: Integer" and returns an array of bare param
+/// names (A, B, C, D). Handles const/var/out/in prefixes and grouped names (A, B: T).</summary>
 /// <param name="AParamList"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
 /// <remarks>
@@ -86,7 +86,7 @@ function ParseParamNames(const AParamList: string): TArray<string>;
   /// itself on the next pass -- the exact failure ParseParamNames' own comment
   /// records for parameter NAMES.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), declaration (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.DocStub.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.ParseParamNames (DRagLint.Refactor.DocStub.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Refactor.DocStub</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

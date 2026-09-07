@@ -110,7 +110,7 @@ type
   /// the engine stays silent.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -148,10 +148,10 @@ type
     /// That is what TDocFactsRenderOptions is for.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile (+22 more)</para>
+    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile (+24 more)</para>
     /// <para>Returns: Findings.ToArray</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Complexity: 55 (cyclomatic, outer body), 511 lines (full implementation)</para>
+    /// <para>Complexity: 57 (cyclomatic, outer body), 547 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>

@@ -55,7 +55,7 @@ type
   /// <summary>One project-unit -&gt; external-unit uses edge.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas)</para>
   /// <para>Used in units: DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -109,7 +109,7 @@ type
   /// per-external rollup, and the flat edge list.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -125,7 +125,7 @@ type
   /// <summary>Tuning knobs for BuildDepsReport.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), declaration (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

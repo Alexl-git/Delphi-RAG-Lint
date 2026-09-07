@@ -36,10 +36,20 @@ type
   /// uncached path, which is a code or invalidation defect rather than a data
   /// condition. DRAGLINT_VERIFY_ORACLE=break injects a fault so the check is
   /// SEEN to fail; run_flow_oracle_memo.ps1 asserts both directions.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Diagnostics.FlowChecks.OracleCheck (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.OracleCheckPM (DRagLint.Diagnostics.FlowChecks.pas)</para>
+  /// <para>Used in units: DRagLint.Diagnostics.FlowChecks</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   EFlowOracleMismatch = class(Exception);
 
   /// <summary>Flow-sensitive checks over a single file's routines.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFlowChecker = class
   public
     /// <summary>Run every flow check on AFile. AStore (optional, nil-safe)
@@ -55,41 +65,135 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ApplyEntryDefs, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectInterfaceDerefs, CollectReadsAndCallDefs, CollectThenGuards, ConstructedTypeText, ConstructorTransfersOwnership (+29 more)</para>
-    /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); Findings.ToArray</para>
-    /// <para>Complexity: 21 (cyclomatic, outer body), 736 lines (full implementation)</para>
+    /// <para>Calls: ApplyEntryDefs, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectGuardTokens, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructedTypeText, ConstructorTransfersOwnership (+45 more)</para>
+    /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); pmUnknown</para>
+    /// <para>Complexity: 42 (cyclomatic, outer body), 1077 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FlowOracles"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ResolveTypeNameToClass"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore = nil;
       AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
     /// <summary>Seconds accumulated in one named phase of Check. See the
     /// sub-breakdown block in the implementation.</summary>
+    /// <param name="APhase"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Double -- Observed: 0; GFlowT[APhase] /
+    /// TStopwatch.Frequency.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function PhaseSeconds(APhase: Integer): Double; static;
     /// <summary>The name of phase APhase, for a profile line.</summary>
+    /// <param name="APhase"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''; FLOW_PHASE_NAMES[APhase].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function PhaseName(APhase: Integer): string; static;
     /// <summary>How many phases there are.</summary>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: FLOW_PHASES.</returns>
     class function PhaseCount: Integer; static;
     /// <summary>Routines analysed since process start -- the denominator for a
     /// per-routine cost.</summary>
+    /// <returns><!-- drag-lint:auto -->Int64 -- Observed: GFlowRoutines.</returns>
     class function RoutinesAnalysed: Int64; static;
     /// <summary>Seconds spent inside flow ORACLE AOracle (Step 0 of
     /// docs\PLAN-flowchecker-transfer.md). Nested time is excluded, so the
     /// slots partition rather than overlap.</summary>
+    /// <param name="AOracle"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Double -- Observed: 0; GOracleT[AOracle] /
+    /// TStopwatch.Frequency.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function OracleSeconds(AOracle: Integer): Double; static;
     /// <summary>Calls made to oracle AOracle.</summary>
+    /// <param name="AOracle"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0; GOracleCalls[AOracle].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleName"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleSeconds"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function OracleCalls(AOracle: Integer): Int64; static;
     /// <summary>Calls to AOracle that did NOT come back from a cache -- the
     /// size of the prize a store-lifetime memo would claim.</summary>
+    /// <param name="AOracle"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0; GOracleMiss[AOracle].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleName"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleSeconds"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function OracleMisses(AOracle: Integer): Int64; static;
     /// <summary>The name of oracle AOracle, for a profile line.</summary>
+    /// <param name="AOracle"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''; ORACLE_NAMES[AOracle].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleSeconds"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function OracleName(AOracle: Integer): string; static;
     /// <summary>How many oracle slots there are.</summary>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: ORACLE_SLOTS.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleName"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleSeconds"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function OracleCount: Integer; static;
   end;
 

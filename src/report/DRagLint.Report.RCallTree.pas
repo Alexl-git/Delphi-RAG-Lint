@@ -14,7 +14,7 @@ type
   /// empty at the depth cap or when a node is a cycle re-encounter.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree.Expand (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildForwardCallTree.Expand (DRagLint.Report.RCallTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildForwardCallTree.Expand (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree.Expand (DRagLint.Report.RCallTree.pas)</para>
   /// <para>Used in units: DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -30,7 +30,7 @@ type
   /// <summary>Whole-tree totals.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildForwardCallTree (DRagLint.Report.RCallTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildForwardCallTree (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree (DRagLint.Report.RCallTree.pas)</para>
   /// <para>Used in units: DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -44,7 +44,7 @@ type
   /// <summary>The reverse call tree rooted at a symbol, plus summary totals.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), declaration (DRagLint.Report.RCallTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -56,7 +56,7 @@ type
   /// <summary>Tuning knobs for BuildReverseCallTree.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), declaration (DRagLint.Report.RCallTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

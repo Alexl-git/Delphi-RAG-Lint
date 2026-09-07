@@ -50,13 +50,13 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFirebirdSqlParser = class(TInterfacedObject, IParser)
     public
-      /// <summary><!-- drag-lint:auto -->---- TFirebirdSqlParser ----</summary>
+      /// <summary><!-- drag-lint:auto sum -->---- TFirebirdSqlParser ----</summary>
       /// <returns><!-- drag-lint:auto -->string -- Observed: 'firebird-sql'.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

@@ -52,17 +52,29 @@ uses
 type
   /// <summary>Raised when no RAD Studio installation can be resolved from any
   /// of the three sources.</summary>
-  /// <remarks>The message names all three sources and what was tried, because
+  /// <remarks>
+  /// The message names all three sources and what was tried, because
   /// the whole point of raising here rather than degrading is that the person
-  /// reading it can act on it.</remarks>
+  /// reading it can act on it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Core.StudioEnv.TStudioEnv.Root (DRagLint.Core.StudioEnv.pas)</para>
+  /// <para>Used in units: DRagLint.Core.StudioEnv</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EStudioNotFound = class(Exception);
 
   /// <summary>Resolves the RAD Studio 37.0 installation root and everything
   /// composed from it.</summary>
-  /// <remarks>Stateless and thread-safe: every call re-reads the environment
+  /// <remarks>
+  /// Stateless and thread-safe: every call re-reads the environment
   /// and the registry. Both are cheap and neither is called in a loop, so no
   /// cache is kept -- a cached root would go stale across an install without
-  /// any way to notice.</remarks>
+  /// any way to notice.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Proxy, DRagLint.Project.Resolver</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TStudioEnv = class
   strict private
     const
@@ -75,8 +87,20 @@ type
     /// <summary>Reads HKCU RootDir, or '' if the key, the value or the read
     /// fails.</summary>
     /// <returns>The recorded installation root, or an empty string.</returns>
-    /// <remarks>Never raises: a missing key is the normal state on a machine
-    /// with no IDE, and the caller has a further source to try.</remarks>
+    /// <remarks>
+    /// Never raises: a missing key is the normal state on a machine
+    /// with no IDE, and the caller has a further source to try.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Trim</para>
+    /// <para>Returns: ''; Trim(Reg.ReadString(REG_VALUE))</para>
+    /// <para>Touches: registry</para>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ReadRegistryRoot: string; static;
   public
     /// <summary>Resolves the Studio root without raising.</summary>
@@ -86,35 +110,86 @@ type
     /// was tried, or an empty string on success. Suitable for printing
     /// verbatim.</param>
     /// <returns>True when a root was resolved.</returns>
-    /// <remarks>For callers that own their own failure mode -- an exit code, a
+    /// <remarks>
+    /// For callers that own their own failure mode -- an exit code, a
     /// degraded-but-working path. Callers that simply cannot proceed should use
-    /// <see cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/> instead.</remarks>
+    /// <see cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/> instead.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Core.StudioEnv.TStudioEnv.Root (DRagLint.Core.StudioEnv.pas), DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty (DRagLint.Core.StudioEnv.pas), DRagLint.LSP.Proxy.ResolveDelphiLspPath (DRagLint.LSP.Proxy.pas)</para>
+    /// <para>Calls: ExcludeTrailingPathDelimiter, GetEnvironmentVariable, Trim</para>
+    /// <para>Returns: True; False</para>
+    /// <para>Mutates: ADiagnostic (out), ARoot (out)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function TryRoot(out ARoot: string; out ADiagnostic: string): Boolean; static;
     /// <summary>The Studio root, or an empty string when none resolves.</summary>
     /// <returns>The root with no trailing path delimiter, or ''.</returns>
-    /// <remarks>For the two callers that legitimately degrade: a $(BDS) macro
+    /// <remarks>
+    /// For the two callers that legitimately degrade: a $(BDS) macro
     /// expansion, where an empty root makes the path fail its own existence
     /// check and drop out, and a constructor that must not raise. Anywhere the
     /// absence is actually fatal, use
     /// <see cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/> so the failure
-    /// names Studio.</remarks>
+    /// names Studio.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas)</para>
+    /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot</para>
+    /// <para>Returns: ''</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RootOrEmpty: string; static;
     /// <summary>The RAD Studio installation root: $BDS, else the registry, else
     /// the existence-checked fallback.</summary>
     /// <returns>The root, with no trailing path delimiter.</returns>
     /// <exception cref="EStudioNotFound">Raised when no source resolves. The
     /// message names all three.</exception>
-    /// <remarks>The single place this repo is allowed to name a Studio path.
+    /// <remarks>
+    /// The single place this repo is allowed to name a Studio path.
     /// Everything under it -- bin\rsvars.bat, lib\&lt;plat&gt;\release -- is
     /// composed with TPath.Combine by the caller, never stored as its own
-    /// literal.</remarks>
+    /// literal.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Root: string; static;
     /// <summary>The batch file that loads the Embarcadero build environment.</summary>
     /// <returns>&lt;Root&gt;\bin\rsvars.bat.</returns>
     /// <exception cref="EStudioNotFound">Propagated from
     /// <see cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>.</exception>
-    /// <remarks>Composed, never stored. Its existence is NOT checked here --
-    /// callers pass it to cmd.exe, whose own failure names the file.</remarks>
+    /// <remarks>
+    /// Composed, never stored. Its existence is NOT checked here --
+    /// callers pass it to cmd.exe, whose own failure names the file.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)</para>
+    /// <para>Returns: TPath.Combine(Root, 'bin\rsvars.bat')</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RsvarsBat: string; static;
     /// <summary>Checks the parts of the contract a test can control: that $BDS
     /// wins, that a trailing delimiter and surrounding whitespace are
@@ -123,15 +198,27 @@ type
     /// <param name="AFailure">On False, which assertion failed and with what
     /// values; '' on success.</param>
     /// <returns>True when every assertion holds.</returns>
-    /// <remarks>Lives here rather than in the CLI so that the only unit naming
+    /// <remarks>
+    /// Lives here rather than in the CLI so that the only unit naming
     /// a Studio path is also the only unit naming one in its test --
     /// tests\autotest\run_studio_root_guard.ps1 enforces exactly that, and an
     /// assertion written elsewhere would have to be exempted from the guard it
     /// exists to support. Reached through `drag-lint selftest studio-root`.
-    ///
     /// NOT thread-safe, unlike the rest of this class: it sets and restores the
     /// process-wide BDS variable. It is a test entry point, called once from a
-    /// single-purpose CLI verb.</remarks>
+    /// single-purpose CLI verb.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.SelfTest.Expect, GetEnvironmentVariable, PChar, SetEnvironmentVariable</para>
+    /// <para>Returns: True</para>
+    /// <para>Mutates: AFailure (out)</para>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest.Expect"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function SelfTest(out AFailure: string): Boolean; static;
   end;
 

@@ -20,7 +20,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.SymbolFacts, DRagLint.LSP.Completion, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -110,9 +110,9 @@ type
       class function CheckUnbalancedBeginEnd( const AFile: string)                   : TArray<TLintFinding>;
       { Tree-sitter ERROR / MISSING nodes -> located 'syntax-error' findings.
       Live syntax diagnostics (Error-Insight-style) without a compiler. }
-      /// <summary><!-- drag-lint:auto -->Tree-sitter ERROR / MISSING nodes -&gt; located
-      /// 'syntax-error' findings. Live syntax diagnostics (Error-Insight-style) without a
-      /// compiler.</summary>
+      /// <summary><!-- drag-lint:auto sum -->Tree-sitter ERROR / MISSING nodes -&gt;
+      /// located 'syntax-error' findings. Live syntax diagnostics (Error-Insight-style)
+      /// without a compiler.</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
       /// Findings.ToArray.</returns>
@@ -135,9 +135,9 @@ type
       subtree is intentionally false-positive-SAFE: a name used anywhere (incl.
       a nested routine = closure, or via with/property) raises the count and
       suppresses the finding. No compiler / no DB needed. }
-      /// <summary><!-- drag-lint:auto -->v0.46: unused local variables (the compiler's
-      /// H2164). For each defProc, a local declared in its var section that occurs
-      /// exactly once in the whole routine subtree (i.e. only its declaration) is
+      /// <summary><!-- drag-lint:auto sum -->v0.46: unused local variables (the
+      /// compiler's H2164). For each defProc, a local declared in its var section that
+      /// occurs exactly once in the whole routine subtree (i.e. only its declaration) is
       /// flagged. Counting over the subtree is intentionally false-positive-SAFE: a name
       /// used anywhere (incl. a nested routine = closure, or via with/property) raises
       /// the count and suppresses the finding. No compiler / no DB needed.</summary>
@@ -281,7 +281,7 @@ type
       /// <remarks>
       /// One AST walk per routine. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
       /// <para>Calls: CheckProc, CountNames, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Emit, Format, Integer, MaxNest, NodeStr</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
@@ -482,10 +482,38 @@ type
       /// <param name="AFileId">The file's id in AStore; 0 is tolerated.</param>
       /// <returns>'with-hides-outer-symbol' findings, one per identifier per
       /// with-body, at the first use site; empty when nothing is provable.</returns>
-      /// <remarks>Never raises. Silence is the answer to every doubt -- see the
-      /// implementation's own header for the four things that buy silence.</remarks>
+      /// <remarks>
+      /// Never raises. Silence is the answer to every doubt -- see the
+      /// implementation's own header for the four things that buy silence.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: AddMembersFrom, BareTypeName, CharInSet, CheckProc, CollectDecls, Consider, ContainsText, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding.SurfaceOf, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding.VisitProcs (+12 more)</para>
+      /// <para>Returns: nil; L; Findings.ToArray</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding.SurfaceOf"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding.VisitProcs"/>
+      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CheckWithHiding(const AFile: string; const AStore: ISymbolStore;
         const ALibStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
+      /// Findings.ToArray.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Move, NodeStr</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls"/>
+      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
       /// <summary>Flags a value-returning FUNCTION that also mutates observable state
       /// (a Command-Query Separation violation, Fowler): a query that is also a command.
@@ -522,7 +550,7 @@ type
       /// CreateProcess=1. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: ArgIsFixedSchemeUri, CharInSet, CmdArgIndex, CollectAssignments, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer (+6 more)</para>
+      /// <para>Calls: ArgIsFixedSchemeUri, CharInSet, CmdArgIndex, CollectAssignments, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, ExtractFileName, Format (+12 more)</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckShellExec.Visit"/>
@@ -558,6 +586,7 @@ type
       /// filesystem, stream, ini-file or dataset-location sink. The bare file name and
       /// extension may be constants; the path to them may not.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <returns>One finding per string literal that carries a path portion AND is shown,
       /// by a bounded backward walk, to reach a sink operand. Empty when the file does not
       /// parse.</returns>
@@ -576,6 +605,17 @@ type
       /// Supersedes the retired rules\hardcoded-absolute-path.scm outright -- the built-in
       /// owns the id unconditionally, so there is no dual implementation to drift.
       /// Never raises.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: BodyTaints, BuildMap, CalleeBody, CalleeRhsTaints, CalleeTaints, CharInSet, Classify, CollectAssignments, Copy, Default (+28 more)</para>
+      /// <para>Returns: Found; FoundAny; nil; Findings.ToArray</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath.ReportOrphanLiterals"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath.Visit"/>
+      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
+      /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckHardcodedPath(const AFile: string; const AStore: ISymbolStore = nil): TArray<TLintFinding>;
       /// <summary>Flags a for/while/repeat loop whose body's first statement is an
@@ -713,10 +753,38 @@ type
       /// <summary>Flags a destructive act gated on a file-existence check.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
       /// <returns>One finding per gated destructive call.</returns>
-      /// <remarks>FileExists/TFile.Exists answer False for ANY failure to stat, so
+      /// <remarks>
+      /// FileExists/TFile.Exists answer False for ANY failure to stat, so
       /// gating a truncate or a delete on one turns a transient fault into silent data
-      /// loss that still returns success. See INBOX-stat-gated-destructive-acts.</remarks>
+      /// loss that still returns success. See INBOX-stat-gated-destructive-acts.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CalleeText, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckStatGatedDestructive.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Emit, FindCall, Format, Integer, IsDestructiveName, IsExistenceName, IsFilenameAppendWriter, NodeStr, SameText, Trim</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckStatGatedDestructive.Visit"/>
+      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CheckStatGatedDestructive(const AFile: string): TArray<TLintFinding>;
+      /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
+      /// CheckTooManyExitPoints(AFile, 5).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/2</para>
+      /// <para>Overload 1 of 2</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CheckTooManyExitPoints(const AFile: string): TArray<TLintFinding>; overload;
       /// <summary>Flags routines exceeding AMaxExits Exit statements (configurable threshold).</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
@@ -725,7 +793,7 @@ type
       /// <remarks>
       /// Severity info. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
       /// <para>Calls: CountExits, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr, SameText</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Overload 2 of 2</para>
@@ -765,7 +833,7 @@ type
       /// <remarks>
       /// Severity info. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
       /// <para>Calls: CyclomaticOf, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeStr</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Overload 2 of 2</para>
@@ -830,7 +898,7 @@ type
       /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
       /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Score</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Pure</para>

@@ -61,7 +61,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
+  /// <para>Used by: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Batch, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -34,8 +34,8 @@ type
     AST during the parse the linter already does. }
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
-  /// <para>Used in units: DRagLint.Lint.Linter</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.ExceptionUnitWriter, DRagLint.Lint.Linter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDragExcCand = record
@@ -45,8 +45,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
-  /// <para>Used in units: DRagLint.Lint.Linter</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.ExceptionUnitWriter, DRagLint.Lint.Linter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDragExcSite = record
@@ -69,7 +69,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), declaration (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), declaration (DRagLint.LSP.Server.pas) (+3 more)</para>
+  /// <para>Used by: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), declaration (DRagLint.LSP.Completion.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -89,7 +89,7 @@ type
       FExcUnit   : string                                                  ;
       FExcCand   : TArray<TDragExcCand>                                    ;
       FExcSites  : TArray<TDragExcSite>                                    ;
-      /// <summary><!-- drag-lint:auto -->The first literalString inside the argument list
+      /// <summary>The first literalString inside the argument list
       /// is taken deliberately: for `Create('Disk quota exceeded on ' + S)` that is the
       /// STATIC PREFIX, which is what a class name can be derived from. Ruling 2 (exactly
       /// where the literal ends and the runtime data begins) is still open and gates
@@ -99,16 +99,16 @@ type
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Lint.Linter.NodeText, DRagLint.Lint.Linter.NormalizeExcMessage, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.HarvestExceptions.FirstLiteralString, DRagLint.Lint.Linter.UnquotePascalString, Integer, SameText</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 61 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestFile (DRagLint.Lint.Linter.pas)</para>
+      /// <para>Calls: DRagLint.Lint.Linter.NodeText, DRagLint.Lint.Linter.NormalizeExcMessage, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.HarvestExceptions.FirstLiteralString, DRagLint.Lint.Linter.UnquotePascalString, Integer, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartPoint</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 62 lines (full implementation)</para>
       /// <para>Reads: FExcSites, FExcCand   Writes: FExcSites, FExcCand</para>
       /// <para>Recursive</para>
       /// <seealso cref="DRagLint.Lint.Linter.NodeText"/>
       /// <seealso cref="DRagLint.Lint.Linter.NormalizeExcMessage"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.HarvestExceptions.FirstLiteralString"/>
       /// <seealso cref="DRagLint.Lint.Linter.UnquotePascalString"/>
-      /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
@@ -117,24 +117,24 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, ExtractFileExt, Integer, LowerCase, Move, SameText, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 98 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, ExtractFileExt, Integer, LowerCase, Move, SameText, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 121 lines (full implementation)</para>
       /// <para>Reads: FLanguage, FExcUnit, FQueryRules</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
       /// <seealso cref="DRagLint.Lint.Linter.CheckDfmCredentials"/>
       /// <seealso cref="DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs"/>
       /// <seealso cref="DRagLint.Lint.Linter.CollectDfmParseErrors"/>
-      /// <seealso cref="DRagLint.Lint.Linter.EmptyBranchIsCommented"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function CheckFileImpl(const AFilePath: string): TArray<TLintFinding>;
     public
-      /// <summary><!-- drag-lint:auto -->TLinter</summary>
+      /// <summary><!-- drag-lint:auto sum -->TLinter</summary>
       /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string = ''</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.Create (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas) (+1 more)</para>
       /// <para>Calls: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll, ParamStr</para>
       /// <para>constructor</para>
       /// <para>Reads: FLanguage   Writes: FLanguage, FQueryRules</para>
@@ -194,15 +194,15 @@ type
       /// when ExceptionsUnit is empty.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Format, SameText</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 29 lines (full implementation)</para>
-      /// <para>Reads: FExcUnit, FExcSites, FExcCand</para>
+      /// <para>Calls: DRagLint.Lint.ExceptionNaming.DeriveExceptionClassName, DRagLint.Lint.ExceptionNaming.UniqueExceptionClassName, Format, SameText</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 82 lines (full implementation)</para>
+      /// <para>Reads: FExcUnit, FExcCand, FExcSites</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Lint.ExceptionNaming.DeriveExceptionClassName"/>
+      /// <seealso cref="DRagLint.Lint.ExceptionNaming.UniqueExceptionClassName"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds"/>
-      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Destroy"/>
-      /// <seealso cref="DRagLint.Lint.Linter.TLinter.ExternalRuleCount"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure EnrichExceptionFindings(var AFindings: TArray<TLintFinding>);
@@ -213,7 +213,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Lint.Linter.TLinter.CheckFileImpl, Format, Writeln</para>
+      /// <para>Calls: DRagLint.Lint.Linter.TLinter.CheckFileImpl, Format, FWalkFilter, Writeln</para>
+      /// <para>Reads: FWalkFilter</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
@@ -258,7 +259,7 @@ type
       /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
       /// <para>Reads: FQueryRules</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
@@ -285,6 +286,17 @@ type
       /// <para>A file that fails to read or parse is skipped in silence; a
       /// harvest is best-effort enrichment, and refusing to write the unit
       /// because one unrelated unit is malformed would be the wrong trade.</para>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.TLinter.HarvestExceptions, ExtractFileExt, Integer, Move, SameText, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
+      /// <para>Reads: FExcUnit, FLanguage</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.HarvestExceptions"/>
+      /// <seealso cref="TreeSitter.TTSParser.Create"/>
+      /// <seealso cref="TreeSitter.TTSParser.Parse"/>
+      /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HarvestFile(const AFilePath: string);
       /// <summary>Every bare `raise Exception.Create(...)` seen so far.</summary>
@@ -327,11 +339,20 @@ function LinterParseCount: Int64;
 /// key are the same error and get one class.</summary>
 /// <param name="AMsg">Message text, already unquoted.</param>
 /// <returns>Lowercased, punctuation-stripped, specifier-blanked, stopword-free.</returns>
-/// <remarks>Interface-visible because the exceptions-unit writer re-derives the
+/// <remarks>
+/// Interface-visible because the exceptions-unit writer re-derives the
 /// key from the `//` comment it reads back out of the generated block -- that
 /// comment IS the persisted message-to-name map. If the writer computed the key
 /// any other way, a rerun would fail to recognise its own output and would
-/// append a duplicate class on every run.</remarks>
+/// append a duplicate class on every run.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ExceptionUnitWriter.ParseExceptionBlock (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
+/// <para>Calls: CharInSet, LowerCase</para>
+/// <para>Returns: string.Join(' ', Keep)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 46 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NormalizeExcMessage(const AMsg: string): string;
 
 implementation

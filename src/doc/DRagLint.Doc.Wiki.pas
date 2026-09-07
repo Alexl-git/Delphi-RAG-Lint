@@ -60,17 +60,36 @@ const
 type
   /// <summary>Parses `dl:wiki` topics out of stored doc-comment text, and ranks
   /// them against a human phrase.</summary>
-  /// <remarks>Stateless; every method is a class function. Reads nothing but
-  /// its arguments -- no file system, no database.</remarks>
+  /// <remarks>
+  /// Stateless; every method is a class function. Reads nothing but
+  /// its arguments -- no file system, no database.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.CollectWikiTopics (DRagLint.CLI.pas), DRagLint.CLI.DoWiki (DRagLint.CLI.pas), DRagLint.Hover.Renderer.WikiIndicatorLines (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverPlain (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Hover.Renderer</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TWikiParser = class
     public
       /// <summary>Cheap pre-filter: does this raw block contain the marker at
       /// all?</summary>
       /// <param name="ARaw">A symbol_docs.raw_block value.</param>
       /// <returns>True when a full parse is worth running.</returns>
-      /// <remarks>Case-insensitive, matching both the header test below and
+      /// <remarks>
+      /// Case-insensitive, matching both the header test below and
       /// SQLite's ASCII-case-insensitive LIKE, so the SQL pre-filter and this
-      /// can never disagree about which rows are candidates.</remarks>
+      /// can never disagree about which rows are candidates.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Doc.Wiki.TWikiParser.Walk (DRagLint.Doc.Wiki.pas), DRagLint.Hover.Renderer.WikiIndicatorLines (DRagLint.Hover.Renderer.pas)</para>
+      /// <para>Calls: LowerCase, Pos</para>
+      /// <para>Returns: (ARaw &lt;&gt; '') and (Pos(WIKI_MARK, LowerCase(ARaw)) &gt; 0)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.MatchScore"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ParseRawBlock"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function HasMarker(const ARaw: string): Boolean; static;
 
       /// <summary>Parses every topic in one doc block.</summary>
@@ -81,10 +100,23 @@ type
       /// <param name="ADocStartLine">symbol_docs.start_line -- the 1-based file
       /// line of the comment's FIRST line. HeaderLine is derived from it.</param>
       /// <returns>Zero or more topics, in the order they appear.</returns>
-      /// <remarks>Never raises on malformed input: an unnamed header yields a
+      /// <remarks>
+      /// Never raises on malformed input: an unnamed header yields a
       /// topic with an empty Name, and an alias/seecode line with nothing after
       /// the colon contributes nothing. Reporting bad input is
-      /// <c>wiki --check</c>'s job, not the parser's.</remarks>
+      /// <c>wiki --check</c>'s job, not the parser's.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.CollectWikiTopics (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas), DRagLint.Hover.Renderer.WikiIndicatorLines (DRagLint.Hover.Renderer.pas)</para>
+      /// <para>Calls: DRagLint.Doc.Wiki.TWikiParser.Walk</para>
+      /// <para>Returns: Walk(ARaw, AOwnerQName, AOwnerKind, AFilePath, ADocStartLine, nil)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.Walk"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ParseRawBlock(const ARaw, AOwnerQName, AOwnerKind,
         AFilePath: string; ADocStartLine: Integer): TArray<TWikiTopic>; static;
 
@@ -95,7 +127,8 @@ type
       /// <param name="ANames">Receives the names of the topics removed, so the
       /// caller can put an indicator where the body used to be.</param>
       /// <returns>AText minus the topic sections.</returns>
-      /// <remarks>FOR HOVER AND OTHER GLANCE-SIZED SURFACES. Owner ruling R3,
+      /// <remarks>
+      /// FOR HOVER AND OTHER GLANCE-SIZED SURFACES. Owner ruling R3,
       /// 2026-08-27: <i>"might be too long. Hover should say has Wiki - a
       /// clickable link to jump to the text."</i> A concept body is paragraphs
       /// and a hover popup is a glance; putting one inside the other makes the
@@ -104,7 +137,19 @@ type
       /// the hover renderer deliberately shows those, and they are not part of
       /// any topic. Shares ParseRawBlock's single walk, so what is removed here
       /// is exactly what <c>wiki</c> reports, and the two cannot drift into
-      /// disagreeing about where a topic ends.</para></remarks>
+      /// disagreeing about where a topic ends.</para>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverPlain (DRagLint.Hover.Renderer.pas)</para>
+      /// <para>Calls: DRagLint.Doc.Wiki.TWikiParser.Walk, Trim</para>
+      /// <para>Returns: Trim(Rest.Text)</para>
+      /// <para>Mutates: ANames (out)</para>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.Walk"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function StripTopics(const AText: string; out ANames: TArray<string>): string; static;
 
       /// <summary>How well ATerm matches a topic's name or any of its
@@ -114,10 +159,24 @@ type
       /// <returns>0 for no match; higher is better. The bands are exact (100),
       /// prefix either direction (80), whole-word containment either direction
       /// (60), plain substring either direction (40).</returns>
-      /// <remarks>BOTH DIRECTIONS is the requirement, not a nicety: the user
+      /// <remarks>
+      /// BOTH DIRECTIONS is the requirement, not a nicety: the user
       /// types "the scheduler" and the alias is "scheduler". A one-way
       /// containment test answers nothing for exactly the phrasing this
-      /// feature exists to accept.</remarks>
+      /// feature exists to accept.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoWiki (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas)</para>
+      /// <para>Calls: DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord, LowerCase, Pos, StartsStr, Trim</para>
+      /// <para>Returns: 0; S</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 25 lines (full implementation)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ParseRawBlock"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function MatchScore(const ATopic: TWikiTopic; const ATerm: string): Integer; static;
 
       /// <summary>Comparison for ranking: better score first, then shorter
@@ -128,9 +187,22 @@ type
       /// <param name="ANameB">Right topic's Name.</param>
       /// <returns>Negative when A should print before B, positive when B
       /// should, zero when the two are indistinguishable.</returns>
-      /// <remarks>Shortest-name tiebreak follows <c>query --name-like</c>,
+      /// <remarks>
+      /// Shortest-name tiebreak follows <c>query --name-like</c>,
       /// whose guard pins the same rule -- one ordering convention, not
-      /// two.</remarks>
+      /// two.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoWiki (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas)</para>
+      /// <para>Calls: CompareText</para>
+      /// <para>Returns: Length(ANameA) - Length(ANameB); CompareText(ANameA, ANameB)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.MatchScore"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ParseRawBlock"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CompareRanked(AScoreA: Integer; const ANameA: string;
         AScoreB: Integer; const ANameB: string): Integer; static;
     private
@@ -138,18 +210,57 @@ type
       /// HTML comment) once the tags are removed.</summary>
       /// <param name="ALine">One cleaned comment line.</param>
       /// <returns>True to drop the line from the body.</returns>
-      /// <remarks>Used to keep <c>&lt;/remarks&gt;</c> out of the body without
-      /// mangling a prose line that merely mentions a tag.</remarks>
+      /// <remarks>
+      /// Used to keep <c>&lt;/remarks&gt;</c> out of the body without
+      /// mangling a prose line that merely mentions a tag.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Doc.Wiki.TWikiParser.Walk (DRagLint.Doc.Wiki.pas)</para>
+      /// <para>Calls: Trim</para>
+      /// <para>Returns: True</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 24 lines (full implementation)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.MatchScore"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ParseRawBlock"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function IsMarkupOnly(const ALine: string): Boolean; static;
       /// <summary>Splits a comma list, trims each item, drops empties.</summary>
       /// <param name="AText">The text after an `Aliases:` or `SeeCode:` label.</param>
       /// <returns>The non-empty trimmed items, in order.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Doc.Wiki.TWikiParser.Walk (DRagLint.Doc.Wiki.pas)</para>
+      /// <para>Calls: Trim</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.MatchScore"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function SplitList(const AText: string): TArray<string>; static;
       /// <summary>True when ANeedle occurs in AHay bounded by non-alphanumerics
       /// on both sides.</summary>
       /// <param name="AHay">Haystack; must already be lower case.</param>
       /// <param name="ANeedle">Needle; must already be lower case.</param>
       /// <returns>True on a whole-word occurrence.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Doc.Wiki.TWikiParser.MatchScore (DRagLint.Doc.Wiki.pas)</para>
+      /// <para>Calls: CharInSet, PosEx</para>
+      /// <para>Returns: False</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.MatchScore"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ParseRawBlock"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ContainsWholeWord(const AHay, ANeedle: string): Boolean; static;
       /// <summary>THE ONE WALK. Parses topics and, when ANonWiki is supplied,
       /// simultaneously collects every line that is NOT part of a topic.</summary>
@@ -161,10 +272,23 @@ type
       /// <param name="ANonWiki">Receives the non-topic lines, or nil when the
       /// caller only wants the topics.</param>
       /// <returns>The topics, in the order they appear.</returns>
-      /// <remarks>Both public entry points route through here so that "what a
+      /// <remarks>
+      /// Both public entry points route through here so that "what a
       /// topic covers" has exactly one definition. Two walks would drift, and
       /// the failure would be silent: the hover would strip a line the wiki
-      /// verb still showed, or leave one it did not.</remarks>
+      /// verb still showed, or leave one it did not.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Doc.Wiki.TWikiParser.ParseRawBlock (DRagLint.Doc.Wiki.pas), DRagLint.Doc.Wiki.TWikiParser.StripTopics (DRagLint.Doc.Wiki.pas)</para>
+      /// <para>Calls: CharInSet, Copy, Default, DRagLint.Doc.Wiki.TWikiParser.HasMarker, DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly, DRagLint.Doc.Wiki.TWikiParser.SplitList, DRagLint.Doc.Wiki.TWikiParser.Walk.Flush, DRagLint.Doc.Wiki.TWikiParser.Walk.Keep, DRagLint.Doc.Wiki.TWikiParser.Walk.StartTopic, DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned, LowerCase, Pos, StartsStr, StartsText, Trim</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 133 lines (full implementation)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.SplitList"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.Walk.Flush"/>
+      /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.Walk.Keep"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Walk(const ARaw, AOwnerQName, AOwnerKind, AFilePath: string;
         ADocStartLine: Integer; ANonWiki: TStrings): TArray<TWikiTopic>; static;
   end;

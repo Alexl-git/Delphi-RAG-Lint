@@ -37,8 +37,8 @@ const
 /// DoIndex(Args); DoQuery (Args); DoRules (Args); DoLint (Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+86 more)</para>
-/// <para>Complexity: 101 (cyclomatic, outer body), 247 lines (full implementation)</para>
+/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+89 more)</para>
+/// <para>Complexity: 104 (cyclomatic, outer body), 251 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>

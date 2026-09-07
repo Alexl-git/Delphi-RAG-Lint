@@ -68,6 +68,10 @@ const
 /// silently never arrived. A rendezvous between two processes cannot be built
 /// on a variable either of them may have inherited differently. Caught by
 /// running it, not by reading it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Returns: TPath.Combine(EngineHoldDir, HOLD_FILE_NAME)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function EngineHoldFilePath: string;
 
@@ -79,23 +83,49 @@ function EngineHoldFilePath: string;
 /// <param name="AError">Set to the failure reason when the result is False;
 /// set to '' otherwise.</param>
 /// <returns>True when the sentinel was written.</returns>
-/// <remarks>Writing the sentinel does NOT itself stop anything -- the plugin
+/// <remarks>
+/// Writing the sentinel does NOT itself stop anything -- the plugin
 /// observes it on its status timer. A caller that needs the lock gone must
-/// still wait for it.</remarks>
+/// still wait for it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: AError (out)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HoldEngine(ASeconds: Integer; out AError: string): Boolean;
 
 /// <summary>Ends any hold immediately, so the plugin may respawn its engine.</summary>
 /// <param name="AError">Set to the failure reason when the result is False.</param>
 /// <returns>True when no hold remains -- INCLUDING when there was none to
 /// begin with, which is a success, not an error.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: AError (out)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReleaseEngineHold(out AError: string): Boolean;
 
 /// <summary>True while a hold is live.</summary>
 /// <param name="ASecondsLeft">Whole seconds remaining, or 0 when not held.</param>
 /// <returns>False for a missing, empty, unparseable or expired sentinel -- see
 /// the unit header on why this fails open.</returns>
-/// <remarks>Cheap enough to call from a 1 s UI timer: one stat and one short
-/// read. Never raises.</remarks>
+/// <remarks>
+/// Cheap enough to call from a 1 s UI timer: one stat and one short
+/// read. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.StatusBar.TDragLintStatusBar.PollEngineHold (DragLint.Plugin.StatusBar.pas) ?</para>
+/// <para>Calls: Integer, Trim, TryStrToInt64</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: ASecondsLeft (out)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EngineIsHeld(out ASecondsLeft: Integer): Boolean;
 
 implementation

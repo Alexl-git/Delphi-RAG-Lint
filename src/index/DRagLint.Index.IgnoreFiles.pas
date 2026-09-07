@@ -29,7 +29,7 @@ type
   /// .gitignore is always glob. Matching uses TGlob's direct linear matcher,
   /// so no pattern can cause pathological CPU/stack behavior on the walk.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas), DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -38,8 +38,8 @@ type
       type
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// <para>Used by: DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas)</para>
-        /// <para>Used in units: DRagLint.Index.IgnoreFiles</para>
+        /// <para>Used by: DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas)</para>
+        /// <para>Used in units: DRagLint.Index.IgnoreFiles, DRagLint.Index.IgnoreFiles <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.PopDir"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.PopDir"/></para>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>
@@ -87,7 +87,7 @@ type
       /// </remarks>
       class function ParseIgnoreFile(const APath: string; AIsHg: Boolean): TLayer; static;
       public
-        /// <summary><!-- drag-lint:auto -->TIgnoreStack</summary>
+        /// <summary><!-- drag-lint:auto sum -->TIgnoreStack</summary>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
         /// <para>Called from: DRagLint.CLI.DoSelfTestIgnoreFiles (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.SetWalkFilter (DRagLint.Core.Indexer.pas)</para>

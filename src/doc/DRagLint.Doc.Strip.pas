@@ -24,7 +24,7 @@ type
   /// content.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), declaration (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripFile (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Strip.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Strip.TDocStripper.StripFile (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Doc.Strip</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

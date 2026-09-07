@@ -125,7 +125,7 @@ type
     /// whether the unit is marked.</param>
     /// <returns>True to report `doc-drift`.</returns>
     /// <remarks>
-    /// <para>An INBOUND list (`Called from:`, `Used by:`, `Used in units:`) is
+    /// <para>An INBOUND list (`Called from: `, `Used by:`, `Used in units:`) is
     /// compared as a SET for EVERY unit -- owner ruling 2026-09-06, "order is
     /// not important, we should compare parts". Reordering entries is therefore
     /// not drift. Everything else in the block keeps the whitespace-collapsed
@@ -137,19 +137,18 @@ type
     /// reverse, an entry only the SOURCE records, is forgiven only on a unit
     /// marked `dl:shared`, where another project may legitimately have written
     /// it; on an unmarked unit it is a stale entry and still drift.</para>
-    /// </remarks>
-    /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-    /// <para>Calls: DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase</para>
+    /// Used by: `
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), `</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutParaLabel, LowerCase</para>
     /// <para>Returns: CollapseWs(AStored) &lt;&gt; CollapseWs(AFresh); False</para>
-    /// <para>Complexity: 20 (cyclomatic, outer body), 84 lines (full implementation)</para>
+    /// <para>Complexity: 27 (cyclomatic, outer body), 161 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.LabelContent"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ParaLabelCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BlockDrifted(const AStored, AFresh: string;
@@ -173,15 +172,15 @@ type
     /// Order changes only on marked units.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
-    /// <para>Calls: CompareText, Copy, DRagLint.Doc.SharedFacts.ExtractBlockBody, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, EndsText (+6 more)</para>
+    /// <para>Calls: CompareText, Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.ExtractBlockBody, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf (+8 more)</para>
     /// <para>Returns: ADocText; Lines.Text</para>
-    /// <para>Complexity: 22 (cyclomatic, outer body), 164 lines (full implementation)</para>
+    /// <para>Complexity: 27 (cyclomatic, outer body), 190 lines (full implementation)</para>
     /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ExtractBlockBody"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.LabelContent"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MergeInboundFacts(const ADocText, AStoredRemarks: string;
@@ -205,14 +204,14 @@ type
     /// tekDeleteLines. Both now ask this first.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas)</para>
-    /// <para>Calls: DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitInClosure, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitVouchable</para>
     /// <para>Returns: False</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.UnitInClosure"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function HoldsForeignInboundEntries(const AStoredRemarks: string;
@@ -228,6 +227,7 @@ type
     /// <param name="AStore">The current project's index. Not owned. Nil answers
     /// False: with no index there is nothing to vouch with, and the caller's
     /// existing behaviour stands.</param>
+    /// <param name="AUnitPath"><!-- drag-lint:auto type -->const string</param>
     /// <returns>True to withhold the `fixable` flag.</returns>
     /// <remarks>
     /// <para>THIS ANSWERS "CAN I VOUCH FOR THE DELETION", NOT "IS THERE DRIFT".
@@ -235,26 +235,37 @@ type
     /// automatically is withdrawn. Reporting a real difference is always right.
     /// Deleting a true fact on the strength of an index that structurally
     /// cannot hold it is not.</para>
-    ///
     /// <para>WHY A PROJECT INDEX CANNOT VOUCH. Under the one-DB-per-project
     /// layout a production project index is exactly the compile closure, so it
     /// can never hold a test caller. A block written when one database covered
     /// production AND tests therefore regenerates to a strict subset, for ever,
     /// with no code change involved.</para>
-    ///
     /// <para>TWO SHAPES, MEASURED, and the second is the larger loss.
-    /// `Called from:` / `Used by:` / `Used in units:` are NARROWED entry by
+    /// `Called from: ` / `, ` / `Used by:` / `Used in units:` are NARROWED entry by
     /// entry. `Covered by:` is DELETED WHOLE -- it names tests by definition, so
     /// a closure index reproduces none of it, and it is not in INBOUND_LABELS,
     /// so the entry-level forgiveness never sees it. On DataCopy one such line
     /// named 41 tests and the regeneration proposed no line at all.</para>
-    ///
     /// <para>DELIBERATELY CONSERVATIVE IN ONE DIRECTION ONLY. An entry whose
     /// unit IS in the closure and is genuinely gone stays fixable -- the index
     /// can vouch for that absence, and withholding it would disable the feature
     /// rather than protect it. That case is the positive control in
     /// run_doc_drift_unseen_units.ps1 and it is what stops this predicate from
     /// degenerating into "never fixable".</para>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// Used in units: ` are NARROWED entry by entry. `
+    /// Used by: ` / `
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), ` / `</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase, Trim</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 88 lines (full implementation)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.LabelContent"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.UnitVouchable"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsShared"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RegenerationDropsUnvouchable(const AStored, AFresh: string;
       const AStore: ISymbolStore; const AUnitPath: string): Boolean;

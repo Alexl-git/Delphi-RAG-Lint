@@ -42,7 +42,7 @@ type
   /// stdio.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.Run (DRagLint.CLI.pas), declaration (DRagLint.LSP.Proxy.pas)</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -88,9 +88,10 @@ type
 /// Pascal LSP to x64, which is the build that copes with a large project.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
-/// <para>Calls: DRagLint.LSP.Proxy.StdErrLine, ExcludeTrailingPathDelimiter, FileExists</para>
-/// <para>Returns: Root + '\bin64\DelphiLSP.exe'; ''</para>
-/// <para>Touches: registry</para>
+/// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot, DRagLint.LSP.Proxy.StdErrLine, FileExists</para>
+/// <para>Returns: ''; Root + '\bin64\DelphiLSP.exe'</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
 /// <seealso cref="DRagLint.LSP.Proxy.StdErrLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -109,7 +110,7 @@ function ResolveDelphiLspPath(const AOverride: string): string;
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
 /// <para>Calls: CloseHandle, CreatePipe, CreateProcess, DRagLint.Core.JobObject.AssignToDragLintJob, DRagLint.LSP.Proxy.PumpFramed, DRagLint.LSP.Proxy.ResolveDelphiLspPath, DRagLint.LSP.Proxy.StdErrLine, DRagLint.LSP.Proxy.TPumpThread.Create, FileExists, FillChar (+9 more)</para>
 /// <para>Returns: EXIT_SPAWN_FAILED; Integer(Code)</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 147 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 151 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.JobObject.AssignToDragLintJob"/>
 /// <seealso cref="DRagLint.LSP.Proxy.PumpFramed"/>

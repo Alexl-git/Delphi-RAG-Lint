@@ -13,7 +13,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), declaration (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Workspace.Config.pas), DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Workspace.Config</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -24,8 +24,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), declaration (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Workspace.Config</para>
+  /// <para>Used by: declaration (DRagLint.Workspace.Config.pas), DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DragLint.Plugin.ProjectNotifier, DRagLint.Workspace.Config</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TWorkspaceConfig = record
@@ -37,20 +37,20 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI</para>
+  /// <para>Used by: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DragLint.Plugin.ProjectNotifier</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TWorkspaceConfigIO = class
     public
-      /// <summary><!-- drag-lint:auto -->TWorkspaceConfigIO</summary>
+      /// <summary><!-- drag-lint:auto sum -->TWorkspaceConfigIO</summary>
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TWorkspaceConfig -- Observed:
       /// Default(TWorkspaceConfig).</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->Invalid JSON in workspace config: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?</para>
+      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFixSweep (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) ?, DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas) ? (+1 more)</para>
       /// <para>Calls: Default, TJSONArray, TJSONObject</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>
       /// <para>Touches: file system</para>
@@ -74,7 +74,7 @@ type
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Dir.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas) ?</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile"/>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile"/>

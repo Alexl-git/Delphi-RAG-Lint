@@ -51,10 +51,16 @@ const
 type
   /// <summary>One generated exception class: its declared name, the raw message
   /// that names it, and the key both are looked up by.</summary>
-  /// <remarks>Name is whatever the UNIT currently declares, which may be a
+  /// <remarks>
+  /// Name is whatever the UNIT currently declares, which may be a
   /// human's rename rather than anything the namer would produce. Key is
   /// authoritative for identity; Name is authoritative for what raise sites
-  /// must say.</remarks>
+  /// must say.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.Lint.ExceptionUnitWriter.ParseExceptionBlock (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.Lint.ExceptionUnitWriter.PlanExceptionEntries (DRagLint.Lint.ExceptionUnitWriter.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ExceptionUnitWriter</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExcEntry = record
     Name  : string;
     RawMsg: string;
@@ -62,10 +68,16 @@ type
   end;
 
   /// <summary>What one `exceptions-sync` run decided, before anything is written.</summary>
-  /// <remarks>Separating the decision from the write is what lets --apply be a
+  /// <remarks>
+  /// Separating the decision from the write is what lets --apply be a
   /// genuine gate rather than a formality: the dry run produces this record and
   /// prints it, and the applying run produces the same record and then writes
-  /// NewText. The two cannot disagree about what would happen.</remarks>
+  /// NewText. The two cannot disagree about what would happen.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ExceptionUnitWriter</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExcSyncPlan = record
     /// <summary>Bindings already declared in the block, in declaration order.</summary>
     Existing: TArray<TExcEntry>;
@@ -94,10 +106,20 @@ type
 /// <param name="AUnitText">The whole unit as read from disk.</param>
 /// <returns>One entry per declaration line the block holds; empty when the unit
 /// has no block, or an empty one.</returns>
-/// <remarks>A line is a binding only if it declares a class AND carries a
+/// <remarks>
+/// A line is a binding only if it declares a class AND carries a
 /// same-line // comment. A declaration without a comment has no key and is left
 /// strictly alone -- it is someone's hand-written class living inside the block,
-/// and dropping it would delete their code.</remarks>
+/// and dropping it would delete their code.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.Lint.ExceptionUnitWriter.ParseDeclLine, DRagLint.Lint.ExceptionUnitWriter.SplitLines, DRagLint.Lint.Linter.NormalizeExcMessage</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Lint.ExceptionUnitWriter.ParseDeclLine"/>
+/// <seealso cref="DRagLint.Lint.ExceptionUnitWriter.SplitLines"/>
+/// <seealso cref="DRagLint.Lint.Linter.NormalizeExcMessage"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseExceptionBlock(const AUnitText: string): TArray<TExcEntry>;
 
 /// <summary>Renders the body that goes between the two markers.</summary>
@@ -105,9 +127,17 @@ function ParseExceptionBlock(const AUnitText: string): TArray<TExcEntry>;
 /// <param name="ARoot">Ancestor class for every declaration.</param>
 /// <returns>A CRLF-terminated block body, with its own `type` keyword when
 /// there is at least one entry, and empty otherwise.</returns>
-/// <remarks>The `type` sits INSIDE the managed region on purpose: a `type` left
+/// <remarks>
+/// The `type` sits INSIDE the managed region on purpose: a `type` left
 /// outside it does not compile once the region is empty, and the region is
-/// empty in exactly the case that matters -- a freshly created unit.</remarks>
+/// empty in exactly the case that matters -- a freshly created unit.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
+/// <para>Calls: Format, Trim</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderExceptionBlock(const AEntries: TArray<TExcEntry>; const ARoot: string): string;
 
 /// <summary>Decides which harvested messages need a new class.</summary>
@@ -126,7 +156,16 @@ function RenderExceptionBlock(const AEntries: TArray<TExcEntry>; const ARoot: st
 /// by enumerating every type in the index. The design measured 0 clashes
 /// against 2,258 existing E-types, so the bulk scan would be a large query
 /// run to answer nothing; a handful of point lookups costs almost nothing and
-/// is still an actual check rather than an assumption.</para></remarks>
+/// is still an actual check rather than an assumption.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
+/// <para>Calls: AIsTakenElsewhere, DRagLint.Lint.ExceptionNaming.DeriveExceptionClassName, DRagLint.Lint.ExceptionNaming.UniqueExceptionClassName, Trim</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 88 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Lint.ExceptionNaming.DeriveExceptionClassName"/>
+/// <seealso cref="DRagLint.Lint.ExceptionNaming.UniqueExceptionClassName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure PlanExceptionEntries(const AExisting: TArray<TExcEntry>;
                                const ASites: TArray<TDragExcSite>;
                                const ACandidates: TArray<TDragExcCand>;
@@ -137,9 +176,19 @@ procedure PlanExceptionEntries(const AExisting: TArray<TExcEntry>;
 /// <param name="AUnitText">Current unit text.</param>
 /// <param name="ABody">Body from RenderExceptionBlock.</param>
 /// <returns>The unit text with the region rewritten.</returns>
-/// <remarks>When the unit has no markers the region is INSERTED immediately
+/// <remarks>
+/// When the unit has no markers the region is INSERTED immediately
 /// before `implementation`, which is the only place in a unit where a type
-/// section is still legal and nothing of the user's is displaced.</remarks>
+/// section is still legal and nothing of the user's is displaced.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
+/// <para>Calls: ContainsText, Copy, DRagLint.Lint.ExceptionUnitWriter.SplitLines, SameText, StartsStr, Trim</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 52 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Lint.ExceptionUnitWriter.SplitLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SpliceExceptionBlock(const AUnitText, ABody: string): string;
 
 /// <summary>Renders a complete, compilable unit around a managed region.</summary>
@@ -161,9 +210,29 @@ function SpliceExceptionBlock(const AUnitText, ABody: string): string;
 /// declared in the very unit being written.</para>
 /// <para>Matching is whole-identifier and case-insensitive, so a unit named
 /// `Exceptions` is not considered present because `CommonExceptions` is.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Lint.ExceptionUnitWriter.MentionsUnit, DRagLint.Lint.ExceptionUnitWriter.SplitLines, LowerCase, Pos, SameText, Trim</para>
+/// <para>Returns: AUnitText; SB.ToString</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 55 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Lint.ExceptionUnitWriter.MentionsUnit"/>
+/// <seealso cref="DRagLint.Lint.ExceptionUnitWriter.SplitLines"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function EnsureUsesEntry(const AUnitText, AUnitName: string): string;
 
+/// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ARootUnit"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ABody"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, SameText, StartsStr</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderNewExceptionUnit(const AUnitName, ARootUnit, ABody: string): string;
 
 implementation

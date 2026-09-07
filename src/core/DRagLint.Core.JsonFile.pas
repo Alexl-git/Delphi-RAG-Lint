@@ -51,8 +51,15 @@ uses
 /// <exception cref="EOSError">Raised when the atomic swap fails -- loudly, so a
 /// caller cannot mistake a failed save for a successful one. The original file
 /// is left completely untouched in that case.</exception>
-/// <remarks>Not thread-safe against concurrent writers of the same path; the
-/// swap is atomic, so the loser simply overwrites rather than interleaving.</remarks>
+/// <remarks>
+/// Not thread-safe against concurrent writers of the same path; the
+/// swap is atomic, so the loser simply overwrites rather than interleaving.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Index.Manifest.TManifestIO.Save (DRagLint.Index.Manifest.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.WriteNamingPreset (DragLint.Plugin.LintOptionsFrame.pas) ?, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DeleteNamingPreset (DragLint.Plugin.LintOptionsFrame.pas) ?, DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases (DragLint.Plugin.OptionsFrames.pas) ?</para>
+/// <para>Calls: MoveFileEx, PChar</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure WriteJsonFileAtomic(const APath: string; ARoot: TJSONObject);
 
 implementation

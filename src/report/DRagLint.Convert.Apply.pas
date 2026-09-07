@@ -67,7 +67,7 @@ type
   /// (To), per the matching #convert rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -84,16 +84,17 @@ type
   /// The wire spelling of each value is produced by ApplyItemKindName and is a
   /// COMPATIBILITY SURFACE (schema apply/1): adding a kind is additive, but
   /// renaming one is a breaking change and requires apply/2.
-  ///
   /// The REMAINDER of a conversion -- everything the engine did not or could
   /// not carry over -- is exactly the subset of items whose Field is afTodos,
   /// afReemitNotes or afWarnings. aikMappingNotApplied is emitted by the
   /// #mapping surface (DRagLint.Convert.DfmReemit).
-  ///
   /// NOT represented, deliberately: a property removed by an explicit #remove
   /// or acknowledged by #ignore. Both are silent by design, and whether a
   /// DELIBERATE removal counts as remainder at all is an open question for the
   /// converter side -- see docs\converter\apply-remainder-contract.md.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas)</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyItemKind = (
     aikFieldRetyped,         { .pas published field decl retyped F -> T }
@@ -122,9 +123,14 @@ type
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
-  /// <remarks>The three REMAINDER fields are afTodos, afReemitNotes and
+  /// <remarks>
+  /// The three REMAINDER fields are afTodos, afReemitNotes and
   /// afWarnings; afConverted, afAccessSites and afCreatorSites describe work
-  /// that WAS done.</remarks>
+  /// that WAS done.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TApplyField = (afConverted, afAccessSites, afCreatorSites, afTodos,
                  afReemitNotes, afWarnings);
 
@@ -134,13 +140,16 @@ type
   /// Every item mirrors exactly one entry in one of TApplyReport's six legacy
   /// string arrays, so Length(Items) always equals the sum of their lengths --
   /// see TApplyReport's remarks.
-  ///
   /// The non-Text fields are best-effort context, NOT guaranteed populated:
   /// which ones carry a value depends on Kind. Line is a 1-based line in
   /// FilePath and is 0 when unknown -- notably for anything derived from the
   /// DFM re-emit, because TDfmNode carries no line number, so such items can
   /// only be anchored to the instance's object-block header line. RuleLine is
   /// the 1-based line in the rules file that produced the item, or 0.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlainItem (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyItem = record
     Kind    : TApplyItemKind;
@@ -167,14 +176,13 @@ type
   /// Items is the SAME report in typed form: one TApplyItem per entry across
   /// the six string arrays, in emission order, each carrying the kind and the
   /// structured facts the prose was rendered from.
-  ///
   /// INVARIANT: Length(Items) = the sum of the lengths of the six arrays.
   /// BuildApplyPlan maintains it structurally -- every report line is appended
   /// through a single Emit, which writes to exactly one array and to Items.
   /// The six arrays are kept as-is so existing text consumers are unaffected.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas)</para>
-  /// <para>Used in units: DRagLint.Convert.Apply</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyReport = record
@@ -200,7 +208,7 @@ type
   /// even when Ok=True (e.g. a field declaration that could not be located, or
   /// a ToType whose unit could not be resolved for the uses-add).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -228,7 +236,7 @@ type
   /// would be built from a property tree that does not reflect the type's
   /// real current shape.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -289,6 +297,7 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// types and how each property/event maps.</param>
 /// <param name="AOnly">Optional allow-list of instance names to restrict the
 /// plan to; empty means convert every instance that matches a rule.</param>
+/// <param name="ACastLib"><!-- drag-lint:auto type -->const TCastLib</param>
 /// <returns>A TApplyResult. Task 2 implements surface #1 (.pas declaration
 /// retype) and surface #2 (.pas uses-add): each located instance contributes a
 /// tekReplaceInLine edit swapping its FromType token for ToType, plus (once
@@ -315,15 +324,15 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
-/// <para>Calls: BuildPropTree, Default, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile, DRagLint.Convert.Apply.BuildApplyPlan.TreeFor, DRagLint.Convert.Apply.FindConstructionSites, DRagLint.Convert.Apply.FindConvertInstances, DRagLint.Convert.Apply.FindDfmInstanceSymbol, DRagLint.Convert.Apply.FindMemberAccessSites, DRagLint.Convert.Apply.LeadingIndent, DRagLint.Convert.Apply.LocateFieldTypeToken (+10 more)</para>
+/// <para>Calls: BuildPropTree, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile (+18 more)</para>
 /// <para>Returns: Default(TApplyResult)</para>
-/// <para>Complexity: 33 (cyclomatic, outer body), 380 lines (full implementation)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 619 lines (full implementation)</para>
 /// <para>Touches: file system</para>
-/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile"/>
-/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.TreeFor"/>
-/// <seealso cref="DRagLint.Convert.Apply.FindConstructionSites"/>
-/// <seealso cref="DRagLint.Convert.Apply.FindConvertInstances"/>
-/// <seealso cref="DRagLint.Convert.Apply.FindDfmInstanceSymbol"/>
+/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.Emit"/>
+/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport"/>
+/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.InstItem"/>
+/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites"/>
+/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
@@ -367,9 +376,15 @@ function FindConvertInstances(const ADfmText: string; const ARules: TConversionR
 /// <summary>The stable wire name of an item kind, e.g. 'creator-verify'.</summary>
 /// <param name="AKind">The kind to spell.</param>
 /// <returns>A lowercase, hyphenated ASCII token; never empty.</returns>
-/// <remarks>THE SINGLE SOURCE of these names. Every emitter (the apply/1 JSON,
+/// <remarks>
+/// THE SINGLE SOURCE of these names. Every emitter (the apply/1 JSON,
 /// the remainder contract doc, any consumer dispatch table) must go through
 /// here rather than spelling a literal, so a rename cannot drift apart. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.EmitApplyJson.ItemJson (DRagLint.CLI.pas)</para>
+/// <para>Returns: NAMES[AKind]</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function ApplyItemKindName(AKind: TApplyItemKind): string;
 
@@ -377,7 +392,14 @@ function ApplyItemKindName(AKind: TApplyItemKind): string;
 /// <param name="AField">The field to spell.</param>
 /// <returns>A lowercase, snake_case ASCII token matching the apply/1 JSON key
 /// of the corresponding array; never empty.</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.EmitApplyJson.ItemJson (DRagLint.CLI.pas)</para>
+/// <para>Returns: NAMES[AField]</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyFieldName(AField: TApplyField): string;
 
 implementation

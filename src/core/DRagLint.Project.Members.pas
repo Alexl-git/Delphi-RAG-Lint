@@ -19,7 +19,7 @@ type
   /// <summary>One project-owned source file and its optional sibling .dfm.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), declaration (DRagLint.Project.Coherence.pas), declaration (DRagLint.Project.Members.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Project.Coherence.pas), declaration (DRagLint.Project.Members.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Project.Coherence, DRagLint.Project.Members</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -42,7 +42,7 @@ uses
 /// <remarks>
 /// Thread-safety: call from the main (IDE) thread, like the spawn sites.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+/// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas), DragLint.Plugin.GraphWindow.TDragLintGraphFrame.LaunchViewer (DragLint.Plugin.GraphWindow.pas) ?, DragLint.Plugin.LspClient.TDragLintLspClient.Start/2 (DragLint.Plugin.LspClient.pas) ?</para>
 /// <para>Calls: AssignProcessToJobObject</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->

@@ -303,7 +303,7 @@ function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
-/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers, DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk, DRagLint.Doc.SymbolFacts.JoinCappedDisplay, IsTestRoutine, LastSegment</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers, DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk, DRagLint.Doc.SymbolFacts.JoinCappedDisplay, IsTestRoutine, LastSegment, LowerCase, TargetIsMethodOf, Trim</para>
 /// <para>Returns: ''; JoinCappedDisplay(Capped, COVERED_BY_CAP)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers"/>
@@ -440,7 +440,7 @@ type
       /// unanimity + object-type-gate ruleset.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches, DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity, DRagLint.Doc.SymbolFacts.ProcsForFile, Integer</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches, DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity, DRagLint.Doc.SymbolFacts.ProcsForFile, Integer, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.StartPoint</para>
       /// <para>Returns: Default(TSymbolFacts)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf"/>

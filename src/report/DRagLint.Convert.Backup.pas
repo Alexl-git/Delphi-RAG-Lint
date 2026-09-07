@@ -65,7 +65,7 @@ function NextBackupName(const APath: string): string;
 /// does not exist or the copy fails (TFile.Copy); callers should backup BEFORE
 /// any conversion write so a failed backup aborts before anything is touched.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Convert.Backup.NextBackupName, Format</para>
 /// <para>Mutates: AMappings (out)</para>
 /// <para>Touches: file system</para>
@@ -96,7 +96,7 @@ procedure BackupFiles(const APaths: TArray<string>; out AMappings: TArray<string
 /// a crash between this call and the actual write still leaves a complete
 /// recovery map pointing at the (untouched) .BCK backups.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
 /// <para>Calls: Format</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
@@ -124,7 +124,7 @@ procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
 /// the rest of the codebase's strict-ASCII/CRLF source-file convention -- this
 /// must run AFTER the conversion write (it stamps the already-converted file).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
 /// <para>Calls: ExtractFileExt, Format, SameText</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->

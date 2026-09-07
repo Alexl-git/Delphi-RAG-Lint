@@ -44,8 +44,8 @@ type
   /// integer (for {$IF CompilerVersion >= 37} style checks).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.SetPreprocess (DRagLint.Core.Indexer.pas) (+7 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Index.Closure, DRagLint.Preprocess, DRagLint.Preprocess.Profile, DRagLint.Preprocess.Types</para>
+  /// <para>Used by: DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.SetPreprocess (DRagLint.Core.Indexer.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Diagnostics.ParseCache, DRagLint.Index.Closure, DRagLint.Preprocess, DRagLint.Preprocess.Profile, DRagLint.Preprocess.Types</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDefineProfile = record
@@ -78,8 +78,8 @@ type
   /// (opt-in, matching preprocess.js options.tolerances).
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), declaration (DRagLint.Preprocess.Types.pas), DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas), declaration (DRagLint.Preprocess.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Preprocess, DRagLint.Preprocess.Types</para>
+  /// <para>Used by: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), declaration (DRagLint.Preprocess.Types.pas), DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Preprocess, DRagLint.Preprocess.Types</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPPOptions = record

@@ -17,8 +17,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDelphi13Parser = class(TInterfacedObject, IParser)
@@ -28,10 +28,10 @@ type
       { v0.42: deep scan -> emit identifier usage refs (read/write/attribute).
       Set by the indexer from the --deep/--shallow flag before parsing. }
       EmitUsageRefs: Boolean;
-      /// <summary><!-- drag-lint:auto -->TDelphi13Parser</summary>
+      /// <summary><!-- drag-lint:auto sum -->TDelphi13Parser</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
       /// <para>constructor</para>
       /// <para>Writes: FLanguage</para>
       /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.FileExtensions"/>
@@ -68,7 +68,7 @@ type
       /// <returns><!-- drag-lint:auto type -->TParseResult</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
+      /// <para>Calls: Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, Integer, Move, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
       /// <para>Reads: FLanguage, EmitUsageRefs</para>
       /// <para>Pure</para>
@@ -76,7 +76,7 @@ type
       /// <seealso cref="DRagLint.Parser.Delphi13.HarvestStringLiterals"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TWalkState.Create"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.Walk"/>
-      /// <seealso cref="TreeSitter.TTSParser.Create"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.HasError"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;

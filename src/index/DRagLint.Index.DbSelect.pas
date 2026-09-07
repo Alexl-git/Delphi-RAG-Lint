@@ -27,7 +27,7 @@ type
   /// no --db flags are given.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveLibraryDb (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -108,7 +108,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Run (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Model.JsonEscape, DRagLint.Diagnostics.AstChecks.TAstChecker.Check, DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings (+26 more)</para>
-      /// <para>Complexity: 93 (cyclomatic, outer body), 448 lines (full implementation)</para>
+      /// <para>Complexity: 93 (cyclomatic, outer body), 450 lines (full implementation)</para>
       /// <para>Reads: FStore, FLinter</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
@@ -339,7 +339,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Lint.Linter.TLinter.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Lint.Linter.TLinter.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Flush, Format, Writeln</para>
       /// <para>constructor</para>
       /// <para>Reads: FDbPaths, FStore   Writes: FDbPaths, FStore, FLinter</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Migrate"/>

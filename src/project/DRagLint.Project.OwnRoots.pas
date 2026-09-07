@@ -31,7 +31,7 @@ type
   /// Value type; copy freely. Immutable after Load. Thread-safe to
   /// share for reading.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), declaration (DRagLint.Project.OwnRoots.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Project.OwnRoots.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Project.OwnRoots</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -58,7 +58,7 @@ type
     /// empty "ownRoots": [] IS an error, because scoping to nothing would report
     /// a clean project, the same reasoning as the empty --project refusal.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
     /// <para>Calls: Default, DRagLint.Project.OwnRoots.NormalizeDir, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONObject, Trim</para>
     /// <para>Returns: Default(TOwnRoots)</para>
     /// <para>Touches: file system</para>
@@ -76,7 +76,7 @@ type
     /// DRagLint.Storage.FileMembership.NormalizeForLookup: forward slashes
     /// folded to backslashes, compared case-insensitively.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
+    /// <para>Called from: DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
     /// <para>Calls: ExpandFileName, StartsText, StringReplace</para>
     /// <para>Returns: True; False</para>
     /// <para>Reads: FActive, FRoots</para>

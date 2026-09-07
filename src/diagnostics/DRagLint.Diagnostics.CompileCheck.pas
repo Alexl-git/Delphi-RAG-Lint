@@ -69,15 +69,15 @@ type
       /// already up to date. Not thread-safe.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture, ExtractFileExt, Format, LowerCase, PChar, SameText, SetEnvironmentVariable</para>
+      /// <para>Calls: Default, DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture, ExtractFileExt, Format, LowerCase, PChar, SameText, SetEnvironmentVariable</para>
       /// <para>Returns: Default(TCompileCheckResult)</para>
-      /// <para>Complexity: 17 (cyclomatic, outer body), 103 lines (full implementation)</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 106 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
-      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Run(const ATarget: string; const AFullBuild: Boolean = False; const AMsbuildPath: string = ''; const ARsvarsPath: string = ''; const ATargetPlatform: string = ''): TCompileCheckResult;
@@ -149,14 +149,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)</para>
-      /// <para>Calls: DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf, GetShortPathName, LowerCase, Pos, PWideChar, SetString, StringReplace, Trim</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 103 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf, GetShortPathName, LowerCase, Pos, PWideChar, SetString, StringReplace, Trim</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 112 lines (full implementation)</para>
       /// <para>Touches: file system, registry</para>
+      /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath.ShortPathOf"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.InsertFindings"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity"/>
       /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine"/>
-      /// <seealso cref="DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ResolveIdeLibraryPath(const APlatform: string): string;
@@ -167,7 +167,7 @@ type
       /// <param name="AEnvBlock"><!-- drag-lint:auto type -->Pointer</param>
       /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1; Integer(ExitCode).</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->CreatePipe failed; CreateProcessW failed: %d</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas)</para>
@@ -199,12 +199,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function NormalizeSeverity(const ARaw: string): string;
-      /// <summary><!-- drag-lint:auto -->Maps a DCC message code (e.g. 'H2219', 'W1000',
-      /// 'E2003', 'F2613') to its severity WORD via the leading letter -- H-&gt;hint,
-      /// W-&gt;warning, E/F-&gt;error. The code letter is authoritative for msbuild lines
-      /// like "Hint warning H2219" where the severity word ("warning") disagrees with the
-      /// real severity (Hint). Falls back to AFallbackWord when the code is
-      /// empty/unrecognized.</summary>
+      /// <summary><!-- drag-lint:auto sum -->Maps a DCC message code (e.g. 'H2219',
+      /// 'W1000', 'E2003', 'F2613') to its severity WORD via the leading letter --
+      /// H-&gt;hint, W-&gt;warning, E/F-&gt;error. The code letter is authoritative for
+      /// msbuild lines like "Hint warning H2219" where the severity word ("warning")
+      /// disagrees with the real severity (Hint). Falls back to AFallbackWord when the
+      /// code is empty/unrecognized.</summary>
       /// <param name="ACode"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFallbackWord"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->string -- Observed: 'hint'; 'warning'; 'error';

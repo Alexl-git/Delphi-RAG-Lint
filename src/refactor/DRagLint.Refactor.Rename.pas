@@ -148,7 +148,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
-      /// <para>Calls: AddEdit, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.Walk, HdrName, Integer (+7 more)</para>
+      /// <para>Calls: AddEdit, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.Walk, HdrName, Integer (+9 more)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal.EnclosingProc"/>

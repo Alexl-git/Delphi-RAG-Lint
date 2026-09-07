@@ -26,7 +26,7 @@ type
   /// All three are False when Indexed is False.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), declaration (DRagLint.Project.Coherence.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Project.Coherence.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Project.Coherence</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

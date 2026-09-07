@@ -57,7 +57,7 @@ type
   /// <summary>Output of TProjectReconciler.Analyze.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), declaration (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -92,7 +92,7 @@ type
       // Parse the .dpr uses clause; return absolute paths for each listed unit.
       // Uses the same logic as TClosureResolver.ParseDprUses but returns only
       // the file paths (we need the absolute-path set, not unit names).
-      /// <summary><!-- drag-lint:auto -->Parse the .dpr uses clause; return absolute
+      /// <summary><!-- drag-lint:auto sum -->Parse the .dpr uses clause; return absolute
       /// paths for each listed unit. Uses the same logic as TClosureResolver.ParseDprUses
       /// but returns only the file paths (we need the absolute-path set, not unit names).</summary>
       /// <param name="ADprPath"><!-- drag-lint:auto type -->const string</param>
@@ -113,7 +113,7 @@ type
       procedure CollectDprMembers(const ADprPath: string; AMembers: TDictionary<string, string>);
 
       // Parse the .dproj DCCReference ItemGroup; add absolute paths.
-      /// <summary><!-- drag-lint:auto -->Parse the .dproj DCCReference ItemGroup; add
+      /// <summary><!-- drag-lint:auto sum -->Parse the .dproj DCCReference ItemGroup; add
       /// absolute paths.</summary>
       /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AMembers"><!-- drag-lint:auto type -->TDictionary&lt;string, string&gt;</param>
@@ -132,7 +132,7 @@ type
       procedure CollectDprojMembers(const ADprojPath: string; AMembers: TDictionary<string, string>);
 
       // Resolve a path token relative to ABaseDir.
-      /// <summary><!-- drag-lint:auto -->Resolve a path token relative to ABaseDir.</summary>
+      /// <summary><!-- drag-lint:auto sum -->Resolve a path token relative to ABaseDir.</summary>
       /// <param name="AToken"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->string -- Observed: '';
@@ -151,7 +151,7 @@ type
       function ResolveMember(const AToken, ABaseDir: string): string;
 
       // Build a relative path from ABase to AFile (backslash sep).
-      /// <summary><!-- drag-lint:auto -->Build a relative path from ABase to AFile
+      /// <summary><!-- drag-lint:auto sum -->Build a relative path from ABase to AFile
       /// (backslash sep).</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ABase"><!-- drag-lint:auto type -->const string</param>
@@ -197,7 +197,7 @@ type
       /// AProjectFile may be a .dpr or .dproj; the sibling file is auto-detected.</summary>
       /// <param name="AProjectFile">Absolute or relative path to .dpr or .dproj.</param>
       /// <returns>TReconcileResult with populated Missing, Extra, and Stale arrays.</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->Project file not found: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>

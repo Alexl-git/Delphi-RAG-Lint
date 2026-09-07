@@ -155,7 +155,7 @@ type
     /// TList&lt;TSymbol&gt;.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods (DRagLint.Index.CallResolver.pas) ?</para>
     /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols</para>
     /// <para>Reads: FChildCache, FStore</para>
     /// <para>Pure</para>
@@ -187,7 +187,7 @@ type
     { True when AFileId's on-disk content no longer matches what the index
       recorded, or it could not be read. Only meaningful AFTER LinesOf has been
       called for that file -- the probe happens there, once per file per run. }
-    /// <summary><!-- drag-lint:auto -->True when AFileId's on-disk content no longer
+    /// <summary><!-- drag-lint:auto sum -->True when AFileId's on-disk content no longer
     /// matches what the index recorded, or it could not be read. Only meaningful AFTER
     /// LinesOf has been called for that file -- the probe happens there, once per file
     /// per run.</summary>
@@ -280,15 +280,15 @@ type
     /// to resolve still resolves.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, DRagLint.Index.CallResolver.TCallResolver.PickFromMatches, SameText</para>
-    /// <para>Complexity: 10 (cyclomatic, outer body), 36 lines (full implementation)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods, DRagLint.Index.CallResolver.TCallResolver.PickFromMatches, SameText</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 100 lines (full implementation)</para>
     /// <para>Reads: FStore</para>
     /// <para>Mutates: AConfidence (out)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.PickFromMatches"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string;
@@ -404,7 +404,7 @@ type
       existing call edges and receivers can be excluded from both the delete and
       the resolve stream rather than rebuilt from source that no longer lines up.
       See LinesOf and INBOX-whole-db-resolve-degrades-a-stale-index. }
-    /// <summary><!-- drag-lint:auto -->Probes AFileId (reading + caching it if not
+    /// <summary><!-- drag-lint:auto sum -->Probes AFileId (reading + caching it if not
     /// already read) and reports whether its on-disk content still matches what the index
     /// recorded. Called by ResolveCallTargets BEFORE it deletes anything, so a stale
     /// file's existing call edges and receivers can be excluded from both the delete and

@@ -22,11 +22,11 @@ uses
 
 type
   // v0.20: LSP response builders for completion, signatureHelp, diagnostics.
-  /// <summary><!-- drag-lint:auto -->v0.20: LSP response builders for completion,
+  /// <summary><!-- drag-lint:auto sum -->v0.20: LSP response builders for completion,
   /// signatureHelp, diagnostics.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleSignatureHelp (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleSignatureHelp (DRagLint.LSP.Server.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -69,7 +69,7 @@ type
       // v0.26: map compiler finding severity ('Error'|'Warning'|'Hint'|
       // 'Information') to LSP DiagnosticSeverity (1=Error, 2=Warning,
       // 3=Information, 4=Hint).
-      /// <summary><!-- drag-lint:auto -->v0.26: map compiler finding severity
+      /// <summary><!-- drag-lint:auto sum -->v0.26: map compiler finding severity
       /// ('Error'|'Warning'|'Hint'| 'Information') to LSP DiagnosticSeverity (1=Error,
       /// 2=Warning, 3=Information, 4=Hint).</summary>
       /// <param name="ASev"><!-- drag-lint:auto type -->const string</param>
@@ -157,7 +157,7 @@ type
       class function BuildSignatureHelp(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer)  : TJSONObject;
       // v0.26: AStore is optional; when supplied, compiler_findings for this file
       // are merged into the result alongside lint findings.
-      /// <summary><!-- drag-lint:auto -->v0.26: AStore is optional; when supplied,
+      /// <summary><!-- drag-lint:auto sum -->v0.26: AStore is optional; when supplied,
       /// compiler_findings for this file are merged into the result alongside lint
       /// findings.</summary>
       /// <param name="ALinter"><!-- drag-lint:auto type -->const TLinter</param>
@@ -167,8 +167,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.ShouldKeep, DRagLint.Lint.Linter.TLinter.LintFile, DRagLint.LSP.Completion.DiscoverLintConfig, DRagLint.LSP.Completion.TLspCompletion.MapCompilerSeverityToLspSeverity, DRagLint.LSP.Completion.TLspCompletion.MapLintSeverityToLspSeverity, ExtractFileExt, SameText</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 182 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.ShouldKeep, DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds, DRagLint.Lint.Linter.TLinter.LintFile (+6 more)</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 211 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile"/>
@@ -198,7 +198,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MakeCompletionItem(const ASym: TSymbol; const AStore: ISymbolStore): TJSONObject;
-      /// <summary><!-- drag-lint:auto -->TLspCompletion</summary>
+      /// <summary><!-- drag-lint:auto sum -->TLspCompletion</summary>
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

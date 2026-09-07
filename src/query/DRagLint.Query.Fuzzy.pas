@@ -10,7 +10,7 @@ uses
 // Classic O(|a|*|b|) Levenshtein distance with two rolling rows.
 // Case-insensitive (lowercases both inputs first) - Pascal identifiers are
 // case-insensitive at the language level.
-/// <summary><!-- drag-lint:auto -->Classic O(|a|*|b|) Levenshtein distance with two
+/// <summary><!-- drag-lint:auto sum -->Classic O(|a|*|b|) Levenshtein distance with two
 /// rolling rows. Case-insensitive (lowercases both inputs first) - Pascal identifiers are
 /// case-insensitive at the language level.</summary>
 /// <param name="A"><!-- drag-lint:auto type -->const string</param>
@@ -27,7 +27,7 @@ function LevenshteinDistance(const A, B: string): Integer;
 
 // Acceptable distance threshold for a fuzzy match against APattern.
 // Tighter for short patterns to keep precision; looser for long patterns.
-/// <summary><!-- drag-lint:auto -->Acceptable distance threshold for a fuzzy match
+/// <summary><!-- drag-lint:auto sum -->Acceptable distance threshold for a fuzzy match
 /// against APattern. Tighter for short patterns to keep precision; looser for long
 /// patterns.</summary>
 /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
@@ -42,14 +42,14 @@ function FuzzyMaxDistanceFor(const APattern: string): Integer;
 
 // Extracts the case-insensitive 3-gram set of a string. Patterns shorter
 // than 3 chars return an empty array (caller should fall back to full scan).
-/// <summary><!-- drag-lint:auto -->Extracts the case-insensitive 3-gram set of a string.
-/// Patterns shorter than 3 chars return an empty array (caller should fall back to full
-/// scan).</summary>
+/// <summary><!-- drag-lint:auto sum -->Extracts the case-insensitive 3-gram set of a
+/// string. Patterns shorter than 3 chars return an empty array (caller should fall back
+/// to full scan).</summary>
 /// <param name="S"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.EnsureTrigramTablePopulated (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbol (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.EnsureTrigramTablePopulated (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UpsertSymbol (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsFuzzy (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindByNameLike (DRagLint.Storage.SQLite.pas)</para>
 /// <para>Calls: Copy, LowerCase</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->

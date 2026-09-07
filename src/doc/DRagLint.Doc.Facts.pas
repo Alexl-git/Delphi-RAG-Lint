@@ -28,7 +28,7 @@ type
   /// only where the source states it. Nothing in this record is ever
   /// invented.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

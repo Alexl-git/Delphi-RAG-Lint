@@ -18,7 +18,7 @@ uses
 type
   // A loaded external lint rule expressed as a tree-sitter S-expression query.
   // Sister .json file (same basename) supplies metadata: id, severity, message.
-  /// <summary><!-- drag-lint:auto -->A loaded external lint rule expressed as a
+  /// <summary><!-- drag-lint:auto sum -->A loaded external lint rule expressed as a
   /// tree-sitter S-expression query. Sister .json file (same basename) supplies metadata:
   /// id, severity, message.</summary>
   /// <remarks>
@@ -90,8 +90,8 @@ type
         node kinds in FExcludeAncestors -- used to suppress a match that sits in
         a structural context the rule should not flag (e.g. an integer literal
         that IS the value of a const definition, for large-magic-number). }
-      /// <summary><!-- drag-lint:auto -->True if the picked node (or any ancestor up to
-      /// the root) is one of the node kinds in FExcludeAncestors -- used to suppress a
+      /// <summary><!-- drag-lint:auto sum -->True if the picked node (or any ancestor up
+      /// to the root) is one of the node kinds in FExcludeAncestors -- used to suppress a
       /// match that sits in a structural context the rule should not flag (e.g. an
       /// integer literal that IS the value of a const definition, for
       /// large-magic-number).</summary>
@@ -100,32 +100,34 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
-      /// <para>Calls: SameText</para>
+      /// <para>Calls: SameText, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent</para>
       /// <para>Reads: FExcludeAncestors</para>
       /// <para>Pure</para>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.Parent"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Destroy"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Run"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function InExcludedAncestor(const ANode: TTSNode): Boolean;
       { True when FRequireAncestors is empty (no requirement) or the node has an
         ancestor of one of those kinds. }
-      /// <summary><!-- drag-lint:auto -->True when FRequireAncestors is empty (no
+      /// <summary><!-- drag-lint:auto sum -->True when FRequireAncestors is empty (no
       /// requirement) or the node has an ancestor of one of those kinds.</summary>
       /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
-      /// <para>Calls: SameText</para>
+      /// <para>Calls: SameText, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent</para>
       /// <para>Reads: FRequireAncestors</para>
       /// <para>Pure</para>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.Parent"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Destroy"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Run"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasRequiredAncestor(const ANode: TTSNode): Boolean;
@@ -136,24 +138,38 @@ type
       /// so it cannot be answered from the tree shape alone.</param>
       /// <returns>True to DROP the match. False when no exemption is declared,
       /// which is every pre-existing rule.</returns>
-      /// <remarks>Only the NEAREST enclosing argument list is consulted, so a
+      /// <remarks>
+      /// Only the NEAREST enclosing argument list is consulted, so a
       /// literal nested in an inner call is judged by that inner callee. See
       /// <c>FExcludeArgOf</c> for why this cannot be an ancestor-kind test.
-      /// Pure.</remarks>
+      /// Pure.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
+      /// <para>Calls: DRagLint.Lint.QueryRules.NodeText, SameText, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent, Trim</para>
+      /// <para>Returns: False</para>
+      /// <para>Reads: FExcludeArgOf</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.NodeText"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function IsArgumentOfExcludedCallee(const ANode: TTSNode; const ASource: TBytes): Boolean;
     public
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
       /// <param name="AQuerySource"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AScmPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AJsonPath"><!-- drag-lint:auto type -->const string</param>
-      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->tree-sitter query compile failed: rule "%s" (offset %d, errType %d,</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)</para>
-      /// <para>Calls: DRagLint.Lint.QueryRules.ExtractRequiredLiteral, Format, SameText, TreeSitter.Query.TTSQuery.Create, TSQueryError</para>
+      /// <para>Calls: DRagLint.Lint.QueryRules.ExtractRequiredLiteral, Format, LowerCase, SameText, TreeSitter.Query.TTSQuery.Create, Trim, TSQueryError</para>
       /// <para>constructor</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 58 lines (full implementation)</para>
-      /// <para>Reads: FId, FExcludeAncestors, FRequireAncestors, FQuery   Writes: FSourcePath, FId, FSeverity, FMessage, FWarnCapture, FEnabled, FRequiredText, FRuleId (+3 more)</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 76 lines (full implementation)</para>
+      /// <para>Reads: FId, FExcludeAncestors, FExcludeArgOf, FRequireAncestors, FRequireFileText, FQuery   Writes: FSourcePath, FId, FSeverity, FMessage, FWarnCapture, FEnabled, FRequiredText, FRuleId (+5 more)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.ExtractRequiredLiteral"/>
       /// <seealso cref="TreeSitter.Query.TTSQuery.Create"/>
@@ -170,6 +186,7 @@ type
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Run"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
@@ -181,15 +198,15 @@ type
       /// FoundList.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, Integer, SameText, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.Query.TTSQueryCursor.Create, TreeSitter.Query.TTSQueryCursor.Execute, TreeSitter.Query.TTSQueryCursor.NextMatch</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 82 lines (full implementation)</para>
+      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, Integer, SameText, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.Query.TTSQueryCursor.Create, TreeSitter.Query.TTSQueryCursor.Execute, TreeSitter.Query.TTSQueryCursor.NextMatch, TreeSitter.Query.TTSQueryMatchHelper.CapturesArray, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 85 lines (full implementation)</para>
       /// <para>Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage, FRuleId</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.AllPredicatesPass"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.NoteRuleTicks"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
-      /// <seealso cref="TreeSitter.Query.TTSQuery.CaptureNameForID"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string): TArray<TLintFinding>;
@@ -241,7 +258,7 @@ type
     public
       // Loads every *.scm under ARulesDir as a TQueryRule, paired with the
       // sibling <basename>.json if present. Skips and warns on compile failures.
-      /// <summary><!-- drag-lint:auto -->Loads every *.scm under ARulesDir as a
+      /// <summary><!-- drag-lint:auto sum -->Loads every *.scm under ARulesDir as a
       /// TQueryRule, paired with the sibling &lt;basename&gt;.json if present. Skips and
       /// warns on compile failures.</summary>
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
@@ -264,7 +281,7 @@ type
   /// Diagnostic only, and populated ONLY while DRAGLINT_PROFILE is set.
   /// See QueryRuleTimings for why this exists.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), declaration (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.QueryRules.QueryRuleTimings (DRagLint.Lint.QueryRules.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.QueryRules.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.QueryRules.QueryRuleTimings (DRagLint.Lint.QueryRules.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.QueryRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

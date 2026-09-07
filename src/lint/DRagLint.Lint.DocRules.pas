@@ -53,6 +53,7 @@ type
     /// <summary>Flags every public/published declaration in AStore that has
     /// no doc-comment of any kind.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
+    /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
     /// <returns>'missing-doc' findings, one per undocumented public/published
     /// declaration; empty if none.</returns>
     /// <remarks>
@@ -66,7 +67,7 @@ type
     /// record/enum), routines (procedure/function/method/constructor/
     /// destructor), and properties. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.DocRules.IsDocumentableKind, Format</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Pure</para>
@@ -87,6 +88,7 @@ type
     /// <param name="AOpts">The render options the DOCUMENTER used. Anything the
     /// checker does not share with it is measured as drift -- see
     /// TDocFactsRenderOptions.</param>
+    /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
     /// <returns>'doc-drift' findings, in stable per-symbol/per-signal order; empty
     /// if every documented decl is structurally current.</returns>
     /// <remarks>
@@ -97,7 +99,7 @@ type
     /// re-parsing the message: a finding is merely a report here. Never raises;
     /// per-symbol failures are swallowed so one bad decl cannot abort the sweep.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Lint.DocRules.DocumentedPublicDecls, Flush, Format, GetEnvironmentVariable, Writeln</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Pure</para>

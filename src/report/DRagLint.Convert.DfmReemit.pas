@@ -53,7 +53,7 @@ type
   /// verbatim in ValueText, not modelled as child nodes. Only a dnkSubObject has
   /// children: its properties + nested objects.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -65,7 +65,7 @@ type
     Kind      : TDfmNodeKind;
     ValueText : string;
     ClassName_: string;
-    /// <summary><!-- drag-lint:auto -->TDfmNode</summary>
+    /// <summary><!-- drag-lint:auto sum -->TDfmNode</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Convert.DfmReemit.CloneNode (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas)</para>
@@ -96,13 +96,16 @@ type
   /// prose it is indistinguishable from an ordinary note, so it carries the
   /// mapping's name, the #apply line that requested it, the source path and the
   /// unmatched value -- everything needed to fix the rule book.
-  ///
   /// A source leaf that is absent AND has no usable default is NOT recorded
   /// here: there was nothing to map, which is an informational note
   /// (mapping-source-absent), not unfinished work. One that is absent because
   /// it sits at its declared default IS recorded, and Value carries that
   /// resolved default -- a value the operator asked to be mapped and which was
   /// not, even though it never appeared in the .dfm text.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitNotApplied = record
     MapName : string;
@@ -118,11 +121,14 @@ type
   /// (DRagLint.Convert.Rules, rkDefault). A rule book that states both
   /// `#link X &lt;- X` and `#default X = ...` is the natural way to write "use
   /// the source value, or this if there isn't one", and the source must win.
-  ///
   /// It is recorded rather than skipped in silence for the same reason
   /// TReemitNotApplied exists: the operator wrote a rule that did nothing, and
   /// only the rule book can say which of the two they meant. Existing carries
   /// the value that WON so the report can be read without the .dfm to hand.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitDefaultSuperseded = record
     Path     : string;  { the T property path the #default named }
@@ -138,11 +144,14 @@ type
   /// not an invention. Before this existed the property simply vanished and the
   /// T side adopted T's OWN default, a DIFFERENT value that merely shares a
   /// name; that is what `defaults-may-diverge` warned about and could not fix.
-  ///
   /// Reported because the value is written into the `.dfm` without appearing in
   /// the source `.dfm`, and an operator diffing the two would otherwise have no
   /// account of where it came from. Informational, not remainder: the work was
   /// DONE, this says so.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitDefaultResolved = record
     FromPath: string;  { the F property that was absent }
@@ -159,10 +168,13 @@ type
   /// the target is a DIFFERENT enum type, so the name is either not a member of
   /// it at all (the form fails to load) or -- far worse -- happens to BE one and
   /// silently means something else.
-  ///
   /// Carries the cast's name and the offending value so the fix is a one-line
   /// `map` addition to the .castlib, and the rule line so the operator can find
   /// the `#link ... : Cast` that asked for it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitEnumUnmapped = record
     CastName: string;  { the enum cast named by the #link's ': Cast' suffix }
@@ -194,12 +206,10 @@ type
   /// that matched nothing (REMAINDER). Notes=everything else, currently only the
   /// narrowed F/T default-divergence warning. Each string entry is ASCII and
   /// human-readable.
-  ///
   /// This block was an ORPHAN until 2026-09-05: it sat above TReemitNotApplied's
   /// own doc comment, three records away from the type it describes, so Help
   /// Insight showed none of it on TReemitReport. If you add a record here, put
   /// it ABOVE this block, not between it and the record.
-  ///
   /// Stubs/Relocated were split OUT of Notes so a consumer can assign each entry a
   /// stable kind without matching on its prose (DRagLint.Convert.Apply's typed
   /// TApplyItem). The convert-reemit JSON still emits 'notes' as the UNION of the
@@ -243,7 +253,7 @@ type
   /// block, or no #convert header in the rules. Error carries the reason when Ok
   /// is False.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -270,14 +280,14 @@ type
 /// respect to the tree-sitter runtime if called concurrently.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
-/// <para>Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, Trim</para>
+/// <para>Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, Trim</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 53 lines (full implementation)</para>
 /// <para>Mutates: ARoot (out)</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.NodeText"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Create"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.WalkNodeInto"/>
-/// <seealso cref="TreeSitter.TTSParser.Create"/>
-/// <seealso cref="TreeSitter.TTSParser.Parse"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
@@ -289,6 +299,7 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// #convert F -&gt; T header; #link/#default/#ignore/#remove drive the remap).</param>
 /// <param name="AFromTree">The F type's flattened property tree (BuildPropTree).</param>
 /// <param name="AToTree">The T type's flattened property tree (BuildPropTree).</param>
+/// <param name="ACastLib"><!-- drag-lint:auto type -->const TCastLib</param>
 /// <returns>A TReemitResult: on success, the emitted T block in DfmText plus the
 /// structured Report; on hard failure, Ok=False with Error set.</returns>
 /// <remarks>
@@ -304,15 +315,15 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// Components child is left ALONE. Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
-/// <para>Calls: CloneNode, Copy, Default, DRagLint.Convert.DfmReemit.BareTypeTail, DRagLint.Convert.DfmReemit.EmitBlock, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.PlaceAtPath, DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested, DRagLint.Convert.DfmReemit.ReemitComponent.RemapLeaf, DRagLint.Convert.DfmReemit.TDfmNode.Create (+11 more)</para>
+/// <para>Calls: ApplyInScope, ApplySets, CloneNode, Copy, Default, DRagLint.Convert.DfmReemit.BareTypeTail, DRagLint.Convert.DfmReemit.EmitBlock, DRagLint.Convert.DfmReemit.FindAtPath, DRagLint.Convert.DfmReemit.LeafDefaultOf, DRagLint.Convert.DfmReemit.LeafTypeOf (+24 more)</para>
 /// <para>Returns: Default(TReemitResult)</para>
-/// <para>Complexity: 14 (cyclomatic, outer body), 275 lines (full implementation)</para>
+/// <para>Complexity: 27 (cyclomatic, outer body), 720 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.BareTypeTail"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.EmitBlock"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.ParseDfmBlock"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.PlaceAtPath"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.FindAtPath"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.LeafDefaultOf"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.LeafTypeOf"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;

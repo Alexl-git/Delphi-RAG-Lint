@@ -23,16 +23,16 @@ type
   //   - folders containing each unit listed in the .dpr's `uses X in 'path'`
   //     clauses (one level deep)
   // All $(BDS) and similar macros are expanded.
-  /// <summary><!-- drag-lint:auto -->Resolves the set of folders that should be scanned
-  /// for a Delphi project. Inputs: a .dproj path. Outputs: deduplicated folder list
-  /// combining: - the .dproj's own folder - DCC_UnitSearchPath entries from the .dproj -
-  /// Library and Browsing paths from registry (Win32 + Win64, HKCU + HKLM) - folders
-  /// containing each unit listed in the .dpr's `uses X in 'path'` clauses (one level
-  /// deep) All $(BDS) and similar macros are expanded.</summary>
+  /// <summary><!-- drag-lint:auto sum -->Resolves the set of folders that should be
+  /// scanned for a Delphi project. Inputs: a .dproj path. Outputs: deduplicated folder
+  /// list combining: - the .dproj's own folder - DCC_UnitSearchPath entries from the
+  /// .dproj - Library and Browsing paths from registry (Win32 + Win64, HKCU + HKLM) -
+  /// folders containing each unit listed in the .dpr's `uses X in 'path'` clauses (one
+  /// level deep) All $(BDS) and similar macros are expanded.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoScanAll (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas) (+16 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas) (+19 more)</para>
+  /// <para>Used in units: Config.IndexesFrame, Config.SettingsFrame, DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan, DragLint.Plugin.OptionsFrames</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProjectResolver = class
@@ -119,7 +119,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AddSemicolonList(AList: TList<string>; const ASemicolonList: string; const ABaseDir: string);
-      /// <summary><!-- drag-lint:auto -->Enumerates every platform subkey under
+      /// <summary><!-- drag-lint:auto sum -->Enumerates every platform subkey under
       /// ...\BDS\37.0\Library across both hives and registry views, deduplicated
       /// case-insensitively. These are the names Delphi itself registers (Win32, Win64,
       /// Android64, iOSDevice64, ...).</summary>
@@ -181,14 +181,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReadDprUsesPaths(const ADprPath  : string; AList: TList<string>);
-      /// <summary><!-- drag-lint:auto -->The project's OWN folders, shared by Resolve and
-      /// ResolveProjectOnly: the .dproj search paths plus the directories named by the
-      /// main source's `in '...'` clauses. Deliberately contains no registry lookup --
-      /// that tail is what separates a compiler search path from an indexing scope, and
-      /// it is added by Resolve alone.</summary>
+      /// <summary><!-- drag-lint:auto sum -->The project's OWN folders, shared by Resolve
+      /// and ResolveProjectOnly: the .dproj search paths plus the directories named by
+      /// the main source's `in '...'` clauses. Deliberately contains no registry lookup
+      /// -- that tail is what separates a compiler search path from an indexing scope,
+      /// and it is added by Resolve alone.</summary>
       /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
-      /// <exception cref="Exception"><!-- drag-lint:auto --></exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->.dproj not found: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveProjectOnly (DRagLint.Project.Resolver.pas)</para>
@@ -206,14 +206,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas)</para>
-      /// <para>Calls: GetEnvironmentVariable</para>
+      /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty</para>
       /// <para>constructor</para>
-      /// <para>Reads: FBDS   Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded</para>
+      /// <para>Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded</para>
+      /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create;
@@ -285,8 +285,8 @@ type
       //   AAllPlatforms = True  -> every platform subkey under ...\BDS\37.0\Library
       //     (Android*, iOS*, Linux64, OSX*, Win64x, ...), which additionally pulls
       //     in the Posix / Androidapi / iOSapi / Macapi platform source trees.
-      /// <summary><!-- drag-lint:auto -->Library/Browsing paths from registry only - no
-      /// .dproj required. Useful for "index everything Delphi knows about" without a
+      /// <summary><!-- drag-lint:auto sum -->Library/Browsing paths from registry only -
+      /// no .dproj required. Useful for "index everything Delphi knows about" without a
       /// project. AAllPlatforms = False -&gt; Win32 + Win64 only (the IDE's native
       /// targets). AAllPlatforms = True -&gt; every platform subkey under
       /// ...\BDS\37.0\Library (Android*, iOS*, Linux64, OSX*, Win64x, ...), which
@@ -296,7 +296,7 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+4 more)</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+5 more)</para>
       /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>

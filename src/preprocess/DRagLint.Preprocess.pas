@@ -85,7 +85,7 @@ uses
 /// No shared mutable state -- each call builds its own defines
 /// dictionary and IF stack.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
 /// <para>Calls: DRagLint.Preprocess.Preprocess/2</para>
 /// <para>Returns: Preprocess(AUtf8, Opts)</para>
 /// <para>Overload 1 of 2</para>

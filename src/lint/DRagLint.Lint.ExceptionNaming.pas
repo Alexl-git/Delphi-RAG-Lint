@@ -49,20 +49,40 @@ const
 /// <para>Does NOT guarantee uniqueness -- that is UniqueExceptionClassName's
 /// job, because uniqueness depends on what the definitions unit already holds
 /// and on every type name already in scope.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ExceptionUnitWriter.PlanExceptionEntries (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.Lint.Linter.TLinter.EnrichExceptionFindings (DRagLint.Lint.Linter.pas)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.Lint.ExceptionNaming.CaseWord, DRagLint.Lint.ExceptionNaming.FirstClause, DRagLint.Lint.ExceptionNaming.InArray, DRagLint.Lint.ExceptionNaming.StripContextPrefix, DRagLint.Lint.ExceptionNaming.StripSpecifiers, DRagLint.Lint.ExceptionNaming.WordsOf, LowerCase, UpperCase</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 49 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Lint.ExceptionNaming.CaseWord"/>
+/// <seealso cref="DRagLint.Lint.ExceptionNaming.FirstClause"/>
+/// <seealso cref="DRagLint.Lint.ExceptionNaming.InArray"/>
+/// <seealso cref="DRagLint.Lint.ExceptionNaming.StripContextPrefix"/>
+/// <seealso cref="DRagLint.Lint.ExceptionNaming.StripSpecifiers"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function DeriveExceptionClassName(const AMessage: string): string;
 
-/// <summary>Makes ABase unique against ATaken by appending 2, 3, ... </summary>
+/// <summary>Makes ABase unique against ATaken by appending 2, 3, ...</summary>
 /// <param name="ABase">A name from DeriveExceptionClassName; '' returns ''.</param>
 /// <param name="ATaken">Names already spoken for: the definitions unit's own
 /// entries plus every type name visible to the project. Compared
 /// case-INSENSITIVELY, because Delphi identifiers are.</param>
 /// <returns>ABase when free, else ABase + the lowest free integer from 2.</returns>
-/// <remarks>A numeric suffix is only STABLE because the caller persists the
+/// <remarks>
+/// A numeric suffix is only STABLE because the caller persists the
 /// message-to-name map and never reassigns: without that, a newly added message
 /// that sorted earlier would renumber existing classes and rewrite source, which
 /// is the churn this whole feature exists to avoid. The suffix rule therefore
-/// makes the persisted map load-bearing, not optional.</remarks>
+/// makes the persisted map load-bearing, not optional.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ExceptionUnitWriter.PlanExceptionEntries (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.Lint.Linter.TLinter.EnrichExceptionFindings (DRagLint.Lint.Linter.pas)</para>
+/// <para>Calls: DRagLint.Lint.ExceptionNaming.UniqueExceptionClassName.IsTaken, IntToStr, SameText</para>
+/// <para>Returns: ''; ABase + IntToStr(N)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Lint.ExceptionNaming.UniqueExceptionClassName.IsTaken"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UniqueExceptionClassName(const ABase: string; const ATaken: TArray<string>): string;
 
 implementation
