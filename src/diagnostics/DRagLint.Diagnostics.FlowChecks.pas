@@ -62,6 +62,7 @@ type
     /// <param name="AFileId">File id within AStore (0 when no store).</param>
     /// <param name="ALibStore">Optional library symbol store for cross-DB lookups; nil disables.</param>
     /// <returns>All flow findings for the file.</returns>
+    /// <exception cref="EFlowOracleMismatch"><!-- drag-lint:auto exc -->via DRagLint.Diagnostics.FlowChecks.OracleCheck: %s: cached %s but a fresh computation says %s, for key "%s". The; via DRagLint.Diagnostics.FlowChecks.OracleCheckPM: oracle param-mode: cached mode %d but a fresh computation says %d, for</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>

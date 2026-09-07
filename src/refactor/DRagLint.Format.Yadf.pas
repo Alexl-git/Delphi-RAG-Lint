@@ -33,7 +33,7 @@ type
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AYadfPath"><!-- drag-lint:auto type -->const string = ''</param>
       /// <returns><!-- drag-lint:auto type -->TFormatResult</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->File not found: %s</exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->File not found: %s; via DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture: CreatePipe failed; via DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture: CreateProcessW failed: %d</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ? (+130 more)</para>

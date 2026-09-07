@@ -35,6 +35,7 @@ const
 
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: 2; DoIndexAll(Args);
 /// DoIndex(Args); DoQuery (Args); DoRules (Args); DoLint (Args).</returns>
+/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+89 more)</para>

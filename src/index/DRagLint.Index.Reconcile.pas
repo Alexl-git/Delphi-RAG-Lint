@@ -197,7 +197,7 @@ type
       /// AProjectFile may be a .dpr or .dproj; the sibling file is auto-detected.</summary>
       /// <param name="AProjectFile">Absolute or relative path to .dpr or .dproj.</param>
       /// <returns>TReconcileResult with populated Missing, Extra, and Stale arrays.</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->Project file not found: %s</exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->Project file not found: %s; via DRagLint.Index.Closure.TClosureResolver.Resolve: Project file not found: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>

@@ -51,6 +51,7 @@ type
     /// (no git, untracked file, uncommitted line, non-zero exit, empty/
     /// unparseable output, timeout, or exception). NEVER a guessed or wrong
     /// date.</returns>
+    /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Doc.GitSince.SpawnGit: CreatePipe failed; via DRagLint.Doc.GitSince.SpawnGit: CreateProcessW failed: %d</exception>
     /// <remarks>
     /// Degrades silently: absence over a wrong fact. Spawns a git
     /// subprocess -- the caller must gate this behind the --since opt-in so a

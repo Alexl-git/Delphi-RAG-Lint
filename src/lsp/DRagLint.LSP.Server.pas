@@ -195,7 +195,7 @@ type
       /// TArray&lt;ISymbolStore&gt;.Create(FEphemStore) + FStores.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.AnyStoreOwns, DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore, ExtractFileExt, LowerCase, SameText</para>
       /// <para>Complexity: 12 (cyclomatic, outer body), 33 lines (full implementation)</para>
       /// <para>Reads: FStores, FEphemStore, FEphemFile, FEphemStamp</para>
@@ -208,6 +208,28 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  StoresForFile(const APath: string): TArray<ISymbolStore>;
+      /// <summary><!-- drag-lint:auto sum -->Callers use it to let the file's OWN
+      /// declaration win outright. Accumulating across every store is right for a
+      /// multi-DB project, where the same name legitimately lives in several project
+      /// databases; it is wrong for a loose file, where the library's namesakes are noise
+      /// in front of the declaration the reader is standing on. Scoped deliberately: for
+      /// a file some index DOES own, StoresForFile returns FStores unchanged, this
+      /// returns False, and every request behaves exactly as it did before.</summary>
+      /// <param name="AStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt;</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FEphemStore &lt;&gt; nil)
+      /// and (Length(AStores) &gt; 0) and (AStores[0] = FEphemStore).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas)</para>
+      /// <para>Reads: FEphemStore</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.Create"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function  EphemeralLeads(const AStores: TArray<ISymbolStore>): Boolean;
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: nil;
       /// TJSONObject(Parsed).</returns>
@@ -354,14 +376,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.LSP.Server.TLSPServer.SendMessage, StrToIntDef</para>
+      /// <para>Calls: DRagLint.LSP.Server.TLSPServer.EphemeralLeads, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.LSP.Server.TLSPServer.StoresForFile, StrToIntDef</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 64 lines (full implementation)</para>
       /// <para>Reads: FStores</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.EphemeralLeads"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromSymbol"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDefinition     (const AId: TJSONValue; const AParams: TJSONObject);
@@ -370,8 +393,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition, DRagLint.LSP.Server.TLSPServer.LocationFromRef/2, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.LSP.Server.TLSPServer.SendMessage, StrToIntDef, TJSONBool</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 70 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition, DRagLint.LSP.Server.TLSPServer.LocationFromRef/2, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.LSP.Server.TLSPServer.StoresForFile, StrToIntDef, TJSONBool</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 81 lines (full implementation)</para>
       /// <para>Reads: FStores</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
@@ -501,14 +524,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, StrToIntDef</para>
+      /// <para>Calls: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.LSP.Server.TLSPServer.StoresForFile, StrToIntDef</para>
       /// <para>Reads: FStores</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StoresForFile"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleCompletion     (const AId: TJSONValue; const AParams: TJSONObject);

@@ -59,6 +59,7 @@ type
       /// dedup, existence-filter) to avoid cmdline overflow, and injected via DCC_UnitSearchPath
       /// env var. Empty string means use the .dproj default (typically Win64).</param>
       /// <returns>Findings, raw stdout, and the compiler exit code.</returns>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture: CreatePipe failed; via DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture: CreateProcessW failed: %d</exception>
       /// <remarks>
       /// By default runs an INCREMENTAL compile (msbuild /t:Make; dcc64
       /// without -B): only changed units and their dependents are recompiled, so it
@@ -86,6 +87,7 @@ type
       /// parses its findings.</summary>
       /// <param name="ACmd">The full command line to execute.</param>
       /// <returns>Parsed findings, raw output, and the exit code.</returns>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture: CreatePipe failed; via DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture: CreateProcessW failed: %d</exception>
       /// <remarks>
       /// Used by check-unit for the single-unit shadow-overlay compile.
       /// <!-- drag-lint:auto BEGIN -->

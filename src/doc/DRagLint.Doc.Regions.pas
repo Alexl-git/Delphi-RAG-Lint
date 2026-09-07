@@ -609,8 +609,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Doc.Regions.DropAlreadyPresentPhrases, DRagLint.Doc.Regions.EmitHarvestedRemarks, DRagLint.Doc.Regions.HasMalformedManagedFence, DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor, DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody, DRagLint.Doc.Regions.TDocRegions.IsManagedDesc, DRagLint.Doc.Regions.TDocRegions.IsManagedText, DRagLint.Doc.Regions.TDocRegions.MergeComment.ClassifyParamAction, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineException (+26 more)</para>
-    /// <para>Complexity: 86 (cyclomatic, outer body), 1354 lines (full implementation)</para>
+    /// <para>Calls: ContainsText, DRagLint.Doc.Regions.DropAlreadyPresentPhrases, DRagLint.Doc.Regions.EmitHarvestedRemarks, DRagLint.Doc.Regions.HasMalformedManagedFence, DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor, DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody, DRagLint.Doc.Regions.TDocRegions.IsManagedDesc, DRagLint.Doc.Regions.TDocRegions.IsManagedText, DRagLint.Doc.Regions.TDocRegions.MergeComment.ClassifyParamAction, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineException (+27 more)</para>
+    /// <para>Complexity: 86 (cyclomatic, outer body), 1394 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.DropAlreadyPresentPhrases"/>
     /// <seealso cref="DRagLint.Doc.Regions.EmitHarvestedRemarks"/>

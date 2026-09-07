@@ -222,6 +222,7 @@ type
     /// <param name="AProjectFile">Path to the .dpr or .dproj whose closure to document.</param>
     /// <param name="AOptions">Batch options; Stubs gates the facts-only filter.</param>
     /// <returns>Aggregated edits over the closure + summed DeclCount/DocCount.</returns>
+    /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Index.Closure.TClosureResolver.Resolve: Project file not found: %s</exception>
     /// <remarks>
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->

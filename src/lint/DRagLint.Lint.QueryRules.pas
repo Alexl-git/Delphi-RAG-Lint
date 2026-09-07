@@ -264,6 +264,7 @@ type
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
       /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TQueryRule&gt;</returns>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Lint.QueryRules.TQueryRule.Create: tree-sitter query compile failed: rule "%s" (offset %d, errType %d,</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas)</para>

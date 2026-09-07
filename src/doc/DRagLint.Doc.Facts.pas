@@ -114,6 +114,10 @@ type
   /// Message carries the callee's own mined literal and is empty on the same
   /// terms as TRaiseDetail.Message -- "no message captured", never "no message
   /// exists".
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCalleeRaise = record
     /// <summary>The exception class the callee raises.</summary>
@@ -558,7 +562,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.CalleeRaisesType.BodyRaises (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.CalleeRaisesType (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -593,12 +597,13 @@ type
     /// carries the true distinct count so the renderer can add '(+N more)'. 0 or
     /// negative shows no callers (CalledFrom stays empty, total unaffected).
     /// Default 5.</param>
+    /// <param name="AIncludeCalleeRaises"><!-- drag-lint:auto type -->Boolean = False</param>
     /// <returns><!-- drag-lint:auto -->TDocFacts -- Observed: Default(TDocFacts).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+35 more)</para>
-    /// <para>Complexity: 72 (cyclomatic, outer body), 996 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+36 more)</para>
+    /// <para>Complexity: 73 (cyclomatic, outer body), 1037 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -626,7 +631,7 @@ type
     /// exception-cref check must never disagree about what "the body raises"
     /// means. Costs a memoised source read plus a line scan of the body.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Drift.CalleeRaisesType.BodyRaises (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseClass, DRagLint.Doc.Facts.SourceLines, Min</para>
     /// <para>Returns: nil; RaiseSet.ToStringArray</para>
     /// <para>Pure</para>
@@ -634,7 +639,7 @@ type
     /// <seealso cref="DRagLint.Doc.Facts.CollectRaiseClass"/>
     /// <seealso cref="DRagLint.Doc.Facts.SourceLines"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
-    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineRaisesDetailed"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineRaises(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
@@ -652,7 +657,7 @@ type
     /// those rules produce. This routine exists so the message can be mined
     /// without touching them.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest (DRagLint.Doc.Facts.pas) ?</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseDetail, DRagLint.Doc.Facts.SourceLines, Min</para>
     /// <para>Returns: nil; Acc.ToArray</para>
     /// <para>Pure</para>
@@ -660,7 +665,7 @@ type
     /// <seealso cref="DRagLint.Doc.Facts.CollectRaiseDetail"/>
     /// <seealso cref="DRagLint.Doc.Facts.SourceLines"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
-    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineRaises"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineRaisesDetailed(const AStore: ISymbolStore; const ASym: TSymbol): TArray<TRaiseDetail>;
@@ -682,22 +687,31 @@ type
     /// cannot drift apart: before this existed, doc-drift accepted a
     /// callee-justified cref that `document` would never write, and the two
     /// halves of one feature disagreed silently for months.
-    ///
     /// FAIL-SAFE IN ONE DIRECTION ONLY, unchanged from the checker's original:
     /// an unresolved edge (TargetSymbolId = 0, i.e. RTL or cross-DB), a
     /// vanished row, and a bodyless callee all contribute NOTHING rather than
     /// contributing "raises nothing". Absence of information is never evidence.
-    ///
     /// A self-edge contributes nothing -- a routine cannot justify its own cref
     /// by recursing -- but is not discarded, because it is also how a call to
     /// an overload SIBLING presents. The overload arm is bounded to the same
     /// ParentId AND FileId: it is the one place this walk can attribute a raise
     /// to a routine that did not make it, so it must not reach across units and
     /// collect unrelated routines that merely share a name.
-    ///
     /// SORTED, and not incidentally: GetCallEdgesFromSymbol has no ORDER BY, so
     /// an unsorted result would reorder between runs and `document --apply`
     /// would rewrite the same file forever.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Drift.CalleeRaisesType (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <para>Calls: CompareText, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest, MineRaisesDetailed, SameText</para>
+    /// <para>Returns: nil; Acc.ToArray</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 72 lines (full implementation)</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineRaises"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineCalleeRaises(const AStore: ISymbolStore; const ASym: TSymbol;
       const AEdges: TArray<TCallEdge>): TArray<TCalleeRaise>;

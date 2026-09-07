@@ -352,5 +352,41 @@
 #   influences what is indexed, the version MUST move.
 #
 #   Superseded: 1.10.0-alpha|67c2c588351ad638e978b632cd0184b7745f29c8a3cd33e98196b4551e709f9b
+#
+# 2026-09-07 (session 77): hash updated WITHOUT a version bump. FIFTH sweep.
+#
+#   The autodoc sweep that shipped transitive <exception cref> attribution
+#   (gap 2) touched exactly TWO files inside this surface, and added THREE
+#   lines between them, every one of them a `///` doc comment:
+#
+#     src\index\DRagLint.Index.ManifestWrite.pas  +1  (a new <exception cref>)
+#     src\index\DRagLint.Index.Reconcile.pas      +1/-1 (a via appended to one)
+#
+#   The whole sweep was verified comment-only before this entry was written:
+#   `git diff -U0` over all 17 changed files yields ZERO changed lines that are
+#   not `///`. Nothing either file does changes what the parser sees in a byte
+#   sequence, so no stored PARSE becomes stale and a bump would buy hours of
+#   re-parsing to say nothing new.
+#
+#   ONE CORRECTION TO THE STANDING SUGGESTION ABOVE, and the reason it is still
+#   only filed. Four entries now say the honest fix is to hash this surface with
+#   `///` lines stripped. That may be wrong, and it is worth someone checking
+#   before it is built: this engine EXTRACTS doc comments -- they are indexed as
+#   doc text and answered by `document`, `doc-drift` and hover. So a `///` edit
+#   is not self-evidently invisible to extraction the way a whitespace change
+#   is; it changes stored CONTENT while leaving stored PARSES alone. If that is
+#   right, the two are different staleness questions and the remedy is not one
+#   hash with comments stripped but a recognition that a doc edit needs a
+#   REINDEX of the touched files, which the sweep already does with --reindex,
+#   and never a version bump.
+#
+#   Not decided here, and deliberately not implemented here: changing this
+#   guard's definition of identity as a side effect of the fifth sweep to trip
+#   it would be exactly the move every entry above warns against.
+#
+#   The same warning as every entry above: if a future edit to these files ever
+#   influences what is indexed, the version MUST move.
+#
+#   Superseded: 1.10.0-alpha|02c80791a48b50c8fda23c93444bf3e14fe6d4285303e1043f70cee05370be2d
 
-1.10.0-alpha|02c80791a48b50c8fda23c93444bf3e14fe6d4285303e1043f70cee05370be2d
+1.10.0-alpha|3a652a374545bac0ce875bf8149d45769708dbc7d650f5add2e97707aa91fb43
