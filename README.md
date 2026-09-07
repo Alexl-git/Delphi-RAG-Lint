@@ -109,6 +109,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Is unit `U` part of project `P`? | `drag-lint query --name U --db <P.sqlite> --exact` |
 | What are the members of a type? | `drag-lint surface --qname <Unit.TType> --db <db>` |
 | Where does a DOC COMMENT say this? | `drag-lint query find --doc-contains "<phrase>" --db <db>` |
+| Which DECLARATIONS say this? | `drag-lint query find --decl-contains "stored IsFontStored" --kind property --db <db>` |
 | Where is this message / caption / SQL? | `drag-lint query --text "<phrase>" --db <db>` |
 | Which files reference unit `U`? | `drag-lint query unit-usage --unit U --db <db>` |
 | Which database covers this file? | `drag-lint resolve-dbs --in <U.pas>` |
@@ -596,7 +597,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 | [`wiki --term "<phrase>"`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/wiki) | **Route a human word to the code.** Looks a phrase or alias up against the `dl:wiki` concept topics authors write inside ordinary `///` comments -- "the scheduler", "delta streaming" -- and prints the owning symbol, its `SeeCode` participants (each resolved to `file:line`) and the body. Exits 1 when nothing matches, so a script can branch on it | `--list` (every topic), `--check` (SeeCode drift gate, exits 1 on drift), `--json` |
 | `query --text "<phrase>"` | Search **string literals only** -- constants, resourcestrings, DFM captions, SQL exception text | `--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N` |
 | [`query find-callers`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-find-callers) `--name <n>` | Every call-site for a symbol, with source context | `--context N`, `--resolved` (precise call-edges) |
-| `query find` | Find symbols by documentation state | `--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public` |
+| `query find` | Find symbols by documentation state, or by declaration text | `--doc-tag`, `--doc-contains`, `--decl-contains`, `--no-docs`, `--kind`, `--name`, `--unit`, `--public` |
 | [`query type-usage`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-type-usage) `--in <f.pas>` | Of a LIST of type names, which does this file actually **reference**? Counts declarations, `X.Create` sites and inheritance; a name only in a comment or string literal is not a reference -- the difference from grep. Name-keyed | `--names A,B,C`, `--names-file <f>`, `--json` |
 | `query unit-usage` `--in <f.pas> --unit <U>` | Of unit **U's exported surface**, which symbols does this file reference? `0 of N` means the `uses` entry is a dead import. The unit is resolved in whichever index HAS it, so a project file can be asked about an RTL/VCL unit (pass both `--db`s). Comments and string literals are excluded structurally | `--json` |
 | [`query ancestors`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-ancestors) `--name <t>` | Transitive class/interface ancestry | `--of <ancestor>` |

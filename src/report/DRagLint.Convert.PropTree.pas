@@ -273,8 +273,9 @@ function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
 implementation
 
 uses
-  System.IOUtils,  { TFile -- reading a declaring line for its `default` clause }
-  System.StrUtils; { PosEx }
+  System.IOUtils,  { TFile -- still used elsewhere in this unit }
+  System.StrUtils, { PosEx }
+  DRagLint.Core.DeclText; { TDeclTextReader -- the shared declaring-line reader }
 
 type
   /// <summary>What a property declaration says about its `default`.</summary>
@@ -510,56 +511,25 @@ var
   // store, so --no-write-back (a read-only store handle) is unaffected.
   ChainCache: TDictionary<Int64 , TArray<TSymbol>>; // class id -> its resolved chain
   TypeCache : TDictionary<string, TSymbol        >; // 'lowername|scopefileid' -> resolved class
-  // file id -> that file's lines, read ONCE per query. The `default` clause is
-  // not indexed (storing it would change extraction and cost an extractor-version
-  // bump, which re-parses every database), so it is read from the declaring
-  // source line -- the same trick GetClassSurface uses. One read per FILE, not
-  // per property.
-  LineCache : TDictionary<Int64 , TArray<string> >;
+  // Reads a declaring source line, caching each file once per query. The
+  // `default` clause is not indexed (storing it would change extraction and
+  // cost an extractor-version bump, which re-parses every database), so it is
+  // read from the declaring source line -- the same trick GetClassSurface uses.
+  //
+  // v(A2): the reader itself now lives in DRagLint.Core.DeclText, because
+  // `query find --decl-contains` needs the identical thing. It was lifted
+  // rather than copied: the T3j defect in the doc path was a THIRD copy of a
+  // window predicate that had quietly stopped matching the comment describing
+  // it. Behaviour here is unchanged -- same per-file cache, same span join,
+  // same '' -means-unknown contract.
+  DeclText  : TDeclTextReader;
 
   // The declaring source text of ASym, StartLine..EndLine joined with a space.
   // Empty when the file is unreadable or the range is nonsense -- an empty
   // result means "unknown", never "no default".
   function DeclTextOf(const ASym: TSymbol): string;
-  var
-    Lines: TArray<string>;
-    Path : string        ;
-    Span : TArray<string>;
-    i, Lo, Hi: Integer   ;
   begin
-    Result:= '';
-    if ASym.FileId <= 0 then Exit;
-    if not LineCache.TryGetValue(ASym.FileId, Lines) then
-    begin
-      Lines:= nil;
-      Path := AStore.GetFilePath(ASym.FileId);
-      if (Path <> '') and TFile.Exists(Path) then
-        try
-          Lines:= TFile.ReadAllLines(Path, TEncoding.ANSI);
-        except  // dl:ok try-except-swallowed@bbcc -- nothing to log to; BuildPropTree is a pure query, and HasDefault=False already means "unknown"
-          on E: Exception do
-            { A source file that exists but cannot be READ (locked by the IDE,
-              permissions, a bad encoding) must degrade this ONE property to
-              "default unknown" -- it must not abort the whole property-tree
-              query, which answers many other questions that do not need the
-              file at all. There is nothing to log to: BuildPropTree is a pure
-              query with no report channel. The effect is visible to callers as
-              HasDefault=False, which they already treat as "do not invent a
-              value", so the failure is conservative rather than silent. }
-            Lines:= nil;
-        end;
-      LineCache.Add(ASym.FileId, Lines);
-    end;
-    if Length(Lines) = 0 then Exit;
-    Lo:= ASym.StartLine;
-    Hi:= ASym.EndLine;
-    if Hi < Lo then Hi:= Lo;
-    if (Lo < 1) or (Lo > Length(Lines)) then Exit;
-    if Hi > Length(Lines) then Hi:= Length(Lines);
-    SetLength(Span, Hi - Lo + 1);
-    for i:= Lo to Hi do
-      Span[i - Lo]:= Lines[i - 1];
-    Result:= Trim(string.Join(' ', Span));
+    Result:= DeclText.TextOf(ASym);
   end;
 
   // True when ALow_ has AWord as a whole word starting at APos (so 'default'
@@ -1645,7 +1615,7 @@ begin
   Visited   := TDictionary<string, Boolean>.Create;
   ChainCache:= TDictionary<Int64 , TArray<TSymbol>>.Create;
   TypeCache := TDictionary<string, TSymbol        >.Create;
-  LineCache := TDictionary<Int64 , TArray<string> >.Create;
+  DeclText  := TDeclTextReader.Create(AStore);
   Truncated := False;
   try
     Result.RootType:= Root.Name;
@@ -1654,7 +1624,7 @@ begin
     Result.Nodes    := Nodes.ToArray;
     Result.Truncated:= Truncated;
   finally
-    LineCache .Free;
+    DeclText  .Free;
     TypeCache .Free;
     ChainCache.Free;
     Nodes     .Free;

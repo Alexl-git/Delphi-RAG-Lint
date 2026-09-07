@@ -76,6 +76,7 @@ uses
   , { v0.42: lets TFDParam.SetAsX inline (was H2443) }
       FireDAC.DApt
   , TreeSitter
+  , DRagLint.Core.DeclText { v(A2): TDeclTextReader -- `query find --decl-contains` }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
     must not be listed twice. }
   , DRagLint.Core   .Interfaces
@@ -244,6 +245,10 @@ type
     // v0.16: query find flags
     DocTag     : string ;
     DocContains: string ;
+    // v(A2): --decl-contains <phrase>. Matches the DECLARING SOURCE LINE,
+    // not the doc comment and not a string literal -- the clauses the
+    // extractor does not model (`stored X`, `default V`, `read F write S`).
+    DeclContains: string ;
     NoDocs     : Boolean;
     Kind       : string ;
     PublicOnly : Boolean;
@@ -556,6 +561,9 @@ begin
   Writeln('       ^ names, TYPES and trailing comments. outline --file lists them with line numbers.');
   Writeln('  Where does a DOC COMMENT say this?    drag-lint query find --doc-contains "<phrase>" --db <db>');
   Writeln('       ^ case-insensitive, over /// blocks and harvested // above a declaration.');
+  Writeln('  Which DECLARATIONS say this?          drag-lint query find --decl-contains "stored IsFontStored" --kind property --db <db>');
+  Writeln('       ^ declaration clauses the index does not model. `query --text` sees string LITERALS only,');
+  Writeln('         so it answers 0 for a phrase that is in the source -- this reads the declaring line instead.');
   Writeln('  Where is this message/caption/SQL?    drag-lint query --text "<phrase>" --db <db>');
   Writeln('       ^ STRING LITERALS, DFM and SQL. NOT source text. For doc-comment prose use');
   Writeln('         `query find --doc-contains`; only BODY-INLINE comments need grep (not indexed).');
@@ -632,7 +640,9 @@ begin
   Writeln('                               sent people to grep for prose the index already had.)');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]');
   Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous)');
-  Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --no-docs] [--kind K] [--public] [--db ...]');
+  Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
+  Writeln('       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)');
+  Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
   Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json]');
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
   Writeln('  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]');
@@ -1258,6 +1268,7 @@ begin
     else if (A = '--by') and (i < ParamCount) then begin Inc(i); Result.SortBy:= ParamStr(i); end
     else if (A = '--doc-tag') and (i < ParamCount) then begin Inc(i); Result.DocTag:= ParamStr(i); end
     else if (A = '--doc-contains') and (i < ParamCount) then begin Inc(i); Result.DocContains:= ParamStr(i); end
+    else if (A = '--decl-contains') and (i < ParamCount) then begin Inc(i); Result.DeclContains:= ParamStr(i); end
     else if (A = '--no-docs') then Result.NoDocs:= True
     else if (A = '--kind') and (i < ParamCount) then begin Inc(i); Result.Kind:= ParamStr(i); end
     else if (A = '--public') then Result.PublicOnly:= True
@@ -4503,7 +4514,106 @@ end;
 
 function DoQueryHints(const AArgs: TArgs): Integer; forward;
 
-// v0.16: query find --doc-tag X | --doc-contains Y | --no-docs [--kind K] [--public]
+{ v(A2): the --decl-contains arm of `query find`.
+
+  Answers "which declarations SAY this?" for the clauses the extractor does not
+  model. `query --text` cannot: it indexes .pas STRING LITERALS plus .dfm/.sql
+  text, so `query --text "stored IsFontStored"` returns 0 matches on a phrase
+  that is present verbatim in Vcl.Controls.pas. Both a review agent and the
+  engine work hit that on the same day and both fell back to grepping the RTL,
+  which is exactly the outcome the "index is a product" rule exists to prevent.
+
+  Reads the declaring line via the SHARED TDeclTextReader, the same one
+  BuildPropTree uses -- one declaration of that reader, not two.
+
+  Matching is case-insensitive SUBSTRING on the declaration text, because that
+  is what the question is ("does this declaration mention `stored`?"). It is
+  deliberately not whole-word: `stored IsFontStored` is itself two tokens and a
+  user narrowing by hand wants the literal phrase.
+
+  A capped candidate scan reports the cap when it bites. Truncating silently
+  would let a caller read "3 matches" as the complete answer, which is the same
+  defect class as an unknown --doc-tag returning 0 rows. }
+function QueryFindByDecl(const AArgs: TArgs; const AStore: ISymbolStore): Integer;
+const
+  { SIZED BY MEASUREMENT, and the first two values were both wrong.
+
+    The cost is per FILE, not per symbol -- TDeclTextReader caches each file's
+    lines -- so a row cap prices the wrong resource. Measured on
+    library-Win32.sqlite (9,593 files), `--decl-contains "stored IsFontStored"
+    --kind property`:
+
+      cap     20,000  ->   3 matches, INCOMPLETE
+      cap    250,000  ->  95 matches, INCOMPLETE, 31.7 s
+      cap  2,000,000  ->  97 matches, COMPLETE   , 18.9 s   (298,982 candidates)
+
+    The library holds 298,982 properties, so this value is effectively uncapped
+    for the largest index that exists here, and the whole answer arrives in
+    under 20 s. At 20,000 the verb answered "3" to the very question it was
+    built for -- enumerating every `stored IsXStored` pair a rule book might
+    touch -- which is worse than refusing, because 3 looks like an answer.
+
+    The cap is kept, and the INCOMPLETE note with it, because a cap that never
+    fires is still the difference between a truncated answer and a silent one. }
+  DECL_SCAN_CAP = 2000000;
+var
+  Cands  : TArray<TSymbol>;
+  Reader : TDeclTextReader;
+  S      : TSymbol        ;
+  Needle : string         ;
+  DeclTxt: string         ;
+  Path   : string         ;
+  Hits   : Integer        ;
+  Scanned: Integer        ;
+begin
+  Needle := LowerCase(AArgs.DeclContains);
+  Hits   := 0;
+  Scanned:= 0;
+
+  { Candidate selection follows the narrowing the user gave, most specific
+    first. --name is exact, not fuzzy: this verb is an audit tool, and a fuzzy
+    candidate set would make a zero-result mean two different things. }
+  if AArgs.Name <> '' then Cands:= AStore.FindSymbolsByExactName(AArgs.Name)
+  else if AArgs.UnitName <> '' then
+    { A qualified name begins with its unit, so a prefix scan IS the unit's
+      symbol set -- no new store query for a narrowing that already has one. }
+    Cands:= AStore.FindSymbolsByPrefix(AArgs.UnitName + '.', DECL_SCAN_CAP)
+  else Cands:= AStore.FindSymbolsByKind(AArgs.Kind, AArgs.PublicOnly, DECL_SCAN_CAP);
+
+  Reader:= TDeclTextReader.Create(AStore);
+  try
+    for S in Cands do
+    begin
+      // --kind narrows the OTHER two paths as well, so `--name Color --kind
+      // property` means what it looks like rather than silently ignoring one.
+      if (AArgs.Kind <> '') and (not SameText(S.Kind.ToText, AArgs.Kind)) then Continue;
+      Inc(Scanned);
+      DeclTxt:= Reader.TextOf(S);
+      if DeclTxt = '' then Continue; // unreadable file: UNKNOWN, never "no match"
+      if Pos(Needle, LowerCase(DeclTxt)) = 0 then Continue;
+
+      Inc(Hits);
+      Path:= AStore.GetFilePath(S.FileId);
+      Writeln(System.SysUtils.Format('%s  [%s]  %s:%d', [S.QualifiedName, S.Kind.ToText, Path, S.StartLine]));
+      // The declaration itself is the EVIDENCE. Printing only a location sends
+      // the reader back to the file, which is the grep round-trip this verb
+      // exists to remove.
+      Writeln('    ' + DeclTxt);
+    end;
+  finally
+    Reader.Free;
+  end;
+
+  Writeln(System.SysUtils.Format('%d match(es) in %d candidate(s).', [Hits, Scanned]));
+  if Length(Cands) >= DECL_SCAN_CAP then
+    Writeln(System.SysUtils.Format(
+      'NOTE: candidate scan hit its cap of %d -- this answer is INCOMPLETE. Narrow further with --kind/--name/--unit.',
+      [DECL_SCAN_CAP]));
+
+  if Hits = 0 then Result:= 1 else Result:= 0;
+end;
+
+// v0.16: query find --doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs [--kind K] [--public]
 // Output per result: "<qualified_name>  [<kind>]  <file_path>:<start_line>"
 // Exit 0 if any results, 1 if none.
 function DoQueryFind(const AArgs: TArgs): Integer;
@@ -4513,10 +4623,35 @@ var
   S       : TSymbol        ;
   FilePath: string         ;
 begin
-  if (AArgs.DocTag = '') and (AArgs.DocContains = '') and (not AArgs.NoDocs) then
+  if (AArgs.DocTag = '') and (AArgs.DocContains = '') and (AArgs.DeclContains = '')
+     and (not AArgs.NoDocs) then
   begin
-    Writeln('Usage: drag-lint query find [--doc-tag X | --doc-contains Y | --no-docs] ' + '[--kind K] [--public] [--db <file.sqlite>]');
+    Writeln('Usage: drag-lint query find [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] ' + '[--kind K] [--public] [--db <file.sqlite>]');
     Writeln('  --doc-tag: summary|remarks|returns|param|exception|example|seealso|since|deprecated');
+    Writeln('  --decl-contains: matches the DECLARING SOURCE LINE (needs --kind, --name or --unit)');
+    Exit(2);
+  end;
+
+  { v(A2): --decl-contains needs NARROWING, and refusing is the whole point.
+
+    It answers "which declarations say <phrase>" for the clauses the extractor
+    does not model -- `stored IsFontStored`, `default clWindow`, `nodefault`,
+    `read FColor write SetColor`. None of that is in the database (the stored
+    signature for TCustomEdit.AutoSize is exactly `Boolean`), so the only way to
+    answer is to RE-READ each candidate's declaring source line. That is file
+    I/O per candidate. Unnarrowed against the platform library index -- 1.5M
+    symbols -- it is not a slow query, it is thousands of file reads, and the
+    person who typed it did not ask for that.
+
+    So it fails with the narrowing flags NAMED. A query flag that silently does
+    something enormous is worse than one that refuses. }
+  if (AArgs.DeclContains <> '') and (AArgs.Kind = '') and (AArgs.Name = '')
+     and (AArgs.UnitName = '') then
+  begin
+    Writeln('ERROR: --decl-contains needs narrowing -- pass --kind K, --name N or --unit U.');
+    Writeln('  It re-reads the DECLARING SOURCE LINE of every candidate, so an');
+    Writeln('  unnarrowed run over a library index is thousands of file reads.');
+    Writeln('  e.g. drag-lint query find --decl-contains "stored IsFontStored" --kind property --db <db>');
     Exit(2);
   end;
 
@@ -4544,6 +4679,8 @@ begin
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if not RoOk then Exit(1);
+
+  if AArgs.DeclContains <> '' then Exit(QueryFindByDecl(AArgs, Store));
 
   if AArgs.NoDocs then Syms:= Store.FindUndocumented(AArgs.Kind, AArgs.PublicOnly)
   else if AArgs.DocTag <> '' then Syms:= Store.FindByDocTag(AArgs.DocTag)

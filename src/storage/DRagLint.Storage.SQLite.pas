@@ -118,6 +118,7 @@ type
       FQGetSymbolFacts       : TFDQuery     ;
       FQFindByDocTag         : TFDQuery     ;
       FQFindUndocumented     : TFDQuery     ;
+      FQFindSymbolsByKind    : TFDQuery     ;
       FQFindByDocContains    : TFDQuery     ;
       FQListDocumentedSymbols: TFDQuery     ;
       FQFindContaining       : TFDQuery     ;
@@ -1967,6 +1968,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
+      function FindSymbolsByKind(const AKind: string; APublicOnly: Boolean;
+        ALimit: Integer): TArray<TSymbol>;
       /// <param name="ASubstring"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed: Acc.ToArray.</returns>
       /// <remarks>
@@ -2855,6 +2858,7 @@ begin
   FQGetSymbolFacts.Free;
   FQFindByDocTag.Free;
   FQFindUndocumented.Free;
+  FQFindSymbolsByKind.Free;
   FQFindByDocContains.Free;
   FQListDocumentedSymbols.Free;
   FQFindContaining.Free;
@@ -3770,6 +3774,18 @@ begin
   FQFindUndocumented:= NewQuery(
     'SELECT s.* FROM symbols s ' + 'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE d.symbol_id IS NULL ' + '  AND (:kind = '''' OR s.kind = :kind) ' +
     '  AND (:publicOnly = 0 OR (s.modifiers IS NULL ' + '       OR (s.modifiers NOT LIKE ''%private%'' AND ' + '           s.modifiers NOT LIKE ''%protected%'')))');
+
+  // v(A2): candidates for `query find --decl-contains`. Same publicOnly
+  // predicate as FQFindUndocumented above, deliberately -- two different
+  // answers to "is this member public" in one file is exactly the drift this
+  // repo keeps paying for. The kind is matched EXACTLY and an empty kind
+  // matches nothing: the caller re-reads a source line per row, so an
+  // accidental unbounded scan of a 1.5M-symbol library index would be file
+  // I/O, not just rows.
+  FQFindSymbolsByKind:= NewQuery(
+    'SELECT s.* FROM symbols s ' + 'WHERE s.kind = :kind ' +
+    '  AND (:publicOnly = 0 OR (s.modifiers IS NULL ' + '       OR (s.modifiers NOT LIKE ''%private%'' AND ' + '           s.modifiers NOT LIKE ''%protected%''))) ' +
+    'LIMIT :lim');
 
   FQFindByDocContains:= NewQuery(
     'SELECT s.* FROM symbols s INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'WHERE d.summary LIKE :pat OR d.remarks LIKE :pat OR d.example_text LIKE :pat');
@@ -7062,6 +7078,38 @@ begin
       end;
     finally
       FQFindUndocumented.Close;
+    end;
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.FindSymbolsByKind(const AKind: string; APublicOnly: Boolean;
+  ALimit: Integer): TArray<TSymbol>;
+var
+  Acc: TList<TSymbol>;
+begin
+  Result:= nil;
+  // An empty kind would match no row anyway (kind = '' is never stored), but
+  // exiting here says so out loud rather than letting a caller read an empty
+  // result as a fact about the codebase.
+  if (Trim(AKind) = '') or (ALimit < 1) then Exit;
+  Acc:= TList<TSymbol>.Create;
+  try
+    if FQFindSymbolsByKind.Active then FQFindSymbolsByKind.Close;
+    FQFindSymbolsByKind.ParamByName('kind').AsString:= AKind;
+    FQFindSymbolsByKind.ParamByName('publicOnly').AsInteger:= Ord(APublicOnly);
+    FQFindSymbolsByKind.ParamByName('lim').AsInteger:= ALimit;
+    FQFindSymbolsByKind.Open;
+    try
+      while not FQFindSymbolsByKind.Eof do
+      begin
+        Acc.Add(ReadSymbolFromQuery(FQFindSymbolsByKind));
+        FQFindSymbolsByKind.Next;
+      end;
+    finally
+      FQFindSymbolsByKind.Close;
     end;
     Result:= Acc.ToArray;
   finally

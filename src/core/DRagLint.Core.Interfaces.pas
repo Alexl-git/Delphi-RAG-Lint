@@ -1241,6 +1241,23 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindUndocumented(const AKind: string; APublicOnly: Boolean): TArray<TSymbol>;
+
+    /// <summary>Every symbol of kind AKind, capped at ALimit rows.</summary>
+    /// <param name="AKind">Symbol kind to match exactly (e.g. 'property',
+    /// 'field', 'method'). Must not be '': an unbounded scan of a 1.5M-symbol
+    /// library index is not a query anyone wants by accident.</param>
+    /// <param name="APublicOnly">True to exclude private and protected members,
+    /// using the same modifiers test as <see cref="FindUndocumented"/>.</param>
+    /// <param name="ALimit">Maximum rows. Values below 1 answer nothing.</param>
+    /// <returns>The matching symbols, unordered beyond the store's own row
+    /// order.</returns>
+    /// <remarks>Backs `query find --decl-contains`, which re-reads each
+    /// candidate's declaring line -- so the cap is a real cost control, not
+    /// politeness: the caller does file I/O per row. Deliberately NOT a
+    /// substring or fuzzy match; the kind is exact, and an unknown kind
+    /// answers empty rather than everything.</remarks>
+    function FindSymbolsByKind(const AKind: string; APublicOnly: Boolean;
+      ALimit: Integer): TArray<TSymbol>;
     /// <param name="ASubstring"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
