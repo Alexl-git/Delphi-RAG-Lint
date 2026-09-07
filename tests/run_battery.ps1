@@ -137,6 +137,39 @@ param(
   # `# dl:serial:`. The marker lives in the RUNNER, not in a list here, because
   # "I cannot share a machine" is a property of the runner; a driver-side list
   # would drift the first time someone adds a new one.
+  #
+  # WHAT THE EXISTING -Jobs 8 EVIDENCE ACTUALLY SAYS (re-derived 2026-09-07 from
+  # the CSVs, because a session plan had recorded "there are ZERO -Jobs>1 results
+  # on disk, so the evidence bar stands at 0 of 3" -- that is wrong; four runs
+  # are on disk and were read).
+  #
+  #   reference  C:\TEMP\draglint_battery_20260830-022813  serial, 413 rows
+  #   parallel   ...-001557 / -003233 / -004833            -Jobs 8, 409/410/410
+  #
+  # Joined by runner name, the real state differences are exactly three, each in
+  # ONE of the three parallel runs and none serially:
+  #   run_engine_hold   PASS -> FAIL      (the machine-wide sentinel, above)
+  #   run_lint_tests    PASS -> TIMEOUT   (shared rules dir + a 261 s runner)
+  #   run_store_tests   PASS -> FAIL      (shared rules dir)
+  # ALL THREE ARE NOW QUARANTINED, so the historical A/B has been fully acted
+  # on. There is no known-and-unaddressed parallel failure.
+  #
+  # TWO TRAPS IN READING THOSE CSVs, both of which caught this pass first:
+  #   * the column is `State`, not `Status`. Grouping on `Status` yields empty
+  #     keys and a cheerful "0 differences" that means nothing.
+  #   * the parallel runs have FEWER ROWS, and that is NOT a dropped result.
+  #     run_battery_jobs_guard, run_exception_class_naming,
+  #     run_lsp_switch_params_guard and run_serve_multidb_warning_guard were all
+  #     CREATED between 01:05 and 02:27 that morning, i.e. after the parallel
+  #     runs and before the 02:28 serial reference. Comparing two batteries
+  #     across a changing tree manufactures phantom "missing" runners. (The
+  #     driver's genuine dropped-result net is below, and it converts a missing
+  #     result into a FAIL row rather than a shrunken denominator.)
+  #
+  # The default stays 1 -- now because three concurrency-sensitive runners were
+  # found the only way they could be found, not because nothing was measured.
+  # A fresh A/B on the CURRENT tree has never been run; that, not the flag, is
+  # what is missing.
   [int]$Jobs = 1,
 
   # Enumerate and print the set, run nothing.
