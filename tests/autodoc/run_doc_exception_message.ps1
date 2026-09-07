@@ -63,6 +63,8 @@ procedure NoRaise;
 procedure Concatenated;
 procedure Formatted;
 procedure TwiceOneClass;
+procedure ReRaiseOnly;
+procedure ReRaiseAfterOwn;
 
 implementation
 
@@ -110,6 +112,32 @@ begin
   if Random(2) = 0 then
     raise Exception.Create('first failure mode');
   raise Exception.CreateFmt('second failure mode: %d', [42]);
+end;
+
+procedure ReRaiseOnly;
+begin
+  try
+    WriteLn('work');
+  except
+    on E: Exception do
+    begin
+      WriteLn('logged');
+      raise;
+    end;
+  end;
+end;
+
+procedure ReRaiseAfterOwn;
+begin
+  try
+    raise Exception.Create('its own failure');
+  except
+    on E: Exception do
+    begin
+      WriteLn('logged');
+      raise;
+    end;
+  end;
 end;
 
 end.
@@ -217,6 +245,45 @@ try {
   $drift = & $exePath doc-drift --qname 'excmsg.Wrapped' --db $db --json 2>$null | Out-String
   Check 'doc-drift still answers for this fixture' `
     ($null -ne $drift) 'doc-drift produced nothing at all'
+
+  Write-Host ''
+  Write-Host 'GAP 4: a bare `raise;` is a RE-RAISE, not a new exception' -ForegroundColor Cyan
+  # docs\INBOX-report-exceptions-raised-and-handled.md, gap 4 and the ask's own
+  # third bullet: "a bare raise (re-raise) is NOT a new exception and must not
+  # be listed as one."
+  #
+  # CollectRaiseClass captures the next identifier after `raise`, so `raise;`
+  # contributes nothing -- which is correct, and was never pinned. It is worth
+  # pinning precisely BECAUSE it works by accident of the scanner rather than by
+  # an explicit rule: the next person to make the raise scan cleverer (a
+  # cross-line state for wrapped constructors already exists) can easily make
+  # `raise;` pick up the `on E: Exception` above it, and nothing would say so.
+  $reraise = DocFor 'excmsg.ReRaiseOnly'
+  Check 'a routine whose only raise is a re-raise emits NO <exception cref>' `
+    (-not ((Flat $reraise) -match '<exception')) `
+    "a re-raise must not be reported as a raise; got:`n$reraise"
+  # The nearby class name is the trap: `on E: Exception do ... raise;` puts the
+  # identifier `Exception` a couple of tokens before the bare raise, so a scan
+  # that widened its window would attribute it. Assert the NAME is absent, not
+  # merely the tag, so a future emitter that writes crefs differently still
+  # fails here.
+  Check 'and it does not adopt the handler''s `on E: Exception` class' `
+    (-not ((Flat $reraise) -match 'cref="Exception"')) `
+    "the handler's class must not be mined as a raise; got:`n$reraise"
+
+  # POSITIVE CONTROL, and this arm is worthless without it. "No exception tag"
+  # is equally consistent with an emitter that produced nothing for this
+  # declaration at all -- the exact way run_doc_p3_guards' D5 arm once passed
+  # for the wrong reason. ReRaiseAfterOwn has the SAME re-raise in the SAME
+  # try/except shape and one real raise of its own, so it proves the miner is
+  # awake in this construct.
+  $both = DocFor 'excmsg.ReRaiseAfterOwn'
+  Check 'CONTROL: the same shape WITH a real raise does emit its exception' `
+    ((Flat $both) -match '<exception cref="Exception"') `
+    "the miner is inert inside try/except, so the assertions above prove nothing; got:`n$both"
+  Check 'CONTROL: and it reports the real message, not the re-raise' `
+    ((Flat $both) -match 'its own failure') `
+    "got:`n$both"
 }
 finally { Pop-Location }
 
