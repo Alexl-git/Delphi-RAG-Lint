@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Math,
-  System.Generics.Collections, System.RegularExpressions,
+  System.Generics.Collections, System.Generics.Defaults, System.RegularExpressions,
   DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince,
   DRagLint.Hover.Returns;
 
@@ -16,6 +16,32 @@ const
   // at most this many are shown; OverriddenByTotal carries the true count so the
   // renderer can add '(+N more)', mirroring CalledFrom's cap discipline.
   OVERRIDDENBY_CAP = 6;
+
+  /// ONE constant, read by BOTH the writer and the checker, and that is the
+  /// whole point of it being here rather than a literal on each side.
+  ///
+  /// doc-drift accepts an <exception cref> justified by a callee this many hops
+  /// away (Doc.Drift.CalleeRaisesType). If the WRITER ever walked deeper than
+  /// the CHECKER accepts, `document` would emit tags that doc-drift then
+  /// reports as drift, and `--fix` would delete what `document` just wrote --
+  /// a ping-pong the user cannot break, because each half is behaving
+  /// correctly by its own lights.
+  ///
+  /// Raising it is not a one-line change: two hops starts suppressing findings
+  /// that are genuinely about the declaration itself. See
+  /// run_doc_exception_transitive.ps1 CONTROL-4 (checker side) and
+  /// run_doc_exception_transitive_writer.ps1 assertion 3 (writer side) -- both
+  /// pin the bound, and both must move together or not at all.
+  EXCEPTION_VIA_DEPTH = 1;
+
+  /// Display cap on how many callees are NAMED in one <exception cref> body
+  /// before the rest are counted as '(+N more)', mirroring CalledFrom's cap
+  /// discipline. A plain constant rather than a docs.* knob deliberately: a
+  /// knob would live in Manifest.pas, which is inside the extractor's hashed
+  /// surface, so adding one would force a full re-parse of every index to buy
+  /// a display preference. Measured fan-out on this repo at the time of
+  /// writing was 29 declarations with one callee and 1 with two, so 3 is slack.
+  MAX_EXCEPTION_VIA = 3;
 
 type
   /// <summary>One signature parameter's harvested MEANING (ruling D-3): the
@@ -78,6 +104,26 @@ type
     Message : string;
   end;
 
+  /// <summary>One exception a resolved CALLEE raises, attributed to that
+  /// callee. The transitive counterpart of TRaiseDetail.</summary>
+  /// <remarks>
+  /// ViaQName is what makes this reportable rather than merely true: an
+  /// &lt;exception cref&gt; on a one-line delegator is otherwise indistinguishable
+  /// from one the routine earns itself, and a reader cannot tell where to look
+  /// when it turns out to be wrong.
+  /// Message carries the callee's own mined literal and is empty on the same
+  /// terms as TRaiseDetail.Message -- "no message captured", never "no message
+  /// exists".
+  /// </remarks>
+  TCalleeRaise = record
+    /// <summary>The exception class the callee raises.</summary>
+    ExcClass: string;
+    /// <summary>Qualified name of the callee that raises it.</summary>
+    ViaQName: string;
+    /// <summary>The callee's mined message literal; empty when none.</summary>
+    Message : string;
+  end;
+
   /// <summary>Index-grounded facts about one symbol, for the managed
   /// DocInsight remarks block. All lists are capped for display; the *Total
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
@@ -101,6 +147,16 @@ type
     /// messages are two entries, because the emit side picks the first entry
     /// carrying a message and a dedupe would decide that arbitrarily.</remarks>
     RaisesDetailed : TArray<TRaiseDetail>;
+    /// <summary>Exceptions raised by resolved callees EXCEPTION_VIA_DEPTH hops
+    /// away, each attributed to the callee that raises it. Sorted by class,
+    /// then by callee qualified name.</summary>
+    /// <remarks>Filled only when TDocFactsRenderOptions.IncludeCalleeRaises is
+    /// set, which `document` does and doc-drift and hover deliberately do not:
+    /// the walk reads other symbols' bodies, and paying that on the checker's
+    /// per-declaration path would put a cross-file read into every lint-all.
+    /// When it IS filled, Raises is widened to the union of own and callee
+    /// classes so the emit and repair loops see one set.</remarks>
+    CalleeRaises   : TArray<TCalleeRaise>;
     ReturnType     : string             ;
     // v(item1 T8): distinct return-expression RHS strings mined from the
     // function's body via the hover MineReturnExpressions miner (DRagLint.
@@ -450,6 +506,15 @@ type
     MaxReturnCases: Integer;
     /// <summary>Cap on listed callers. 0/negative lists none.</summary>
     MaxCallers    : Integer;
+    /// <summary>Mine what resolved callees raise, and widen Raises with it.
+    /// OFF by default.</summary>
+    /// <remarks>Only the WRITER wants this. doc-drift already walks one hop of
+    /// its own, lazily and only for a cref the own body failed to match, so
+    /// turning this on for the checker would move that cost onto every
+    /// declaration in every lint-all instead of the few that need it. False is
+    /// therefore the safe default in the literal sense: it is the behaviour
+    /// every existing caller already had.</remarks>
+    IncludeCalleeRaises: Boolean;
     /// <summary>The documented defaults: seealso on, no extra stores, 20 and 5.</summary>
     /// <returns><!-- drag-lint:auto type -->TDocFactsRenderOptions</returns>
     /// <remarks>
@@ -545,7 +610,8 @@ type
     class function Build(const AStore: ISymbolStore; const ASym: TSymbol;
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
-      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5): TDocFacts;
+      AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5;
+      AIncludeCalleeRaises: Boolean = False): TDocFacts;
 
     /// <summary>Mines the exception class names raised directly in ASym's own
     /// body, deduped and case-insensitive. This is the same miner Build uses to
@@ -598,6 +664,43 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineRaisesDetailed(const AStore: ISymbolStore; const ASym: TSymbol): TArray<TRaiseDetail>;
+    /// <summary>What ASym's resolved callees raise, EXCEPTION_VIA_DEPTH hops
+    /// away, attributed to the callee that raises each one.</summary>
+    /// <param name="AStore">Open store; used to resolve edge targets and read
+    /// callee bodies.</param>
+    /// <param name="ASym">The calling symbol.</param>
+    /// <param name="AEdges">ASym's outbound call edges, already loaded by the
+    /// caller. Passed in rather than queried here so the two callers can each
+    /// keep the load they already do -- the checker loads lazily, Build loads
+    /// once -- instead of this adding a third query per symbol.</param>
+    /// <returns>Callee-attributed raises, sorted by class then callee qualified
+    /// name; empty when nothing resolves. Empty means "found nothing", and as
+    /// everywhere else in this unit it must not be read as "raises nothing".</returns>
+    /// <remarks>
+    /// THE SHARED WALK. This is the same traversal Doc.Drift.CalleeRaisesType
+    /// used to implement privately, extracted so the WRITER and the CHECKER
+    /// cannot drift apart: before this existed, doc-drift accepted a
+    /// callee-justified cref that `document` would never write, and the two
+    /// halves of one feature disagreed silently for months.
+    ///
+    /// FAIL-SAFE IN ONE DIRECTION ONLY, unchanged from the checker's original:
+    /// an unresolved edge (TargetSymbolId = 0, i.e. RTL or cross-DB), a
+    /// vanished row, and a bodyless callee all contribute NOTHING rather than
+    /// contributing "raises nothing". Absence of information is never evidence.
+    ///
+    /// A self-edge contributes nothing -- a routine cannot justify its own cref
+    /// by recursing -- but is not discarded, because it is also how a call to
+    /// an overload SIBLING presents. The overload arm is bounded to the same
+    /// ParentId AND FileId: it is the one place this walk can attribute a raise
+    /// to a routine that did not make it, so it must not reach across units and
+    /// collect unrelated routines that merely share a name.
+    ///
+    /// SORTED, and not incidentally: GetCallEdgesFromSymbol has no ORDER BY, so
+    /// an unsorted result would reorder between runs and `document --apply`
+    /// would rewrite the same file forever.
+    /// </remarks>
+    class function MineCalleeRaises(const AStore: ISymbolStore; const ASym: TSymbol;
+      const AEdges: TArray<TCallEdge>): TArray<TCalleeRaise>;
   end;
 
 /// <summary>Per-section cost of every TDocFactsBuilder.Build call so far, as two
@@ -2266,6 +2369,89 @@ begin
   end;
 end;
 
+{ This walk implements EXACTLY ONE hop, and the constant is checked at COMPILE
+  time rather than trusted. A runtime check would only fire for whoever ran the
+  build; this refuses to produce a binary in which the writer and the checker
+  could disagree about depth at all. Raising EXCEPTION_VIA_DEPTH is a real piece
+  of work -- widen this traversal, and move Doc.Drift with it -- not a constant
+  edit, so the build stopping is the correct outcome. }
+{$IF EXCEPTION_VIA_DEPTH <> 1}
+  {$MESSAGE ERROR 'MineCalleeRaises implements one hop. Widen the walk (and Doc.Drift) before raising EXCEPTION_VIA_DEPTH.'}
+{$IFEND}
+class function TDocFactsBuilder.MineCalleeRaises(const AStore: ISymbolStore;
+  const ASym: TSymbol; const AEdges: TArray<TCallEdge>): TArray<TCalleeRaise>;
+var
+  Acc: TList<TCalleeRaise>;
+
+  { Everything ACand raises, attributed to ACand. Bodyless is skipped for the
+    same reason as everywhere else in this unit: never looked at is not the
+    same fact as looked and found nothing. }
+  procedure Harvest(const ACand: TSymbol);
+  begin
+    if ACand.ImplStartLine <= 0 then Exit;
+    var QN: string:= ACand.QualifiedName;
+    if QN = '' then QN:= ACand.Name;
+    for var D in MineRaisesDetailed(AStore, ACand) do
+    begin
+      { Dedupe on the whole triple. One callee raising a class twice with the
+        same message is one fact, not two; with DIFFERENT messages it is two,
+        which matches how MineRaisesDetailed treats the own-body case. }
+      var Dup: Boolean:= False;
+      for var Have in Acc do
+        if SameText(Have.ExcClass, D.ExcClass) and SameText(Have.ViaQName, QN)
+           and (Have.Message = D.Message) then
+        begin
+          Dup:= True;
+          Break;
+        end;
+      if Dup then Continue;
+      var CR: TCalleeRaise;
+      CR.ExcClass:= D.ExcClass;
+      CR.ViaQName:= QN;
+      CR.Message := D.Message;
+      Acc.Add(CR);
+    end;
+  end;
+
+begin
+  Result:= nil;
+  Acc:= TList<TCalleeRaise>.Create;
+  try
+    for var E in AEdges do
+    begin
+      if E.TargetSymbolId <= 0 then Continue; { unresolved / external -> fail safe }
+      var Callee: TSymbol:= AStore.GetSymbolById(E.TargetSymbolId);
+      if Callee.Id <= 0 then Continue;        { vanished row -> fail safe }
+
+      if Callee.Id <> ASym.Id then Harvest(Callee);
+
+      { The overload arm. See the declaration's remarks for why a self-edge is
+        kept rather than skipped, and why this is bounded to one scope. }
+      if (Callee.Id = ASym.Id) or SameText(E.Confidence, 'ambiguous') then
+        for var Cand in AStore.FindSymbolsByExactName(Callee.Name) do
+        begin
+          if Cand.Id = ASym.Id then Continue; { never attribute a decl to itself }
+          if (Cand.ParentId <> Callee.ParentId) or (Cand.FileId <> Callee.FileId) then Continue;
+          Harvest(Cand);
+        end;
+    end;
+
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+
+  { Stable order: class, then callee. Insertion order here is edge-row order,
+    which the store does not promise. }
+  TArray.Sort<TCalleeRaise>(Result, TComparer<TCalleeRaise>.Construct(
+    function(const L, R: TCalleeRaise): Integer
+    begin
+      Result:= CompareText(L.ExcClass, R.ExcClass);
+      if Result = 0 then Result:= CompareText(L.ViaQName, R.ViaQName);
+      if Result = 0 then Result:= CompareText(L.Message, R.Message);
+    end));
+end;
+
 { The literals here are the SAME defaults Build declares on its own parameters
   (20 return cases, 5 callers). They are repeated rather than shared because
   Build's are part of its published signature; if either moves, both move. }
@@ -2275,6 +2461,9 @@ begin
   Result.ExtraStores    := nil;
   Result.MaxReturnCases := 20;
   Result.MaxCallers     := 5;
+  { OFF: the writer is the only caller that wants the callee walk, and it opts
+    in explicitly. Defaults must stay the behaviour every existing caller had. }
+  Result.IncludeCalleeRaises := False;
 end;
 
 class function TDocFactsRenderOptions.Make(AIncludeSeeAlso: Boolean;
@@ -2285,6 +2474,10 @@ begin
   Result.ExtraStores    := AExtraStores;
   Result.MaxReturnCases := AMaxReturnCases;
   Result.MaxCallers     := AMaxCallers;
+  { Not a parameter: adding one would change a published signature every call
+    site already uses, to express something only `document` ever sets. It sets
+    the field directly. }
+  Result.IncludeCalleeRaises := False;
 end;
 
 { A caller that zero-initialised the record would otherwise render a block with
@@ -2302,7 +2495,8 @@ end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
-  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer): TDocFacts;
+  const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
+  AIncludeCalleeRaises: Boolean): TDocFacts;
 var
   ResCallers: TArray<TResolvedCaller>;
   RC        : TResolvedCaller        ;
@@ -2966,6 +3160,46 @@ begin
     keeping the message. Two scans rather than one because the two consumers
     want different shapes -- see MineRaisesDetailed's remarks. }
   Result.RaisesDetailed:= MineRaisesDetailed(AStore, ASym);
+
+  { TRANSITIVE RAISES, WRITER ONLY (INBOX-exception-cref-transitive-raise, gap 2).
+
+    doc-drift has ACCEPTED a cref justified by a one-hop callee since session
+    47, but the writer only ever mined the routine's own body -- so `document`
+    would never write the tag the checker was already willing to take. Two
+    halves of one feature, disagreeing in silence because each half's guard
+    only ever tested its own half.
+
+    OFF unless asked, and the flag is not timidity. doc-drift runs Build for
+    every declaration in a lint-all; this walk reads OTHER symbols' bodies, so
+    doing it unconditionally would move a cross-file read onto ~1600
+    declarations to serve the few that need it. The checker keeps its own lazy
+    walk, which runs only when a cref failed to match the own body.
+
+    The edge query is repeated here rather than shared with the Calls section
+    above: Edges there is scoped inside that section's own `if`, and widening
+    its scope to save one indexed lookup on a path that is not hot would be a
+    worse trade than the lookup. }
+  if AIncludeCalleeRaises then
+  begin
+    Result.CalleeRaises:= MineCalleeRaises(AStore, ASym,
+                                           AStore.GetCallEdgesFromSymbol(ASym.Id));
+    { Widen Raises to own UNION callee classes. Both emit loops and the repair
+      reconciliation in Doc.Regions iterate Raises, so a class that only a
+      callee raises has to be IN that set or no tag is emitted for it -- and,
+      just as importantly, a class that is no longer raised anywhere must fall
+      OUT of it, which is what reaps a stale via tag on the next run. }
+    var Widen: TStringList:= TStringList.Create;
+    try
+      Widen.Sorted:= True;
+      Widen.Duplicates:= dupIgnore;
+      Widen.CaseSensitive:= False;
+      for var Own in Result.Raises do Widen.Add(Own);
+      for var CR in Result.CalleeRaises do Widen.Add(CR.ExcClass);
+      Result.Raises:= Widen.ToStringArray;
+    finally
+      Widen.Free;
+    end;
+  end;
 
   // Deprecated: ground-truth 'deprecated' directive detection (see
   // DetectDeprecated's header comment for the source/probe rationale).

@@ -547,18 +547,6 @@ end;
 function CalleeRaisesType(const AStore: ISymbolStore; const ASym: TSymbol;
   const ATypeName: string; var ACallEdges: TArray<TCallEdge>;
   var ALoaded: Boolean): Boolean;
-
-  // Does this one symbol's body raise ATypeName? Exact name, case-insensitive:
-  // a descendant does NOT satisfy an ancestor cref, matching what the
-  // own-body test above already does (CONTROL-2 pins this).
-  function BodyRaises(const ACand: TSymbol): Boolean;
-  begin
-    Result:= False;
-    if ACand.ImplStartLine <= 0 then Exit; // bodyless -> never looked, not "raises nothing"
-    for var RC in TDocFactsBuilder.MineRaises(AStore, ACand) do
-      if SameText(RC, ATypeName) then Exit(True);
-  end;
-
 begin
   Result:= False;
   // Loaded once per Analyze and shared across every <exception cref> on the
@@ -570,38 +558,23 @@ begin
     ALoaded:= True;
   end;
 
-  for var E in ACallEdges do
-  begin
-    if E.TargetSymbolId <= 0 then Continue; // unresolved / external -> fail safe
-    var Callee: TSymbol:= AStore.GetSymbolById(E.TargetSymbolId);
-    if Callee.Id <= 0 then Continue;        // vanished row -> fail safe
-
-    // The resolved callee itself. A declaration can never satisfy its own cref
-    // by recursing, so a self-edge contributes nothing here -- but it is NOT
-    // discarded, because of the overload case immediately below.
-    if (Callee.Id <> ASym.Id) and BodyRaises(Callee) then Exit(True);
-
-    // OVERLOAD SIBLINGS. A qualified name in this index carries the parameter
-    // signature ('transitive.Go (const AItem: string)'), so overloads do NOT
-    // share one -- resolving by qualified name would find nothing extra. What
-    // actually happens at a call site like `Go([AItem])` inside `Go` is that
-    // name-based resolution lands on a sibling overload or on the ENCLOSING
-    // declaration itself. Both shapes are handled here: when the edge points at
-    // this very symbol, or is ambiguous, consider the same-named routines
-    // declared in the SAME scope -- i.e. the overload set.
-    //
-    // Bounded to the same ParentId AND FileId on purpose. This is the one place
-    // the check can suppress a real finding (two same-named routines that
-    // genuinely differ in what they raise), so it must not reach across units
-    // and collect unrelated routines that merely share a name.
-    if (Callee.Id = ASym.Id) or SameText(E.Confidence, 'ambiguous') then
-      for var Cand in AStore.FindSymbolsByExactName(Callee.Name) do
-      begin
-        if Cand.Id = ASym.Id then Continue; // never satisfy a decl from itself
-        if (Cand.ParentId <> Callee.ParentId) or (Cand.FileId <> Callee.FileId) then Continue;
-        if BodyRaises(Cand) then Exit(True);
-      end;
-  end;
+  // THE WALK ITSELF NOW LIVES IN TDocFactsBuilder.MineCalleeRaises, and this is
+  // a consumer of it (gap 2, 2026-09-07). It used to be implemented privately
+  // here, which is precisely how the writer and the checker came to disagree:
+  // `document` mined only the own body, so it would never WRITE the tag this
+  // function was already willing to ACCEPT. One traversal, two consumers, and
+  // the disagreement becomes impossible rather than merely unlikely.
+  //
+  // Semantics are unchanged and must stay unchanged -- resolved edges only,
+  // self-edge contributes nothing, overload siblings bounded to one scope,
+  // fail-safe in one direction. run_doc_exception_transitive.ps1 (RED-A, RED-B,
+  // CONTROL-1..4) is what says so; it was green before this extraction and
+  // must be green after it, with the same six answers.
+  //
+  // Exact name, case-insensitive: a descendant does NOT satisfy an ancestor
+  // cref, matching what the own-body test does (CONTROL-2 pins this).
+  for var CR in TDocFactsBuilder.MineCalleeRaises(AStore, ASym, ACallEdges) do
+    if SameText(CR.ExcClass, ATypeName) then Exit(True);
 end;
 
 class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;

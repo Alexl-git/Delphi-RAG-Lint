@@ -2763,6 +2763,46 @@ var
         Seen.Add(M);
         if Result = '' then Result:= M else Result:= Result + '; ' + M;
       end;
+
+      { TRANSITIVE ATTRIBUTION (gap 2). Everything above is what THIS routine
+        raises; everything below is what a resolved one-hop callee raises, and
+        the two are deliberately not blended.
+
+        WHY NAME THE CALLEE. `via <qname>` is the difference between a fact and
+        a puzzle. A cref on a one-line delegator is otherwise indistinguishable
+        from one the routine earns itself, and a reader who finds it wrong has
+        nowhere to look. The name is also what makes the tag REAPABLE with
+        confidence: the emitter can tell its own attribution from a human's
+        sentence without guessing.
+
+        OWN MESSAGES FIRST, always. A routine that raises a class itself is
+        describing its own contract; the delegated raise is supporting detail.
+        AF.CalleeRaises arrives sorted by class then callee qualified name --
+        stable, because the edge query has no ORDER BY and an unstable order
+        would rewrite the same file on every run.
+
+        CAPPED at MAX_EXCEPTION_VIA, then counted. A tag that lists a dozen
+        callees is not more informative than one that lists three and says how
+        many more there are, and it wraps across half the doc block. }
+      var Shown: Integer:= 0;
+      var Extra: Integer:= 0;
+      for var CR in AF.CalleeRaises do
+      begin
+        if not SameText(CR.ExcClass, ACls) then Continue;
+        if Shown >= MAX_EXCEPTION_VIA then
+        begin
+          Inc(Extra);
+          Continue;
+        end;
+        var Attrib: string:= 'via ' + CR.ViaQName;
+        if Trim(CR.Message) <> '' then Attrib:= Attrib + ': ' + Trim(CR.Message);
+        if Seen.IndexOf(Attrib) >= 0 then Continue;
+        Seen.Add(Attrib);
+        Inc(Shown);
+        if Result = '' then Result:= Attrib else Result:= Result + '; ' + Attrib;
+      end;
+      if Extra > 0 then
+        Result:= Result + Format(' (+%d more)', [Extra]);
     finally
       Seen.Free;
     end;

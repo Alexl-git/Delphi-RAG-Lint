@@ -199,9 +199,18 @@ try {
   Check 'InComments emits NO exception tag at all' `
     (-not ($cmt -match '<exception cref=')) `
     "both raises are commented out, so the routine raises nothing; got:`n$cmt"
-  Check 'NoRaise emits NO exception tag' `
+  # STAYS GREEN UNDER TRANSITIVE RAISES, and for a reason worth naming (gap 2,
+  # 2026-09-07). Since `document` learned to attribute a one-hop callee's raise
+  # as `via <callee>: <message>`, "calls something" is no longer sufficient
+  # grounds for silence. NoRaise stays silent because its only callee is
+  # WriteLn, which is RTL and unresolved here, and an unresolved edge is
+  # absence of information rather than evidence.
+  # So do NOT "fix" this by relaxing the assertion if it ever goes red: a red
+  # here would mean the writer had started attributing UNRESOLVED callees,
+  # which is the fail-safe direction being crossed.
+  Check 'NoRaise emits NO exception tag (and calls no RESOLVABLE raiser)' `
     (-not ($none -match '<exception cref=')) `
-    "a routine with no raise must stay silent; got:`n$none"
+    "a routine with no raise, and no resolvable raising callee, must stay silent; got:`n$none"
 
   Write-Host ''
   Write-Host 'PINNED LIMITS: what the miner captures for computed messages' -ForegroundColor Cyan

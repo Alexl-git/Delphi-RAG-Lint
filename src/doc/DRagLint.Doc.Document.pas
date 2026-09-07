@@ -942,7 +942,14 @@ begin
   Sig      := Trim(ASym.Signature);
   SigParams:= ParseParamNames(ExtractParamList(Sig));
 
-  Facts := TDocFactsBuilder.Build(AStore, ASym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers);
+  { AIncludeCalleeRaises = True, and only here. This is the WRITER: it is the
+    one caller that has to know what a one-hop callee raises, because it is the
+    one that emits the <exception cref> doc-drift has been willing to accept
+    since session 47. Hover and doc-drift pass False and keep the behaviour they
+    already had -- see TDocFacts.CalleeRaises for why that is not merely
+    caution. }
+  Facts := TDocFactsBuilder.Build(AStore, ASym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers,
+                                  {AIncludeCalleeRaises=}True);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class
