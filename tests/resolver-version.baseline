@@ -72,4 +72,33 @@
 #
 #   Superseded: 1.1.0-alpha|790d7011021acd549cc6420b02884df7470eef4c6a9ece2163405a6fdac3dfa9
 
-1.1.0-alpha|3be00d360f91f38761edeb97760b40607a28bce7f24044608cfa9d361399c21e
+# 2026-09-07: HASH UPDATED, VERSION DELIBERATELY NOT BUMPED -- the "genuinely
+#   cannot affect what is derived" case, same discipline as the 2026-09-06 (C1b)
+#   entry above.
+#
+#   WHAT CHANGED: the 91-file autodoc sweep (b42a7e7) regenerated managed
+#   DocInsight blocks across src\. Two files of this surface carry them --
+#   DRagLint.Index.CallResolver.pas (hashed whole, `::*`) and
+#   DRagLint.Storage.SQLite.pas (hashed per listed routine).
+#
+#   PROVEN comment-only, not asserted. `git diff -U0 fef1067 b42a7e7` over both
+#   files, classifying every added/removed line:
+#
+#       doc-comment (///) lines changed : 633
+#       NON-doc lines changed           :   0
+#
+#   Zero. No routine body changed, so every resolve pass derives exactly the
+#   call_edges, type_ancestors, type_helpers and unit_uses rows it derived
+#   before, and no index owes a re-resolve.
+#
+#   Note the asymmetry with the extractor baseline's twin entry: the count here
+#   is far larger (633 vs 253) only because Storage.SQLite.pas is this repo's
+#   most heavily documented unit. Volume is not evidence either way -- the
+#   load-bearing number is the ZERO on the second line.
+#
+#   Same warning as every entry above: the failure mode of getting this wrong is
+#   SILENT.
+#
+#   Superseded: 1.1.0-alpha|3be00d360f91f38761edeb97760b40607a28bce7f24044608cfa9d361399c21e
+
+1.1.0-alpha|6e434fe61cc56c0a94ab31d745f42dd2acb8b742bd5331a62925f3e6c13dcca8

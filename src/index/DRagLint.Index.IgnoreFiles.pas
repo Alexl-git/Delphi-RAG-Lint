@@ -39,7 +39,7 @@ type
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
         /// <para>Used by: DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile (DRagLint.Index.IgnoreFiles.pas), DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir (DRagLint.Index.IgnoreFiles.pas)</para>
-        /// <para>Used in units: DRagLint.Index.IgnoreFiles, DRagLint.Index.IgnoreFiles <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.PopDir"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile"/> <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.PopDir"/></para>
+        /// <para>Used in units: DRagLint.Index.IgnoreFiles</para>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
         /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>

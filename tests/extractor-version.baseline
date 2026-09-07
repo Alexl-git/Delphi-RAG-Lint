@@ -281,4 +281,40 @@
 #   hash that bump covers, so the NEXT change is measured against it.
 #
 #   Superseded: 1.9.0-alpha|bc6dd9b413ef1b005214c677d85cf1b1f5877e43a4be8c32ba56f123beb89465
-1.10.0-alpha|32a9ffadea89833a06e141527ae053419124e759cffe8007ae58d113032fd231
+# 2026-09-07: hash updated WITHOUT a version bump, per the rule above. This is
+#   the SAME case as the 2026-08-26 entry, and it is recorded in the same detail
+#   because the failure mode of getting it wrong is SILENT.
+#
+#   WHAT CHANGED: the 91-file autodoc sweep (b42a7e7) regenerated managed
+#   DocInsight blocks across src\. NINETEEN files of the hashed surface carry
+#   them.
+#
+#   PROVEN comment-only, not asserted. `git diff -U0 fef1067 b42a7e7` over
+#   exactly the four hashed roots, classifying every added/removed line:
+#
+#       doc-comment (///) lines changed : 253
+#       NON-doc lines changed           :   0
+#
+#   Zero. No declaration moved, no code changed. A `///` comment cannot change
+#   what the parser sees in a byte sequence, so no stored parse in any index
+#   becomes stale.
+#
+#   Bumping would re-parse ~7,000 library files plus every project index to
+#   produce byte-identical symbols -- exactly the cost the DRAGLINT_VERSION /
+#   DRAGLINT_EXTRACTOR_VERSION split exists to avoid.
+#
+#   WORTH RECORDING FOR THE NEXT SWEEP, because it is a recurring tax rather
+#   than a one-off: a tree-wide autodoc pass is INDISTINGUISHABLE to this guard
+#   from a real extraction change, since the digest is over raw file bytes and
+#   doc comments are bytes. That is the third time a `document --project` run
+#   has landed here (2026-08-26 twice, now this). If it happens much more, the
+#   honest fix is to hash the surface with `///` lines stripped -- but that is a
+#   change to the guard's definition of identity and must be made deliberately,
+#   not as a side effect of a sweep.
+#
+#   The same warning as every entry above: if a future edit to these files ever
+#   influences what is indexed, the version MUST move.
+#
+#   Superseded: 1.10.0-alpha|32a9ffadea89833a06e141527ae053419124e759cffe8007ae58d113032fd231
+
+1.10.0-alpha|67c2c588351ad638e978b632cd0184b7745f29c8a3cd33e98196b4551e709f9b
