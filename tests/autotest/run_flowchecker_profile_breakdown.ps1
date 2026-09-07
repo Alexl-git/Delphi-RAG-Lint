@@ -119,11 +119,32 @@ try {
   # ---- A2: THE PARTITION BOUND. An accumulator that never accumulates, that
   #      double-counts a nested phase, or that charges a window twice all show
   #      up here and nowhere else. Both historic mistakes fail this.
+  # 2026-09-07 -- WHY THE ENGINE NOW PRINTS 4 DECIMALS, and why this block was
+  # worth less than it looked. Measured on this exact fixture, 10 runs: the
+  # FlowChecker slot is ~0.0044-0.0060 s. At the engine's old '%8.2f' that
+  # printed "0.00" on most runs, so `$slot -gt 0` below was FALSE and the
+  # partition bound -- the assertion this runner calls load-bearing -- was
+  # SKIPPED without saying so. On the occasional slower pass the slot rounded
+  # to "0.01" while the breakdown still rounded to "0.00", giving ratio 0 and
+  # the single FAIL in 67 recorded battery results. So the runner was not
+  # "flaky ~1 in 5" (a figure with no measurement behind it, repeated through
+  # three plans): it was vacuous nearly always and correct once.
+  #
+  # With the engine at '%9.4f' the same 10 runs measure ratio 0.955-0.980 --
+  # inside the bound with real margin, and actually evaluated. If a future
+  # change puts 2-decimal timings back, this check silently stops running
+  # again; that is what the vacuity guard immediately below is for.
   $slot = $null; $sum = $null
   if ($withP -match 'FlowChecker\.Check\s+([0-9.]+) s')           { $slot = [double]$Matches[1] }
   if ($withP -match 'FlowChecker\.Check breakdown\s+([0-9.]+) s') { $sum  = [double]$Matches[1] }
   Check 'A2 both the slot and the breakdown total were parsed' `
         (($null -ne $slot) -and ($null -ne $sum)) "slot=$slot sum=$sum"
+  # VACUITY GUARD for the bound below. A printed slot of 0 is not a fast run --
+  # it is a run whose numbers lost all their significant digits, and the old
+  # `if ($slot -gt 0)` treated that as "nothing to check" and moved on green.
+  Check 'A2 the slot printed enough precision to be divisible (vacuity guard)' `
+        (($null -ne $slot) -and ($slot -gt 0)) `
+        "slot=$slot -- 0 means the engine quantised the timing away and the partition bound below did NOT run"
   if (($null -ne $slot) -and ($null -ne $sum) -and ($slot -gt 0)) {
     $ratio = $sum / $slot
     Check 'A2 the breakdown SUMS to the slot it decomposes (0.75..1.05)' `

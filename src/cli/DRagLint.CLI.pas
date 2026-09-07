@@ -726,7 +726,7 @@ begin
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
   Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
-  Writeln('  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (asks a running Delphi IDE plugin to STOP its drag-lint.exe children and not respawn them, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Writes a sentinel -- the plugin acts on its next status tick, so wait for the lock before staging)');
+  Writeln('  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (writes a hold sentinel: a running Delphi IDE plugin will not respawn drag-lint.exe while it lasts and stops its LSP child on the next request that wants it, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Frees nothing by itself -- build\stage-engine.ps1 kills the running holder and retries)');
   Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
@@ -11995,15 +11995,19 @@ end; // function
     until it passes.
 
   RUNNING THIS DOES NOT ITSELF FREE THE FILE
-    It writes a sentinel; the plugin acts on it when its status timer next
-    fires. A caller that needs the lock actually gone must wait and retry --
-    which build_draglint_win64.bat does. Said plainly here because a verb named
-    "release" that returns instantly invites the assumption that it finished.
+    It writes a sentinel; the plugin observes it on the next request that wants
+    the client. The status strip only ANNOUNCES the hold -- it stops nothing,
+    and it is not what acts. A caller that needs the lock actually gone must
+    wait and retry -- which build_draglint_win64.bat does, through
+    stage-engine.ps1, which is what kills the holder. Said plainly here because
+    a verb named "release" that returns instantly invites the assumption that
+    it finished.
   --------------------------------------------------------------------------- }
 
 /// <summary>drag-lint ide-release: writes the engine-hold sentinel so a running
-/// IDE plugin stops its drag-lint.exe children and does not respawn them until
-/// the hold expires. With --resume, clears the hold instead.</summary>
+/// IDE plugin declines to (re)spawn drag-lint.exe until the hold expires, and
+/// stops its LSP child on its next request. Frees nothing by itself. With
+/// --resume, clears the hold instead.</summary>
 /// <param name="AArgs">Parsed CLI args. Limit doubles as the hold length in
 /// seconds when given (--seconds is its alias); Resume selects the clear
 /// operation; AsJson or Format='json' selects JSON output.</param>
@@ -12097,8 +12101,9 @@ begin
   begin
     Writeln(System.SysUtils.Format('engine hold set for %d second(s).', [Left]));
     { Do NOT let this read as "the file is free now". It is not, yet. }
-    Writeln('The IDE plugin stops its engine children on its next status tick;');
-    Writeln('wait for the lock to clear before staging. Clear early with:');
+    Writeln('The IDE plugin will not respawn its engine while the hold lasts, and');
+    Writeln('stops its LSP child on its next request.');
+    Writeln('This verb kills nothing -- build\stage-engine.ps1 does that. Clear early with:');
     Writeln('  drag-lint ide-release --resume');
     Writeln('sentinel: ' + EngineHoldFilePath);
   end;
@@ -14783,7 +14788,7 @@ var
 begin
   if (not FActive) or (FOpen = '') then Exit;
   Stamp:= TStopwatch.GetTimeStamp;
-  Writeln(ErrOutput, Format('  %-28s %10.2f s', [FOpen, (Stamp - FMark) / TStopwatch.Frequency]));
+  Writeln(ErrOutput, Format('  %-28s %11.4f s', [FOpen, (Stamp - FMark) / TStopwatch.Frequency]));
   Flush(ErrOutput);
   FMark:= Stamp;
   FOpen:= '';
@@ -14802,7 +14807,7 @@ procedure TLintPhaseProfiler.Done;
 begin
   if not FActive then Exit;
   CloseOpenPhase;
-  Writeln(ErrOutput, Format('  %-28s %10.2f s', ['TOTAL', (TStopwatch.GetTimeStamp - FStart) / TStopwatch.Frequency]));
+  Writeln(ErrOutput, Format('  %-28s %11.4f s', ['TOTAL', (TStopwatch.GetTimeStamp - FStart) / TStopwatch.Frequency]));
   Flush(ErrOutput);
   FActive:= False;
 end; // procedure
@@ -15420,33 +15425,44 @@ begin
         end;
     for var K in Ord do
       if GScanT[K] > 0 then
-        Writeln(ErrOutput, Format('    %-28s %8.2f s  (%d file(s), %.2f ms/file)',
+        Writeln(ErrOutput, Format('    %-28s %9.4f s  (%d file(s), %.2f ms/file)',
           [SCAN_NAMES[K], GScanT[K] / TStopwatch.Frequency, GScanN[K],
            GScanT[K] * 1000 / (TStopwatch.Frequency * Max(1, GScanN[K]))]));
-    Writeln(ErrOutput, Format('    %-28s %8.2f s  <-- the quadratic accumulation, measured at last',
+    Writeln(ErrOutput, Format('    %-28s %9.4f s  <-- the quadratic accumulation, measured at last',
       ['(Findings append)', GScanAppend / TStopwatch.Frequency]));
     { The .scm slot split into its two halves. Only the PARSE half could be
       recovered by sharing TAstParseCache with the AST checks (TLinter builds its
       own parser, so every file is parsed twice) -- the query half would remain
       whatever it is. Printing both is what stops that being guessed. }
-    Writeln(ErrOutput, Format('      %-26s %8.2f s  (%d file(s), %.2f ms/file)',
+    Writeln(ErrOutput, Format('      %-26s %9.4f s  (%d file(s), %.2f ms/file)',
       ['of which read+parse', DRagLint.Lint.Linter.LinterParseTicks / TStopwatch.Frequency,
        DRagLint.Lint.Linter.LinterParseCount,
        DRagLint.Lint.Linter.LinterParseTicks * 1000 / (TStopwatch.Frequency * Max(1, DRagLint.Lint.Linter.LinterParseCount))]));
-    Writeln(ErrOutput, Format('      %-26s %8.2f s',
+    Writeln(ErrOutput, Format('      %-26s %9.4f s',
       ['of which .scm queries', (GScanT[0] - DRagLint.Lint.Linter.LinterParseTicks) / TStopwatch.Frequency]));
     { FLOWCHECKER SUB-BREAKDOWN -- INBOX-flowchecker-is-half-of-lint-all.
       FlowChecker.Check measured 54.1% of this run with NOTHING inside it, and
       that note records four hypotheses about it that measured dead. Printed
       immediately after the slot table so the sub-lines sit next to the total
       they decompose. The sum is printed too: if it drifts far from the slot,
-      the phases have stopped covering the routine and the breakdown is lying. }
+      the phases have stopped covering the routine and the breakdown is lying.
+
+      FOUR DECIMALS, NOT TWO -- DO NOT TIDY THIS BACK. Every timing column in
+      this profile prints %9.4f because the sum-vs-slot ratio is a RATIO of two
+      printed numbers, and at %8.2f both quantise to 0.01 s resolution. On a
+      small corpus the whole slot is 0.01 s and every phase rounds to 0.00, so
+      the ratio reads 0 and run_flowchecker_profile_breakdown.ps1 fails an
+      assertion about a profiler that was working perfectly. Measured: 1 FAIL
+      in 67 recorded battery results -- rare enough that it was written down as
+      "a timing flake" for three sessions running and never diagnosed. It is
+      not load sensitivity; it is print precision, and a longer run merely
+      hides it. }
     var FlowSum: Double:= 0;
     for var FP:= 0 to DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseCount - 1 do
       FlowSum:= FlowSum + DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP);
     if FlowSum > 0 then
     begin
-      Writeln(ErrOutput, Format('    %-28s %8.2f s  (%d routine(s))',
+      Writeln(ErrOutput, Format('    %-28s %9.4f s  (%d routine(s))',
         ['FlowChecker.Check breakdown', FlowSum,
          DRagLint.Diagnostics.FlowChecks.TFlowChecker.RoutinesAnalysed]));
       Writeln(ErrOutput,
@@ -15457,7 +15473,7 @@ begin
         '       the replay loop and a window there would have swallowed the loop itself)');
       for var FP:= 0 to DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseCount - 1 do
         if DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP) > 0 then
-          Writeln(ErrOutput, Format('      %-26s %8.2f s  (%5.1f%% of the checker)',
+          Writeln(ErrOutput, Format('      %-26s %9.4f s  (%5.1f%% of the checker)',
             [DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseName(FP),
              DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP),
              100 * DRagLint.Diagnostics.FlowChecks.TFlowChecker.PhaseSeconds(FP) / FlowSum]));
@@ -15473,14 +15489,14 @@ begin
     var DFS: TDataFlowStats:= DataFlowStats;
     if DFS.Solves > 0 then
     begin
-      Writeln(ErrOutput, Format('      %-26s %8.2f s  (%d solve(s), %d block(s), %d visit(s) = %.3f per block)',
+      Writeln(ErrOutput, Format('      %-26s %9.4f s  (%d solve(s), %d block(s), %d visit(s) = %.3f per block)',
         ['of which solver', DFS.SolveSeconds, DFS.Solves, DFS.Blocks, DFS.Visits,
          DFS.Visits / Max(Int64(1), DFS.Blocks)]));
-      Writeln(ErrOutput, Format('        %-24s %8.2f s  (%d call(s), %.4f ms/call, %5.1f%% of the solver)',
+      Writeln(ErrOutput, Format('        %-24s %9.4f s  (%d call(s), %.4f ms/call, %5.1f%% of the solver)',
         ['of which Transfer', DFS.TransferSeconds, DFS.Transfers,
          DFS.TransferSeconds * 1000 / Max(Int64(1), DFS.Transfers),
          100 * DFS.TransferSeconds / Max(0.000001, DFS.SolveSeconds)]));
-      Writeln(ErrOutput, Format('        %-24s %8.2f s  (Join x%d, Equals x%d, re-enqueue x%d)',
+      Writeln(ErrOutput, Format('        %-24s %9.4f s  (Join x%d, Equals x%d, re-enqueue x%d)',
         ['of which Join+Equals+queue', DFS.SolveSeconds - DFS.TransferSeconds,
          DFS.Joins, DFS.Comparisons, DFS.Reenqueues]));
       Writeln(ErrOutput, Format('        %-24s %.3f per block over %d block(s) in one routine',
@@ -15490,7 +15506,7 @@ begin
         ratio; a pooled 2.388 is equally consistent with one lattice at 1.0 and
         another at 6.0. Sorted by cost, so the row that matters is first. }
       for var LS in DataFlowLatticeStats do
-        Writeln(ErrOutput, Format('        %-24s %8.2f s  (%.3f visit(s)/block, Transfer %5.1f%%, %d solve(s))',
+        Writeln(ErrOutput, Format('        %-24s %9.4f s  (%.3f visit(s)/block, Transfer %5.1f%%, %d solve(s))',
           [LS.Name, LS.SolveSeconds, LS.Visits / Max(Int64(1), LS.Blocks),
            100 * LS.TransferSeconds / Max(0.000001, LS.SolveSeconds), LS.Solves]));
     end;
@@ -15514,11 +15530,11 @@ begin
       OracleTot:= OracleTot + TFlowChecker.OracleSeconds(OI);
     if OracleTot > 0 then
       for var OI:= 0 to TFlowChecker.OracleCount - 1 do
-        Writeln(ErrOutput, Format('      %-26s %8.2f s  (%d call(s), %d miss(es), %.1f%% miss)',
+        Writeln(ErrOutput, Format('      %-26s %9.4f s  (%d call(s), %d miss(es), %.1f%% miss)',
           [TFlowChecker.OracleName(OI), TFlowChecker.OracleSeconds(OI),
            TFlowChecker.OracleCalls(OI), TFlowChecker.OracleMisses(OI),
            100 * TFlowChecker.OracleMisses(OI) / Max(Int64(1), TFlowChecker.OracleCalls(OI))]));
-    Writeln(ErrOutput, Format('    %-28s %8.2f s', ['(sum of the slots above)', (ScanTot + GScanAppend) / TStopwatch.Frequency]));
+    Writeln(ErrOutput, Format('    %-28s %9.4f s', ['(sum of the slots above)', (ScanTot + GScanAppend) / TStopwatch.Frequency]));
     { SESSION 36 (P3): the .scm half broken down PER RULE. The aggregate is the
       largest single item left in lint-all, but "114 queries cost 54 s" is not
       something a fix can be aimed at, and the last two attempts to optimise this
@@ -15534,14 +15550,14 @@ begin
         [Length(RuleTimes), RuleTot]));
       var RuleShown: Integer:= Min(15, Length(RuleTimes));
       for var K:= 0 to RuleShown - 1 do
-        Writeln(ErrOutput, Format('      %-30s %8.2f s  (%d call(s), %.3f ms/call)',
+        Writeln(ErrOutput, Format('      %-30s %9.4f s  (%d call(s), %.3f ms/call)',
           [RuleTimes[K].RuleId, RuleTimes[K].Seconds, RuleTimes[K].Calls,
            RuleTimes[K].Seconds * 1000 / Max(1, RuleTimes[K].Calls)]));
       if Length(RuleTimes) > RuleShown then
       begin
         var Rest: Double:= 0;
         for var K:= RuleShown to High(RuleTimes) do Rest:= Rest + RuleTimes[K].Seconds;
-        Writeln(ErrOutput, Format('      %-30s %8.2f s  (not listed)',
+        Writeln(ErrOutput, Format('      %-30s %9.4f s  (not listed)',
           [Format('... %d cheaper rule(s)', [Length(RuleTimes) - RuleShown]), Rest]));
       end;
     end;

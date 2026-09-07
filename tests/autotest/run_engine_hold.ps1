@@ -164,6 +164,103 @@ Check 'an absurd --seconds is clamped to an hour, not honoured' `
 Run @('ide-release','--resume') | Out-Null
 
 # ---------------------------------------------------------------------------
+# CHECK 4b -- WHAT THE VERB SAYS IT DOES
+#
+# Every surface that described `ide-release` claimed the plugin STOPS its
+# drag-lint.exe children "on its next status tick". Both halves were wrong and
+# both had been wrong since the verb shipped:
+#   * the status strip (StatusBar.PollEngineHold) only ANNOUNCES the hold --
+#     its own comment says "Announcing is not the same act as acting";
+#   * the plugin acts LAZILY in EnsureLspClient, on the next request that wants
+#     the client, and even then only stops a client that already exists. It
+#     never kills anything -- build\stage-engine.ps1 does that.
+#
+# A reader who believed the old text would run the verb by hand and wait for a
+# lock that, with nothing hovering, never clears.
+#
+# run_docs_sync_guard.ps1 cannot catch this: it checks verb PRESENCE, rule
+# counts and dead DB paths, never prose, so it stayed green in both directions.
+# Hence these checks, deliberately narrow -- two tokens, and only on the lines
+# that name the verb. Matching English loosely is how a prose guard becomes
+# noise that everyone learns to skim.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '-- check 4b: the wording matches the contract' -ForegroundColor Cyan
+
+# The two predicates, factored out so the positive control (B5) can run the
+# SAME code over planted text. A guard that cannot be made to fail is not a
+# guard -- this repo has shipped three of those.
+function Test-HoldProseOk([string]$Text, [string[]]$Banned, [string[]]$Required) {
+  foreach ($b in $Banned)   { if ($Text -match [regex]::Escape($b)) { return $false } }
+  foreach ($r in $Required) { if ($Text -notmatch [regex]::Escape($r)) { return $false } }
+  $true
+}
+
+# B1 + B2 -- the runtime output of a real `ide-release`.
+$r = Run @('ide-release','--seconds','60')
+$runtime = $r.Out
+Check 'runtime output does not claim a status tick' `
+  (Test-HoldProseOk $runtime @('status tick') @()) `
+  'the strip announces; EnsureLspClient acts'
+Check 'runtime output names the refusal and the killer' `
+  (Test-HoldProseOk $runtime @() @('respawn','stage-engine.ps1')) `
+  'a caller needs both facts: what the plugin declines, and who actually kills'
+Run @('ide-release','--resume') | Out-Null
+
+# B3 -- the --help line for the verb.
+$help     = (Run @('--help')).Out
+$helpLine = ($help -split "`n" | Where-Object { $_ -match '^\s*drag-lint ide-release' }) -join "`n"
+Check 'the --help line for ide-release exists' ($helpLine -ne '') 'regex: ^\s*drag-lint ide-release'
+Check '--help does not claim a status tick' `
+  (Test-HoldProseOk $helpLine @('status tick') @()) $helpLine
+# RED-check finding, 2026-09-07: requiring only 'respawn' here is NOT
+# discriminating -- the OLD help line already said "not respawn them", so that
+# half passed against the defect it was written to catch. The token the old
+# text genuinely lacked is the one naming who actually kills. Required tokens
+# have to be chosen against the broken text, not against the fixed text.
+Check '--help says the plugin will not respawn, and who does the killing' `
+  (Test-HoldProseOk $helpLine @() @('respawn','stage-engine.ps1')) $helpLine
+
+# B4 -- the three prose surfaces. Only the line(s) that NAME the verb.
+$proseSurfaces = @(
+  @{ File = 'README.md';                Select = { param($L) $L -match '^\|' -and $L -match 'ide-release' } },
+  @{ File = 'docs\AI-USAGE.md';         Select = { param($L) $L -match '^\|' -and $L -match 'ide-release' } },
+  # The wiki page's LEAD only: line 1 is the H1, and the body below the first
+  # '## ' heading is already correct and says so at length.
+  @{ File = 'docs\wiki\ide-release.md'; Select = $null }
+)
+foreach ($s in $proseSurfaces) {
+  $path = Join-Path $Repo $s.File
+  if (-not (Test-Path -LiteralPath $path)) { Check "$($s.File) exists" $false $path; continue }
+  $lines = Get-Content -LiteralPath $path
+  if ($null -eq $s.Select) {
+    $stop  = ($lines | Select-String -Pattern '^## ' | Select-Object -First 1).LineNumber
+    if (-not $stop) { $stop = $lines.Count + 1 }
+    $text  = ($lines[1..($stop - 2)]) -join ' '
+  } else {
+    $text = ($lines | Where-Object { & $s.Select $_ }) -join ' '
+  }
+  Check "$($s.File): the ide-release description was found" ($text.Trim() -ne '') ''
+  Check "$($s.File): does not overstate the verb as 'stop its/their children'" `
+    (Test-HoldProseOk $text @('stop its','stop their') @()) $text
+  Check "$($s.File): says the plugin will not respawn" `
+    (Test-HoldProseOk $text @() @('respawn')) $text
+}
+
+# B5 -- POSITIVE CONTROL. The predicates above only prove something if they can
+# still say FAIL. Plant the old wording and the removed token and require BOTH
+# to be rejected; otherwise every PASS above is vacuous.
+$planted = 'the plugin stops its drag-lint.exe children on its next status tick'
+Check 'positive control: the OLD wording is rejected' `
+  (-not (Test-HoldProseOk $planted @('status tick') @())) 'banned-token predicate is live'
+Check 'positive control: text missing "respawn" is rejected' `
+  (-not (Test-HoldProseOk $planted @() @('respawn'))) 'required-token predicate is live'
+Check 'positive control: correct text still passes both' `
+  (Test-HoldProseOk 'will not respawn drag-lint.exe; build\stage-engine.ps1 kills the holder' `
+     @('status tick','stop its') @('respawn','stage-engine.ps1')) `
+  'the predicates are not stuck on false'
+
+# ---------------------------------------------------------------------------
 # CHECK 5 -- the staging recovery retries a genuinely locked target
 # ---------------------------------------------------------------------------
 Write-Host ''

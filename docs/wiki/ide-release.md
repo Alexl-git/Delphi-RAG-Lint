@@ -1,8 +1,9 @@
 # ide-release
 
-Asks a running drag-lint **Delphi IDE plugin** to stop its `drag-lint.exe`
-child processes and not respawn them for a while, so the engine binary can be
-rebuilt while the IDE stays open.
+Asks a running drag-lint **Delphi IDE plugin** not to respawn its
+`drag-lint.exe` child processes for a while -- and to drop the running one on
+its next request -- so the engine binary can be rebuilt while the IDE stays
+open. The verb frees nothing by itself; see below.
 
 ## The problem it solves
 
