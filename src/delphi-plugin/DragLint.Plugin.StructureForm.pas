@@ -31,6 +31,11 @@ procedure RefreshEmbeddedStructure(AForm: TForm);
 procedure RefreshEmbeddedStructureDiagnostics(AForm: TForm);
 { v0.48: scroll an embedded Structure form to its Diagnostics section if it has any. }
 procedure ScrollEmbeddedStructureToDiagnostics(AForm: TForm);
+{ v(session 73): select the embedded Structure form's Diagnostics row for ALine.
+  Same shape as the two helpers above -- the caller holds the embedded form as a
+  plain TForm and must not need TDragLintStructureForm in its uses clause.
+  False when the form is not a Structure form or the line carries no finding. }
+function SelectEmbeddedStructureDiagnosticForLine(AForm: TForm; ALine: Integer): Boolean;
 
 var { v0.48: set True by a compile that just pushed findings; the dock watch timer
     consumes it to auto-scroll the Structure to the Diagnostics section (if any). }
@@ -160,6 +165,19 @@ type
       the first message selected (shared by the 'Diag' button + the auto-jump). }
       procedure ScrollToDiagnostics;
       function HasDiagnostics: Boolean;
+
+      /// <summary>Selects the Diagnostics row for ALine and scrolls it into
+      /// view, or clears the selection when that line carries no finding.</summary>
+      /// <param name="ALine">1-based editor line the caret is on.</param>
+      /// <returns>True when a row was selected.</returns>
+      /// <remarks>Does NOT take focus and does NOT move the editor caret --
+      /// this is the editor -> panel direction only, and the panel already
+      /// navigates the editor on double-click, so moving the caret here would
+      /// close a feedback loop (select row -> jump editor -> caret moves ->
+      /// select row). A line with no finding CLEARS the selection rather than
+      /// leaving the previous row lit, because a stale highlight claims the
+      /// caret is somewhere it is not.</remarks>
+      function SelectDiagnosticForLine(ALine: Integer): Boolean;
   end;
 
 var
@@ -743,6 +761,63 @@ end;
 function TDragLintStructureForm.HasDiagnostics: Boolean;
 begin
   Result:= Length(FDiags) > 0;
+end;
+
+{ v(session 73): caret line -> panel selection.
+  docs\INBOX-caret-line-should-select-its-finding-in-the-panel.md, the owner's
+  ask from live IDE use: "when I highlight a line in the editor, if this line
+  has a message in drag-lint structure, we need to highlight this message there
+  so we could see it and maybe easier to right-click".
+
+  Wiring, not new machinery: the diagnostic rows are already the children of
+  FRootDiag, each carrying a TStructureNodeData with the 1-based Line.
+
+  FOUR OF THE NOTE'S FIVE DESIGN POINTS ARE SETTLED HERE:
+
+  * No focus change and no caret move (see the declaration's remarks). Only the
+    tree's Selected + MakeVisible are touched, which is what ScrollToDiagnostics
+    already does.
+  * A line with no finding CLEARS the selection.
+  * MORE THAN ONE FINDING ON A LINE is normal. The FIRST matching row wins, and
+    that is the most severe one, because the tree is already built in severity
+    order -- the same ordering the gutter uses to pick its glyph colour, so the
+    two surfaces agree by construction rather than by a second sort here.
+  * Cost: this runs off a caret poll, so it walks FRootDiag's children -- tens
+    of nodes for a file, not the whole tree, and only when the caret's LINE
+    changed (the caller debounces on line, not on position).
+
+  The fifth (re-entrancy) is the CALLER's, because the loop it guards against
+  runs through the caller: this function cannot move the editor. }
+function TDragLintStructureForm.SelectDiagnosticForLine(ALine: Integer): Boolean;
+var
+  N: TTreeNode;
+  D: TStructureNodeData;
+begin
+  Result:= False;
+  if (FTree = nil) or (FRootDiag = nil) or (ALine <= 0) then Exit;
+
+  N:= FRootDiag.getFirstChild;
+  while N <> nil do
+  begin
+    if N.Data <> nil then
+    begin
+      D:= TStructureNodeData(N.Data);
+      if D.Line = ALine then
+      begin
+        // MakeVisible before Selected: selecting a node that is scrolled out of
+        // view leaves the tree showing the wrong region until the next paint.
+        N.MakeVisible;
+        FTree.Selected:= N;
+        Exit(True);
+      end;
+    end;
+    N:= N.getNextSibling;
+  end;
+
+  // Nothing on this line. Clearing beats leaving the previous row lit: a stale
+  // highlight is a claim about where the caret is, and it would be false.
+  if (FTree.Selected <> nil) and (FTree.Selected.Parent = FRootDiag) then
+    FTree.Selected:= nil;
 end;
 
 procedure TDragLintStructureForm.ScrollToDiagnostics;
@@ -1534,6 +1609,12 @@ end;
 procedure ScrollEmbeddedStructureToDiagnostics(AForm: TForm);
 begin
   if (AForm is TDragLintStructureForm) and TDragLintStructureForm(AForm).HasDiagnostics then TDragLintStructureForm(AForm).ScrollToDiagnostics;
+end;
+
+function SelectEmbeddedStructureDiagnosticForLine(AForm: TForm; ALine: Integer): Boolean;
+begin
+  Result:= (AForm is TDragLintStructureForm)
+           and TDragLintStructureForm(AForm).SelectDiagnosticForLine(ALine);
 end;
 
 procedure ShowDragLintStructure;

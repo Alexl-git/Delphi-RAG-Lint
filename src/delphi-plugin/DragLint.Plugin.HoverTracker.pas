@@ -45,6 +45,7 @@ uses
   , DragLint.Plugin.LspClient
   , DragLint.Plugin.EditViewNotifier
   , DragLint.Plugin.Editor
+  , DragLint.Plugin.DockForm     { SelectDockedDiagnosticForLine -- caret -> panel }
   , DragLint.Plugin.StatusBar    { SetDragLintNote -- the 'thinking' note }
   , DragLint.Plugin.Telemetry    { DLT -- item 5: where a dwell fired, and whether it showed }
   ;
@@ -110,8 +111,19 @@ type
       FLastBundleModel   : TDragLintHoverModel        ;
       FLastBundleCallers : TArray<TDragLintCallerInfo>;
       FLastShownKey      : string ; { v0.42: caret key we already popped; don't re-show it }
+      { v(session 73): last caret LINE the panel selection was driven from, so
+        the tree walk happens on a line CHANGE rather than on every 200 ms tick.
+        -1 = nothing driven yet. Keyed by file too, because line 40 of one unit
+        is not line 40 of the next. }
+      FLastCaretLine     : Integer;
+      FLastCaretFile     : string ;
       FLastForegroundFail: Boolean; { v0.40.8b: log the bail-out only once per transition }
       procedure OnTick(Sender: TObject);
+      { v(session 73): editor caret line -> drag-lint panel selection. Runs on
+        THIS tick rather than in a tracker of its own, which the note asks for
+        explicitly ("a THIRD tracker should not be added"). Cheap by design --
+        it exits on the first guard unless the caret changed LINE. }
+      procedure DriveCaretPanelSelection;
       procedure ResetState;
     public
       constructor Create;
@@ -131,6 +143,8 @@ begin
   FLastPos:= Point(-1, -1);
   FStableCount:= 0;
   FHintShown  := False;
+  FLastCaretLine:= -1;
+  FLastCaretFile:= '';
 end;
 
 destructor TDragLintHoverHelper.Destroy;
@@ -143,6 +157,53 @@ procedure TDragLintHoverHelper.ResetState;
 begin
   FStableCount:= 0;
   FHintShown  := False;
+end;
+
+{ v(session 73): caret line -> panel selection.
+  docs\INBOX-caret-line-should-select-its-finding-in-the-panel.md.
+
+  WHY IT SITS BEFORE EVERY BAIL-OUT IN OnTick. The rest of that method exits
+  early when the hover TOOLTIP is switched off, and again when the MOUSE is not
+  over the editor view. Both are right for a tooltip and both are wrong here:
+  the ask is about where the CARET is, and a user reading the panel has usually
+  parked the mouse over the panel, not the code. Wiring this in after those
+  guards would have produced a feature that works only while the mouse hovers
+  the editor -- which is the shape a reviewer would never notice and a user
+  would report as "it works sometimes".
+
+  RE-ENTRANCY (the note's design point 1) is closed by construction, not by a
+  flag: this drives editor -> panel only, and SelectDockedDiagnosticForLine
+  neither moves the caret nor focuses the panel, so the loop the note warns
+  about -- select row, jump editor, caret moves, select row -- has no return
+  edge to close it.
+
+  COST (design point 5): guarded on a LINE change, so holding a key down inside
+  one line does nothing, and the work when it does fire is a walk of the
+  Diagnostics root's children -- tens of nodes -- not of the whole tree. }
+procedure TDragLintHoverHelper.DriveCaretPanelSelection;
+var
+  ESS     : IOTAEditorServices;
+  EditView: IOTAEditView      ;
+  FilePath: string            ;
+  Line    : Integer           ;
+begin
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EditView:= ESS.TopView;
+  if EditView = nil then Exit;
+
+  FilePath:= EditView.Buffer.FileName;
+  if FilePath = '' then Exit;
+
+  Line:= EditView.Position.Row; { 1-based, which is what the panel stores }
+  if (Line = FLastCaretLine) and SameText(FilePath, FLastCaretFile) then Exit;
+
+  FLastCaretLine:= Line;
+  FLastCaretFile:= FilePath;
+
+  { Return value ignored on purpose: False means "no finding on this line",
+    which is not a failure and has already had its effect (the selection was
+    cleared). }
+  SelectDockedDiagnosticForLine(Line);
 end;
 
 procedure TDragLintHoverHelper.OnTick(Sender: TObject);
@@ -163,6 +224,18 @@ var
 begin
   try
     Settings:= LoadSettings;
+
+    { v(session 73): caret -> panel selection, BEFORE the tooltip guards below.
+      It is a different feature on the same tick and must not inherit the
+      tooltip's on/off switch or its mouse-over-the-editor requirement. See
+      DriveCaretPanelSelection's header. }
+    try DriveCaretPanelSelection; except // dl:ok try-except-swallowed@6b30 -- a timer tick must not raise into the IDE message loop
+      on E: Exception do
+        { Isolated from the tooltip path deliberately: a fault in the panel
+          link must not take the tooltip down with it, and vice versa. }
+        ;
+    end;
+
     if not Settings.EnableHoverTooltip then
     begin
       ResetState;

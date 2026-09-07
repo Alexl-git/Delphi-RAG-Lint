@@ -32,6 +32,18 @@ procedure ShowDragLintDockLintOptions;
 /// frame is unavailable (mirrors ShowDragLintDockLintOptions's nil guard).</summary>
 procedure ShowDragLintDockButterfly(const AQName, ACallersJson, ACalleesJson: string);
 
+/// <summary>Selects the docked panel's Diagnostics row for editor line ALine,
+/// or clears that selection when the line carries no finding.</summary>
+/// <param name="ALine">1-based editor line the caret is on.</param>
+/// <returns>True when a row was selected.</returns>
+/// <remarks>The editor -> panel half of the caret/panel link. Does not show,
+/// raise or focus the dock, and does not move the editor caret, so it is a
+/// silent no-op when the panel is not open. Exported for the same reason as
+/// ShowDragLintDockButterfly: TDragLintDockFrame is declared in this unit's
+/// implementation section, so a caret poll elsewhere cannot reach GDockFrame.
+/// Never raises.</remarks>
+function SelectDockedDiagnosticForLine(ALine: Integer): Boolean;
+
 { Batch E Task 3: cross-file "open at file:line" nav for butterfly tree nodes.
   Editor.pas's DLNavigateToSource is what we need (opens ANY file's source
   view, not just the current module), but Editor.pas already uses DockForm
@@ -670,6 +682,31 @@ procedure ShowDragLintDockButterfly(const AQName, ACallersJson, ACalleesJson: st
 begin
   ShowDragLintDock;
   if GDockFrame <> nil then GDockFrame.PopulateButterfly(AQName, ACallersJson, ACalleesJson);
+end;
+
+function SelectDockedDiagnosticForLine(ALine: Integer): Boolean;
+begin
+  Result:= False;
+  { Deliberately NOT ShowDragLintDock, unlike the two above. Those are invoked
+    by a menu action -- the user asked to see the panel. This one fires off a
+    caret poll, and opening a docked window because someone moved the caret
+    would be the panel taking over the IDE. A closed panel is a silent no-op. }
+  if GDockFrame = nil then Exit;
+  { FStructure is private to TDragLintDockFrame, and this function is in the
+    same unit, so Delphi's unit-scoped privacy already allows the read -- no
+    accessor added and no encapsulation widened for other units. }
+  try
+    Result:= SelectEmbeddedStructureDiagnosticForLine(GDockFrame.FStructure, ALine);
+  except // dl:ok try-except-swallowed@a91f -- a caret poll must never surface an exception into the IDE's message loop
+    on E: Exception do
+      { This runs several times a second off a timer. An exception escaping here
+        would become a modal dialog while the user is typing, repeatedly, which
+        is far worse than a selection that quietly fails to update. There is no
+        report channel from a caret poll, and the visible effect -- the panel
+        does not follow the caret -- is exactly what the user would see anyway
+        if the panel were closed. }
+      Result:= False;
+  end;
 end;
 
 procedure UnregisterDragLintDock;
