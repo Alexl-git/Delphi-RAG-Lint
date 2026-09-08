@@ -821,7 +821,7 @@ begin
   Writeln('                               file): the ACTIVE PROJECT''s db first, then the folder-matched db.');
   Writeln('                               Omit --project to model "no project active". Same resolution the IDE');
   Writeln('                               uses, so this is how it is verified without an IDE.');
-  Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write');
+  Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
   Writeln('  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project''s _D-RAG folder');
@@ -23719,9 +23719,15 @@ end; // function
 // reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--json] [--config <path>]
 // Dry-run (default): print MISSING/EXTRA/STALE report, exit 0, write nothing.
 // --apply: back up .dpr/.dproj and insert Missing units (Task 2).
-// --json: emit a JSON object {missing,extra,stale} to stdout instead of text.
-//         When --apply is also given, apply still runs; apply messages go to
-//         ErrOutput so stdout remains valid JSON.
+// --json: emit a JSON object {missing,extra,stale,applied} to stdout instead
+//         of text. `applied` is the OUTCOME of --apply (false on a dry run,
+//         and false when --apply had nothing to write), never the flag.
+//         With --apply the document also carries `backups` (the .bak paths
+//         taken) and `edited` (the project files that actually changed);
+//         these are separate because a backup is taken before the edit is
+//         attempted and the editors are idempotent. Apply runs BEFORE the
+//         document is built; its messages go to ErrOutput so stdout remains
+//         one valid JSON object.
 // --db <db> [--full]: run the index/findings COHERENCE phase against <db>.
 //         For each project member (the compile closure + its sibling .dfm) that
 //         is not indexed, index-stale, or compile-stale, re-scan it (and its
@@ -23765,6 +23771,10 @@ var
   ProfileTgt  : string                                    ;
   SavedOut    : TTextRec                                  ;
   CohDbPath   : string                                    ;
+  { What --apply actually wrote. Populated by the single Apply call below;
+    Default() when --apply was not passed, so `applied` is false without a
+    special case. }
+  AppRes      : TReconcileApplyResult                     ;
   { --only names that matched no MISSING unit. Held until the JSON is built so a
     machine caller learns of a typo from the document, not from stderr. nil when
     --only was not passed. }
@@ -23998,6 +24008,21 @@ begin
       end;
     end;
 
+    { WRITE FIRST, THEN REPORT -- one Apply call for both output shapes.
+
+      Previously each branch made its own Apply call at the END, so the JSON
+      document was emitted BEFORE the write it was describing and could not
+      say whether one happened. `applied` would have had to report the FLAG,
+      which is precisely the defect found in uses-fix on 2026-09-07: --apply
+      against an already-reconciled project claimed a write, and offered a
+      revert for a .bak that was never taken.
+
+      Ordering against the coherence phase is UNCHANGED (it still runs
+      first), so the recompile continues to see the pre-apply project. Only
+      the report now trails the write instead of leading it. }
+    AppRes:= Default(TReconcileApplyResult);
+    if AArgs.Apply then AppRes:= Reconciler.Apply(ProjectFile, RR);
+
     if AArgs.AsJson then
     begin
       // JSON output: { "missing": [...], "extra": [...], "stale": [...] }
@@ -24052,6 +24077,37 @@ begin
         end;
         JRoot.AddPair('stale', JStale);
 
+        { THE OUTCOME, NOT THE FLAG. Always present, including on a dry run,
+          where it is false: exit 0 covered BOTH "applied" and "nothing to
+          do", so a caller reading only the document could not tell a
+          successful write from a project that needed none.
+
+          Always-present rather than emitted-only-when-true, because an
+          absent key is exactly what a caller mis-reads: `@($null).Count` is
+          1 in PowerShell, so a missing field can measure as one entry. }
+        JRoot.AddPair('applied', TJSONBool.Create(AppRes.Applied));
+
+        { The paths, present only when --apply was actually passed -- a dry
+          run has nothing to say about them and the shape stays as it was
+          for every existing dry-run caller.
+
+          BACKUPS AND EDITED ARE SEPARATE ON PURPOSE. A .bak is taken before
+          the edit is attempted and both editors are idempotent, so a run can
+          leave a backup on disk having changed nothing. A caller offering
+          "revert" must key on `backups`; one reporting "N units added"
+          must key on `edited`. Collapsing them into one field is what would
+          make a revert button appear for a write that never happened. }
+        if AArgs.Apply then
+        begin
+          var JBak: TJSONArray:= TJSONArray.Create;
+          for var BPath in AppRes.Backups do JBak.Add(BPath);
+          JRoot.AddPair('backups', JBak);
+
+          var JEd: TJSONArray:= TJSONArray.Create;
+          for var EPath in AppRes.Edited do JEd.Add(EPath);
+          JRoot.AddPair('edited', JEd);
+        end;
+
         // Coherence summary (only when --db ran the phase) -- same JRoot so
         // stdout stays ONE valid JSON object.
         if HaveCoh then
@@ -24075,8 +24131,12 @@ begin
         JRoot.Free;
       end; // try
 
-      // --apply still runs; write messages to stderr so stdout stays clean.
-      if AArgs.Apply then begin Reconciler.Apply(ProjectFile, RR); Writeln(ErrOutput, 'Applied: Missing units added to .dpr and .dproj (.bak backups written).'); end;
+      { The write already happened above. Commentary only, and to stderr so
+        stdout stays one JSON object -- the document itself carries
+        `applied`, `backups` and `edited`. }
+      if AArgs.Apply then
+        if AppRes.Applied then Writeln(ErrOutput, Format('Applied: Missing units added to %d project file(s) (%d .bak backup(s) written).', [Length(AppRes.Edited), Length(AppRes.Backups)]))
+        else                   Writeln(ErrOutput, 'Applied: nothing to write -- every MISSING unit was already listed.');
     end // if
     else
     begin
@@ -24112,8 +24172,22 @@ begin
                 + 'A full reindex resets compile-freshness, so this is expected '
                 + 'straight after one.)');
 
-      // --apply: write changes to .dpr/.dproj (with .bak backups).
-      if AArgs.Apply then begin Reconciler.Apply(ProjectFile, RR); Writeln('Applied: Missing units added to .dpr and .dproj (.bak backups written).'); end;
+      { --apply already wrote (above). Report WHAT HAPPENED, not what was
+        asked for: the old unconditional line claimed units had been added to
+        both project files even when Missing was empty, when the .dpr had no
+        uses clause to splice into, or when every DCCReference was already
+        present -- three no-ops that read as a successful write. }
+      if AArgs.Apply then
+      begin
+        if AppRes.Applied then
+          for var EPath in AppRes.Edited do Writeln('Applied: updated ' + EPath)
+        else Writeln('Applied: nothing to write -- every MISSING unit was already listed.');
+        { Backups are listed WHETHER OR NOT anything was edited. They are taken
+          before the edit is attempted, so a no-op run still leaves .bak files
+          beside the project; not naming them left the user with unexplained
+          files and no idea which run made them. }
+        for var BPath in AppRes.Backups do Writeln('Backup:  ' + BPath);
+      end;
     end; // else
   finally
     Reconciler.Free;

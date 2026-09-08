@@ -389,4 +389,41 @@
 #
 #   Superseded: 1.10.0-alpha|02c80791a48b50c8fda23c93444bf3e14fe6d4285303e1043f70cee05370be2d
 
-1.10.0-alpha|3a652a374545bac0ce875bf8149d45769708dbc7d650f5add2e97707aa91fb43
+# 2026-09-07 (session 78): hash updated WITHOUT a version bump, per the rule
+#   above. NOT a doc sweep this time -- REAL CODE changed, so the reasoning is
+#   spelled out rather than pointed at a previous entry.
+#
+#   WHAT CHANGED: ONE file in the hashed surface,
+#   src\index\DRagLint.Index.Reconcile.pas (83 insertions, 12 deletions), so
+#   that `reconcile-project --json` can report the OUTCOME of --apply instead
+#   of the flag. TProjectReconciler.Apply became a function returning
+#   TReconcileApplyResult (Applied / Backups / Edited), and its two private
+#   file editors EditDpr and EditDproj became functions returning whether they
+#   actually wrote.
+#
+#   WHY NO BUMP. The question this file asks is "does any STORED PARSE become
+#   stale?". Three things were checked, not assumed:
+#
+#     1. Analyze -- the ONLY routine in this unit that reads source -- is
+#        untouched. `git diff` mentions the word only inside <param> doc text.
+#     2. Everything changed lives in Apply and the two editors, which WRITE
+#        .dpr/.dproj files. They emit no symbol, ref, use or call edge.
+#     3. TProjectReconciler has exactly ONE consumer in the tree --
+#        DoReconcileProject in DRagLint.CLI.pas. It is not reachable from the
+#        indexer, so it cannot run during a walk at all.
+#
+#   This is the same shape as the 2026-08-26 (3rd) entry, which covered an
+#   earlier change to this very routine for the same reason: what --apply
+#   WRITES into a project file is not what the parser READS out of one.
+#
+#   NOTE FOR THE NEXT READER, since four entries above debate stripping `///`
+#   from this digest: that debate does not apply here. This entry is a genuine
+#   CODE change that is genuinely outside extraction, which is the case the
+#   escape hatch was written for -- not the recurring autodoc tax.
+#
+#   The same warning as every entry above: if a future edit to this file ever
+#   influences what is indexed, the version MUST move.
+#
+#   Superseded: 1.10.0-alpha|3a652a374545bac0ce875bf8149d45769708dbc7d650f5add2e97707aa91fb43
+
+1.10.0-alpha|7562d480be39c02cdf165f9bf4edf888a158742de7a2b68468a0e1e2eff637d2

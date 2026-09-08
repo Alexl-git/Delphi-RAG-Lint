@@ -74,6 +74,33 @@ type
     ClosureFiles: TArray<string>;
   end;
 
+  /// <summary>What TProjectReconciler.Apply actually DID, as distinct from what
+  /// it was asked to do.</summary>
+  /// <remarks>
+  /// Apply is asked to write whenever the caller passes --apply, but it can
+  /// correctly write NOTHING: Missing may be empty, the .dpr may have no uses
+  /// clause to splice into, or every DCCReference may already be present.
+  /// Reporting the REQUEST as though it were the outcome is what let
+  /// uses-fix tell a caller its unit had been rewritten when it had not, and
+  /// offer a revert for a .bak that did not exist. This record is the
+  /// outcome, so no caller has to infer it from an exit code.
+  /// <para>Backups and Edited are INDEPENDENT. Backups are taken before the
+  /// edit is attempted, so a run can leave a .bak on disk and change nothing;
+  /// a caller offering revert must look at Backups, and a caller reporting
+  /// 'N units added' must look at Edited.</para>
+  /// </remarks>
+  TReconcileApplyResult = record
+    /// <summary>True iff at least one project file was actually rewritten.
+    /// Equivalent to Length(Edited) &gt; 0; carried as a field so callers that
+    /// only need the yes/no do not depend on the array's shape.</summary>
+    Applied: Boolean;
+    /// <summary>.bak paths actually written, in the order taken (.dpr then
+    /// .dproj). Empty when Apply exited before backing anything up.</summary>
+    Backups: TArray<string>;
+    /// <summary>Project files whose contents actually changed on disk.</summary>
+    Edited: TArray<string>;
+  end;
+
   /// <summary>Compares a Delphi project's stated member list against its actual
   /// compile closure and reports Missing / Extra / Stale units.</summary>
   /// <remarks>
@@ -222,6 +249,10 @@ type
       /// Re-running after Apply reports 0 Missing.</summary>
       /// <param name="AProjectFile">Path to .dpr or .dproj.</param>
       /// <param name="AResult">Result from a prior Analyze call.</param>
+      /// <returns>What was actually written -- see TReconcileApplyResult. A
+      /// caller must not read --apply as "a write happened": Apply exits
+      /// without touching anything when Missing is empty, and the two file
+      /// editors are idempotent.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
@@ -234,7 +265,7 @@ type
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure Apply(const AProjectFile: string; const AResult: TReconcileResult);
+      function Apply(const AProjectFile: string; const AResult: TReconcileResult): TReconcileApplyResult;
   end;
 
 /// <summary>True when the file's base name (including extension) matches a
@@ -724,7 +755,11 @@ end; // function
 // comments containing ';' (e.g. uMain in 'uMain.pas' {Form: TFoo; aux})
 // do not fool the semicolon search.  Positions from the blanked copy are
 // applied directly to the original content (same length -> same indexes).
-procedure EditDpr(const ADprPath: string; const AMissing: TArray<TReconcileItem>);
+// Returns True iff the .dpr was rewritten. Every early Exit below is a
+// legitimate no-op (nothing missing, no uses clause, no terminating ';', or
+// every unit already listed), and a caller reporting "applied" must be able
+// to tell those apart from a real write.
+function EditDpr(const ADprPath: string; const AMissing: TArray<TReconcileItem>): Boolean;
 var
   Content  : string        ;
   Blanked  : string        ;
@@ -738,6 +773,7 @@ var
   Item     : TReconcileItem;
   Additions: string        ;
 begin
+  Result:= False;
   if Length(AMissing) = 0 then Exit;
   Content:= TFile.ReadAllText(ADprPath);
 
@@ -797,7 +833,8 @@ begin
   Content:= Before + Additions + After;
 
   TFile.WriteAllText(ADprPath, Content);
-end; // procedure
+  Result:= True;
+end; // function
 
 // --------------------------------------------------------------------------
 // Apply helpers -- .dproj DCCReference ItemGroup edit
@@ -816,7 +853,9 @@ end;
 // Edit the .dproj: insert DCCReference entries into the existing ItemGroup
 // (the one already containing <DCCReference>), or create a new ItemGroup
 // before </Project>.
-procedure EditDproj(const ADprojPath: string; const AMissing: TArray<TReconcileItem>);
+// Returns True iff the .dproj was rewritten. See EditDpr: an idempotent
+// no-op and a real insertion are indistinguishable to the caller otherwise.
+function EditDproj(const ADprojPath: string; const AMissing: TArray<TReconcileItem>): Boolean;
 var
   Content   : string        ;
   Snippet   : string        ;
@@ -827,6 +866,7 @@ var
   M         : TMatch        ;
   Item      : TReconcileItem;
 begin
+  Result:= False;
   if Length(AMissing) = 0 then Exit;
   Content:= TFile.ReadAllText(ADprojPath);
 
@@ -854,7 +894,7 @@ begin
     begin
       Content:= Copy(Content, 1, InsertPos - 1) + Snippet + #13#10 + '  ' + Copy(Content, InsertPos, MaxInt);
       TFile.WriteAllText(ADprojPath, Content);
-      Exit;
+      Exit(True);
     end;
   end; // if
 
@@ -865,8 +905,9 @@ begin
   begin
     Content:= Copy(Content, 1, InsertPos - 1) + '  <ItemGroup>' + Snippet + #13#10 + '  </ItemGroup>' + #13#10 + Copy(Content, InsertPos, MaxInt);
     TFile.WriteAllText(ADprojPath, Content);
+    Result:= True;
   end;
-end; // procedure
+end; // function
 
 // --------------------------------------------------------------------------
 
@@ -877,7 +918,9 @@ end; // procedure
 /// Extra/Stale entries are never removed.</summary>
 /// <param name="AProjectFile">Path to .dpr or .dproj.</param>
 /// <param name="AResult">Result from a prior Analyze call.</param>
-procedure TProjectReconciler.Apply(const AProjectFile: string; const AResult: TReconcileResult);
+/// <returns>The outcome, not the request: which .bak files were written and
+/// which project files actually changed. See TReconcileApplyResult.</returns>
+function TProjectReconciler.Apply(const AProjectFile: string; const AResult: TReconcileResult): TReconcileApplyResult;
 var
   ProjectAbs       : string                ;
   Ext              : string                ;
@@ -887,7 +930,13 @@ var
   Item             : TReconcileItem        ;
   ProjectRelMissing: TArray<TReconcileItem>;
   I                : Integer               ;
+
 begin
+  Result:= Default(TReconcileApplyResult);
+  { NOTHING MISSING IS A LEGITIMATE OUTCOME, NOT A FAILURE. Returning an
+    all-false result here (rather than leaving the caller to read exit 0) is
+    what lets `--apply` on an already-reconciled project report
+    applied=false instead of claiming a write it never made. }
   if Length(AResult.Missing) = 0 then Exit;
 
   ProjectAbs:= TPath.GetFullPath(AProjectFile);
@@ -906,8 +955,19 @@ begin
   end;
 
   // -- Backups (overwrite any existing .bak) ---------------------------------
-  if TFile.Exists(DprPath  ) then TFile.Copy(DprPath  , DprPath   + '.bak', True);
-  if TFile.Exists(DprojPath) then TFile.Copy(DprojPath, DprojPath + '.bak', True);
+  // Taken BEFORE the edits are attempted, and both editors are idempotent, so
+  // a .bak can exist for a file that then did not change. Recorded as taken,
+  // not as proof of a write -- Edited is what says a write happened.
+  if TFile.Exists(DprPath  ) then
+  begin
+    TFile.Copy(DprPath  , DprPath   + '.bak', True);
+    Result.Backups:= Result.Backups + [DprPath + '.bak'];
+  end;
+  if TFile.Exists(DprojPath) then
+  begin
+    TFile.Copy(DprojPath, DprojPath + '.bak', True);
+    Result.Backups:= Result.Backups + [DprojPath + '.bak'];
+  end;
 
   // -- Rebuild Missing list with RelPath relative to project dir (backslash) -
   SetLength(ProjectRelMissing, Length(AResult.Missing));
@@ -920,10 +980,21 @@ begin
   end;
 
   // -- Edit .dpr uses clause -------------------------------------------------
-  if TFile.Exists(DprPath) then EditDpr(DprPath, ProjectRelMissing);
+  { NESTED, NOT `Exists(..) and Edit(..)`. The editors read the file
+    unconditionally, so calling one for a file that does not exist raises.
+    A single `and` would be safe only under short-circuit evaluation, which is
+    the default but is a per-project switch ($BOOLEVAL) this unit does not set
+    and cannot see. Nesting makes the guard independent of it. }
+  if TFile.Exists(DprPath) then
+    if EditDpr(DprPath, ProjectRelMissing) then Result.Edited:= Result.Edited + [DprPath];
 
   // -- Edit .dproj DCCReference ItemGroup ------------------------------------
-  if TFile.Exists(DprojPath) then EditDproj(DprojPath, ProjectRelMissing);
-end; // procedure
+  // Independent of the .dpr arm: a .dproj insertion must still happen when the
+  // .dpr already listed everything.
+  if TFile.Exists(DprojPath) then
+    if EditDproj(DprojPath, ProjectRelMissing) then Result.Edited:= Result.Edited + [DprojPath];
+
+  Result.Applied:= Length(Result.Edited) > 0;
+end; // function
 
 end.
