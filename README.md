@@ -139,8 +139,11 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   the library DB as a second `--db` for the breakdown. The `--in` form still
   exits 2, because "which of U's exports does this file use" is unanswerable
   without U's exports.
-* `query --text` searches **string literals, DFM and SQL** - not comments and not
-  source text. Use grep for those.
+* `query --text` searches **string literals, DFM, SQL and COMMENT PROSE** -- `//`,
+  `{ }`, `(* *)` and `///`. It still does NOT search source text (identifiers,
+  declarations); use `query find --decl-contains` for a declaring line.
+  Narrow with `--kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception`;
+  `--kind literal` reproduces the behaviour from before comments were indexed.
 * `lint <file>` is a strict **subset** of `lint-all`: project-wide rules
   (unused-public-symbol, unused-unit-in-uses, the uses-edge and duplicate-global
   rules) can only fire in `lint-all`. Never report "clean" from a per-file run.
@@ -595,7 +598,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 | `query --name <n>` / `--qname <q>` | Find symbols by name (fuzzy) or exact qualified name | `--json`, `--case-sensitive`, `--exact` |
 | `query --name-like <substr>` | **Substring search over symbol NAMES** -- the discovery query, for when you do not know the identifier yet. Shortest-name-first; trigram-driven (12 ms vs 18.9 s for a bare scan on a 3.3 GB index) | `--kind class,interface,...`, `--limit N` (default 50), `--json` |
 | [`wiki --term "<phrase>"`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/wiki) | **Route a human word to the code.** Looks a phrase or alias up against the `dl:wiki` concept topics authors write inside ordinary `///` comments -- "the scheduler", "delta streaming" -- and prints the owning symbol, its `SeeCode` participants (each resolved to `file:line`) and the body. Exits 1 when nothing matches, so a script can branch on it | `--list` (every topic), `--check` (SeeCode drift gate, exits 1 on drift), `--json` |
-| `query --text "<phrase>"` | Search **string literals only** -- constants, resourcestrings, DFM captions, SQL exception text | `--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--limit N` |
+| `query --text "<phrase>"` | Search **string literals AND comment prose** -- constants, resourcestrings, DFM captions, SQL exception text, and `//` / `{ }` / `(* *)` / `///` comments | `--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--kind <k>`, `--limit N` |
 | [`query find-callers`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-find-callers) `--name <n>` | Every call-site for a symbol, with source context | `--context N`, `--resolved` (precise call-edges) |
 | `query find` | Find symbols by documentation state, or by declaration text | `--doc-tag`, `--doc-contains`, `--decl-contains`, `--no-docs`, `--kind`, `--name`, `--unit`, `--public` |
 | [`query type-usage`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-type-usage) `--in <f.pas>` | Of a LIST of type names, which does this file actually **reference**? Counts declarations, `X.Create` sites and inheritance; a name only in a comment or string literal is not a reference -- the difference from grep. Name-keyed | `--names A,B,C`, `--names-file <f>`, `--json` |

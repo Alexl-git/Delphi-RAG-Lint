@@ -915,7 +915,8 @@ type
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Checkpoint"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
+      function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer;
+        const AKind: string = ''): TArray<TStringLitMatch>;
       // v14 (D5): resolved call-target edges (call_edges table).
       /// <summary><!-- drag-lint:auto sum -->v14 (D5): resolved call-target edges
       /// (call_edges table).</summary>
@@ -6115,7 +6116,8 @@ begin
   end;
 end;
 
-function TSQLiteSymbolStore.SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
+function TSQLiteSymbolStore.SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer;
+  const AKind: string): TArray<TStringLitMatch>;
 var
   Q   : TFDQuery              ;
   List: TList<TStringLitMatch>;
@@ -6193,10 +6195,23 @@ begin
       'LEFT JOIN symbols s ON s.id = sl.symbol_id ' +
       'WHERE ' + FtsTable + ' MATCH :q ';
     if ASource <> '' then Sql:= Sql + 'AND sl.source = :src ';
+    { M1b: `kind` now separates comment prose from string literals -- 'comment'
+      for line, brace and paren-star comments, 'doc' for a triple-slash one,
+      against the pre-existing
+      'literal'/'const'/'resourcestring'/'format'/'dfm-prop'/'sql-exception'.
+      (Those forms are spelled out in words rather than shown, because a literal
+      closing brace inside a brace comment ENDS it -- Delphi has no nested
+      comments, and writing them out is what broke this unit's parse once.)
+      A caller who wants only what --text returned BEFORE comments were
+      indexed passes --kind literal; one hunting a stale product name in
+      prose passes --kind comment. Empty means no filter, which is the
+      default and returns both. }
+    if AKind <> '' then Sql:= Sql + 'AND sl.kind = :knd ';
     Sql:= Sql + 'ORDER BY f.path, sl.start_line LIMIT :lim';
     Q.SQL.Text:= Sql;
     Q.ParamByName('q').AsString:= MatchExpr;
     if ASource <> '' then Q.ParamByName('src').AsString:= ASource;
+    if AKind   <> '' then Q.ParamByName('knd').AsString:= AKind;
     Q.ParamByName('lim').AsInteger:= ALimit;
     Q.Open;
     while not Q.Eof do

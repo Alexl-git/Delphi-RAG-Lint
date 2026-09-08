@@ -2628,10 +2628,97 @@ var
     end;
   end;
 
+  (* M1b: strip a comment's DELIMITERS, leaving the prose.
+
+     Handles the four Delphi forms, and reports which one it was so the caller
+     can tag a triple-slash doc comment differently from the rest:
+
+       /// doc      -> 'doc'
+       // line      -> 'comment'
+       { block }    -> 'comment'
+       paren-star   -> 'comment'
+
+     NOTE THE DELIMITERS ON THIS VERY COMMENT. It is a paren-star comment, not a
+     brace one, because it must SHOW a closing brace -- and a closing brace
+     inside a brace comment ends it, Delphi having no nested comments. Written
+     with braces, this block terminated at the third table row and the rest of it
+     was compiled as code (E2029/E1019/E2003 in this unit and in
+     Storage.SQLite.pas, caught by the battery). The repo has hit this shape
+     before; it is on the scar list.
+
+     A {$...} compiler directive never reaches here: PROBED, not assumed --
+     dumpnode over a fixture holding {$R *.dfm}, {$WARN ...} and an
+     {$IFDEF}/{$ENDIF} pair reports NO comment node for any of them, only for the
+     real comments. The grammar gives directives their own shape, so there is no
+     directive noise to filter out and no filter here pretending to do it. *)
+  function StripCommentMarkers(const ARaw: string; out AKind: string): string;
+  var
+    S: string;
+  begin
+    S    := Trim(ARaw);
+    AKind:= 'comment';
+    if StartsStr('///', S) then
+    begin
+      AKind:= 'doc';
+      Result:= Trim(Copy(S, 4, MaxInt));
+    end
+    else if StartsStr('//', S) then Result:= Trim(Copy(S, 3, MaxInt))
+    else if StartsStr('(*', S) then
+    begin
+      Result:= Copy(S, 3, MaxInt);
+      if EndsStr('*)', Result) then Result:= Copy(Result, 1, Length(Result) - 2);
+      Result:= Trim(Result);
+    end
+    else if StartsStr('{', S) then
+    begin
+      Result:= Copy(S, 2, MaxInt);
+      if EndsStr('}', Result) then Result:= Copy(Result, 1, Length(Result) - 1);
+      Result:= Trim(Result);
+    end
+    else Result:= S;
+  end;
+
   procedure Visit(const N: TTSNode);
   var I: Integer; Lit: TStringLiteral; Raw, Dec: string; P: TTSPoint;
   begin
     if N.IsNull then Exit;
+    { M1b: body-inline comment prose, so `query --text` can find an error
+      message, a TODO or a stale product name that lives in a COMMENT rather
+      than in a string. Before this, `query --text "Mahr program"` returned only
+      the string-literal hits and every comment occurrence was invisible -- the
+      gap the DataCopy marposs audit filed.
+
+      They are rows in string_literals rather than a parallel corpus, which is
+      the whole reason this is cheap: the existing string_literals_ai trigger
+      already mirrors every insert into BOTH string_fts (unicode61) and
+      string_fts_tri (trigram), so comments become searchable by phrase, any-order
+      AND substring with no new table, no new trigger and NO SCHEMA_VERSION bump.
+
+      `kind` separates them: 'doc' for `///`, 'comment' for the rest. `query
+      --text --kind` filters on it, so a caller who wants only literals can still
+      have exactly what they had before. }
+    if N.NodeType = 'comment' then
+    begin
+      Raw:= NodeText(N, ASource);
+      Dec:= StripCommentMarkers(Raw, Lit.Kind);
+      { An empty or delimiter-only comment carries no prose and would only pad
+        the FTS index -- a bare `//` separator line is extremely common. }
+      if Trim(Dec) <> '' then
+      begin
+        Lit.Source   := 'pas';
+        Lit.OwnerName:= '';
+        Lit.Text     := Dec;
+        Lit.Id       := 0;
+        Lit.FileId   := 0;
+        Lit.SymbolId := 0;
+        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= Integer(P.Column)+1;
+        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := Integer(P.Column)+1;
+        Acc.Add(Lit);
+      end;
+      { A comment is a leaf (ChildCount=0 for all four forms, probed), so there
+        is nothing below it to walk. }
+      Exit;
+    end;
     if N.NodeType = 'literalString' then
     begin
       Raw:= NodeText(N, ASource);            // existing helper in this unit

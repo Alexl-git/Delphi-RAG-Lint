@@ -1837,7 +1837,8 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer): TArray<TStringLitMatch>;
+    function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer;
+      const AKind: string = ''): TArray<TStringLitMatch>;
 
     // v14 (D5): resolved call-target edges (call_edges table).
     /// <summary>Insert or replace the resolved call edge for one ref (ref_id is
