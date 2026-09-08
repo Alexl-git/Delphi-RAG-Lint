@@ -481,6 +481,50 @@
 #
 #   Pinned by tests\autotest\run_lone_cr_line_accounting.ps1, which was
 #   observed RED (13,17) against the pre-fix engine and green (14,18) after.
-DEFER-UNTIL|2026-09-10|b6dea3f4f3b45a05fa18c6781eace85bfb32a1ac9f7325b12ec40ecd485acf14|lone-CR line accounting is built; M1b (comment corpus) is not, and the bank bumps ONCE for both
 
-1.10.0-alpha|7562d480be39c02cdf165f9bf4edf888a158742de7a2b68468a0e1e2eff637d2
+# 2026-09-08 (session 79): A REAL BUMP, 1.10.0-alpha -> 1.11.0-alpha, and it
+#   DISCHARGES the DEFER-UNTIL|2026-09-10 recorded earlier the same day. Both
+#   rows of INBOX-extractor-change-bank.md are now built and guarded, which was
+#   the condition that deferral was waiting on -- so the bump is taken once, for
+#   both, exactly as the bank exists to arrange.
+#
+#   WHAT CHANGED, and each genuinely invalidates stored parses:
+#
+#   1. LONE-CR LINE ACCOUNTING (src\preprocess\DRagLint.Preprocess.Types.pas,
+#      new NormalizeLoneCR; called from src\parser\DRagLint.Parser.Delphi13.pas).
+#      tree-sitter advances its row counter on LF only, so a CR that is not part
+#      of a CRLF did not start a new line for it while Delphi, the IDE, VS Code
+#      and .NET all treat it as a terminator. Every POSITION stored after such a
+#      byte was one line low. 58 of 11,370 indexed files hold a lone CR.
+#
+#   2. A COMMENT CORPUS (same parser unit, HarvestStringLiterals). Comment nodes
+#      are now harvested into string_literals as kind 'comment' (// and the block
+#      forms) and 'doc' (triple-slash), so `query --text` finds prose. Those are
+#      NEW ROWS that no existing index contains -- the clearest possible case of
+#      "an extractor emits new symbols/refs", and unreachable without a re-parse.
+#
+#   NO SCHEMA_VERSION BUMP IS OWED. The comments are rows in the EXISTING
+#   string_literals table, so the existing string_literals_ai trigger mirrors
+#   them into both string_fts (unicode61) and string_fts_tri (trigram). No new
+#   table, no new trigger, no new column.
+#
+#   SIZE, MEASURED RATHER THAN FEARED. On src\parser (5 files, this repo's own
+#   heavily-commented source) comment text is 96.6% of all indexed text and
+#   raises it 29x -- which sounds alarming and is the wrong denominator. The
+#   DATABASE grows **1.5%** (2,179,072 -> 2,211,840 bytes, both VACUUMed), because
+#   a DB is dominated by symbols, refs and their indexes, not by literal text.
+#   Measured by deleting the comment rows from a copy and vacuuming, which fires
+#   the same triggers and reproduces a comments-free index exactly.
+#
+#   THE RE-PARSE IS THE POINT, not a cost to argue away: until every index is
+#   rebuilt, a lone-CR file answers with line numbers one low, and NO index can
+#   answer a comment-prose query at all.
+#
+#   Pinned by tests\autotest\run_lone_cr_line_accounting.ps1 (RED 13,17 before /
+#   green 14,18 after, with an LF twin as oracle) and
+#   tests\autotest\run_comment_corpus.ps1 (RED hits=0 before / 16 checks green
+#   after, with literal-vs-comment --kind controls both ways).
+#
+#   Superseded: 1.10.0-alpha|7562d480be39c02cdf165f9bf4edf888a158742de7a2b68468a0e1e2eff637d2
+
+1.11.0-alpha|a284e45f310197aa8164068f8931b367d4ef4b2883d8048f6ebdd57c63ccfca8
