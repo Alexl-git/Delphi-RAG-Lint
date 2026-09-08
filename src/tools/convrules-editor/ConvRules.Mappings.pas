@@ -61,6 +61,18 @@ type
     /// <summary>The enum member this case fires on; '' on the #else case.</summary>
     Member: string;
     /// <summary>True on the single #else case, which carries Sets but no member.</summary>
+    /// <remarks>#else IS GATED, and the gate is not visible in this editor. The engine
+    ///   fires it only when the source value RESOLVED -- present in the .dfm block, or
+    ///   absent but recoverable from the property's declared `default` clause -- and no
+    ///   #when arm matched. When the source is absent AND its declaration has no
+    ///   `default` clause, the value is genuinely unknown: the engine reports
+    ///   `mapping-source-absent` and #else does NOT fire, because firing it would invent
+    ///   a target value out of nothing.
+    ///   <para>So #else is "any resolved value no arm matched", NOT "everything not
+    ///   listed". Pinned engine-side by tests\autotest\run_dfm_reemit.ps1 -- case 14
+    ///   (present + unmatched -> #else fires) and case 16 (absent source -> #else must
+    ///   NOT fire). A `stored` clause suppresses streaming regardless of value, so a
+    ///   `stored`-guarded property can be absent and still unresolvable.</para></remarks>
     IsElse: Boolean;
     /// <summary>The source property this case reads, ONLY when it differs from the
     ///   mapping's primary one; '' means "whatever the mapping reads".</summary>

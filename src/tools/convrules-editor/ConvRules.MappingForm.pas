@@ -119,7 +119,14 @@ const
   COL_VALUE = 1;
 
   { What the member list shows for the #else branch. Bracketed so it can never collide
-    with a real identifier. }
+    with a real identifier.
+
+    It reads as "everything else", and that is very nearly right -- but the engine
+    GATES it: #else fires for a value that RESOLVED and matched no #when arm, and NOT
+    when the source property is absent from the block with no `default` clause to
+    recover it from. That case is reported as `mapping-source-absent` instead, because
+    firing #else on an unknown would invent a target value. See TMappingCase.IsElse in
+    ConvRules.Mappings for the full contract and the engine tests that pin it. }
   ELSE_ROW = '(#else)';
 
 constructor TMappingForm.Create(AOwner: TComponent);
