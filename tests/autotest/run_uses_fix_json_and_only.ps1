@@ -31,6 +31,14 @@
   `deselected` is distinguishable from `skipped` precisely because it is set
   BEFORE TryEdit, so --only is observable even with no compiler at all.
 
+  A SECOND GAP, NAMED RATHER THAN LEFT IMPLIED: the `warning` and `backup`
+  fields are emitted ONLY when a write actually happened, and a write requires a
+  verified edit, which requires a compile. So NOTHING here exercises them --
+  they are shipped code with no assertion behind them. What IS pinned is their
+  absence (7b/7c: applied=false and no .bak when there was nothing to change).
+  Closing the gap properly needs a fixture project that really compiles; until
+  someone builds one, treat those two fields as reviewed but untested.
+
   RED BASELINE, measured 2026-09-07 by running this runner against drag-lint
   1.9.0-alpha (built 2026-09-02, VS Code's private engine copy), which predates
   both flags:
