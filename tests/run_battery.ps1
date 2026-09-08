@@ -175,6 +175,32 @@ param(
   # Enumerate and print the set, run nothing.
   [switch]$List,
 
+  # Minutes between PROGRESS HEARTBEATS. 0 disables them.
+  #
+  # Why this exists, in the owner's words (2026-09-08): "When battery runs, we
+  # need a more prominent message that will be better visible with 10 minute
+  # status update, so I won't get confused and think the run is over and ready
+  # for the next command."
+  #
+  # The failure mode is specific and is a property of the SERIAL loop below: it
+  # prints '[ 12/486] tests/... ... ' with -NoNewline and then BLOCKS inside
+  # WaitForExit until that one runner finishes. tests\doctests\run_doctests_v021
+  # alone is ~188 s and tests\lint\run_lint_tests is ~261 s, so the console can
+  # sit on a half-written line for four and a half minutes with no cursor
+  # movement. That is indistinguishable from a finished run at a prompt, which
+  # is exactly the confusion reported.
+  #
+  # 10 is the owner's number, and it is a PARAMETER rather than a constant so a
+  # short -Include run can ask for a tighter beat without editing the driver.
+  #
+  # [double], not [int], and that is load-bearing rather than cosmetic: it is
+  # what makes the feature TESTABLE. run_battery_heartbeat_guard drives it at
+  # -HeartbeatMin 0.02 (1.2 s) so it can observe a real beat in seconds instead
+  # of needing a ten-minute runner. With an [int] the smallest observable
+  # interval would be one minute and the guard would either take minutes or, far
+  # more likely, never be written at all.
+  [double]$HeartbeatMin = 10,
+
   # Where per-runner transcripts go. Default: a timestamped dir under $env:TEMP.
   [string]$LogDir = ''
 )
@@ -421,7 +447,9 @@ if ($missingRules.Count -eq 0) {
     # `copy /Y`, which never deletes.
     #
     # Found retiring hardcoded-absolute-path.scm for the B7 built-in: the .scm sat
-    # in third_partydll-win64ules and srccliWin64Releaseules after the
+    # in third_partydll-win64
+ules and srccliWin64Release
+ules after the
     # source file was deleted. On the next deploy the retired external rule would
     # have loaded ALONGSIDE the built-in under the same id and restored the very
     # finding flood the rewrite removed -- while this check printed "matches".
@@ -520,6 +548,67 @@ $effectiveTimeout = $(if ($Jobs -gt 1) { $TimeoutSec * 2 } else { $TimeoutSec })
 $results = New-Object System.Collections.Generic.List[object]
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
+# --- Progress heartbeat ----------------------------------------------------
+# See -HeartbeatMin. Three pieces: a loud START banner, a periodic beat while a
+# slow runner blocks the loop, and a loud END banner in the summary.
+# 0.0, NOT 0. `[Math]::Max(0, 0.01)` binds the Max(int,int) overload and returns
+# an Int32 0, which silently disabled the heartbeat for EVERY fractional
+# interval while leaving the 10-minute default working perfectly. Found by
+# run_battery_heartbeat_guard reporting beats=0; it would otherwise have shipped
+# invisibly, because nothing but a test ever passes a fraction.
+$script:HeartbeatEvery = [TimeSpan]::FromMinutes([Math]::Max(0.0, $HeartbeatMin))
+$script:LastBeat       = [DateTime]::UtcNow
+$script:BeatCount      = 0
+
+function Write-BatteryBanner([string]$Title, [string]$Colour, [string[]]$Lines) {
+  # A full-width rule on its own lines. The point is to be findable by EYE in a
+  # scrollback of several hundred single-line runner results, so it must not
+  # look like one of them.
+  $bar = '=' * 78
+  Write-Host ''
+  Write-Host $bar -ForegroundColor $Colour
+  Write-Host ("  {0}" -f $Title) -ForegroundColor $Colour
+  foreach ($l in $Lines) { Write-Host ("  {0}" -f $l) -ForegroundColor $Colour }
+  Write-Host $bar -ForegroundColor $Colour
+  Write-Host ''
+}
+
+# Emit a beat if the interval has elapsed. $CurrentRel is the runner currently
+# blocking, which is the single most useful fact when the console has been
+# still for minutes -- "which one is it stuck on".
+#
+# Returns $true when it printed, so the SERIAL loop can re-draw the in-progress
+# '[ n/N ] rel ... ' prefix it wrote with -NoNewline. Without that re-draw the
+# eventual 'PASS (12.3s)' would land at the end of the heartbeat block instead
+# of after its own runner's name.
+function Test-BatteryHeartbeat([int]$Done, [int]$Total, [string]$CurrentRel, [double]$CurrentSec) {
+  if ($script:HeartbeatEvery -le [TimeSpan]::Zero) { return $false }
+  $now = [DateTime]::UtcNow
+  if (($now - $script:LastBeat) -lt $script:HeartbeatEvery) { return $false }
+  $script:LastBeat = $now
+  $script:BeatCount++
+
+  $elapsed = $sw.Elapsed
+  # ETA from the MEAN of what has actually completed. Deliberately not printed
+  # at all until something has completed: an ETA extrapolated from zero samples
+  # is a fabricated number, and this repo's standing rule is that a reported
+  # measurement must be one.
+  $eta = 'n/a (no runner has completed yet)'
+  if ($Done -gt 0) {
+    $remain = [TimeSpan]::FromSeconds(($elapsed.TotalSeconds / $Done) * ($Total - $Done))
+    $eta = '{0:N1} min remaining (est), finish ~{1:HH:mm}' -f `
+             $remain.TotalMinutes, (Get-Date).Add($remain)
+  }
+  Write-BatteryBanner ("BATTERY STILL RUNNING -- heartbeat #{0}" -f $script:BeatCount) 'Yellow' @(
+    ('elapsed   : {0:N1} min' -f $elapsed.TotalMinutes),
+    ('progress  : {0} of {1} runners done, {2} remaining' -f $Done, $Total, ($Total - $Done)),
+    ('running   : {0}  ({1:N0}s so far, budget {2}s)' -f $CurrentRel, $CurrentSec, $TimeoutSec),
+    ('eta       : {0}' -f $eta),
+    'This run is NOT finished. Do not type the next command yet.'
+  )
+  return $true
+}
+
 # One runner's execution, identical in both paths. Returns the result object.
 # EXTRACTED, NOT DUPLICATED: a serial and a parallel copy of this would be two
 # definitions of what "PASS" means, and this repo has been bitten by exactly
@@ -557,6 +646,21 @@ $RunOneText = @'
   }
 '@
 $RunOne = [scriptblock]::Create($RunOneText)
+
+# The START banner. Printed here rather than at the top of the file on purpose:
+# everything above is enumeration and PRECONDITION checking, some of which exits
+# (no runners selected -> exit 2; a missing rules\ dir -> a loud refusal). This
+# is the last point at which "the battery is now actually executing runners" is
+# a true statement.
+Write-BatteryBanner 'BATTERY STARTED' 'Cyan' @(
+  ('started   : {0:yyyy-MM-dd HH:mm:ss}' -f (Get-Date)),
+  ('runners   : {0} to execute (of {1} found)' -f $kept.Count, $totalFound),
+  ('mode      : {0}' -f $(if ($Jobs -gt 1) { "-Jobs $Jobs (parallel + serial quarantine)" } else { 'serial (-Jobs 1)' })),
+  ('budget    : {0}s per runner' -f $effectiveTimeout),
+  ('logs      : {0}' -f $LogDir),
+  ('heartbeat : {0}' -f $(if ($script:HeartbeatEvery -gt [TimeSpan]::Zero) { "every $HeartbeatMin min while a runner blocks" } else { 'DISABLED (-HeartbeatMin 0)' })),
+  'A full battery takes roughly half an hour. Long silences are NORMAL.'
+)
 
 if ($Jobs -gt 1) {
   # --- Parallel phase, then the quarantine serially -------------------------
@@ -659,7 +763,34 @@ foreach ($r in $kept) {
             -WindowStyle Hidden
 
   $state = ''
-  if ($proc.WaitForExit($TimeoutSec * 1000)) {
+  # POLLED wait, not a single blocking WaitForExit($TimeoutSec * 1000).
+  #
+  # The timeout semantics are deliberately IDENTICAL -- the budget is still
+  # $TimeoutSec of wall clock measured from here, and a runner that outlives it
+  # is still killed with its whole tree. The only thing the slices buy is a
+  # chance to emit a heartbeat while a 261 s runner would otherwise hold the
+  # console silent (see -HeartbeatMin).
+  #
+  # The deadline is computed ONCE and the remaining budget is re-derived from it
+  # each pass, so the slices cannot accumulate drift into a longer effective
+  # timeout the way `WaitForExit(1000)` in a counted loop would.
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSec)
+  $exited   = $false
+  while ($true) {
+    $remainMs = [int][Math]::Round(([DateTime]::UtcNow - $deadline).TotalMilliseconds * -1)
+    if ($remainMs -le 0) { break }
+    # 500 ms slices. Two wake-ups a second for the duration of a runner is
+    # nothing next to the runner itself, and it keeps the beat responsive enough
+    # that run_battery_heartbeat_guard can observe one in seconds rather than
+    # needing a runner that outlives a whole slice.
+    if ($proc.WaitForExit([Math]::Min($remainMs, 500))) { $exited = $true; break }
+    if (Test-BatteryHeartbeat ($i - 1) $kept.Count $rel $rsw.Elapsed.TotalSeconds) {
+      # Re-draw the in-progress prefix the heartbeat interrupted, so this
+      # runner's own PASS/FAIL still lands after its own name.
+      Write-Host ("[{0,3}/{1}] {2} ... " -f $i, $kept.Count, $rel) -NoNewline
+    }
+  }
+  if ($exited) {
     $code  = $proc.ExitCode
     $state = $(if ($code -eq 0) { 'PASS' } else { 'FAIL' })
   } else {
@@ -725,6 +856,22 @@ $csv = Join-Path $LogDir 'results.csv'
 $results | Export-Csv -NoTypeInformation -Encoding utf8 -Path $csv
 Write-Host ''
 Write-Host ("  results: {0}" -f $csv)
-Write-Host ''
 
-exit $(if ($fail.Count -eq 0 -and $timeout.Count -eq 0) { 0 } else { 1 })
+# The END banner -- the counterpart to BATTERY STARTED, and the actual answer to
+# "is it finished?". It is the LAST thing printed, so it is what a returning
+# reader sees at the bottom of the scrollback, and it states the verdict in a
+# word rather than leaving it to be inferred from three counts.
+$green = ($fail.Count -eq 0 -and $timeout.Count -eq 0)
+Write-BatteryBanner `
+  $(if ($green) { 'BATTERY FINISHED -- ALL GREEN' } else { 'BATTERY FINISHED -- RED' }) `
+  $(if ($green) { 'Green' } else { 'Red' }) `
+  @(
+    ('finished  : {0:yyyy-MM-dd HH:mm:ss}' -f (Get-Date)),
+    ('result    : {0} pass / {1} fail / {2} timeout of {3} executed' -f $pass, $fail.Count, $timeout.Count, $results.Count),
+    ('wall clock: {0:N1} min' -f $sw.Elapsed.TotalMinutes),
+    ('results   : {0}' -f $csv),
+    $(if ($Exclude.Count -gt 0 -or $Include.Count -gt 0) { 'NARROWED RUN -- this is NOT the full battery.' } else { 'Full battery -- no -Include/-Exclude narrowing.' }),
+    'The run is over. It is safe to type the next command.'
+  )
+
+exit $(if ($green) { 0 } else { 1 })
