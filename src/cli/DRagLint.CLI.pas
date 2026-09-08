@@ -307,6 +307,12 @@ type
     Target: string; // --target <file.dproj|.pas>
     // v0.43: check-unit (in-memory semantic check) + uses-audit
     Shadow         : string ; // --shadow <dir> (unsaved-buffer overlay)
+    { ghost-check --in-place: restore the pre-2026-09-08 behaviour of
+      OVERWRITING the real files for the duration of the compile. Default
+      False = shadow compile, which never writes them. Opt-in because the
+      owner's ruling is that a file modified in the editor after its save
+      must not be rewritten -- and every entry this verb gets is one. }
+    GhostInPlace   : Boolean; // --in-place (ghost-check; DANGEROUS)
     ResolveUsesFlag: Boolean; // --resolve-uses (enrich undeclared errors)
     CheckPlatform  : string ; // --platform win32|win64 (matches project config)
     // fresh compiler findings: refresh-findings --full (force a full build even
@@ -453,6 +459,12 @@ type
     TextAnyOrder : Boolean; // --any-order
     TextSubstring: Boolean; // --substring
     TextSource   : string ; // --source pas|dfm|sql ('' = all)
+    { `query --text --kind` reuses the EXISTING Kind field rather than adding a
+      second one. --kind is parsed unconditionally further up this chain, so a
+      second branch for it would be unreachable dead code -- the same shape as
+      the document/ghost-check --unit collision noted above. The two senses are
+      disjoint by subcommand: `query find --kind property` means a SYMBOL kind,
+      `query --text --kind comment` means a string_literals row kind. }
     // v0.64: lint-all progress
     Quiet : Boolean; // --quiet  suppress per-file progress to stderr
     // Task 5: lint-all ownership scope. --lint-third-party restores the pre-
@@ -563,11 +575,12 @@ begin
   Writeln('  Where does a DOC COMMENT say this?    drag-lint query find --doc-contains "<phrase>" --db <db>');
   Writeln('       ^ case-insensitive, over /// blocks and harvested // above a declaration.');
   Writeln('  Which DECLARATIONS say this?          drag-lint query find --decl-contains "stored IsFontStored" --kind property --db <db>');
-  Writeln('       ^ declaration clauses the index does not model. `query --text` sees string LITERALS only,');
-  Writeln('         so it answers 0 for a phrase that is in the source -- this reads the declaring line instead.');
+  Writeln('       ^ declaration clauses the index does not model. `query --text` sees string literals');
+  Writeln('         and comment prose, not declaring lines -- this reads the declaring line instead.');
   Writeln('  Where is this message/caption/SQL?    drag-lint query --text "<phrase>" --db <db>');
-  Writeln('       ^ STRING LITERALS, DFM and SQL. NOT source text. For doc-comment prose use');
-  Writeln('         `query find --doc-contains`; only BODY-INLINE comments need grep (not indexed).');
+  Writeln('       ^ STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///.');
+  Writeln('         Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception.');
+  Writeln('         --kind literal is what this returned before comments were indexed.');
   Writeln('  Which files reference unit U?         drag-lint query unit-usage --unit U --db <db>');
   Writeln('       ^ omit --in for the project-wide answer; add --in <F.pas> to ask about ONE file.');
   Writeln('       ^ for an RTL/VCL/third-party unit pass the platform library DB too');
@@ -631,7 +644,10 @@ begin
   Writeln('                               JSON rows carry "match_kind": "exact" | "fuzzy" | "substring" (--name-like) -- reject "fuzzy" unless');
   Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
   Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
-  Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--limit N] [--db ...] [--json]');
+  Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql] [--kind <k>] [--limit N] [--db ...] [--json]');
+  Writeln('       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).');
+  Writeln('         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception');
+  Writeln('         narrows it; --kind literal reproduces the pre-comment behaviour exactly.');
   Writeln('                               searches STRING LITERALS ONLY -- string constants, resourcestrings,');
   Writeln('                               DFM captions, SQL exception messages. NOT source text: identifiers,');
   Writeln('                               property assignments and type names are not in this corpus, so 0');
@@ -769,7 +785,10 @@ begin
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
   Writeln('  drag-lint refresh-findings --project <X.dproj> --db <db> [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build)');
-  Writeln('  drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--format json|text]');
+  Writeln('  drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--in-place] [--format json|text]');
+  Writeln('       ^ compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written.');
+  Writeln('         --in-place restores the old behaviour (overwrites the real files for the compile,');
+  Writeln('         then restores them) -- it can lose live edits if the IDE reloads inside that window.');
   Writeln('                               compile the UNSAVED editor buffer by overlaying it on the real unit.');
   Writeln('                               Backs the IDE''s "Compile Buffer (unsaved)". Restores the original on exit.');
   Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
@@ -1337,6 +1356,7 @@ begin
     else if (A = '--target') and (i < ParamCount) then begin Inc(i); Result.Target:= ParamStr(i); end
     else if (A = '--add-project') and (i < ParamCount) then begin Inc(i); Result.AddProjectName:= ParamStr(i); end
     else if (A = '--shadow') and (i < ParamCount) then begin Inc(i); Result.Shadow:= ParamStr(i); end
+    else if (A = '--in-place') and (Result.Command = 'ghost-check') then Result.GhostInPlace:= True
     else if A = '--resolve-uses'  then Result.ResolveUsesFlag:= True
     else if A = '--edges'         then Result.Edges          := True
     else if A = '--causes'        then Result.Causes         := True
@@ -5550,7 +5570,7 @@ begin
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(DbPath, RoOk);
     if not RoOk then Continue; { stale DB reported; skip, scan the rest }
-    Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim);
+    Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim, AArgs.Kind);
     for M in Matches do begin SetLength(AllMatches, Length(AllMatches) + 1); AllMatches[High(AllMatches)]:= M; end;
   end;
   if Length(AllMatches) > Lim then SetLength(AllMatches, Lim);
@@ -16653,8 +16673,23 @@ begin
   else Writeln('ghost-check: WARNING -- could not safely restore ', E.RealPath, '; recovery journal kept (run ghost-recover or restart the IDE).');
 end; // procedure
 
-{ v0.48: ghost-check -- compile the project with one or more units' content
-  replaced by their UNSAVED buffers, WITHOUT a lasting change to any file. Each
+{ FORWARD: the shadow compiler lives ~1,250 lines further down (it is shared with
+  check-unit and uses-fix), and Delphi resolves an implementation-section call
+  top-down. DoGhostCheck's default path calls it, so without this the unit fails
+  with E2003 rather than merely reading oddly. }
+function CompileUnitInContext(const AUnitPath, AProject, APlatform, AShadow: string): TCompileCheckResult; forward;
+
+{ v0.48: ghost-check -- compile one or more units against their UNSAVED buffers.
+
+  SINCE 2026-09-08 THE DEFAULT NEVER WRITES YOUR FILES. Each dirty buffer is
+  staged into a temp shadow dir and compiled there via CompileUnitInContext
+  (dcc with the shadow dir first on -U, in full project context). The real
+  paths are not touched, no mtime is stamped, no _D-RAG journal is written and
+  no .dcu is deleted -- so the IDE has nothing to notice and no reload prompt
+  can discard the edits being compiled.
+
+  --in-place selects the historical behaviour described below, which DOES
+  rewrite the real files for the duration of the compile. Each
   overlay is stamped with a current mtime to force its recompile, the project is
   compiled ONCE, then EVERY file is restored to its original content + EXACT
   timestamp (verified, crash-journaled in _D-RAG). Overlays come from --overlays
@@ -16677,8 +16712,9 @@ var
   i            : Integer             ;
   F            : TCompilerFinding    ;
   Sb           : TStringBuilder      ;
+  ShadowDir    : string              ;
 const
-  USAGE = 'Usage: drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf>' + ' | --overlays <manifest> ) [--platform win32|win64] [--format json|text]';
+  USAGE = 'Usage: drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf>' + ' | --overlays <manifest> ) [--platform win32|win64] [--in-place] [--format json|text]';
 begin
   Dproj:= AArgs.Target;
   if Dproj = '' then begin Writeln(USAGE); Exit(2); end;
@@ -16735,7 +16771,82 @@ begin
     begin Writeln('ghost-check: nothing to overlay.'); Exit(2); end;
 
     Res:= Default(TCompileCheckResult);
+    if not AArgs.GhostInPlace then
+    begin
+      { ---- DEFAULT SINCE 2026-09-08: SHADOW. THE REAL FILES ARE NEVER WRITTEN.
+
+        OWNER'S RULING: "We need to stop unattended rewrites of modified files.
+        If file was modified in the editor after the original save time, it means
+        we cannot modify it back."
+
+        Every entry this verb receives IS such a file. The plugin stages a buffer
+        ONLY when it byte-differs from disk (Editor.pas:3267 skips the equal
+        case), so "modified in the editor after save" is not a condition the
+        engine has to detect -- it is the definition of the input. The engine
+        cannot see the IDE's dirty flag and does not need to.
+
+        What this replaces: the in-place path below overwrote each real file with
+        the unsaved buffer, stamped mtime = Now to force a rebuild, compiled the
+        whole project, then restored. Restore narrowed the window; it could not
+        remove it. Fired unattended 3.5 s after you stopped typing, that window
+        was enough for the IDE to see "changed on disk" and offer a reload, and
+        accepting DISCARDED the live edits.
+
+        WHY A PER-UNIT SHADOW RATHER THAN A SHADOW PROJECT. A shadow directory
+        cannot shadow an msbuild project build: a .dpr binds its units with
+        explicit `uses X in 'X.pas'` paths that no unit search path overrides
+        (114 such clauses in this repo's own drag-lint.dpr). CompileUnitInContext
+        does not use msbuild -- it invokes dcc directly with the shadow dir FIRST
+        on -U, which is exactly the override a search path CAN perform. That is
+        why this works where a shadowed project build would not.
+
+        ALL dirty buffers go into ONE shadow dir before any compile, so a dirty
+        unit that uses another dirty unit sees its buffer too, not the stale disk
+        copy.
+
+        WHAT IT NO LONGER CATCHES, stated rather than discovered later: an error
+        in a SAVED unit newly caused by a dirty unit's interface change. Only the
+        dirty units are compiled, and their dependencies resolve through existing
+        .dcu files. Pass --in-place to get the old whole-project behaviour, at
+        the risk this ruling exists to remove. }
+      ShadowDir:= TPath.Combine(TPath.GetTempPath,
+        Format('draglint_ghost_%d_%d', [GetCurrentProcessId, GetTickCount]));
+      try
+        TDirectory.CreateDirectory(ShadowDir);
+        for i:= 0 to Entries.Count - 1 do
+        begin
+          E:= Entries[i];
+          { Identical to disk means there is nothing unsaved to compile. The
+            plugin already filters these, but ghost-check is a public verb and
+            another caller may not. }
+          if BytesSame(E.BufBytes, E.OrigBytes) then Continue;
+          try TFile.WriteAllBytes(TPath.Combine(ShadowDir, ExtractFileName(E.RealPath)), E.BufBytes); except end;
+        end;
+        for i:= 0 to Entries.Count - 1 do
+        begin
+          E:= Entries[i];
+          if BytesSame(E.BufBytes, E.OrigBytes) then Continue;
+          var UnitRes: TCompileCheckResult:= CompileUnitInContext(E.RealPath, Dproj, AArgs.CheckPlatform, ShadowDir);
+          { Map the shadow path in each finding back to the real unit, so the
+            IDE can place a marker. Same remap check-unit performs. }
+          for var K:= 0 to High(UnitRes.Findings) do
+            if SameText(ExtractFileName(UnitRes.Findings[K].RawPath), ExtractFileName(E.RealPath)) then
+              UnitRes.Findings[K].RawPath:= E.RealPath;
+          Res.Findings:= Res.Findings + UnitRes.Findings;
+        end;
+      finally
+        { Best-effort: a leftover temp dir is harmless, and failing to delete it
+          must never turn a successful check into an error. }
+        try if TDirectory.Exists(ShadowDir) then TDirectory.Delete(ShadowDir, True); except end;
+      end;
+      Res.Findings:= NormalizeFindings(Res.Findings,
+        ExtractFilePath(StringReplace(Dproj, '/', '\', [rfReplaceAll])));
+    end
+    else
     try
+      { ---- OPT-IN SINCE 2026-09-08: the historical in-place overlay.
+        It WRITES YOUR REAL FILES for the duration of the compile. Reachable only
+        via --in-place; nothing in the plugin passes it. }
       { Indexed, not for-in: GhostApplyOverlay records the ownership timestamp of
         its own write back into the record, and a for-in loop variable is a COPY
         -- the token would be discarded and every restore would fall back to
