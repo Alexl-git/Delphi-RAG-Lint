@@ -6278,6 +6278,16 @@ begin
     implementation-private here, so wire it through the same hook pattern as
     the SaveNotifier hooks above. }
   DragLint.Plugin.DockForm.GButterflyNav:= DLNavigateToSource;
+  { Session 78: the job queue now DEFERS heavy jobs while `ide-release` holds
+    the engine, and says so once per deferral episode. It reports through a
+    hook rather than calling DebugLog directly because JobQueue.pas must stay
+    free of ToolsAPI -- its headless harness compiles it into a console
+    program with no IDE at all. }
+  DragLint.Plugin.JobQueue.GJobQueueDeferredHook:=
+    procedure (AText: string)
+    begin
+      DebugLog(AText);
+    end;
   { v0.47: auto-compile the UNSAVED buffer when editing goes idle (AutoCompileBuffer),
     so compiler errors on unsaved code appear without saving or the menu. The runner
     calls this on the main thread; RunGhostCheckAsync is single-flight + restores. }

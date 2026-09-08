@@ -91,9 +91,18 @@ either of them may have inherited differently.
 
 ## What it does NOT cover
 
-Only the long-lived language server is gated. Hover and lint also spawn
-short-lived `drag-lint.exe` processes, and one of those can still hold the file
-for a moment; the staging recovery retries with a backoff, which absorbs it.
+The long-lived language server is gated, and since session 78 so is the
+plugin's **job queue**: reindex, lint-all, auto-document, forms-CSV and
+refresh-findings jobs are DEFERRED while a hold lasts, then run when it lifts.
+They are not dropped, and a job already running when the hold appears is not
+interrupted -- the hold's contract is "will not start anything". That matters
+beyond tidiness: a queued bare `index` job makes `stage-engine.ps1` refuse to
+stage rather than kill, and killing a bat-wrapped job leaves `cmd.exe` running
+the next line of the bat.
+
+Hover and lint also spawn short-lived `drag-lint.exe` processes, and one of
+those can still hold the file for a moment; the staging recovery retries with a
+backoff, which absorbs it.
 
 The VS Code client is unaffected -- since extension v1.4 it runs its own
 private copy of the engine and never touches the deployed binary. See
