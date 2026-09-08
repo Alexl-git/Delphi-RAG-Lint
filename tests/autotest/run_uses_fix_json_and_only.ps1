@@ -251,6 +251,45 @@ Check '5 "nothing to change" still emits JSON' `
   'an empty stdout makes "nothing to do" indistinguishable from a crash'
 
 # ---------------------------------------------------------------------------
+# 7 -- `applied` IS THE OUTCOME, NOT THE FLAG.
+#      Self-review found the first cut reporting applied=true for `--apply` on a
+#      unit with nothing to change: no write, no .bak, and a caller told its
+#      file had been rewritten. uKeepMe has a clean uses clause.
+# ---------------------------------------------------------------------------
+$keep = Join-Path $src 'uKeepMe.pas'
+$rawA = (& $exePath uses-fix $keep --project $proj --db $db --apply --format json 2>$null | Out-String)
+$ai = $rawA.IndexOf('{')
+$applyJson = if ($ai -ge 0) { try { $rawA.Substring($ai) | ConvertFrom-Json } catch { $null } } else { $null }
+Check '7a --apply with nothing to change still emits JSON' ($null -ne $applyJson) 'no document'
+Check '7b and reports applied=false, because nothing was written' `
+  ($applyJson.applied -eq $false) "applied=$($applyJson.applied)"
+Check '7c and no .bak was left behind (the claim matches the disk)' `
+  (-not (Test-Path ($keep + '.bak'))) `
+  'applied=false must mean no backup exists, or the field is still lying'
+
+# ---------------------------------------------------------------------------
+# 8 -- THE SAFETY CAVEAT REACHES THE MACHINE CALLER.
+#      Text mode has always printed "best-effort ... do a full project build".
+#      JSON suppressed it, so the one caller putting a button in front of a
+#      human was the only one never shown it.
+# ---------------------------------------------------------------------------
+Check '8 the counts object carries deselected' `
+  ($null -ne $sel.counts.deselected) "counts=$($sel.counts | ConvertTo-Json -Compress)"
+
+# ---------------------------------------------------------------------------
+# 9 -- THE SWEEP FORM DOES NOT SWALLOW THE FLAGS.
+#      `uses-fix` with no <unit.pas> goes to the sweep, which honours neither.
+#      Silence there makes a mistyped command look like an answer.
+# ---------------------------------------------------------------------------
+$sweepErr = Join-Path $scratch 'sweep.err'
+& $exePath uses-fix --project $proj --db $db --only uMoveMe --format json 2>$sweepErr | Out-Null
+$sweepNote = if (Test-Path $sweepErr) { Get-Content $sweepErr -Raw } else { '' }
+Check '9a the sweep says --only does not apply to it' `
+  ($sweepNote -match '--only applies to') "stderr was:`n$sweepNote"
+Check '9b and says the same of --format json' `
+  ($sweepNote -match '--format json applies to') "stderr was:`n$sweepNote"
+
+# ---------------------------------------------------------------------------
 # 6 -- TEXT MODE IS UNCHANGED. The IDE and humans still use it.
 # ---------------------------------------------------------------------------
 $txt = (& $exePath uses-fix $unit --project $proj --db $db --remove-unused 2>$null | Out-String)

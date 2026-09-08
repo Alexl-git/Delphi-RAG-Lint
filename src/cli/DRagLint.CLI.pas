@@ -18377,8 +18377,25 @@ var
       JRoot.AddPair('unit'    , SrcPath     );
       JRoot.AddPair('project' , Proj        );
       JRoot.AddPair('platform', Plat        );
-      JRoot.AddPair('applied' , TJSONBool.Create(AArgs.Apply));
+      { THE OUTCOME, NOT THE FLAG. `--apply` on a unit with nothing to change
+        writes no file and no .bak, so reporting the flag verbatim told the
+        caller its unit had been rewritten when it had not -- and offered a
+        revert for a backup that does not exist. }
+      var DidWrite: Boolean:= AArgs.Apply and ((nMove + nRemove) > 0);
+      JRoot.AddPair('applied' , TJSONBool.Create(DidWrite));
       JRoot.AddPair('removeUnused', TJSONBool.Create(AArgs.RemoveUnused));
+      { The single most important thing this verb has to say, and the JSON path
+        was the ONLY caller that never saw it -- exactly backwards, since it is
+        the one putting a button in front of a human. }
+      if DidWrite then
+      begin
+        JRoot.AddPair('backup', SrcPath + '.bak');
+        JRoot.AddPair('warning',
+          'The per-unit verify is BEST-EFFORT, not a faithful full-build check: ' +
+          'dcc can reuse a stale .dcu or abort on an RTL dependency, masking a ' +
+          'real error. Do a full project build to confirm; revert from the ' +
+          'backup if it fails.');
+      end;
 
       if Length(AArgs.OnlySections) > 0 then
       begin
@@ -18417,6 +18434,13 @@ var
       JCnt.AddPair('move'  , TJSONNumber.Create(nMove  ));
       JCnt.AddPair('remove', TJSONNumber.Create(nRemove));
       JCnt.AddPair('skip'  , TJSONNumber.Create(nSkip  ));
+      { Counted so `counts` sums to items.length and a caller can render
+        "3 of 7 selected" without walking the array. Without it the object was
+        asymmetric with the status set its own items use. }
+      var nDeselected: Integer:= 0;
+      for var It in Items do
+        if SameText(It.Status, 'deselected') then Inc(nDeselected);
+      JCnt.AddPair('deselected', TJSONNumber.Create(nDeselected));
       JRoot.AddPair('counts', JCnt);
 
       Result:= JRoot.Format(2);
@@ -18434,7 +18458,22 @@ var
   Lines2      : TStringList   ;
 begin
   { no <unit> target -> project-wide dry-run report (fast, index-only) }
-  if AArgs.Target = '' then Exit(DoUsesFixSweep(AArgs));
+  if AArgs.Target = '' then
+  begin
+    { THE SWEEP FORM HONOURS NEITHER NEW FLAG, so it says so rather than
+      swallowing them. A flag listed in --help for a verb, silently doing
+      nothing on one of that verb's two forms, is the exact shape of defect this
+      repo keeps finding: the run looks like an answer.
+      The sweep is a project-wide REPORT with no per-unit write, so --only has
+      nothing to select and there is no apply for it to narrow; the tab consumes
+      the per-unit form. Naming the limitation is enough -- inventing a second
+      JSON shape here would be scope nobody asked for. }
+    if Length(AArgs.OnlySections) > 0 then
+      Writeln(ErrOutput, 'note: --only applies to `uses-fix <unit.pas>`, not to the sweep form -- ignored.');
+    if SameText(AArgs.Format, 'json') then
+      Writeln(ErrOutput, 'note: --format json applies to `uses-fix <unit.pas>`, not to the sweep form -- text follows.');
+    Exit(DoUsesFixSweep(AArgs));
+  end;
 
   if AArgs.ProjectPath = '' then
   begin
@@ -23726,6 +23765,10 @@ var
   ProfileTgt  : string                                    ;
   SavedOut    : TTextRec                                  ;
   CohDbPath   : string                                    ;
+  { --only names that matched no MISSING unit. Held until the JSON is built so a
+    machine caller learns of a typo from the document, not from stderr. nil when
+    --only was not passed. }
+  Unmatched   : TStringList                               ;
 begin
   // Accept either positional arg (AArgs.Path) or explicit --project.
   ProjectFile:= AArgs.Path;
@@ -23767,6 +23810,14 @@ begin
   try
     RR:= Reconciler.Analyze(ProjectFile);
 
+    { NIL IT EXPLICITLY. Delphi zero-initialises managed types (strings,
+      interfaces, dynamic arrays) but NOT plain object references, so without
+      this the `Unmatched.Free` in the finally below runs on a garbage pointer
+      whenever --only was not passed -- which is every existing caller.
+      Measured: an EAccessViolation on `reconcile-project --json`, i.e. the
+      common path, from a line that only ever meant to tidy up. }
+    Unmatched:= nil;
+
     { --only <unit,...>: restrict the actionable set to a reviewed selection.
 
       WHY IT FILTERS RR ITSELF, and this early. TProjectReconciler.Apply writes
@@ -23788,6 +23839,7 @@ begin
     begin
       var Kept   : TArray<TReconcileItem>;
       var Matched: TStringList:= TStringList.Create;
+      Unmatched:= TStringList.Create;
       try
         Matched.Sorted:= True;
         Matched.Duplicates:= dupIgnore;
@@ -23801,9 +23853,19 @@ begin
               Matched.Add(Sel);
               Break;
             end;
+        { UNMATCHED NAMES GO TO STDERR, NEVER STDOUT.
+          Measured 2026-09-07: writing this notice to stdout put a bare text line
+          AHEAD of the --json document, so `--only <typo> --json` produced output
+          no parser accepts -- and the caller it broke is the one this flag
+          exists for. stdout carries the document; commentary belongs on stderr.
+          The names are ALSO carried inside the JSON (see 'unmatched' below), so
+          a machine caller does not have to read stderr to learn of a typo. }
         for var Sel in AArgs.OnlySections do
           if Matched.IndexOf(Sel) < 0 then
-            Writeln(Format('  --only: "%s" matches no MISSING unit -- ignored.', [Sel]));
+          begin
+            Unmatched.Add(Sel);
+            Writeln(ErrOutput, Format('  --only: "%s" matches no MISSING unit -- ignored.', [Sel]));
+          end;
         RR.Missing:= Kept;
       finally
         Matched.Free;
@@ -23954,6 +24016,18 @@ begin
         end;
         JRoot.AddPair('missing', JMissing);
 
+        { --only names that matched nothing. Present only when --only was given,
+          so the document's shape does not change for existing callers. This is
+          the machine-readable half of the stderr notice: a caller reading only
+          stdout still learns that its selection contained a typo, rather than
+          seeing a short 'missing' list and concluding the project is clean. }
+        if Assigned(Unmatched) and (Unmatched.Count > 0) then
+        begin
+          var JUnm: TJSONArray:= TJSONArray.Create;
+          for var UName in Unmatched do JUnm.Add(UName);
+          JRoot.AddPair('unmatched', JUnm);
+        end;
+
         JExtra:= TJSONArray.Create;
         for Item in RR.Extra do
         begin
@@ -24043,6 +24117,7 @@ begin
     end; // else
   finally
     Reconciler.Free;
+    Unmatched.Free; { nil unless --only was passed; Free on nil is a no-op }
   end; // try
 
   Result:= 0;

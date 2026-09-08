@@ -72,6 +72,22 @@ Check '1 baseline: three units are MISSING' `
   ($all -match 'MISSING \(3\)') `
   "got: $(($all -split "`n" | Select-String 'MISSING').Line)"
 
+# 1b -- THE FLAG'S ABSENCE MUST CHANGE NOTHING, and this is not ceremony.
+# The first cut of --only added an `Unmatched.Free` to the shared finally while
+# only ASSIGNING Unmatched under --only. Delphi does not zero-initialise object
+# references, so every caller that did NOT pass --only freed a garbage pointer:
+# `reconcile-project --json` died with an EAccessViolation. Every check in this
+# runner passes --only, so none of them could see it -- the neighbouring
+# run_reconcile.ps1 caught it instead.
+# A feature guard that only ever exercises its own flag cannot see what the flag
+# broke for everyone else.
+$plainJson = & $Exe reconcile-project "$work\App.dpr" --json 2>$null | Out-String
+$plainOk = $null
+try { $plainOk = $plainJson | ConvertFrom-Json } catch { $plainOk = $null }
+Check '1b --json WITHOUT --only still works (regression: AV on the common path)' `
+  (($LASTEXITCODE -eq 0) -and ($null -ne $plainOk)) `
+  "exit=$LASTEXITCODE; got:`n$($plainJson.Substring(0, [Math]::Min(200, $plainJson.Length)))"
+
 # ---------------------------------------------------------------------------
 # 2 -- A DRY RUN WITH --only PREVIEWS EXACTLY ONE.
 # ---------------------------------------------------------------------------
@@ -171,6 +187,36 @@ $dpr3 = Get-Content "$work\App.dpr" -Raw
 Check '7 --only matches unit names case-insensitively' `
   ($dpr3 -match 'uHelper\s+in\s+''uHelper\.pas''') `
   'Pascal identifiers are case-insensitive; the flag must be too'
+
+# ---------------------------------------------------------------------------
+# 8 -- --only MUST NOT CORRUPT --json.
+#      Self-review, then measurement, caught the unmatched-name notice going to
+#      STDOUT ahead of the document: `--only <typo> --json` produced output no
+#      parser accepts, and the caller it broke is the one the flag exists for.
+#      Checks 1-7 all read TEXT, so none of them could see it.
+# ---------------------------------------------------------------------------
+FreshCopy
+$jsonOut = & $Exe reconcile-project "$work\App.dpr" --only NoSuchUnitHere --json 2>$null | Out-String
+$parsed = $null
+try { $parsed = $jsonOut | ConvertFrom-Json } catch { $parsed = $null }
+Check '8a --only with --json still emits parseable JSON' `
+  ($null -ne $parsed) `
+  "commentary on stdout ahead of the document breaks every machine caller; got:`n$($jsonOut.Substring(0, [Math]::Min(200, $jsonOut.Length)))"
+Check '8b and the unmatched name is IN the document' `
+  (($null -ne $parsed) -and (@($parsed.unmatched) -contains 'NoSuchUnitHere')) `
+  'a stdout-only caller must learn of a typo without reading stderr'
+# POSITIVE CONTROL: a selection that matches must NOT invent an unmatched entry.
+FreshCopy
+$jsonOk = & $Exe reconcile-project "$work\App.dpr" --only uHelper --json 2>$null | Out-String
+$parsedOk = $null
+try { $parsedOk = $jsonOk | ConvertFrom-Json } catch { $parsedOk = $null }
+# `unmatched` is OMITTED entirely when everything matched, so the document's
+# shape does not change for callers predating the flag. Note @($null).Count is 1
+# in PowerShell, so an absent key must be filtered, not counted -- the first
+# version of this check failed against correct output for that reason alone.
+Check '8c a matching selection reports no unmatched names' `
+  (($null -ne $parsedOk) -and ((@($parsedOk.unmatched | Where-Object { $_ })).Count -eq 0)) `
+  "unmatched=$($parsedOk.unmatched -join ',')"
 
 if (Test-Path $work) { Remove-Item -Recurse -Force $work }
 
