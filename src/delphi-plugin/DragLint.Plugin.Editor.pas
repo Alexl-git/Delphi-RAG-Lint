@@ -4501,6 +4501,28 @@ begin
   DLRunReport(Format('uses-fix "%s" --project "%s" --db "%s"', [Pas, Proj, Db]), 'drag-lint-uses-fix-preview.txt');
 end;
 
+{ THE REVIEWED-FIX SURFACE. The two verbs with an --apply path (uses-fix,
+  reconcile-project) are exposed here as a per-item checklist rather than as
+  more report items, because an all-or-nothing rewrite of a uses clause or of
+  two project files is not something to put behind a menu click. The tab
+  passes the ticked names as --only; the ENGINE still owns the edit. }
+procedure InvokeUsesDepsTab(Sender: TObject);
+begin
+  ShowDragLintDockUsesDeps;
+end;
+
+{ deps-report SHIPPED WITH NO MENU ITEM AT ALL, on a submenu called "Uses &&
+  Dependencies" -- found while mapping every item to its verb (2026-09-07).
+  Project-scoped, so it sits in the project group. }
+procedure InvokeDepsReport(Sender: TObject);
+var
+  Db: string;
+begin
+  Db:= ResolvePrimaryIndexDb;
+  if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
+  DLRunReport(Format('deps-report --db "%s" --depth 3 --format text', [Db]), 'drag-lint-deps-report.txt');
+end;
+
 procedure InvokeReconcileProject(Sender: TObject);
 var
   Proj: string; MS: IOTAModuleServices;
@@ -4553,6 +4575,33 @@ begin
   if (Db <> '') and FileExists(Db) then DbArg:= Format(' --db "%s"', [Db])
   else DbArg:= '';
   DLRunReport(Format('wiring --qname "%s"%s --format text', [Q, DbArg]), 'drag-lint-wiring.txt');
+end;
+
+{ Forward: the text renderer is implementation-only and is declared just
+  below, but the chooser has to sit beside it to read as one feature.
+  (The Messages renderer needs no forward -- it is in the interface.) }
+procedure InvokeReverseCallTree(Sender: TObject); forward;
+
+{ ONE MENU ITEM, TWO RENDERERS. `Reverse Call Tree (who calls this, N-deep)`
+  and `Reverse Call Tree (clickable, Messages window)` were two menu entries
+  for ONE report, differing only in where the output lands. That is a
+  destination, not a different question, and asking the user to pick a
+  renderer before they have seen the answer is the same organised-by-how-it-
+  is-computed confusion this menu split exists to remove.
+
+  Both renderers are KEPT and still separately callable -- the Messages one
+  has its own keystroke binding -- so nothing is lost; only the menu
+  collapses. Cancel means cancel: falling through to a default destination
+  would make the dialog decoration. }
+procedure InvokeReverseCallTreeChoose(Sender: TObject);
+begin
+  case MessageDlg('Reverse call tree -- where should it go?' + sLineBreak + sLineBreak +
+                  'Yes = IDE Messages window (clickable; double-click jumps to the call site)' + sLineBreak +
+                  'No  = text report in an editor buffer',
+                  mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+    mrYes: InvokeReverseCallTreeMessages(Sender);
+    mrNo : InvokeReverseCallTree        (Sender);
+  end;
 end;
 
 /// <summary>Reverse call tree for the symbol under the cursor: who calls X, and who
@@ -6077,6 +6126,10 @@ begin
   AddWrappedItem(RootMenu, 'Symbol Search...'           , InvokeSymbolSearch    );
   AddWrappedItem(RootMenu, 'Show Structure'             , InvokeShowStructure   );
   AddWrappedItem(RootMenu, 'Rename Symbol...'           , InvokeRename          );
+  { MOVED here from Uses && Dependencies (2026-09-07): converting a public
+    field to a property is a refactor and has nothing to do with uses. It
+    lived on that submenu only because it was built as a 'Quick-Fix'. }
+  AddWrappedItem(RootMenu, 'Convert Public Field to Property at Cursor', InvokeConvertFieldToProperty);
   AddWrappedItem(RootMenu, 'Format with YADF'           , InvokeFormatYadf      );
   AddWrappedItem(RootMenu, 'Format Whole Project with YADF...', InvokeFormatProjectYadf);
   AddWrappedItem(RootMenu, 'Generate Test Helper CSV...', InvokeGenerateFormsCsv);
@@ -6087,20 +6140,40 @@ begin
   var SubUses: TMenuItem:= TMenuItem.Create(RootMenu);
   SubUses.Caption:= 'Uses && Dependencies';
   RootMenu.Add(SubUses);
-  AddWrappedItem(SubUses, 'Circular Uses Report (cycles + fix plan)...'                , InvokeCircularUses    );
-  AddWrappedItem(SubUses, 'Uses Audit -- interface->impl moves + unused (this unit)...', InvokeUsesAudit       );
-  AddWrappedItem(SubUses, 'Uses Cleanup Preview (compiler-verified, this unit)...'     , InvokeUsesFix         );
-  AddWrappedItem(SubUses, 'Reconcile Project Members (.dpr/.dproj)...'                 , InvokeReconcileProject);
-  AddWrappedItem(SubUses, 'Uses Report (CSV)...'                                       , InvokeUsesReportCsv   );
+  { THE SPLIT (2026-09-07). Fourteen items sat here in ONE flat list ordered
+    by how each answer is computed, with nothing on screen saying which were
+    reports and which were actions, nor whether an item touched the current
+    unit or the whole project. They are grouped now by SCOPE -- the only
+    distinction available to a user BEFORE clicking -- using disabled section
+    headers rather than nested submenus, which would have cost an extra click
+    on every item to fix a labelling problem.
+
+    The fix surface goes FIRST and alone: it is the only entry here that
+    changes anything, and everything below it reports.
+
+    Two items LEFT. 'Convert Public Field to Property' is a refactor with no
+    connection to uses -- filed here only because it was built as a
+    'Quick-Fix' -- and now sits beside Rename Symbol on the root menu. The
+    second Reverse Call Tree entry merged into the first; see
+    InvokeReverseCallTreeChoose. }
+  AddWrappedItem(SubUses, 'Uses && Deps Tab -- review && apply fixes...'               , InvokeUsesDepsTab     );
+  AddSeparator(SubUses);
+  AddSectionHeader(SubUses, 'This unit / at the cursor');
+  AddWrappedItem(SubUses, 'Uses Audit -- interface->impl moves + unused...'            , InvokeUsesAudit       );
+  AddWrappedItem(SubUses, 'Uses Cleanup Preview (compiler-verified)...'                , InvokeUsesFix         );
+  AddWrappedItem(SubUses, 'Add Missing Units to uses (whole unit)...'                  , InvokeSuggestUses     );
   AddWrappedItem(SubUses, 'Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)'  , InvokeQuickFixUses    );
   AddWrappedItem(SubUses, 'Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor'      , InvokeQuickFixInlineHintUses);
-  AddWrappedItem(SubUses, 'Quick-Fix: Convert Public Field to Property at Cursor'      , InvokeConvertFieldToProperty);
-  AddWrappedItem(SubUses, 'Add Missing Units to uses (whole unit)...'                  , InvokeSuggestUses     );
   AddWrappedItem(SubUses, 'Impact / Blast Radius (symbol)...'                          , InvokeImpact          );
   AddWrappedItem(SubUses, 'Show Wiring (Spring4D DI + DFM events)...'                  , InvokeWiring          );
-  AddWrappedItem(SubUses, 'Reverse Call Tree (who calls this, N-deep)...'              , InvokeReverseCallTree );
-  AddWrappedItem(SubUses, 'Reverse Call Tree (clickable, Messages window)...'          , InvokeReverseCallTreeMessages);
+  AddWrappedItem(SubUses, 'Reverse Call Tree (who calls this, N-deep)...'              , InvokeReverseCallTreeChoose);
   AddWrappedItem(SubUses, 'Call Graph (Butterfly)...'                                  , InvokeButterfly       );
+  AddSeparator(SubUses);
+  AddSectionHeader(SubUses, 'This project');
+  AddWrappedItem(SubUses, 'Circular Uses Report (cycles + fix plan)...'                , InvokeCircularUses    );
+  AddWrappedItem(SubUses, 'Reconcile Project Members (.dpr/.dproj)...'                 , InvokeReconcileProject);
+  AddWrappedItem(SubUses, 'Uses Report (CSV)...'                                       , InvokeUsesReportCsv   );
+  AddWrappedItem(SubUses, 'Dependency Report (third-party rollup)...'                  , InvokeDepsReport      );
 
   { v0.46: Inspect Symbol submenu }
   var SubInspect: TMenuItem:= TMenuItem.Create(RootMenu);

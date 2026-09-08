@@ -24,6 +24,13 @@ procedure UnregisterDragLintDock; { idempotent teardown }
 /// Project Manager "Project Rules..." action so a right-click lands on rules.</summary>
 procedure ShowDragLintDockLintOptions;
 
+/// <summary>Shows the drag-lint dock and selects the Uses &amp; Deps tab -- the
+/// reviewed-fix surface for uses-fix and reconcile-project.</summary>
+/// <remarks>Deliberately does NOT refresh either section. The tab runs nothing
+/// until asked: uses-fix shadow-compiles once per candidate, so opening the
+/// panel must never start work the user did not request.</remarks>
+procedure ShowDragLintDockUsesDeps;
+
 /// <summary>Shows the drag-lint dock and fills the Call Graph (butterfly) tab from
 /// two reverse-calltree/1 JSON documents (see TDragLintDockFrame.PopulateButterfly).
 /// Editor.pas's InvokeButterfly/ShowButterflyForQName call this instead of touching
@@ -91,6 +98,7 @@ uses
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.StatusBar
   , DragLint.Plugin.LintOptionsFrame
+  , DragLint.Plugin.UsesDepsFrame
   , DragLint.Plugin.ExeResolver
   ;
 
@@ -120,8 +128,18 @@ type
       FTabStruct          : TTabSheet   ;
       FTabUnifiedSearch   : TTabSheet   ;
       FTabUsages          : TTabSheet   ;
-      FTabGraph           : TTabSheet   ;
       FTabLintOptions     : TTabSheet   ;
+      { The SIXTH tab. Named `Uses & Deps`, not `Uses`, because `Find
+        Usages` is already two tabs to its left and the two would sit
+        adjacent meaning unrelated things -- who REFERENCES a symbol versus
+        uses-clause hygiene. }
+      FTabUsesDeps        : TTabSheet   ;
+      { FTabGraph was DELETED here (session 78). It was declared and never
+        assigned -- the v0.46 Graph tab became its own dockable tool window
+        and the field outlived it. It was inert, but it is what made a tab
+        COUNT taken from this field list come out one too high, which is the
+        same habit that produced two other wrong numbers in session 77:
+        count what is CONSTRUCTED, not what is declared. }
       FTabButterfly  : TTabSheet   ; { Batch E Task 3: Call Graph (butterfly) tab }
       FButterflyTree : TTreeView   ;
       FNavList       : TObjectList<TNav>; { owns TNav nodes attached to FButterflyTree.Items[].Data }
@@ -147,6 +165,8 @@ type
       /// Public so external callers (e.g. the Project Manager "Project Rules..."
       /// action) can jump straight to it without touching private frame internals.</summary>
       procedure SelectLintOptionsTab;
+      /// <summary>Brings the Uses &amp; Deps tab to the front. Does not query.</summary>
+      procedure SelectUsesDepsTab;
       /// <summary>Fills the Call Graph (butterfly) tab from two reverse-calltree/1
       /// JSON documents -- ACallersJson (who calls AQName) under a "Callers of
       /// AQName (N)" root and ACalleesJson (what AQName calls) under a
@@ -283,6 +303,7 @@ begin
   FTabUnifiedSearch:= AddTab('Search (no grep)');
   FTabUsages       := AddTab('Find Usages'    );
   FTabLintOptions  := AddTab('Lint Options'   );
+  FTabUsesDeps     := AddTab('Uses & Deps'    );
   { v0.46: the Graph tab was removed -- the graph is now its own dockable tool
     window (View > Tool Windows > drag-lint Graph), so the in-dock launcher tab
     was just stale clutter. }
@@ -326,6 +347,11 @@ end;
 procedure TDragLintDockFrame.SelectLintOptionsTab;
 begin
   if (FPages <> nil) and (FTabLintOptions <> nil) then FPages.ActivePage:= FTabLintOptions;
+end;
+
+procedure TDragLintDockFrame.SelectUsesDepsTab;
+begin
+  if (FPages <> nil) and (FTabUsesDeps <> nil) then FPages.ActivePage:= FTabUsesDeps;
 end;
 
 { ---- TNav ----------------------------------------------------------------- }
@@ -544,6 +570,14 @@ begin
   except
     on E: Exception do AddPlaceholder(FTabLintOptions, 'Lint Options failed to load: ' + E.Message);
   end;
+
+  { Its own try/except like every neighbour above: one tab failing to build
+    must not cost the user the other five. }
+  try
+    CreateEmbeddedUsesDeps(Self, FTabUsesDeps);
+  except
+    on E: Exception do AddPlaceholder(FTabUsesDeps, 'Uses & Deps failed to load: ' + E.Message);
+  end;
 end; // procedure
 
 procedure TDragLintDockFrame.HandlePageChange(Sender: TObject);
@@ -676,6 +710,12 @@ procedure ShowDragLintDockLintOptions;
 begin
   ShowDragLintDock;
   if GDockFrame <> nil then GDockFrame.SelectLintOptionsTab;
+end;
+
+procedure ShowDragLintDockUsesDeps;
+begin
+  ShowDragLintDock;
+  if GDockFrame <> nil then GDockFrame.SelectUsesDepsTab;
 end;
 
 procedure ShowDragLintDockButterfly(const AQName, ACallersJson, ACalleesJson: string);
