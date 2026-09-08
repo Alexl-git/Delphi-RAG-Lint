@@ -106,7 +106,24 @@ param(
   # battery tests\lint\run_lint_tests.ps1 took **261.2 s**, i.e. 87% of this
   # budget on an otherwise quiet box. See $effectiveTimeout below for what that
   # means under -Jobs.
-  [int]$TimeoutSec = 300,
+  #
+  # RAISED 300 -> 600 ON 2026-09-08, with the measurement this comment block
+  # demands rather than a guess. run_lint_tests TIMED OUT at 300.2 s in a full
+  # battery, and then took **299.7 s standalone on a verifiably idle box** (zero
+  # other drag-lint processes) while passing 162/162. It cleared its own cap by
+  # THREE TENTHS OF A SECOND.
+  #
+  # So the 2026-08-30 figure is stale in the same direction as the 2026-07-27 one
+  # before it: the runner has grown ~15% (261.2 -> 299.7 s) and now sits at 99.9%
+  # of budget. That is not a flake caused by a busy machine -- it is a cap below
+  # the runner's honest cost, which produces a red that depends on the weather
+  # and teaches every reader to discount timeouts. This comment block already
+  # said that is the worst outcome; the number simply caught up with it.
+  #
+  # 600, not 320, deliberately: a cap set just above today's measurement buys one
+  # session of quiet and then does this again. A genuinely hung runner is still
+  # killed, and still killed with its whole process tree.
+  [int]$TimeoutSec = 600,
 
   # How many runners to execute concurrently. DEFAULT 1 -- the serial path is
   # byte-for-byte the loop this driver has always used, and stays the reference
