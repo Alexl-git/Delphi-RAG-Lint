@@ -4488,6 +4488,119 @@ begin
     'nothing converts TOvcTable yet -- it must NOT show as already ruled');
 end;
 
+{ Enum member auto-suggest. Shapes are the real ones: BDE TBatchMode -> FireDAC
+  TFDBatchMoveMode (which convrules\BDE-to-FireDAC.rules:134-139 already maps by
+  hand), and the Orpheus/VCL layout pair recorded in the Phase G design. }
+procedure TestSuggestEnumPairs;
+var
+  Pairs  : TEnumPairs;
+  Surplus: TArray<string>;
+  Src, Tgt: TArray<string>;
+
+  function TargetFor(const ASrc: string): string;
+  var P: TEnumPair;
+  begin
+    Result := '<none>';
+    for P in Pairs do
+      if SameText(P.FromMember, ASrc) then Exit(P.ToMember);
+  end;
+
+begin
+  // --- the lowercase tag, which is what makes name matching work at all.
+  Check('enum.tag.bde',
+    LowercaseTagOf(['batAppend', 'batUpdate', 'batDelete']) = 'bat',
+    LowercaseTagOf(['batAppend', 'batUpdate', 'batDelete']));
+  Check('enum.tag.fd',
+    LowercaseTagOf(['dmAppend', 'dmUpdate', 'dmAlwaysInsert']) = 'dm');
+  Check('enum.tag.single', LowercaseTagOf(['ablGlyphLeft']) = 'abl',
+    'one member still yields its lowercase lead, not the whole name');
+  Check('enum.tag.none', LowercaseTagOf(['Alpha', 'Beta']) = '',
+    'members with no lowercase lead have no tag');
+  Check('enum.tag.empty', LowercaseTagOf([]) = '');
+  Check('enum.tag.disjoint', LowercaseTagOf(['batAppend', 'dmAppend']) = '',
+    'no shared lead -> no tag');
+
+  // THE TRAP: a raw common prefix of (abcOne, abcOnly) is 'abcOn', and stripping
+  // that would compare 'e' with 'ly'. The tag must stop at the lowercase run.
+  Check('enum.tag.stops.at.case.boundary',
+    LowercaseTagOf(['abcOne', 'abcOnly']) = 'abc',
+    LowercaseTagOf(['abcOne', 'abcOnly']));
+
+  // --- the real BDE -> FireDAC pair.
+  Src := ['batAppend', 'batUpdate', 'batAppendUpdate', 'batDelete', 'batCopy'];
+  Tgt := ['dmAppend', 'dmUpdate', 'dmAppendUpdate', 'dmDelete', 'dmAlwaysInsert'];
+  Pairs := SuggestEnumPairs(Src, Tgt, Surplus);
+
+  Check('enum.pairs.one.per.source', Length(Pairs) = 5,
+    Format('expected 5 rows, got %d', [Length(Pairs)]));
+  Check('enum.pairs.append',       TargetFor('batAppend')       = 'dmAppend');
+  Check('enum.pairs.update',       TargetFor('batUpdate')       = 'dmUpdate');
+  Check('enum.pairs.appendupdate', TargetFor('batAppendUpdate') = 'dmAppendUpdate',
+    'the longer name must not be stolen by the shorter one');
+  Check('enum.pairs.delete',       TargetFor('batDelete')       = 'dmDelete');
+
+  // batCopy has no dmCopy. That is the interesting answer, not a failure -- the
+  // hand-written book maps it to dmAlwaysInsert, which no name rule could know.
+  Check('enum.pairs.unmatched.is.blank', TargetFor('batCopy') = '',
+    'a source member with no name match must come back blank, not guessed');
+  Check('enum.pairs.surplus.reported',
+    (Length(Surplus) = 1) and SameText(Surplus[0], 'dmAlwaysInsert'),
+    Format('surplus=%d: %s', [Length(Surplus), string.Join(',', Surplus)]));
+
+  Check('enum.pairs.order.preserved',
+    (Length(Pairs) = 5) and (Pairs[0].FromMember = 'batAppend')
+    and (Pairs[4].FromMember = 'batCopy'),
+    'rows come back in source declaration order');
+
+  // --- the Orpheus/VCL layout pair from the Phase G design: 6 vs 4, 4 match.
+  Src := ['ablGlyphLeft', 'ablGlyphRight', 'ablGlyphTop', 'ablGlyphBottom',
+          'ablGlyphOverlay', 'ablGlyphNone'];
+  Tgt := ['blGlyphLeft', 'blGlyphRight', 'blGlyphTop', 'blGlyphBottom'];
+  Pairs := SuggestEnumPairs(Src, Tgt, Surplus);
+  Check('enum.pairs.abc.count', Length(Pairs) = 6);
+  Check('enum.pairs.abc.matched',
+    (TargetFor('ablGlyphLeft') = 'blGlyphLeft')
+    and (TargetFor('ablGlyphBottom') = 'blGlyphBottom'));
+  Check('enum.pairs.abc.surplus.source',
+    (TargetFor('ablGlyphOverlay') = '') and (TargetFor('ablGlyphNone') = ''),
+    'the two extra source members stay unmapped');
+  Check('enum.pairs.abc.no.target.surplus', Length(Surplus) = 0,
+    'every target was used');
+
+  // --- case-insensitivity and degenerate inputs.
+  // Case-insensitivity applies to the NAME half. The tag is a LOWERCASE run by
+  // definition, so an ALL-CAPS member ('DMAPPEND') correctly has no tag at all
+  // and its bare name stays the whole identifier -- vary case after the tag.
+  Pairs := SuggestEnumPairs(['batAppend'], ['dmAPPEND'], Surplus);
+  Check('enum.pairs.ci', (Length(Pairs) = 1) and (Pairs[0].ToMember = 'dmAPPEND'),
+    'matching is case-insensitive but returns the target VERBATIM');
+  Pairs := SuggestEnumPairs(['batAppend'], ['DMAPPEND'], Surplus);
+  Check('enum.pairs.no.tag.no.match', Pairs[0].ToMember = '',
+    'an all-caps target has no lowercase tag, so its bare name is the whole name');
+
+  Pairs := SuggestEnumPairs([], ['dmAppend'], Surplus);
+  Check('enum.pairs.no.source', Length(Pairs) = 0);
+  Check('enum.pairs.no.source.all.surplus', Length(Surplus) = 1);
+
+  Pairs := SuggestEnumPairs(['batAppend'], [], Surplus);
+  Check('enum.pairs.no.target', (Length(Pairs) = 1) and (Pairs[0].ToMember = ''));
+  Check('enum.pairs.no.target.no.surplus', Length(Surplus) = 0);
+
+  // A target may only be consumed ONCE -- two source members must not both claim
+  // the same target, or the generated book would write a duplicate arm.
+  // Reached only via DUPLICATE input: within one enum, members are unique and
+  // share a tag, so their bare names are unique too and two of them can never
+  // claim the same target. Duplicates CAN arrive from a caller, so the guard is
+  // real -- and this is the input that actually exercises it.
+  Pairs := SuggestEnumPairs(['batAppend', 'batAppend'], ['dmAppend'], Surplus);
+  Check('enum.pairs.target.used.once',
+    (Length(Pairs) = 2) and (Pairs[0].ToMember = 'dmAppend')
+    and (Pairs[1].ToMember = ''),
+    'a duplicated source member must not claim the same target twice');
+  Check('enum.pairs.used.once.no.surplus', Length(Surplus) = 0,
+    'the target was consumed, so it is not surplus');
+end;
+
 procedure TestMappingGridHooks;
 var
   Book   : TArray<TRuleNode>;
@@ -4974,6 +5087,7 @@ begin
     TestRuleCatalogParse;
     TestRuleCatalogIndex;
     TestRuleCatalogRealFolder;
+    TestSuggestEnumPairs;
 
     FreeAndNil(GParseBook);
 

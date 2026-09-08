@@ -18,7 +18,11 @@ uses
   System.SysUtils,
   System.Generics.Collections,
   ConvRules.Model,
-  ConvRules.Engine;
+  ConvRules.Engine,
+  { The ENGINE's .castlib model, for TEnumPair. Depends on nothing but the RTL, and
+    the editor .dpr already links it -- see TEnumPairs for why the suggestion emits
+    the engine's record rather than a parallel one of our own. }
+  DRagLint.Convert.CastLib;
 
 type
   /// <summary>What is wrong with a #mapping or #apply.</summary>
@@ -40,6 +44,18 @@ type
   ///   #else.</para></remarks>
   TMappingIssueKind = (mikUndefined, mikTargetMissing, mikTargetReadOnly, mikBadLiteral,
                        mikToTypeNotDeclared, mikNonExhaustive);
+
+  /// <summary>A list of member correspondences, in source declaration order.</summary>
+  /// <remarks>The element type is the ENGINE's DRagLint.Convert.CastLib.TEnumPair,
+  ///   NOT one of our own. That unit owns the `enum ... end` .castlib grammar this
+  ///   suggestion is destined for, so emitting its record means the editor's output
+  ///   is already the shape the engine parses -- and there is one TEnumPair in the
+  ///   tree rather than two that could drift. The editor .dpr has referenced that
+  ///   unit since the castlib work landed, and it depends on nothing but the RTL.
+  ///   <para>ToMember is '' when nothing matched, which is a real answer and not a
+  ///   failure: a surplus source member is exactly what the author must decide about
+  ///   by hand.</para></remarks>
+  TEnumPairs = TArray<TEnumPair>;
 
   /// <summary>One validation finding, addressed to a named mapping.</summary>
   /// <remarks>Detail is the specific offender -- the path, the literal, the class or the
@@ -119,6 +135,34 @@ type
 ///   apply time, and those the editor can be sure about, so they must block.</para>
 ///   <para>Callers gating an OK button should let warnings through and stop on errors.</para></remarks>
 function MappingIssueIsWarning(AKind: TMappingIssueKind): Boolean;
+
+/// <summary>PURE: the leading all-lowercase run common to every member.</summary>
+/// <param name="AMembers">Enum member names; [] yields ''.</param>
+/// <returns>e.g. 'bat' for (batAppend, batUpdate, batDelete); '' when the members
+/// share no lowercase lead.</returns>
+/// <remarks>Delphi enum members conventionally carry a lowercase type tag before a
+///   capitalised name -- batAppend, dmAppend, ablGlyphLeft. Trimming the common
+///   prefix back to its all-LOWERCASE run is what stops it eating into the name
+///   itself: (abcOne, abcOnly) share the five characters 'abcOn', and stripping that
+///   would compare 'e' against 'ly'. Stripping only 'abc' compares 'One' against
+///   'Only', which correctly does not match.</remarks>
+function LowercaseTagOf(const AMembers: TArray<string>): string;
+
+/// <summary>PURE: pairs source enum members to target ones by NAME.</summary>
+/// <param name="ASource">Source enum members, in declaration order.</param>
+/// <param name="ATarget">Candidate target enum members.</param>
+/// <param name="AUnmatchedTarget">Receives target members nothing mapped to.</param>
+/// <returns>One entry per SOURCE member, in order; ToMember is '' where nothing
+///   matched.</returns>
+/// <remarks>Name-first and name-ONLY, deliberately. Two enums being converted are
+///   different types whose members correspond by MEANING; equal ordinals across
+///   unrelated types are a coincidence, not evidence -- and an enum with explicit
+///   values (TFoo = (a = 1, b = 5)) has no positional relationship to anything.
+///   Comparison is on the member name with each side's own lowercase tag removed,
+///   case-insensitively. This is a SUGGESTION for a human to accept or reject; it
+///   never writes a mapping by itself.</remarks>
+function SuggestEnumPairs(const ASource, ATarget: TArray<string>;
+  out AUnmatchedTarget: TArray<string>): TEnumPairs;
 
 /// <summary>Validate every #mapping and #apply node in one #convert block's context.</summary>
 /// <param name="ANodes">The flat node list to check, in file order. Non-mapping kinds are
@@ -258,6 +302,95 @@ function MappedTargetPaths(const ANodes: TArray<TRuleNode>;
   const AApplied: TArray<string>): TArray<string>;
 
 implementation
+
+uses
+  System.StrUtils;
+
+function LowercaseTagOf(const AMembers: TArray<string>): string;
+var
+  Common: string;
+  M     : string;
+  i, N  : Integer;
+begin
+  Result := '';
+  if Length(AMembers) = 0 then Exit;
+
+  // 1) the raw common prefix, case-insensitively.
+  Common := AMembers[0];
+  for M in AMembers do
+  begin
+    N := 0;
+    while (N < Length(Common)) and (N < Length(M))
+          and (UpCase(Common[N + 1]) = UpCase(M[N + 1])) do
+      Inc(N);
+    Common := Copy(Common, 1, N);
+    if Common = '' then Exit;
+  end;
+
+  // 2) trim it back to its leading all-LOWERCASE run. Without this step
+  //    (abcOne, abcOnly) would yield 'abcOn' and the comparison would be
+  //    'e' vs 'ly'; with it the tag is 'abc' and the names differ, correctly.
+  i := 0;
+  while (i < Length(Common)) and CharInSet(Common[i + 1], ['a'..'z']) do
+    Inc(i);
+  Result := Copy(Common, 1, i);
+end;
+
+function SuggestEnumPairs(const ASource, ATarget: TArray<string>;
+  out AUnmatchedTarget: TArray<string>): TEnumPairs;
+var
+  SrcTag, TgtTag: string;
+  Used          : TArray<Boolean>;
+  Leftover      : TList<string>;
+  i, j          : Integer;
+  SrcBare       : string;
+
+  { The member name with its own enum's lowercase tag removed. }
+  function Bare(const AMember, ATag: string): string;
+  begin
+    Result := AMember;
+    if (ATag <> '') and StartsText(ATag, Result) then
+      Result := Copy(Result, Length(ATag) + 1, MaxInt);
+  end;
+
+begin
+  AUnmatchedTarget := nil;
+  SetLength(Result, Length(ASource));
+  SetLength(Used, Length(ATarget));
+
+  SrcTag := LowercaseTagOf(ASource);
+  TgtTag := LowercaseTagOf(ATarget);
+
+  for i := 0 to High(ASource) do
+  begin
+    Result[i].FromMember := ASource[i];
+    Result[i].ToMember   := '';
+    SrcBare := Bare(ASource[i], SrcTag);
+    if SrcBare = '' then Continue;
+
+    for j := 0 to High(ATarget) do
+    begin
+      // A target is claimed at most ONCE. DEFENSIVE: within a single enum this
+      // cannot trigger -- members are unique and share one tag, so their bare
+      // names are unique too. It is reachable only when a caller passes a source
+      // list containing duplicates, which is why the test for it feeds one.
+      if Used[j] then Continue;
+      if not SameText(SrcBare, Bare(ATarget[j], TgtTag)) then Continue;
+      Result[i].ToMember := ATarget[j];   // verbatim: the book must spell it as declared
+      Used[j] := True;
+      Break;
+    end;
+  end;
+
+  Leftover := TList<string>.Create;
+  try
+    for j := 0 to High(ATarget) do
+      if not Used[j] then Leftover.Add(ATarget[j]);
+    AUnmatchedTarget := Leftover.ToArray;
+  finally
+    Leftover.Free;
+  end;
+end;
 
 function MappingIssueIsWarning(AKind: TMappingIssueKind): Boolean;
 begin

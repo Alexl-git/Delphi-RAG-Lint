@@ -58,6 +58,17 @@ type
       a member list that changes under the user keeps every assignment already made. }
     procedure LoadMembers(AFromCurrent: Boolean);
     procedure RefreshMemberList;
+    /// <summary>Fills the SELECTED target path across every member row by matching
+    ///   enum member names.</summary>
+    /// <remarks>Operates on the target path of the current grid row and applies it to
+    ///   ALL non-#else member rows, because that is the shape of the job: one target
+    ///   property, one value per source member. A member whose name finds no
+    ///   counterpart is left EMPTY rather than guessed at, and the status line reports
+    ///   how many were filled, how many were left, and how many target members went
+    ///   unused -- the surplus is what the author still has to think about.
+    ///   Never touches the #else row: its value is a fallback, not a translation of any
+    ///   particular member.</remarks>
+    procedure DoSuggestValues(Sender: TObject);
     procedure RefreshCaseGrid;
     procedure MemberSelected(Sender: TObject);
     procedure GridEdited(Sender: TObject; ACol, ARow: Longint; const AText: string);
@@ -216,6 +227,14 @@ begin
   Btn := TButton.Create(Self);
   Btn.Parent := Bottom; Btn.SetBounds(114, 5, 100, 25);
   Btn.Caption := 'Remove'; Btn.OnClick := DoRemoveTarget;
+
+  Btn := TButton.Create(Self);
+  Btn.Parent := Bottom;
+  Btn.SetBounds(220, 5, 130, 25);
+  Btn.Caption := 'Suggest values';
+  Btn.Hint := 'Fill this target across every member by matching enum member NAMES';
+  Btn.ShowHint := True;
+  Btn.OnClick := DoSuggestValues;
 
   FBtnOk := TButton.Create(Self);
   FBtnOk.Parent := Bottom; FBtnOk.SetBounds(700, 5, 90, 25);
@@ -448,6 +467,126 @@ begin
   if ACol = COL_PATH then FCases[c].Sets[i].ToPath := Trim(AText)
   else                    FCases[c].Sets[i].Value  := Trim(AText);
   Revalidate;
+end;
+
+procedure TMappingForm.DoSuggestValues(Sender: TObject);
+var
+  c, r, i, j : Integer;
+  Path, TypeN: string;
+  Err        : string;
+  TgtMembers : TArray<string>;
+  SrcMembers : TArray<string>;
+  Surplus    : TArray<string>;
+  Pairs      : TEnumPairs;
+  Filled, Left: Integer;
+
+  { Set ATo on case ACase, replacing an existing assignment to the same path
+    rather than appending a second one to it. }
+  procedure PutValue(ACase: Integer; const APath, AValue: string);
+  var k: Integer;
+  begin
+    for k := 0 to High(FCases[ACase].Sets) do
+      if SameText(Trim(FCases[ACase].Sets[k].ToPath), APath) then
+      begin
+        FCases[ACase].Sets[k].Value := AValue;
+        Exit;
+      end;
+    SetLength(FCases[ACase].Sets, Length(FCases[ACase].Sets) + 1);
+    FCases[ACase].Sets[High(FCases[ACase].Sets)].ToPath := APath;
+    FCases[ACase].Sets[High(FCases[ACase].Sets)].Value  := AValue;
+  end;
+
+{ Every precondition in one place, returning the message to show, '' when all
+    hold. Collapsing six guard clauses into one exit is not cosmetic: the routine
+    tripped too-many-exit-points, and a single failure channel is what lets the
+    caller below read as the actual work. Sets Path, TypeN and TgtMembers. }
+  // Why the review below: six exits is one per PRECONDITION, which is the
+  // guard-clause shape the rule's own message recommends. Getting under the cap
+  // would mean either merging two unrelated checks behind one message, or six
+  // levels of nesting; both are worse than the finding.
+  // (Do not open this comment with the marker word -- a second one on its own
+  // line reads as a marker naming a rule called "reason" and suppresses nothing.)
+  function Blocked: string;  // dl:ok too-many-exit-points@8756
+  var
+    LLeaf: TPropLeaf;
+    LFound: Boolean;
+    LErr  : string;
+  begin
+    Result := '';
+    c := CurrentCase;
+    if c < 0 then Exit('Select a member row first.');
+
+    r := FGrid.Row;
+    if (r < 1) or (r > Length(FCases[c].Sets)) then
+      Exit('Select the target row to suggest values for.');
+
+    Path := Trim(FCases[c].Sets[r - 1].ToPath);
+    if Path = '' then Exit('That target row has no path yet.');
+
+    // The path's DECLARED TYPE is what says which enum to match against.
+    LFound := False;
+    TypeN  := '';
+    for LLeaf in FToTree.Leaves do
+      if SameText(LLeaf.Path, Path) then
+      begin
+        TypeN  := LLeaf.TypeName;
+        LFound := True;
+        Break;
+      end;
+    if not LFound then
+      Exit(Format('%s is not in the To tree, so its type is unknown.', [Path]));
+
+    if not Assigned(FEngine) then Exit('No engine available to read enum members.');
+
+    // Not an enum, or not indexed. Either way there is nothing to match against,
+    // and saying WHICH type failed is more use than a bare refusal.
+    if (not FEngine.EnumMembersOf(TypeN, TgtMembers, LErr)) or (Length(TgtMembers) = 0) then
+      Exit(Format('%s is %s -- no enum members to match. %s', [Path, TypeN, LErr]));
+  end;
+
+begin
+  Err := Blocked;
+  if Err <> '' then
+  begin
+    FStatus.SimpleText := Err;
+    Exit;
+  end;
+
+  SrcMembers := nil;
+  for i := 0 to High(FCases) do
+    if not FCases[i].IsElse then
+      SrcMembers := SrcMembers + [FCases[i].Member];
+
+  Pairs := SuggestEnumPairs(SrcMembers, TgtMembers, Surplus);
+
+  Filled := 0;
+  Left   := 0;
+  j      := 0;
+  for i := 0 to High(FCases) do
+  begin
+    if FCases[i].IsElse then Continue;      // a fallback is not a member translation
+    if j > High(Pairs) then Break;
+    if Pairs[j].ToMember <> '' then
+    begin
+      PutValue(i, Path, Pairs[j].ToMember);
+      Inc(Filled);
+    end
+    else
+      Inc(Left);                            // left EMPTY on purpose -- never guessed
+    Inc(j);
+  end;
+
+  RefreshCaseGrid;
+  Revalidate;
+
+  // Plain if, not IfThen: IfThen evaluates BOTH arms, so it would run the join
+  // even with nothing surplus -- and the repo's ifthen-both-branches rule says so.
+  Err := '';
+  if Length(Surplus) > 0 then
+    Err := ': ' + string.Join(', ', Surplus);
+  FStatus.SimpleText := Format(
+    '%s (%s): filled %d of %d member(s); %d unmatched; %d target member(s) unused%s',
+    [Path, TypeN, Filled, Length(SrcMembers), Left, Length(Surplus), Err]);
 end;
 
 procedure TMappingForm.DoAddTarget(Sender: TObject);
