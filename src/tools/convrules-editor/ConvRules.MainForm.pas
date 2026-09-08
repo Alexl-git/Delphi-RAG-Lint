@@ -112,6 +112,10 @@ type
     FLblFormTypes : TLabel;           // "N types, M shown"
     FFilterError  : string;           // first malformed regex, surfaced in the label
     FCatalog      : TRuleCatalog;     // every #convert the rules folder already has
+    // Types claimed by MORE THAN ONE rule. An atomic rule lives in exactly one
+    // file; two claims mean two versions waiting to diverge, so the panel must
+    // say so rather than let FindRuleForType silently pick the first.
+    FCatalogDups  : TCatalogDuplicates;
     FRulesFolder  : string;           // scanned folder (registry-backed)
     FLastFormDir  : string;           // where the Open-form dialog resumes
     // Three descendant sets, fetched ONCE each (~1.5 s per call, measured against
@@ -209,6 +213,10 @@ type
     /// <returns>An owned list; EMPTY (never nil) when the engine cannot answer, so
     /// callers cannot mistake "no answer" for "not a descendant".</returns>
     function LoadDescendantSet(const AAncestor: string): TStringList;
+    /// <summary>How many rules in the catalog claim ATypeName; 0 or 1 is healthy.</summary>
+    /// <param name="ATypeName">A bare or qualified type name.</param>
+    /// <returns>The number of sites, so a caller can render "+N DUPLICATE".</returns>
+    function DuplicateSitesFor(const ATypeName: string): Integer;
     /// <summary>The declaring unit of ATypeName, memoised for the session.</summary>
     /// <returns>'' when the engine cannot resolve it -- which must NOT be read as
     /// "not a standard control".</returns>
@@ -1923,6 +1931,19 @@ end;
   The same .pas texts are also run through ScanUsesClauses, and the units they name
   become CANDIDATE rows on the Unit Rules tab -- a work list, not an edit. The rule
   book is not touched by any of this. }
+function TConvRulesForm.DuplicateSitesFor(const ATypeName: string): Integer;
+var
+  Dup : TCatalogDuplicate;
+  Want: string;
+begin
+  Result := 0;
+  Want   := BareTypeName(ATypeName);
+  if Want = '' then Exit;
+  for Dup in FCatalogDups do
+    if SameText(BareTypeName(Dup.FromType), Want) then
+      Exit(Length(Dup.Entries));
+end;
+
 function TConvRulesForm.DeclaringUnitCached(const ATypeName: string): string;
 begin
   if FDeclUnits = nil then
@@ -2057,6 +2078,12 @@ begin
     begin
       FFormTypeRows[i].Ruled   := True;
       FFormTypeRows[i].RuledBy := ExtractFileName(Entry.FilePath);
+      // Say it on the ROW, not only in the status line. The status line is gone by
+      // the time the user is looking at this type, and picking the wrong one of two
+      // rules is a silent mistake.
+      if DuplicateSitesFor(FFormTypeRows[i].TypeName) > 1 then
+        FFormTypeRows[i].RuledBy := Format('%s +%d DUPLICATE',
+          [FFormTypeRows[i].RuledBy, DuplicateSitesFor(FFormTypeRows[i].TypeName) - 1]);
     end
     else
     begin
@@ -2099,6 +2126,7 @@ begin
   end;
 
   FCatalog     := ScanRulesFolder(Folder, Errs);
+  FCatalogDups := FindDuplicates(FCatalog);
   FRulesFolder := Folder;
 
   // The index is a CACHE of what the folder says; failing to write it must not
@@ -2114,7 +2142,18 @@ begin
   if Sender <> nil then
   begin
     RefreshFormTypes;
-    if Length(Errs) > 0 then
+
+    // A duplicate is louder than an unreadable file: an unreadable file is
+    // obviously missing, whereas a duplicate looks like a working corpus right up
+    // until two copies of one rule drift apart.
+    if Length(FCatalogDups) > 0 then
+      SetError(Format('%d conversion(s) from %s -- BUT %d type(s) are claimed by ' +
+        'more than one rule, starting with %s in %s and %s. A rule must live in ' +
+        'exactly one file; move or delete one.',
+        [Length(FCatalog), Folder, Length(FCatalogDups), FCatalogDups[0].FromType,
+         ExtractFileName(FCatalogDups[0].Entries[0].FilePath),
+         ExtractFileName(FCatalogDups[0].Entries[1].FilePath)]))
+    else if Length(Errs) > 0 then
       SetStatus(Format('%d conversion(s) catalogued from %s; %d file(s) unreadable: %s',
         [Length(FCatalog), Folder, Length(Errs), string.Join('; ', Errs)]))
     else

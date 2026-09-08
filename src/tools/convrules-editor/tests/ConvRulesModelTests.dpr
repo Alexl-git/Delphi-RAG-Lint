@@ -4369,6 +4369,99 @@ begin
   Check('catalog.merge.none', Length(MergeCatalogs([])) = 0);
 end;
 
+{ One rule per type is the corpus invariant (owner, 2026-09-08): an atomic rule
+  lives in exactly ONE file, because the same conversion in two places is how two
+  versions of it diverge. FindDuplicates is what makes that invariant checkable. }
+procedure TestRuleCatalogDuplicates;
+var
+  Cat : TRuleCatalog;
+  Dups: TCatalogDuplicates;
+  A, B: TRuleCatalog;
+begin
+  // --- the intended state: one rule per type, across two files.
+  A := CatalogFromText('#convert Bde.DBTables.TQuery -> FireDAC.Comp.Client.TFDQuery'#13#10,
+                       'C:\rules\bde.rules');
+  B := CatalogFromText('#convert Vcl.Graphics.TFont -> Vcl.Graphics.TFont'#13#10,
+                       'C:\rules\font.rules');
+  Dups := FindDuplicates(MergeCatalogs([A, B]));
+  Check('catalog.dup.none', Length(Dups) = 0,
+    Format('a clean corpus must report nothing, got %d', [Length(Dups)]));
+
+  Check('catalog.dup.empty', Length(FindDuplicates(nil)) = 0);
+
+  // --- the same type in two files. THE case this exists for.
+  B := CatalogFromText('#convert Bde.DBTables.TQuery -> Other.TSomethingElse'#13#10,
+                       'C:\rules\legacy.rules');
+  Cat  := MergeCatalogs([A, B]);
+  Dups := FindDuplicates(Cat);
+  Check('catalog.dup.found', Length(Dups) = 1,
+    Format('expected 1 duplicated type, got %d', [Length(Dups)]));
+  if Length(Dups) = 1 then
+  begin
+    Check('catalog.dup.names.the.type', SameText(BareTypeName(Dups[0].FromType), 'TQuery'),
+      Dups[0].FromType);
+    // BOTH sites, not just the loser -- the fix is to move or delete one, and you
+    // cannot do that without being told where both are.
+    Check('catalog.dup.holds.both', Length(Dups[0].Entries) = 2,
+      Format('expected both sites, got %d', [Length(Dups[0].Entries)]));
+    Check('catalog.dup.scan.order',
+      (Length(Dups[0].Entries) = 2)
+      and SameText(ExtractFileName(Dups[0].Entries[0].FilePath), 'bde.rules')
+      and SameText(ExtractFileName(Dups[0].Entries[1].FilePath), 'legacy.rules'),
+      'sites come back in scan order -- the first is what FindRuleForType picks');
+  end;
+
+  // --- a QUALIFIED name in one book and a BARE one in another is still a
+  //     duplicate. A qualified-string comparison would miss exactly this.
+  B := CatalogFromText('#convert TQuery -> Other.TSomethingElse'#13#10, 'C:\rules\bare.rules');
+  Dups := FindDuplicates(MergeCatalogs([A, B]));
+  Check('catalog.dup.bare.vs.qualified', Length(Dups) = 1,
+    'Bde.DBTables.TQuery and a bare TQuery are the same rule twice');
+
+  // --- case-insensitively, as Pascal is.
+  B := CatalogFromText('#convert bde.dbtables.tquery -> Other.T'#13#10, 'C:\rules\ci.rules');
+  Check('catalog.dup.ci', Length(FindDuplicates(MergeCatalogs([A, B]))) = 1);
+
+  // --- twice in the SAME file counts too: one rule, one place, and that place
+  //     cannot be the same file twice either.
+  Dups := FindDuplicates(CatalogFromText(
+    '#convert Bde.DBTables.TQuery -> A.TOne'#13#10 +
+    '#convert Bde.DBTables.TQuery -> A.TTwo'#13#10, 'C:\rules\same.rules'));
+  Check('catalog.dup.same.file', Length(Dups) = 1,
+    'a type declared twice in one file is still a duplicate');
+  Check('catalog.dup.same.file.both', (Length(Dups) = 1) and (Length(Dups[0].Entries) = 2));
+
+  // --- three sites report as ONE duplicated type carrying three entries, not as
+  //     two or three separate findings.
+  Dups := FindDuplicates(CatalogFromText(
+    '#convert TQuery -> A.T1'#13#10 +
+    '#convert TQuery -> A.T2'#13#10 +
+    '#convert TQuery -> A.T3'#13#10, 'C:\rules\three.rules'));
+  Check('catalog.dup.three.is.one.finding', Length(Dups) = 1,
+    Format('expected 1 finding, got %d', [Length(Dups)]));
+  Check('catalog.dup.three.entries', (Length(Dups) = 1) and (Length(Dups[0].Entries) = 3));
+
+  // --- the REAL corpus must be clean. If this ever fails, the corpus is wrong,
+  //     not the test.
+  begin
+    var Dir: string := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+      '..\..\..\..\convrules'));
+    if TDirectory.Exists(Dir) then
+    begin
+      var Errs: TArray<string>;
+      var RealDups: TCatalogDuplicates := FindDuplicates(ScanRulesFolder(Dir, Errs));
+      var Msg: string := '';
+      if Length(RealDups) > 0 then
+        Msg := RealDups[0].FromType + ' in ' +
+               ExtractFileName(RealDups[0].Entries[0].FilePath) + ' and ' +
+               ExtractFileName(RealDups[0].Entries[1].FilePath);
+      Check('catalog.dup.real.corpus.clean', Length(RealDups) = 0, Msg);
+    end
+    else
+      Skip('catalog.dup.real.corpus.clean', 'no convrules\ folder');
+  end;
+end;
+
 procedure TestRuleCatalogIndex;
 var
   Cat, Back: TRuleCatalog;
@@ -5086,6 +5179,7 @@ begin
     TestFormTypesFilter;
     TestRuleCatalogParse;
     TestRuleCatalogIndex;
+    TestRuleCatalogDuplicates;
     TestRuleCatalogRealFolder;
     TestSuggestEnumPairs;
 

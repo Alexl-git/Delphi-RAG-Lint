@@ -46,6 +46,18 @@ type
 
   TRuleCatalog = TArray<TRuleCatalogEntry>;
 
+  /// <summary>One source type that more than one rule claims to convert.</summary>
+  /// <remarks>Entries are every catalog row covering that type, in scan order --
+  /// which is also the order FindRuleForType silently picks the first of. Holding
+  /// them ALL is the point: the fix is to delete or move one, and you cannot do
+  /// that without being told where both are.</remarks>
+  TCatalogDuplicate = record
+    FromType: string;
+    Entries : TRuleCatalog;
+  end;
+
+  TCatalogDuplicates = TArray<TCatalogDuplicate>;
+
 /// <summary>PURE: the bare type name of a possibly unit-qualified name.</summary>
 /// <param name="AQualified">'Bde.DBTables.TTable' or 'TTable'.</param>
 /// <returns>The text after the last dot; the input unchanged when there is none.</returns>
@@ -63,6 +75,23 @@ function CatalogFromText(const AText, APath: string): TRuleCatalog;
 
 /// <summary>PURE: concatenates catalogs, preserving order.</summary>
 function MergeCatalogs(const AParts: TArray<TRuleCatalog>): TRuleCatalog;
+
+/// <summary>PURE: every source type claimed by more than one rule.</summary>
+/// <param name="ACatalog">The scanned catalog.</param>
+/// <returns>One entry per duplicated type, in first-appearance order; [] when the
+/// corpus holds one rule per type, which is the intended state.</returns>
+/// <remarks>THE RULE THIS ENFORCES (owner, 2026-09-08): an atomic rule lives in
+/// exactly ONE file, because the same conversion in two places is how two versions
+/// of it appear and diverge. Rules may be moved between files freely; they may not
+/// be COPIED.
+/// <para>Comparison is on the BARE type name, case-insensitively, matching
+/// FindRuleForType -- so 'Bde.DBTables.TQuery' in one book and a bare 'TQuery' in
+/// another ARE a duplicate, which is exactly the case a qualified-name comparison
+/// would miss.</para>
+/// <para>This is deliberately NOT folded into FindRuleForType. That function
+/// answers "is this type covered", is called once per row while painting, and must
+/// stay cheap; this one answers a corpus-health question and is called on rescan.</para></remarks>
+function FindDuplicates(const ACatalog: TRuleCatalog): TCatalogDuplicates;
 
 /// <summary>PURE: the first catalog entry converting ATypeName.</summary>
 /// <param name="ACatalog">The catalog to search.</param>
@@ -176,6 +205,55 @@ begin
     Result := List.ToArray;
   finally
     List.Free;
+  end;
+end;
+
+function FindDuplicates(const ACatalog: TRuleCatalog): TCatalogDuplicates;
+var
+  Groups: TDictionary<string, TRuleCatalog>;
+  Order : TList<string>;                  // keys in FIRST-APPEARANCE order
+  Found : TList<TCatalogDuplicate>;
+  Entry : TRuleCatalogEntry;
+  Bucket: TRuleCatalog;
+  Dup   : TCatalogDuplicate;
+  Key   : string;
+begin
+  Result := nil;
+  Groups := TDictionary<string, TRuleCatalog>.Create;
+  Order  := TList<string>.Create;
+  Found  := TList<TCatalogDuplicate>.Create;
+  try
+    for Entry in ACatalog do
+    begin
+      // Bare + upper: a qualified 'Bde.DBTables.TQuery' and a bare 'TQuery' are
+      // the SAME rule declared twice, and that is the case a naive comparison of
+      // the written names would miss entirely.
+      Key := UpperCase(BareTypeName(Entry.FromType));
+      if Key = '' then Continue;
+
+      if not Groups.TryGetValue(Key, Bucket) then
+      begin
+        Bucket := nil;
+        Order.Add(Key);
+      end;
+      Groups.AddOrSetValue(Key, Bucket + [Entry]);
+    end;
+
+    // Walk Order, not Groups: a dictionary has no order, and a report that
+    // reshuffles between runs is one nobody can diff.
+    for Key in Order do
+      if Groups.TryGetValue(Key, Bucket) and (Length(Bucket) > 1) then
+      begin
+        Dup.FromType := Bucket[0].FromType;   // as the first site spells it
+        Dup.Entries  := Bucket;
+        Found.Add(Dup);
+      end;
+
+    Result := Found.ToArray;
+  finally
+    Found.Free;
+    Order.Free;
+    Groups.Free;
   end;
 end;
 
