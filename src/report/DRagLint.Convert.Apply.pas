@@ -1582,6 +1582,27 @@ begin
   Opts:= Default(TPropTreeOptions);
   Opts.Depth       := 6;
   Opts.ToPersistent:= True;
+  { A REFERENCED COMPONENT IS NOT AN OWNED SUB-OBJECT, and expanding one walks
+    the whole form's component graph. Left at the legacy default (False) this is
+    the entire reason convert-apply does not finish on a large form.
+
+    MEASURED 2026-09-08 on ORM3 CLIENT\VARINSP (942 KB .dfm, 1,454 object
+    blocks), TOvcTable against the Win32 library index:
+
+      default (expand refs)   103.2 s   32,224 properties
+      TreatRefsAsLeaves       6.1 s        928 properties
+
+    35x fewer leaves, 17x faster, for the F tree alone. One instance of the
+    conversion took 1,077 s before this line existed. The INBOX note that filed
+    the slowness sized TOvcTable at "192+ published leaves" -- the real figure
+    was 32,224, so every estimate built on it was out by 168x.
+
+    Owned TPersistent sub-objects (TFont, TStrings, the grid's own view
+    objects) still expand -- those ARE part of the block being re-emitted. What
+    stops is following a property that merely POINTS at another component,
+    which the DFM records as a name reference and which the re-emit never needs
+    to descend into. }
+  Opts.TreatRefsAsLeaves:= True;
 
   PasLines:= TStringList.Create;
   Edits    := TList<TTextEdit>.Create;
