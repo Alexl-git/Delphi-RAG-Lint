@@ -151,12 +151,14 @@ type
       procedure HandlePageChange(Sender: TObject);
       procedure HandleInitTimer (Sender: TObject);
       procedure HandleWatchTimer(Sender: TObject);
-      procedure HandleOpenGraph (Sender: TObject);
       function AddTab(const ACaption: string): TTabSheet;
       procedure AddPlaceholder(ATab: TTabSheet; const AText: string);
-      function ResolveExe   : string;
-      function ResolveDbArgs: string;
-      procedure BuildGraphTab(ATab: TTabSheet);
+      { ResolveExe / ResolveDbArgs / BuildGraphTab / HandleOpenGraph were
+        DELETED here (session 78) with the dead FTabGraph field. All four
+        served the in-dock Graph tab, which became its own dockable tool
+        window in v0.46; the code outlived the tab and the compiler had been
+        saying so (H2219, three times) ever since. Removed while this file
+        was open for the Uses & Deps tab rather than left to accumulate. }
       procedure ButterflyTreeDblClick(Sender: TObject);
     public
       constructor Create(AOwner: TComponent); override;
@@ -234,53 +236,6 @@ begin
   L.WordWrap := True;
   L.Caption  := AText;
 end;
-
-function TDragLintDockFrame.ResolveExe: string;
-begin
-  Result:= DragLintExe;
-end;
-
-function TDragLintDockFrame.ResolveDbArgs: string;
-var
-  Dbs: TArray<string>;
-  P  : string        ;
-begin
-  Result:= '';
-  try
-    Dbs:= ResolveActiveIndexDbs(LoadSettings);
-  except
-    SetLength(Dbs, 0);
-  end;
-  for P in Dbs do
-    if P <> '' then Result:= Result + Format(' --db "%s"', [P]);
-end;
-
-procedure TDragLintDockFrame.HandleOpenGraph(Sender: TObject);
-begin
-  { v0.43: the graph now lives in its own dockable tool window so it can sit
-    open beside Structure. Open that instead of launching a floating exe. }
-  ShowDragLintGraph;
-end;
-
-procedure TDragLintDockFrame.BuildGraphTab(ATab: TTabSheet);
-var
-  Btn: TButton;
-  L  : TLabel ;
-begin
-  L:= TLabel.Create(ATab);
-  L.Parent  := ATab;
-  L.Align   := alTop;
-  L.WordWrap:= True;
-  L.Caption:= ' The graph is a dedicated, dockable tool window (View > Tool ' + 'Windows > drag-lint Graph) so it can sit open beside Structure. Open it:';
-  L.Height:= 48;
-
-  Btn:= TButton.Create(ATab);
-  Btn.Parent := ATab;
-  Btn.Align  := alTop;
-  Btn.Height := 30;
-  Btn.Caption:= 'Open Graph Window';
-  Btn.OnClick:= HandleOpenGraph;
-end; // procedure
 
 constructor TDragLintDockFrame.Create(AOwner: TComponent);
 begin
@@ -737,7 +692,15 @@ begin
     accessor added and no encapsulation widened for other units. }
   try
     Result:= SelectEmbeddedStructureDiagnosticForLine(GDockFrame.FStructure, ALine);
-  except // dl:ok try-except-swallowed@a91f -- a caret poll must never surface an exception into the IDE's message loop
+  { The dl:ok review that used to sit on this line was REMOVED (session 78).
+    `review-marker-unused` had been reporting it for a while: the handler
+    below does something (Result:= False), so `try-except-swallowed` no
+    longer fires here and the marker reviewed nothing. An inert marker is
+    not harmless -- it is a permanent hint in every lint-all run, and a
+    report with a permanent hint in it is one people learn to skim. If the
+    rule ever fires here again it will be reported, and can be reviewed
+    then, against the code as it is then. }
+  except
     on E: Exception do
       { This runs several times a second off a timer. An exception escaping here
         would become a modal dialog while the user is typing, repeatedly, which
