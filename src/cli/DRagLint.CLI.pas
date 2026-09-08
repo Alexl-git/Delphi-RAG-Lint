@@ -777,7 +777,7 @@ begin
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
   Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text]   (circular unit deps; --plan = followable refactoring playbook)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
-  Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused]   (compiler-verified uses cleanup)');
+  Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH]');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
@@ -18076,6 +18076,30 @@ end; // begin
 // Every edit is applied to a shadow + compiled; it is kept ONLY if it adds no
 // new compiler error vs the baseline. Default is dry-run (prints a diff);
 // --apply writes the file after a .bak backup.
+//
+// v1.10.2: --format json and --only <unit,...>, which exist together for one
+// reason: an IDE cannot offer a REVIEWED fix without both. It needs a machine
+// -readable list of candidates to put checkboxes against, and it needs a way to
+// say "apply these three". Given only --apply, a fix button is all-or-nothing
+// over changes the user has not seen individually, which is why the plugin has
+// always exposed this verb as a report and nothing else.
+type
+  { One candidate the walk considered. NOT "one edit that will be made" -- the
+    difference is the point. A candidate that failed compiler verification, or
+    that the caller did not select, still appears here with a status and a
+    reason, because a tab that silently omits them makes the user wonder why the
+    unit they expected is missing and gives them nothing to act on. }
+  TUsesFixItem = record
+    UnitName: string ;
+    Kind    : string ; { 'move' | 'remove' }
+    Line    : Integer;
+    { 'verified'   -- the edit compiled clean and is in the write set
+      'skipped'    -- considered and rejected; Reason says why
+      'deselected' -- excluded by --only, so never even compiled }
+    Status  : string ;
+    Reason  : string ;
+  end;
+
 function DoUsesFix(const AArgs: TArgs): Integer;
 var
   Store       : ISymbolStore                       ;
@@ -18098,6 +18122,8 @@ var
   nMove       : Integer                            ;
   nRemove     : Integer                            ;
   nSkip       : Integer                            ;
+  Items       : TList<TUsesFixItem>                ;
+  WantJson    : Boolean                            ;
 
   function UnitStemOf(const APath: string): string;
   begin
@@ -18312,6 +18338,93 @@ var
       end;
   end;
 
+  { --only: is this candidate in the caller's selection? No selection means
+    everything, so the flag's absence cannot change behaviour. }
+  function Selected(const AUnitName: string): Boolean;
+  begin
+    if Length(AArgs.OnlySections) = 0 then Exit(True);
+    for var Sel in AArgs.OnlySections do
+      if SameText(AUnitName, Sel) then Exit(True);
+    Result:= False;
+  end;
+
+  procedure AddItem(const AUnitName, AKind: string; ALine: Integer;
+                    const AStatus, AReason: string);
+  var
+    It: TUsesFixItem;
+  begin
+    It.UnitName:= AUnitName;
+    It.Kind    := AKind    ;
+    It.Line    := ALine    ;
+    It.Status  := AStatus  ;
+    It.Reason  := AReason  ;
+    Items.Add(It);
+  end;
+
+  { The whole report as one object. Emitted from the SAME item list the text
+    path prints and --apply writes from, so the three cannot disagree about what
+    was considered. }
+  function ItemsToJson: string;
+  var
+    JRoot: TJSONObject;
+    JArr : TJSONArray ;
+    JCnt : TJSONObject;
+    JSel : TJSONArray ;
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('schema'  , 'uses-fix/1');
+      JRoot.AddPair('unit'    , SrcPath     );
+      JRoot.AddPair('project' , Proj        );
+      JRoot.AddPair('platform', Plat        );
+      JRoot.AddPair('applied' , TJSONBool.Create(AArgs.Apply));
+      JRoot.AddPair('removeUnused', TJSONBool.Create(AArgs.RemoveUnused));
+
+      if Length(AArgs.OnlySections) > 0 then
+      begin
+        JSel:= TJSONArray.Create;
+        for var Sel in AArgs.OnlySections do JSel.Add(Sel);
+        JRoot.AddPair('selection', JSel);
+
+        { Names the caller asked for that matched no candidate. Reported rather
+          than dropped: a typo is otherwise indistinguishable from a unit that
+          simply needed no change. }
+        var JUn: TJSONArray:= TJSONArray.Create;
+        for var Sel in AArgs.OnlySections do
+        begin
+          var Seen: Boolean:= False;
+          for var It in Items do
+            if SameText(It.UnitName, Sel) then begin Seen:= True; Break; end;
+          if not Seen then JUn.Add(Sel);
+        end;
+        JRoot.AddPair('unmatched', JUn);
+      end;
+
+      JArr:= TJSONArray.Create;
+      for var It in Items do
+      begin
+        var JIt: TJSONObject:= TJSONObject.Create;
+        JIt.AddPair('unit'  , It.UnitName);
+        JIt.AddPair('kind'  , It.Kind    );
+        JIt.AddPair('line'  , TJSONNumber.Create(It.Line));
+        JIt.AddPair('status', It.Status  );
+        JIt.AddPair('reason', It.Reason  );
+        JArr.AddElement(JIt);
+      end;
+      JRoot.AddPair('items', JArr);
+
+      JCnt:= TJSONObject.Create;
+      JCnt.AddPair('move'  , TJSONNumber.Create(nMove  ));
+      JCnt.AddPair('remove', TJSONNumber.Create(nRemove));
+      JCnt.AddPair('skip'  , TJSONNumber.Create(nSkip  ));
+      JRoot.AddPair('counts', JCnt);
+
+      Result:= JRoot.Format(2);
+    finally
+      JRoot.Free;
+    end;
+  end;
+
 var
   Uo          : TUnitUse      ;
   uStem       : string        ;
@@ -18325,7 +18438,7 @@ begin
 
   if AArgs.ProjectPath = '' then
   begin
-    Writeln('Usage: drag-lint uses-fix <unit.pas> --project <dproj> --db <sqlite> ' + '[--platform win32|win64] [--apply] [--remove-unused]');
+    Writeln('Usage: drag-lint uses-fix <unit.pas> --project <dproj> --db <sqlite> ' + '[--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]');
     Writeln('   or: drag-lint uses-fix --project <dproj> --db <sqlite> [--in <dir>] [--remove-unused]   (sweep report)');
     Exit   (2                                                                                                          );
   end;
@@ -18333,6 +18446,7 @@ begin
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   Proj:= AArgs.ProjectPath;
   Plat:= AArgs.CheckPlatform;
+  WantJson:= SameText(AArgs.Format, 'json');
   Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
   Store.Migrate;
 
@@ -18342,6 +18456,7 @@ begin
   NameCache:= TDictionary<string, TArray<string>>.Create;
   Orig:= TStringList.Create;
   Work:= TStringList.Create;
+  Items:= TList<TUsesFixItem>.Create;
   try
     for var Fid2 in Store.GetAllFileIds do begin U:= UnitStemOf(Store.GetFilePath(Fid2)); if U <> '' then IndexedUnits.AddOrSetValue(U, Fid2); end;
     ThisStem:= UnitStemOf(AArgs.Target);
@@ -18383,15 +18498,31 @@ begin
       if not IndexedUnits.ContainsKey(uStem) then Continue;
       if SameText(uStem, ThisStem) then Continue;
 
+      { CANDIDACY IS DECIDED FROM THE INDEX; ONLY VERIFICATION COMPILES.
+        That split is what lets --only skip the expensive half without changing
+        the answer: a deselected unit is still REPORTED as a candidate (so the
+        IDE can show it unticked), it simply never reaches TryEdit. }
+
       { MOVE: interface entry, not referenced from the interface section }
       if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(uStem)) and (RefImpl.ContainsKey(uStem)) then
       begin
-        if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'move') then
+        if not Selected(Uo.UnitName) then
+        begin
+          AddItem(Uo.UnitName, 'move', Uo.StartLine, 'deselected', 'not in --only');
+          if not WantJson then Writeln(Format('  -      %s  (deselected by --only)', [Uo.UnitName]));
+        end
+        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'move') then
         begin
           Inc(nMove);
-          Writeln(Format('  MOVED  %s  interface -> implementation (line %d)', [Uo.UnitName, Uo.StartLine]));
+          AddItem(Uo.UnitName, 'move', Uo.StartLine, 'verified', '');
+          if not WantJson then Writeln(Format('  MOVED  %s  interface -> implementation (line %d)', [Uo.UnitName, Uo.StartLine]));
         end
-        else begin Inc(nSkip); Writeln(Format('  skip   %s  (move did not verify / not a clean entry)', [Uo.UnitName])); end;
+        else
+        begin
+          Inc(nSkip);
+          AddItem(Uo.UnitName, 'move', Uo.StartLine, 'skipped', 'move did not verify / not a clean entry');
+          if not WantJson then Writeln(Format('  skip   %s  (move did not verify / not a clean entry)', [Uo.UnitName]));
+        end;
       end
       { REMOVE: never referenced, only with --remove-unused, and only if it has
         no init/final section (side-effect units stay) }
@@ -18400,14 +18531,39 @@ begin
         if HasInitSection(uStem) then
         begin
           Inc(nSkip);
-          Writeln(Format('  skip   %s  (unreferenced but has init/final -- ' + 'possible side-effect unit, NOT removed)', [Uo.UnitName]));
+          AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'skipped',
+                  'unreferenced but has init/final -- possible side-effect unit, NOT removed');
+          if not WantJson then Writeln(Format('  skip   %s  (unreferenced but has init/final -- ' + 'possible side-effect unit, NOT removed)', [Uo.UnitName]));
         end
-        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove') then begin Inc(nRemove); Writeln(Format('  REMOVE %s  commented out (line %d)', [Uo.UnitName, Uo.StartLine])); end
-        else begin Inc(nSkip); Writeln(Format('  skip   %s  (remove did not verify / not a clean entry)', [Uo.UnitName])); end;
+        else if not Selected(Uo.UnitName) then
+        begin
+          AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'deselected', 'not in --only');
+          if not WantJson then Writeln(Format('  -      %s  (deselected by --only)', [Uo.UnitName]));
+        end
+        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove') then
+        begin
+          Inc(nRemove);
+          AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'verified', '');
+          if not WantJson then Writeln(Format('  REMOVE %s  commented out (line %d)', [Uo.UnitName, Uo.StartLine]));
+        end
+        else
+        begin
+          Inc(nSkip);
+          AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'skipped', 'remove did not verify / not a clean entry');
+          if not WantJson then Writeln(Format('  skip   %s  (remove did not verify / not a clean entry)', [Uo.UnitName]));
+        end;
       end; // if
     end; // for
 
-    if (nMove + nRemove) = 0 then begin Writeln('  Nothing to change.'); Exit (0 ); end;
+    { A JSON caller gets a document in EVERY outcome, including this one. An
+      empty stdout would force the IDE to distinguish "nothing to do" from "the
+      engine failed" by exit code alone, and a tab that renders nothing on both
+      is how a broken query looks like a clean unit. }
+    if (nMove + nRemove) = 0 then
+    begin
+      if WantJson then Writeln(ItemsToJson) else Writeln('  Nothing to change.');
+      Exit(0);
+    end;
 
     if AArgs.Apply then
     begin
@@ -18421,17 +18577,22 @@ begin
       finally
         Lines2.Free;
       end;
-      Writeln(Format('-- APPLIED %d move(s), %d remove(s) to %s (backup: %s.bak)', [nMove, nRemove, ExtractFileName(SrcPath), ExtractFileName(SrcPath)]));
-      Writeln('** WARNING: the per-unit verify is BEST-EFFORT, not a faithful'    );
-      Writeln('   full-build check (dcc can reuse a stale .dcu or abort on an RTL');
-      Writeln('   dependency, masking a real error). You MUST do a full project'  );
-      Writeln('   build to confirm; revert from .bak if it fails.'                );
+      if WantJson then Writeln(ItemsToJson)
+      else
+      begin
+        Writeln(Format('-- APPLIED %d move(s), %d remove(s) to %s (backup: %s.bak)', [nMove, nRemove, ExtractFileName(SrcPath), ExtractFileName(SrcPath)]));
+        Writeln('** WARNING: the per-unit verify is BEST-EFFORT, not a faithful'    );
+        Writeln('   full-build check (dcc can reuse a stale .dcu or abort on an RTL');
+        Writeln('   dependency, masking a real error). You MUST do a full project'  );
+        Writeln('   build to confirm; revert from .bak if it fails.'                );
+      end;
     end // if
+    else if WantJson then Writeln(ItemsToJson)
     else begin PrintDiff; Writeln(Format('-- DRY-RUN: %d move(s), %d remove(s) (best-effort verify -- ' + 'a full project build is required to confirm).', [nMove, nRemove])); end;
     Result:= 0;
   finally
     RefIntf.Free; RefImpl.Free; IndexedUnits.Free; NameCache.Free;
-    Orig.Free; Work.Free;
+    Orig.Free; Work.Free; Items.Free;
   end; // try
 end; // begin
 

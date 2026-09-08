@@ -308,7 +308,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 | `extract-method --file F --from-line L1 --to-line L2 --name N` | pull a statement run into a new method |
 | `create-enum-helper --qname TEnum` | generate a Byte-family record helper for an enum (`--methods`, `--tostring rtti\|case`) |
 | `uses-audit <unit.pas>` | interface->impl `uses` moves + unused units (report only) |
-| `uses-fix <unit.pas> --project P` | compiler-verified `uses` cleanup (`--remove-unused`) |
+| `uses-fix <unit.pas> --project P` | compiler-verified `uses` cleanup (`--remove-unused`, `--apply`). `--format json` emits schema `uses-fix/1`: every CANDIDATE with `kind` (move/remove), `line` and `status` -- `verified` (compiled clean, in the write set), `skipped` (+`reason`), or `deselected` (excluded by `--only`, never compiled). `--only <unit,...>` restricts which candidates are compiled and written, so a reviewed partial apply is expressible; unmatched names come back in `unmatched` rather than being dropped |
 | `format <file>` | reformat via YADF (`--yadf-path`) |
 | `shared-unit --in <file.pas>` | read or extend the `dl:shared` marker that declares a unit shared by several projects (`--add-project <name>`; dry-run without `--apply`, `--json`) |
 

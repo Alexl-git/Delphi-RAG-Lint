@@ -668,7 +668,7 @@ CI flags (apply to `lint` / `lint-all` / `check-ast`): `--format sarif` (SARIF
 | [`extract-method`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/extract-method) `--file <f> --from-line --to-line --name <n>` | Pull a statement run into a new method | `--apply` |
 | [`create-enum-helper`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/create-enum-helper) `--qname <TEnum>` | Generate a Byte-family record helper for an enum | `--methods <csv>`, `--tostring rtti\|case` |
 | `uses-audit <unit.pas> --db <db>` | Propose interface->implementation moves + unused units | `--format text\|json` |
-| `uses-fix <unit.pas> --project <dproj> --db <db>` | Compiler-verified `uses` cleanup | `--apply`, `--remove-unused` |
+| `uses-fix <unit.pas> --project <dproj> --db <db>` | Compiler-verified `uses` cleanup | `--apply`, `--remove-unused`, `--format json\|text`, `--only <unit,...>` |
 | `format <file>` | Format a `.pas` file with the YADF formatter | `--yadf-path` |
 
 **Formatting is safe for your suppressions.** drag-lint drives **YADF** for the
