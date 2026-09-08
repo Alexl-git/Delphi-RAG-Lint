@@ -98,13 +98,38 @@ if (-not (Test-Path $baseline)) {
   #
   # Nothing detected it, because a permanently green guard produces no signal.
   # So the baseline's SHAPE is now part of what is checked.
-  $active = @(Get-Content $baseline | Where-Object { $_ -and -not $_.Trim().StartsWith('#') })
+  # A DEFER-UNTIL line is ACTIVE TOO, and must be separated out BEFORE counting.
+  #
+  # 2026-09-08: the 2026-08-31 repair above (c0e18b6, "the extractor version
+  # guard could not fail") broke this guard a fourth way, in the opposite
+  # direction from the first three. Those three made it incapable of FAILING;
+  # this one made a whole documented mechanism incapable of being USED. A
+  # DEFER-UNTIL line does not start with '#', so it counted as a second active
+  # line and the hard `exit 1` below fired before the defer branch was ever
+  # reached. Every deferral was therefore rejected as "an appended line silently
+  # disarms this guard" -- advice that is exactly wrong for the one line the
+  # baseline's own header instructs the reader to add.
+  #
+  # It went unnoticed because the last real deferral (2026-08-21) was discharged
+  # ten days before the check was added, so nothing exercised the path. Found by
+  # trying to USE it, not by reading it.
+  #
+  # The append hazard it exists to catch is untouched: two `<version>|<hash>`
+  # lines still fail, and so do two DEFER-UNTIL lines.
+  $activeAll = @(Get-Content $baseline | Where-Object { $_ -and -not $_.Trim().StartsWith('#') })
+  $deferLines = @($activeAll | Where-Object { $_ -match '^\s*DEFER-UNTIL\|' })
+  $active     = @($activeAll | Where-Object { $_ -notmatch '^\s*DEFER-UNTIL\|' })
+
   Check 'baseline carries exactly ONE active line' ($active.Count -eq 1) `
     "$($active.Count) found -- an appended line silently disarms this guard"
   if ($active.Count -ne 1) {
     Write-Host '   Keep ONE `<version>|<hash>` line; move superseded ones to `#` history.' -ForegroundColor Yellow
     Write-Host 'FAIL' -ForegroundColor Red; exit 1
   }
+  Check 'baseline carries at most ONE DEFER-UNTIL line' ($deferLines.Count -le 1) `
+    "$($deferLines.Count) found -- only the first is read, so a second is a silent no-op"
+  if ($deferLines.Count -gt 1) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
+
   $stored = $active[0].Trim()
   $sv, $sh = $stored -split '\|', 2
 

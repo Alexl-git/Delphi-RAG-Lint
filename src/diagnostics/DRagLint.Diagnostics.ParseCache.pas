@@ -194,20 +194,51 @@ end;
 
 class function TAstParseCache.ApplyPreprocess(const AUtf8: TBytes; const AFile: string): TBytes;
 begin
-  Result:= AUtf8;
+  { LINE-ENDING NORMALISATION FIRST, and BEFORE the early exit below, because it
+    must happen whether or not preprocessing is enabled.
+
+    tree-sitter advances its row counter on LF only, so a CR that is not part of
+    a CRLF does not start a new line for it -- while Delphi, the RAD Studio IDE,
+    VS Code and .NET all treat it as a terminator. Every line reported after such
+    a byte is then one lower than the editor shows, which is what makes
+    `allow --fix-line N` write its review marker to the WRONG line: the user
+    reads N off the report and the marker lands one line off. Gutter icons and
+    the Problems panel point at the wrong line for the same reason, and
+    review-marker-stale then hashes the wrong line, so markers in such a file can
+    never verify.
+
+    THIS IS THE CHOKE POINT FOR BOTH LINT ENTRY POINTS. TLinter builds its own
+    TTSParser and does not share this cache, but both call HERE, which is exactly
+    why the transform belongs in this function and not in either caller.
+
+    NO EXTRACTOR BUMP. src\diagnostics is outside the hash surface
+    (run_extractor_version_guard: src\parser, src\preprocess, src\index), so this
+    half ships without a reindex. The indexer's own copy lives in
+    DRagLint.Parser.Delphi13.Parse and DOES bill the bump.
+
+    Length-preserving, so every finding's line/col offset stays valid -- the same
+    property the preprocessor's blank-to-spaces rule relies on. }
+  Result:= NormalizeLoneCR(AUtf8);
   if not (FPreprocess and FProfileSet) then Exit;
   try
     var PpOpts: TPPOptions:= TPPOptionsDefault;
     PpOpts.Profile    := FProfile;
     PpOpts.IncludeMode:= 'defines-only';
     PpOpts.BaseDir    := TPath.GetDirectoryName(AFile);
-    Result:= Preprocess(AUtf8, PpOpts);
+    { Preprocess the NORMALISED bytes (Result), never the raw AUtf8 -- passing
+      AUtf8 here silently discards the line-ending normalisation above whenever
+      preprocessing is enabled, which is the default. Both are the same length,
+      so this is not a behaviour change for any file without a lone CR. }
+    Result:= Preprocess(Result, PpOpts);
   except
     { FAIL-OPEN, matching the indexer (Indexer.pas:948). If preprocessing throws,
       lint the RAW bytes: findings are KEPT. The safe direction here is noise,
       never silent suppression -- a swallowed exception that dropped a file's
       findings would be invisible, and no count anywhere would move. }
-    on E: Exception do Result:= AUtf8;
+    { NORMALISED, not raw: the fallback drops the PREPROCESSING, which is what
+      threw, and must not also drop the line-ending normalisation, which cannot
+      throw and is what keeps reported lines pointing where the editor does. }
+    on E: Exception do Result:= NormalizeLoneCR(AUtf8);
   end;
 end;
 

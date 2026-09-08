@@ -12,6 +12,7 @@ uses
   , DRagLint.Core  .Model
   , DRagLint.Core  .Interfaces
   , DRagLint.Parser.SpringDI
+  , DRagLint.Preprocess.Types { NormalizeLoneCR -- ONE definition, in the hash surface }
   ;
 
 type
@@ -2694,7 +2695,23 @@ var
   Root  : TTSNode   ;
 begin
   Result:= Default(TParseResult);
-  Source:= ASource;
+  { A lone CR does not advance tree-sitter's row counter, so without this every
+    line this parser reports for such a file is one lower than the editor shows.
+    See NormalizeLoneCR for the measurement and the accepted edge cases.
+
+    Normalised ONCE, here, so the parse, the TWalkState spans and the string
+    literal harvest below all read the SAME bytes. Normalising only the buffer
+    fed to tree-sitter would leave the walk indexing a different one.
+
+    THIS IS ONLY THE INDEXER'S COPY, and on its own it fixes almost nothing a
+    user sees. There are THREE parse entry points -- this one, TLinter (which
+    builds its own TTSParser) and TAstParseCache.GetOrParse -- and every harm the
+    defect note lists (`allow --fix-line` writing to the wrong line, gutter icons,
+    the Problems panel, review-marker-stale) comes from the other two. They get it
+    in TAstParseCache.ApplyPreprocess, which is outside the extractor hash surface
+    and therefore ships without a reindex. Established by building this fix alone
+    and watching the note's own reproducer still report the wrong line. }
+  Source:= NormalizeLoneCR(ASource);
   Tree  := nil;
   Parser:= nil;
   State := nil;

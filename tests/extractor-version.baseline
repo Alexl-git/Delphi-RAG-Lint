@@ -426,4 +426,61 @@
 #
 #   Superseded: 1.10.0-alpha|3a652a374545bac0ce875bf8149d45769708dbc7d650f5add2e97707aa91fb43
 
+# 2026-09-08 (session 79): A DEFER-UNTIL, and the FIRST time this mechanism has
+#   been used since 2026-08-19. Read the reason before extending the date.
+#
+#   WHAT CHANGED: the lone-CR line-accounting fix, which IS a real extraction
+#   change. A CR that is not part of a CRLF terminates a line for Delphi, the
+#   RAD Studio IDE, VS Code and .NET, but tree-sitter advances its row counter
+#   on LF only -- so every line the indexer stored after such a byte was one
+#   lower than the editor shows. Two files in the hashed surface:
+#     src\preprocess\DRagLint.Preprocess.Types.pas  -- NormalizeLoneCR (new)
+#     src\parser\DRagLint.Parser.Delphi13.pas       -- calls it before parsing
+#   Stored POSITIONS therefore change for any indexed file holding a lone CR, so
+#   a bump is genuinely owed. This is not an escape-hatch "cannot affect
+#   extraction" entry; it is a postponement of a debt that is real.
+#
+#   WHY IT IS DEFERRED RATHER THAN BUMPED NOW. The bump is batched, by the
+#   owner's standing instruction: INBOX-extractor-change-bank.md holds TWO rows
+#   and only this one is built. The other -- M1b, a body-inline comment corpus
+#   written at index time -- is unbuilt. Bumping today would bill the full ~5 h
+#   re-parse of ~7,000 library files plus every project index and bank only half
+#   the batch, which is exactly what PLAN-SESSION-79 forbids: "If they are not
+#   both finished and guarded by then, do not bump and do not start the
+#   reindex."
+#
+#   WHAT IS STALE MEANWHILE, stated plainly because a deferral is a live debt:
+#   every existing index keeps the OLD (one-too-low) line numbers for the files
+#   that contain a lone CR. Measured across all 34 indexes on this machine:
+#   58 files of 11,370, of which only 7 are code and 6 of those are vendored --
+#   ABC5, kbmMemTable, OmniThreadLibrary and a CAD library. Exactly one is code
+#   this shop owns (DataCopy Tests\Test.UsageWiring.pas, one lone CR).
+#
+#   AND THE USER-VISIBLE HALF IS ALREADY FIXED WITHOUT THIS BUMP, which is why
+#   deferring costs so little. There are THREE parse entry points and only one
+#   is in this surface:
+#     TDelphi13Parser.Parse       (src\parser)      -- the indexer   <- deferred
+#     TLinter                     (src\lint)        -- own TTSParser <- SHIPPED
+#     TAstParseCache.GetOrParse   (src\diagnostics) -- AST checks    <- SHIPPED
+#   Every harm the defect note lists -- `allow --fix-line` writing a review
+#   marker to the wrong line, gutter icons, the Problems panel,
+#   review-marker-stale hashing the wrong line -- comes from the latter two,
+#   which are OUTSIDE this surface and shipped today with no reindex. Both get
+#   the transform in TAstParseCache.ApplyPreprocess.
+#
+#   THE TRANSITIONAL INCONSISTENCY, so it is not discovered as a surprise: until
+#   the bump, `lint` reports the editor-correct line for a lone-CR file while the
+#   INDEX still holds the old one. Two surfaces disagreeing by one line, on the
+#   seven files above. That is the price of the deferral and it resolves on the
+#   reindex.
+#
+#   THE DATE. PLAN-SESSION-79 has the owner kicking off the ~5 h reindex on
+#   Tuesday evening 2026-09-09, with the bump immediately before it. 2026-09-10
+#   gives that one day of slack so an overnight run cannot turn the battery red
+#   mid-flight. The guard goes RED by itself on 2026-09-11, which is the point.
+#
+#   Pinned by tests\autotest\run_lone_cr_line_accounting.ps1, which was
+#   observed RED (13,17) against the pre-fix engine and green (14,18) after.
+DEFER-UNTIL|2026-09-10|b6dea3f4f3b45a05fa18c6781eace85bfb32a1ac9f7325b12ec40ecd485acf14|lone-CR line accounting is built; M1b (comment corpus) is not, and the bank bumps ONCE for both
+
 1.10.0-alpha|7562d480be39c02cdf165f9bf4edf888a158742de7a2b68468a0e1e2eff637d2
