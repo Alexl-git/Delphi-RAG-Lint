@@ -174,4 +174,69 @@ Check 'EXPLICIT: and nothing is reported as skipped' `
   (-not ($one.Err -match 'were NOT rewritten')) ''
 
 Write-Host ''
+Write-Host 'CONTROL 4 -- the skip happens BEFORE THE PARSE, not after it' -ForegroundColor Cyan
+# WHY A LOCK. Controls 1-3 all assert on the REPORT, and the report looks
+# identical whether the walk never opened the non-member or parsed it and
+# dropped its findings afterwards. That is not a hypothetical gap: this filter
+# has shipped INERT TWICE. First it read AArgs.Target; then B8 (4e0ed68) called
+# WalkClosure with a store that was still nil, because the store was opened 425
+# lines further down. Both times the twelve controls above stayed green, because
+# the post-hoc finding filter in FinalizeAndOutput was doing the whole job.
+#
+# An exclusive lock is the cheapest observable that separates the two: a file
+# the walk OPENS produces a `SKIP <path>: EInOutError ...` line from
+# Linter.pas, and a file it never opens produces nothing. So the assertion is
+# about a line that must be ABSENT -- which is why it is paired with 4b below.
+#
+# RED BASELINE, MEASURED 2026-09-07 and not predicted. An engine was built
+# with the pre-T2 state reproduced EXACTLY -- WalkClosure handed a nil store at
+# that one call site, everything else untouched, so the post-hoc finding filter
+# still worked, which is what the real defect looked like. Result:
+#
+#   ALL TWELVE existing controls PASS. Only 4a goes RED.
+#
+# That is the whole argument for this section in one line: the twelve controls
+# are structurally incapable of seeing this defect, because they read a report
+# that a different mechanism was producing correctly. 4b and 4c stay green in
+# the red build too, as controls should.
+#
+# (A first, cruder probe nilled the store PERMANENTLY and took five other
+# controls red with it. That would have been a weaker claim -- it breaks the
+# finding filter as well -- so it was discarded and re-measured.)
+function RunLintLocked([string[]]$ExtraArgs, [string]$Tag, [string]$LockPath) {
+  $fs = [System.IO.File]::Open($LockPath, 'Open', 'Read', 'None')
+  try   { return RunLint $ExtraArgs $Tag }
+  finally { $fs.Dispose() }   # a leaked handle would poison every later run
+}
+
+$lockOut = RunLintLocked @('lint', (Join-Path $WorkDir 'src'), '--db', $db) 'locked-out' `
+             (Join-Path $WorkDir 'src\OutOfClosure.pas')
+$lockOutAll = $lockOut.Out + $lockOut.Err
+
+Check '4a LOCKED NON-MEMBER: the walk never opened it (no SKIP line)' `
+  (-not ($lockOutAll -match '(?m)SKIP .*OutOfClosure\.pas')) `
+  'a SKIP line means LintFolder tried to PARSE a file no project compiles'
+
+Check '4b and the in-closure finding is still reported' `
+  ($lockOutAll -match 'InClosure\.pas:\d+:\d+') `
+  'without this, 4a would also pass against a run that linted nothing at all'
+
+# POSITIVE CONTROL FOR THE LOCK ITSELF. If the lock silently failed to take,
+# 4a would pass for the wrong reason. Locking a MEMBER must produce the SKIP
+# line, because that file IS walked.
+#
+# Known separate wart, deliberately tolerated here: a locked MEMBER also ends
+# the run with `FATAL: EInOutError` from a later stage that reads the file
+# unguarded (ApplyLineMarkers / the built-in checkers). A locked file is an
+# artificial condition, so this asserts only on the SKIP line and ignores the
+# exit code -- recorded rather than silently worked around.
+$lockIn = RunLintLocked @('lint', (Join-Path $WorkDir 'src'), '--db', $db) 'locked-in' `
+            (Join-Path $WorkDir 'src\InClosure.pas')
+$lockInAll = $lockIn.Out + $lockIn.Err
+
+Check '4c POSITIVE CONTROL: locking a MEMBER does produce a SKIP line' `
+  ($lockInAll -match '(?m)SKIP .*InClosure\.pas') `
+  'the lock is not taking effect, so 4a proves nothing'
+
+Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
