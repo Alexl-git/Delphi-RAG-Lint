@@ -821,7 +821,7 @@ begin
   Writeln('                               file): the ACTIVE PROJECT''s db first, then the folder-matched db.');
   Writeln('                               Omit --project to model "no project active". Same resolution the IDE');
   Writeln('                               uses, so this is how it is verified without an IDE.');
-  Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units');
+  Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
   Writeln('  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project''s _D-RAG folder');
@@ -23516,7 +23516,7 @@ begin
   end;
 end; // function
 
-// reconcile-project <App.dpr|.dproj> [--apply] [--json] [--config <path>]
+// reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--json] [--config <path>]
 // Dry-run (default): print MISSING/EXTRA/STALE report, exit 0, write nothing.
 // --apply: back up .dpr/.dproj and insert Missing units (Task 2).
 // --json: emit a JSON object {missing,extra,stale} to stdout instead of text.
@@ -23605,6 +23605,49 @@ begin
   Reconciler:= TProjectReconciler.Create(LibRoots, StaleGlobs);
   try
     RR:= Reconciler.Analyze(ProjectFile);
+
+    { --only <unit,...>: restrict the actionable set to a reviewed selection.
+
+      WHY IT FILTERS RR ITSELF, and this early. TProjectReconciler.Apply writes
+      whatever is in Missing, so narrowing Missing here is the whole feature --
+      the reconciler keeps sole ownership of the rewrite, and the IDE never
+      reimplements it to get a partial apply. Filtering here also means the
+      REPORT and the WRITE are narrowed by one act: a dry run with --only is an
+      exact preview of the apply, because there is no second place where "the
+      selected set" could be computed differently.
+
+      MISSING ONLY. Apply adds missing units and touches nothing else (it exits
+      early when Missing is empty, and never reads Extra or Stale), so those two
+      sections stay unfiltered: they are advisory, and filtering an advisory
+      list by what you intend to WRITE hides findings instead of deferring them.
+
+      An unmatched name is REPORTED, not ignored. A typo would otherwise look
+      exactly like a clean run against an already-reconciled project. }
+    if Length(AArgs.OnlySections) > 0 then
+    begin
+      var Kept   : TArray<TReconcileItem>;
+      var Matched: TStringList:= TStringList.Create;
+      try
+        Matched.Sorted:= True;
+        Matched.Duplicates:= dupIgnore;
+        Matched.CaseSensitive:= False;
+        for var MItem in RR.Missing do
+          for var Sel in AArgs.OnlySections do
+            if SameText(MItem.UnitName, Sel) then
+            begin
+              SetLength(Kept, Length(Kept) + 1);
+              Kept[High(Kept)]:= MItem;
+              Matched.Add(Sel);
+              Break;
+            end;
+        for var Sel in AArgs.OnlySections do
+          if Matched.IndexOf(Sel) < 0 then
+            Writeln(Format('  --only: "%s" matches no MISSING unit -- ignored.', [Sel]));
+        RR.Missing:= Kept;
+      finally
+        Matched.Free;
+      end;
+    end;
 
     // Index/findings coherence phase (only with an EXPLICIT --db): ensure every
     // project member is indexed + compile-fresh in <db>, healing missing/stale

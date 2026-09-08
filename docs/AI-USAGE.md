@@ -514,7 +514,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 | `index --all` | build every DB in the manifest (`--only`, `--platform`, `--jobs`, `--dry-run`) |
 | `register-project` | add a NEW project to the manifest as its own section, so `index --all` and the IDE's reindex can see it. Dry-run by default; `--apply` writes. Refuses when a section already claims the project |
 | `resolve-dbs` | print the consumer DB list a query/lsp/serve would use (`--platform`), or resolve the single DB covering one target (`--project <x.dproj>`, `--in <x.pas>`) |
-| `reconcile-project <App.dproj>` | sync project member list; flag stale used units (`--apply`) |
+| `reconcile-project <App.dproj>` | sync project member list; flag stale used units (`--apply`). `--only <unit,...>` restricts MISSING -- and therefore what `--apply` writes -- to a reviewed selection, so a dry run with `--only` is an exact preview of the apply. EXTRA and STALE stay unfiltered: they are advisory, and `--apply` never touches them |
 | `library-drift` | registry roots missing from the library index (exit 2 = drift) |
 | `workspace index\|status\|add` | multi-project workspace operations |
 | `forms-csv --project P --db DB` | test-helper form-navigation CSV, one row per form |
