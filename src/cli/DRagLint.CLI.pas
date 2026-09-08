@@ -66,6 +66,7 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults { Task 5: TComparer<string>.Construct for the lint-all skip-report sort }
   , System.Diagnostics       { TStopwatch -- DRAGLINT_PROFILE per-phase lint-all timing }
+  , System.SyncObjs          { TEvent -- the resolve-stage heartbeat's interruptible wait }
   , System.Math
   , Data.DB
   , FireDAC.Comp.Client
@@ -2432,6 +2433,317 @@ end; // procedure
   Deliberately does NOT fail the section, matching the folder walk exactly: one
   unparseable file out of hundreds should cost that file, not the index. The
   SKIP line is the record, and it goes to the same place the walk's does. }
+type
+  /// <summary>Prints a periodic "still running" line for a long resolve stage
+  /// until it is stopped.</summary>
+  /// <remarks>
+  /// <para>Exists because the post-parse phase is the ONLY part of an index run
+  /// with no natural per-item output: the file walk prints a line per file, and
+  /// then the four cross-unit resolve passes print nothing for as long as they
+  /// take. Measured 2026-09-08 on a full library re-parse: 62 minutes of total
+  /// silence -- 17% of a 6-hour run -- during which the process was at 99% CPU
+  /// and indistinguishable from a hang.</para>
+  /// <para>A stage announcement alone answers "what is it doing"; it does NOT
+  /// answer "is it still alive" once the stage has been running for an hour.
+  /// This does, and it is deliberately coarse -- one line a minute, not per
+  /// item. The resolve passes have no cheap denominator to report a percentage
+  /// against, so elapsed time is the honest signal.</para>
+  /// <para>Thread-safety: Stage stops and JOINS this thread before printing its
+  /// own completion line, so the beat never races the frame around it. It CAN
+  /// race the pass itself: the storage layer writes from the owning thread
+  /// mid-pass (`resolve: calls ... starting WHOLE-DB pass`, and the `N file(s)
+  /// WITHHELD` notice), so a beat landing in the same instant could interleave.
+  /// Unlocked deliberately -- the alternative is a lock reaching into the
+  /// storage layer's every write, and at one beat a minute against a handful of
+  /// mid-pass lines the exposure is a garbled line, not lost information.
+  /// Measured on a 200-unit corpus at a 1 ms interval: 38 beats, none shredded.
+  /// If mid-pass output ever becomes chatty, revisit this.</para>
+  /// </remarks>
+  TStageHeartbeat = class(TThread)
+  private
+    FLabel : string;
+    FIndent: string;
+    FT0    : TDateTime;
+    FStop  : TEvent;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(const AIndent, ALabel: string);
+    destructor Destroy; override;
+    /// <summary>Signals the beat to stop and waits for it to finish.</summary>
+    procedure StopAndWait;
+  end;
+
+const
+  { One line a minute. Long enough that a 20-second stage stays silent (nothing
+    to say), short enough that an operator watching a multi-hour pass never
+    waits more than a minute for proof of life. }
+  STAGE_HEARTBEAT_DEFAULT_MS = 60000;
+  { TEST SEAM, and it earns its keep. A heartbeat whose interval is only ever 60
+    s cannot be exercised by any test that finishes in less than a minute, so it
+    would ship unverified -- and a heartbeat that never fires is indistinguishable
+    from the silence it exists to break. Overriding this is the only way a runner
+    can prove the beat actually beats. Undocumented in --help on purpose: it is a
+    test hook, not a feature. }
+  STAGE_HEARTBEAT_ENV = 'DRAGLINT_STAGE_HEARTBEAT_MS';
+
+/// <summary>The heartbeat interval in ms -- the env override when set to a
+/// positive integer, otherwise one minute.</summary>
+function StageHeartbeatMs: Cardinal;
+var
+  V: string;
+  N: Integer;
+begin
+  Result:= STAGE_HEARTBEAT_DEFAULT_MS;
+  V:= GetEnvironmentVariable(STAGE_HEARTBEAT_ENV);
+  if (V <> '') and TryStrToInt(V, N) and (N > 0) then Result:= Cardinal(N);
+end;
+
+constructor TStageHeartbeat.Create(const AIndent, ALabel: string);
+begin
+  inherited Create(False);
+  FreeOnTerminate:= False;
+  FIndent:= AIndent;
+  FLabel := ALabel;
+  FT0    := Now;
+  FStop  := TEvent.Create(nil, True, False, '');
+end;
+
+destructor TStageHeartbeat.Destroy;
+begin
+  FStop.Free;
+  { dl:ok inherited-bare -- the standard destructor idiom. A bare `inherited` in
+    a destructor is the ONLY correct form: naming Destroy explicitly would call
+    it non-virtually and skip TThread's own teardown. }
+  inherited;  // dl:ok inherited-bare@246d
+end;
+
+procedure TStageHeartbeat.Execute;
+var
+  Elapsed: Double;
+begin
+  { WaitFor, not Sleep: a stage that finishes in 3 s must not keep the process
+    alive for the rest of the minute waiting to say so. }
+  while FStop.WaitFor(StageHeartbeatMs) = wrTimeout do
+  begin
+    Elapsed:= (Now - FT0) * SecsPerDay;
+    { %.2d, NOT %02d. Delphi's Format reads the 0 as part of the WIDTH and pads
+      with spaces, so %02d yields '0m 0s'; zero-padding is the PRECISION form.
+      Caught by the runner asserting the rendered shape rather than merely that
+      a beat occurred. }
+    Writeln(Format('%sstage: %s -- still running, %dm%.2ds elapsed',
+      [FIndent, FLabel, Trunc(Elapsed) div SecsPerMin, Trunc(Elapsed) mod SecsPerMin]));
+    Flush(Output);
+  end;
+end;
+
+procedure TStageHeartbeat.StopAndWait;
+begin
+  FStop.SetEvent;
+  WaitFor;
+end;
+
+/// <summary>Runs one resolve pass, announcing it before it starts and timing it
+/// when it ends.</summary>
+/// <param name="AIndent">Leading whitespace, so a line matches the indentation
+/// its call site already uses.</param>
+/// <param name="ALabel">The stage's name, e.g. 'calls'. Named individually and
+/// not as one blanket "resolving" line, because WHICH pass is slow is the
+/// question that matters -- the call pass is ~99% of this phase (2,252 s
+/// against ~21 s for the other three together on a library corpus).</param>
+/// <param name="AProc">The pass itself.</param>
+/// <remarks>Announces BEFORE running, and flushes: a line buffered until the
+/// stage completes would report the silence rather than break it. Exceptions
+/// propagate unchanged -- the heartbeat is stopped in a finally so a failing
+/// pass cannot leave a thread beating over the error message.</remarks>
+procedure Stage(const AIndent, ALabel: string; AProc: TProc);
+var
+  T0  : TDateTime;
+  Beat: TStageHeartbeat;
+begin
+  Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', Now)]));
+  Flush(Output);
+  T0  := Now;
+  Beat:= TStageHeartbeat.Create(AIndent, ALabel);
+  try
+    AProc();
+  finally
+    Beat.StopAndWait;
+    Beat.Free;
+  end;
+  Writeln(Format('%sstage: %s -- done in %.1fs', [AIndent, ALabel, (Now - T0) * SecsPerDay]));
+  Flush(Output);
+end;
+
+{ ---------------------------------------------------------------------------
+  DOC-APPLY DAMAGE GUARD
+
+  Filed 2026-09-08 from DataCopy: `document --unit --apply --no-backup` DELETED
+  two method declarations from a class. Each lost declaration had been replaced
+  by a duplicated `/// </remarks>`, so the unit still PARSED and nothing
+  shouted; it was caught only by a later lint run reporting doc-orphan-block and
+  a class-surface diff against the committed revision. One step later and the
+  deletion would have been committed, and `--no-backup` had removed the only
+  local way back.
+
+  THE ROOT CAUSE IS NOT KNOWN AND THIS DOES NOT FIX IT. Two faithful attempts
+  to reproduce it failed. This is the consumer's own suggested remedy, chosen
+  precisely because it is independent of the cause: turn a silent code deletion
+  into a refusal.
+
+  THE INVARIANT. On the non-strip document path the writer manages `///` blocks
+  and nothing else -- measured before this was written: plain `//` comments,
+  brace comments, blank lines and code all survive an ordinary run untouched.
+  (Written without a literal brace pair on purpose: a closing brace inside a
+  brace comment TERMINATES it, which broke this very build once already.)
+  So "every line that is not a `///` comment survives, in order" is a COMPLETE
+  description of a legal doc write, with no false positives from comment style.
+  A declaration line is not a `///` line, so consuming one is caught by
+  construction rather than by enumerating failure shapes.
+
+  NOT APPLIED TO THE STRIP PATH (DoDocumentStripQName). Stripping removes doc
+  blocks, which is a different contract; holding it to this invariant would
+  refuse its ordinary work.
+  --------------------------------------------------------------------------- }
+
+const
+  { TEST SEAM. The defect has no reproducer, so without a way to force the
+    damage the guard could only ever be observed NOT firing -- and a guard never
+    seen fire is a guard that may be incapable of firing. Set to 1, this appends
+    one synthetic edit that deletes a CODE line, which is the shape reported.
+    Undocumented in --help on purpose: a test hook, not a feature. }
+  DOC_SELFTEST_DAMAGE_ENV = 'DRAGLINT_DOC_SELFTEST_DAMAGE';
+
+/// <summary>The part of a unit a doc write must never change: every line that
+/// is not a <c>///</c> comment, joined.</summary>
+/// <remarks>Compared before and after an apply. Leading whitespace is kept, so
+/// a re-indent counts as a change too -- the writer has no business reflowing
+/// code either.</remarks>
+function DocCodeSkeleton(const AText: string): string;
+var
+  L    : TStringList;
+  Keep : TStringList;
+  I    : Integer;
+begin
+  L   := TStringList.Create;
+  Keep:= TStringList.Create;
+  try
+    L.Text:= AText;
+    for I:= 0 to L.Count - 1 do
+      if not StartsText('///', TrimLeft(L[I])) then Keep.Add(L[I]);
+    Result:= Keep.Text;
+  finally
+    Keep.Free;
+    L.Free;
+  end;
+end;
+
+/// <summary>Applies doc edits and refuses -- restoring every touched file
+/// byte-for-byte -- if the write changed any line that is not a
+/// <c>///</c> comment.</summary>
+/// <param name="AEdits">The doc writer's edits.</param>
+/// <param name="AWriteBackups">As TTextEditApplier.Apply.</param>
+/// <param name="ASkipped">As TTextEditApplier.Apply: edits refused by their own
+/// stale-anchor guard.</param>
+/// <param name="AViolation">Empty when the write was legal; otherwise a
+/// human-readable refusal naming the file.</param>
+/// <returns>Files touched, or 0 when the write was refused.</returns>
+/// <remarks>Snapshots the ORIGINAL BYTES in memory rather than trusting the
+/// .bak, because the reported incident ran with --no-backup -- the mode in
+/// which the damage is unrecoverable is exactly the mode that must be
+/// protected.</remarks>
+function ApplyDocEditsGuarded(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean;
+  out ASkipped: Integer; out AViolation: string): Integer;
+var
+  Edits   : TArray<TTextEdit>;
+  Paths   : TStringList;
+  Snapshot: TDictionary<string, TBytes>;
+  E       : TTextEdit;
+  P       : string;
+  I       : Integer;
+begin
+  Result    := 0;
+  ASkipped  := 0;
+  AViolation:= '';
+  Edits     := AEdits;
+  if Length(Edits) = 0 then Exit;
+
+  Paths   := TStringList.Create;
+  Snapshot:= TDictionary<string, TBytes>.Create;
+  try
+    Paths.Sorted    := True;
+    Paths.Duplicates:= dupIgnore;
+    for E in Edits do
+      if (E.FilePath <> '') and TFile.Exists(E.FilePath) then Paths.Add(E.FilePath);
+    for P in Paths do Snapshot.AddOrSetValue(P, TFile.ReadAllBytes(P));
+
+    { The seam. Appended AFTER the snapshot so the restore is measured against
+      the real pre-write bytes. }
+    if (GetEnvironmentVariable(DOC_SELFTEST_DAMAGE_ENV) = '1') and (Paths.Count > 0) then
+    begin
+      var Victim: TStringList:= TStringList.Create;
+      try
+        Victim.Text:= TEncoding.ANSI.GetString(Snapshot[Paths[0]]);
+        for I:= 0 to Victim.Count - 1 do
+          if (not StartsText('///', TrimLeft(Victim[I]))) and (Trim(Victim[I]) <> '') and
+             (StartsText('function', TrimLeft(Victim[I])) or StartsText('procedure', TrimLeft(Victim[I]))) then
+          begin
+            E:= Default(TTextEdit);
+            E.FilePath:= Paths[0];
+            E.Kind    := tekDeleteLines;
+            E.Line    := I + 1;
+            E.EndLine := I + 1;
+            Edits     := Edits + [E];
+            Break;
+          end;
+      finally
+        Victim.Free;
+      end;
+    end;
+
+    Result:= TTextEditApplier.Apply(Edits, AWriteBackups, ASkipped);
+
+    for P in Paths do
+    begin
+      if not TFile.Exists(P) then
+      begin
+        AViolation:= Format('%s: the file is GONE after the write', [P]);
+        Break;
+      end;
+      if DocCodeSkeleton(TEncoding.ANSI.GetString(TFile.ReadAllBytes(P))) <>
+         DocCodeSkeleton(TEncoding.ANSI.GetString(Snapshot[P])) then
+      begin
+        AViolation:= Format('%s: the write would change a line that is not a /// comment', [P]);
+        Break;
+      end;
+    end;
+
+    { ALL-OR-NOTHING. A batch run edits many files, and a per-file restore would
+      leave the run half-applied -- which is a worse state to hand back than
+      either extreme, because nothing downstream can tell which half is which. }
+    if AViolation <> '' then
+    begin
+      for P in Paths do
+        if Snapshot.ContainsKey(P) then TFile.WriteAllBytes(P, Snapshot[P]);
+      Result:= 0;
+    end;
+  finally
+    Snapshot.Free;
+    Paths.Free;
+  end;
+end;
+
+/// <summary>Prints the refusal and returns the CLI exit code for it.</summary>
+function ReportDocDamageRefusal(const AViolation: string): Integer;
+begin
+  Writeln(ErrOutput, 'ERROR: doc apply REFUSED -- ' + AViolation);
+  Writeln(ErrOutput, '  Every touched file was restored byte-for-byte; nothing was written.');
+  Writeln(ErrOutput, '  `document` manages /// blocks only, so a change to any other line is a defect,');
+  Writeln(ErrOutput, '  not a formatting difference. Please report this with the unit that triggered it:');
+  Writeln(ErrOutput, '  docs\INBOX-document-apply-deletes-declarations.md');
+  Result:= 3;
+end;
+
 function IndexOneFileTolerant(const AIndexer: IIndexer; const APath: string): Boolean;
 begin
   Result:= True;
@@ -2504,6 +2816,24 @@ begin
   try
     Store:= TSQLiteSymbolStore.Create(AItem.DbPath);
     Store.Migrate;
+
+    { THE OPENING HALF OF A PAIR. The section already announces how it ENDED;
+      until now it never announced that it had BEGUN, and the difference is not
+      cosmetic. On 2026-09-08 a library platform finished normally and its
+      worker exited, and from outside that was indistinguishable from a crash --
+      because a summary can only ever prove success AFTER the fact. A BEGIN with
+      no matching summary is unambiguous while the run is still in flight, and
+      it is the only in-flight death signal there can be.
+
+      Deliberately carries the wall-clock START time: every other duration in
+      this output is relative, so without one absolute stamp per section a log
+      read the next morning cannot be aligned against anything else that
+      happened on the box. }
+    var BeginPlat: string:= '';
+    if AItem.Platform <> '' then BeginPlat:= ' [' + AItem.Platform + ']';
+    Writeln(Format('=== %s%s BEGIN -> %s : started %s ===',
+      [AItem.Name, BeginPlat, AItem.DbPath, FormatDateTime('hh:nn:ss', Now)]));
+    Flush(Output);
 
     { MODE. --rebuild empties the index of source before the walk; --recompile
       (the default) updates in place and lets the eviction below remove what has
@@ -2743,9 +3073,9 @@ begin
       Only the call pass is guarded -- see the DoIndex note for why the other
       three stay unconditional (they are the repair path, and they cost ~21 s
       together on that same index). }
-    Store.ResolveUnitUseTargets;
-    Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
-    Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
+    Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
+    Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
+    Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
     { CallEdgesNeedRebuild: see the DoIndex site for the full argument. Short
       version -- "no file changed" only implies "every edge still holds" if the
       edges existed to begin with, and this is the path `index --all` takes, so
@@ -2762,9 +3092,13 @@ begin
     if ResolverStale or AResolveOnly then Store.ClearCallEdges;
     if (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
        Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly then
-      Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
+      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
     else
-      Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
+      Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
+    { The checkpoint below folds the -wal in and is NOT free on a multi-gigabyte
+      index, so it is announced too: it is the last thing between the operator
+      and the section summary, and an unannounced pause there reads exactly like
+      the hang this instrumentation exists to rule out. }
     Elapsed:= (Now - T0) * 86400;
 
     var PlatSuffix:= '';
@@ -2803,7 +3137,7 @@ begin
       finishes, rather than whenever this process happens to close. `index
       --all` builds many sections in one process and is exactly the run someone
       copies a database out of while it is still going. }
-    Store.Checkpoint;
+    Stage('  ', 'checkpoint', procedure begin Store.Checkpoint; end);
     Writeln(Format('=== %s%s -> %s : files=%d symbols=%d [%.1fs] ===', [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols, Elapsed]));
     Result:= True;
   except
@@ -4234,9 +4568,9 @@ begin
       principle leave a call edge that was derived from the broken uses graph.
       `--force-reparse` re-runs everything, and DRAGLINT_NO_SCOPED_RESOLVE=1
       forces the full-corpus call pass; both are one flag away. }
-    Store.ResolveUnitUseTargets;
-    Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
-    Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
+    Stage('', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
+    Stage('', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
+    Stage('', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
     { A MISSING EDGE SET ALSO FORCES THE PASS. Every other term here asks "did
       anything change?", and the skip message's premise -- no file changed, so
       every call edge already holds -- is only true if the edges were there in
@@ -4262,9 +4596,9 @@ begin
     if (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
        (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or ResolverStale or
        AArgs.ResolveOnly then
-      Store.ResolveCallTargets(OpenLibraryStores(AArgs)) { v14 (D5) + v21 cross-DB }
+      Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end) { v14 (D5) + v21 cross-DB }
     else
-      Writeln('resolve: calls skipped -- no file changed, so every call edge already holds.');
+      Writeln('stage: calls -- skipped, no file changed, so every call edge already holds.');
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
     CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform);
@@ -4354,9 +4688,9 @@ begin
     else if TFile.Exists(F) then Indexer.IndexFile(F)
     else Writeln('  (skip, not found) ', F);
   end;
-  Store.ResolveUnitUseTargets;
-  Store.ResolveAncestry; { v11 (M1): link class/interface heritage cross-unit }
-  Store.ResolveHelpers;  { v15: link record/class helper targets cross-unit }
+  Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
+  Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
+  Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
   { GUARDED, v0.86 -- see the long note at the DoIndex call site. This function's
     only writer is the Indexer walk above: it does not clear, prune or evict, so
     ParsedFiles alone is the whole precondition here.
@@ -4367,9 +4701,9 @@ begin
     unchanged corpus -- see the DoIndex site for the argument. A dictionary build
     can open a database whose edges were dropped just as the other two can. }
   if (Indexer.ParsedFiles > 0) or Store.CallEdgesNeedRebuild then
-    Store.ResolveCallTargets { v14 (D5): resolve call sites to target symbols }
+    Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
   else
-    Writeln('  resolve: calls skipped -- no file changed, so every call edge already holds.');
+    Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
@@ -13598,7 +13932,9 @@ begin
   if Applied then
   begin
     var Skipped: Integer:= 0;
-    TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup, Skipped);
+    var DocViol : string;
+    ApplyDocEditsGuarded(Res.Edits, not AArgs.NoBackup, Skipped, DocViol);
+    if DocViol <> '' then Exit(ReportDocDamageRefusal(DocViol));
     // v(PHASE A2 + D-2): a refusal means the index and the file disagree.
     // Reindex, recompute from the fresh coordinates, and apply once more.
     if Skipped > 0 then
@@ -13610,7 +13946,11 @@ begin
       Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
       Skipped:= 0;
       if Length(Res.Edits) > 0 then
-        TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup, Skipped);
+      begin
+        var DocViol2: string;
+        ApplyDocEditsGuarded(Res.Edits, not AArgs.NoBackup, Skipped, DocViol2);
+        if DocViol2 <> '' then Exit(ReportDocDamageRefusal(DocViol2));
+      end;
       if Skipped > 0 then Exit(ReportStaleAnchorRefusal(Skipped));
     end;
   end;
@@ -13662,7 +14002,12 @@ begin
   // So this path fails LOUDLY and names the flag that reconciles the two, which
   // this verb already has: --reindex brackets the run with an index pass.
   var BatchSkipped: Integer:= 0;
-  if Applied then TTextEditApplier.Apply(ARes.Edits, not AArgs.NoBackup, BatchSkipped);
+  if Applied then
+  begin
+    var DocViolB: string;
+    ApplyDocEditsGuarded(ARes.Edits, not AArgs.NoBackup, BatchSkipped, DocViolB);
+    if DocViolB <> '' then Exit(ReportDocDamageRefusal(DocViolB));
+  end;
 
   // v(ADP3 T2): --strip has its own reporting shape (tags/blocks REMOVED),
   // shared by document --project and document-all. v(ADP3 T3d2 D6): routed
@@ -14114,7 +14459,9 @@ begin
   if Applied then
   begin
     var Skipped: Integer:= 0;
-    TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup, Skipped);
+    var DocViolQ: string;
+    ApplyDocEditsGuarded(Res.Edits, not AArgs.NoBackup, Skipped, DocViolQ);
+    if DocViolQ <> '' then Exit(ReportDocDamageRefusal(DocViolQ));
     // v(PHASE A2 + D-2): THE filed case -- two --qname applies in a row against
     // one class, no reindex between them. See ReindexAfterStaleAnchor.
     if Skipped > 0 then
@@ -14128,7 +14475,11 @@ begin
         LoadDocMaxCallers, LoadDocComplexityMin);
       Skipped:= 0;
       if Length(Res.Edits) > 0 then
-        TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup, Skipped);
+      begin
+        var DocViolQ2: string;
+        ApplyDocEditsGuarded(Res.Edits, not AArgs.NoBackup, Skipped, DocViolQ2);
+        if DocViolQ2 <> '' then Exit(ReportDocDamageRefusal(DocViolQ2));
+      end;
       if Skipped > 0 then Exit(ReportStaleAnchorRefusal(Skipped));
     end;
   end;
@@ -24085,10 +24436,10 @@ begin
           // index site's post-pass) so unit_uses / ancestry / calls resolve.
           if CohScanned > 0 then
           begin
-            Store.ResolveUnitUseTargets;
-            Store.ResolveAncestry;
-            Store.ResolveHelpers;
-            Store.ResolveCallTargets;
+            Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
+            Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end);
+            Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);
+            Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
           end;
 
           // Recompile + refresh compiler_findings for the whole project when
