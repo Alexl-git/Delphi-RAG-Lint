@@ -385,15 +385,37 @@ sits at its declared default now RESOLVES, and the resolved value is emitted
 explicitly rather than silently dropped. Two new report kinds carry it:
 `default-superseded` and `default-resolved`.
 
+> **Renamed after this release.** `default-superseded` became
+> **`default-rule-superseded`** on 2026-09-08, at the converter team's request:
+> "default" meant our `#default` RULE DIRECTIVE in this one kind and the Delphi
+> `default` CLAUSE in the three beside it. A consumer pinned to the old spelling
+> sees the kind vanish rather than change. Nothing had built against it yet,
+> which is why it was taken immediately.
+
 `#when` now matches a resolved default exactly as it matches a streamed value,
 so a mapping over an enum finally fires on that enum's own default.
 **`mapping-source-absent` is correspondingly NARROWED** to the only case where
 nothing can honestly be said: absent, and no clause to resolve it to.
 
-**This reverses the `#else` gating that downstream rule books were told about on
-2026-09-04.** `#else` now fires only when the source is absent AND has no usable
-default. A `#when` written to catch "the enum is at its default" by way of
-`#else` will stop firing -- write the default as an explicit `#when` arm.
+**`#else` fires when the source value RESOLVED -- present, or absent and carried
+from its declared `default` -- and no `#when` arm matched.** It stays gated OFF
+in the one case where nothing can be resolved (absent AND no usable default),
+because firing it there would invent a target value out of nothing.
+
+D2 therefore makes `#else` fire in strictly MORE cases than before, not fewer:
+an absent leaf with a `default` clause now resolves and can reach it, where
+previously it went straight to `mapping-source-absent`.
+
+> **CORRECTED 2026-09-08. The two paragraphs above previously said the exact
+> reverse** -- that `#else` "now fires only when the source is absent AND has no
+> usable default", and that a `#when` catching an enum's default by way of
+> `#else` "will stop firing". Both were wrong, and the second described a
+> behaviour that never existed: before D2 an absent leaf did not reach `#else`
+> either. The CODE and the tests were right throughout
+> (`DfmReemit.pas` `EvaluateMapping` exits before the `#else` check when
+> `ResolveLeafValue` fails; `run_dfm_reemit.ps1:392` pins it). The converter
+> team caught it while relabelling their `#else` UI to match this text, which
+> would have put the false statement in front of users.
 
 `stored` is honoured. `Vcl.Controls.pas` declares
 `Color ... stored IsColorStored default clWindow`; with `ParentColor` set,

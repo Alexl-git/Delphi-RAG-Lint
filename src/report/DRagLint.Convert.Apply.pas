@@ -117,7 +117,7 @@ type
     aikMappingSourceAbsent,  { #apply'd #mapping's source is not in the block AND
                                has no usable default to resolve it to }
     aikMappingNotApplied,    { #apply'd #mapping matched no value }
-    aikDefaultSuperseded,    { #default skipped -- a rule already carried that path }
+    aikDefaultRuleSuperseded,{ #default skipped -- a rule already carried that path }
     aikDefaultResolved,      { F prop absent-because-default; its value was carried }
     aikEnumCastUnmapped);    { an enum cast had no map for this value and no else }
 
@@ -423,7 +423,7 @@ const
     'link-stub-unfilled', 'collection-relocated', 'defaults-may-diverge',
     'cast-not-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
-    'default-superseded', 'default-resolved', 'enum-cast-unmapped');
+    'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1257,7 +1257,7 @@ var
       -- the source value is the one that survived -- so the text names both. }
     for var DS in AReport.DefaultsSuperseded do
     begin
-      var DIt: TApplyItem:= InstItem(aikDefaultSuperseded, afWarnings,
+      var DIt: TApplyItem:= InstItem(aikDefaultRuleSuperseded, afWarnings,
         Format('%s: line %d: #default %s = %s did not fire -- a rule already carried %s',
           [Inst.InstanceName, DS.RuleLine, DS.Path, DS.Value, DS.Existing]));
       DIt.FilePath:= ADfmPath;

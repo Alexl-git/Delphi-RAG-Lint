@@ -412,6 +412,11 @@ Check 'mapping absent-source does NOT fire the #else' (-not ($o16 -match 'nmDefa
 $b17 = "object C1: TFromC`r`n  Caption = 'Hi'`r`nend`r`n"
 $r17 = "#convert TFromC -> TToC`r`n#link Text <- Caption`r`n#default Text = 'Zzz'`r`n"
 $o17 = Reemit $b17 $r17 'ReemitFix.TFromC' 'ReemitFix.TToC'
+# NOTE the two spellings, which are two DIFFERENT surfaces and only one moved.
+# This runner asserts convert-reemit's own report array `defaultsSuperseded`,
+# which was NOT renamed. The apply/1 ITEM KIND beside it was: it is
+# `default-rule-superseded` since 2026-09-08 and is asserted in
+# run_convert_apply.ps1 phase 7. The labels below name the concept, not the kind.
 Check 'default-superseded exit 0' ($script:LastExit -eq 0) "out=$o17"
 $j17 = $o17 | ConvertFrom-Json
 Check 'default-superseded keeps the SOURCE value Text = ''Hi''' `

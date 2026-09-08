@@ -1057,7 +1057,7 @@ else {
 
 # ===========================================================================
 # PHASE 7: a #default on a path a #link already carries does NOT fire, and the
-# skipped rule is reported (default-superseded).
+# skipped rule is reported (default-rule-superseded).
 #
 # #default is documented on both sides as a FALLBACK -- "set a target property
 # when NO SOURCE MAPS". The engine tested neither claim: it wrote
@@ -1067,7 +1067,7 @@ else {
 # the typed apply/1 item rather than only inside convert-reemit's own report.
 # ===========================================================================
 Write-Host ''
-Write-Host '=== Phase 7: #default superseded by a #link (default-superseded) ===' -ForegroundColor Cyan
+Write-Host '=== Phase 7: #default superseded by a #link (default-rule-superseded) ===' -ForegroundColor Cyan
 
 Push-Location $phase7
 try {
@@ -1091,8 +1091,20 @@ try { $defDoc = $defJson | ConvertFrom-Json } catch { $defDoc = $null }
 Check 'default: json parses' ($null -ne $defDoc) `
   "raw=$($defJson.Substring(0, [Math]::Min(200, $defJson.Length)))"
 if ($null -ne $defDoc) {
-  $dsu = @($defDoc.items) | Where-Object { $_.kind -eq 'default-superseded' }
-  Check 'default: a default-superseded item is emitted' ($dsu.Count -ge 1) "count=$($dsu.Count)"
+  # The kind is `default-rule-superseded` -- named for the #default RULE
+  # DIRECTIVE, not the Delphi `default` clause that the three sibling kinds
+  # mean (renamed 2026-09-08 at the converter team's request, before anything
+  # depended on it). Asserting the exact spelling is the point: an agent
+  # dispatches on `kind`, so a silent respelling is a breaking change.
+  $dsu = @($defDoc.items) | Where-Object { $_.kind -eq 'default-rule-superseded' }
+  Check 'default: a default-rule-superseded item is emitted' ($dsu.Count -ge 1) "count=$($dsu.Count)"
+  # RED-check companion: the OLD spelling must be gone everywhere, not merely
+  # unused here. Without this, reverting NAMES to 'default-superseded' would
+  # fail only the line above, which reads as a lookup typo rather than as the
+  # contract breaking.
+  Check 'default: the pre-rename spelling default-superseded is NOT emitted' `
+    (@($defDoc.items | Where-Object { $_.kind -eq 'default-superseded' }).Count -eq 0) `
+    "the retired spelling is still on the wire"
   if ($dsu.Count -ge 1) {
     Check 'default: item is reported in the warnings field' ($dsu[0].field -eq 'warnings') `
       "field=$($dsu[0].field)"
@@ -1137,7 +1149,7 @@ else {
 # across explicitly, and reported as `default-resolved`.
 #
 # This is the apply/1 surface for the sparse-DFM work. Phase 7 covers the kind
-# next to it (`default-superseded`), but nothing exercised THIS one: the item
+# next to it (`default-rule-superseded`), but nothing exercised THIS one: the item
 # loop in Convert.Apply could have been deleted entirely and every assertion in
 # this runner would still have passed. Computed-then-discarded is the exact
 # shape session 68's A1 was about, so it gets its own end-to-end check.
@@ -1260,7 +1272,7 @@ Check 'part: json parses' ($null -ne $partDoc) `
 
 if ($null -ne $partDoc) {
   # --- the #default superseded INSIDE the part reaches apply/1 --------------
-  $pdsu = @($partDoc.items) | Where-Object { $_.kind -eq 'default-superseded' }
+  $pdsu = @($partDoc.items) | Where-Object { $_.kind -eq 'default-rule-superseded' }
   Check 'part: the part''s superseded #default reaches apply/1' `
     ($pdsu.Count -ge 1) "count=$($pdsu.Count)"
   Check 'part: it is reported EXACTLY ONCE (re-applying the HandleNested fold makes this 2)' `

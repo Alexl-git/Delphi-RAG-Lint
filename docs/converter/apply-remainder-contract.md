@@ -93,14 +93,25 @@ not an expected mode.
 | `uses-unit-unresolved` | warnings | no unit found declaring the target type |
 | `mapping-source-absent` | reemit_notes | an applied `#mapping`'s source path is not in this block AND has no `default` clause (NARROWED -- see below) |
 | `mapping-not-applied` | warnings | an applied `#mapping` matched nothing |
-| `default-superseded` | warnings | a `#default` did not fire -- a `#link`/`#mapping` already carried that path |
+| `default-rule-superseded` | warnings | a `#default` did not fire -- a `#link`/`#mapping` already carried that path |
 | `default-resolved` | reemit_notes | a source property absent because it sits at its declared `default`; its value was resolved and carried explicitly |
 | `enum-cast-unmapped` | warnings | a `#link`'s enum cast had no `map` for this value and no `else`, so nothing was written |
 
 `ApplyItemKindName` is the single source of these spellings; nothing emits a
 literal.
 
-### `default-superseded` is an addition beyond the original table
+### `default-rule-superseded` is an addition beyond the original table
+
+Named for the `#default` **rule directive**, not the Delphi `default` clause.
+
+**RENAMED 2026-09-08, and this one IS a wire break.** It shipped in
+v1.10.0-alpha as `default-superseded`; the converter team asked for the longer
+spelling because three of the four `default*` kinds (`default-resolved`,
+`defaults-may-diverge`, `mapping-source-absent`) mean the LANGUAGE feature and
+only this one means our DIRECTIVE, so an agent dispatching on `kind` has to know
+which sense applies. Taken now because nothing consumes it yet -- the converter
+team had not built against it -- and renaming after they do costs an `apply/2`.
+A consumer pinned to `default-superseded` sees the kind disappear, not change.
 
 Also not in PLAN-SESSION-68's vocabulary, and it also needs your sign-off.
 
@@ -277,7 +288,7 @@ becomes an additive kind.
 `rule_line` is the 1-based line **in the rules file** that produced the item, or
 `0`. For `mapping-not-applied` it is the `#apply` line -- the line that requested
 the work that did not happen -- not the mapping's own declaration. For
-`default-superseded` it is the `#default` line, for the same reason: it is the
+`default-rule-superseded` it is the `#default` line, for the same reason: it is the
 line to delete or rethink.
 
 ## `#mapping` / `#apply` semantics, as implemented
