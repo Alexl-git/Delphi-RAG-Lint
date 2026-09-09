@@ -6,8 +6,13 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **19** (`SCHEMA_VERSION` in
-`src/storage/DRagLint.Storage.Schema.pas`). Recent additive changes:
+Current schema version at time of writing: **21** (`SCHEMA_VERSION` in
+`src/storage/DRagLint.Storage.Schema.pas`, verified 2026-09-08 against the
+constant itself rather than against a database). Recent additive changes:
+**v21 added `refs.external_target`** -- the qualified name of a call target that
+lives outside this DB, so a cross-database call stops looking like an unresolved
+one (see 2.3); **v20 added `refs.receiver_text`** -- the call-site receiver
+verbatim, so an unresolved call can still say what it hung off (2.3);
 v16 added the column `files.last_compiled_unix` (compiler-finding freshness;
 see 2.1); v17 added `symbols.prop_access` (property-leaf assignability engine;
 see 2.2); **v18 added the new `symbol_facts` table** -- per-routine analysis
@@ -187,6 +192,8 @@ narrows to resolved calls only).
 | `name_text` | TEXT | Verbatim identifier text at the reference site |
 | `start_line`/`start_col`/`end_line`/`end_col` | INTEGER | Reference span |
 | `enclosing_symbol_id` | INTEGER FK -> `symbols.id` (v13+, ON DELETE SET NULL) | The innermost routine whose implementation body contains this ref; NULL if the ref is not inside any routine body |
+| `receiver_text` | TEXT (v20+) | The call-site RECEIVER, verbatim as written left of the dot -- `''` for an unqualified call. What lets an unresolved call still say what it hung off. **`NULL` means "pre-v20 DB, never resolved by a v20 engine"**, which is a different claim from `''`; read it with `FindField`, not `FieldByName`, so an older DB yields `''` rather than raising |
+| `external_target` | TEXT (v21+) | The qualified NAME of a call target that lives OUTSIDE this database -- the cross-DB case, where `symbol_id` cannot be filled because the symbol is not in this index at all. Without it an RTL/VCL call is indistinguishable from an unresolved one |
 
 **`kind` value domain** (free-form string set at each call site in the
 parser; no enum backs it): `attribute`, `call`, `di-resolve`, `di-unresolved`,
@@ -410,9 +417,17 @@ build log. `file_id` is set when the finding's path matched an indexed file
 
 ### 2.12 `string_literals` and the FTS text tables
 
-`string_literals` holds one row per string literal found in `.pas`/`.dfm`
-(and `.sql`, subject to indexing convention) source, with owning
-file/symbol and span. It backs `drag-lint query --text "<phrase>"`.
+`string_literals` holds one row per indexed TEXT SPAN in `.pas`/`.dfm` (and
+`.sql`, subject to indexing convention) source, with owning file/symbol and
+span. It backs `drag-lint query --text "<phrase>"`.
+
+**THE TABLE NAME UNDERSTATES IT, AND HAS SINCE THE COMMENT CORPUS LANDED.** It
+is no longer "one row per string literal": as of the 2026-09-08 extractor it
+also holds **comment prose** (`//`, brace, paren-star) and **doc comments**
+(`///`), and the TYPE token on a DFM `object` line. A consumer that reads the
+name literally and filters on the assumption that every row is a quoted string
+will silently mis-scope its results. Discriminate with `kind`, never with the
+table name.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -420,10 +435,39 @@ file/symbol and span. It backs `drag-lint query --text "<phrase>"`.
 | `file_id` | INTEGER FK -> `files.id` (ON DELETE CASCADE) | |
 | `symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE SET NULL) | Owning symbol, when attributable |
 | `source` | TEXT | Which kind of source file this literal came from (`pas`/`dfm`/`sql`) |
-| `kind` | TEXT | Literal kind as captured (e.g. plain string literal vs. DFM caption) |
+| `kind` | TEXT | Which KIND of text span this row is -- see the value domain below. This is the column that separates a quoted string from comment prose, and the only reliable way to scope a `--text` query |
 | `owner_name` | TEXT | Human-readable owner label (e.g. component/property name for a DFM caption) |
 | `text` | TEXT | The literal's text content |
 | `start_line`/`start_col`/`end_line`/`end_col` | INTEGER | Span |
+
+**`kind` value domain** (free-form string set at each emit site; no enum backs
+it -- these are the values the current extractor writes):
+
+| `kind` | `source` | What it is |
+|---|---|---|
+| `literal` | `pas` | An ordinary quoted string literal |
+| `const` | `pas` | A declared constant's string value |
+| `resourcestring` | `pas` | A `resourcestring` value |
+| `format` | `pas` | A format string |
+| `comment` | `pas` | **Comment prose** -- `//`, brace and paren-star comments |
+| `doc` | `pas` | A `///` documentation comment |
+| `dfm-prop` | `dfm` | A DFM property VALUE (captions, hints, ...) and component names |
+| `dfm-type` | `dfm` | The TYPE on a DFM `object` line -- what answers "which forms hold a component of type X, and how many" |
+| `sql-exception` | `sql` | A `CREATE EXCEPTION` message |
+
+Filter with `--kind` on the query surface: `--kind literal` restores exactly what
+`--text` returned BEFORE comments were indexed, `--kind comment` hunts prose,
+`--kind dfm-type` enumerates component instances. Empty means no filter, which
+is the default and returns everything.
+
+Two caveats a consumer will otherwise hit:
+
+* **Comment prose dominates the row count and barely moves the file size.**
+  Measured 2026-09-08: comment text is ~96.6% of indexed text spans and grows
+  the TEXT CORPUS ~29x, but the DATABASE by only ~1.5%. Sizing a DB from the
+  row count of this table will be wrong by more than an order of magnitude.
+* `sql-exception` messages are harvested from `MS*.sql` files by default (a
+  migration-script convention); `--no-sql-ms` indexes every `.sql`.
 
 The remaining text-search tables --
 `string_fts`, `string_fts_config`, `string_fts_data`, `string_fts_docsize`,
@@ -437,7 +481,8 @@ untyped columns for them (SQLite manages their internal B-tree/segment
 structure itself) and their row counts mirror `string_literals`' shape, not
 independent data. Use the FTS5 `MATCH` query surface via
 `drag-lint query --text "<phrase>" [--any-order] [--substring] [--source
-pas|dfm|sql]` instead of hand-rolling SQL against them.
+pas|dfm|sql] [--kind <kind>] [--limit N]` instead of hand-rolling SQL against
+them.
 
 ### 2.13 `symbol_trigrams`
 

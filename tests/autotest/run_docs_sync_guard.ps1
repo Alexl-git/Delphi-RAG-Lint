@@ -967,6 +967,77 @@ if ($HelpOnlyOnPurpose.Count -gt 0) {
   }
 }
 Write-Host ''
+Write-Host '-- check 8: the index-schema docs state the real SCHEMA_VERSION' -ForegroundColor Cyan
+# WHY THIS EXISTS. On 2026-09-08 docs\INDEX-SCHEMA.md said schema_version 19 and
+# docs\INDEXING-AND-DB-ARCHITECTURE.md said 17, against a live 21. Two schema
+# revisions -- refs.receiver_text (v20) and refs.external_target (v21) -- were
+# undocumented, and the whole comment-prose corpus had landed in string_literals
+# without the table's description changing from "one row per string literal".
+#
+# None of it was caught, because checks 1-7 police --help, README and AI-USAGE
+# and NOTHING policed the schema reference -- the document an external consumer
+# reads before writing SQL against the index. That is the same silence this
+# guard was created to end, in the one file where a wrong answer is acted on
+# directly.
+#
+# Deliberately narrow: a version number is objective and cheap. It does not
+# prove the prose is right, but a doc whose stated version matches the code has
+# at least been looked at since the last migration, and every drift found on
+# 2026-09-08 was accompanied by a stale version line.
+$schemaSrc = Join-Path $repo 'src\storage\DRagLint.Storage.Schema.pas'
+Check 'schema source present' (Test-Path -LiteralPath $schemaSrc) $schemaSrc
+if (Test-Path -LiteralPath $schemaSrc) {
+  $mSchema = [regex]::Match((Get-Content -LiteralPath $schemaSrc -Raw), 'SCHEMA_VERSION\s*=\s*(\d+)')
+  Check 'SCHEMA_VERSION parsed from source' $mSchema.Success 'the constant moved or was renamed'
+  if ($mSchema.Success) {
+    $liveSchema = [int]$mSchema.Groups[1].Value
+    Write-Host ("  live SCHEMA_VERSION = {0}" -f $liveSchema) -ForegroundColor DarkGray
+
+    # INDEX-SCHEMA.md is the authoritative consumer reference and must be exact.
+    $idxDoc = Join-Path $repo 'docs\INDEX-SCHEMA.md'
+    Check 'docs\INDEX-SCHEMA.md present' (Test-Path -LiteralPath $idxDoc) $idxDoc
+    if (Test-Path -LiteralPath $idxDoc) {
+      $idxRaw   = Get-Content -LiteralPath $idxDoc -Raw
+      $mStated  = [regex]::Match($idxRaw, '(?i)current schema version[^\r\n]*?\*\*(\d+)\*\*')
+      Check 'INDEX-SCHEMA.md states a schema version' $mStated.Success `
+        'expected a line like "Current schema version at time of writing: **NN**"'
+      if ($mStated.Success) {
+        $statedIdx = [int]$mStated.Groups[1].Value
+        Check 'INDEX-SCHEMA.md states the REAL schema version' ($statedIdx -eq $liveSchema) `
+          "doc says $statedIdx, source says $liveSchema -- a migration shipped without the consumer reference being updated"
+      }
+      # POSITIVE CONTROL: the matcher must be capable of rejecting a wrong number.
+      $ctlRaw = $idxRaw -replace '(?i)(current schema version[^\r\n]*?\*\*)\d+(\*\*)', "`${1}999`${2}"
+      $mCtl   = [regex]::Match($ctlRaw, '(?i)current schema version[^\r\n]*?\*\*(\d+)\*\*')
+      Check 'POSITIVE CONTROL: a planted wrong version is detected' `
+        ($mCtl.Success -and ([int]$mCtl.Groups[1].Value -ne $liveSchema)) `
+        'if this passes silently the check above can never fail'
+    }
+
+    # INDEXING-AND-DB-ARCHITECTURE.md carries an "Applies to" banner. Its PROSE
+    # is explicitly marked indicative rather than authoritative, so only the
+    # banner is policed -- holding the whole document to the schema would fail
+    # permanently and teach everyone to skip it.
+    $archDoc = Join-Path $repo 'docs\INDEXING-AND-DB-ARCHITECTURE.md'
+    if (Test-Path -LiteralPath $archDoc) {
+      # Tolerant of where the bold falls: the banner writes
+      # `**schema_version 21**` (whole phrase bold), an earlier revision wrote
+      # `schema_version **17**` (number bold). Both are the same claim, and a
+      # matcher that only accepts one shape fails on formatting rather than on
+      # drift -- which is a guard crying wolf, the thing that teaches people to
+      # ignore it.
+      $mArch = [regex]::Match((Get-Content -LiteralPath $archDoc -Raw), '(?i)schema_version[^\d\r\n]{0,4}(\d+)')
+      Check 'INDEXING-AND-DB-ARCHITECTURE.md banner states a schema version' $mArch.Success `
+        'expected "schema_version NN" in the Applies-to banner'
+      if ($mArch.Success) {
+        Check 'INDEXING-AND-DB-ARCHITECTURE.md banner is current' ([int]$mArch.Groups[1].Value -eq $liveSchema) `
+          ("banner says {0}, source says {1}" -f $mArch.Groups[1].Value, $liveSchema)
+      }
+    }
+  }
+}
+
+Write-Host ''
 if ($script:Failed) { Write-Host 'DOCS SYNC GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'DOCS SYNC GUARD: PASS' -ForegroundColor Green
 exit 0

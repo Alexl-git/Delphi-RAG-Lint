@@ -1,7 +1,17 @@
 # drag-lint indexing & database architecture
 
-**Applies to:** drag-lint **1.1.0-alpha** · index **schema_version 17** ·
-tree-sitter grammars delphi13 **14** / dfm **14**.
+**Applies to:** drag-lint **1.10.1-alpha** · index **schema_version 21** ·
+extractor **1.13.0-alpha** · tree-sitter grammars delphi13 **14** / dfm **14**.
+Header re-verified 2026-09-08 against `SCHEMA_VERSION` and
+`DRAGLINT_EXTRACTOR_VERSION` in source. **The prose below this header has NOT
+been re-verified line by line** -- it was written against schema 17 and the
+retired ORM3 union DB, so treat specific table shapes here as indicative and
+`docs\INDEX-SCHEMA.md` (kept current) as authoritative.
+
+Two things this document predates, both of which change what the tables hold:
+`string_literals` now carries comment and doc-comment prose plus DFM object
+types, not only string literals; and `refs` gained `receiver_text` (v20) and
+`external_target` (v21).
 Verified 2026-07-15 against the then-live ORM3 union index (`C:\Projects\DB\ORM3\drag-lint.sqlite`,
 schema 16, 29 tables -- that DB was **retired and deleted on 2026-08-09**; see the
 note in section 1) and the engine at
