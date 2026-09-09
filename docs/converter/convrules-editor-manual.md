@@ -388,16 +388,19 @@ filled in is scratch and is not persisted; so is a block whose body is only `#ma
 Saved my.rules (backup my.rules.bak) (1 empty rule(s) not saved). Validate: OK
 ```
 
-**A book containing `#mapping` / `#apply` will fail the post-save validate.** The engine's
-parser does not know those two directives yet (deferred by design -- see G6.1), so it
-reports them as unknown:
+**~~A book containing `#mapping` / `#apply` will fail the post-save validate.~~ NO LONGER
+TRUE -- corrected 2026-09-09.** The engine has caught up: a book carrying a `#mapping`
+declaration and an `#apply` of it now validates clean.
 
 ```
-Saved my.rules (backup my.rules.bak). Validate: line 1: unknown directive: #mapping
+> drag-lint.exe convert-validate --rules maptest.rules
+OK
+EXITCODE=0
 ```
 
-The file on disk is correct and complete. The message is the engine saying it has not
-caught up, not a problem with your rule book.
+Measured against the deployed `third_party\dll-win64\drag-lint.exe`. If you see
+`unknown directive: #mapping`, your engine is older than 2026-09-04. (`#tag` is a
+different matter and *is* still rejected -- see `INBOX-tag-directive-for-atomic-rule-selection.md`.)
 
 **Curate...** opens the block-level curation window, which works on the file **on disk** --
 so it offers to save first. Answering No curates the on-disk version and discards nothing;
@@ -406,14 +409,92 @@ stale file.
 
 Its toolbar acts on the checked blocks: **Split...** moves them out into another file,
 **Delete** removes them, **Merge...** brings another file in, and **Compose** writes the
-whole working set into one file for the engine.
+working set into one file for the engine -- the whole set, or only the checked rules.
+See *Composing the rules for one job* below.
 
 **There is no Copy.** A `Copy...` button existed until 2026-09-09 and was removed on
 purpose. It wrote the checked blocks to a second file and left the source intact --
 which is precisely the duplicate state the rule catalog reports, and the standing rule
-is that an atomic rule lives in exactly ONE file. Rules may be **moved** between books
+is that a rule lives in exactly ONE file. Rules may be **moved** between books
 freely; they may not be **copied**, because the same conversion in two places is how two
 versions of it appear and then diverge. If you want a rule somewhere else, Split it out.
+
+**A COMPOSED book is different, and may duplicate freely.** It is generated, disposable
+output for `--rules`, never an authored source, so it *may* -- and *must* -- carry the
+`#mapping` declarations that its selected rules `#apply`. The one-rule-one-place rule is
+about what you **author and keep**, not about what a build step emits. The catalog scans
+`convrules\` and does not index a `.job.rules` you write elsewhere, so a composed book
+cannot show up as a duplicate.
+
+---
+
+## Composing the rules for one job
+
+A real migration needs a SUBSET of the corpus, not all of it. You get that by checking
+the rules you want and pressing **Compose** -- the books themselves stay as they are.
+
+**This replaced an earlier plan to split every conversion into its own file.** That plan
+(*atomization*) was retired on 2026-09-09: it existed only because Compose used to work a
+whole file at a time, and making Compose work a BLOCK at a time gives per-job selection
+without splitting anything.
+
+### Choosing the rules
+
+* **Tick them in the grid.** The check state belongs to the working set, not the grid, so
+  it survives switching to another file and back.
+* **Select by form types** ticks every rule in the set that converts a type on the form
+  you examined with `--form` / **Open form...**. It is disabled when no form was examined.
+  It *adds* to what you already ticked and never clears it, and the status bar says how
+  many rules were newly selected.
+* **Clear selection** unticks everything, in every file.
+* A file with rules selected is marked **`-- N selected`** in the file list, so a
+  selection in a book you have navigated away from is still visible.
+
+**With nothing ticked anywhere, Compose writes the WHOLE set** -- exactly what it always
+did. There is no mode switch.
+
+### What always travels, and why
+
+The **`(file header)`** and **`(file trailer)`** rows cannot be ticked, split, or deleted;
+the editor refuses and says so. They hold directives that belong to the BOOK rather than
+to any one rule -- `#mapping`, `#remove` and `#unuse` in the header, `#migrate` in the
+trailer -- and every composed book gets them whether or not you selected a rule from that
+file. That is what makes a selected rule usable: the `#apply` inside it names a `#mapping`
+declared in the header.
+
+Two consequences worth knowing before you trust the output:
+
+* **A file with nothing ticked still contributes its header and trailer.** If you want
+  none of a book, remove the FILE from the working set rather than unticking its rules.
+* **File-scope `#remove` lines apply to the whole job.** Selecting only the `TSession`
+  rule out of `BDE-to-FireDAC.rules` still carries all 27 of that book's `#remove` lines,
+  which were authored against all ten of its rules. They can strip a property that no
+  selected rule reads. This is deliberate, not a bug -- but check it when a conversion
+  drops something you expected to keep.
+
+### The two refusals
+
+**An `#apply` with no `#mapping`.** Before writing anything, the editor checks that every
+`#apply <Name>` in the composed text has its `#mapping <Name>` declaration there too. If
+one is missing -- typically because the book that declares it is not in the working set --
+Compose refuses, names the mapping, and writes nothing. Fix it by adding that book to the
+set, or by unticking the rule that applies it.
+
+**The target is a file in the working set.** When a selection is active, Compose will not
+write over a book that is loaded. Writing a subset over its own source would delete every
+rule you did not select, recoverable only from the `.bak`. Choose another target. (With no
+selection this refusal does not apply: folding the set into the first file is what a
+whole-set compose has always meant.)
+
+### The output
+
+A partial composition defaults to **`<book>.job.rules`**; a whole-set one keeps
+`<book>.composed.rules`, so a subset is never mistaken for the full corpus. The report
+lists what each file contributed, e.g. `BDE-to-FireDAC.rules: 2 of 10 rule block(s)
+selected; file header/trailer travel`.
+
+Composing `TDatabase` and `TSession` out of `BDE-to-FireDAC.rules` yields a 280-line job
+book from a 707-line source: 145 lines of header, the two rules, and the 76-line trailer.
 
 ---
 
@@ -505,12 +586,21 @@ the safe act and the cost of the other one is stated. Completing a From-only stu
 
 ```
 Where should the Vcl.StdCtrls.TCheckBox -> Vcl.StdCtrls.TRadioButton rule go?
-Yes = a NEW atom file, TCheckBox-to-TRadioButton.rules
-No  = append to the open book, BDE-to-FireDAC.rules
+Yes = append to the open book, BDE-to-FireDAC.rules
+No  = start a NEW file, TCheckBox-to-TRadioButton.rules
 ```
 
+**The default changed on 2026-09-09.** It used to offer the new file first, because one
+conversion per file was then the target shape. Atomization was retired -- selective
+Compose picks the rules a job needs out of multi-rule books -- so neither shape is "the"
+one, and appending to the book you are working in is the ordinary case. The new file is
+still one click away.
+
+The name of that new file (`TCheckBox-to-TRadioButton.rules`) is spelled once, in
+`ATOM_NAME_FMT`. **The convention is not settled** -- it is owner ruling 1c, still open.
+
 Choosing the new file prompts to save the open book first (**No discards its unsaved
-edits**), then points the editor at the new atom. **The file is not created until you
+edits**), then points the editor at it. **The file is not created until you
 Save** -- and a save with no completed rule is refused rather than leaving a 0-byte
 `.rules` the folder scan would pick up:
 
