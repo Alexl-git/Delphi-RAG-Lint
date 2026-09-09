@@ -113,9 +113,37 @@ annotation rather than silently ignored.</p>
 
 <table>
   <tr><th>Rule group</th><th class="n">Rules</th><th>Covers</th></tr>
-  <tr><td>Correctness and safety</td><td class="n">70</td>
-      <td>Bug patterns (53), data-flow defects such as use-before-assignment and
-          dead stores (9), resource and object lifetime (8)</td></tr>
+  <tr><td>Object lifetime and resources</td><td class="n">17</td>
+      <td>Use-after-free, double-free, leaked objects, unprotected create/free
+          without try-finally, destructors not marked <code>override</code>,
+          missing inherited calls, <code>FreeAndNil</code> on an interface,
+          object/interface dual-handle mixing, unreleased critical sections,
+          virtual calls from a constructor, instantiating a class with an
+          unimplemented abstract method</td></tr>
+  <tr><td>Exceptions and control flow</td><td class="n">18</td>
+      <td>Bare and empty <code>except</code> blocks, swallowed exceptions,
+          <code>raise</code> or <code>Exit</code>/<code>Break</code> inside
+          <code>finally</code>, re-raising in a way that loses the stack trace,
+          raising the root <code>Exception</code> class, unreachable duplicate
+          handlers, exceptions constructed but never raised, unreachable code
+          after <code>Exit</code>, loops that run at most once, empty
+          conditional / loop / case / procedure bodies</td></tr>
+  <tr><td>Logic, comparisons and type safety</td><td class="n">20</td>
+      <td>Operator-precedence traps (<code>not X in S</code>,
+          <code>not A = B</code>), comparisons that are always true or always
+          false, identical operands, self-assignment, off-by-one loop bounds,
+          float equality, string and case-insensitive comparison mistakes,
+          division by literal zero, <code>Format()</code> argument count and
+          specifier type mismatches, non-exhaustive <code>case</code> on an enum,
+          unguarded hard casts, lossy Unicode-to-Ansi casts</td></tr>
+  <tr><td>Data flow, concurrency and source integrity</td><td class="n">15</td>
+      <td>Use before assignment, <code>Result</code> or <code>out</code>
+          parameters not set on every path, values overwritten before being read,
+          write-only locals, loop variable used after the loop, UI access from a
+          background thread, <code>Sleep</code> on the VCL main thread,
+          <code>with</code> silently shadowing an outer symbol, destructive
+          actions gated on a file-existence check, unnamed literal constants,
+          and syntax or unbalanced <code>begin</code>/<code>end</code> errors</td></tr>
   <tr><td>Dead code and project hygiene</td><td class="n">32</td>
       <td>Unreachable and unused code (12), project-wide checks that only a
           whole-project run can see, such as unused public symbols and unused
@@ -129,7 +157,7 @@ annotation rather than silently ignored.</p>
   <tr><td>Security, platform and data access</td><td class="n">23</td>
       <td>Security issues including injection and unsafe API use (10),
           platform and portability (10), FireDAC-specific data-access (3)</td></tr>
-  <tr class="tot"><td>Total</td><td class="n">179</td><td>16 categories</td></tr>
+  <tr class="tot"><td>Total</td><td class="n">179</td><td>8 groups, drawn from the engine's 16 rule categories</td></tr>
 </table>
 
 <ul>
@@ -312,10 +340,14 @@ declaration.</p>
 
 <p class="foot">
 Counts in this document are derived from the shipping build, not from
-documentation: rule totals and category breakdowns come from
-<code>drag-lint rules --json</code>, and the command surface from
-<code>drag-lint --help</code> (80 documented commands), both taken on 9 September
-2026 against drag-lint 1.10.1-alpha. Category subtotals sum to 179.
+documentation: rule totals come from <code>drag-lint rules --json</code>, and the
+command surface from <code>drag-lint --help</code> (80 documented commands), both
+taken on 9 September 2026 against drag-lint 1.10.1-alpha.
+The eight rule groups above are a presentation grouping over the engine's own 16
+categories, chosen so each group is a comparable size and describes one kind of
+problem; every one of the 179 rules appears in exactly one group, and the
+subtotals sum to 179. Run <code>drag-lint rules</code> for the authoritative,
+always-current catalog.
 </p>
 
 </body>
