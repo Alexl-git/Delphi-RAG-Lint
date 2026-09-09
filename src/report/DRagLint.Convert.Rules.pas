@@ -377,6 +377,10 @@ var
   Raw   : string               ;
   Line  : string               ;
   Low   : string               ;
+  { True once a '#convert' has been seen. '#tag' is scoped to the enclosing
+    #convert block, so a '#tag' before the first one is an error rather than a
+    silent no-op -- see the '#tag' arm below. }
+  SeenConvert: Boolean;
 
   procedure AddError(const AMsg: string);
   var
@@ -617,6 +621,7 @@ var
 begin
   Rules:= TList<TConversionRule>.Create;
   Errs := TList<TRuleError>.Create;
+  SeenConvert:= False;
   try
     Lines:= SplitLines(AText);
     for LineNo:= 1 to Length(Lines) do
@@ -702,6 +707,7 @@ begin
         SplitHeadAndUnits(Rhs, Head, Units);
         R.ToType  := Head;
         R.UnitsAdd:= Units;
+        SeenConvert:= True;
         AddRule(R);
       end
       else if Directive('#link', Arg) then
@@ -762,6 +768,28 @@ begin
         R.LineNo := LineNo;
         R.MapName:= Arg;
         AddRule(R);
+      end
+      else if Directive('#tag', Arg) then
+      begin
+        { '#tag <Ident>' -- TOLERATED, and deliberately nothing more. The rule
+          corpus wants to label a #convert block so a job can select rules by
+          tag; until that selection exists, the only thing the engine owes is to
+          stop REJECTING the directive, because `convert-validate` failing with
+          'unknown directive: #tag' is what blocks the corpus from carrying tags
+          at all. The tag is NOT captured into the rule model, so it cannot yet
+          be typo-checked or selected on -- that is a separate, unrequested ask.
+
+          It must not invent a rule either: no AddRule here, so the rule COUNT
+          of a file is identical with and without its #tag lines.
+
+          SCOPE. A tag labels the enclosing #convert block, so a '#tag' before
+          the first '#convert' has nothing to label and is an ERROR rather than
+          a silent no-op -- a silently-ignored tag is exactly the failure a
+          corpus of tagged rules cannot afford. }
+        if not SeenConvert then
+          AddError('#tag before any #convert -- a tag labels the enclosing #convert block')
+        else if Trim(Arg) = '' then
+          AddError('#tag requires a tag name');
       end
       else if Line.StartsWith('#') then
       begin
