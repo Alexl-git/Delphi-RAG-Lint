@@ -5236,12 +5236,12 @@ end;
 
 { Task 4 names a NEW atom file and guarantees the path is free.
 
-  AtomFileNameFor must strip the uses-units that ride after a comma on a #convert
+  RuleFileNameFor must strip the uses-units that ride after a comma on a #convert
   header -- '-> FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf, ...' names ONE target
   and a list of units to add. Taking the whole tail would put half a uses clause in a
   file name. This is the same rule CatalogFromText applies to ToType.
 
-  UniqueAtomPath is a SAFETY function, not a convenience: DoSave writes wherever
+  UniqueRulePath is a SAFETY function, not a convenience: DoSave writes wherever
   FFilePath points, and WriteBlocksTo APPENDS to an existing file. Returning a path
   that already exists would silently graft a new rule onto an unrelated atom. It must
   never return an existing path, and the test asserts that against real files.
@@ -5255,41 +5255,41 @@ var
 begin
   // --- units after the comma are NOT part of the target type.
   Check('atom.name.strips.units',
-    SameText(AtomFileNameFor('Bde.DBTables.TQuery',
+    SameText(RuleFileNameFor('Bde.DBTables.TQuery',
       'FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf, FireDAC.DApt'),
       'TQuery-to-TFDQuery.rules'),
-    AtomFileNameFor('Bde.DBTables.TQuery', 'FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf'));
+    RuleFileNameFor('Bde.DBTables.TQuery', 'FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf'));
 
   // --- already-bare names work unchanged.
-  Check('atom.name.bare', SameText(AtomFileNameFor('TEdit', 'TMemo'), 'TEdit-to-TMemo.rules'),
-    AtomFileNameFor('TEdit', 'TMemo'));
+  Check('atom.name.bare', SameText(RuleFileNameFor('TEdit', 'TMemo'), 'TEdit-to-TMemo.rules'),
+    RuleFileNameFor('TEdit', 'TMemo'));
 
   // --- a name must never contain a path separator or other illegal character,
   //     whatever the book spells, or the "new file" would escape the folder.
-  Check('atom.name.sanitised', Pos('\', AtomFileNameFor('A\B.TX', 'C/D.TY')) = 0,
-    AtomFileNameFor('A\B.TX', 'C/D.TY'));
-  Check('atom.name.sanitised.slash', Pos('/', AtomFileNameFor('A\B.TX', 'C/D.TY')) = 0);
+  Check('atom.name.sanitised', Pos('\', RuleFileNameFor('A\B.TX', 'C/D.TY')) = 0,
+    RuleFileNameFor('A\B.TX', 'C/D.TY'));
+  Check('atom.name.sanitised.slash', Pos('/', RuleFileNameFor('A\B.TX', 'C/D.TY')) = 0);
 
   // --- empty input must not produce a dangling "-to-.rules".
-  Check('atom.name.empty', AtomFileNameFor('', '') = '', AtomFileNameFor('', ''));
+  Check('atom.name.empty', RuleFileNameFor('', '') = '', RuleFileNameFor('', ''));
 
-  // --- UniqueAtomPath against REAL files.
+  // --- UniqueRulePath against REAL files.
   Dir := TPath.Combine(TPath.GetTempPath, 'convrules_atom_' + IntToStr(GetCurrentProcessId));
   TDirectory.CreateDirectory(Dir);
   try
-    P1 := UniqueAtomPath(Dir, 'TQuery-to-TFDQuery.rules');
+    P1 := UniqueRulePath(Dir, 'TQuery-to-TFDQuery.rules');
     Check('atom.path.free.is.plain', SameText(ExtractFileName(P1), 'TQuery-to-TFDQuery.rules'),
       ExtractFileName(P1));
     Check('atom.path.not.exists', not TFile.Exists(P1));
 
     TFile.WriteAllText(P1, '#convert A.T -> B.T'#13#10);
-    P2 := UniqueAtomPath(Dir, 'TQuery-to-TFDQuery.rules');
+    P2 := UniqueRulePath(Dir, 'TQuery-to-TFDQuery.rules');
     Check('atom.path.avoids.existing', not SameText(P1, P2),
       'must not hand back a path DoSave would append to');
     Check('atom.path.second.not.exists', not TFile.Exists(P2), P2);
 
     TFile.WriteAllText(P2, '#convert A.T -> B.T'#13#10);
-    P3 := UniqueAtomPath(Dir, 'TQuery-to-TFDQuery.rules');
+    P3 := UniqueRulePath(Dir, 'TQuery-to-TFDQuery.rules');
     Check('atom.path.third', (not TFile.Exists(P3)) and (not SameText(P3, P1))
       and (not SameText(P3, P2)), P3);
 

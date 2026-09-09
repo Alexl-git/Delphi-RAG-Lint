@@ -112,7 +112,7 @@ type
     FLblFormTypes : TLabel;           // "N types, M shown"
     FFilterError  : string;           // first malformed regex, surfaced in the label
     FCatalog      : TRuleCatalog;     // every #convert the rules folder already has
-    // Types claimed by MORE THAN ONE rule. An atomic rule lives in exactly one
+    // Types claimed by MORE THAN ONE rule. A rule lives in exactly one
     // file; two claims mean two versions waiting to diverge, so the panel must
     // say so rather than let FindRuleForType silently pick the first.
     FCatalogDups  : TCatalogDuplicates;
@@ -185,7 +185,7 @@ type
     /// for AFrom -- finishing that is not authoring a second rule, so both prompts
     /// are skipped.</param>
     /// <returns>True to go on creating the rule in the current book, whose FFilePath
-    /// may by then point at a fresh atom. False when the caller must abandon: the user
+    /// may by then point at a fresh rule file. False when the caller must abandon: the user
     /// cancelled, or was routed to the existing rule instead.</returns>
     /// <remarks>Split out of DoNewConversion so that routine keeps one exit for this
     /// whole decision. Everything here is prompting and bookkeeping; no rule is
@@ -3063,7 +3063,7 @@ function TConvRulesForm.ChooseTargetForNewRule(const AFrom, ATo: string;
   ACompletingStub: Boolean): Boolean;
 var
   RuledEntry: TRuleCatalogEntry;
-  Folder, AtomName, NewPath, OpenBook: string;
+  Folder, RuleFileName, NewPath, OpenBook: string;
 begin
   Result := False;
 
@@ -3104,19 +3104,19 @@ begin
     Compose picks the rules a job needs out of multi-rule books, so neither is
     "the" shape any more. Atomization was retired 2026-09-09 -- the default is
     now to append to the book that is open, with a new file still one click
-    away. ATOM_NAME_FMT still names that new file: owner ruling 1c is open. }
+    away. RULE_FILE_NAME_FMT still names that new file: owner ruling 1c is open. }
   Folder := Trim(FRulesFolder);
   if Folder = '' then Folder := ExtractFilePath(FFilePath);
-  AtomName := AtomFileNameFor(AFrom, ATo);
+  RuleFileName := RuleFileNameFor(AFrom, ATo);
   if FFilePath = '' then OpenBook := '(none yet)'
   else OpenBook := ExtractFileName(FFilePath);
 
-  if (not ACompletingStub) and (Folder <> '') and (AtomName <> '') then
+  if (not ACompletingStub) and (Folder <> '') and (RuleFileName <> '') then
     case MessageDlg(Format('Where should the %s -> %s rule go?' + sLineBreak +
            sLineBreak +
            'Yes = append to the open book, %s' + sLineBreak +
            'No  = start a NEW file, %s',
-           [AFrom, ATo, OpenBook, AtomName]),
+           [AFrom, ATo, OpenBook, RuleFileName]),
            mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
       mrCancel: Exit;
       { mrYes is unhandled ON PURPOSE: it falls through to the append below,
@@ -3130,7 +3130,7 @@ begin
             case MessageDlg(Format('Start %s?' + sLineBreak + sLineBreak +
                    'Yes = save %s first.' + sLineBreak +
                    'No  = DISCARD any unsaved edits in it.',
-                   [AtomName, ExtractFileName(FFilePath)]),
+                   [RuleFileName, ExtractFileName(FFilePath)]),
                    mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
               mrCancel: Exit;
               mrYes   :
@@ -3142,9 +3142,9 @@ begin
                 end;
             end;
 
-          // UniqueAtomPath never returns an existing path: DoSave OVERWRITES, so a
-          // colliding name would silently replace a sibling atom.
-          NewPath := UniqueAtomPath(Folder, AtomName);
+          // UniqueRulePath never returns an existing path: DoSave OVERWRITES, so a
+          // colliding name would silently replace a sibling rule file.
+          NewPath := UniqueRulePath(Folder, RuleFileName);
           FBook.Clear;
           FFilePath := NewPath;
           FLblFile.Caption := NewPath;
@@ -3387,7 +3387,7 @@ begin
   var dropped: Integer;
   var outText: string := FBook.SaveCompleteToString(dropped);
 
-  { A BRAND-NEW atom file with nothing complete would be created EMPTY.
+  { A BRAND-NEW rule file with nothing complete would be created EMPTY.
     SaveCompleteToString drops a #convert that has no #link yet, so "new file AND
     everything dropped" writes a 0-byte .rules -- a file the folder scan picks up,
     the catalog cannot explain, and no backup exists to undo (step 1 only backs up

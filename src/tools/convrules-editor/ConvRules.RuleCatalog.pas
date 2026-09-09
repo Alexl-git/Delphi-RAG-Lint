@@ -106,7 +106,7 @@ function MergeCatalogs(const AParts: TArray<TRuleCatalog>): TRuleCatalog;
 /// <param name="ACatalog">The scanned catalog.</param>
 /// <returns>One entry per duplicated type, in first-appearance order; [] when the
 /// corpus holds one rule per type, which is the intended state.</returns>
-/// <remarks>THE RULE THIS ENFORCES (owner, 2026-09-08): an atomic rule lives in
+/// <remarks>THE RULE THIS ENFORCES (owner, 2026-09-08): a rule lives in
 /// exactly ONE file, because the same conversion in two places is how two versions
 /// of it appear and diverge. Rules may be moved between files freely; they may not
 /// be COPIED.
@@ -135,7 +135,7 @@ function MappingCatalogFromText(const AText, APath: string): TMappingCatalog;
 /// <remarks>The invariant FindDuplicates enforces for types, keyed on the mapping name
 /// instead: a name declared in two books is two versions of one mapping waiting to
 /// diverge. Case-insensitive, as Pascal is.
-/// <para>This is needed BEFORE atomization, not after. Splitting a #convert into its
+/// <para>Still needed after atomization was retired (2026-09-09). Moving a #convert into its
 /// own file separates it from the preamble #mapping its #apply names, and the tempting
 /// repair is to copy the declaration across. This makes that visible.</para></remarks>
 function FindDuplicateMappings(const ACatalog: TMappingCatalog): TMappingDuplicates;
@@ -187,29 +187,33 @@ function CheckApplyIntegrity(const AText: string): TApplyIntegrity;
 /// other miss and never raises.</para></remarks>
 function HeaderIndexFor(ABook: TRuleBook; const AEntry: TRuleCatalogEntry): Integer;
 
-/// <summary>PURE: the file name a NEW single-conversion atom should carry.</summary>
+/// <summary>PURE: the file name a NEW single-conversion rule file should carry.</summary>
 /// <param name="AFrom">The From type, bare or qualified.</param>
 /// <param name="ATo">The To type AS WRITTEN ON THE HEADER -- any uses-units after a
 /// comma are stripped here, the same way CatalogFromText derives ToType.</param>
 /// <returns>'&lt;FromBare&gt;-to-&lt;ToBare&gt;.rules', or '' when either side is empty.</returns>
-/// <remarks>THE CONVENTION IS OWNER RULING 1c AND IS NOT SETTLED. It is spelled once,
-/// in ATOM_NAME_FMT, so changing it costs one line and cannot drift between callers.
+/// <remarks>SETTLED 2026-09-09 -- owner ruling 1c. The format stays
+/// '&lt;FromBare&gt;-to-&lt;ToBare&gt;.rules'; the "atom" vocabulary around it was dropped in
+/// the same ruling, because atomization had been retired earlier that day and this
+/// names an ordinary rule file the user chose to start, not an atom. Spelled once, in
+/// RULE_FILE_NAME_FMT, so a future change costs one line and cannot drift between
+/// callers.
 /// <para>Characters illegal in a file name are replaced, never passed through: the
 /// result is combined with a folder by the caller, and a name carrying a separator
 /// would write outside it.</para></remarks>
-function AtomFileNameFor(const AFrom, ATo: string): string;
+function RuleFileNameFor(const AFrom, ATo: string): string;
 
 /// <summary>A path in AFolder for AName that DOES NOT ALREADY EXIST.</summary>
 /// <param name="AFolder">Target folder.</param>
-/// <param name="AName">Desired file name, typically from AtomFileNameFor.</param>
+/// <param name="AName">Desired file name, typically from RuleFileNameFor.</param>
 /// <returns>AFolder\AName when free, else the first free '...-2', '...-3' variant.
 /// '' when AName is empty.</returns>
 /// <remarks>SAFETY, not convenience. The save path APPENDS to a file that already
 /// exists, so handing back an occupied path would graft a new rule silently onto an
-/// unrelated atom -- and the one-rule-one-file invariant would be broken by the very
+/// unrelated rule file -- and the one-rule-one-file invariant would be broken by the very
 /// command meant to uphold it. The suffix goes before the extension so the file stays
 /// a '.rules' and keeps being scanned.</remarks>
-function UniqueAtomPath(const AFolder, AName: string): string;
+function UniqueRulePath(const AFolder, AName: string): string;
 
 /// <summary>PURE: the first catalog entry converting ATypeName.</summary>
 /// <param name="ACatalog">The catalog to search.</param>
@@ -361,9 +365,9 @@ end;
 
 { Owner ruling 1c lives HERE and nowhere else. }
 const
-  ATOM_NAME_FMT = '%s-to-%s.rules';
+  RULE_FILE_NAME_FMT = '%s-to-%s.rules';
 
-function AtomFileNameFor(const AFrom, ATo: string): string;
+function RuleFileNameFor(const AFrom, ATo: string): string;
 var
   F, T: string;
   CommaAt: Integer;
@@ -392,10 +396,10 @@ begin
   T := Sanitise(BareTypeName(T));
   if (F = '') or (T = '') then Exit;
 
-  Result := Format(ATOM_NAME_FMT, [F, T]);
+  Result := Format(RULE_FILE_NAME_FMT, [F, T]);
 end;
 
-function UniqueAtomPath(const AFolder, AName: string): string;
+function UniqueRulePath(const AFolder, AName: string): string;
 var
   Base, Ext: string;
   n: Integer;
@@ -406,7 +410,7 @@ begin
   Result := TPath.Combine(AFolder, AName);
   if not TFile.Exists(Result) then Exit;
 
-  // Suffix BEFORE the extension: 'X-2.rules', never 'X.rules-2', or the new atom
+  // Suffix BEFORE the extension: 'X-2.rules', never 'X.rules-2', or the new file
   // would stop matching the '*.rules' folder scan and become invisible to the catalog.
   Base := TPath.GetFileNameWithoutExtension(AName);
   Ext  := TPath.GetExtension(AName);
