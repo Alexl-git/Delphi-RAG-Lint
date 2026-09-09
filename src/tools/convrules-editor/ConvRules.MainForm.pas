@@ -3100,8 +3100,11 @@ begin
         end;
     end;
 
-  { One conversion per file is the target shape, so offer a fresh atom before
-    appending to whatever book happens to be open. }
+  { A rule may live in an existing book or in a file of its own; selective
+    Compose picks the rules a job needs out of multi-rule books, so neither is
+    "the" shape any more. Atomization was retired 2026-09-09 -- the default is
+    now to append to the book that is open, with a new file still one click
+    away. ATOM_NAME_FMT still names that new file: owner ruling 1c is open. }
   Folder := Trim(FRulesFolder);
   if Folder = '' then Folder := ExtractFilePath(FFilePath);
   AtomName := AtomFileNameFor(AFrom, ATo);
@@ -3111,12 +3114,14 @@ begin
   if (not ACompletingStub) and (Folder <> '') and (AtomName <> '') then
     case MessageDlg(Format('Where should the %s -> %s rule go?' + sLineBreak +
            sLineBreak +
-           'Yes = a NEW atom file, %s' + sLineBreak +
-           'No  = append to the open book, %s',
-           [AFrom, ATo, AtomName, OpenBook]),
+           'Yes = append to the open book, %s' + sLineBreak +
+           'No  = start a NEW file, %s',
+           [AFrom, ATo, OpenBook, AtomName]),
            mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
       mrCancel: Exit;
-      mrYes   :
+      { mrYes is unhandled ON PURPOSE: it falls through to the append below,
+        which is now the default. mrNo starts a new file. }
+      mrNo    :
         begin
           // FFilePath is about to point somewhere else and the open book may hold
           // unsaved edits. Ask BEFORE touching FBook: clearing first and prompting
@@ -3148,7 +3153,7 @@ begin
           RefreshUnitList;
           // The file is created by the UNCHANGED save routine, never here. If no link
           // is ever assigned, DoSave refuses and no empty file appears.
-          SetStatus(Format('New atom: %s. It is not on disk until you Save.',
+          SetStatus(Format('New file: %s. It is not on disk until you Save.',
             [ExtractFileName(NewPath)]));
         end;
     end;
@@ -3304,7 +3309,9 @@ end;
   No = curate the on-disk version anyway, Cancel = out. }
 procedure TConvRulesForm.DoCurate(Sender: TObject);
 var
-  Reload: string;
+  Reload   : string;
+  FormTypes: TArray<string>;
+  TypeRow  : TFormTypeRow;
 begin
   if (FFilePath <> '') and (FBook.Nodes.Count > 0) then
     case MessageDlg('Curation works on the file on disk. Save your edits first?',
@@ -3323,7 +3330,16 @@ begin
         end;
     end;
 
-  Reload := TCurationForm.Execute(Self, FFilePath);
+  { Hand the curation window the types actually on the examined form, so its
+    "Select by form types" can check exactly the rules this job needs. Filtered-
+    out rows are excluded (Reenabled is the user's per-row override); Ruled is
+    deliberately NOT consulted -- an unruled type simply matches no block. }
+  FormTypes := nil;
+  for TypeRow in FFormTypeRows do
+    if not (TypeRow.Excluded and not TypeRow.Reenabled) then
+      FormTypes := FormTypes + [TypeRow.TypeName];
+
+  Reload := TCurationForm.Execute(Self, FFilePath, FormTypes);
   if Reload <> '' then
   begin
     LoadFile(Reload);

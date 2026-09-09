@@ -22,7 +22,9 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Generics.Collections,
   Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Dialogs,
-  ConvRules.BlockFile, ConvRules.BlockOps, ConvRules.WorkingSet;
+  ConvRules.BlockFile,  // dl:unit ConvRules.BlockFile accepted -- shares HEADERLESS_KINDS
+  ConvRules.BlockOps, ConvRules.WorkingSet,
+  ConvRules.RuleCatalog;   // CheckApplyIntegrity, the compose gate
 
 type
   /// <summary>The modal curation window.</summary>
@@ -33,7 +35,17 @@ type
     FBlocks  : TListView;     // vsReport + Checkboxes: File | Kind | Block | Lines
     FStatus  : TStatusBar;
     FBtnSplit, FBtnDelete, FBtnMerge, FBtnCompose: TButton;
+    FBtnByType, FBtnClearSel: TButton;
     FTouched : TDictionary<string, Boolean>;   // paths this session wrote
+    /// <summary>Component types on the examined form, for by-type selection;
+    /// empty when the main form has examined none.</summary>
+    FFormTypes: TArray<string>;
+    /// <summary>True while RefreshBlocks is populating the grid, so the
+    /// Checked values it restores are not read back as user edits.</summary>
+    FLoading  : Boolean;
+
+    procedure DoSelectByType(Sender: TObject);
+    procedure DoClearSelection(Sender: TObject);
 
     procedure BuildUI;
     procedure RefreshFiles;
@@ -61,9 +73,15 @@ type
     /// <summary>Frees the working set and the touched-paths tracker.</summary>
     destructor Destroy; override;
     /// <summary>Show the modal curation window seeded with AInitialPath (may be '').</summary>
+    /// <param name="AOwner">Owning component.</param>
+    /// <param name="AInitialPath">A book to load into the working set, or ''.</param>
+    /// <param name="AFormTypes">Component types found on the examined form, which
+    /// the "Select by form types" command matches rules against. Empty (the
+    /// default) simply disables that command.</param>
     /// <returns>AInitialPath when that file was modified and the caller must reload
     /// it, otherwise ''.</returns>
-    class function Execute(AOwner: TComponent; const AInitialPath: string): string;
+    class function Execute(AOwner: TComponent; const AInitialPath: string;
+      const AFormTypes: TArray<string> = nil): string;
   end;
 
 implementation
@@ -204,13 +222,14 @@ begin
 end;
 
 class function TCurationForm.Execute(AOwner: TComponent;
-  const AInitialPath: string): string;
+  const AInitialPath: string; const AFormTypes: TArray<string> = nil): string;
 var
   F: TCurationForm;
 begin
   Result := '';
   F := TCurationForm.Create(AOwner);
   try
+    F.FFormTypes := AFormTypes;
     if (AInitialPath <> '') and TFile.Exists(AInitialPath) then
     begin
       F.FSet.AddFile(AInitialPath);
@@ -282,11 +301,26 @@ begin
   FBtnCompose := TButton.Create(Self);
   FBtnCompose.Parent := Top; FBtnCompose.SetBounds(326, 38, 110, 25);
   FBtnCompose.Caption := 'Compose...'; FBtnCompose.OnClick := DoCompose;
-  FBtnCompose.Hint := 'Fold the whole working set into ONE .rules file for --rules';
+  FBtnCompose.Hint := 'Fold the working set into ONE .rules file for --rules. '
+    + 'With blocks checked, only those rules -- plus every file''s header and '
+    + 'trailer -- are written.';
   FBtnCompose.ShowHint := True;
 
+  FBtnByType := TButton.Create(Self);
+  FBtnByType.Parent := Top; FBtnByType.SetBounds(452, 38, 150, 25);
+  FBtnByType.Caption := 'Select by form types';
+  FBtnByType.OnClick := DoSelectByType;
+  FBtnByType.ShowHint := True;
+
+  FBtnClearSel := TButton.Create(Self);
+  FBtnClearSel.Parent := Top; FBtnClearSel.SetBounds(608, 38, 110, 25);
+  FBtnClearSel.Caption := 'Clear selection';
+  FBtnClearSel.OnClick := DoClearSelection;
+  FBtnClearSel.Hint := 'Uncheck every rule in every file of the working set';
+  FBtnClearSel.ShowHint := True;
+
   B := TButton.Create(Self);
-  B.Parent := Top; B.SetBounds(452, 38, 80, 25);
+  B.Parent := Top; B.SetBounds(724, 38, 80, 25);
   B.Caption := 'Close'; B.ModalResult := mrOk;
 
   FFiles := TListBox.Create(Self);
@@ -324,8 +358,15 @@ begin
   try
     FFiles.Items.Clear;
     for i := 0 to FSet.Count - 1 do
-      FFiles.Items.Add(Format('%d. %s   [%s]',
-        [i + 1, ExtractFileName(FSet.Item(i).Path), FSet.Item(i).Path]));
+      { The '-- N selected' marker is what stops a selection in an off-screen
+        file being invisible: the grid only ever shows ONE file's blocks. }
+      if Length(FSet.Item(i).Selected) > 0 then
+        FFiles.Items.Add(Format('%d. %s   [%s]   -- %d selected',
+          [i + 1, ExtractFileName(FSet.Item(i).Path), FSet.Item(i).Path,
+           Length(FSet.Item(i).Selected)]))
+      else
+        FFiles.Items.Add(Format('%d. %s   [%s]',
+          [i + 1, ExtractFileName(FSet.Item(i).Path), FSet.Item(i).Path]));
   finally
     FFiles.Items.EndUpdate;
   end;
@@ -340,10 +381,15 @@ const
   KIND_NAME: array[TRuleBlockKind] of string =
     ('header', 'trailer', 'convert', 'cast', 'enum');
 var
-  fi, i: Integer;
-  F    : TWorkingFile;
-  It   : TListItem;
+  fi, i, k: Integer;
+  F       : TWorkingFile;
+  It      : TListItem;
 begin
+  { The grid is rebuilt on every file switch, which is why the selection is held
+    in the working set and merely RESTORED here. Without FLoading, setting
+    It.Checked below fires BlocksChange, which would write the half-built grid
+    back over the model. }
+  FLoading := True;
   FBlocks.Items.BeginUpdate;
   try
     FBlocks.Items.Clear;
@@ -361,10 +407,17 @@ begin
         It.SubItems.Add(KIND_NAME[F.Blocks[i].Kind]);
         It.SubItems.Add(BlockLabel(F.Blocks[i]));
         It.SubItems.Add(Format('%d-%d', [F.Blocks[i].StartLine, F.Blocks[i].EndLine]));
+        for k in F.Selected do
+          if k = i then
+          begin
+            It.Checked := True;
+            Break;
+          end;
       end;
     end;
   finally
     FBlocks.Items.EndUpdate;
+    FLoading := False;
   end;
   UpdateEnabled;
 end;
@@ -400,12 +453,71 @@ begin
   FBtnDelete.Enabled  := FBtnSplit.Enabled;
   FBtnMerge.Enabled   := (fi >= 0);
   FBtnCompose.Enabled := FSet.Count > 0;
+  FBtnByType.Enabled  := (FSet.Count > 0) and (Length(FFormTypes) > 0);
+  FBtnByType.Hint     := Format('Check every rule in the set that converts a type '
+    + 'on the examined form (%d type(s) examined)', [Length(FFormTypes)]);
+  FBtnClearSel.Enabled := FSet.AnySelected;
 end;
 
 procedure TCurationForm.BlocksChange(Sender: TObject; Item: TListItem;
   Change: TItemChange);
+var
+  fi : Integer;
+  Sel: TArray<Integer>;
 begin
-  if Change = ctState then UpdateEnabled;
+  if (Change <> ctState) or FLoading then Exit;
+
+  { A header or trailer travels into every composed book already, so checking one
+    would be a promise the compose cannot keep differently. Refuse the tick
+    rather than silently ignoring it -- and guard the re-entrant ctState the
+    un-check itself raises. }
+  if (Item <> nil) and Item.Checked
+     and (FFiles.ItemIndex >= 0) and (FFiles.ItemIndex < FSet.Count)
+     and (Item.Index <= High(FSet.Item(FFiles.ItemIndex).Blocks))
+     and (FSet.Item(FFiles.ItemIndex).Blocks[Item.Index].Kind in HEADERLESS_KINDS) then
+  begin
+    FLoading := True;
+    try
+      Item.Checked := False;
+    finally
+      FLoading := False;
+    end;
+    FStatus.SimpleText := 'The file header/trailer always travels into a composed '
+      + 'book and cannot be selected (nor split, nor deleted) -- its #mapping, '
+      + '#remove, #unuse and #migrate lines belong to the book, not to one rule.';
+    Exit;
+  end;
+
+  Sel := CheckedIndexes(fi);
+  if (fi >= 0) and (fi < FSet.Count) then
+  begin
+    FSet.SetSelected(fi, Sel);
+    { The file list carries the '-- N selected' marker, so a selection made in a
+      file the user then navigates away from stays visible. }
+    RefreshFiles;
+  end;
+  UpdateEnabled;
+end;
+
+procedure TCurationForm.DoSelectByType(Sender: TObject);
+var
+  n: Integer;
+begin
+  if Length(FFormTypes) = 0 then Exit;
+  n := FSet.SelectByTypes(FFormTypes);
+  RefreshFiles;
+  RefreshBlocks;
+  FStatus.SimpleText := Format('Select by form types: %d block(s) newly selected '
+    + 'for %d examined type(s).', [n, Length(FFormTypes)]);
+end;
+
+procedure TCurationForm.DoClearSelection(Sender: TObject);
+begin
+  FSet.ClearSelection;
+  RefreshFiles;
+  RefreshBlocks;
+  FStatus.SimpleText := 'Selection cleared -- Compose will now write the WHOLE '
+    + 'working set.';
 end;
 
 procedure TCurationForm.FFilesClick(Sender: TObject);
@@ -729,6 +841,7 @@ var
   Text: string;
   Target, Bak: string;
   Head: TArray<string>;
+  Chk : TApplyIntegrity;
 begin
   if FSet.Count = 0 then Exit;
   // Compose folds the whole set with the .rules merge semantics and writes ONE
@@ -754,9 +867,46 @@ begin
       [ExtractFileName(FSet.Item(0).Path), GrammarName(GrammarOf(FSet.Item(0).Path))]);
     Exit;
   end;
-  Text   := FSet.ComposeAll(Rep);
-  Target := AskTargetFile(ChangeFileExt(FSet.Item(0).Path, '') + '.composed.rules');
+  Text := FSet.ComposeSelected(Rep);
+
+  { Every '#apply <Name>' in the OUTPUT must have its '#mapping <Name>'
+    declaration there too. A selective compose can strand one -- the declaration
+    lives in a book that is not in the working set -- and the engine would then
+    produce a book that runs and converts nothing for that mapping. Refuse
+    BEFORE asking for a target, so nothing is written and nothing is half-done. }
+  Chk := CheckApplyIntegrity(Text);
+  if not Chk.OK then
+  begin
+    FStatus.SimpleText := 'Compose refused: ' + Chk.Summary
+      + ' -- add the book that declares it to the working set, or uncheck the '
+      + 'rule that applies it. Nothing was written.';
+    ShowReport(Self, 'Compose refused -- unsatisfied #apply',
+      ['Compose refused. ' + Chk.Summary, ''] + Rep.Lines);
+    Exit;
+  end;
+
+  { A partial book must not be mistaken for the whole composition, so it gets a
+    different default name. }
+  if FSet.AnySelected then
+    Target := AskTargetFile(ChangeFileExt(FSet.Item(0).Path, '') + '.job.rules')
+  else
+    Target := AskTargetFile(ChangeFileExt(FSet.Item(0).Path, '') + '.composed.rules');
   if Target = '' then Exit;
+
+  { SAFETY, and scoped deliberately to selections. Writing a SUBSET over a file
+    that is in the working set deletes the rules that were not selected -- 1 of
+    10 written over BDE-to-FireDAC.rules would destroy nine authored rules, with
+    only the .bak to recover from. The whole-set path keeps its long-standing
+    behaviour untouched (it folds the set INTO the first file by design), so
+    this refusal does not change it and needs no ruling. }
+  if FSet.AnySelected and (FSet.IndexOfPath(Target) >= 0) then
+  begin
+    FStatus.SimpleText := 'Compose refused: ' + ExtractFileName(Target)
+      + ' is in the working set. A composed job book is a GENERATED copy, and '
+      + 'writing this subset over an authored source would delete the rules that '
+      + 'are not selected. Choose a different target. Nothing was written.';
+    Exit;
+  end;
   try
     WriteTextWithBackup(Target, Text, Bak);
     FTouched.AddOrSetValue(TouchKey(Target), True);
