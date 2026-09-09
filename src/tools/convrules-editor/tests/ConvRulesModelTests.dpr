@@ -878,6 +878,57 @@ end;
   owned TPersistent sub-objects are still expanded -- the latter guards against
   "fixing" the cost with --depth 1, which drops 523 of 696 leaves, all nested.
   Skipped when the exe / library-Win64 db is absent. }
+{ A HARD engine failure during class-name resolution must be REPORTED, not swallowed.
+
+  ResolveClassQName calls QueryJsonFor and discards its error: `if not QueryJsonFor(...)
+  then Exit;` returns the BARE name unchanged. That treats "zero hits" (exit 1) and
+  "the engine could not run" (exit 2, e.g. a --db that does not exist) as the same
+  outcome. The bare name then reaches proptree, which -- unlike query -- tolerates a
+  nonexistent --db and answers from the rest, so it runs happily and reports
+  "class not found: <Type>".
+
+  That is how a DEAD DB PATH surfaced as a message about the CLASS. It cost a whole
+  debugging session on 2026-09-09: 12 tests failed naming picker/proptree/class,
+  and the actual cause was one stale constant naming an index deleted in August.
+
+  The assertion is not "it fails" -- it already failed. It is that the message names
+  the CAUSE. Uses a deliberately absent DB alongside a good one, which is exactly the
+  shape that misled us: query refuses the list outright while proptree accepts it. }
+procedure TestResolveHardFailureIsReported;
+var
+  Exe    : string;
+  Adapter: TEngineAdapter;
+  Tree   : TProptree;
+  Err, Note: string;
+  OK     : Boolean;
+const
+  AbsentDb = 'C:\Projects\NO_SUCH_DB_convrules_resolve_test.sqlite';
+begin
+  Exe := ResolveExe;
+  if (Exe = '') or (not TFile.Exists(LibWin64)) then
+  begin
+    Skip('resolve.harderror', 'exe / library-Win64 db absent');
+    Exit;
+  end;
+  if TFile.Exists(AbsentDb) then
+  begin
+    Skip('resolve.harderror', 'the deliberately-absent db path exists');
+    Exit;
+  end;
+  Adapter := TEngineAdapter.Create(Exe, [LibWin64, AbsentDb]);
+  try
+    OK := Adapter.GetProptree('TabcToggleBtn', Tree, Err, Note);
+    Check('resolve.harderror.fails', not OK, 'a broken --db list must not succeed');
+    // The whole point: the message must not blame the class for a config fault.
+    Check('resolve.harderror.not.classnotfound', Pos('class not found', Err) = 0,
+      'misleading -- blames the class for a dead --db: ' + Err);
+    Check('resolve.harderror.names.cause', Pos('exit 2', Err) > 0,
+      'error must name the failing engine call: ' + Err);
+  finally
+    Adapter.Free;
+  end;
+end;
+
 procedure TestProptreeRefsAsLeavesLive;
 var
   Exe    : string;
@@ -4382,6 +4433,226 @@ begin
   Check('catalog.merge.none', Length(MergeCatalogs([])) = 0);
 end;
 
+{ A #mapping NAME must also live in exactly one file. Same invariant as one-rule-
+  per-type, different key -- and it matters sooner: atomizing spreads #apply across
+  files, so the health check has to be able to see a name declared twice BEFORE the
+  first split happens.
+
+  THE TRAP THIS PINS. A #mapping is not one line. The declaration
+  (`#mapping N from T to C`) is followed by sibling #when/#else clause lines that
+  repeat the NAME and are not re-declarations. The model marks the declaration with
+  MapFromType <> ''; keying on the name alone would count BdeBatchMode six times in
+  one file and report the corpus as duplicated when it is clean. }
+procedure TestMappingCatalog;
+var
+  Cat : TMappingCatalog;
+  Dups: TMappingDuplicates;
+  A, B: TMappingCatalog;
+  Real_: TMappingCatalog;
+  Dir : string;
+const
+  DECL_PLUS_CLAUSES =
+    '#mapping BdeBatchMode from Bde.DBTables.TBatchMode to FireDAC.Comp.BatchMove.TFDBatchMove'#13#10 +
+    '#mapping BdeBatchMode #when Mode = batAppend -> Mode = dmAppend'#13#10 +
+    '#mapping BdeBatchMode #else -> Mode = dmAlwaysInsert'#13#10;
+begin
+  // --- only the DECLARATION is an entry; the two clauses are not.
+  Cat := MappingCatalogFromText(DECL_PLUS_CLAUSES, 'C:\rules\bde.rules');
+  Check('catalog.mapping.decl.only', Length(Cat) = 1,
+    Format('a declaration plus 2 clauses is ONE entry, got %d', [Length(Cat)]));
+  if Length(Cat) = 1 then
+  begin
+    Check('catalog.mapping.name', SameText(Cat[0].Name, 'BdeBatchMode'), Cat[0].Name);
+    Check('catalog.mapping.path', SameText(Cat[0].FilePath, 'C:\rules\bde.rules'), Cat[0].FilePath);
+    Check('catalog.mapping.lineno', Cat[0].LineNo = 1, IntToStr(Cat[0].LineNo));
+  end;
+
+  Check('catalog.mapping.empty', Length(MappingCatalogFromText('', 'x')) = 0);
+  Check('catalog.mapping.dup.empty', Length(FindDuplicateMappings(nil)) = 0);
+
+  // --- two DIFFERENT names across two files is the intended state.
+  A := MappingCatalogFromText('#mapping One from A.T to B.C'#13#10, 'C:\rules\a.rules');
+  B := MappingCatalogFromText('#mapping Two from A.T to B.C'#13#10, 'C:\rules\b.rules');
+  Check('catalog.mapping.dup.none', Length(FindDuplicateMappings(A + B)) = 0,
+    'distinct names in distinct files must report nothing');
+
+  // --- THE case this exists for: one name, two files.
+  B := MappingCatalogFromText('#mapping One from X.T to Y.C'#13#10, 'C:\rules\legacy.rules');
+  Dups := FindDuplicateMappings(A + B);
+  Check('catalog.mapping.dup.two.files', Length(Dups) = 1,
+    Format('expected 1 duplicated mapping name, got %d', [Length(Dups)]));
+  if Length(Dups) = 1 then
+  begin
+    Check('catalog.mapping.dup.names.it', SameText(Dups[0].Name, 'One'), Dups[0].Name);
+    Check('catalog.mapping.dup.holds.both', Length(Dups[0].Entries) = 2,
+      Format('both sites or it is not actionable, got %d', [Length(Dups[0].Entries)]));
+    Check('catalog.mapping.dup.scan.order',
+      (Length(Dups[0].Entries) = 2)
+      and SameText(ExtractFileName(Dups[0].Entries[0].FilePath), 'a.rules')
+      and SameText(ExtractFileName(Dups[0].Entries[1].FilePath), 'legacy.rules'));
+  end;
+
+  // --- case-insensitively, as Pascal is.
+  B := MappingCatalogFromText('#mapping ONE from X.T to Y.C'#13#10, 'C:\rules\ci.rules');
+  Check('catalog.mapping.dup.ci', Length(FindDuplicateMappings(A + B)) = 1);
+
+  // --- twice in the SAME file is still one name in two places.
+  Check('catalog.mapping.dup.same.file', Length(FindDuplicateMappings(
+    MappingCatalogFromText('#mapping One from A.T to B.C'#13#10 +
+                           '#mapping One from C.T to D.C'#13#10, 'C:\rules\same.rules'))) = 1);
+
+  // --- REAL CORPUS. BDE-to-FireDAC.rules carries 10 #mapping LINES and exactly 2
+  //     DECLARATIONS. Counting lines would give 10 and report 2 false duplicates.
+  // ConvRulesCorpusPath is declared further down this file; inline the same rule.
+  Dir := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\convrules\BDE-to-FireDAC.rules'));
+  if not TFile.Exists(Dir) then
+    Skip('catalog.mapping.real', 'BDE-to-FireDAC.rules absent')
+  else
+  begin
+    Real_ := MappingCatalogFromText(TFile.ReadAllText(Dir), Dir);
+    Check('catalog.mapping.real.count', Length(Real_) = 2,
+      Format('expected 2 declarations among 10 #mapping lines, got %d', [Length(Real_)]));
+    Check('catalog.mapping.real.clean', Length(FindDuplicateMappings(Real_)) = 0,
+      'the shipped book declares each mapping once');
+  end;
+end;
+
+{ "Open owning rule" needs to turn a catalog entry back into a BLOCK in the book it
+  came from. HeaderIndexFor is that lookup, and it is pure so the risky half (loading
+  a file, discarding edits) stays in the form.
+
+  WHY IT IS NOT JUST LineNo - 1. The catalog is an INDEX and the book on disk moves
+  underneath it: add a comment at the top and every recorded line is off by one. A
+  lookup that trusted LineNo would then select the WRONG BLOCK -- silently, because a
+  neighbouring #convert is still a plausible-looking rule. So LineNo is a HINT,
+  verified against the From type, and the type wins when they disagree.
+
+  Out-of-range must return -1 rather than raise: the index can name a line past the
+  end of a book that has since been trimmed, and that is a stale index, not a crash. }
+procedure TestHeaderIndexFor;
+var
+  Book : TRuleBook;
+  E    : TRuleCatalogEntry;
+const
+  SRC =
+    '// header comment'#13#10 +
+    '#convert Bde.DBTables.TQuery -> FireDAC.Comp.Client.TFDQuery'#13#10 +
+    '#link SQL <- SQL'#13#10 +
+    '#convert Bde.DBTables.TTable -> FireDAC.Comp.Client.TFDTable'#13#10;
+begin
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(SRC);
+
+    // --- exact hit: LineNo 2 is the TQuery header (1-based -> node index 1).
+    E.FromType := 'Bde.DBTables.TQuery'; E.ToType := ''; E.FilePath := 'x'; E.LineNo := 2;
+    Check('catalog.header.by.lineno', HeaderIndexFor(Book, E) = 1,
+      IntToStr(HeaderIndexFor(Book, E)));
+
+    // --- the second block, to prove it is not just finding the first #convert.
+    E.FromType := 'Bde.DBTables.TTable'; E.LineNo := 4;
+    Check('catalog.header.second.block', HeaderIndexFor(Book, E) = 3,
+      IntToStr(HeaderIndexFor(Book, E)));
+
+    // --- STALE LineNo: points at the #link, not a header. Must fall back to the
+    //     From type and still land on the TQuery header.
+    E.FromType := 'Bde.DBTables.TQuery'; E.LineNo := 3;
+    Check('catalog.header.stale.lineno.falls.back', HeaderIndexFor(Book, E) = 1,
+      Format('stale LineNo must resolve by From, got %d', [HeaderIndexFor(Book, E)]));
+
+    // --- a BARE From in the index against a QUALIFIED one in the book still matches.
+    E.FromType := 'TQuery'; E.LineNo := 0;
+    Check('catalog.header.bare.matches.qualified', HeaderIndexFor(Book, E) = 1,
+      IntToStr(HeaderIndexFor(Book, E)));
+
+    // --- a type the book does not convert -> -1.
+    E.FromType := 'Vcl.StdCtrls.TButton'; E.LineNo := 2;
+    Check('catalog.header.missing.type', HeaderIndexFor(Book, E) = -1,
+      IntToStr(HeaderIndexFor(Book, E)));
+
+    // --- out of range must be -1, NOT an exception.
+    E.FromType := 'Bde.DBTables.TQuery'; E.LineNo := 9999;
+    Check('catalog.header.out.of.range', HeaderIndexFor(Book, E) = 1,
+      'an out-of-range hint still resolves by From');
+    E.FromType := 'Nope.TNothing'; E.LineNo := 9999;
+    Check('catalog.header.out.of.range.unknown', HeaderIndexFor(Book, E) = -1,
+      'out of range AND unknown must be -1, not a crash');
+
+    E.FromType := ''; E.LineNo := 0;
+    Check('catalog.header.empty.from', HeaderIndexFor(Book, E) = -1);
+  finally
+    Book.Free;
+  end;
+end;
+
+{ Task 4 names a NEW atom file and guarantees the path is free.
+
+  AtomFileNameFor must strip the uses-units that ride after a comma on a #convert
+  header -- '-> FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf, ...' names ONE target
+  and a list of units to add. Taking the whole tail would put half a uses clause in a
+  file name. This is the same rule CatalogFromText applies to ToType.
+
+  UniqueAtomPath is a SAFETY function, not a convenience: DoSave writes wherever
+  FFilePath points, and WriteBlocksTo APPENDS to an existing file. Returning a path
+  that already exists would silently graft a new rule onto an unrelated atom. It must
+  never return an existing path, and the test asserts that against real files.
+
+  NOTE the file-NAME convention itself is owner ruling 1c and is not settled; it lives
+  in one constant so a ruling costs one line. These checks pin the STRIPPING and the
+  UNIQUENESS, which no ruling changes. }
+procedure TestAtomFileNaming;
+var
+  Dir, P1, P2, P3: string;
+begin
+  // --- units after the comma are NOT part of the target type.
+  Check('atom.name.strips.units',
+    SameText(AtomFileNameFor('Bde.DBTables.TQuery',
+      'FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf, FireDAC.DApt'),
+      'TQuery-to-TFDQuery.rules'),
+    AtomFileNameFor('Bde.DBTables.TQuery', 'FireDAC.Comp.Client.TFDQuery, FireDAC.Stan.Intf'));
+
+  // --- already-bare names work unchanged.
+  Check('atom.name.bare', SameText(AtomFileNameFor('TEdit', 'TMemo'), 'TEdit-to-TMemo.rules'),
+    AtomFileNameFor('TEdit', 'TMemo'));
+
+  // --- a name must never contain a path separator or other illegal character,
+  //     whatever the book spells, or the "new file" would escape the folder.
+  Check('atom.name.sanitised', Pos('\', AtomFileNameFor('A\B.TX', 'C/D.TY')) = 0,
+    AtomFileNameFor('A\B.TX', 'C/D.TY'));
+  Check('atom.name.sanitised.slash', Pos('/', AtomFileNameFor('A\B.TX', 'C/D.TY')) = 0);
+
+  // --- empty input must not produce a dangling "-to-.rules".
+  Check('atom.name.empty', AtomFileNameFor('', '') = '', AtomFileNameFor('', ''));
+
+  // --- UniqueAtomPath against REAL files.
+  Dir := TPath.Combine(TPath.GetTempPath, 'convrules_atom_' + IntToStr(GetCurrentProcessId));
+  TDirectory.CreateDirectory(Dir);
+  try
+    P1 := UniqueAtomPath(Dir, 'TQuery-to-TFDQuery.rules');
+    Check('atom.path.free.is.plain', SameText(ExtractFileName(P1), 'TQuery-to-TFDQuery.rules'),
+      ExtractFileName(P1));
+    Check('atom.path.not.exists', not TFile.Exists(P1));
+
+    TFile.WriteAllText(P1, '#convert A.T -> B.T'#13#10);
+    P2 := UniqueAtomPath(Dir, 'TQuery-to-TFDQuery.rules');
+    Check('atom.path.avoids.existing', not SameText(P1, P2),
+      'must not hand back a path DoSave would append to');
+    Check('atom.path.second.not.exists', not TFile.Exists(P2), P2);
+
+    TFile.WriteAllText(P2, '#convert A.T -> B.T'#13#10);
+    P3 := UniqueAtomPath(Dir, 'TQuery-to-TFDQuery.rules');
+    Check('atom.path.third', (not TFile.Exists(P3)) and (not SameText(P3, P1))
+      and (not SameText(P3, P2)), P3);
+
+    Check('atom.path.in.folder',
+      SameText(ExcludeTrailingPathDelimiter(ExtractFilePath(P3)),
+               ExcludeTrailingPathDelimiter(Dir)), P3);
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
 { One rule per type is the corpus invariant (owner, 2026-09-08): an atomic rule
   lives in exactly ONE file, because the same conversion in two places is how two
   versions of it diverge. FindDuplicates is what makes that invariant checkable. }
@@ -5172,6 +5443,7 @@ begin
     TestPlatformDefaults;
     TestEngineTimeoutHeadroom;
     TestProptreeRefsAsLeavesLive;
+    TestResolveHardFailureIsReported;
     TestAcceptanceTcxButtonToPool;
     TestQueryLocationParse;
     TestQuerySymbolTieBreak;
@@ -5196,6 +5468,9 @@ begin
     TestRuleCatalogParse;
     TestRuleCatalogIndex;
     TestRuleCatalogDuplicates;
+    TestMappingCatalog;
+    TestHeaderIndexFor;
+    TestAtomFileNaming;
     TestRuleCatalogRealFolder;
     TestSuggestEnumPairs;
 

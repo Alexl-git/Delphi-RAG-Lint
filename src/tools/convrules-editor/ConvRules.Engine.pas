@@ -199,7 +199,13 @@ type
     function RunCapture(const AArgs: string; out AOutput: string): Integer;
     /// <summary>`query --name AName --json` -> raw output, or '' + a reason.
     /// AName must be BARE: a dotted name matches nothing.</summary>
-    function QueryJsonFor(const AName: string; out AJson, AError: string): Boolean;
+    function QueryJsonFor(const AName: string; out AJson, AError: string): Boolean; overload;
+    /// <summary>As above, also reporting the engine's EXIT CODE.</summary>
+    /// <param name="ACode">0 ok; 1 zero hits (not a fault); anything else is a
+    /// HARD failure -- 2 is an unusable --db list. Callers that treat a miss as
+    /// benign must still not treat a hard failure that way.</param>
+    function QueryJsonFor(const AName: string; out AJson, AError: string;
+      out ACode: Integer): Boolean; overload;
     function DbArgsFor(const ADbs: TArray<string>): string; overload;
     function DbArgs: string; overload;
     /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
@@ -209,6 +215,20 @@ type
     /// cxButtons.TcxButton) via `query --name`, which is what `proptree --qname`
     /// requires. Discards the tie count; see the overload below.</summary>
     function ResolveClassQName(const AName: string): string; overload;
+
+    /// <summary>As the two-argument form, but REPORTS a hard engine failure
+    /// instead of silently returning the bare name.</summary>
+    /// <param name="AError">'' when the name resolved OR when the index simply
+    /// holds no such class (both are ordinary outcomes). Non-empty only when the
+    /// query could not be answered at all -- an unusable --db list above all.</param>
+    /// <remarks>The distinction is load-bearing. Without it a dead --db path and an
+    /// unknown type are the same event to the caller, the bare name flows on to
+    /// proptree (which, unlike query, tolerates a missing --db and answers from the
+    /// rest), and a CONFIGURATION fault is reported as "class not found" -- blaming
+    /// the type for a broken index list. That cost a full debugging session on
+    /// 2026-09-09; pinned by resolve.harderror.* in ConvRulesModelTests.</remarks>
+    function ResolveClassQName(const AName: string; out AAmbiguity: Integer;
+      out AError: string): string; overload;
 
     /// <summary>As above, reporting how many CLASS rows carried EXACTLY this
     /// name.</summary>
@@ -642,6 +662,7 @@ var
   QN    : string;
   VisArg: string;
   Ambig : Integer;
+  ResErr: string;
 begin
   AError := '';
   ANote := '';
@@ -649,7 +670,16 @@ begin
   // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
   // unit-qualified form (cxButtons.TcxButton). Qualify it first (no-op if already
   // qualified or not resolvable).
-  QN := ResolveClassQName(AQname, Ambig);
+  QN := ResolveClassQName(AQname, Ambig, ResErr);
+  // A hard resolution failure is a fault in the ENGINE CALL, not in the type.
+  // Report it here: proptree tolerates a --db that does not exist and answers
+  // from the remaining indexes, so letting the unqualified name through would
+  // produce a confident "class not found" about a perfectly real class.
+  if ResErr <> '' then
+  begin
+    AError := Format('cannot resolve "%s": %s', [AQname, ResErr]);
+    Exit(False);
+  end;
   // Several classes carry that bare name -- TEdit, TButton and TLabel all have both an
   // FMX and a VCL declaration -- and only the engine's row order chose between them.
   // Silently returning an FMX property tree for a VCL form is the failure this reports.
@@ -841,9 +871,18 @@ end;
 function TEngineAdapter.ResolveClassQName(const AName: string;
   out AAmbiguity: Integer): string;
 var
+  Ignored: string;
+begin
+  Result := ResolveClassQName(AName, AAmbiguity, Ignored);
+end;
+
+function TEngineAdapter.ResolveClassQName(const AName: string;
+  out AAmbiguity: Integer; out AError: string): string;
+var
   Json   : string;
   Err    : string;
   Syms   : TArray<TQuerySymbol>;
+  Code   : Integer;
   Classes: TArray<TQuerySymbol>;
   S      : TQuerySymbol;
   Sym    : TQuerySymbol;
@@ -851,9 +890,17 @@ var
 begin
   Result := AName;
   AAmbiguity := 0;
+  AError := '';
   // Already qualified (has a '.') or empty -> nothing to do.
   if (AName = '') or (Pos('.', AName) > 0) then Exit;
-  if not QueryJsonFor(AName, Json, Err) then Exit;   // exit 1 = no hits, not a failure
+  if not QueryJsonFor(AName, Json, Err, Code) then
+  begin
+    // Exit 1 is "no such class" -- an ordinary answer, so leave AError empty and
+    // hand back the bare name as before. Any OTHER code means the query did not
+    // run; that must not masquerade as a miss.
+    if Code <> 1 then AError := Err;
+    Exit;
+  end;
   Syms := ParseQuerySymbols(Json);
   // Keep only class rows, then let the SHARED selector do the exact-name match and
   // the tie count. Taking "the first kind=class row" without comparing the name is
@@ -1369,10 +1416,19 @@ end;
 function TEngineAdapter.QueryJsonFor(const AName: string;
   out AJson, AError: string): Boolean;
 var
+  Ignored: Integer;
+begin
+  Result := QueryJsonFor(AName, AJson, AError, Ignored);
+end;
+
+function TEngineAdapter.QueryJsonFor(const AName: string;
+  out AJson, AError: string; out ACode: Integer): Boolean;
+var
   Code: Integer;
 begin
   AError := '';
   Code := RunCapture(Format('query --name "%s" --json%s', [AName, DbArgs]), AJson);
+  ACode := Code;
   case Code of
     0: Exit(True);
     // Exit 1 is "zero hits", NOT a broken call -- say so plainly rather than

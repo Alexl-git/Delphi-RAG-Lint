@@ -20,7 +20,10 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.StrUtils,
-  System.Generics.Collections, System.Generics.Defaults;
+  System.Generics.Collections, System.Generics.Defaults,
+  { TRuleBook, for HeaderIndexFor. ConvRules.Model uses only the RTL, so naming it
+    here cannot create a cycle. }
+  ConvRules.Model;
 
 const
   /// <summary>The index file written into the scanned rules folder.</summary>
@@ -58,6 +61,29 @@ type
 
   TCatalogDuplicates = TArray<TCatalogDuplicate>;
 
+  /// <summary>One '#mapping &lt;Name&gt; from &lt;Type&gt; to &lt;Class&gt;' DECLARATION.</summary>
+  /// <remarks>A #mapping spans several physical lines: the declaration is followed by
+  /// sibling #when/#else CLAUSE lines that repeat the name. Only the declaration is an
+  /// entry here -- a clause is a USE of the name, not a second declaration of it, and
+  /// counting clauses would report every multi-clause mapping as duplicated inside a
+  /// single correct file. LineNo is 1-based, for display and for routing a later save
+  /// back to the owning book.</remarks>
+  TMappingCatalogEntry = record
+    Name    : string;
+    FilePath: string;
+    LineNo  : Integer;
+  end;
+
+  TMappingCatalog = TArray<TMappingCatalogEntry>;
+
+  /// <summary>One mapping name declared by more than one book.</summary>
+  TMappingDuplicate = record
+    Name   : string;
+    Entries: TMappingCatalog;
+  end;
+
+  TMappingDuplicates = TArray<TMappingDuplicate>;
+
 /// <summary>PURE: the bare type name of a possibly unit-qualified name.</summary>
 /// <param name="AQualified">'Bde.DBTables.TTable' or 'TTable'.</param>
 /// <returns>The text after the last dot; the input unchanged when there is none.</returns>
@@ -92,6 +118,64 @@ function MergeCatalogs(const AParts: TArray<TRuleCatalog>): TRuleCatalog;
 /// answers "is this type covered", is called once per row while painting, and must
 /// stay cheap; this one answers a corpus-health question and is called on rescan.</para></remarks>
 function FindDuplicates(const ACatalog: TRuleCatalog): TCatalogDuplicates;
+
+/// <summary>PURE: every '#mapping' DECLARATION in one rule-book text.</summary>
+/// <param name="AText">A .rules book. Unrecognised text is ignored, never an error.</param>
+/// <param name="APath">Recorded verbatim as each entry's FilePath; not read.</param>
+/// <returns>One entry per declaration, in file order. Clause lines yield nothing.</returns>
+/// <remarks>Uses the same TRuleBook the editor loads books with, so the catalog cannot
+/// disagree with the editor about what a '#mapping' says. The declaration is identified
+/// the way the MODEL marks it -- MapFromType &lt;&gt; '' -- never by re-parsing the line.</remarks>
+function MappingCatalogFromText(const AText, APath: string): TMappingCatalog;
+
+/// <summary>PURE: every mapping NAME declared more than once.</summary>
+/// <param name="ACatalog">The scanned mapping catalog.</param>
+/// <returns>One entry per duplicated name, in first-appearance order, each holding ALL
+/// its sites in scan order; [] when every name is declared once.</returns>
+/// <remarks>The invariant FindDuplicates enforces for types, keyed on the mapping name
+/// instead: a name declared in two books is two versions of one mapping waiting to
+/// diverge. Case-insensitive, as Pascal is.
+/// <para>This is needed BEFORE atomization, not after. Splitting a #convert into its
+/// own file separates it from the preamble #mapping its #apply names, and the tempting
+/// repair is to copy the declaration across. This makes that visible.</para></remarks>
+function FindDuplicateMappings(const ACatalog: TMappingCatalog): TMappingDuplicates;
+
+/// <summary>PURE: the node index of the '#convert' header a catalog entry names.</summary>
+/// <param name="ABook">The loaded owning book. nil yields -1.</param>
+/// <param name="AEntry">A catalog entry; its LineNo is a HINT, its FromType decides.</param>
+/// <returns>The 0-based index into ABook.Nodes, or -1 when this book converts no such type.</returns>
+/// <remarks>LineNo is deliberately NOT trusted. The catalog is an index and the book
+/// moves underneath it -- inserting one comment shifts every recorded line -- so the hint
+/// is ACCEPTED ONLY IF the node it names is still an rnkConvert for the same bare type;
+/// otherwise the first header converting that type wins. Trusting the number would select
+/// a neighbouring rule, which looks plausible and is wrong.
+/// <para>An out-of-range LineNo is a stale index, not a fault: it falls back like any
+/// other miss and never raises.</para></remarks>
+function HeaderIndexFor(ABook: TRuleBook; const AEntry: TRuleCatalogEntry): Integer;
+
+/// <summary>PURE: the file name a NEW single-conversion atom should carry.</summary>
+/// <param name="AFrom">The From type, bare or qualified.</param>
+/// <param name="ATo">The To type AS WRITTEN ON THE HEADER -- any uses-units after a
+/// comma are stripped here, the same way CatalogFromText derives ToType.</param>
+/// <returns>'&lt;FromBare&gt;-to-&lt;ToBare&gt;.rules', or '' when either side is empty.</returns>
+/// <remarks>THE CONVENTION IS OWNER RULING 1c AND IS NOT SETTLED. It is spelled once,
+/// in ATOM_NAME_FMT, so changing it costs one line and cannot drift between callers.
+/// <para>Characters illegal in a file name are replaced, never passed through: the
+/// result is combined with a folder by the caller, and a name carrying a separator
+/// would write outside it.</para></remarks>
+function AtomFileNameFor(const AFrom, ATo: string): string;
+
+/// <summary>A path in AFolder for AName that DOES NOT ALREADY EXIST.</summary>
+/// <param name="AFolder">Target folder.</param>
+/// <param name="AName">Desired file name, typically from AtomFileNameFor.</param>
+/// <returns>AFolder\AName when free, else the first free '...-2', '...-3' variant.
+/// '' when AName is empty.</returns>
+/// <remarks>SAFETY, not convenience. The save path APPENDS to a file that already
+/// exists, so handing back an occupied path would graft a new rule silently onto an
+/// unrelated atom -- and the one-rule-one-file invariant would be broken by the very
+/// command meant to uphold it. The suffix goes before the extension so the file stays
+/// a '.rules' and keeps being scanned.</remarks>
+function UniqueAtomPath(const AFolder, AName: string): string;
 
 /// <summary>PURE: the first catalog entry converting ATypeName.</summary>
 /// <param name="ACatalog">The catalog to search.</param>
@@ -129,9 +213,6 @@ function CatalogFromIndexText(const AText: string): TRuleCatalog;
 function ScanRulesFolder(const AFolder: string; out AErrors: TArray<string>): TRuleCatalog;
 
 implementation
-
-uses
-  ConvRules.Model;
 
 const
   { Tab-separated field order of one index record. CatalogToIndexText writes them
@@ -205,6 +286,178 @@ begin
     Result := List.ToArray;
   finally
     List.Free;
+  end;
+end;
+
+function MappingCatalogFromText(const AText, APath: string): TMappingCatalog;
+var
+  Book : TRuleBook;
+  List : TList<TMappingCatalogEntry>;
+  i    : Integer;
+  Node : TRuleNode;
+  Entry: TMappingCatalogEntry;
+begin
+  List := TList<TMappingCatalogEntry>.Create;
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(AText);
+    // TRuleBook parses ONE node per physical line, so i+1 is the 1-based line number.
+    for i := 0 to Book.Nodes.Count - 1 do
+    begin
+      Node := Book.Nodes[i];
+      if Node.Kind <> rnkMapping then Continue;
+      // MapFromType is the MODEL's own marker for the declaration line. A #when or
+      // #else clause carries the same MapName and an empty MapFromType; treating one
+      // as a declaration would report BdeBatchMode -- 1 declaration, 5 clauses -- as a
+      // six-way duplicate inside a single, entirely correct file.
+      if Trim(Node.MapFromType) = '' then Continue;
+      if Trim(Node.MapName) = '' then Continue;
+
+      Entry.Name     := Trim(Node.MapName);
+      Entry.FilePath := APath;
+      Entry.LineNo   := i + 1;
+      List.Add(Entry);
+    end;
+    Result := List.ToArray;
+  finally
+    Book.Free;
+    List.Free;
+  end;
+end;
+
+{ Owner ruling 1c lives HERE and nowhere else. }
+const
+  ATOM_NAME_FMT = '%s-to-%s.rules';
+
+function AtomFileNameFor(const AFrom, ATo: string): string;
+var
+  F, T: string;
+  CommaAt: Integer;
+
+  { A file name may not carry a separator or any of the characters Windows reserves.
+    Substitute rather than delete, so two different types cannot collapse onto one
+    name. }
+  function Sanitise(const AText: string): string;
+  var
+    Ch: Char;
+  begin
+    Result := '';
+    for Ch in AText do
+      if TPath.IsValidFileNameChar(Ch) then Result := Result + Ch
+      else Result := Result + '_';
+  end;
+
+begin
+  Result := '';
+  T := Trim(ATo);
+  // A header's target may be followed by uses-units: keep only the type.
+  CommaAt := Pos(',', T);
+  if CommaAt > 0 then T := Trim(Copy(T, 1, CommaAt - 1));
+
+  F := Sanitise(BareTypeName(AFrom));
+  T := Sanitise(BareTypeName(T));
+  if (F = '') or (T = '') then Exit;
+
+  Result := Format(ATOM_NAME_FMT, [F, T]);
+end;
+
+function UniqueAtomPath(const AFolder, AName: string): string;
+var
+  Base, Ext: string;
+  n: Integer;
+begin
+  Result := '';
+  if Trim(AName) = '' then Exit;
+
+  Result := TPath.Combine(AFolder, AName);
+  if not TFile.Exists(Result) then Exit;
+
+  // Suffix BEFORE the extension: 'X-2.rules', never 'X.rules-2', or the new atom
+  // would stop matching the '*.rules' folder scan and become invisible to the catalog.
+  Base := TPath.GetFileNameWithoutExtension(AName);
+  Ext  := TPath.GetExtension(AName);
+  n := 2;
+  repeat
+    Result := TPath.Combine(AFolder, Format('%s-%d%s', [Base, n, Ext]));
+    Inc(n);
+  until not TFile.Exists(Result);
+end;
+
+function HeaderIndexFor(ABook: TRuleBook; const AEntry: TRuleCatalogEntry): Integer;
+var
+  Hint, i: Integer;
+  Want   : string;
+
+  function HeaderMatches(AIndex: Integer): Boolean;
+  begin
+    Result := (ABook.Nodes[AIndex].Kind = rnkConvert)
+      and SameText(BareTypeName(ABook.Nodes[AIndex].FromType), Want);
+  end;
+
+begin
+  Result := -1;
+  if ABook = nil then Exit;
+  Want := BareTypeName(AEntry.FromType);
+  if Want = '' then Exit;
+
+  // 1. The recorded line, accepted only if it still IS this rule's header.
+  Hint := AEntry.LineNo - 1;
+  if (Hint >= 0) and (Hint < ABook.Nodes.Count) and HeaderMatches(Hint) then
+    Exit(Hint);
+
+  // 2. Otherwise the index is stale: the TYPE is the durable key, so take the first
+  //    header converting it. First, not last, to agree with FindRuleForType -- the
+  //    panel already reports that site as the owner.
+  for i := 0 to ABook.Nodes.Count - 1 do
+    if HeaderMatches(i) then
+      Exit(i);
+end;
+
+function FindDuplicateMappings(const ACatalog: TMappingCatalog): TMappingDuplicates;
+var
+  Groups: TDictionary<string, TMappingCatalog>;
+  Order : TList<string>;                  // keys in FIRST-APPEARANCE order
+  Found : TList<TMappingDuplicate>;
+  Entry : TMappingCatalogEntry;
+  Bucket: TMappingCatalog;
+  Dup   : TMappingDuplicate;
+  Key   : string;
+begin
+  Result := nil;
+  Groups := TDictionary<string, TMappingCatalog>.Create;
+  Order  := TList<string>.Create;
+  Found  := TList<TMappingDuplicate>.Create;
+  try
+    for Entry in ACatalog do
+    begin
+      // A mapping name is an identifier and never qualified, so unlike the type
+      // catalog there is nothing to strip here -- only case to fold.
+      Key := UpperCase(Trim(Entry.Name));
+      if Key = '' then Continue;
+
+      if not Groups.TryGetValue(Key, Bucket) then
+      begin
+        Bucket := nil;
+        Order.Add(Key);
+      end;
+      Groups.AddOrSetValue(Key, Bucket + [Entry]);
+    end;
+
+    // Walk Order, not Groups: a dictionary has no order, and a report that
+    // reshuffles between runs is one nobody can diff.
+    for Key in Order do
+      if Groups.TryGetValue(Key, Bucket) and (Length(Bucket) > 1) then
+      begin
+        Dup.Name    := Bucket[0].Name;      // as the first site spells it
+        Dup.Entries := Bucket;
+        Found.Add(Dup);
+      end;
+
+    Result := Found.ToArray;
+  finally
+    Found.Free;
+    Order.Free;
+    Groups.Free;
   end;
 end;
 
