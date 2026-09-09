@@ -1707,12 +1707,46 @@ begin
 end;
 
 { Criterion 12: WHILE no blocks are selected the Split and Delete commands are
-  disabled. CanOperateOn is the single rule the form's enablement uses. }
+  disabled. CanOperateOn is the single rule the form's enablement uses.
+
+  Task 5d.0 widened it: a HEADERLESS block -- preamble or trailer -- carries
+  file-scope content (#mapping / #remove / #unuse / #migrate) that belongs to no
+  single rule, so it may not be split out or deleted from the grid either. Before
+  rbkTrailing existed this could only reach the preamble; since 0acff42 it could
+  delete the 43-line #migrate tail of convrules\BDE-to-FireDAC.rules. }
 procedure TestBlockOpsEnablement;
+const
+  SRC =
+    '// hdr'#13#10 +
+    '#remove X'#13#10 +
+    '#convert A.T -> B.T'#13#10 +
+    '#link P <- Q'#13#10 +
+    '#migrate U -> V'#13#10;
+var
+  B: TRuleBlocks;
 begin
-  Check('blockops.enable.none', not CanOperateOn([]), 'empty selection must disable');
-  Check('blockops.enable.one', CanOperateOn([0]), 'one selected block must enable');
-  Check('blockops.enable.many', CanOperateOn([1, 4]), 'several selected must enable');
+  B := SplitRulesBlocks(SRC);
+  { Guard the fixture itself: every assertion below is meaningless if the split
+    did not produce [preamble, convert, trailing]. }
+  Check('blockops.enable.fixture', (Length(B) = 3)
+    and (B[0].Kind = rbkPreamble) and (B[1].Kind = rbkConvert)
+    and (B[2].Kind = rbkTrailing), 'want [preamble, convert, trailing], got '
+    + IntToStr(Length(B)) + ' block(s)');
+
+  Check('blockops.enable.none', not CanOperateOn(B, []), 'empty selection must disable');
+  Check('blockops.enable.rule', CanOperateOn(B, [1]), 'one selected rule must enable');
+  Check('blockops.enable.preamble', not CanOperateOn(B, [0]),
+    'a preamble is file-scope and must not be splittable or deletable');
+  Check('blockops.enable.trailer', not CanOperateOn(B, [2]),
+    'a trailer holds #migrate and must not be splittable or deletable');
+  Check('blockops.enable.mixed', not CanOperateOn(B, [0, 1]),
+    'any headerless block in the selection disables the commands');
+  Check('blockops.enable.outofrange', not CanOperateOn(B, [99]),
+    'an out-of-range index is not a selection');
+  { Negative controls: a fix that over-applies -- refusing any selection in a
+    file that HAS a preamble, or tripping over a repeated index -- fails here. }
+  Check('blockops.enable.rule.dup', CanOperateOn(B, [1, 1]),
+    'a repeated index is still just one selected rule');
 end;
 
 { Criterion 5: an incoming #link whose target is already linked FROM THE SAME

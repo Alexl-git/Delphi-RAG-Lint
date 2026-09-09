@@ -31,12 +31,23 @@ function DeleteBlocks(const ABlocks: TRuleBlocks;
 procedure SplitOut(const ASource: TRuleBlocks; const AIndexes: TArray<Integer>;
   out ARemaining, AMoved: TRuleBlocks);
 
-/// <summary>PURE: the enablement rule for the Split / Delete commands -- they
-/// operate on a selection, so an empty selection disables them.</summary>
-/// <remarks>There is no Copy command. CopyOut was retired on 2026-09-09 because it
-/// left the source intact, manufacturing the duplicate state FindDuplicates reports;
-/// a rule may be MOVED between books, never COPIED.</remarks>
-function CanOperateOn(const ASelected: TArray<Integer>): Boolean;
+/// <summary>PURE: the enablement rule for the Split / Delete commands. True only
+/// when ASelected names at least one in-range block of ABlocks and none of the
+/// blocks it names is headerless (HEADERLESS_KINDS).</summary>
+/// <param name="ABlocks">The file's blocks; the selection indexes into these.</param>
+/// <param name="ASelected">Selected block indexes; duplicates and out-of-range
+/// entries are ignored, and a selection made only of them is no selection.</param>
+/// <returns>True when Split and Delete may act on the selection.</returns>
+/// <remarks>A preamble or trailer holds file-scope directives that belong to no
+/// single rule, so moving or deleting one from the grid would silently strip the
+/// book. Before rbkTrailing existed this could only reach the preamble; since
+/// 0acff42 an unguarded Delete could remove the 43-line #migrate tail of
+/// convrules\BDE-to-FireDAC.rules.
+/// <para>There is no Copy command. CopyOut was retired on 2026-09-09 because it
+/// left the source intact, manufacturing the duplicate state FindDuplicates
+/// reports; a rule may be MOVED between books, never COPIED.</para></remarks>
+function CanOperateOn(const ABlocks: TRuleBlocks;
+  const ASelected: TArray<Integer>): Boolean;
 
 type
   /// <summary>One #link inside a block, with its verbatim source line.</summary>
@@ -231,9 +242,20 @@ begin
   ARemaining := DeleteBlocks(ASource, AIndexes);
 end;
 
-function CanOperateOn(const ASelected: TArray<Integer>): Boolean;
+function CanOperateOn(const ABlocks: TRuleBlocks;
+  const ASelected: TArray<Integer>): Boolean;
+var
+  Idx: TArray<Integer>;
+  i  : Integer;
 begin
-  Result := Length(ASelected) > 0;
+  { NormalizeIndexes drops out-of-range and duplicate entries, so a selection made
+    only of stale indexes correctly reads as no selection at all. }
+  Idx := NormalizeIndexes(ASelected, Length(ABlocks));
+  if Length(Idx) = 0 then Exit(False);
+  for i in Idx do
+    if ABlocks[i].Kind in HEADERLESS_KINDS then
+      Exit(False);
+  Result := True;
 end;
 
 function TMergePlan.ConflictCount: Integer;
@@ -284,7 +306,7 @@ begin
   try
     Lines := SplitRawLines(ABlock.RawText);
     // Headerless kinds start at line 0; every other kind's line 0 IS its header.
-    if ABlock.Kind in [rbkPreamble, rbkTrailing] then i0 := 0 else i0 := 1;
+    if ABlock.Kind in HEADERLESS_KINDS then i0 := 0 else i0 := 1;
     for i := i0 to High(Lines) do
       if (Trim(Lines[i].Text) <> '')
          and not SameText(FirstToken(Lines[i].Text), '#link') then
@@ -317,7 +339,7 @@ begin
     for i := 0 to High(AIncoming) do
       // Headerless kinds have no header to duplicate; matching them on '' would
       // report every preamble and trailer as a collision with every other one.
-      if not (AIncoming[i].Kind in [rbkPreamble, rbkTrailing])
+      if not (AIncoming[i].Kind in HEADERLESS_KINDS)
          and (IndexOfHeader(AExisting, AIncoming[i].Header, AIncoming[i].Kind) >= 0) then
         List.Add(Trim(AIncoming[i].Header));
     Result := List.ToArray;

@@ -393,7 +393,10 @@ var
   Sel: TArray<Integer>;
 begin
   Sel := CheckedIndexes(fi);
-  FBtnSplit.Enabled   := CanOperateOn(Sel) and (fi >= 0);
+  { fi is now checked FIRST: CanOperateOn needs the file's blocks, so the index
+    must be valid before it is dereferenced, not merely and-ed alongside. }
+  FBtnSplit.Enabled   := (fi >= 0) and (fi < FSet.Count)
+                         and CanOperateOn(FSet.Item(fi).Blocks, Sel);
   FBtnDelete.Enabled  := FBtnSplit.Enabled;
   FBtnMerge.Enabled   := (fi >= 0);
   FBtnCompose.Enabled := FSet.Count > 0;
@@ -569,7 +572,7 @@ var
   ErrMsg  : string;
 begin
   Sel := CheckedIndexes(fi);
-  if not CanOperateOn(Sel) or (fi < 0) then Exit;
+  if (fi < 0) or (fi >= FSet.Count) or not CanOperateOn(FSet.Item(fi).Blocks, Sel) then Exit;
   Target := AskTargetFile(ChangeFileExt(FSet.Item(fi).Path, '') + '-split'
     + ExtractFileExt(FSet.Item(fi).Path));
   if Target = '' then Exit;
@@ -615,7 +618,7 @@ var
   ErrMsg: string;
 begin
   Sel := CheckedIndexes(fi);
-  if not CanOperateOn(Sel) or (fi < 0) then Exit;
+  if (fi < 0) or (fi >= FSet.Count) or not CanOperateOn(FSet.Item(fi).Blocks, Sel) then Exit;
   if MessageDlg(Format('Delete %d block(s) from %s?'#13#10
     + 'A backup is written first.', [Length(Sel), ExtractFileName(FSet.Item(fi).Path)]),
     mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;

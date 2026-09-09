@@ -72,6 +72,16 @@ type
 
   TRuleBlocks = TArray<TRuleBlock>;
 
+const
+  /// <summary>The block kinds that carry no rule of their own.</summary>
+  /// <remarks>Both hold FILE-SCOPE content -- #mapping / #remove / #unuse in a
+  /// preamble, #migrate in a trailer -- which belongs to the book rather than to
+  /// any one #convert. They are therefore never selectable for a job, never
+  /// splittable or deletable from the curation grid, and always travel into a
+  /// composed book. Spelled once here so the rule cannot drift between the
+  /// places that enforce it.</remarks>
+  HEADERLESS_KINDS = [rbkPreamble, rbkTrailing];
+
 /// <summary>PURE: split text into lines, keeping each line's exact terminator.</summary>
 /// <param name="AText">Any text; '' yields an empty array.</param>
 /// <returns>Lines in order; concatenating Text+Eol reproduces AText byte for byte.</returns>
