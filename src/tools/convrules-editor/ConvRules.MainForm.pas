@@ -178,6 +178,20 @@ type
     procedure DoValidate(Sender: TObject);
     procedure DoCurate(Sender: TObject);
     procedure DoNewConversion(Sender: TObject);
+    /// <summary>Decides WHERE a new rule should be written, prompting as needed.</summary>
+    /// <param name="AFrom">From type, already resolved.</param>
+    /// <param name="ATo">To type, already resolved.</param>
+    /// <param name="ACompletingStub">True when the selected rule is a From-only stub
+    /// for AFrom -- finishing that is not authoring a second rule, so both prompts
+    /// are skipped.</param>
+    /// <returns>True to go on creating the rule in the current book, whose FFilePath
+    /// may by then point at a fresh atom. False when the caller must abandon: the user
+    /// cancelled, or was routed to the existing rule instead.</returns>
+    /// <remarks>Split out of DoNewConversion so that routine keeps one exit for this
+    /// whole decision. Everything here is prompting and bookkeeping; no rule is
+    /// created and no file is written -- the unchanged save path does that.</remarks>
+    function ChooseTargetForNewRule(const AFrom, ATo: string;
+      ACompletingStub: Boolean): Boolean;
     procedure DoAutoMatch(Sender: TObject);
     procedure RefreshRulesList;
     procedure RulesSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
@@ -209,6 +223,27 @@ type
     /// <remarks>Fires whether the row is greyed or not, by design: a greyed row is
     /// a hint, never a prohibition.</remarks>
     procedure FormTypeClick(Sender: TObject);
+    /// <summary>Double-click a RULED type: open the book that owns it and select
+    /// the block.</summary>
+    /// <remarks>The conservative reading of "edit an individual conversion": it
+    /// loads the whole owning FILE and selects the rule inside it, so FFilePath
+    /// keeps meaning exactly what it meant before and there is no new way to lose a
+    /// file. Switching books goes through the same three-way prompt Curate uses,
+    /// worded with DISCARD because that is what No does.
+    /// <para>For a type claimed by several rules it opens the FIRST site -- the one
+    /// FindRuleForType reports as the owner and the panel already names -- and says
+    /// how many others exist, because picking silently between two rules is the
+    /// mistake this whole catalog exists to prevent.</para></remarks>
+    procedure FormTypeDblClick(Sender: TObject);
+    /// <summary>Opens the book that owns ATypeName's rule and selects the block.</summary>
+    /// <param name="ATypeName">A bare or qualified type name.</param>
+    /// <returns>False when nothing was opened -- not catalogued, the user cancelled,
+    /// a save failed, or the index is stale. The reason is already on the status bar.</returns>
+    /// <remarks>The single way to reach an existing rule, shared by the form-types
+    /// double-click and by New Conversion when it finds the type already ruled. One
+    /// implementation because both must apply the same discard prompt and the same
+    /// stale-index handling.</remarks>
+    function OpenOwningRule(const ATypeName: string): Boolean;
     /// <summary>Toggles the selected row's manual re-enable override.</summary>
     procedure ToggleFormTypeReenable(Sender: TObject);
     /// <summary>Owner-draws one form-type row: V/N/? mark, name, count, why greyed.</summary>
@@ -935,6 +970,7 @@ begin
   FFormTypeList.ItemHeight := 18;
   FFormTypeList.OnDrawItem := FormTypeDrawItem;
   FFormTypeList.OnClick := FormTypeClick;
+  FFormTypeList.OnDblClick := FormTypeDblClick;
 
   SplitForms := TSplitter.Create(Self);
   SplitForms.Parent := Self; SplitForms.Align := alLeft; SplitForms.Width := 4;
@@ -2207,6 +2243,98 @@ begin
       [FFormTypeRows[i].TypeName]));
 end;
 
+procedure TConvRulesForm.FormTypeDblClick(Sender: TObject);
+var
+  i: Integer;
+begin
+  i := FFormTypeList.ItemIndex;
+  if (i < 0) or (i > High(FFormTypeRows)) then Exit;
+  if not FFormTypeRows[i].Ruled then
+  begin
+    SetStatus(Format('%s has no rule yet -- pick a To class and press "+ New ' +
+      'Conversion".', [FFormTypeRows[i].TypeName]));
+    Exit;
+  end;
+  OpenOwningRule(FFormTypeRows[i].TypeName);
+end;
+
+function TConvRulesForm.OpenOwningRule(const ATypeName: string): Boolean;
+var
+  Hdr, Sites, Sel, k: Integer;
+  Entry: TRuleCatalogEntry;
+  TypeName, Extra: string;
+begin
+  Result := False;
+  TypeName := ATypeName;
+
+  // Ask the catalog again rather than trusting the painted row: the row carries a
+  // display name, and the catalog may have been rescanned since it was drawn.
+  if not FindRuleForType(FCatalog, TypeName, Entry) then
+  begin
+    SetError(Format('%s is marked as ruled but the catalog no longer has it. ' +
+      'Press "Rescan rules".', [TypeName]));
+    Exit;
+  end;
+
+  if not SameText(Entry.FilePath, FFilePath) then
+  begin
+    if (FFilePath <> '') and (FBook.Nodes.Count > 0) then
+      case MessageDlg(Format('Open %s to edit the %s rule?' + sLineBreak + sLineBreak +
+             'Yes = save %s first.' + sLineBreak +
+             'No  = DISCARD any unsaved edits in it and open the other book.',
+             [ExtractFileName(Entry.FilePath), TypeName,
+              ExtractFileName(FFilePath)]),
+             mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+        mrCancel: Exit;
+        mrYes   :
+          // Same reasoning as DoCurate: if the save failed, opening the other book
+          // would throw the edits away. DoSave has already said why -- do not
+          // overwrite its message.
+          if not DoSave(nil) then
+          begin
+            SetError('Not opened: the save failed, so your edits are still only in '
+              + 'this editor and nothing on disk changed.');
+            Exit;
+          end;
+      end;
+    LoadFile(Entry.FilePath);
+  end;
+
+  Hdr := HeaderIndexFor(FBook, Entry);
+  if Hdr < 0 then
+  begin
+    SetError(Format('%s is catalogued in %s but no #convert for it was found there. ' +
+      'The index is stale -- press "Rescan rules".',
+      [TypeName, ExtractFileName(Entry.FilePath)]));
+    Exit;
+  end;
+
+  Sel := -1;
+  for k := 0 to FRules.Items.Count - 1 do
+    if Integer(FRules.Items[k].Data) = Hdr then begin Sel := k; Break; end;
+  if Sel >= 0 then
+  begin
+    FRules.ItemIndex := Sel;
+    FRules.Items[Sel].Selected := True;
+    FRules.Items[Sel].Focused := True;
+    FRules.SetFocus;
+  end
+  else
+    // The rule exists in the model but the list is filtered, so no row shows it.
+    // Load the grid directly rather than leaving the user staring at the old block.
+    LoadGridForBlock(Hdr);
+
+  Sites := DuplicateSitesFor(TypeName);
+  if Sites > 1 then
+    Extra := Format(' -- NOTE %d rules claim %s; this is the first. Move or delete ' +
+      'the others.', [Sites, TypeName])
+  else
+    Extra := '';
+  SetStatus(Format('Opened the rule for %s -- %s, line %d.',
+    [TypeName, ExtractFileName(Entry.FilePath), Entry.LineNo]) + Extra);
+  Result := True;
+end;
+
 procedure TConvRulesForm.ToggleFormTypeReenable(Sender: TObject);
 var
   i: Integer;
@@ -2931,6 +3059,103 @@ end;
 { New Conversion: read From/To from the pickers, verify both resolve to indexed
   classes, append a fresh #convert block, load it (populates the grid + To pool),
   then run Auto-Match so the obvious mappings are pre-filled. }
+function TConvRulesForm.ChooseTargetForNewRule(const AFrom, ATo: string;
+  ACompletingStub: Boolean): Boolean;
+var
+  RuledEntry: TRuleCatalogEntry;
+  Folder, AtomName, NewPath, OpenBook: string;
+begin
+  Result := False;
+
+  { The catalog is normally built when a form is examined. Nothing guarantees that
+    happened: opening a book and pressing New Conversion straight away is an ordinary
+    way to use this editor, and the catalog would then be EMPTY -- so FindRuleForType
+    would answer "not ruled" for every type and this guard would never fire.
+
+    Observed 2026-09-09 driving the real UI: TTable, which IS ruled, sailed past the
+    duplicate prompt because no form had been examined. Build it on demand instead;
+    the scan is a folder read, not an engine call. }
+  if Length(FCatalog) = 0 then RescanRulesFolder(nil);
+
+  { A rule for this type may already exist elsewhere in the folder, and authoring a
+    second one produces exactly the duplicate FindDuplicates reports. Offer the
+    existing rule FIRST.
+
+    Deliberately not a hard refusal. The user may be replacing a rule on purpose, and
+    a tool that simply says no gets worked around in ways nobody can see. The DEFAULT
+    is the safe act and the cost of the other one is stated. }
+  if (not ACompletingStub) and FindRuleForType(FCatalog, AFrom, RuledEntry) then
+    case MessageDlg(Format('%s is already converted by %s (line %d).' + sLineBreak +
+           sLineBreak +
+           'Yes = open THAT rule and edit it.' + sLineBreak +
+           'No  = write a SECOND rule anyway; the catalog will report a duplicate.',
+           [AFrom, ExtractFileName(RuledEntry.FilePath), RuledEntry.LineNo]),
+           mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+      mrCancel: Exit;
+      mrYes   :
+        begin
+          FCbFrom.Text := AFrom;
+          OpenOwningRule(AFrom);   // one implementation, shared with the double-click
+          Exit;
+        end;
+    end;
+
+  { One conversion per file is the target shape, so offer a fresh atom before
+    appending to whatever book happens to be open. }
+  Folder := Trim(FRulesFolder);
+  if Folder = '' then Folder := ExtractFilePath(FFilePath);
+  AtomName := AtomFileNameFor(AFrom, ATo);
+  if FFilePath = '' then OpenBook := '(none yet)'
+  else OpenBook := ExtractFileName(FFilePath);
+
+  if (not ACompletingStub) and (Folder <> '') and (AtomName <> '') then
+    case MessageDlg(Format('Where should the %s -> %s rule go?' + sLineBreak +
+           sLineBreak +
+           'Yes = a NEW atom file, %s' + sLineBreak +
+           'No  = append to the open book, %s',
+           [AFrom, ATo, AtomName, OpenBook]),
+           mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+      mrCancel: Exit;
+      mrYes   :
+        begin
+          // FFilePath is about to point somewhere else and the open book may hold
+          // unsaved edits. Ask BEFORE touching FBook: clearing first and prompting
+          // afterwards would destroy the very edits the prompt is about.
+          if (FFilePath <> '') and (FBook.Nodes.Count > 0) then
+            case MessageDlg(Format('Start %s?' + sLineBreak + sLineBreak +
+                   'Yes = save %s first.' + sLineBreak +
+                   'No  = DISCARD any unsaved edits in it.',
+                   [AtomName, ExtractFileName(FFilePath)]),
+                   mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+              mrCancel: Exit;
+              mrYes   :
+                if not DoSave(nil) then
+                begin
+                  SetError('New file not started: the save failed, so your edits are '
+                    + 'still only in this editor and nothing on disk changed.');
+                  Exit;
+                end;
+            end;
+
+          // UniqueAtomPath never returns an existing path: DoSave OVERWRITES, so a
+          // colliding name would silently replace a sibling atom.
+          NewPath := UniqueAtomPath(Folder, AtomName);
+          FBook.Clear;
+          FFilePath := NewPath;
+          FLblFile.Caption := NewPath;
+          FActiveHdr := -1;
+          RefreshRulesList;
+          RefreshUnitList;
+          // The file is created by the UNCHANGED save routine, never here. If no link
+          // is ever assigned, DoSave refuses and no empty file appears.
+          SetStatus(Format('New atom: %s. It is not on disk until you Save.',
+            [ExtractFileName(NewPath)]));
+        end;
+    end;
+
+  Result := True;
+end;
+
 procedure TConvRulesForm.DoNewConversion(Sender: TObject);
 var
   fromT, toT: string;
@@ -2939,6 +3164,7 @@ var
   fromNote, toNote, notes: string;
   hdr : TRuleNode;
   newHdrIdx: Integer;
+  CompletingStub: Boolean;
 begin
   var LGuard: IInterface := HourGlass;
   fromT := Trim(FCbFrom.Text);
@@ -2963,13 +3189,19 @@ begin
     Exit;
   end;
 
+  // Completing a From-only stub is NOT authoring a second rule -- it finishes the
+  // one already here -- so neither guard below applies to it.
+  CompletingStub := (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count)
+     and (FBook.Nodes[FActiveHdr].Kind = rnkConvert)
+     and (Trim(FBook.Nodes[FActiveHdr].ToType) = '')
+     and SameText(Trim(FBook.Nodes[FActiveHdr].FromType), fromT);
+
+  if not ChooseTargetForNewRule(fromT, toT, CompletingStub) then Exit;
+
   // If the SELECTED rule is a From-only stub whose From matches the picker, SET
   // ITS To in place (the "assign a To to a Fill From-classes row" flow) instead of
   // creating a duplicate. Otherwise append a fresh #convert block.
-  if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count)
-     and (FBook.Nodes[FActiveHdr].Kind = rnkConvert)
-     and (Trim(FBook.Nodes[FActiveHdr].ToType) = '')
-     and SameText(Trim(FBook.Nodes[FActiveHdr].FromType), fromT) then
+  if CompletingStub then
   begin
     FBook.Nodes[FActiveHdr].ToType := toT;
     FBook.Nodes[FActiveHdr].Dirty := True;
@@ -3138,6 +3370,23 @@ begin
   //    and is not persisted.
   var dropped: Integer;
   var outText: string := FBook.SaveCompleteToString(dropped);
+
+  { A BRAND-NEW atom file with nothing complete would be created EMPTY.
+    SaveCompleteToString drops a #convert that has no #link yet, so "new file AND
+    everything dropped" writes a 0-byte .rules -- a file the folder scan picks up,
+    the catalog cannot explain, and no backup exists to undo (step 1 only backs up
+    a file that already existed).
+
+    Refused NARROWLY, on both conditions. Saving an EXISTING book down to empty is a
+    different act -- deliberate deletion -- and it keeps its .bak. }
+  if (Trim(outText) = '') and (dropped > 0) and (not TFile.Exists(FFilePath)) then
+  begin
+    SetError(Format('Nothing saved and %s was NOT created: it has no completed rule ' +
+      'yet. A #convert needs at least one #link -- assign a property, then Save.',
+      [ExtractFileName(FFilePath)]));
+    Exit;
+  end;
+
   TFile.WriteAllText(FFilePath, outText, TEncoding.ASCII);
 
   // 3) validate the saved file
@@ -3164,6 +3413,21 @@ begin
   if Length(us.Conflicts) > 0 then
     SetError(Format('Note: unit conflicts (ADD wins): %s',
       [string.Join(', ', us.Conflicts)]));
+
+  { The folder just changed on disk, so the catalog is now one save out of date. Any
+    type this save has newly ruled would keep painting as UN-RULED -- inviting a
+    second rule for it -- until something else happened to rescan.
+
+    Only when a form has been examined: with no type list there is nothing to re-mark
+    and this would be an engine call for no reason. RescanRulesFolder writes its own
+    status, so preserve the save message the user is actually waiting for. }
+  if Length(FFormTypeRows) > 0 then
+  begin
+    var SaveMsg: string := FLblStatus.Caption;
+    RescanRulesFolder(nil);
+    RefreshFormTypes;
+    SetStatus(SaveMsg);
+  end;
 
   Result := True;   // the file IS on disk; a failed validation is a report, not a failure
 end;

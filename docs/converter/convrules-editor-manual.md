@@ -464,6 +464,71 @@ via `--form` showed every type as un-ruled until you pressed Rescan by hand.
 
 ---
 
+## Opening the rule that already converts a type
+
+**Double-click a greyed type** in the Types-on-form panel. The editor opens the book
+that owns the rule and selects the block:
+
+```
+Opened the rule for TTable -- BDE-to-FireDAC.rules, line 205.
+```
+
+If that rule lives in a different book you are asked first, and the wording says what
+happens: **Yes** saves the open book, **No** DISCARDS its unsaved edits, Cancel stops.
+
+The recorded line number is a **hint, not the answer**. The catalog is an index and
+the book moves underneath it -- inserting one comment shifts every recorded line -- so
+the hint is used only when the node it names is still a `#convert` for the same type;
+otherwise the first header for that type wins. A stale index therefore selects the
+right rule rather than a plausible-looking neighbour.
+
+When several rules claim the type it opens the **first** -- the one the panel already
+names as the owner -- and says how many others exist.
+
+## New Conversion: where the rule goes
+
+**+ New Conversion** asks two questions before it appends anything.
+
+**If the type is already converted**, it offers that rule instead:
+
+```
+Bde.DBTables.TTable is already converted by BDE-to-FireDAC.rules (line 205).
+Yes = open THAT rule and edit it.
+No  = write a SECOND rule anyway; the catalog will report a duplicate.
+```
+
+This is not a refusal. You may be replacing a rule deliberately -- but the default is
+the safe act and the cost of the other one is stated. Completing a From-only stub from
+**Fill From-classes** is not a second rule, so it skips this.
+
+**Then it asks where the rule should live:**
+
+```
+Where should the Vcl.StdCtrls.TCheckBox -> Vcl.StdCtrls.TRadioButton rule go?
+Yes = a NEW atom file, TCheckBox-to-TRadioButton.rules
+No  = append to the open book, BDE-to-FireDAC.rules
+```
+
+Choosing the new file prompts to save the open book first (**No discards its unsaved
+edits**), then points the editor at the new atom. **The file is not created until you
+Save** -- and a save with no completed rule is refused rather than leaving a 0-byte
+`.rules` the folder scan would pick up:
+
+```
+Nothing saved and X.rules was NOT created: it has no completed rule yet.
+A #convert needs at least one #link -- assign a property, then Save.
+```
+
+The atom name strips the uses-units that ride after a comma on a `#convert` header,
+and a name that already exists is never reused -- the next free `-2`, `-3` is taken,
+before the extension so the file stays a `.rules`. The naming convention itself is
+not yet settled; it lives in one constant (`ATOM_NAME_FMT`).
+
+After a successful save the folder is rescanned, so a type you have just ruled greys
+out immediately.
+
+---
+
 ## Troubleshooting
 
 **"X is not in the current index set" for a type you know exists.**
