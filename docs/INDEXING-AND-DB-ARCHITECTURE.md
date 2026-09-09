@@ -3,28 +3,37 @@
 **Applies to:** drag-lint **1.10.1-alpha** · index **schema_version 21** ·
 extractor **1.14.0-alpha** · tree-sitter grammars delphi13 **14** / dfm **14**.
 Header re-verified 2026-09-09 against `SCHEMA_VERSION` and
-`DRAGLINT_EXTRACTOR_VERSION` in source. **The prose below this header has NOT
-been re-verified line by line** -- it was written against schema 17 and the
-retired ORM3 union DB, so treat specific table shapes here as indicative and
-`docs\INDEX-SCHEMA.md` (kept current) as authoritative.
+`DRAGLINT_EXTRACTOR_VERSION` in source, and the version stamps THROUGHOUT this
+document were corrected the same day: the body and the diagram below both used
+to say `schema_version 17` while this banner said 21, and the sample database
+they cited had been deleted a month earlier.
 
-Two things this document predates, both of which change what the tables hold:
-`string_literals` now carries comment and doc-comment prose plus DFM object
-types, not only string literals; and `refs` gained `receiver_text` (v20) and
+**What is still not guaranteed: the prose has not been re-verified line by
+line.** It was originally written against schema 17 and the retired ORM3 union
+DB. Its ARCHITECTURE -- how indexing works, how the databases relate, which
+process writes -- is current and was re-checked; individual table shapes in the
+sections below may still lag. For the per-table column reference,
+`docs\INDEX-SCHEMA.md` is authoritative and is kept current (refreshed
+2026-09-09 against a live v21 index).
+
+Two changes this document's prose predates, both of which alter what the tables
+hold: `string_literals` now carries comment and doc-comment prose plus DFM
+object types and component types, not only string literals (see INDEX-SCHEMA.md
+for the full `kind` breakdown); and `refs` gained `receiver_text` (v20) and
 `external_target` (v21).
-Verified 2026-07-15 against the then-live ORM3 union index (`C:\Projects\DB\ORM3\drag-lint.sqlite`,
-schema 16, 29 tables -- that DB was **retired and deleted on 2026-08-09**; see the
-note in section 1) and the engine at
-`third_party\dll-win64\drag-lint.exe`; schema **v17** (`symbols.prop_access`,
-see §6) verified 2026-07-20 against `SCHEMA_VERSION` in
-`src/storage/DRagLint.Storage.Schema.pas` and the shipped exe's CLI usage
-output -- the ORM3 sample DB above has not yet been re-indexed past v16, so
-it still reads `prop_access = NULL`.
+Re-verified 2026-09-09 against a live index rebuilt that day -- the
+`Micronite2027` CLIENT project index (`schema_version 21`, 30 tables,
+`indexer_fingerprint = v=1.14.0-alpha;schema=21;pp=1;plat=win64`) -- and the
+engine at `third_party\dll-win64\drag-lint.exe`. The earlier stamp on this
+paragraph described the ORM3 **union** index at schema 16, a database that was
+retired and deleted on 2026-08-09 when the layout moved to one DB per project
+(see the note in section 1); its caveat that `prop_access` still read NULL is
+obsolete, because every index in the estate has since been rebuilt past v17.
 
 > **Version note.** This document explains *how indexing works and how the DBs
 > fit together*. The per-table column reference lives in
 > [INDEX-SCHEMA.md](INDEX-SCHEMA.md). If `drag-lint info` reports a **schema
-> version above 17** or a **grammar version above 14**, treat the details below
+> version above 21** or a **grammar version above 14**, treat the details below
 > as possibly stale and re-verify with `drag-lint schema --db <file> --format json`
 > and `drag-lint info --json` before trusting them -- then refresh this doc's
 > header stamp. The stability contract (additive columns, `schema_meta` first) is
@@ -45,7 +54,7 @@ The write path is owned exclusively by `drag-lint index`.
         v   tree-sitter parse (delphi13 / dfm grammars)  +  resolve passes
         |
   ┌─────────────────────┐        ┌──────────────────────────────────────┐
-  │  drag-lint index     │  ───►  │  <name>.sqlite  (schema_version 17)  │
+  │  drag-lint index     │  ───►  │  <name>.sqlite  (schema_version 21)  │
   │  (the ONLY writer)   │        │  symbols·refs·call_edges·unit_uses·  │
   └─────────────────────┘        │  type_ancestors·di_bindings·FTS·...  │
                                   └──────────────────────────────────────┘

@@ -7,8 +7,9 @@ building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
 Current schema version at time of writing: **21** (`SCHEMA_VERSION` in
-`src/storage/DRagLint.Storage.Schema.pas`, verified 2026-09-08 against the
-constant itself rather than against a database). Recent additive changes:
+`src/storage/DRagLint.Storage.Schema.pas`, verified 2026-09-09 against the
+constant AND against a live index rebuilt the same day -- previously this line
+had only ever been checked against the constant). Recent additive changes:
 **v21 added `refs.external_target`** -- the qualified name of a call target that
 lives outside this DB, so a cross-database call stops looking like an unresolved
 one (see 2.3); **v20 added `refs.receiver_text`** -- the call-site receiver
@@ -28,24 +29,34 @@ Schema history, one line per step:
 - `18 -> 19`: four additive `symbol_facts` columns; the `>=` gate is unchanged;
   **`symbols.id` is reassigned by the full reindex** -- re-resolve by
   `qualified_name`, never by a cached id.
+- `19 -> 20`: additive column `refs.receiver_text` -- the call-site receiver
+  verbatim, so an unresolved call can still say what it hung off (see 2.3).
+- `20 -> 21`: additive column `refs.external_target` -- the qualified name of a
+  call target that lives outside this DB, so a cross-database call stops looking
+  like an unresolved one (see 2.3). **This is the current version.**
 
 All facts in this document were cross-checked against the DDL in
 `src/storage/DRagLint.Storage.SQLite.pas` and
-`src/storage/DRagLint.Storage.Schema.pas`, and against a live index
-(the ORM3 union DB `C:\Projects\DB\ORM3\drag-lint.sqlite`, retired and deleted
-2026-08-09 in favour of one DB per project) **re-indexed with the v18 engine on
-2026-07-23** (`schema_version = 18`, verified both via `drag-lint schema --db
-<path> --format text` and a direct read-only `SELECT value FROM schema_meta
-WHERE key='schema_version'` -- the two agree). The row counts in the "Table of
-tables" below are from that 2026-07-23 v18 sample (836 files / 74151 symbols /
-382358 refs). Counts drift as the codebase grows and every project/library DB
-was re-indexed to v18 in the same pass -- always introspect a specific
-`.sqlite` live (see below) rather than trusting these numbers.
+`src/storage/DRagLint.Storage.Schema.pas`, and against a live index:
+**the `Micronite2027` CLIENT project index, re-indexed 2026-09-09 under
+extractor 1.14.0-alpha** (`schema_version = 21`, verified both via
+`drag-lint schema --db <path> --format text` and a direct read-only
+`SELECT value FROM schema_meta` -- the two agree). The row counts in the
+"Table of tables" below are from that sample.
+
+**The sample is ONE PROJECT index, not an estate-wide total**, which matters for
+reading the counts: it is a single Delphi application (707 files), so
+`di_bindings` is 4 rather than the hundreds a server-side project shows, and the
+`fb_*` / `compiler_findings` / `orm_links` tables are empty because their
+optional ingest steps were not run against it. Counts drift with every reindex
+-- always introspect a specific `.sqlite` live (see below) rather than trusting
+these numbers. What is stable is the SHAPE: the table and column set for a given
+`schema_version`.
 
 New columns/tables are migration-safe: `CREATE TABLE IF NOT EXISTS` +
 `ALTER TABLE ... ADD COLUMN` run on open, and the version gate is a `>=` check,
 so a DB indexed by an OLDER engine simply lacks the newer table/columns (facts
-read as absent, never wrong) until it is re-indexed with the v18 engine.
+read as absent, never wrong) until it is re-indexed with a current engine.
 
 ## 1. Purpose and stability contract
 
@@ -81,34 +92,56 @@ read as absent, never wrong) until it is re-indexed with the v18 engine.
 
 ### Table of tables
 
-| Table | Rows (ORM3, v18 2026-07-23) | What it holds |
+| Table | Rows (Micronite2027, v21 2026-09-09) | What it holds |
 |---|---:|---|
-| `schema_meta` | 1 | Schema version marker (key/value) |
-| `files` | 836 | One row per indexed source file |
-| `symbols` | 74151 | Every declared/defined code element (incl. params/locals at v14+) |
-| `refs` | 382358 | Every reference (read/write/call/type-use/...) to a symbol |
-| `call_edges` | 18801 | Resolved call-site -> target-symbol edges (subset of `refs`) |
-| `unit_uses` | 14223 | Every `uses`-clause entry, resolved or not |
-| `type_ancestors` | 1443 | Class/interface inheritance edges |
+| `schema_meta` | 5 | Version, fingerprints and scan type (key/value) -- see 2.14 |
+| `files` | 707 | One row per indexed source file |
+| `symbols` | 91423 | Every declared/defined code element (incl. params/locals at v14+) |
+| `refs` | 543882 | Every reference (read/write/call/type-use/...) to a symbol |
+| `call_edges` | 33113 | Resolved call-site -> target-symbol edges (subset of `refs`) |
+| `unit_uses` | 10619 | Every `uses`-clause entry, resolved or not |
+| `type_ancestors` | 1132 | Class/interface inheritance edges |
 | `type_helpers` | 22 | Record/class helper -> target-type edges |
-| `symbol_docs` | 4789 | Parsed XMLDoc/PasDoc/oneline doc comments per symbol |
-| `symbol_facts` | 13267 | Per-routine analysis facts (complexity, reads/writes, SQL tables, DFM event, ownership; v19 adds mutated params, UI affinity, external surfaces, wiring) -- v18+; see 2.15 |
-| `di_bindings` | 540 | Spring4D `RegisterType<T>.Implements<I>` DI registrations |
-| `string_literals` | 40276 | Every string literal, with owning symbol/file |
-| `symbol_trigrams` | 649557 | Trigram inverted index for fuzzy symbol search |
-| `string_fts*` (9 tables) | varies | SQLite FTS5 shadow tables backing `query --text` |
-| `compiler_findings` | 0 (ORM3) | Ingested dcc32/dcc64/msbuild log findings |
-| `fb_relations` | 0 (ORM3) | Live Firebird schema snapshot: tables |
-| `fb_columns` | 0 (ORM3) | Live Firebird schema snapshot: columns |
-| `fb_field_info` | 0 (ORM3) | Live Firebird `TFIELD` display/edit metadata snapshot |
-| `fb_datasets` | 0 (ORM3) | Live Firebird dataset (`TFIBDataSet`-style) SQL snapshot |
-| `fb_enum_values` | 0 (ORM3) | Live Firebird enum-domain value snapshot |
-| `orm_links` | 0 (ORM3) | Cross-DB Delphi-symbol <-> SQL-symbol ORM link candidates |
+| `symbol_docs` | 4577 | Parsed XMLDoc/PasDoc/oneline doc comments per symbol |
+| `symbol_facts` | 15905 | Per-routine analysis facts (complexity, reads/writes, SQL tables, DFM event, ownership; v19 adds mutated params, UI affinity, external surfaces, wiring) -- v18+; see 2.15 |
+| `di_bindings` | 4 | Spring4D `RegisterType<T>.Implements<I>` DI registrations |
+| `string_literals` | 98915 | Every string literal AND comment, with owning symbol/file |
+| `symbol_trigrams` | 713676 | Trigram inverted index for fuzzy symbol search |
+| `string_fts*` (10 tables) | varies | SQLite FTS5 shadow tables backing `query --text` -- two indexes (`string_fts` unicode61 + `string_fts_tri` trigram), five shadow tables each |
+| `compiler_findings` | 0 (sample) | Ingested dcc32/dcc64/msbuild log findings |
+| `fb_relations` | 0 (sample) | Live Firebird schema snapshot: tables |
+| `fb_columns` | 0 (sample) | Live Firebird schema snapshot: columns |
+| `fb_field_info` | 0 (sample) | Live Firebird `TFIELD` display/edit metadata snapshot |
+| `fb_datasets` | 0 (sample) | Live Firebird dataset (`TFIBDataSet`-style) SQL snapshot |
+| `fb_enum_values` | 0 (sample) | Live Firebird enum-domain value snapshot |
+| `orm_links` | 0 (sample) | Cross-DB Delphi-symbol <-> SQL-symbol ORM link candidates |
 
-Row counts marked "0 (ORM3)" are populated by optional ingest steps (compiler
+Row counts marked "0 (sample)" are populated by optional ingest steps (compiler
 log import, live Firebird connection snapshot, ORM link resolution) that were
 not run against this particular sample DB; the tables always exist (created
 by `CREATE TABLE IF NOT EXISTS` in the DDL) even when empty.
+
+Note on `string_literals`: the table name understates it. It is the **searchable
+text index**, and holds far more than quoted strings -- comment prose, doc
+comments and DFM content all live here, separated by the `kind` column. That is
+why its row count is large relative to the file count, and it is what lets
+`query --text` find a phrase in a doc-comment or a DFM caption rather than only
+in a string literal. Observed `kind` values in the sample:
+
+| `kind` | Rows | What it is |
+|---|---:|---|
+| `literal` | 29023 | An ordinary quoted string in code |
+| `doc` | 25629 | A `///` documentation comment |
+| `comment` | 21111 | A `//`, `{ }` or `(* *)` comment |
+| `dfm-prop` | 8926 | A property VALUE from a `.dfm` (captions, hints, SQL text) |
+| `dfm-type` | 7084 | The component TYPE on a `.dfm` `object` line -- how you find every form holding a `TOvcTable` |
+| `const` | 4595 | A declared string constant |
+| `format` | 2491 | A `Format()` format string |
+| `resourcestring` | 56 | A `resourcestring` declaration |
+
+Filter on it with `query --text <phrase> --kind <kind>`, and note the boundary
+this makes explicit: `--kind literal` returns only genuine string literals, so
+code written against the pre-comment behaviour keeps working unchanged.
 
 There is **no `params` or `local_vars` table.** As of v14 (D5), typed local
 variables and parameters are stored as ordinary rows in `symbols` with
@@ -508,7 +541,24 @@ Single-row-per-key metadata table.
 | `key` | TEXT PK | e.g. `schema_version` |
 | `value` | TEXT | Its value (schema_version is stored as a stringified integer) |
 
-This is the table to check first (see section 1).
+This is the table to check first (see section 1). The keys a current index
+carries, read from the 2026-09-09 sample:
+
+| `key` | Example value | Meaning |
+|---|---|---|
+| `schema_version` | `21` | The structural contract this document describes. Check it before reading anything else. |
+| `indexer_fingerprint` | `v=1.14.0-alpha;schema=21;pp=1;plat=win64` | What PRODUCED the stored parses: extractor version, schema, preprocessor flag, platform. The engine re-parses a file when this no longer matches, so a consumer can use it to tell whether an index predates an extractor change. |
+| `resolver_fingerprint` | `r=1.1.0-alpha;schema=21` | What produced the DERIVED edges (`call_edges`, `type_ancestors`, `type_helpers`, resolved `unit_uses`). Deliberately separate: when only this is stale the remedy is `index --resolve-only`, which re-derives edges from parses the index already holds instead of re-parsing anything. |
+| `scan_type` | `project` or `library` | Which KIND of index this is -- a project's compile closure, or a folder/library tree. This is what makes a membership question answerable: in a `project` index a hit IS membership, and a miss IS non-membership. |
+| `indexed_at_unix` | `1788972499` | When the index was last written, seconds since the Unix epoch. |
+
+**Do not infer freshness from `indexed_at_unix` alone.** It says when the index
+was written, not whether the files it describes have changed since. Compare the
+fingerprints for "was this built by the current engine", and the per-file
+`files.mtime_unix` / `files.sha256` columns for "has this file changed".
+`files.indexed_at_fingerprint` records the fingerprint each individual file was
+indexed under, which is what makes an incremental reindex able to re-parse only
+the files an engine change actually invalidated.
 
 ---
 
