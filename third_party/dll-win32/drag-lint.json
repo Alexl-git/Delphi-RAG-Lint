@@ -1,4 +1,4 @@
-{
+﻿{
   "settings": {
     "currentProjectsIndexing": "perProject",
     "defaultPlatform": "Win32",
@@ -307,6 +307,22 @@
         ],
         "useIgnoreFiles": true,
         "sqlOnlyMS": true
+      },
+      {
+        "name": "DragLint-ConvRulesEditor",
+        "include": [
+          "C:\\Projects\\Delphi-RAG-lint\\src\\tools\\convrules-editor\\ConvRulesEditor.dpr"
+        ],
+        "sqlOnlyMS": true,
+        "useIgnoreFiles": true
+      },
+      {
+        "name": "DragLint-ConvRulesTests",
+        "include": [
+          "C:\\Projects\\Delphi-RAG-lint\\src\\tools\\convrules-editor\\tests\\ConvRulesModelTests.dpr"
+        ],
+        "sqlOnlyMS": true,
+        "useIgnoreFiles": true
       }
     ]
   }

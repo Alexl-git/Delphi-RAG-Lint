@@ -164,7 +164,7 @@ try {
   Write-Host ''
   Write-Host 'CASE C -- a MATCHING stamp with no file change must still SKIP' -ForegroundColor Cyan
   $matching = & $Exe index $src --db $db 2>&1 | Out-String
-  Check 'the calls pass is skipped' ($matching -match 'resolve: calls\s+skipped') `
+  Check 'the calls pass is skipped' ($matching -match 'stage:\s+calls\s+--\s+skipped') `
     'RED here means every unchanged index now pays a whole-DB resolve -- the 2,252s to 17s saving is gone'
   Check 'and it does NOT claim the resolver changed' `
     (-not ($matching -match 'Resolver changed|no resolver stamp')) ''
@@ -177,7 +177,7 @@ try {
   Check 'the stamp was actually aged on disk' ($aged -match 'ancient') $aged
   $mismatch = & $Exe index $src --db $db 2>&1 | Out-String
   Check 'it announces the resolver change' ($mismatch -match 'Resolver changed since this DB was resolved') ''
-  Check 'and the calls pass RUNS' (-not ($mismatch -match 'resolve: calls\s+skipped')) ''
+  Check 'and the calls pass RUNS' (-not ($mismatch -match 'stage:\s+calls\s+--\s+skipped')) ''
   Check 'as a WHOLE-DB pass' ($mismatch -match 'WHOLE-DB pass') `
     'a scoped pass would leave the rest of the database on the old resolver'
 
@@ -195,7 +195,7 @@ try {
   $absent = & $Exe index $src --db $db 2>&1 | Out-String
   Check 'it says the DB carries no resolver stamp' ($absent -match 'no resolver stamp') `
     'RED means the grandfather clause is back: an unstamped DB is being trusted'
-  Check 'the calls pass RUNS' (-not ($absent -match 'resolve: calls\s+skipped')) `
+  Check 'the calls pass RUNS' (-not ($absent -match 'stage:\s+calls\s+--\s+skipped')) `
     'RED is the exact incident -- 25 of 31 sections skipped and were stamped current anyway'
   Check 'as a WHOLE-DB pass' ($absent -match 'WHOLE-DB pass') ''
 
@@ -214,7 +214,7 @@ try {
     $allRo = & $Exe index --all --only Proj --resolve-only --config "$fx\global.drag-lint.json" 2>&1 | Out-String
     Check 'it announces the walk-skip' ($allRo -match 'skipping the walk') `
       'RED means --all accepted --resolve-only and dropped it'
-    Check 'and the calls pass RUNS anyway' (-not ($allRo -match 'resolve: calls\s+skipped')) `
+    Check 'and the calls pass RUNS anyway' (-not ($allRo -match 'stage:\s+calls\s+--\s+skipped')) `
       'with the walk skipped ParsedFiles is 0, so every other term in the gate is false'
     Check 'as a WHOLE-DB pass' ($allRo -match 'WHOLE-DB pass') ''
   }
