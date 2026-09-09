@@ -2050,6 +2050,145 @@ begin
     'and the one TBatchMove applies');
 end;
 
+{ Task 5d.3: the selection lives in the WORKING SET, not in the grid.
+
+  The grid is rebuilt on every file switch, so a selection held there would be
+  lost the moment the user looked at another book -- which is exactly the job
+  this feature exists to support (pick rules across several books for one
+  migration). Indexes are POSITIONAL, so every block-list change resets them. }
+procedure TestWorkingSetSelection;
+const
+  SRC_A =
+    '// hdr'#13#10 +
+    '#remove X'#13#10 +
+    '#convert Bde.DBTables.TAlpha -> B.TBeta'#13#10 +
+    '#link P <- Q'#13#10 +
+    '#convert C.TGamma -> D.TDelta'#13#10 +
+    '#link R <- S'#13#10 +
+    '#migrate U -> V'#13#10;
+  { No preamble, no trailer: under a selective compose with nothing checked this
+    file must contribute NOTHING. }
+  SRC_B =
+    '#convert E.TOne -> F.TTwo'#13#10 +
+    '#link K <- L'#13#10;
+var
+  WS  : TWorkingSet;
+  Rep : TComposeReport;
+  T, W: string;
+  n   : Integer;
+begin
+  WS := TWorkingSet.Create;
+  try
+    WS.AddText('a.rules', SRC_A);
+    WS.AddText('b.rules', SRC_B);
+    Check('ws.sel.default.none', not WS.AnySelected, 'a fresh set has no selection');
+
+    WS.SetSelected(0, [1]);
+    Check('ws.sel.persists', IdxEq(WS.Selected(0), [1]), IdxStr(WS.Selected(0)));
+    Check('ws.sel.any', WS.AnySelected, 'AnySelected must see it');
+
+    WS.SetSelected(0, [0, 1, 3]);
+    Check('ws.sel.drops.headerless', IdxEq(WS.Selected(0), [1]),
+      'preamble and trailer are never selectable: ' + IdxStr(WS.Selected(0)));
+
+    { Positional indexes: any block-list change must clear the selection, or a
+      stale index silently points at a different rule. }
+    WS.SetSelected(0, [1]);
+    WS.SetBlocks(0, SplitRulesBlocks(SRC_A));
+    Check('ws.sel.reset.on.setblocks', Length(WS.Selected(0)) = 0,
+      'SetBlocks must reset the selection');
+    WS.SetSelected(0, [1]);
+    WS.SyncFromText('a.rules', SRC_A);
+    Check('ws.sel.reset.on.sync', Length(WS.Selected(0)) = 0,
+      'SyncFromText must reset it too');
+
+    { A selection belongs to its FILE, so reordering the set carries it along. }
+    WS.SetSelected(1, [0]);
+    WS.MoveUp(1);
+    Check('ws.sel.follows.moveup',
+      IdxEq(WS.Selected(0), [0]) and (Length(WS.Selected(1)) = 0),
+      'the selection travels with its file, not with its position');
+    WS.MoveDown(0);
+
+    { NEGATIVE CONTROL, and the convention: nothing checked means the whole set,
+      which is what Compose did before selections existed. }
+    WS.ClearSelection;
+    Check('ws.sel.clear', not WS.AnySelected, 'ClearSelection must empty it');
+    T := WS.ComposeSelected(Rep);
+    W := WS.ComposeAll(Rep);
+    Check('ws.compose.selected.none.is.whole', T = W,
+      'with nothing selected, ComposeSelected IS ComposeAll');
+
+    WS.SetSelected(0, [1]);
+    T := WS.ComposeSelected(Rep);
+    Check('ws.compose.selected.picks',
+      (Pos('#convert Bde.DBTables.TAlpha', T) > 0)
+      and (Pos('#convert C.TGamma', T) = 0),
+      'only the checked rule of a.rules travels');
+    Check('ws.compose.selected.headerless.travel',
+      (Pos('#remove X', T) > 0) and (Pos('#migrate U -> V', T) > 0),
+      'a.rules'' file-scope directives travel with it');
+    { b.rules has NO headerless blocks and nothing checked, so it contributes
+      nothing at all -- not "everything" via an all-if-empty shortcut. }
+    Check('ws.compose.selected.unselected.file.empty',
+      Pos('#convert E.TOne', T) = 0,
+      'an unselected file with no file-scope content contributes nothing');
+    Check('ws.compose.selected.report',
+      Pos('a.rules: 1 of 2 rule block(s)', string.Join(#10, Rep.Lines)) > 0,
+      string.Join(' | ', Rep.Lines));
+
+    WS.ClearSelection;
+    n := WS.SelectByTypes(['TAlpha']);
+    Check('ws.sel.bytype', (n = 1) and IdxEq(WS.Selected(0), [1]),
+      Format('n=%d sel=%s', [n, IdxStr(WS.Selected(0))]));
+    Check('ws.sel.bytype.idempotent', WS.SelectByTypes(['TAlpha']) = 0,
+      'selecting the same type again adds nothing');
+    { Negative control: a matcher that selects everything passes .bytype. }
+    WS.ClearSelection;
+    Check('ws.sel.bytype.miss', WS.SelectByTypes(['TNothing']) = 0,
+      'an unmatched type selects nothing');
+    Check('ws.sel.bytype.miss.none', not WS.AnySelected, 'and changes nothing');
+  finally
+    WS.Free;
+  end;
+end;
+
+{ 5d.3 against the real book: by-type selection composes a job that is smaller
+  than the book and still passes the #apply integrity check. }
+procedure TestWorkingSetSelectionCorpus;
+var
+  WS  : TWorkingSet;
+  Rep : TComposeReport;
+  P, T: string;
+  n   : Integer;
+begin
+  P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\convrules\BDE-to-FireDAC.rules'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('ws.sel.bde', 'BDE-to-FireDAC.rules not found: ' + P);
+    Exit;
+  end;
+  WS := TWorkingSet.Create;
+  try
+    WS.AddFile(P);
+    n := WS.SelectByTypes(['TDatabase', 'TSession']);
+    Check('ws.sel.bde.bytype', (n = 2) and IdxEq(WS.Selected(0), [1, 2]),
+      Format('n=%d sel=%s', [n, IdxStr(WS.Selected(0))]));
+
+    T := WS.ComposeSelected(Rep);
+    { 145 preamble + 20 TSession + 39 TDatabase + 76 trailer. }
+    Check('ws.sel.bde.lines', Length(SplitRawLines(T)) = 280,
+      IntToStr(Length(SplitRawLines(T))));
+    Check('ws.sel.bde.integrity', CheckApplyIntegrity(T).OK,
+      'the composed job must be self-consistent: ' + CheckApplyIntegrity(T).Summary);
+    Check('ws.sel.bde.smaller', Length(SplitRawLines(T)) < 707,
+      'and it must actually be a SUBSET of the book');
+  finally
+    WS.Free;
+  end;
+end;
+
 { Criterion 5: an incoming #link whose target is already linked FROM THE SAME
   source is a duplicate and is skipped. }
 procedure TestMergeSkipsDuplicate;
@@ -5899,6 +6038,8 @@ begin
     TestBlockOpsSelectionCorpus;
     TestApplyIntegrity;
     TestApplyIntegrityCorpus;
+    TestWorkingSetSelection;
+    TestWorkingSetSelectionCorpus;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;
     TestBlockOpsSplit;

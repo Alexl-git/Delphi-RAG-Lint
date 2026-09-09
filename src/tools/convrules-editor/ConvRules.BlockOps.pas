@@ -14,7 +14,8 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.Generics.Collections,
-  ConvRules.BlockFile, ConvRules.Model;
+  ConvRules.BlockFile,  // dl:unit ConvRules.BlockFile accepted -- shares HEADERLESS_KINDS
+  ConvRules.Model;
 
 /// <summary>PURE: the blocks at AIndexes, in ASCENDING index order regardless of
 /// the order AIndexes were given in (the grid may report checks out of order).

@@ -15,13 +15,23 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Generics.Collections,
-  ConvRules.BlockFile, ConvRules.BlockOps;
+  { HEADERLESS_KINDS is deliberately SHARED, not copied: the "a preamble or
+    trailer is never selectable" rule is enforced here, in CanOperateOn and in
+    SelectForCompose, and a second spelling of the set is exactly how those
+    three drift apart. }
+  ConvRules.BlockFile,  // dl:unit ConvRules.BlockFile accepted
+  ConvRules.BlockOps;
 
 type
   /// <summary>One loaded file: where it came from and its verbatim blocks.</summary>
   TWorkingFile = record
     Path  : string;
     Blocks: TRuleBlocks;
+    /// <summary>Rule-block indexes chosen for the next selective Compose;
+    /// nil = nothing chosen in this file.</summary>
+    /// <remarks>POSITIONAL, so it is reset by every operation that changes
+    /// Blocks -- a stale index would silently name a different rule.</remarks>
+    Selected: TArray<Integer>;
   end;
 
   /// <summary>Ordered list of loaded files. Position = composition precedence.</summary>
@@ -80,6 +90,42 @@ type
 
     /// <summary>Compose every loaded file, in order, into one .rules text.</summary>
     function  ComposeAll(out AReport: TComposeReport): string;
+
+    /// <summary>Replace one file's selection.</summary>
+    /// <param name="AIndex">File index; out of range is a no-op.</param>
+    /// <param name="ASelected">Rule-block indexes. Normalised against that
+    /// file's blocks: out-of-range and HEADERLESS indexes are dropped, the rest
+    /// sorted and de-duplicated.</param>
+    procedure SetSelected(AIndex: Integer; const ASelected: TArray<Integer>);
+    /// <summary>The file's current selection.</summary>
+    /// <param name="AIndex">File index; out of range yields nil.</param>
+    /// <returns>Its rule-block indexes, ascending.</returns>
+    function  Selected(AIndex: Integer): TArray<Integer>;
+    /// <summary>True when any file has a non-empty selection.</summary>
+    /// <returns>Whether ComposeSelected would compose a SUBSET.</returns>
+    function  AnySelected: Boolean;
+    /// <summary>Empty every file's selection.</summary>
+    procedure ClearSelection;
+    /// <summary>Add, to every file's selection, the blocks converting any of
+    /// ATypeNames -- typically the component types found on an examined form.</summary>
+    /// <param name="ATypeNames">Type names, bare or qualified.</param>
+    /// <returns>How many blocks became selected that were not already, so a
+    /// second call with the same types returns 0.</returns>
+    /// <remarks>Unions into the existing selection rather than replacing it: it
+    /// is one contributing SOURCE, alongside the grid's checkboxes and (once the
+    /// engine deploys #tag) by-tag.</remarks>
+    function  SelectByTypes(const ATypeNames: TArray<string>): Integer;
+    /// <summary>Compose the set honouring each file's selection.</summary>
+    /// <param name="AReport">Receives the compose report, preceded by one
+    /// SelectionReportLine per file when a selection is active.</param>
+    /// <returns>The composed text.</returns>
+    /// <remarks>When NOTHING is selected anywhere this is exactly ComposeAll --
+    /// nothing checked means the whole set, which is what the Compose button did
+    /// before selections existed. Otherwise each file contributes
+    /// SelectForCompose(Blocks, Selected): its headerless blocks always, its
+    /// checked rules as well. A file with no selection AND no headerless blocks
+    /// therefore contributes nothing at all.</remarks>
+    function  ComposeSelected(out AReport: TComposeReport): string;
     /// <summary>Write one entry back to its own path, backing it up first.</summary>
     /// <returns>The backup path written ('' when the file did not exist yet).</returns>
     function  SaveFile(AIndex: Integer): string;
@@ -215,6 +261,12 @@ var
 begin
   F := FFiles[AIndex];
   F.Blocks := ABlocks;
+  { Selection indexes are POSITIONAL, and every caller of SetBlocks -- split,
+    delete, merge, SyncFromText -- has just changed the block list. Keeping the
+    old indexes would silently point them at different rules, so the selection
+    is dropped rather than guessed at. This is the ONE place that owns the reset:
+    do not add a second path that assigns Blocks directly. }
+  F.Selected := nil;
   FFiles[AIndex] := F;
 end;
 
@@ -262,6 +314,100 @@ begin
     Inputs[i].Blocks := FFiles[i].Blocks;
   end;
   Result := Compose(Inputs, AReport);
+end;
+
+procedure TWorkingSet.SetSelected(AIndex: Integer; const ASelected: TArray<Integer>);
+var
+  F   : TWorkingFile;
+  Keep: TList<Integer>;
+  i   : Integer;
+begin
+  if (AIndex < 0) or (AIndex >= FFiles.Count) then Exit;
+  F    := FFiles[AIndex];
+  Keep := TList<Integer>.Create;
+  try
+    { UnionSelections normalises (in range, sorted, de-duplicated); the headerless
+      filter is this unit's own -- a preamble or trailer travels regardless, so
+      recording it as CHOSEN would double-count it in every report. }
+    for i in UnionSelections(F.Blocks, ASelected, nil) do
+      if not (F.Blocks[i].Kind in HEADERLESS_KINDS) then
+        Keep.Add(i);
+    F.Selected      := Keep.ToArray;
+    FFiles[AIndex]  := F;
+  finally
+    Keep.Free;
+  end;
+end;
+
+function TWorkingSet.Selected(AIndex: Integer): TArray<Integer>;
+begin
+  if (AIndex < 0) or (AIndex >= FFiles.Count) then Exit(nil);
+  Result := FFiles[AIndex].Selected;
+end;
+
+function TWorkingSet.AnySelected: Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to FFiles.Count - 1 do
+    if Length(FFiles[i].Selected) > 0 then Exit(True);
+  Result := False;
+end;
+
+procedure TWorkingSet.ClearSelection;
+var
+  i: Integer;
+  F: TWorkingFile;
+begin
+  for i := 0 to FFiles.Count - 1 do
+  begin
+    F := FFiles[i];
+    F.Selected := nil;
+    FFiles[i]  := F;
+  end;
+end;
+
+function TWorkingSet.SelectByTypes(const ATypeNames: TArray<string>): Integer;
+var
+  i, Before: Integer;
+  F        : TWorkingFile;
+begin
+  Result := 0;
+  for i := 0 to FFiles.Count - 1 do
+  begin
+    F      := FFiles[i];
+    Before := Length(F.Selected);
+    { UNION, never replace: by-type is one contributing source alongside the
+      grid's checkboxes, so it must not discard what the user ticked by hand. }
+    SetSelected(i, UnionSelections(F.Blocks, F.Selected,
+      BlocksConvertingTypes(F.Blocks, ATypeNames)));
+    Inc(Result, Length(FFiles[i].Selected) - Before);
+  end;
+end;
+
+function TWorkingSet.ComposeSelected(out AReport: TComposeReport): string;
+var
+  Inputs: TArray<TComposeInput>;
+  Head  : TArray<string>;
+  i     : Integer;
+begin
+  { Nothing checked anywhere means the WHOLE set -- the convention the Compose
+    button had before selections existed, kept so the old behaviour is reachable
+    without a mode switch. }
+  if not AnySelected then Exit(ComposeAll(AReport));
+
+  SetLength(Inputs, FFiles.Count);
+  Head := ['Selective compose -- only the checked rules, plus every file''s '
+    + 'header and trailer:'];
+  for i := 0 to FFiles.Count - 1 do
+  begin
+    Inputs[i].Path   := FFiles[i].Path;
+    Inputs[i].Blocks := SelectForCompose(FFiles[i].Blocks, FFiles[i].Selected);
+    Head := Head + [SelectionReportLine(FFiles[i].Path, FFiles[i].Blocks,
+      FFiles[i].Selected)];
+  end;
+  Result        := Compose(Inputs, AReport);
+  AReport.Lines := Head + AReport.Lines;
 end;
 
 function TWorkingSet.SaveFile(AIndex: Integer): string;
