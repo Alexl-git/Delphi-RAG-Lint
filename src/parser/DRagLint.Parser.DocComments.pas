@@ -447,9 +447,32 @@ begin
         else Buf.Append(ASource[I]);
       end; // case
 
-      if ASource[I] = #10 then
+      { A LONE CR IS A LINE TERMINATOR, and until 2026-09-08 this counted #10
+        ONLY. That disagreed with TStringList.Text and with the store (which has
+        treated a lone CR as a break since session 79 shipped the indexer half of
+        the lone-CR work), so on any unit containing one the scanner ran ONE LINE
+        BEHIND everything else.
+
+        The consequence was not a cosmetic off-by-one. TDocumenter computes its
+        doc-block replacement range from these line numbers, so a skewed scanner
+        made `document --apply` DELETE the declaration packed above a doc block
+        and leave that block's own closing tag behind. Reported from DataCopy as
+        two methods silently removed from a class; reproduced in 30 lines whose
+        only unusual byte is one extra CR.
+
+        CRLF MUST STILL COUNT ONCE. The CR increments; the LF that follows it
+        does not, which is what the lookback tests. Deliberately does NOT consume
+        the LF by advancing I -- the multi-line brace and paren comment states
+        append every character to Buf, so swallowing the LF here would silently
+        change captured comment text. }
+      if ASource[I] = #13 then
       begin
         Inc(Line);
+        Col:= 1;
+      end
+      else if ASource[I] = #10 then
+      begin
+        if (I <= 1) or (ASource[I - 1] <> #13) then Inc(Line);
         Col:= 1;
       end
       else Inc(Col);

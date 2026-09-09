@@ -340,6 +340,34 @@ begin
   if AIsRoot then Kind:= skForm
   else Kind:= skComponent;
   Idx:= AState.Emit(Kind, ObjName, QName, Signature, AParentSymbolIdx, ANode);
+
+  { THE TYPE ON THE `object` LINE IS ITS OWN TOKEN CLASS, so `query --text
+    "TOvcTable" --source dfm` can answer "which forms hold a component of this
+    type, and how many". Until 2026-09-08 the DFM text index carried property
+    VALUES only (`dfm-prop`), so that question returned 0 against a form holding
+    28 such blocks -- and the only way to answer it was to read the .dfm as
+    text, which is what the index exists to replace. It is the FIRST question
+    asked before a component conversion.
+
+    Emitted as `dfm-type` rather than folded into `dfm-prop` so the two stay
+    separable: a caller can ask for types alone instead of substring-matching a
+    property value that happens to contain a class name. The class name is
+    already captured as the symbol's Signature above; this makes it SEARCHABLE
+    rather than only reachable once you know which symbol to ask about. }
+  if (not ClassNode.IsNull) and (ObjClass <> '') then
+  begin
+    var TypeLit: TStringLiteral; TypeLit:= Default(TStringLiteral);
+    TypeLit.Source   := 'dfm';
+    TypeLit.Kind     := 'dfm-type';
+    TypeLit.OwnerName:= ObjName;
+    TypeLit.Text     := ObjClass;
+    TypeLit.StartLine:= Integer(ClassNode.StartPoint.row   ) + 1;
+    TypeLit.StartCol := Integer(ClassNode.StartPoint.column) + 1;
+    TypeLit.EndLine  := Integer(ClassNode.EndPoint  .row   ) + 1;
+    TypeLit.EndCol   := Integer(ClassNode.EndPoint  .column) + 1;
+    AState.Literals.Add(TypeLit);
+  end;
+
   for i:= 0 to ANode.NamedChildCount - 1 do
   begin
     ChildNode:= ANode.NamedChild(i);

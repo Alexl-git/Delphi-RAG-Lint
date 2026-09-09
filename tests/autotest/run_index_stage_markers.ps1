@@ -212,7 +212,11 @@ foreach ($s in $stages) {
 # The first draft of this runner matched the bare section name and so found the
 # new BEGIN line at offset 0, reporting the ordering as broken when it was
 # correct. Anchor on what makes the summary a summary.
-$mSummaryB      = [regex]::Match($rB.Out,'===\s*StageProbe[^=\r\n]*files=\d+\s+symbols=\d+[^=\r\n]*===')
+# NOT [^=]* around the counters: the summary carries several `key=value` fields
+# (refs=, parsed=, skipped=) and an "excludes =" pattern silently stops matching
+# the moment one is added. It did exactly that when refs/parsed/skipped landed.
+# Anchor on the section name and the files= counter, and let the rest be free.
+$mSummaryB      = [regex]::Match($rB.Out,'===\s*StageProbe\b[^\r\n]*files=\d+[^\r\n]*===')
 $idxFirstStageB = $rB.Out.IndexOf('stage:')
 $idxSummaryB    = if ($mSummaryB.Success) { $mSummaryB.Index } else { -1 }
 Check 'B: N2 stages are announced BEFORE the section summary' (($idxFirstStageB -ge 0) -and ($idxSummaryB -ge 0) -and ($idxFirstStageB -lt $idxSummaryB)) `

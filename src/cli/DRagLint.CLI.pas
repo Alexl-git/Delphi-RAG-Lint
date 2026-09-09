@@ -3138,7 +3138,33 @@ begin
       --all` builds many sections in one process and is exactly the run someone
       copies a database out of while it is still going. }
     Stage('  ', 'checkpoint', procedure begin Store.Checkpoint; end);
-    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d [%.1fs] ===', [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols, Elapsed]));
+      { ONE Format, ONE Writeln -- deliberately. Concurrent section workers
+      interleave on this stream and SHRED multi-part output: the 2026-09-08
+      re-parse log has mangled lines at 815 and 1072 among others, and a summary
+      that can be torn in half is a summary a searcher can miss. Building the
+      whole line first makes the write atomic in practice.
+
+      refs joins files/symbols because "did this section actually extract
+      anything" is not answerable from files+symbols alone -- a section can
+      index every file and still resolve nothing.
+
+      parsed/skipped is the pair that makes an INCREMENTAL run legible: files
+      counts the whole corpus either way, so without it a run that re-parsed 3
+      files and one that re-parsed 9,593 print the same number.
+
+      Throughput is here so the NEXT run can be estimated from the last one
+      instead of guessed. The 12.5-hour figure in this repo's own history was
+      wrong by more than 2x against a measured 6 h 04 m, and nobody could tell,
+      because no run ever reported a rate.
+
+      IIndexer exposes no error count, so this line does NOT claim one -- an
+      `errors=0` that merely meant "not measured" would be worse than its
+      absence. }
+    var Rate: Double:= 0;
+    if Elapsed > 0 then Rate:= Store.CountFiles / Elapsed * 60;
+    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d refs=%d parsed=%d skipped=%d [%.1fs, %.0f files/min] ===',
+      [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols,
+       Store.CountReferences, Indexer.ParsedFiles, Indexer.SkippedUpToDate, Elapsed, Rate]));
     Result:= True;
   except
     on E: Exception do

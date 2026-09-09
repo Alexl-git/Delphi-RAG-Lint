@@ -283,6 +283,18 @@ Check 'R either refused cleanly, or applied without touching code' `
   ((($codeR -ne 0) -and ($outR -match '(?i)refus')) -or (($codeR -eq 0) -and ($rDeclsAfter -eq 3))) `
   ($outR.Trim())
 
+# R2 -- THE CAUSE, not the containment. R above passes either way, so it stays
+# green whether the scanner is fixed or merely fenced off by the guard. This one
+# does not: it requires the run to SUCCEED. A build whose scanner still miscounts
+# gets refused by the damage guard and fails here, which is the whole point --
+# without R2 the scanner fix could be dropped and nothing would notice.
+Check 'R2 the lone-CR unit documents SUCCESSFULLY (scanner counts CR as a line)' `
+  ($codeR -eq 0) `
+  "exit=$codeR -- non-zero means the damage guard had to catch a miscomputed edit range, i.e. the scanner is still counting LF only (DRagLint.Parser.DocComments.pas)"
+Check 'R2 and it actually wrote managed blocks' `
+  (($codeR -eq 0) -and [bool](Select-String -LiteralPath $unitR -Pattern 'drag-lint:auto BEGIN' -Quiet)) `
+  'a clean exit that documented nothing would satisfy R2 vacuously'
+
 Write-Host ''
 if ($fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0

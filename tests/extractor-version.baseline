@@ -527,4 +527,19 @@
 #
 #   Superseded: 1.10.0-alpha|7562d480be39c02cdf165f9bf4edf888a158742de7a2b68468a0e1e2eff637d2
 
-1.11.0-alpha|a284e45f310197aa8164068f8931b367d4ef4b2883d8048f6ebdd57c63ccfca8
+# 2026-09-08: bumped 1.11.0-alpha -> 1.12.0-alpha. TDocCommentScanner counted
+#   lines on #10 ONLY, so a LONE CR left it one line behind TStringList and the
+#   store (CR-aware since session 79). Doc-block replacement ranges are computed
+#   from those numbers, so `document --apply` DELETED the declaration packed above
+#   a doc block. Reported from DataCopy; reproduced in 30 lines. This changes which
+#   line every doc comment is reported on, so it is a genuine extraction change.
+# 2026-09-08 (second bump, same session): 1.12.0-alpha -> 1.13.0-alpha. The DFM
+#   parser now emits the `object` line's TYPE as a searchable `dfm-type` text row,
+#   so `query --text "TOvcTable" --source dfm` can answer which forms hold a
+#   component of a type (it returned 0 against 28 real blocks). TWO bumps in one
+#   day is deliberate and costs nothing: 1.12.0-alpha was never released and no
+#   index was ever built against it, so both changes ride ONE re-parse. Bumping
+#   again was preferred over editing the hash under the old version, which would
+#   have meant asserting "cannot affect extraction" about a change that plainly
+#   does.
+1.13.0-alpha|394c89b95ead26a9621f69d9e035d259b757b80c7d86d73cc585a2ef643a3d88
