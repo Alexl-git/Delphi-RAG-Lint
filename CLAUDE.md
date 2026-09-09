@@ -49,6 +49,43 @@ indexes live in `C:\Projects\.drag-lint\`.
 Resolve, never guess: `drag-lint resolve-dbs --project <X.dproj>` /
 `--in <X.pas>` / `--platform <p>`.
 
+## A PROJECT INDEX IS ONLY AS COMPLETE AS ITS `.dproj` / `.dpr`
+
+**After every full reindex, and before trusting any `lint-all`, reconcile the
+project's member list against the units it actually uses.**
+
+Since the 2026-08-11 move to one DB per project, an index is built from the
+COMPILE CLOSURE -- the `.dproj`/`.dpr` members plus transitively-used
+project-local units. That makes the manifest load-bearing in a way it never was
+when a folder walk swept up everything:
+
+* a unit that exists on disk and is USED but is not listed is **not indexed**;
+* so `query`, `find-callers`, `lint-all` and the doc facts for that project are
+  all silently INCOMPLETE -- not wrong-looking, just short;
+* and a project DB is authoritative for membership (`query --name <Unit> --db
+  <projectDb> --exact` -- a miss IS non-membership), so the gap answers
+  confidently.
+
+**This is the failure mode the per-project layout traded for its speed, and
+nothing detects it on its own.** A missing unit produces no error, no warning
+and no empty result -- only a smaller answer than the truth.
+
+The engine already carries both checks; the standing requirement is to RUN them:
+
+```
+drag-lint reconcile-project <App.dproj> --db <db> --json        (dry run FIRST)
+drag-lint lint --project <App.dproj> --rule unit-not-in-dpr
+```
+
+Dry-run before `--apply`, always -- `--apply` edits the project file. Fix the
+`.dproj`/`.dpr`, then re-index that project INCREMENTALLY (`index --project
+<x.dproj> --db <db>`; **never** `index <dir> --db <projectDb>`, which widens a
+project DB into a directory DB). Verify the closure actually grew by comparing
+`files=` on the section summary before and after.
+
+Procedure, triage rules and the per-project run list:
+`docs\PLAN-project-completeness-sweep.md`.
+
 ## Two version constants, and why they are separate
 
 * `DRAGLINT_VERSION` -- the product version. Bump freely for a release.
