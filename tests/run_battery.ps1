@@ -464,9 +464,7 @@ if ($missingRules.Count -eq 0) {
     # `copy /Y`, which never deletes.
     #
     # Found retiring hardcoded-absolute-path.scm for the B7 built-in: the .scm sat
-    # in third_partydll-win64
-ules and srccliWin64Release
-ules after the
+    # in third_party\dll-win64\rules and src\cli\Win64\Release\rules after the
     # source file was deleted. On the next deploy the retired external rule would
     # have loaded ALONGSIDE the built-in under the same id and restored the very
     # finding flood the rewrite removed -- while this check printed "matches".
