@@ -11,14 +11,23 @@ IDE plugin). This guide covers the **CLI** from the release archive.
 
    ```
    drag-lint.exe                 the tool
+   ConvRulesEditor.exe           visual component-conversion rule editor (win64 archive ONLY)
    tree-sitter-delphi13.dll      } parser DLLs -- must sit next to the exe
    tree-sitter-dfm.dll           }
    tree-sitter.dll               }
+   casts.castlib                 class + enum casts (convert-apply --castlib; also read by the editor)
    rules\                        external lint rules (*.scm + *.json)  <-- REQUIRED for linting
      builtin-symbols.txt
+   convrules\                    starter conversion rule books (sample, BDE-to-FireDAC, vendor\)
    README.md  CHANGELOG.md  LICENSE  INSTALL.md
-   docs\AI-USAGE.md
+   docs\AI-USAGE.md  docs\CONVERSION-RULES.md
+   docs\converter\               the rule language, and the editor manual (win64)
    ```
+
+   `ConvRulesEditor.exe` is **Win64 only** -- it is built by `dcc64` from a `.dpr`
+   with no Win32 configuration. The win32 archive still has `convrules\`,
+   `casts.castlib` and the `convert-*` verbs, so the same rule books are authored
+   and applied from the CLI there; only the GUI is absent.
 
 3. (Optional) add the folder to your `PATH`, or call `drag-lint.exe` by full path.
 

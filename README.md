@@ -398,6 +398,20 @@ workflow: `convert-scaffold` -> `convert-validate` -> `convert-apply` (dry-run,
 review the plan) -> `convert-apply --apply`. Full DSL reference, the 5
 conversion surfaces, and the safety scheme: **[docs/CONVERSION-RULES.md](docs/CONVERSION-RULES.md)**.
 
+**`ConvRulesEditor.exe` -- the visual rule-book editor.** Shipped in the
+**win64** archive next to `drag-lint.exe` (it is built by `dcc64` from a `.dpr`
+with no Win32 configuration, so the win32 archive has the rule books and the CLI
+verbs but not the GUI). It puts the source type's real property tree beside the
+target type's -- both read from the index, so both are the actual deep trees
+including inherited and nested members -- and lets you pair them up, author
+conditional mappings, see which types on a form are already covered by a rule,
+and compose the rules for one job out of several books. It authors the plan; the
+CLI applies it. Starter books are in `convrules\`, and the class/enum cast
+library `casts.castlib` sits beside the exe (`convert-apply --castlib` reads the
+same file). Manual:
+**[docs/converter/convrules-editor-manual.md](docs/converter/convrules-editor-manual.md)**;
+rule language: [docs/converter/convrules-dsl.md](docs/converter/convrules-dsl.md).
+
 ### Consuming the index from another tool
 
 The SQLite index is documented for external consumers in

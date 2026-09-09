@@ -18,18 +18,61 @@ them up.
 The output is a **rule book**: a `.rules` text file the drag-lint engine can apply. The
 editor never converts anything itself; it authors the plan.
 
+## Getting it
+
+The editor ships **inside the drag-lint release archive**, `drag-lint-vX.Y.Z-win64.zip`.
+It is **Win64 only** -- it is built by `dcc64` straight from `ConvRulesEditor.dpr` and has
+no Win32 configuration -- so `...-win32.zip` does not contain it. The rule books, the
+`.castlib` and the rule language itself are in both archives, because
+`convert-scaffold` / `convert-validate` / `convert-apply` are CLI verbs: on Win32 you
+author and apply the same books, just without the GUI.
+
+Unzipped, the parts the editor cares about sit like this:
+
+```
+drag-lint.exe             <- the engine; the editor spawns it for every index query
+ConvRulesEditor.exe       <- this program
+casts.castlib             <- class + enum casts
+tree-sitter*.dll
+convrules\                <- starter rule books
+docs\converter\convrules-editor-manual.md   (this file)
+docs\converter\convrules-dsl.md             (the rule language)
+```
+
+**Keep `ConvRulesEditor.exe` beside `drag-lint.exe`.** The editor resolves the engine by
+looking next to itself first, and `casts.castlib` the same way. Move the editor somewhere
+on its own and the property trees come up empty and the class-cast list is blank -- with
+no message saying why, because from the editor's point of view nothing failed.
+
+Building from source instead: `build\_build_convrules_editor_local.bat` (it compiles the
+VCL-style `.res` with `brcc32` first, then `dcc64`, then stages the exe next to
+`drag-lint.exe` in `third_party\dll-win64`).
+
 ## Where rule books live
 
-Top-level `convrules\` in this repository:
+`convrules\` -- top-level in this repository, and next to the exe in a release archive:
 
 | File | What it is |
 |---|---|
-| `convrules\sample.rules` | a small worked example (two `#convert` blocks) |
+| `convrules\sample.rules` | a small worked example (two `#convert` blocks, 18 lines) |
+| `convrules\BDE-to-FireDAC.rules` | the working BDE -> FireDAC book: 10 `#convert` blocks with their property links filled in, 707 lines. A STARTING POINT, not a finished conversion -- see its own header |
 | `convrules\vendor\FireDAC_Migrate_BDE.rules` | Embarcadero's BDE -> FireDAC migration rules, imported verbatim |
 | `convrules\vendor\FireDAC_Rename_Units.rules` | Embarcadero's unit-rename rules, imported verbatim (211 lines) |
 
+`BDE-to-FireDAC.rules` was assembled from the first vendor file, which is 60 flat
+`#migrate` lines: the part the editor can work with became `#convert` blocks, and the
+rest is carried through unchanged at the bottom.
+
 The two imported files are product data, not test fixtures -- open them like any other
 book. See [`refind-corpus.md`](refind-corpus.md) for where they came from.
+
+### The catalog index is rebuilt, never shipped
+
+`convrules\convrules-catalog.index` is the coverage index -- which type is already
+converted by which book and at which line. It stores **absolute** paths, so it is
+deliberately left out of the release archive: a copy from the build machine would point
+at folders you do not have. It is a cache, not source. The folder of the book you open
+becomes the rules folder, and **Rescan rules** rebuilds the index there.
 
 ## Opening one
 
