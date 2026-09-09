@@ -179,8 +179,10 @@ annotation rather than silently ignored.</p>
       a file or project and returns hints, warnings, errors and fatals as JSON.</li>
   <li><b class="f">Ghost-compile of unsaved buffers</b> -- compiles what is currently in the
       editor, in a separate process, so real compiler errors appear as you type
-      without saving and without freezing the IDE. Files are restored
-      byte-for-byte, with a crash-safe recovery journal.</li>
+      without saving and without freezing the IDE. <b>Your source files are never
+      written:</b> each unsaved buffer is staged into a temporary shadow
+      directory and compiled there, in full project context, so the editor stays
+      the single source of truth and no "changed on disk" prompt can appear.</li>
   <li><b class="f">Build-log import</b> -- fold an existing compiler log into the findings view.</li>
   <li><b class="f">Preprocessor awareness</b> -- conditional-compilation branches are resolved
       so inactive code is not misread as active.</li>

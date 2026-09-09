@@ -906,8 +906,24 @@ scheme registry.
 **unsaved** buffer(s) in a *spawned* process and surfaces real compiler errors
 (e.g. `E2003 Undeclared identifier`) in the gutter -- without saving, and without
 ever freezing the IDE. Fires automatically on idle and on tab-switch, with
-multi-unit overlays so edits across several open units are all seen. Files are
-restored byte-for-byte (crash-safe via a recovery journal).
+multi-unit overlays so edits across several open units are all seen.
+
+**Your files are never written.** Since 2026-09-08 each dirty buffer is staged
+into a temporary shadow directory and compiled there (`dcc` with the shadow dir
+first on the unit search path, in full project context). The real paths are not
+touched, no mtime is stamped and no `.dcu` is deleted -- so the IDE has nothing
+to notice and no "changed on disk" reload prompt can appear, let alone discard
+the edits being compiled. All dirty buffers are staged before any compile, so a
+dirty unit that uses another dirty unit sees its buffer too, not the stale disk
+copy.
+
+The trade-off, stated rather than discovered later: only the dirty units are
+compiled, and their dependencies resolve through existing `.dcu` files, so an
+error in a **saved** unit newly caused by a dirty unit's interface change is not
+caught. `ghost-check --in-place` restores the historical whole-project
+behaviour, which briefly overwrites the real files and then restores them
+byte-for-byte with a crash-safe recovery journal. It is opt-in and marked
+dangerous; nothing in the plugin passes it.
 
 **Hover tooltip** (v0.35): a 200ms timer shows `Application.HintWindow` with
 the diagnostic message when the cursor is stable for 600ms over a row that has
