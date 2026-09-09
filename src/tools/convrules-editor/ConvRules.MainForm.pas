@@ -116,7 +116,13 @@ type
     // file; two claims mean two versions waiting to diverge, so the panel must
     // say so rather than let FindRuleForType silently pick the first.
     FCatalogDups  : TCatalogDuplicates;
-    FRulesFolder  : string;           // scanned folder (registry-backed)
+    { The scanned rules folder. PER-SESSION ONLY -- it is written by
+      RescanRulesFolder and never read back from the registry, so it starts EMPTY
+      on every launch. It said "registry-backed" until 2026-09-09; that comment is
+      why the --form startup gap was easy to miss, because it implied the folder
+      survived a restart and the marking would work from the second run on. It does
+      not, and it did not. }
+    FRulesFolder  : string;
     FLastFormDir  : string;           // where the Open-form dialog resumes
     // Three descendant sets, fetched ONCE each (~1.5 s per call, measured against
     // the 3.4 GB Win32 library). They replace a per-type DeclaringUnitOf, which
@@ -1456,6 +1462,29 @@ begin
     FRules.ItemIndex := 0;
     FRules.Items[0].Selected := True;
     FRules.Items[0].Focused := True;
+  end;
+
+  { A form supplied with --form is harvested in the CONSTRUCTOR, before any book is
+    open. At that moment FRulesFolder is empty and FFilePath is empty, so the catalog
+    scan RefreshFormTypes asks for silently exits ("no rules folder yet") and every
+    harvested type is left looking UN-RULED.
+
+    Observed 2026-09-09, the first time this editor was ever run: launching with a
+    book AND --form listed "33 type(s), 33 active" with nothing greyed, though the
+    catalog covers three of them. Pressing Rescan rules by hand fixed it -- which is
+    what proved the marking itself works and only its TIMING was wrong.
+
+    That is not cosmetic. An un-ruled type is an invitation to author a rule for it,
+    so the failure mode is the user writing a SECOND rule for a type that already has
+    one -- precisely the duplicate state FindDuplicates exists to report.
+
+    Opening a book is the moment the folder becomes known, so re-mark here. Guarded on
+    both conditions: nothing to do when no form was examined, and an already-built
+    catalog is not rebuilt just because another book was opened. }
+  if (Length(FFormTypeRows) > 0) and (Length(FCatalog) = 0) then
+  begin
+    RescanRulesFolder(nil);   // sets its own status; the catalog count is the useful
+    RefreshFormTypes;         // message at this point, not the line/rule count above
   end;
 end;
 

@@ -417,6 +417,53 @@ versions of it appear and then diverge. If you want a rule somewhere else, Split
 
 ---
 
+## The Types-on-form panel and the rule catalog
+
+*Verified against a running editor on 2026-09-09 -- the first time this application
+had ever been launched. Screenshots and counts below are from that session.*
+
+**Examining a form.** Pass `--form <path.dfm>` (or use **Open form...**). The editor
+reads the `.dfm` and its `.pas` sibling and lists every component type it finds, with
+the instance count and a marker:
+
+| marker | meaning |
+|---|---|
+| `[V]` | a `TControl` descendant -- something visual |
+| `[N]` | a `TComponent` that is not a control |
+| `[?]` | not resolved in the current index set |
+
+On `ORM3 CLIENT\SelectData.dfm` this reads `Examined 2 file(s): 33 type(s)`.
+
+**Types you already have a rule for are greyed out** and annotated with the book that
+owns them, e.g. `[N] TTable (9) -- BDE-to-FireDAC.rules`. The header count changes
+from `33 active` to `30 active`. That is the panel telling you NOT to write a second
+rule: a conversion lives in exactly one file.
+
+**Rescan rules** re-reads every `*.rules` file in the folder of the open book and
+rewrites `convrules-catalog.index` beside them. The scan is NOT recursive -- which is
+why the vendor reFind books live in `convrules\vendor\` and contribute nothing.
+
+A clean corpus reports:
+
+```
+12 conversion(s) catalogued from C:\Projects\Delphi-RAG-lint\convrules\.
+```
+
+and a corpus with the same type ruled twice reports both sites and the remedy:
+
+```
+[!] 13 conversion(s) from ...\convrules\ -- BUT 1 type(s) are claimed by more than
+one rule, starting with Bde.DBTables.TQuery in BDE-to-FireDAC.rules and
+other.rules. A rule must live in exactly one file; move or delete one.
+```
+
+**The rules folder is per-session.** It is established when you open a book and is
+not remembered between launches. Opening a book after a form has been examined
+re-marks the type list automatically; before 2026-09-09 it did not, and a form loaded
+via `--form` showed every type as un-ruled until you pressed Rescan by hand.
+
+---
+
 ## Troubleshooting
 
 **"X is not in the current index set" for a type you know exists.**
