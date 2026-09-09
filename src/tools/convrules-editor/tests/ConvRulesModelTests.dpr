@@ -1403,6 +1403,180 @@ begin
     'sample.rules has at least 2 #convert blocks');
 end;
 
+{ ABlocks[AIndex].RawText, or '' when AIndex is out of range.
+
+  Load-bearing: these helpers are called with indexes that only EXIST once the
+  split under test works. Indexing directly cost a whole RED run -- Blocks[1] on
+  a one-block array raised EAccessViolation and killed the runner, so every test
+  after this one silently never ran. A failing check must fail, not abort. }
+function RawTextAt(const ABlocks: TRuleBlocks; AIndex: Integer): string;
+begin
+  if (AIndex < 0) or (AIndex > High(ABlocks)) then
+    Result := ''
+  else
+    Result := ABlocks[AIndex].RawText;
+end;
+
+{ Counts lines in ABlocks[AIndex] whose first token is ADirective, case-insensitively.
+  Local to the trailing-block test; a block carries raw text, not parsed lines.
+  Out-of-range yields 0 -- see RawTextAt. }
+function CountDirectiveIn(const ABlocks: TRuleBlocks; AIndex: Integer;
+  const ADirective: string): Integer;
+var
+  L: TRawLine;
+begin
+  Result := 0;
+  for L in SplitRawLines(RawTextAt(ABlocks, AIndex)) do
+    if SameText(FirstToken(L.Text), ADirective) then
+      Inc(Result);
+end;
+
+{ ABlocks[AIndex].Kind, or rbkPreamble when out of range -- a value that is never
+  what a kind assertion wants, so an out-of-range read reports FAIL, not a crash. }
+function KindAt(const ABlocks: TRuleBlocks; AIndex: Integer): TRuleBlockKind;
+begin
+  if (AIndex < 0) or (AIndex > High(ABlocks)) then
+    Result := rbkPreamble
+  else
+    Result := ABlocks[AIndex].Kind;
+end;
+
+{ ABlocks[AIndex].StartLine, or -1 when out of range. }
+function StartLineAt(const ABlocks: TRuleBlocks; AIndex: Integer): Integer;
+begin
+  if (AIndex < 0) or (AIndex > High(ABlocks)) then
+    Result := -1
+  else
+    Result := ABlocks[AIndex].StartLine;
+end;
+
+{ ABlocks[AIndex].Header, or a marker that no real header equals. }
+function HeaderAt(const ABlocks: TRuleBlocks; AIndex: Integer): string;
+begin
+  if (AIndex < 0) or (AIndex > High(ABlocks)) then
+    Result := '(no such block)'
+  else
+    Result := ABlocks[AIndex].Header;
+end;
+
+{ Criterion 5a: file-scope directives that FOLLOW the last #convert are their OWN
+  rbkTrailing block, not part of that rule.
+
+  MEASURED in convrules\BDE-to-FireDAC.rules on 2026-09-09: the last #convert is
+  at line 605 and its body ends at '#ignore Transliterate' (631), but 43 #migrate
+  lines run from 637 to EOF. Until this split existed all 43 lived inside the
+  TBatchMove block's RawText, so composing a selection that excluded that ONE
+  block silently dropped every enum and type migration in the book.
+
+  The boundary is a BACKWARD scan from EOF over blank / comment / file-scope
+  directive lines, stopping at the first body directive. It is deliberately
+  conservative: an UNRECOGNISED directive stops the scan, so unclassified text
+  keeps the pre-existing behaviour of attaching to the last block rather than
+  being moved. #default is body-scope (convrules\sample.rules:7 sits inside a
+  #convert), which the negative controls below pin down. }
+procedure TestBlockSplitTrailing;
+const
+  SRC =
+    '#convert A.TFrom -> B.TTo'#13#10 +
+    '#link Text <- Text'#13#10 +
+    '#ignore Handle'#13#10 +
+    ''#13#10 +
+    '// trailing banner'#13#10 +
+    '#migrate TOld -> TNew, U'#13#10 +
+    '#remove Ctl3D'#13#10;
+  { Negative control 1: ends on a BODY directive -- no trailing block may appear. }
+  SRC_NO_TAIL =
+    '#convert A.TFrom -> B.TTo'#13#10 +
+    '#link Text <- Text'#13#10 +
+    '#ignore Handle'#13#10;
+  { Negative control 2: a comment tail with NO file-scope directive in it. Splitting
+    here would move text for no benefit and change long-standing behaviour. }
+  SRC_COMMENT_TAIL =
+    '#convert A.TFrom -> B.TTo'#13#10 +
+    '#link Text <- Text'#13#10 +
+    ''#13#10 +
+    '// just a closing comment'#13#10;
+  { Negative control 3: #default is BODY-scope and must not open a trailing block. }
+  SRC_DEFAULT_TAIL =
+    '#convert A.TFrom -> B.TTo'#13#10 +
+    '#link Text <- Text'#13#10 +
+    '#default Charset = 1'#13#10;
+var
+  Blocks: TRuleBlocks;
+  P, Text: string;
+  i, LastConvert, Trailing: Integer;
+begin
+  Blocks := SplitRulesBlocks(SRC);
+  Check('blockfile.trailing.count', Length(Blocks) = 2, IntToStr(Length(Blocks)));
+  Check('blockfile.trailing.kind0', KindAt(Blocks, 0) = rbkConvert, 'block 0 must be the #convert');
+  Check('blockfile.trailing.kind1', KindAt(Blocks, 1) = rbkTrailing, 'block 1 must be rbkTrailing');
+  Check('blockfile.trailing.header', HeaderAt(Blocks, 1) = '',
+    'a trailing block has no header, like a preamble: ' + HeaderAt(Blocks, 1));
+  Check('blockfile.trailing.startline', StartLineAt(Blocks, 1) = 4,
+    IntToStr(StartLineAt(Blocks, 1)));
+  Check('blockfile.trailing.body.keeps.ignore',
+    CountDirectiveIn(Blocks, 0, '#ignore') = 1, 'the #ignore stays with its rule');
+  Check('blockfile.trailing.takes.migrate',
+    CountDirectiveIn(Blocks, 1, '#migrate') = 1, '#migrate belongs to the tail');
+  Check('blockfile.trailing.takes.remove',
+    CountDirectiveIn(Blocks, 1, '#remove') = 1, '#remove is file-scope too');
+  Check('blockfile.trailing.takes.banner',
+    Pos('// trailing banner', RawTextAt(Blocks, 1)) > 0,
+    'the banner comment introducing the tail travels with it');
+  { The load-bearing invariant of this unit, restated for the new kind. }
+  Check('blockfile.trailing.roundtrip', JoinBlocks(Blocks) = SRC,
+    Format('got %d bytes, want %d', [Length(JoinBlocks(Blocks)), Length(SRC)]));
+
+  // Negative controls -- without these, a splitter that ALWAYS emits a trailing
+  // block would pass every assertion above.
+  Blocks := SplitRulesBlocks(SRC_NO_TAIL);
+  Check('blockfile.trailing.none.body', Length(Blocks) = 1, IntToStr(Length(Blocks)));
+  Blocks := SplitRulesBlocks(SRC_COMMENT_TAIL);
+  Check('blockfile.trailing.none.comment', Length(Blocks) = 1, IntToStr(Length(Blocks)));
+  Check('blockfile.trailing.none.comment.roundtrip',
+    JoinBlocks(Blocks) = SRC_COMMENT_TAIL, 'a comment-only tail is left where it was');
+  Blocks := SplitRulesBlocks(SRC_DEFAULT_TAIL);
+  Check('blockfile.trailing.none.default', Length(Blocks) = 1,
+    '#default is body-scope: ' + IntToStr(Length(Blocks)));
+
+  { And against the REAL book this defect was found in. A synthetic fixture that
+    passes proves the rule; only the shipped file proves it fires where it matters. }
+  P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\convrules\BDE-to-FireDAC.rules'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('blockfile.trailing.bde', 'BDE-to-FireDAC.rules not found: ' + P);
+    Exit;
+  end;
+  Text  := TFile.ReadAllText(P, TEncoding.ASCII);
+  Blocks := SplitRulesBlocks(Text);
+  Check('blockfile.trailing.bde.roundtrip', JoinBlocks(Blocks) = Text,
+    Format('got %d bytes, want %d', [Length(JoinBlocks(Blocks)), Length(Text)]));
+
+  LastConvert := -1;
+  Trailing    := -1;
+  for i := 0 to High(Blocks) do
+  begin
+    if Blocks[i].Kind = rbkConvert  then LastConvert := i;
+    if Blocks[i].Kind = rbkTrailing then Trailing    := i;
+  end;
+  Check('blockfile.trailing.bde.exists', Trailing >= 0,
+    'the BDE book must yield exactly one trailing block');
+  Check('blockfile.trailing.bde.is.last', Trailing = High(Blocks),
+    'the trailing block is the last block: ' + IntToStr(Trailing));
+  Check('blockfile.trailing.bde.migrate.count',
+    CountDirectiveIn(Blocks, Trailing, '#migrate') = 43,
+    'want 43 #migrate, got ' + IntToStr(CountDirectiveIn(Blocks, Trailing, '#migrate')));
+  Check('blockfile.trailing.bde.tbatchmove.clean',
+    CountDirectiveIn(Blocks, LastConvert, '#migrate') = 0,
+    'TBatchMove must no longer carry the tail: ' +
+    IntToStr(CountDirectiveIn(Blocks, LastConvert, '#migrate')));
+  Check('blockfile.trailing.bde.tbatchmove.keeps.ignore',
+    CountDirectiveIn(Blocks, LastConvert, '#ignore') = 10,
+    'its own 10 #ignore lines must stay: ' +
+    IntToStr(CountDirectiveIn(Blocks, LastConvert, '#ignore')));
+end;
+
 { Criterion 1b: the same byte-faithful round-trip for .castlib, whose blocks are
   'cast <Name> ... end' / 'enum <Name> ... end'. Content before the first block is
   a preamble; content BETWEEN blocks attaches to the preceding block so nothing is
@@ -5385,6 +5559,7 @@ begin
     TestConversionLibraryReconstructs;
     TestConversionLibraryRemovesAreSafe;
     TestBlockSplitRulesRoundTrip;
+    TestBlockSplitTrailing;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;
     TestBlockOpsSplit;

@@ -41,11 +41,21 @@ type
   TRuleGrammar = (rgRules, rgCastLib);
 
   /// <summary>What a block is.</summary>
+  /// <remarks>Both rbkPreamble and rbkTrailing are HEADERLESS: they carry
+  /// file-scope content that belongs to no single rule. Preamble is everything
+  /// before the first block; trailing is the run of file-scope directives after
+  /// the last one. Neither may be dropped when a subset of blocks is composed.</remarks>
   TRuleBlockKind = (
-    rbkPreamble,   // content before the first real block (file header comments)
-    rbkConvert,    // .rules: '#convert From -> To [, unit ...]'
-    rbkCast,       // .castlib: 'cast <Name> ... end'
-    rbkEnum        // .castlib: 'enum <Name> ... end'
+    /// content before the first real block (file header comments)
+    rbkPreamble,
+    /// .rules: file-scope directives AFTER the last block (#migrate and friends)
+    rbkTrailing,
+    /// .rules: '#convert From -> To [, unit ...]'
+    rbkConvert,
+    /// .castlib: 'cast <Name> ... end'
+    rbkCast,
+    /// .castlib: 'enum <Name> ... end'
+    rbkEnum
   );
 
   /// <summary>One block of a rule-book or catalog file, carrying its verbatim text.</summary>
@@ -75,7 +85,16 @@ function SecondToken(const ALine: string): string;
 
 /// <summary>PURE: split a .rules text into blocks. A block starts at a line whose
 /// first token is '#convert' and runs to the line before the next '#convert', or
-/// to end of file. Anything before the first '#convert' is one rbkPreamble block.</summary>
+/// to end of file. Anything before the first '#convert' is one rbkPreamble block,
+/// and a closing run of FILE-SCOPE directives is one rbkTrailing block.</summary>
+/// <param name="AText">Any .rules text; '' yields no blocks at all.</param>
+/// <returns>Blocks in file order; JoinBlocks reproduces AText byte for byte.</returns>
+/// <remarks>The trailing block exists because file-scope directives after the last
+/// '#convert' would otherwise be mis-attributed to that one rule -- in
+/// convrules\BDE-to-FireDAC.rules that is 43 '#migrate' lines sitting inside the
+/// TBatchMove block, which composing a subset without TBatchMove would silently
+/// drop. It is emitted only when that closing run actually contains a file-scope
+/// directive, so a book merely ending in a comment is split exactly as before.</remarks>
 function SplitRulesBlocks(const AText: string): TRuleBlocks;
 
 /// <summary>PURE: split a .castlib text into blocks. A block starts at a line whose
@@ -258,9 +277,119 @@ begin
   end;
 end;
 
+const
+  { Directives that are FILE-scope: they belong to the BOOK, not to any one
+    #convert block.
+
+    MEASURED against convrules\BDE-to-FireDAC.rules on 2026-09-09: the preamble
+    (lines 1-145) carries only #mapping / #remove / #unuse, block bodies carry
+    only #apply / #ignore / #link / #note, and the 43-line tail carries only
+    #migrate. #use / #useswap set a unit name like #unuse, so they are file-scope
+    too. #default is deliberately ABSENT -- convrules\sample.rules:7 has it inside
+    a #convert body, so it is body-scope and must not open a trailing block. }
+  FILE_SCOPE_DIRECTIVES: array[0..5] of string = (
+    '#migrate', '#remove', '#unuse', '#use', '#useswap', '#mapping');
+
+function IsFileScopeDirective(const ALine: string): Boolean;
+var
+  D: string;
+begin
+  for D in FILE_SCOPE_DIRECTIVES do
+    if SameText(FirstToken(ALine), D) then
+      Exit(True);
+  Result := False;
+end;
+
+function IsBlankOrComment(const ALine: string): Boolean;
+var
+  T: string;
+begin
+  T := TrimLeft(ALine);
+  Result := (T = '') or T.StartsWith('//') or T.StartsWith(';');
+end;
+
+{ Splits ABlock's trailing run of file-scope directives off into ATail.
+
+  The boundary is a BACKWARD scan from the block's last line over blank, comment
+  and file-scope-directive lines, stopping at the first line that is none of those
+  -- a body directive, or the '#convert' header itself. The scan is deliberately
+  CONSERVATIVE: an unrecognised directive stops it, so anything this unit cannot
+  classify keeps the historical behaviour of staying with the block rather than
+  being moved somewhere the caller does not expect.
+
+  Returns False when the run holds no file-scope directive at all -- a block that
+  merely ends in a comment is left exactly as it was. On False both out params are
+  Default(TRuleBlock) rather than undefined: a caller that ignores the result then
+  gets an empty block it can see, not whatever was on the stack.
+
+  Index 0 is always the '#convert' header for the blocks this is called on,
+  and a header is neither blank, comment nor file-scope, so the scan always stops
+  before it and AHead can never come back empty. }
+function SplitTrailingRun(const ABlock: TRuleBlock; out AHead, ATail: TRuleBlock): Boolean;
+var
+  Lines       : TArray<TRawLine>;
+  i, Boundary : Integer;
+  HasDirective: Boolean;
+
+  function Join(AFrom, ATo: Integer): string;
+  var
+    j: Integer;
+  begin
+    Result := '';
+    for j := AFrom to ATo do
+      Result := Result + Lines[j].Text + Lines[j].Eol;
+  end;
+
+begin
+  Result       := False;
+  AHead        := Default(TRuleBlock);
+  ATail        := Default(TRuleBlock);
+  Lines        := SplitRawLines(ABlock.RawText);
+  Boundary     := Length(Lines);
+  HasDirective := False;
+  for i := High(Lines) downto 0 do
+    if IsFileScopeDirective(Lines[i].Text) then
+    begin
+      HasDirective := True;
+      Boundary     := i;
+    end
+    else if IsBlankOrComment(Lines[i].Text) then
+      Boundary := i
+    else
+      Break;
+
+  if (not HasDirective) or (Boundary <= 0) or (Boundary > High(Lines)) then
+    Exit;
+
+  AHead         := ABlock;
+  AHead.RawText := Join(0, Boundary - 1);
+  AHead.EndLine := ABlock.StartLine + Boundary - 1;
+
+  ATail           := Default(TRuleBlock);
+  ATail.Kind      := rbkTrailing;
+  ATail.Header    := '';
+  ATail.RawText   := Join(Boundary, High(Lines));
+  ATail.StartLine := ABlock.StartLine + Boundary;
+  ATail.EndLine   := ABlock.EndLine;
+  Result          := True;
+end;
+
 function SplitRulesBlocks(const AText: string): TRuleBlocks;
+var
+  Head, Tail: TRuleBlock;
+  Last      : Integer;
 begin
   Result := SplitOnHeaders(AText, RulesHeaderTest);
+  { Only the LAST block can carry a file-scope tail, and only a #convert block
+    can: a preamble-only file is file-scope throughout and must stay one block
+    (blockfile.preamble.only pins that). }
+  Last := High(Result);
+  if (Last < 0) or (Result[Last].Kind <> rbkConvert) then
+    Exit;
+  if not SplitTrailingRun(Result[Last], Head, Tail) then
+    Exit;
+  Result[Last] := Head;
+  Result       := Result + [Tail];
 end;
 
 function SplitCastLibBlocks(const AText: string): TRuleBlocks;
@@ -304,6 +433,8 @@ begin
       Result := Trim(Copy(TrimLeft(ABlock.Header), Length('#convert') + 1, MaxInt));
     rbkCast, rbkEnum:
       Result := SecondToken(ABlock.Header);
+    rbkTrailing:
+      Result := '(file trailer)';
   else
     Result := '(file header)';
   end;

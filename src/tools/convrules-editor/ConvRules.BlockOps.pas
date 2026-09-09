@@ -283,7 +283,8 @@ begin
   List  := TList<string>.Create;
   try
     Lines := SplitRawLines(ABlock.RawText);
-    if ABlock.Kind = rbkPreamble then i0 := 0 else i0 := 1;   // skip the header line
+    // Headerless kinds start at line 0; every other kind's line 0 IS its header.
+    if ABlock.Kind in [rbkPreamble, rbkTrailing] then i0 := 0 else i0 := 1;
     for i := i0 to High(Lines) do
       if (Trim(Lines[i].Text) <> '')
          and not SameText(FirstToken(Lines[i].Text), '#link') then
@@ -314,7 +315,9 @@ begin
   List := TList<string>.Create;
   try
     for i := 0 to High(AIncoming) do
-      if (AIncoming[i].Kind <> rbkPreamble)
+      // Headerless kinds have no header to duplicate; matching them on '' would
+      // report every preamble and trailer as a collision with every other one.
+      if not (AIncoming[i].Kind in [rbkPreamble, rbkTrailing])
          and (IndexOfHeader(AExisting, AIncoming[i].Header, AIncoming[i].Kind) >= 0) then
         List.Add(Trim(AIncoming[i].Header));
     Result := List.ToArray;
@@ -429,7 +432,7 @@ end;
   first making sure the block ends with one.
 
   CALLER BEWARE -- "the end of the block" is literally the end of RawText. That is
-  right for an rbkConvert/rbkPreamble block, which has no closing line, and WRONG for
+  right for an rbkConvert/rbkPreamble/rbkTrailing block, which has no closing line, and WRONG for
   an rbkCast/rbkEnum block, whose RawText INCLUDES its 'end' line and any trailing
   blanks (see SplitCastLibBlocks): the appended line lands AFTER 'end', outside the
   block body, and nothing here can tell. That is why the curation form refuses a

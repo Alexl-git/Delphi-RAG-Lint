@@ -336,7 +336,9 @@ end;
 { The grid shows the SELECTED file's blocks, so row index = block index. }
 procedure TCurationForm.RefreshBlocks;
 const
-  KIND_NAME: array[TRuleBlockKind] of string = ('header', 'convert', 'cast', 'enum');
+  { Enum order: rbkPreamble, rbkTrailing, rbkConvert, rbkCast, rbkEnum. }
+  KIND_NAME: array[TRuleBlockKind] of string =
+    ('header', 'trailer', 'convert', 'cast', 'enum');
 var
   fi, i: Integer;
   F    : TWorkingFile;
