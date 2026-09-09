@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>drag-lint + Component Converter -- Feature List</title>
+<style>
+  body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 11pt;
+         line-height: 1.45; color: #1a1a1a; max-width: 52em; margin: 2em auto; padding: 0 1em; }
+  h1 { font-size: 20pt; margin: 0 0 .15em 0; }
+  h2 { font-size: 15pt; margin: 1.6em 0 .4em 0; padding-bottom: .15em;
+       border-bottom: 2px solid #b8b8b8; }
+  h3 { font-size: 12pt; margin: 1.1em 0 .3em 0; color: #222; }
+  .sub { color: #555; font-size: 10pt; margin: 0 0 1.4em 0; }
+  .lede { background: #f4f6f8; border-left: 4px solid #7a8a99; padding: .7em 1em; margin: 1.2em 0; }
+  ul { margin: .3em 0 .9em 0; padding-left: 1.5em; }
+  li { margin: .22em 0; }
+  b.f { color: #000; }
+  table { border-collapse: collapse; margin: .6em 0 1em 0; width: 100%; }
+  th, td { border: 1px solid #b8b8b8; padding: .32em .6em; text-align: left; vertical-align: top; font-size: 10.5pt; }
+  th { background: #eceff1; }
+  td.n { text-align: right; width: 4em; }
+  tr.tot td { font-weight: bold; background: #f7f7f7; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 10pt; }
+  .foot { color: #555; font-size: 9.5pt; border-top: 1px solid #ccc; margin-top: 2.5em; padding-top: .8em; }
+</style>
+</head>
+<body>
+
+<h1>drag-lint + Component Converter</h1>
+<p class="sub">Feature list &middot; 9 September 2026 &middot; drag-lint 1.10.1-alpha
+(index extractor 1.14.0-alpha, schema 21)</p>
+
+<div class="lede">
+<b>What it is.</b> drag-lint is an AST-exact symbol index, linter and refactoring
+engine for Delphi / Object Pascal. It parses your code with tree-sitter into a
+SQLite index, then answers questions about it -- symbols, callers, types,
+dependencies, documentation -- without a compiler and without the IDE having the
+project open. The Component Converter is a rules-driven system built on that
+index for migrating legacy VCL components to modern replacements.
+</div>
+
+<h2>1. Indexing and the code database</h2>
+<ul>
+  <li><b class="f">AST-exact indexing</b> via tree-sitter grammars for Pascal and DFM -- no
+      regex, no string-literal or comment noise.</li>
+  <li><b class="f">One database per project</b>, stored beside the project in <code>_D-RAG\</code>,
+      plus per-platform library indexes for the RTL/VCL and third-party code.</li>
+  <li><b class="f">Compile-closure indexing</b> -- a project index contains exactly what the
+      compiler sees: project members, transitively used project-local units, each
+      unit's sibling <code>.dfm</code>, and its <code>{$I}</code> includes. Loose unreferenced
+      files stay out.</li>
+  <li><b class="f">Library and browsing-path scans</b> read the IDE's own registered paths
+      (Win32 + Win64, or every platform including Android / iOS / Linux / macOS).</li>
+  <li><b class="f">Incremental re-indexing</b> with per-file fingerprints -- only changed
+      files are re-parsed; interrupted runs resume rather than restart.</li>
+  <li><b class="f">Resolve-only mode</b> re-derives call edges, ancestry and helper targets
+      from parses the index already holds, skipping the file walk entirely.</li>
+  <li><b class="f">Watch mode</b> re-indexes on file change at a configurable interval.</li>
+  <li><b class="f">Cross-database resolution</b> -- a project index can consult a library
+      index for calls it cannot resolve locally, without ever inventing an edge.</li>
+  <li><b class="f">Parallel indexing</b> across configurable job counts, driven by a named
+      manifest so a whole estate rebuilds with one command.</li>
+  <li><b class="f">Project registration and reconciliation</b> -- add a project to the
+      manifest, and sync its <code>.dproj</code> / <code>.dpr</code> member list against the
+      units it actually uses.</li>
+  <li><b class="f">Full-text index</b> (FTS5, unicode + trigram) over source text, comments,
+      DFM content and SQL.</li>
+</ul>
+
+<h2>2. Search and navigation</h2>
+<ul>
+  <li><b class="f">Symbol lookup</b> by name, qualified name, or substring -- exact, fuzzy
+      and case-sensitive modes, filterable by symbol kind.</li>
+  <li><b class="f">Find callers / find callees</b> for any routine, method or event handler,
+      with surrounding source context.</li>
+  <li><b class="f">Which unit declares this?</b> -- resolves a symbol to the unit you need
+      to add to a <code>uses</code> clause.</li>
+  <li><b class="f">Type-at-position</b> -- resolve the identifier at a file/line/column.</li>
+  <li><b class="f">Text, message and caption search</b> across <code>.pas</code>, <code>.dfm</code>
+      and <code>.sql</code> -- error messages, DFM captions and SQL exception text, with
+      exact-phrase, any-order and substring matching.</li>
+  <li><b class="f">Unit outline</b> -- every type, method and its line, without opening the file.</li>
+  <li><b class="f">Where-used / usages</b> reporting across the whole indexed estate.</li>
+  <li><b class="f">Concept lookup</b> -- routes a human phrase ("the scheduler", "delta
+      streaming") to the owning symbol via topics authors write in ordinary
+      <code>///</code> comments.</li>
+</ul>
+
+<h2>3. Dependency and architecture analysis</h2>
+<ul>
+  <li><b class="f">Circular-dependency detection</b> with generated cycle reports that
+      explain why a cycle exists and recommend a fix.</li>
+  <li><b class="f">Uses-clause audit and auto-fix</b> -- unused units, misplaced
+      interface/implementation entries, missing units.</li>
+  <li><b class="f">Impact analysis</b> -- the transitive blast radius of a symbol, by depth.</li>
+  <li><b class="f">Call graph and butterfly view</b> -- callers and callees composed into one
+      navigable chart (DOT, Mermaid, text or JSON).</li>
+  <li><b class="f">Reverse call tree</b> to arbitrary depth.</li>
+  <li><b class="f">Third-party dependency reporting</b> -- what your code pulls in from where.</li>
+  <li><b class="f">Spring4D dependency-injection wiring</b> -- interface to implementation
+      class, lifetime, and resolve sites.</li>
+  <li><b class="f">Class surface and code slices</b> -- the public interface of a type, or a
+      minimal self-contained compilable slice.</li>
+  <li><b class="f">Type hierarchy</b> -- ancestors, descendants and class helpers.</li>
+</ul>
+
+<h2>4. Linting and auto-fix</h2>
+<p><b>179 rules across 16 categories</b> -- 126 built-in and 53 external
+<code>.scm</code> rules, <b>154 enabled by default</b>, and <b>23 with an automatic
+fix</b>. Rules can be enabled, disabled, re-prioritised and parameterised per
+project; individual findings can be suppressed with an accountable, reviewed
+annotation rather than silently ignored.</p>
+
+<table>
+  <tr><th>Rule group</th><th class="n">Rules</th><th>Covers</th></tr>
+  <tr><td>Correctness and safety</td><td class="n">70</td>
+      <td>Bug patterns (53), data-flow defects such as use-before-assignment and
+          dead stores (9), resource and object lifetime (8)</td></tr>
+  <tr><td>Dead code and project hygiene</td><td class="n">32</td>
+      <td>Unreachable and unused code (12), project-wide checks that only a
+          whole-project run can see, such as unused public symbols and unused
+          units (13), structural issues (7)</td></tr>
+  <tr><td>Complexity and maintainability</td><td class="n">30</td>
+      <td>Complexity limits (11), size and shape metrics (8), refactoring
+          opportunities (11)</td></tr>
+  <tr><td>Conventions and documentation</td><td class="n">24</td>
+      <td>Naming conventions (10), documentation completeness and accuracy (5),
+          review markers (3), other (6)</td></tr>
+  <tr><td>Security, platform and data access</td><td class="n">23</td>
+      <td>Security issues including injection and unsafe API use (10),
+          platform and portability (10), FireDAC-specific data-access (3)</td></tr>
+  <tr class="tot"><td>Total</td><td class="n">179</td><td>16 categories</td></tr>
+</table>
+
+<ul>
+  <li><b class="f">Two scopes</b> -- single file, or whole project. Project-wide rules can
+      only fire in a whole-project run.</li>
+  <li><b class="f">Auto-fix</b> -- preview or apply, targeted by file, line or rule.</li>
+  <li><b class="f">Severity model</b> -- error, warning, info and hint, mapped to the IDE's
+      own colour scheme.</li>
+  <li><b class="f">Machine-readable output</b> -- JSON and SARIF for CI.</li>
+  <li><b class="f">Ownership scoping</b> -- vendored and third-party roots are reported as
+      skipped by name, never silently dropped from the count.</li>
+</ul>
+
+<h2>5. Compiler-less diagnostics and compile checking</h2>
+<ul>
+  <li><b class="f">AST diagnostics without a build</b> -- unbalanced <code>begin</code>/<code>end</code>,
+      undeclared identifiers, and structural errors found by parsing alone.</li>
+  <li><b class="f">Semantic compile-check from the CLI</b> -- spawns the real compiler against
+      a file or project and returns hints, warnings, errors and fatals as JSON.</li>
+  <li><b class="f">Ghost-compile of unsaved buffers</b> -- compiles what is currently in the
+      editor, in a separate process, so real compiler errors appear as you type
+      without saving and without freezing the IDE. Files are restored
+      byte-for-byte, with a crash-safe recovery journal.</li>
+  <li><b class="f">Build-log import</b> -- fold an existing compiler log into the findings view.</li>
+  <li><b class="f">Preprocessor awareness</b> -- conditional-compilation branches are resolved
+      so inactive code is not misread as active.</li>
+</ul>
+
+<h2>6. Documentation</h2>
+<ul>
+  <li><b class="f">DocInsight support</b> -- native Delphi <code>///</code> XML doc comments,
+      rendered in the IDE's own Help Insight tooltips.</li>
+  <li><b class="f">Automatic documentation generation</b> -- summaries, parameters, returns,
+      exceptions and cross-references derived from the index, for a symbol or a
+      whole unit.</li>
+  <li><b class="f">Documentation drift detection</b> -- finds comments that no longer match
+      the code they document, including parameters that no longer exist.</li>
+  <li><b class="f">Undocumented-symbol reporting</b>, filterable by kind and visibility.</li>
+  <li><b class="f">Deprecation and version tracking</b> -- find symbols tagged deprecated or
+      carrying a <code>since</code> annotation.</li>
+  <li><b class="f">Exception documentation</b> -- what a routine raises, traced transitively
+      through the calls it makes.</li>
+  <li><b class="f">Manual export</b> -- the full documentation set as PDF and Word.</li>
+</ul>
+
+<h2>7. Refactoring and code actions</h2>
+<ul>
+  <li><b class="f">Cross-unit rename</b>, with preview before applying.</li>
+  <li><b class="f">Extract method</b>.</li>
+  <li><b class="f">Safe delete</b> -- refuses when references remain.</li>
+  <li><b class="f">Uses-clause quick fixes</b> -- add the missing unit, remove the unused one.</li>
+  <li><b class="f">Enum helper generation</b>.</li>
+  <li><b class="f">Exception-class synchronisation</b> -- generates named exception classes
+      from raise sites and rewrites those sites to use them.</li>
+  <li><b class="f">Local-variable cleanup</b> and code formatting.</li>
+  <li><b class="f">Test-helper scaffolding</b> generated from the real class surface.</li>
+</ul>
+
+<h2>8. AI and tooling integration</h2>
+<ul>
+  <li><b class="f">Context bundles</b> -- assembles exactly what an AI assistant needs to work
+      on a symbol (documentation, class surface, the symbol's own body, and a
+      capped set of callers) instead of whole source files. Measured roughly 60x
+      leaner than reading the files: ~556 tokens versus ~33,762 on a real project.</li>
+  <li><b class="f">MCP server with 15 tools</b> for Claude, Cursor and other MCP clients --
+      symbol lookup, callers, linting, documentation, impact, DI wiring, class
+      surface, code slice, context bundle, type-at-position, rename, AST checks
+      and compile check.</li>
+  <li><b class="f">JSON everywhere</b> -- every query verb emits structured output for
+      scripting.</li>
+  <li><b class="f">Obsidian export</b> and graph export for external analysis.</li>
+</ul>
+
+<h2>9. Editor and IDE integration</h2>
+<ul>
+  <li><b class="f">Language server (LSP)</b> -- hover, go-to-definition, find-references,
+      workspace symbols, completion and signature help, answered from the index
+      across every project at once, with no compiler and no project open.
+      Find-references and workspace symbols are not available from Delphi's own
+      language server at all.</li>
+  <li><b class="f">Proxy mode</b> -- runs alongside RAD Studio's own language server and
+      relays between it and the IDE, so you keep the compiler front end (generics,
+      <code>with</code>, inline variables, unsaved buffers) instead of trading it away.</li>
+  <li><b class="f">RAD Studio 13 plugin</b> -- 66 entry points across four surfaces: 50
+      main-menu items, 2 tool windows, 13 on the Structure view's right-click menu,
+      and 1 on the Project Manager. Includes 12 <code>Ctrl+Alt</code> shortcuts.</li>
+  <li><b class="f">In-editor diagnostics</b> -- gutter markers and wavy underlines, coloured
+      from the IDE's own scheme, with hover tooltips.</li>
+  <li><b class="f">Dockable panels</b> -- Structure, Usages and Call Graph, all
+      click-to-navigate.</li>
+  <li><b class="f">VS Code extension</b> -- findings in the Problems panel on save, a Pascal
+      TextMate grammar, and a colour theme generated from your own RAD Studio
+      scheme so colours match the IDE literally rather than approximately. It runs
+      a private copy of the engine, so an open window never blocks a rebuild.</li>
+  <li><b class="f">Zed</b> -- tree-sitter highlighting today.</li>
+  <li><b class="f">Any LSP editor</b> -- Neovim, Helix and others point at the same server.</li>
+</ul>
+
+<h2>10. Reporting, maintenance and integrity</h2>
+<ul>
+  <li><b class="f">Reports</b> -- dead code, TODOs, compiler hints, top symbols, forms
+      inventory, dependency and cycle reports.</li>
+  <li><b class="f">Index freshness verification</b> -- proves every configured database is
+      current rather than relying on a per-query guess.</li>
+  <li><b class="f">Database maintenance</b> -- schema inspection, migration between layouts,
+      and resolution of which database answers for a given project, file or platform.</li>
+  <li><b class="f">Library drift detection</b> -- registry library roots whose source is on
+      disk but not yet indexed.</li>
+  <li><b class="f">Crash recovery</b> -- detects and restores files left modified by an
+      interrupted operation.</li>
+  <li><b class="f">Findings history</b> -- refresh and diff findings between runs.</li>
+</ul>
+
+<h2>11. Component Converter</h2>
+<p>A rules-driven system for migrating legacy components (for example Orpheus
+<code>TOvc*</code> controls, or BDE data access) to modern replacements such as
+DevExpress or FireDAC -- across every surface a component touches, not just the
+declaration.</p>
+
+<h3>Conversion rules language</h3>
+<ul>
+  <li><b class="f">A documented DSL</b> with 13 directive kinds, a superset of the reFind
+      format -- covering type conversion, property and event linking, defaults,
+      notes, unit add/remove/swap, regular-expression rules, and reusable named
+      value mappings.</li>
+  <li><b class="f">Property and event linking</b> between source and target components,
+      including value casts where the two components express the same idea
+      differently.</li>
+  <li><b class="f">Reusable value mappings</b> with conditional branches, so an enum or a
+      set of related properties translates once and is applied wherever needed.</li>
+  <li><b class="f">Tagging</b> -- rules can be labelled so a single rule book serves several
+      migration jobs and a job selects only the rules it needs.</li>
+  <li><b class="f">Validation against reality</b> -- every referenced property path is checked
+      against the real property tree of the real class in the index, so a rule
+      that names a property that does not exist fails before it is ever applied.</li>
+</ul>
+
+<h3>Conversion engine</h3>
+<ul>
+  <li><b class="f">Rule scaffolding</b> -- generates a valid, ready-to-edit rule file
+      automatically from the actual property trees of the source and target
+      classes: concrete links where exactly one target matches by name and type,
+      explicit markers where a choice is ambiguous, and notes for source
+      properties with no target at all.</li>
+  <li><b class="f">Five-surface rewrite</b> -- applying a conversion rewrites the declaration
+      type, the <code>uses</code> clauses, the <code>.dfm</code> form definition, every
+      property and event access site in code, and runtime construction sites.</li>
+  <li><b class="f">Dry run by default</b> -- shows the complete preview and writes nothing
+      until explicitly told to apply.</li>
+  <li><b class="f">Backups and a recovery file</b> on every write.</li>
+  <li><b class="f">Selective application</b> -- convert named components only.</li>
+  <li><b class="f">Machine-readable remainder</b> -- what could not be converted is emitted as
+      typed JSON items, so the leftover work can be dispatched programmatically
+      instead of read out of prose.</li>
+  <li><b class="f">Cast library</b> -- shared value-translation blocks reused across rule books.</li>
+</ul>
+
+<h3>Rule editor (ConvRulesEditor)</h3>
+<ul>
+  <li><b class="f">Visual rule authoring</b> -- a Windows desktop application, 17 units, that
+      turns rule writing into a mapping exercise rather than text editing.</li>
+  <li><b class="f">Three-column mapping grid</b> -- source properties, assigned targets, and
+      the pool of unassigned targets -- with assign and unassign in place.</li>
+  <li><b class="f">Completion tracking</b> -- a percent-complete column per conversion rule,
+      so a large migration has a visible finish line.</li>
+  <li><b class="f">Real property trees</b> behind the grid, read from the index, so you only
+      ever map to properties that genuinely exist.</li>
+  <li><b class="f">Auto-match</b> to propose links, with manual override.</li>
+  <li><b class="f">Form-driven workflow</b> -- open a real <code>.dfm</code> and see which of its
+      component types are already covered by rules and which are not.</li>
+  <li><b class="f">Class pickers</b> for source and target across platforms.</li>
+  <li><b class="f">Mapping and curation editors</b> for named value mappings.</li>
+  <li><b class="f">Rule catalog</b> across a whole corpus of rule books.</li>
+  <li><b class="f">Raw DSL view</b> and directive tabs exposing the full grammar for anything
+      the grid does not cover.</li>
+  <li><b class="f">Validation on save</b> -- writes a backup, re-emits canonical DSL, and runs
+      the engine's validator before accepting the file.</li>
+  <li><b class="f">Light and dark themes</b>, with the preference remembered per user.</li>
+</ul>
+
+<p class="foot">
+Counts in this document are derived from the shipping build, not from
+documentation: rule totals and category breakdowns come from
+<code>drag-lint rules --json</code>, and the command surface from
+<code>drag-lint --help</code> (80 documented commands), both taken on 9 September
+2026 against drag-lint 1.10.1-alpha. Category subtotals sum to 179.
+</p>
+
+</body>
+</html>
