@@ -49,6 +49,67 @@ procedure SplitOut(const ASource: TRuleBlocks; const AIndexes: TArray<Integer>;
 function CanOperateOn(const ABlocks: TRuleBlocks;
   const ASelected: TArray<Integer>): Boolean;
 
+/// <summary>PURE: the blocks one file contributes to a SELECTIVE compose -- every
+/// headerless block (HEADERLESS_KINDS) plus the rule blocks named by ASelected,
+/// all in FILE order.</summary>
+/// <param name="ABlocks">The file's blocks.</param>
+/// <param name="ASelected">Rule-block indexes. Out-of-range, duplicate and
+/// headerless indexes are ignored, so a preamble named in the selection is
+/// included once, not twice.</param>
+/// <returns>The contributed blocks; JoinBlocks of them is the file's share of the
+/// composed text.</returns>
+/// <remarks>Selecting every rule block returns the file unchanged, so the join is
+/// byte-identical to the source; selecting none returns only the preamble and
+/// trailer. The preamble travels because an #apply inside a selected block names
+/// a #mapping declared there, and the trailer because #migrate is file-scope --
+/// see CheckApplyIntegrity, which makes that falsifiable. A user who wants
+/// neither removes the FILE from the working set.
+/// <para>Compose itself is unchanged: this is applied per input BEFORE Compose
+/// folds the set, which keeps Compose's own semantics and tests untouched.</para>
+/// <para>A composed book is GENERATED, DISPOSABLE output for --rules, never an
+/// authored source, so carrying a #mapping into it is not a second authored copy
+/// and does not breach the one-rule-one-place rule.</para></remarks>
+function SelectForCompose(const ABlocks: TRuleBlocks;
+  const ASelected: TArray<Integer>): TRuleBlocks;
+
+/// <summary>PURE: ascending, de-duplicated union of two selections over ABlocks;
+/// out-of-range indexes are dropped.</summary>
+/// <param name="ABlocks">The file's blocks, for the range check.</param>
+/// <param name="A">One selection.</param>
+/// <param name="B">Another.</param>
+/// <returns>The union, ascending and without duplicates.</returns>
+/// <remarks>The ONE way every selection source adds to the set -- checkboxes and
+/// by-type today, by-tag when the engine deploys #tag support. Keeping the merge
+/// in one function is what lets a third source arrive without reworking the
+/// other two.</remarks>
+function UnionSelections(const ABlocks: TRuleBlocks;
+  const A, B: TArray<Integer>): TArray<Integer>;
+
+/// <summary>PURE: indexes of the rbkConvert blocks whose From type matches a name
+/// in ATypeNames, compared on the BARE name, case-insensitively.</summary>
+/// <param name="ABlocks">The file's blocks.</param>
+/// <param name="ATypeNames">Type names, bare or qualified -- typically the
+/// component types found on an examined form.</param>
+/// <returns>Ascending block indexes; empty when nothing matches.</returns>
+/// <remarks>Matching goes through CatalogFromText and BareTypeName, the same path
+/// the form-types panel uses, so the curation window and the panel cannot
+/// disagree about which rule covers a type. Headerless blocks are never matched:
+/// they carry no #convert, so they cannot answer a type question -- and they
+/// travel regardless.</remarks>
+function BlocksConvertingTypes(const ABlocks: TRuleBlocks;
+  const ATypeNames: TArray<string>): TArray<Integer>;
+
+/// <summary>PURE: the one-line report a selective compose writes per file.</summary>
+/// <param name="APath">The file's path; only its file name is shown.</param>
+/// <param name="ABlocks">Its blocks.</param>
+/// <param name="ASelected">Its selection.</param>
+/// <returns>'&lt;name&gt;: N of M rule block(s) selected; file header/trailer travel',
+/// or a NO rule blocks form when the selection is empty.</returns>
+/// <remarks>A file contributing only file-scope directives is a surprising state
+/// worth saying out loud -- its #remove and #migrate lines still reach the job.</remarks>
+function SelectionReportLine(const APath: string; const ABlocks: TRuleBlocks;
+  const ASelected: TArray<Integer>): string;
+
 type
   /// <summary>One #link inside a block, with its verbatim source line.</summary>
   /// <remarks>Parsed with TRuleBook so the DSL grammar lives in exactly one place;
@@ -176,7 +237,15 @@ function DuplicateHeaders(const AExisting, AIncoming: TRuleBlocks): TArray<strin
 implementation
 
 uses
-  System.Generics.Defaults;
+  { RuleCatalog is used ONLY here, in the implementation: by-type selection goes
+    through CatalogFromText/BareTypeName so this unit and the form-types panel
+    cannot disagree about which rule covers a type. No cycle -- RuleCatalog uses
+    ConvRules.Model, never ConvRules.BlockOps.
+
+    System.Generics.Defaults was dropped on 2026-09-09: a dead import since
+    d6c46d0, referencing no symbol here. TList.Sort reaches TComparer.Default
+    through System.Generics.Collections' own uses, so no import is owed for it. }
+  ConvRules.RuleCatalog;
 
 { Ascending, de-duplicated copy of a selection. }
 function NormalizeIndexes(const AIndexes: TArray<Integer>; ACount: Integer): TArray<Integer>;
@@ -256,6 +325,106 @@ begin
     if ABlocks[i].Kind in HEADERLESS_KINDS then
       Exit(False);
   Result := True;
+end;
+
+{ True when AIndex is named by the normalised selection AIdx. }
+function InSelection(const AIdx: TArray<Integer>; AIndex: Integer): Boolean;
+var
+  i: Integer;
+begin
+  for i in AIdx do
+    if i = AIndex then Exit(True);
+  Result := False;
+end;
+
+{ How many blocks of ABlocks carry a rule of their own (i.e. are selectable). }
+function RuleBlockCount(const ABlocks: TRuleBlocks): Integer;
+var
+  B: TRuleBlock;
+begin
+  Result := 0;
+  for B in ABlocks do
+    if not (B.Kind in HEADERLESS_KINDS) then
+      Inc(Result);
+end;
+
+function SelectForCompose(const ABlocks: TRuleBlocks;
+  const ASelected: TArray<Integer>): TRuleBlocks;
+var
+  Idx : TArray<Integer>;
+  List: TList<TRuleBlock>;
+  i   : Integer;
+begin
+  Idx  := NormalizeIndexes(ASelected, Length(ABlocks));
+  List := TList<TRuleBlock>.Create;
+  try
+    { One pass in FILE order, so the output order never depends on the order the
+      grid reported its checks in -- and a headerless block named in the
+      selection is still emitted exactly once, by this branch. }
+    for i := 0 to High(ABlocks) do
+      if (ABlocks[i].Kind in HEADERLESS_KINDS) or InSelection(Idx, i) then
+        List.Add(ABlocks[i]);
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+function UnionSelections(const ABlocks: TRuleBlocks;
+  const A, B: TArray<Integer>): TArray<Integer>;
+begin
+  Result := NormalizeIndexes(A + B, Length(ABlocks));
+end;
+
+function BlocksConvertingTypes(const ABlocks: TRuleBlocks;
+  const ATypeNames: TArray<string>): TArray<Integer>;
+var
+  List: TList<Integer>;
+  Cat : TRuleCatalog;
+  i   : Integer;
+  Name: string;
+begin
+  List := TList<Integer>.Create;
+  try
+    for i := 0 to High(ABlocks) do
+    begin
+      if ABlocks[i].Kind in HEADERLESS_KINDS then Continue;
+      { The block's own text yields its own catalog entry, so entry and block
+        index stay aligned by construction -- no second lookup to get wrong. }
+      Cat := CatalogFromText(ABlocks[i].RawText, '');
+      if Length(Cat) = 0 then Continue;
+      for Name in ATypeNames do
+        if SameText(BareTypeName(Name), BareTypeName(Cat[0].FromType)) then
+        begin
+          List.Add(i);
+          Break;
+        end;
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+function SelectionReportLine(const APath: string; const ABlocks: TRuleBlocks;
+  const ASelected: TArray<Integer>): string;
+var
+  Total, Picked, i: Integer;
+begin
+  Total  := RuleBlockCount(ABlocks);
+  { Count only RULE blocks: a headerless index in the selection travels anyway
+    and must not be reported as a chosen rule. }
+  Picked := 0;
+  for i in NormalizeIndexes(ASelected, Length(ABlocks)) do
+    if not (ABlocks[i].Kind in HEADERLESS_KINDS) then
+      Inc(Picked);
+  if Picked = 0 then
+    Result := Format('%s: NO rule blocks selected -- only its file header/trailer '
+      + 'travel (its #remove / #unuse / #migrate still reach the job)',
+      [ExtractFileName(APath)])
+  else
+    Result := Format('%s: %d of %d rule block(s) selected; file header/trailer travel',
+      [ExtractFileName(APath), Picked, Total]);
 end;
 
 function TMergePlan.ConflictCount: Integer;

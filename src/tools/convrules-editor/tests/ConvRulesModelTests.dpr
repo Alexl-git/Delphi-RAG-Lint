@@ -1749,6 +1749,307 @@ begin
     'a repeated index is still just one selected rule');
 end;
 
+{ Renders a selection as '[a, b, c]' so a failure message names what came back. }
+function IdxStr(const A: TArray<Integer>): string;
+var
+  i: Integer;
+begin
+  Result := '[';
+  for i := 0 to High(A) do
+  begin
+    if i > 0 then Result := Result + ', ';
+    Result := Result + IntToStr(A[i]);
+  end;
+  Result := Result + ']';
+end;
+
+function IdxEq(const A, B: TArray<Integer>): Boolean;
+var
+  i: Integer;
+begin
+  Result := Length(A) = Length(B);
+  if not Result then Exit;
+  for i := 0 to High(A) do
+    if A[i] <> B[i] then Exit(False);
+end;
+
+{ Counts lines of AText whose first token is ADirective. }
+function CountDirectiveInText(const AText, ADirective: string): Integer;
+var
+  L: TRawLine;
+begin
+  Result := 0;
+  for L in SplitRawLines(AText) do
+    if SameText(FirstToken(L.Text), ADirective) then
+      Inc(Result);
+end;
+
+{ Task 5d.1: a file's contribution to a SELECTIVE compose is every headerless
+  block plus the selected rule blocks, in file order.
+
+  This is what replaces atomization (owner ruling 2026-09-09): rules stay in
+  multi-rule books and a job picks the ones it needs. The preamble travels
+  because an #apply inside a selected block names a #mapping declared there; the
+  trailer travels because #migrate is file-scope. }
+procedure TestBlockOpsSelection;
+const
+  SRC =
+    '// hdr'#13#10 +
+    '#remove X'#13#10 +
+    '#convert Bde.DBTables.TAlpha -> B.TBeta'#13#10 +
+    '#link P <- Q'#13#10 +
+    '#convert C.TGamma -> D.TDelta'#13#10 +
+    '#link R <- S'#13#10 +
+    '#migrate U -> V'#13#10;
+  { A book with neither preamble nor trailer -- it must contribute NOTHING when
+    nothing is selected, not "everything" via some all-if-empty shortcut. }
+  SRC_BARE =
+    '#convert E.TOne -> F.TTwo'#13#10 +
+    '#link K <- L'#13#10;
+var
+  B, Bare, Got: TRuleBlocks;
+begin
+  B := SplitRulesBlocks(SRC);
+  Check('select.fixture', (Length(B) = 4) and (B[0].Kind = rbkPreamble)
+    and (B[1].Kind = rbkConvert) and (B[2].Kind = rbkConvert)
+    and (B[3].Kind = rbkTrailing),
+    'want [preamble, convert, convert, trailing], got ' + IntToStr(Length(B)));
+
+  Got := SelectForCompose(B, []);
+  Check('select.compose.keeps.headerless', (Length(Got) = 2)
+    and (Got[0].Kind = rbkPreamble) and (Got[1].Kind = rbkTrailing),
+    'nothing selected must still yield preamble + trailer, got '
+    + IntToStr(Length(Got)) + ' block(s)');
+
+  Got := SelectForCompose(B, [1]);
+  Check('select.compose.picks.rule',
+    (Length(Got) = 3) and (Pos('#convert Bde.DBTables.TAlpha', JoinBlocks(Got)) > 0)
+    and (Pos('#convert C.TGamma', JoinBlocks(Got)) = 0),
+    'only the selected rule travels');
+
+  { Negative control: an implementation that just returns ABlocks passes this one
+    and fails the two above -- which is precisely why it is not the RED. }
+  Check('select.compose.all.identity',
+    JoinBlocks(SelectForCompose(B, [1, 2])) = SRC,
+    'selecting every rule block must reproduce the file byte for byte');
+
+  Check('select.compose.headerless.once',
+    JoinBlocks(SelectForCompose(B, [0, 3])) = JoinBlocks(SelectForCompose(B, [])),
+    'naming a headerless block in the selection must not duplicate it');
+  Check('select.compose.order',
+    Pos('TAlpha', JoinBlocks(SelectForCompose(B, [2, 1])))
+      < Pos('TGamma', JoinBlocks(SelectForCompose(B, [2, 1]))),
+    'blocks travel in FILE order, not selection order');
+  Check('select.compose.outofrange',
+    JoinBlocks(SelectForCompose(B, [99])) = JoinBlocks(SelectForCompose(B, [])),
+    'a stale index selects nothing');
+
+  Bare := SplitRulesBlocks(SRC_BARE);
+  Check('select.compose.no.preamble.file.none',
+    Length(SelectForCompose(Bare, [])) = 0,
+    'a file with no headerless blocks contributes nothing when nothing is picked');
+  Check('select.compose.no.preamble.file.one',
+    Length(SelectForCompose(Bare, [0])) = 1, 'and exactly its rule when picked');
+
+  Check('select.union', IdxEq(UnionSelections(B, [2, 1], [1, 9]), [1, 2]),
+    IdxStr(UnionSelections(B, [2, 1], [1, 9])));
+  Check('select.union.empty', IdxEq(UnionSelections(B, [], []), []),
+    'union of nothing is nothing');
+
+  Check('select.bytype.hit', IdxEq(BlocksConvertingTypes(B, ['TAlpha']), [1]),
+    IdxStr(BlocksConvertingTypes(B, ['TAlpha'])));
+  Check('select.bytype.ci', IdxEq(BlocksConvertingTypes(B, ['talpha']), [1]),
+    'type matching is case-insensitive, as Pascal is');
+  Check('select.bytype.qualified',
+    IdxEq(BlocksConvertingTypes(B, ['Bde.DBTables.TAlpha']), [1]),
+    'a qualified query matches on the bare name');
+  Check('select.bytype.many', IdxEq(BlocksConvertingTypes(B, ['TGamma', 'TAlpha']), [1, 2]),
+    IdxStr(BlocksConvertingTypes(B, ['TGamma', 'TAlpha'])));
+  { Negative control: a matcher that returns every rule block passes .hit and
+    fails here. }
+  Check('select.bytype.miss', IdxEq(BlocksConvertingTypes(B, ['TNothing']), []),
+    IdxStr(BlocksConvertingTypes(B, ['TNothing'])));
+  Check('select.bytype.never.headerless',
+    IdxEq(BlocksConvertingTypes(B, ['TAlpha', 'TGamma', 'X', 'U']), [1, 2]),
+    'a preamble or trailer can never be matched by type');
+
+  Check('select.report.zero',
+    Pos('NO rule blocks', SelectionReportLine('x.rules', B, [])) > 0,
+    SelectionReportLine('x.rules', B, []));
+  Check('select.report.some',
+    Pos('1 of 2 rule block(s)', SelectionReportLine('x.rules', B, [1])) > 0,
+    SelectionReportLine('x.rules', B, [1]));
+end;
+
+{ The same, against the real book. A synthetic fixture proves the rule; only the
+  shipped corpus proves it fires where the defect actually lives. }
+procedure TestBlockOpsSelectionCorpus;
+var
+  P, Text: string;
+  B      : TRuleBlocks;
+  All    : TArray<Integer>;
+  i      : Integer;
+begin
+  P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\convrules\BDE-to-FireDAC.rules'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('select.bde', 'BDE-to-FireDAC.rules not found: ' + P);
+    Exit;
+  end;
+  Text := TFile.ReadAllText(P, TEncoding.ASCII);
+  B    := SplitRulesBlocks(Text);
+
+  Check('select.bde.blocks', Length(B) = 12, IntToStr(Length(B)));
+  Check('select.bde.trailer.start',
+    (B[11].StartLine = 632) and (B[10].EndLine = 631),
+    Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
+
+  { Nothing selected: 145 preamble + 76 trailer. }
+  Check('select.bde.none.lines',
+    Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 221,
+    IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
+  Check('select.bde.none.content',
+    (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#convert') = 0)
+    and (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#migrate') = 43),
+    'file-scope only: no rules, all 43 #migrate');
+
+  { TDatabase is the block that carries '#apply BdeTransIsolation' (line 173) --
+    NOT TQuery, as the parent plan wrongly said. 145 + 39 + 76 = 260. }
+  Check('select.bde.tdatabase.lines',
+    Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2])))) = 260,
+    IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2]))))));
+  Check('select.bde.tdatabase.carries.apply',
+    Pos('#apply BdeTransIsolation', JoinBlocks(SelectForCompose(B, [2]))) > 0,
+    'the selected rule keeps its #apply');
+  Check('select.bde.tdatabase.carries.mapping',
+    Pos('#mapping BdeTransIsolation from', JoinBlocks(SelectForCompose(B, [2]))) > 0,
+    'and the preamble brought the declaration that #apply names');
+  Check('select.bde.tbatchmove.lines',
+    Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [10])))) = 248,
+    IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [10]))))));
+
+  SetLength(All, 10);
+  for i := 0 to 9 do All[i] := i + 1;
+  Check('select.bde.all.identity', JoinBlocks(SelectForCompose(B, All)) = Text,
+    'selecting all 10 rules must reproduce the book byte for byte');
+
+  Check('select.bde.bytype',
+    IdxEq(BlocksConvertingTypes(B, ['TDatabase', 'TBatchMove', 'TLabel']), [2, 10]),
+    IdxStr(BlocksConvertingTypes(B, ['TDatabase', 'TBatchMove', 'TLabel'])));
+end;
+
+function StrsEq(const A, B: TArray<string>): Boolean;
+var
+  i: Integer;
+begin
+  Result := Length(A) = Length(B);
+  if not Result then Exit;
+  for i := 0 to High(A) do
+    if not SameText(A[i], B[i]) then Exit(False);
+end;
+
+{ Task 5d.2: every '#apply <Name>' in a COMPOSED text must have its
+  '#mapping <Name> from ... to ...' declaration in the same text.
+
+  This is the consumer MappingCatalogFromText and FindDuplicateMappings were
+  written for. It runs on the composed output, not on a source book, because a
+  composed job book is a GENERATED artifact handed to --rules: a #mapping carried
+  into it is not a second authored copy, but an #apply whose declaration stayed
+  behind in a book that is not in the working set is one the engine cannot apply. }
+procedure TestApplyIntegrity;
+const
+  DECL   = '#mapping M from E.TEnum to B.TTo'#13#10;
+  CONV   = '#convert A.T -> B.T'#13#10;
+  APPLY  = '#apply M'#13#10;
+var
+  R: TApplyIntegrity;
+begin
+  R := CheckApplyIntegrity(CONV + APPLY);
+  Check('apply.check.unsatisfied', StrsEq(R.Unsatisfied, ['M']) and not R.OK,
+    'an #apply with no declaration must be reported');
+  Check('apply.check.summary.names.it', Pos('M', R.Summary) > 0, R.Summary);
+
+  { Negative control: a check that flags every #apply fails here. }
+  R := CheckApplyIntegrity(DECL + CONV + APPLY);
+  Check('apply.check.ok', R.OK and (R.Summary = ''),
+    'a declared mapping satisfies its #apply: ' + R.Summary);
+
+  { A #when/#else CLAUSE repeats the name but is not a declaration -- the model
+    marks the declaration with MapFromType <> ''. }
+  R := CheckApplyIntegrity('#mapping M #when X = a -> Y = b'#13#10 + CONV + APPLY);
+  Check('apply.check.clause.is.not.decl', StrsEq(R.Unsatisfied, ['M']),
+    'a clause line is a USE of the name, not a declaration of it');
+
+  R := CheckApplyIntegrity(DECL + CONV + '#apply m'#13#10);
+  Check('apply.check.ci', R.OK, 'names compare case-insensitively, as Pascal does');
+
+  R := CheckApplyIntegrity(CONV + APPLY + APPLY);
+  Check('apply.check.dedup', Length(R.Unsatisfied) = 1,
+    'one missing name reported once, however often it is applied');
+
+  R := CheckApplyIntegrity(CONV + '#apply B'#13#10 + '#apply A'#13#10);
+  Check('apply.check.order', StrsEq(R.Unsatisfied, ['B', 'A']),
+    'reported in first-appearance order, not sorted');
+
+  R := CheckApplyIntegrity(DECL + '#mapping M from E.TEnum to C.TOther'#13#10
+    + CONV + APPLY);
+  Check('apply.check.dup.decl',
+    (Length(R.Unsatisfied) = 0) and (Length(R.DuplicateMappings) = 1) and not R.OK,
+    'the #apply is satisfied, but two declarations of one name is still a defect');
+
+  { Negative controls: nothing to check means OK, not "suspicious". }
+  R := CheckApplyIntegrity('');
+  Check('apply.check.empty', R.OK, 'empty text is fine');
+  R := CheckApplyIntegrity(CONV + '#link P <- Q'#13#10);
+  Check('apply.check.no.apply.no.mapping', R.OK, 'a book with no #apply is fine');
+end;
+
+{ The same against the real book, including the RED the parent plan got wrong. }
+procedure TestApplyIntegrityCorpus;
+var
+  P, Text: string;
+  B      : TRuleBlocks;
+begin
+  P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+    '..\..\..\..\convrules\BDE-to-FireDAC.rules'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('apply.check.bde', 'BDE-to-FireDAC.rules not found: ' + P);
+    Exit;
+  end;
+  Text := TFile.ReadAllText(P, TEncoding.ASCII);
+  B    := SplitRulesBlocks(Text);
+
+  Check('apply.check.bde.whole', CheckApplyIntegrity(Text).OK,
+    'the shipped book must be self-consistent: '
+    + CheckApplyIntegrity(Text).Summary);
+
+  { THE RED, corrected. The parent plan said "the TQuery block, #apply
+    BdeTransIsolation at line 173, excluding its preamble". Both halves were
+    wrong: line 173 is in the TDatabase block (166-204), TQuery (320-421) has no
+    #apply at all, and a selection can never exclude the preamble because it
+    always travels. Dropping block 0 from the JOIN is how the state is reached. }
+  Check('apply.check.bde.no.preamble',
+    StrsEq(CheckApplyIntegrity(JoinBlocks(Copy(B, 1, 11))).Unsatisfied,
+      ['BdeTransIsolation', 'BdeBatchMode']),
+    'without the preamble both #apply names are unsatisfied, in line order (173, 609)');
+
+  Check('apply.check.bde.tdatabase.alone',
+    StrsEq(CheckApplyIntegrity(JoinBlocks(Copy(B, 2, 1))).Unsatisfied,
+      ['BdeTransIsolation']),
+    'the TDatabase block alone strands the name it applies');
+
+  { And the point of the whole design: with the preamble travelling, a selected
+    block IS satisfiable. This makes ruling 3 falsifiable rather than asserted. }
+  Check('apply.check.bde.selected.ok',
+    CheckApplyIntegrity(JoinBlocks(SelectForCompose(B, [2]))).OK,
+    'SelectForCompose carried the declaration that TDatabase applies');
+  Check('apply.check.bde.selected.tbatchmove.ok',
+    CheckApplyIntegrity(JoinBlocks(SelectForCompose(B, [10]))).OK,
+    'and the one TBatchMove applies');
+end;
+
 { Criterion 5: an incoming #link whose target is already linked FROM THE SAME
   source is a duplicate and is skipped. }
 procedure TestMergeSkipsDuplicate;
@@ -5594,6 +5895,10 @@ begin
     TestConversionLibraryRemovesAreSafe;
     TestBlockSplitRulesRoundTrip;
     TestBlockSplitTrailing;
+    TestBlockOpsSelection;
+    TestBlockOpsSelectionCorpus;
+    TestApplyIntegrity;
+    TestApplyIntegrityCorpus;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;
     TestBlockOpsSplit;

@@ -140,6 +140,40 @@ function MappingCatalogFromText(const AText, APath: string): TMappingCatalog;
 /// repair is to copy the declaration across. This makes that visible.</para></remarks>
 function FindDuplicateMappings(const ACatalog: TMappingCatalog): TMappingDuplicates;
 
+type
+  /// <summary>What CheckApplyIntegrity found in one composed text.</summary>
+  TApplyIntegrity = record
+    /// <summary>'#apply' names with no '#mapping' DECLARATION in the same text,
+    /// in first-appearance order, de-duplicated case-insensitively.</summary>
+    Unsatisfied      : TArray<string>;
+    /// <summary>Mapping names declared more than once in the text.</summary>
+    DuplicateMappings: TMappingDuplicates;
+    /// <summary>True when both lists are empty -- the text is safe to hand to
+    /// the engine as far as mappings are concerned.</summary>
+    /// <returns>True when there is nothing to report.</returns>
+    function OK: Boolean;
+    /// <summary>One line naming what is wrong, for a status bar.</summary>
+    /// <returns>A human-readable summary of both lists; '' when OK.</returns>
+    function Summary: string;
+  end;
+
+/// <summary>PURE: every '#apply &lt;Name&gt;' in AText must have a matching
+/// '#mapping &lt;Name&gt; from ... to ...' declaration in AText, and no name may be
+/// declared twice.</summary>
+/// <param name="AText">A rule-book text -- in practice a COMPOSED one.</param>
+/// <returns>The two lists; see TApplyIntegrity.OK.</returns>
+/// <remarks>This runs on the COMPOSED text, not on an authored book, and that is
+/// the whole point. A composed job book is generated, disposable output for
+/// --rules, so a #mapping carried into it from a source preamble is not a second
+/// authored copy and does not breach the one-rule-one-place rule -- but an #apply
+/// whose declaration stayed behind in a book that is not in the working set
+/// produces a book the engine cannot apply, silently.
+/// <para>A #when or #else CLAUSE repeats the name and is NOT a declaration; the
+/// model marks the declaration with MapFromType &lt;&gt; '', the same rule
+/// ConvRules.Mappings.ValidateMappings uses for mikUndefined, so the two cannot
+/// disagree. Names compare case-insensitively, as Pascal does.</para></remarks>
+function CheckApplyIntegrity(const AText: string): TApplyIntegrity;
+
 /// <summary>PURE: the node index of the '#convert' header a catalog entry names.</summary>
 /// <param name="ABook">The loaded owning book. nil yields -1.</param>
 /// <param name="AEntry">A catalog entry; its LineNo is a HINT, its FromType decides.</param>
@@ -381,6 +415,84 @@ begin
     Result := TPath.Combine(AFolder, Format('%s-%d%s', [Base, n, Ext]));
     Inc(n);
   until not TFile.Exists(Result);
+end;
+
+function TApplyIntegrity.OK: Boolean;
+begin
+  Result := (Length(Unsatisfied) = 0) and (Length(DuplicateMappings) = 0);
+end;
+
+function TApplyIntegrity.Summary: string;
+var
+  Parts, Names: TArray<string>;
+  D           : TMappingDuplicate;
+begin
+  Parts := nil;
+  if Length(Unsatisfied) > 0 then
+    Parts := Parts + ['#apply without a #mapping declaration: '
+      + string.Join(', ', Unsatisfied)];
+  if Length(DuplicateMappings) > 0 then
+  begin
+    Names := nil;
+    for D in DuplicateMappings do
+      Names := Names + [Format('%s (%d sites)', [D.Name, Length(D.Entries)])];
+    Parts := Parts + ['#mapping declared more than once: ' + string.Join(', ', Names)];
+  end;
+  Result := string.Join('; ', Parts);
+end;
+
+function CheckApplyIntegrity(const AText: string): TApplyIntegrity;
+var
+  Book   : TRuleBook;
+  Decl   : TMappingCatalog;
+  Missing: TList<string>;
+  Node   : TRuleNode;
+  E      : TMappingCatalogEntry;
+  Name, M: string;
+  Found  : Boolean;
+begin
+  Result := Default(TApplyIntegrity);
+  { Declarations only -- MappingCatalogFromText already discards #when/#else
+    clauses, which repeat the name without declaring it. }
+  Decl := MappingCatalogFromText(AText, '');
+  Result.DuplicateMappings := FindDuplicateMappings(Decl);
+
+  Book    := TRuleBook.Create;
+  Missing := TList<string>.Create;
+  try
+    Book.LoadFromString(AText);
+    for Node in Book.Nodes do
+    begin
+      if Node.Kind <> rnkApply then Continue;
+      Name := Trim(Node.ApplyName);
+      if Name = '' then Continue;
+
+      Found := False;
+      for E in Decl do
+        if SameText(E.Name, Name) then
+        begin
+          Found := True;
+          Break;
+        end;
+      if Found then Continue;
+
+      { First-appearance order, de-duplicated: one missing name is one defect
+        however many blocks apply it. }
+      Found := False;
+      for M in Missing do
+        if SameText(M, Name) then
+        begin
+          Found := True;
+          Break;
+        end;
+      if not Found then
+        Missing.Add(Name);
+    end;
+    Result.Unsatisfied := Missing.ToArray;
+  finally
+    Missing.Free;
+    Book.Free;
+  end;
 end;
 
 function HeaderIndexFor(ABook: TRuleBook; const AEntry: TRuleCatalogEntry): Integer;
