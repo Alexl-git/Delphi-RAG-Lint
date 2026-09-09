@@ -967,7 +967,18 @@ begin
   // enum semantics. A non-integer initializer (rare: `= SomeConst`) leaves the
   // running counter (best-effort; absence-over-wrong is not possible for a bare
   // number, so we keep the positional value).
-  var EnumOrd: Integer:= 0;
+  // Int64, NOT Integer, and this is load-bearing. The counter holds "last ordinal
+  // + 1", whose range is Low(Integer)..High(Integer)+1 -- one value wider than an
+  // Integer. The `= $7FFFFFFF` FORCE_DWORD idiom (which pins an enum to 32 bits)
+  // hits exactly that value, and the Inc below then raised EIntOverflow under the
+  // Debug build's DCC_IntegerOverflowCheck. That threw out of Parse BEFORE
+  // OpenFileTx, so the FILE got no row at all: nine units (Winapi.D3D10,
+  // D3DCommon, D3DCompiler, D3DX10, DXGI1_2, WinAPI.Media, WinAPI.UI.Core,
+  // dxFontFile x2) were absent from every index from 2026-07-26 to 2026-09-09,
+  // with only a SKIP line and exit code 0 to show for it.
+  // THE GENERAL RULE: a value read from SOURCE TEXT must not be incremented in a
+  // type it can saturate. Guarded by tests\autotest\run_enum_ordinal_overflow.ps1.
+  var EnumOrd: Int64:= 0;
   for i:= 0 to EnumNode.NamedChildCount - 1 do
   begin
     ValNode:= EnumNode.NamedChild(i);

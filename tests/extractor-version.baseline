@@ -556,4 +556,38 @@
 #   as the 2026-08-24 ManifestWrite entry above.
 #   A bump here would force a full re-parse of all 35 indexes; the previous one
 #   had just finished at 01:21 the same night, costing 5h32m.
-1.13.0-alpha|c4b87ef16f585311d507c27d817a570d632f17c63b7b05b9eece170a41f76c67
+# 2026-09-09 (second entry, same day): bumped 1.13.0-alpha -> 1.14.0-alpha.
+#   WHAT CHANGED: exactly one type, in TryWalkEnum
+#   (src\parser\DRagLint.Parser.Delphi13.pas) -- the running enum-ordinal
+#   counter went Integer -> Int64, plus its explanatory comment.
+#   WHY IT IS EXTRACTION, and it is not a close call: the counter holds
+#   'last ordinal + 1', which for the `= $7FFFFFFF` FORCE_DWORD idiom is
+#   High(Integer)+1 and does not fit an Integer. The following Inc raised
+#   EIntOverflow under the Debug build's DCC_IntegerOverflowCheck, and it threw
+#   out of Parse BEFORE Core.Indexer OpenFileTx -- so the FILE never got a row.
+#   The parser now produces a full parse for NINE units where it produced
+#   NOTHING: Winapi.D3D10, Winapi.D3DCommon, Winapi.D3DCompiler, Winapi.D3DX10,
+#   Winapi.DXGI1_2, WinAPI.Media, WinAPI.UI.Core and dxFontFile (x2 platforms).
+#   That is the largest possible change in what extraction produces.
+#   WHAT IS STALE UNTIL THE RE-PARSE: those nine units answer 0 rows in every
+#   index -- and have since 18bbbc8 (2026-07-26), silently, with only a
+#   `SKIP <path>: EIntOverflow` line and exit code 0 to show for it. Nothing
+#   else is stale: Int64 widening changes no emitted signature below the
+#   overflow point, so every file that indexes today is byte-identical after.
+#   THE CHEAPER PATH WAS CONSIDERED AND REJECTED, so this is a decision and not
+#   an oversight. Because every affected file has NO row it is never up-to-date
+#   and is re-attempted every run, so a hash-only update plus one incremental
+#   pass under the fixed engine would have closed the gap in minutes with no
+#   stale parse left behind (the 2026-08-26 'membership, not content' shape).
+#   Not taken: the owner's standing instruction for this defect is to ride a
+#   bump, and the rule as written keys on 'the parser changes what it produces',
+#   which this plainly does. A broad reading of the escape hatch is the drift
+#   every entry above warns about.
+#   Pinned by tests\autotest\run_enum_ordinal_overflow.ps1, MEASURED RED then
+#   GREEN with the same runner: 8 PASS / 8 FAIL against a pre-fix engine copy
+#   taken before any edit, 16 PASS / 0 FAIL against the fixed build. Its four
+#   controls (ctA=0, ctB=128, ctC=129, and a symbol that does not exist) pass on
+#   BOTH engines, so the two runs differ in the engine and nothing else.
+#   Superseded: 1.13.0-alpha|c4b87ef16f585311d507c27d817a570d632f17c63b7b05b9eece170a41f76c67
+
+1.14.0-alpha|3fd55ff2b822bdd3e4543f1aa3932055cc53c44bc13d8430110408b663e99c01

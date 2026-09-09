@@ -1,8 +1,8 @@
 # drag-lint indexing & database architecture
 
 **Applies to:** drag-lint **1.10.1-alpha** · index **schema_version 21** ·
-extractor **1.13.0-alpha** · tree-sitter grammars delphi13 **14** / dfm **14**.
-Header re-verified 2026-09-08 against `SCHEMA_VERSION` and
+extractor **1.14.0-alpha** · tree-sitter grammars delphi13 **14** / dfm **14**.
+Header re-verified 2026-09-09 against `SCHEMA_VERSION` and
 `DRAGLINT_EXTRACTOR_VERSION` in source. **The prose below this header has NOT
 been re-verified line by line** -- it was written against schema 17 and the
 retired ORM3 union DB, so treat specific table shapes here as indicative and
