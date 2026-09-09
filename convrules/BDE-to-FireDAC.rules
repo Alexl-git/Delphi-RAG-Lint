@@ -1,6 +1,6 @@
 // BDE -> FireDAC conversion library -- a STARTING POINT, not a finished rule book.
 //
-// Assembled 2026-08-02 from convrules\FireDAC_Migrate_BDE.rules (Embarcadero's
+// Assembled 2026-08-02 from convrules\vendor\FireDAC_Migrate_BDE.rules (Embarcadero's
 // reFind corpus, imported verbatim and NOT modified). That corpus is 60 flat
 // #migrate lines; this file re-expresses the part of it the ConvRules editor can
 // work with -- one #convert block per component pair, with the property links
@@ -69,7 +69,7 @@
 //     limits #1 and docs\converter\apply-remainder-contract.md.
 //
 // Unit/file renames (uAD.inc -> FireDAC.inc and 210 more) are a DIFFERENT domain
-// and are deliberately NOT merged here -- see convrules\FireDAC_Rename_Units.rules.
+// and are deliberately NOT merged here -- see convrules\vendor\FireDAC_Rename_Units.rules.
 //
 // Plain 7-bit ASCII, CRLF.
 

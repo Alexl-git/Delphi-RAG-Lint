@@ -118,9 +118,11 @@ The right-hand column is deliberate: those kinds are edited as raw text (the edi
 ### 3. It is a reFind superset -- and here is exactly how much of one
 
 Embarcadero's **reFind** migration instruction files load as-is. Two of them ship in
-`convrules\` as first-class rule books a user can open:
-`FireDAC_Migrate_BDE.rules` (77 lines) and `FireDAC_Rename_Units.rules` (211 lines),
-byte-identical to the RAD Studio 37.0 samples.
+`convrules\vendor\` -- `FireDAC_Migrate_BDE.rules` (77 lines) and
+`FireDAC_Rename_Units.rules` (211 lines), byte-identical to the RAD Studio 37.0
+samples. They are held as vendor REFERENCE, not as books to edit: they carry no
+`#convert`, so they contribute nothing to the rule catalog, and `vendor\` keeps
+them out of the editor's non-recursive folder scan.
 
 Both load with **zero `rnkUnknown` nodes** and round-trip byte-for-byte. That headline is
 true and it is weaker than it sounds. The measured reality:

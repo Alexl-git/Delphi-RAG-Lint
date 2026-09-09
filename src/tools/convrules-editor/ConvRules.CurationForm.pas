@@ -5,8 +5,13 @@ unit ConvRules.CurationForm;
 
   Shows a WORKING SET (several files loaded together, because one conversion may need
   several interdependent books) and, below it, every block across the set with a file
-  column and a checkbox. The toolbar acts on the checked blocks: split out, copy out,
-  delete, merge another file in, or compose the whole set into one file for the engine.
+  column and a checkbox. The toolbar acts on the checked blocks: split out, delete,
+  merge another file in, or compose the whole set into one file for the engine.
+
+  There is deliberately NO copy-out. It was retired on 2026-09-09: writing the
+  selected blocks to a second file while leaving the source intact produces exactly
+  the duplicate state ConvRules.RuleCatalog.FindDuplicates exists to report. A rule
+  may be MOVED between books; it may not be COPIED.
 
   Every write goes through ConvRules.WorkingSet.WriteTextWithBackup and moves VERBATIM
   block text -- never the main form's canonical re-emitter, so a block that was merely
@@ -27,7 +32,7 @@ type
     FFiles   : TListBox;      // working set, top to bottom = composition precedence
     FBlocks  : TListView;     // vsReport + Checkboxes: File | Kind | Block | Lines
     FStatus  : TStatusBar;
-    FBtnSplit, FBtnCopy, FBtnDelete, FBtnMerge, FBtnCompose: TButton;
+    FBtnSplit, FBtnDelete, FBtnMerge, FBtnCompose: TButton;
     FTouched : TDictionary<string, Boolean>;   // paths this session wrote
 
     procedure BuildUI;
@@ -42,7 +47,6 @@ type
     procedure DoMoveUp(Sender: TObject);
     procedure DoMoveDown(Sender: TObject);
     procedure DoSplit(Sender: TObject);
-    procedure DoCopy(Sender: TObject);
     procedure DoDelete(Sender: TObject);
     procedure DoMerge(Sender: TObject);
     procedure DoCompose(Sender: TObject);
@@ -266,28 +270,23 @@ begin
   FBtnSplit.Hint := 'Move the checked blocks OUT of this file into another';
   FBtnSplit.ShowHint := True;
 
-  FBtnCopy := TButton.Create(Self);
-  FBtnCopy.Parent := Top; FBtnCopy.SetBounds(104, 38, 90, 25);
-  FBtnCopy.Caption := 'Copy...'; FBtnCopy.OnClick := DoCopy;
-  FBtnCopy.Hint := 'Copy the checked blocks into another file; this file is unchanged';
-  FBtnCopy.ShowHint := True;
 
   FBtnDelete := TButton.Create(Self);
-  FBtnDelete.Parent := Top; FBtnDelete.SetBounds(200, 38, 90, 25);
+  FBtnDelete.Parent := Top; FBtnDelete.SetBounds(104, 38, 90, 25);
   FBtnDelete.Caption := 'Delete'; FBtnDelete.OnClick := DoDelete;
 
   FBtnMerge := TButton.Create(Self);
-  FBtnMerge.Parent := Top; FBtnMerge.SetBounds(306, 38, 110, 25);
+  FBtnMerge.Parent := Top; FBtnMerge.SetBounds(210, 38, 110, 25);
   FBtnMerge.Caption := 'Merge from...'; FBtnMerge.OnClick := DoMerge;
 
   FBtnCompose := TButton.Create(Self);
-  FBtnCompose.Parent := Top; FBtnCompose.SetBounds(422, 38, 110, 25);
+  FBtnCompose.Parent := Top; FBtnCompose.SetBounds(326, 38, 110, 25);
   FBtnCompose.Caption := 'Compose...'; FBtnCompose.OnClick := DoCompose;
   FBtnCompose.Hint := 'Fold the whole working set into ONE .rules file for --rules';
   FBtnCompose.ShowHint := True;
 
   B := TButton.Create(Self);
-  B.Parent := Top; B.SetBounds(548, 38, 80, 25);
+  B.Parent := Top; B.SetBounds(452, 38, 80, 25);
   B.Caption := 'Close'; B.ModalResult := mrOk;
 
   FFiles := TListBox.Create(Self);
@@ -393,7 +392,6 @@ var
 begin
   Sel := CheckedIndexes(fi);
   FBtnSplit.Enabled   := CanOperateOn(Sel) and (fi >= 0);
-  FBtnCopy.Enabled    := FBtnSplit.Enabled;
   FBtnDelete.Enabled  := FBtnSplit.Enabled;
   FBtnMerge.Enabled   := (fi >= 0);
   FBtnCompose.Enabled := FSet.Count > 0;
@@ -484,7 +482,7 @@ begin
   end;
 end;
 
-{ Write ABlocks into APath, APPENDING when the file already exists. A split/copy is a
+{ Write ABlocks into APath, APPENDING when the file already exists. A split is a
   MOVE of verbatim text, not a merge -- no link reconciliation happens here.
 
   ANote is what the caller must tell the user about the TARGET, because the target
@@ -605,34 +603,6 @@ begin
       + 'saved -- they now exist in BOTH files. %s',
       [Length(Mvd), ExtractFileName(Target), ExtractFileName(FSet.Item(fi).Path), ErrMsg]);
   end;
-end;
-
-procedure TCurationForm.DoCopy(Sender: TObject);
-var
-  fi  : Integer;
-  Sel : TArray<Integer>;
-  Cpy : TRuleBlocks;
-  Target, Bak, Note: string;
-begin
-  Sel := CheckedIndexes(fi);
-  if not CanOperateOn(Sel) or (fi < 0) then Exit;
-  Target := AskTargetFile(ChangeFileExt(FSet.Item(fi).Path, '') + '-copy'
-    + ExtractFileExt(FSet.Item(fi).Path));
-  if Target = '' then Exit;
-  // Same guard as DoSplit, on CANONICAL paths, and needed for a different reason.
-  // WriteBlocksTo APPENDS when the target exists, so copying onto the source would
-  // append the selected blocks back into the source -- duplicating them -- and then
-  // report "source unchanged", which would be false. Refuse instead.
-  if SameText(NormalizedPath(Target), NormalizedPath(FSet.Item(fi).Path)) then
-  begin
-    FStatus.SimpleText := 'Copy target must be a different file.';
-    Exit;
-  end;
-  Cpy := CopyOut(FSet.Item(fi).Blocks, Sel);
-  if not WriteBlocksTo(Target, Cpy, Bak, Note) then Exit;
-  // criterion 4: the source file is NOT written
-  FStatus.SimpleText := Format('Copied %d block(s) to %s (%s; source unchanged)',
-    [Length(Cpy), ExtractFileName(Target), Note]);
 end;
 
 procedure TCurationForm.DoDelete(Sender: TObject);

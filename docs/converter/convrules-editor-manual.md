@@ -25,8 +25,8 @@ Top-level `convrules\` in this repository:
 | File | What it is |
 |---|---|
 | `convrules\sample.rules` | a small worked example (two `#convert` blocks) |
-| `convrules\FireDAC_Migrate_BDE.rules` | Embarcadero's BDE -> FireDAC migration rules, imported verbatim |
-| `convrules\FireDAC_Rename_Units.rules` | Embarcadero's unit-rename rules, imported verbatim (211 lines) |
+| `convrules\vendor\FireDAC_Migrate_BDE.rules` | Embarcadero's BDE -> FireDAC migration rules, imported verbatim |
+| `convrules\vendor\FireDAC_Rename_Units.rules` | Embarcadero's unit-rename rules, imported verbatim (211 lines) |
 
 The two imported files are product data, not test fixtures -- open them like any other
 book. See [`refind-corpus.md`](refind-corpus.md) for where they came from.
@@ -403,6 +403,17 @@ caught up, not a problem with your rule book.
 so it offers to save first. Answering No curates the on-disk version and discards nothing;
 answering Yes and having the save fail stops the whole operation rather than curating a
 stale file.
+
+Its toolbar acts on the checked blocks: **Split...** moves them out into another file,
+**Delete** removes them, **Merge...** brings another file in, and **Compose** writes the
+whole working set into one file for the engine.
+
+**There is no Copy.** A `Copy...` button existed until 2026-09-09 and was removed on
+purpose. It wrote the checked blocks to a second file and left the source intact --
+which is precisely the duplicate state the rule catalog reports, and the standing rule
+is that an atomic rule lives in exactly ONE file. Rules may be **moved** between books
+freely; they may not be **copied**, because the same conversion in two places is how two
+versions of it appear and then diverge. If you want a rule somewhere else, Split it out.
 
 ---
 

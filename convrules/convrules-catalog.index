@@ -1,0 +1,19 @@
+# drag-lint convrules catalog v1
+#
+# EMPTY PLACEHOLDER -- created by hand 2026-09-08, no rows.
+#
+# This file is normally written by the ConvRules editor: Form types panel ->
+# "Rescan rules", which calls ScanRulesFolder over this folder and rewrites the
+# whole file (header + one tab-separated row per #convert). That has never been
+# run, so the index did not exist until now.
+#
+# Rows are: FromType <TAB> ToType <TAB> FilePath <TAB> LineNo
+#
+# WHAT AN EMPTY INDEX MEANS. Zero rows is NOT "no type is covered". The folder
+# really holds 12 #convert rules today (10 in BDE-to-FireDAC.rules, 2 in
+# sample.rules). Nothing reads this file yet -- CatalogFromIndexText has no
+# caller -- so the emptiness is inert. If you add a reader, do NOT let it treat
+# a present-but-empty index as an authoritative "nothing is covered"; Rescan
+# first.
+#
+# The first Rescan overwrites this file, comments included.

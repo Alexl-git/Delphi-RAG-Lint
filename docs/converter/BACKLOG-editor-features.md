@@ -25,8 +25,8 @@
 > Suite at completion: **543 pass / 0 fail / 0 skip**.
 >
 > **The rule books moved.** `docs\examples\convrules\sample.rules` is now
-> `convrules\sample.rules`, alongside `convrules\FireDAC_Migrate_BDE.rules` and
-> `convrules\FireDAC_Rename_Units.rules`.
+> `convrules\sample.rules`, alongside `convrules\vendor\FireDAC_Migrate_BDE.rules` and
+> `convrules\vendor\FireDAC_Rename_Units.rules`.
 >
 > Still open from this file after Phase G: the two "Also found this session" items below
 > -- **event-coverage assertions in the Usage scanner fixtures** and **tests for the grid

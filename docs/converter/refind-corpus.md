@@ -10,8 +10,8 @@ who was not us.
 
 | Our file | Source (RAD Studio 37.0 samples) | Bytes |
 |---|---|---|
-| `convrules\FireDAC_Migrate_BDE.rules` | `...\Samples\Object Pascal\Database\FireDAC\Tool\reFind\BDE2FDMigration\FireDAC_Migrate_BDE.txt` | 4 025 |
-| `convrules\FireDAC_Rename_Units.rules` | `...\Samples\Object Pascal\Database\FireDAC\Tool\reFind\AD2FDMigration\FireDAC_Rename_Units.txt` | 9 015 |
+| `convrules\vendor\FireDAC_Migrate_BDE.rules` | `...\Samples\Object Pascal\Database\FireDAC\Tool\reFind\BDE2FDMigration\FireDAC_Migrate_BDE.txt` | 4 025 |
+| `convrules\vendor\FireDAC_Rename_Units.rules` | `...\Samples\Object Pascal\Database\FireDAC\Tool\reFind\AD2FDMigration\FireDAC_Rename_Units.txt` | 9 015 |
 
 Sample root: `C:\Users\Public\Documents\Embarcadero\Studio\37.0\Samples\...`.
 

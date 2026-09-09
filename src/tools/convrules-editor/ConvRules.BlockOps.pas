@@ -31,12 +31,11 @@ function DeleteBlocks(const ABlocks: TRuleBlocks;
 procedure SplitOut(const ASource: TRuleBlocks; const AIndexes: TArray<Integer>;
   out ARemaining, AMoved: TRuleBlocks);
 
-/// <summary>PURE: the blocks to write elsewhere; the source is not modified.</summary>
-function CopyOut(const ASource: TRuleBlocks;
-  const AIndexes: TArray<Integer>): TRuleBlocks;
-
-/// <summary>PURE: the enablement rule for the Split / Copy / Delete commands --
-/// they operate on a selection, so an empty selection disables them.</summary>
+/// <summary>PURE: the enablement rule for the Split / Delete commands -- they
+/// operate on a selection, so an empty selection disables them.</summary>
+/// <remarks>There is no Copy command. CopyOut was retired on 2026-09-09 because it
+/// left the source intact, manufacturing the duplicate state FindDuplicates reports;
+/// a rule may be MOVED between books, never COPIED.</remarks>
 function CanOperateOn(const ASelected: TArray<Integer>): Boolean;
 
 type
@@ -230,12 +229,6 @@ procedure SplitOut(const ASource: TRuleBlocks; const AIndexes: TArray<Integer>;
 begin
   AMoved     := SelectBlocks(ASource, AIndexes);
   ARemaining := DeleteBlocks(ASource, AIndexes);
-end;
-
-function CopyOut(const ASource: TRuleBlocks;
-  const AIndexes: TArray<Integer>): TRuleBlocks;
-begin
-  Result := SelectBlocks(ASource, AIndexes);
 end;
 
 function CanOperateOn(const ASelected: TArray<Integer>): Boolean;

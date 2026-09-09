@@ -449,7 +449,12 @@ end;
 const
   LibWin32  = 'C:\Projects\.drag-lint\library-Win32.sqlite';
   LibWin64  = 'C:\Projects\.drag-lint\library-Win64.sqlite';
-  ProjectDb = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
+  { ORM3's CLIENT project index. It is per-PROJECT and lives in that project's own
+    _D-RAG folder: the union DB this used to name (DB\ORM3\drag-lint.sqlite) was
+    DELETED in the 2026-08-11 one-DB-per-project migration. A --db that does not
+    exist makes the engine exit 2, so every call carrying it fails; resolve with
+    `drag-lint resolve-dbs --in <file.pas>` rather than guessing a path. }
+  ProjectDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite';
 
 { Resolve the real drag-lint.exe the editor would use (next to this runner, else
   the deployed dll-win64 copy, else PATH). '' if none found. }
@@ -508,8 +513,8 @@ begin
 
   // --- FROM picker: what FCbFrom would hold ---
   // Editor: ListDescendantsOf('TComponent', GEditorFromDbs=[Win32,Win64,proj]).
-  if not (TFile.Exists(LibWin32) and TFile.Exists(LibWin64)) then
-    Skip('picker.from.datasource', 'library-Win32/Win64 db(s) absent')
+  if not (TFile.Exists(LibWin32) and TFile.Exists(LibWin64) and TFile.Exists(ProjectDb)) then
+    Skip('picker.from.datasource', 'library-Win32/Win64 or ORM3 project db absent')
   else
   begin
     Adapter := TEngineAdapter.Create(Exe, [LibWin32, LibWin64, ProjectDb]);
@@ -535,8 +540,8 @@ begin
 
   // --- TO picker: what FCbTo would hold ---
   // Editor: ListDescendantsOf('TControl', GEditorToDbs=[Win64,proj]).
-  if not TFile.Exists(LibWin64) then
-    Skip('picker.to.datasource', 'library-Win64 db absent')
+  if not (TFile.Exists(LibWin64) and TFile.Exists(ProjectDb)) then
+    Skip('picker.to.datasource', 'library-Win64 or ORM3 project db absent')
   else
   begin
     Adapter := TEngineAdapter.Create(Exe, [LibWin64, ProjectDb]);
@@ -633,9 +638,9 @@ var
   OK     : Boolean;
 begin
   Exe := ResolveExe;
-  if (Exe = '') or (not TFile.Exists(LibWin64)) then
+  if (Exe = '') or (not TFile.Exists(LibWin64)) or (not TFile.Exists(ProjectDb)) then
   begin
-    Skip('proptree.bareclass', 'exe / library-Win64 db absent');
+    Skip('proptree.bareclass', 'exe / library-Win64 / ORM3 project db absent');
     Exit;
   end;
   Adapter := TEngineAdapter.Create(Exe, [LibWin32, LibWin64, ProjectDb]);
@@ -752,7 +757,12 @@ end;
 procedure TestPlatformRescope;
 const
   LibDir    = 'C:\Projects\.drag-lint\';
-  ProjectDb = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
+  { ORM3's CLIENT project index. It is per-PROJECT and lives in that project's own
+    _D-RAG folder: the union DB this used to name (DB\ORM3\drag-lint.sqlite) was
+    DELETED in the 2026-08-11 one-DB-per-project migration. A --db that does not
+    exist makes the engine exit 2, so every call carrying it fails; resolve with
+    `drag-lint resolve-dbs --in <file.pas>` rather than guessing a path. }
+  ProjectDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite';
 var
   Exe: string;
   eng: TEngineAdapter;
@@ -762,9 +772,10 @@ var
 begin
   Exe := ResolveExe;
   if (Exe = '') or (not TFile.Exists(LibDir + 'library-Win64.sqlite'))
-     or (not TFile.Exists(LibDir + 'library-Win32.sqlite')) then
+     or (not TFile.Exists(LibDir + 'library-Win32.sqlite'))
+     or (not TFile.Exists(ProjectDb)) then
   begin
-    Skip('platform.rescope', 'exe or library DBs absent');
+    Skip('platform.rescope', 'exe, library DBs or ORM3 project db absent');
     Exit;
   end;
   eng := TEngineAdapter.Create(Exe, LibDbsFor(cpBoth, LibDir) + [ProjectDb]);
@@ -1145,7 +1156,12 @@ end;
 procedure TestDeclaringUnit;
 const
   LibWin64  = 'C:\Projects\.drag-lint\library-Win64.sqlite';
-  ProjectDb = 'C:\Projects\DB\ORM3\drag-lint.sqlite';
+  { ORM3's CLIENT project index. It is per-PROJECT and lives in that project's own
+    _D-RAG folder: the union DB this used to name (DB\ORM3\drag-lint.sqlite) was
+    DELETED in the 2026-08-11 one-DB-per-project migration. A --db that does not
+    exist makes the engine exit 2, so every call carrying it fails; resolve with
+    `drag-lint resolve-dbs --in <file.pas>` rather than guessing a path. }
+  ProjectDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite';
 var
   Exe: string;
   Eng: TEngineAdapter;
@@ -1415,10 +1431,13 @@ begin
 end;
 
 { Criteria 3 + 4 + 2: split-out REMOVES the selected blocks from the source and
-  writes them to the target in their original relative order; copy-out writes them
-  and leaves the source unchanged; a moved block keeps its comments, blank lines
-  and unrecognised directives verbatim. }
-procedure TestBlockOpsSplitAndCopy;
+  writes them to the target in their original relative order; a moved block keeps
+  its comments, blank lines and unrecognised directives verbatim.
+
+  Copy-out was RETIRED on 2026-09-09: it wrote the selected blocks to a second file
+  and left the source intact, which is exactly the duplicate state FindDuplicates
+  reports. A rule may be MOVED between books; it may not be COPIED. }
+procedure TestBlockOpsSplit;
 const
   SRC =
     '// file header'#13#10 +
@@ -1433,7 +1452,7 @@ const
     '#convert A.T3 -> B.T3'#13#10 +
     '#link R <- R'#13#10;
 var
-  Blocks, Rem, Moved, Copied: TRuleBlocks;
+  Blocks, Rem, Moved: TRuleBlocks;
 begin
   Blocks := SplitRulesBlocks(SRC);          // [preamble, T1, T2, T3]
   Check('blockops.setup', Length(Blocks) = 4, IntToStr(Length(Blocks)));
@@ -1460,16 +1479,10 @@ begin
   Check('blockops.split.keeps.unknown',
     Pos('#weird unrecognised directive', Moved[0].RawText) > 0, 'lost unknown directive');
 
-  // criterion 4 -- copy leaves the source alone
-  Copied := CopyOut(Blocks, [1]);
-  Check('blockops.copy.count', Length(Copied) = 1, IntToStr(Length(Copied)));
-  Check('blockops.copy.header', Copied[0].Header = '#convert A.T1 -> B.T1', Copied[0].Header);
-  Check('blockops.copy.source.unchanged', JoinBlocks(Blocks) = SRC,
-    'CopyOut must not mutate the source blocks');
 end;
 
-{ Criterion 12: WHILE no blocks are selected the Split, Copy and Delete commands
-  are disabled. CanOperateOn is the single rule the form's enablement uses. }
+{ Criterion 12: WHILE no blocks are selected the Split and Delete commands are
+  disabled. CanOperateOn is the single rule the form's enablement uses. }
 procedure TestBlockOpsEnablement;
 begin
   Check('blockops.enable.none', not CanOperateOn([]), 'empty selection must disable');
@@ -4749,9 +4762,12 @@ end;
 { Conformance harness for one imported reFind rule book.
 
   These files are Embarcadero's OWN reFind migration instructions, committed under
-  convrules\ verbatim (see docs\converter\refind-corpus.md). They are a product
-  deliverable a user can open in the editor, NOT an optional fixture -- so an absent
-  file is a FAILURE, never a Skip.
+  convrules\vendor\ verbatim (see docs\converter\refind-corpus.md and
+  convrules\vendor\README.md). They moved out of convrules\ on 2026-09-09 because
+  they carry no #convert and so contribute nothing to the rule catalog, while a
+  future atomization of their #migrate lines would collide with BDE-to-FireDAC.rules
+  in the duplicate report. They remain a product deliverable a user can open in the
+  editor, NOT an optional fixture -- so an absent file is a FAILURE, never a Skip.
 
   Three assertions, and none of them may be relaxed to get green:
     * a non-trivial count of RECOGNISED (non-blank, non-comment) lines, which stops a
@@ -4822,9 +4838,9 @@ end;
 procedure TestReFindCorpusLoads;
 begin
   // 69 directives (#unuse / #remove / #remove DFM: / #migrate) across 77 lines.
-  CheckReFindCorpus('refind.bde',   'FireDAC_Migrate_BDE.rules',  20);
+  CheckReFindCorpus('refind.bde',   'vendor\FireDAC_Migrate_BDE.rules',  20);
   // 197 bare 'old -> new' unit renames -- reFind's plain find/replace form.
-  CheckReFindCorpus('refind.units', 'FireDAC_Rename_Units.rules', 20);
+  CheckReFindCorpus('refind.units', 'vendor\FireDAC_Rename_Units.rules', 20);
 end;
 
 { The kinds TRuleNode.Emit rebuilds FROM ITS TYPED FIELDS when Dirty. Everything else
@@ -4851,7 +4867,7 @@ var
   N, FirstUnuse               : TRuleNode;
   Rebuildable, Migrates, Bare : Integer  ;
 begin
-  P := ConvRulesCorpusPath('FireDAC_Migrate_BDE.rules');
+  P := ConvRulesCorpusPath('vendor\FireDAC_Migrate_BDE.rules');
   if not TFile.Exists(P) then
   begin
     Check('refind.bde.reconstruct.present', False, 'committed corpus file is missing: ' + P);
@@ -5100,7 +5116,7 @@ begin
     TestBlockSplitRulesRoundTrip;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;
-    TestBlockOpsSplitAndCopy;
+    TestBlockOpsSplit;
     TestBlockOpsEnablement;
     TestMergeSkipsDuplicate;
     TestMergeReportsConflict;
