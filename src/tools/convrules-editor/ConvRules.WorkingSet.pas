@@ -115,6 +115,13 @@ type
     /// is one contributing SOURCE, alongside the grid's checkboxes and (once the
     /// engine deploys #tag) by-tag.</remarks>
     function  SelectByTypes(const ATypeNames: TArray<string>): Integer;
+    /// <summary>Add, to every file's selection, the rules carrying ATag.</summary>
+    /// <param name="ATag">A tag name; '' selects nothing.</param>
+    /// <returns>How many blocks became selected that were not already.</returns>
+    /// <remarks>The third selection source, and deliberately the SAME shape as
+    /// SelectByTypes: it unions rather than replaces, so tags, types and hand
+    /// ticks compose instead of overwriting one another.</remarks>
+    function  SelectByTag(const ATag: string): Integer;
     /// <summary>Compose the set honouring each file's selection.</summary>
     /// <param name="AReport">Receives the compose report, preceded by one
     /// SelectionReportLine per file when a selection is active.</param>
@@ -381,6 +388,22 @@ begin
       grid's checkboxes, so it must not discard what the user ticked by hand. }
     SetSelected(i, UnionSelections(F.Blocks, F.Selected,
       BlocksConvertingTypes(F.Blocks, ATypeNames)));
+    Inc(Result, Length(FFiles[i].Selected) - Before);
+  end;
+end;
+
+function TWorkingSet.SelectByTag(const ATag: string): Integer;
+var
+  i, Before: Integer;
+  F        : TWorkingFile;
+begin
+  Result := 0;
+  for i := 0 to FFiles.Count - 1 do
+  begin
+    F      := FFiles[i];
+    Before := Length(F.Selected);
+    SetSelected(i, UnionSelections(F.Blocks, F.Selected,
+      BlocksWithTag(F.Blocks, ATag)));
     Inc(Result, Length(FFiles[i].Selected) - Before);
   end;
 end;

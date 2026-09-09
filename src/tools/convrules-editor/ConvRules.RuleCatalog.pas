@@ -31,7 +31,7 @@ const
 
   /// <summary>First line of the index; a file not starting with this is refused
   /// rather than half-read, so a future v2 cannot be silently misparsed as v1.</summary>
-  CATALOG_INDEX_HEADER = '# drag-lint convrules catalog v1';
+  CATALOG_INDEX_HEADER = '# drag-lint convrules catalog v2';
 
 type
   /// <summary>One '#convert From -> To' the folder already covers.</summary>
@@ -43,6 +43,12 @@ type
   TRuleCatalogEntry = record
     FromType: string;
     ToType  : string;
+    /// <summary>The '#tag' labels on this rule, in file order; empty when untagged.</summary>
+    /// <remarks>Read FROM the book on every scan. The on-disk index CACHES them but
+    /// does not own them, which is why an index whose version is not understood is
+    /// refused whole rather than read as "these rules are untagged" -- that would
+    /// make a tagged rule invisible to the very selection tags exist for.</remarks>
+    Tags    : TArray<string>;
     FilePath: string;
     LineNo  : Integer;
   end;
@@ -98,6 +104,18 @@ function BareTypeName(const AQualified: string): string;
 /// after a comma ('-> FireDAC.Comp.Client.TFDTable, FireDAC.Stan.Intf, ...'); those
 /// are units to add, not alternative targets, and must not land in ToType.</remarks>
 function CatalogFromText(const AText, APath: string): TRuleCatalog;
+
+/// <summary>PURE: the catalog entries carrying ATag, in catalog order.</summary>
+/// <param name="ACatalog">The scanned catalog.</param>
+/// <param name="ATag">A tag name; '' matches nothing.</param>
+/// <returns>The matching entries; [] when none carries the tag.</returns>
+/// <remarks>Case-insensitive, as Pascal is. An EMPTY tag selects NOTHING rather
+/// than everything -- a blank filter box must not silently compose the whole
+/// corpus into a job.
+/// <para>This is the third contributor to a job selection, alongside the grid's
+/// checkboxes and by-type; they all fold together through
+/// ConvRules.BlockOps.UnionSelections.</para></remarks>
+function SelectByTag(const ACatalog: TRuleCatalog; const ATag: string): TRuleCatalog;
 
 /// <summary>PURE: concatenates catalogs, preserving order.</summary>
 function MergeCatalogs(const AParts: TArray<TRuleCatalog>): TRuleCatalog;
@@ -259,7 +277,11 @@ const
   IDX_TO          = 1;
   IDX_PATH        = 2;
   IDX_LINE        = 3;
-  IDX_FIELD_COUNT = 4;
+  { v2 added the tag column. A v1 file has four fields and is refused by the
+    HEADER check before it ever reaches this count, which is the point: a
+    partially understood index reports tagged rules as untagged. }
+  IDX_TAGS        = 4;
+  IDX_FIELD_COUNT = 5;
 
 function BareTypeName(const AQualified: string): string;
 var
@@ -276,6 +298,7 @@ var
   Book : TRuleBook;
   List : TList<TRuleCatalogEntry>;
   Idx  : Integer;
+  TagIdx: Integer;
   Node : TRuleNode;
   Entry: TRuleCatalogEntry;
   ToT  : string;
@@ -297,15 +320,51 @@ begin
       CommaAt := Pos(',', ToT);
       if CommaAt > 0 then ToT := Trim(Copy(ToT, 1, CommaAt - 1));
 
+      { Default() FIRST: this record is reused every iteration, and Tags is the
+        only field not overwritten below. Without the reset a tagged rule would
+        lend its tags to every untagged rule after it (catalog.tags.no.leak). }
+      Entry          := Default(TRuleCatalogEntry);
       Entry.FromType := Trim(Node.FromType);
       Entry.ToType   := ToT;
       Entry.FilePath := APath;
       Entry.LineNo   := Idx + 1;
+      { A #tag labels the ENCLOSING #convert, so scan forward from this header to
+        the next one. }
+      for TagIdx := Idx + 1 to Book.Nodes.Count - 1 do
+      begin
+        if Book.Nodes[TagIdx].Kind = rnkConvert then Break;
+        if (Book.Nodes[TagIdx].Kind = rnkTag)
+           and (Trim(Book.Nodes[TagIdx].TagName) <> '') then
+          Entry.Tags := Entry.Tags + [Trim(Book.Nodes[TagIdx].TagName)];
+      end;
       List.Add(Entry);
     end;
     Result := List.ToArray;
   finally
     Book.Free;
+    List.Free;
+  end;
+end;
+
+function SelectByTag(const ACatalog: TRuleCatalog; const ATag: string): TRuleCatalog;
+var
+  List : TList<TRuleCatalogEntry>;
+  Entry: TRuleCatalogEntry;
+  T    : string;
+begin
+  Result := nil;
+  if Trim(ATag) = '' then Exit;
+  List := TList<TRuleCatalogEntry>.Create;
+  try
+    for Entry in ACatalog do
+      for T in Entry.Tags do
+        if SameText(Trim(T), Trim(ATag)) then
+        begin
+          List.Add(Entry);
+          Break;
+        end;
+    Result := List.ToArray;
+  finally
     List.Free;
   end;
 end;
@@ -657,7 +716,8 @@ begin
       SB.Append(Entry.FromType).Append(#9)
         .Append(Entry.ToType).Append(#9)
         .Append(Entry.FilePath).Append(#9)
-        .Append(IntToStr(Entry.LineNo)).Append(#13#10);
+        .Append(IntToStr(Entry.LineNo)).Append(#9)
+        .Append(string.Join(',', Entry.Tags)).Append(#13#10);
     Result := SB.ToString;
   finally
     SB.Free;
@@ -693,10 +753,15 @@ begin
       Parts := Ln.Split([#9]);
       if Length(Parts) < IDX_FIELD_COUNT then Continue;
 
+      { Reset first -- one record is reused per line, and Tags would otherwise
+        carry over from the previous row. }
+      Entry          := Default(TRuleCatalogEntry);
       Entry.FromType := Trim(Parts[IDX_FROM]);
       Entry.ToType   := Trim(Parts[IDX_TO]);
       Entry.FilePath := Trim(Parts[IDX_PATH]);
       Entry.LineNo   := StrToIntDef(Trim(Parts[IDX_LINE]), 0);
+      if Trim(Parts[IDX_TAGS]) <> '' then
+        Entry.Tags := Trim(Parts[IDX_TAGS]).Split([',']);
       List.Add(Entry);
     end;
     Result := List.ToArray;

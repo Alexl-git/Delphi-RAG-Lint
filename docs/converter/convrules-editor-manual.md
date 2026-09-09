@@ -446,12 +446,42 @@ without splitting anything.
   you examined with `--form` / **Open form...**. It is disabled when no form was examined.
   It *adds* to what you already ticked and never clears it, and the status bar says how
   many rules were newly selected.
+* **Select by tag...** asks for a tag name and ticks every rule carrying that
+  `#tag`. Also additive, and an **empty tag matches NOTHING** -- deliberately, so a
+  blank box cannot silently compose the whole corpus into a job.
 * **Clear selection** unticks everything, in every file.
 * A file with rules selected is marked **`-- N selected`** in the file list, so a
   selection in a book you have navigated away from is still visible.
 
 **With nothing ticked anywhere, Compose writes the WHOLE set** -- exactly what it always
 did. There is no mode switch.
+
+### Tagging a rule
+
+A `#tag` line labels the `#convert` block it sits in, so a job can select rules by
+purpose rather than by type:
+
+```
+#convert Bde.DBTables.TQuery -> FireDAC.Comp.Client.TFDQuery, FireDAC.Comp.Client
+#tag BDEtoFireDAC
+#tag Modernisation2026
+#link SQL <- SQL
+```
+
+**One tag per line, and a rule may carry several.** One per line rather than a comma
+list so that adding a tag appends a line instead of rewriting one, and a diff shows a
+single added line.
+
+Tags are read from the books on every rescan; `convrules-catalog.index` **caches** them
+but does not own them. That index is now **v2**. A v1 index is refused whole rather
+than read as "these rules have no tags" -- a partially understood index would make a
+tagged rule invisible to the very selection tags exist for, which is worse than no
+index at all.
+
+The engine **tolerates and skips** `#tag` as of 2026-09-09 (`build_date 2026-09-09
+10:54:29` or later); selection is entirely an editor and catalog concern. On an older
+engine a tagged book fails validation with `unknown directive: #tag`. A `#tag` before
+the first `#convert` is an error -- it has nothing to label.
 
 ### What always travels, and why
 

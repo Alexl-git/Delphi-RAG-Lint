@@ -100,6 +100,18 @@ function UnionSelections(const ABlocks: TRuleBlocks;
 function BlocksConvertingTypes(const ABlocks: TRuleBlocks;
   const ATypeNames: TArray<string>): TArray<Integer>;
 
+/// <summary>PURE: indexes of the rbkConvert blocks carrying ATag.</summary>
+/// <param name="ABlocks">The file's blocks.</param>
+/// <param name="ATag">A tag name; '' matches nothing.</param>
+/// <returns>Ascending block indexes; empty when nothing carries the tag.</returns>
+/// <remarks>Goes through CatalogFromText and SelectByTag, the same path the
+/// catalog uses, so the curation window and the catalog cannot disagree about
+/// which rules a tag covers. The THIRD selection source the design left room
+/// for -- it lands as one more UnionSelections contributor, with no rework to
+/// checkboxes or by-type.</remarks>
+function BlocksWithTag(const ABlocks: TRuleBlocks;
+  const ATag: string): TArray<Integer>;
+
 /// <summary>PURE: the one-line report a selective compose writes per file.</summary>
 /// <param name="APath">The file's path; only its file name is shown.</param>
 /// <param name="ABlocks">Its blocks.</param>
@@ -400,6 +412,30 @@ begin
           List.Add(i);
           Break;
         end;
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+function BlocksWithTag(const ABlocks: TRuleBlocks;
+  const ATag: string): TArray<Integer>;
+var
+  List: TList<Integer>;
+  i   : Integer;
+begin
+  Result := nil;
+  if Trim(ATag) = '' then Exit;
+  List := TList<Integer>.Create;
+  try
+    for i := 0 to High(ABlocks) do
+    begin
+      if ABlocks[i].Kind in HEADERLESS_KINDS then Continue;
+      { The block's own text yields its own catalog entry, so a hit IS this
+        block -- no second lookup to get wrong. }
+      if Length(SelectByTag(CatalogFromText(ABlocks[i].RawText, ''), ATag)) > 0 then
+        List.Add(i);
     end;
     Result := List.ToArray;
   finally

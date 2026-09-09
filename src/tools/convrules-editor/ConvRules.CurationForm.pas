@@ -35,7 +35,7 @@ type
     FBlocks  : TListView;     // vsReport + Checkboxes: File | Kind | Block | Lines
     FStatus  : TStatusBar;
     FBtnSplit, FBtnDelete, FBtnMerge, FBtnCompose: TButton;
-    FBtnByType, FBtnClearSel: TButton;
+    FBtnByType, FBtnByTag, FBtnClearSel: TButton;
     FTouched : TDictionary<string, Boolean>;   // paths this session wrote
     /// <summary>Component types on the examined form, for by-type selection;
     /// empty when the main form has examined none.</summary>
@@ -45,6 +45,7 @@ type
     FLoading  : Boolean;
 
     procedure DoSelectByType(Sender: TObject);
+    procedure DoSelectByTag(Sender: TObject);
     procedure DoClearSelection(Sender: TObject);
 
     procedure BuildUI;
@@ -312,15 +313,22 @@ begin
   FBtnByType.OnClick := DoSelectByType;
   FBtnByType.ShowHint := True;
 
+  FBtnByTag := TButton.Create(Self);
+  FBtnByTag.Parent := Top; FBtnByTag.SetBounds(608, 38, 110, 25);
+  FBtnByTag.Caption := 'Select by tag...';
+  FBtnByTag.OnClick := DoSelectByTag;
+  FBtnByTag.Hint := 'Check every rule in the set carrying a #tag you name';
+  FBtnByTag.ShowHint := True;
+
   FBtnClearSel := TButton.Create(Self);
-  FBtnClearSel.Parent := Top; FBtnClearSel.SetBounds(608, 38, 110, 25);
+  FBtnClearSel.Parent := Top; FBtnClearSel.SetBounds(724, 38, 110, 25);
   FBtnClearSel.Caption := 'Clear selection';
   FBtnClearSel.OnClick := DoClearSelection;
   FBtnClearSel.Hint := 'Uncheck every rule in every file of the working set';
   FBtnClearSel.ShowHint := True;
 
   B := TButton.Create(Self);
-  B.Parent := Top; B.SetBounds(724, 38, 80, 25);
+  B.Parent := Top; B.SetBounds(840, 38, 80, 25);
   B.Caption := 'Close'; B.ModalResult := mrOk;
 
   FFiles := TListBox.Create(Self);
@@ -456,6 +464,7 @@ begin
   FBtnByType.Enabled  := (FSet.Count > 0) and (Length(FFormTypes) > 0);
   FBtnByType.Hint     := Format('Check every rule in the set that converts a type '
     + 'on the examined form (%d type(s) examined)', [Length(FFormTypes)]);
+  FBtnByTag.Enabled    := FSet.Count > 0;
   FBtnClearSel.Enabled := FSet.AnySelected;
 end;
 
@@ -509,6 +518,27 @@ begin
   RefreshBlocks;
   FStatus.SimpleText := Format('Select by form types: %d block(s) newly selected '
     + 'for %d examined type(s).', [n, Length(FFormTypes)]);
+end;
+
+procedure TCurationForm.DoSelectByTag(Sender: TObject);
+var
+  Tag: string;
+  n  : Integer;
+begin
+  Tag := '';
+  if not InputQuery('Select by tag',
+       'Check every rule carrying this #tag:', Tag) then Exit;
+  if Trim(Tag) = '' then
+  begin
+    FStatus.SimpleText := 'No tag given -- nothing selected. An empty tag '
+      + 'deliberately matches NOTHING rather than everything.';
+    Exit;
+  end;
+  n := FSet.SelectByTag(Tag);
+  RefreshFiles;
+  RefreshBlocks;
+  FStatus.SimpleText := Format('Select by tag "%s": %d block(s) newly selected.',
+    [Trim(Tag), n]);
 end;
 
 procedure TCurationForm.DoClearSelection(Sender: TObject);

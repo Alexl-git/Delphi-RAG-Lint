@@ -1,13 +1,13 @@
-# drag-lint convrules catalog v1
-Bde.DBTables.TSession	FireDAC.Comp.Client.TFDManager	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	146
-Bde.DBTables.TDatabase	FireDAC.Comp.Client.TFDConnection	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	166
-Bde.DBTables.TTable	FireDAC.Comp.Client.TFDTable	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	205
-Bde.DBTables.TQuery	FireDAC.Comp.Client.TFDQuery	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	320
-Bde.DBTables.TUpdateSQL	FireDAC.Comp.Client.TFDUpdateSQL	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	422
-Bde.DBTables.TStoredProc	FireDAC.Comp.Client.TFDStoredProc	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	432
-Data.DB.TParam	FireDAC.Stan.Param.TFDParam	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	532
-Data.DB.TParams	FireDAC.Stan.Param.TFDParams	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	544
-Data.DB.TAutoIncField	FireDAC.Comp.DataSet.TFDAutoIncField	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	556
-Bde.DBTables.TBatchMove	FireDAC.Comp.BatchMove.TFDBatchMove	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	605
-Vcl.Graphics.TFont	Vcl.Graphics.TFont	C:\Projects\Delphi-RAG-lint\convrules\sample.rules	1
-Vcl.StdCtrls.TEdit	Vcl.StdCtrls.TMemo	C:\Projects\Delphi-RAG-lint\convrules\sample.rules	13
+# drag-lint convrules catalog v2
+Bde.DBTables.TSession	FireDAC.Comp.Client.TFDManager	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	146	
+Bde.DBTables.TDatabase	FireDAC.Comp.Client.TFDConnection	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	166	
+Bde.DBTables.TTable	FireDAC.Comp.Client.TFDTable	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	205	
+Bde.DBTables.TQuery	FireDAC.Comp.Client.TFDQuery	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	320	
+Bde.DBTables.TUpdateSQL	FireDAC.Comp.Client.TFDUpdateSQL	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	422	
+Bde.DBTables.TStoredProc	FireDAC.Comp.Client.TFDStoredProc	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	432	
+Data.DB.TParam	FireDAC.Stan.Param.TFDParam	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	532	
+Data.DB.TParams	FireDAC.Stan.Param.TFDParams	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	544	
+Data.DB.TAutoIncField	FireDAC.Comp.DataSet.TFDAutoIncField	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	556	
+Bde.DBTables.TBatchMove	FireDAC.Comp.BatchMove.TFDBatchMove	C:\Projects\Delphi-RAG-lint\convrules\BDE-to-FireDAC.rules	605	
+Vcl.Graphics.TFont	Vcl.Graphics.TFont	C:\Projects\Delphi-RAG-lint\convrules\sample.rules	1	
+Vcl.StdCtrls.TEdit	Vcl.StdCtrls.TMemo	C:\Projects\Delphi-RAG-lint\convrules\sample.rules	13	

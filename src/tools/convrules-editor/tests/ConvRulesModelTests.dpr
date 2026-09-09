@@ -2189,6 +2189,139 @@ begin
   end;
 end;
 
+{ Task 5b: '#tag <Name>' is a first-class node kind.
+
+  UNBLOCKED 2026-09-09: the engine tolerates and skips #tag (their c856075),
+  deployed as build_date 2026-09-09 10:54:29, so a tagged book validates clean
+  and the owner's "no tagged file until it is deployed" rule is satisfied.
+
+  A tag labels the ENCLOSING #convert block. It is parsed, not merely carried:
+  the round-trip already worked via rnkUnknown/Raw, so a test that only asserted
+  the file survives a save would have passed before this change existed. }
+procedure TestTagDirective;
+var
+  Book: TRuleBook;
+  SRC : string;
+begin
+  SRC := '#convert A.TFrom -> B.TTo'#13#10 +
+         '#tag BDEtoFireDAC'#13#10 +
+         '#tag Modernisation2026'#13#10 +
+         '#link P <- Q'#13#10;
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString(SRC);
+    Check('parse.kind.tag', Book.Nodes[1].Kind = rnkTag,
+      'a #tag line must parse as rnkTag, not rnkUnknown');
+    Check('parse.tag.name', Book.Nodes[1].TagName = 'BDEtoFireDAC',
+      Book.Nodes[1].TagName);
+    { One tag per line, so a rule may carry several -- the reason the DSL does
+      not take a comma list is that an editor can then append one tag without
+      rewriting an existing line, and a diff shows one added line. }
+    Check('parse.tag.second', (Book.Nodes[2].Kind = rnkTag)
+      and (Book.Nodes[2].TagName = 'Modernisation2026'), Book.Nodes[2].TagName);
+    Check('parse.tag.emit', Book.Nodes[1].Emit = '#tag BDEtoFireDAC',
+      Book.Nodes[1].Emit);
+    { The load-bearing guarantee: parsing a tag must not disturb the book. }
+    Check('parse.tag.roundtrip', Book.SaveToString = SRC,
+      'a tagged book must round-trip byte for byte');
+    { NEGATIVE CONTROLS: neither a bare '#tag' nor a look-alike may become one. }
+    Check('parse.tag.not.other', Book.Nodes[3].Kind = rnkLink,
+      'the #link after the tags is still a #link');
+  finally
+    Book.Free;
+  end;
+
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString('#convert A.T -> B.T'#13#10 + '#tagged X'#13#10);
+    Check('parse.tag.prefix.not.matched', Book.Nodes[1].Kind <> rnkTag,
+      '#tagged is not #tag -- a prefix match would swallow it');
+  finally
+    Book.Free;
+  end;
+
+  Book := TRuleBook.Create;
+  try
+    Book.LoadFromString('#convert A.T -> B.T'#13#10 + '#tag'#13#10);
+    Check('parse.tag.bare.name.empty', Book.Nodes[1].TagName = '',
+      'a nameless #tag carries no name; the ENGINE reports it, we do not invent one');
+  finally
+    Book.Free;
+  end;
+end;
+
+{ Task 5c: the catalog carries each rule's tags, and the on-disk index is v2.
+
+  Tags are read FROM the .rules books on every scan -- the index CACHES them, it
+  does not own them. A v1 index is refused whole rather than read as "these rules
+  have no tags", which would silently under-report and make a tagged rule
+  unfindable by the selection that exists to find it. }
+procedure TestCatalogTags;
+const
+  SRC =
+    '#convert A.TAlpha -> B.TBeta'#13#10 +
+    '#tag BDEtoFireDAC'#13#10 +
+    '#tag Modernisation2026'#13#10 +
+    '#link P <- Q'#13#10 +
+    '#convert C.TGamma -> D.TDelta'#13#10 +
+    '#link R <- S'#13#10;
+var
+  Cat, Sel: TRuleCatalog;
+  Txt     : string;
+begin
+  Cat := CatalogFromText(SRC, 'x.rules');
+  Check('catalog.tags.count', Length(Cat) = 2, IntToStr(Length(Cat)));
+  Check('catalog.tags.first', (Length(Cat[0].Tags) = 2)
+    and SameText(Cat[0].Tags[0], 'BDEtoFireDAC')
+    and SameText(Cat[0].Tags[1], 'Modernisation2026'),
+    'the first rule carries both of its tags');
+  { LEAK GUARD: the scan loop reuses one Entry record, so tags from the previous
+    rule must not bleed into the next one. This is the defect a naive field-add
+    introduces, and it would look like "the second rule is tagged too". }
+  Check('catalog.tags.no.leak', Length(Cat[1].Tags) = 0,
+    'an untagged rule must have NO tags: ' + IntToStr(Length(Cat[1].Tags)));
+
+  { The block-level and working-set wrappers must agree with the catalog, or the
+    UI would select a different set from the one the catalog reports. }
+  Check('blocks.withtag.hit',
+    IdxEq(BlocksWithTag(SplitRulesBlocks(SRC), 'BDEtoFireDAC'), [0]),
+    IdxStr(BlocksWithTag(SplitRulesBlocks(SRC), 'BDEtoFireDAC')));
+  Check('blocks.withtag.miss',
+    Length(BlocksWithTag(SplitRulesBlocks(SRC), 'Nope')) = 0,
+    'an unknown tag matches no block');
+  Check('blocks.withtag.empty',
+    Length(BlocksWithTag(SplitRulesBlocks(SRC), '')) = 0,
+    'an empty tag matches NOTHING, never everything');
+
+  Sel := SelectByTag(Cat, 'BDEtoFireDAC');
+  Check('catalog.tags.select', (Length(Sel) = 1)
+    and SameText(Sel[0].FromType, 'A.TAlpha'), IntToStr(Length(Sel)));
+  Check('catalog.tags.select.ci', Length(SelectByTag(Cat, 'bdetofiredac')) = 1,
+    'tag matching is case-insensitive, as Pascal is');
+  { NEGATIVE CONTROL: a selector that returns everything passes .select. }
+  Check('catalog.tags.select.miss', Length(SelectByTag(Cat, 'Nope')) = 0,
+    IntToStr(Length(SelectByTag(Cat, 'Nope'))));
+  Check('catalog.tags.select.empty', Length(SelectByTag(Cat, '')) = 0,
+    'an empty tag selects nothing rather than everything');
+
+  { The index round-trips tags, and announces itself as v2. }
+  Txt := CatalogToIndexText(Cat);
+  Check('catalog.index.v2.header', Pos('catalog v2', Txt) > 0,
+    Copy(Txt, 1, 40));
+  Check('catalog.index.v2.roundtrip',
+    (Length(CatalogFromIndexText(Txt)) = 2)
+    and (Length(CatalogFromIndexText(Txt)[0].Tags) = 2)
+    and (Length(CatalogFromIndexText(Txt)[1].Tags) = 0),
+    'tags must survive a write/read of the index');
+
+  { A v1 index is REFUSED WHOLE, not read as untagged. Reading it would report
+    every rule as tagless and make by-tag selection silently find nothing. }
+  Check('catalog.index.v1.refused',
+    Length(CatalogFromIndexText('# drag-lint convrules catalog v1'#13#10
+      + 'A.TAlpha'#9'B.TBeta'#9'x.rules'#9'1'#13#10)) = 0,
+    'a v1 index must be refused, not partially understood');
+end;
+
 { Criterion 5: an incoming #link whose target is already linked FROM THE SAME
   source is a duplicate and is skipped. }
 procedure TestMergeSkipsDuplicate;
@@ -6040,6 +6173,8 @@ begin
     TestApplyIntegrityCorpus;
     TestWorkingSetSelection;
     TestWorkingSetSelectionCorpus;
+    TestTagDirective;
+    TestCatalogTags;
     TestBlockSplitCastLibRoundTrip;
     TestBlockLabel;
     TestBlockOpsSplit;

@@ -19,6 +19,16 @@ uses
   , System.Generics.Collections
   ;
 
+const
+  /// <summary>The '#tag' directive, spelled ONCE.</summary>
+  /// <remarks>The engine tolerates and skips it (their c856075, deployed
+  /// 2026-09-09 10:54:29); selection on tags is entirely an editor and catalog
+  /// concern. Spelled once so that if the engine ever renames the directive, the
+  /// parse arm, the re-emitter and the catalog all move together in one edit --
+  /// three call sites drifting apart is exactly how a corpus ends up carrying a
+  /// directive nothing reads.</remarks>
+  DIRECTIVE_TAG = '#tag';
+
 type
   /// <summary>Kind of one parsed DSL line.</summary>
   TRuleNodeKind = (
@@ -37,6 +47,7 @@ type
     rnkPcre,       // raw <pcre> -> <pcre> escape-hatch line
     rnkMapping,    // #mapping Name from Type to Classes  |  #mapping Name #when/#else -> sets
     rnkApply,      // #apply Name  (pull a #mapping into this #convert block)
+    rnkTag,        // #tag Name    (label the enclosing #convert, for job selection)
     rnkUnknown     // anything else (kept verbatim, never dropped)
   );
 
@@ -119,6 +130,14 @@ type
     // rnkApply
     /// <summary>The name of the #mapping this #apply line pulls into its block.</summary>
     ApplyName  : string;
+
+    // rnkTag
+    /// <summary>The label this #tag line puts on its enclosing #convert block.</summary>
+    /// <remarks>One tag per LINE, so a rule may carry several: an editor can then
+    /// append a tag without rewriting an existing line, and a diff shows one added
+    /// line. '' for a bare '#tag' -- the ENGINE reports that as an error and this
+    /// model does not invent a name for it.</remarks>
+    TagName    : string;
 
     function Emit: string;
   end;
@@ -405,6 +424,8 @@ begin
                          [MapName, WhenFrom, WhenValue, EmitSetList(Sets)]);
     rnkApply:
       Result := Format('#apply %s', [ApplyName]);
+    rnkTag:
+      Result := DIRECTIVE_TAG + ' ' + TagName;
   else
     // rnkMigrate, rnkPcre, rnkComment, rnkBlank, rnkUnknown: edited via Raw.
     Result := Raw;
@@ -567,6 +588,13 @@ begin
     begin
       N.Kind := rnkApply;
       N.ApplyName := Body;
+      Exit(N);
+    end;
+
+    if Dir = DIRECTIVE_TAG then
+    begin
+      N.Kind := rnkTag;
+      N.TagName := Body;
       Exit(N);
     end;
 
