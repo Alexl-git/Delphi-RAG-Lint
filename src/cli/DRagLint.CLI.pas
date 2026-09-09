@@ -15026,6 +15026,38 @@ begin
     end;
 end;
 
+{ The PROJECT FILE the manifest says owns ADbPath, or '' when no section claims
+  it -- the db -> section -> project reverse lookup.
+
+  LintAnchorDir wants only this file's FOLDER, but unit-not-in-dpr needs the
+  file itself, so the walk lives here once instead of being written twice and
+  drifting apart.
+
+  A folder-scan section (the Library) yields '' from SectionProjectFile and is
+  skipped, so a library DB can never be mistaken for a project. }
+function ManifestProjectFileForDb(const ADbPath: string): string;
+var
+  Manifest: TIndexManifest;
+  I       : Integer       ;
+  ProjFile: string        ;
+begin
+  Result:= '';
+  if ADbPath = '' then Exit;
+  try
+    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    for I:= 0 to High(Manifest.Sections) do
+    begin
+      ProjFile:= SectionProjectFile(Manifest, Manifest.Sections[I]);
+      if ProjFile = '' then Continue;
+      if SameText(ExpandSectionDb(Manifest, Manifest.Sections[I]), ExpandFileName(ADbPath)) then
+        Exit(ProjFile);
+    end;
+  except
+    { No manifest, or an unreadable one, is not a lint failure. }
+    on E: Exception do Result:= '';
+  end;
+end; // function ManifestProjectFileForDb
+
 { The project folder a lint run is anchored to: --project when given, else the
   index's own _D-RAG parent, else the manifest section that claims this DB.
   The manifest step is not dead weight after the migration -- a section may pin
@@ -15036,9 +15068,7 @@ end;
   exactly as it did before this feature existed. }
 function LintAnchorDir(const AArgs: TArgs; const ADbPath: string): string;
 var
-  Manifest: TIndexManifest;
-  I       : Integer       ;
-  ProjFile: string        ;
+  ProjFile: string;
 begin
   if AArgs.ProjectPath <> '' then
     Exit(ExcludeTrailingPathDelimiter(ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath))));
@@ -15046,19 +15076,9 @@ begin
   Result:= AnchorDirForDb(ADbPath);
   if Result <> '' then Exit;
 
-  try
-    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-    for I:= 0 to High(Manifest.Sections) do
-    begin
-      ProjFile:= SectionProjectFile(Manifest, Manifest.Sections[I]);
-      if ProjFile = '' then Continue;
-      if SameText(ExpandSectionDb(Manifest, Manifest.Sections[I]), ExpandFileName(ADbPath)) then
-        Exit(ExcludeTrailingPathDelimiter(ExtractFilePath(ProjFile)));
-    end;
-  except
-    { No manifest, or an unreadable one, is not a lint failure. }
-    on E: Exception do Result:= '';
-  end;
+  ProjFile:= ManifestProjectFileForDb(ADbPath);
+  if ProjFile <> '' then
+    Result:= ExcludeTrailingPathDelimiter(ExtractFilePath(ProjFile));
 end;
 
 { Collapse skipped files into the fewest honest lines. Grouping by directory
@@ -16026,7 +16046,26 @@ begin
   if LayersCfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
   Prof.Phase('unit-not-in-dpr');
-  if AArgs.ProjectPath <> '' then Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, FilePaths);
+  if AArgs.ProjectPath <> '' then
+    Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, FilePaths)
+  else
+  begin
+    { WITHOUT --project this rule was skipped ENTIRELY, so the canonical
+      `lint-all --db <db>` never evaluated unit-not-in-dpr at all and a unit
+      missing from the .dpr went unreported on every default run.
+
+      The project file is not a new input that has to be supplied: the manifest
+      section owning THIS VERY DB already names it, and that is the same lookup
+      LintAnchorDir performs for ownRoots.
+
+      The inference is deliberately NARROW -- it feeds this one check and
+      nothing else. It must NOT reach ScopeSet, ResolveIndexProfile or the
+      report BaseDir, because "no --project" still means UNSCOPED and that
+      default has to stay byte-identical. }
+    var InferredProj: string:= ManifestProjectFileForDb(ProjectDb);
+    if (InferredProj <> '') and TFile.Exists(InferredProj) then
+      Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(InferredProj, FilePaths);
+  end;
   { Used-unit resolvability (used-unit-not-resolvable) }
   Prof.Phase('used-unit-resolvable');
   Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
@@ -24224,6 +24263,28 @@ end; // function
 //         index WITHOUT editing the .dpr (independent of --apply). The recompile
 //         is best-effort: a non-buildable target does not fail reconcile. The
 //         report gains a `coherence:` line (text) / `"coherence"` object (JSON).
+
+{ WHY nothing was written -- one reason per outcome, instead of one hardcoded
+  sentence covering three.
+
+  The message used to assert flatly that "every MISSING unit was already
+  listed". That became FALSE the moment Apply started refusing non-unit closure
+  entries: a project whose only MISSING entries are $I includes would be told
+  its units were already listed, when in truth nothing was ever eligible to be
+  written. A confidently WRONG reason is worse than a vague one -- it sends the
+  reader somewhere there is nothing to find. }
+function ReconcileNothingWrittenReason(const ARes: TReconcileApplyResult): string;
+var
+  Suffix: string;
+begin
+  if Length(ARes.Refused) = 0 then
+    Exit('Applied: nothing to write -- every MISSING unit was already listed.');
+  if Length(ARes.Refused) = 1 then Suffix:= 'y' else Suffix:= 'ies';
+  Result:= Format('Applied: nothing to write -- %d closure entr%s refused as non-unit ' +
+                  '(listed below); no MISSING unit remained to add.',
+                  [Length(ARes.Refused), Suffix]);
+end; // function ReconcileNothingWrittenReason
+
 function DoReconcileProject(const AArgs: TArgs): Integer;
 var
   ProjectFile : string                                    ;
@@ -24529,6 +24590,18 @@ begin
         end;
         JRoot.AddPair('missing', JMissing);
 
+        { Closure entries reported as MISSING but refused by the write (today,
+          $I includes). Present only when --apply actually refused something,
+          so the document's shape does not change for existing callers -- the
+          same rule `unmatched` below follows. A caller diffing the `missing`
+          count against `edited` needs this to explain the difference. }
+        if Length(AppRes.Refused) > 0 then
+        begin
+          var JRef: TJSONArray:= TJSONArray.Create;
+          for var RPath in AppRes.Refused do JRef.Add(RPath);
+          JRoot.AddPair('refused', JRef);
+        end;
+
         { --only names that matched nothing. Present only when --only was given,
           so the document's shape does not change for existing callers. This is
           the machine-readable half of the stderr notice: a caller reading only
@@ -24624,7 +24697,12 @@ begin
         `applied`, `backups` and `edited`. }
       if AArgs.Apply then
         if AppRes.Applied then Writeln(ErrOutput, Format('Applied: Missing units added to %d project file(s) (%d .bak backup(s) written).', [Length(AppRes.Edited), Length(AppRes.Backups)]))
-        else                   Writeln(ErrOutput, 'Applied: nothing to write -- every MISSING unit was already listed.');
+        else                   Writeln(ErrOutput, ReconcileNothingWrittenReason(AppRes));
+      { Named, not silent. Without this the reported MISSING count and the
+        written count differ with no stated reason. }
+      if AArgs.Apply and (Length(AppRes.Refused) > 0) then
+        for var RPath in AppRes.Refused do
+          Writeln(ErrOutput, 'Refused: ' + RPath + ' -- an {$I} include is not a unit and cannot be a project member.');
     end // if
     else
     begin
@@ -24632,8 +24710,16 @@ begin
       Writeln(Format('MISSING (%d) - used but not listed (will be added with --apply):', [Length(RR.Missing)]));
       for Item in RR.Missing do
       begin
-        if Item.UsedBy <> '' then Writeln(Format('  %s -> %s   (used by %s)', [Item.UnitName, Item.RelPath, Item.UsedBy]))
-        else Writeln(Format('  %s -> %s', [Item.UnitName, Item.RelPath]));
+        { THIS LIST IS THE REVIEW SURFACE -- it is what a human reads to choose
+          --only names -- so an entry --apply will refuse must say so HERE, not
+          only after the write. The header's "will be added" is not true of a
+          $I include, and an unmarked include is exactly the name someone
+          would hand to --only and then wonder why nothing happened. }
+        var NotAUnit: string:= '';
+        if not SameText(TPath.GetExtension(Item.FilePath), '.pas') then
+          NotAUnit:= '   [not a unit -- refused by --apply]';
+        if Item.UsedBy <> '' then Writeln(Format('  %s -> %s   (used by %s)%s', [Item.UnitName, Item.RelPath, Item.UsedBy, NotAUnit]))
+        else Writeln(Format('  %s -> %s%s', [Item.UnitName, Item.RelPath, NotAUnit]));
       end;
 
       Writeln(Format('EXTRA (%d) - listed but never reached via uses (review):', [Length(RR.Extra)]));
@@ -24669,7 +24755,10 @@ begin
       begin
         if AppRes.Applied then
           for var EPath in AppRes.Edited do Writeln('Applied: updated ' + EPath)
-        else Writeln('Applied: nothing to write -- every MISSING unit was already listed.');
+        else Writeln(ReconcileNothingWrittenReason(AppRes));
+        { Named, not silent -- see the JSON arm. }
+        for var RPath in AppRes.Refused do
+          Writeln('Refused: ' + RPath + ' -- an {$I} include is not a unit and cannot be a project member.');
         { Backups are listed WHETHER OR NOT anything was edited. They are taken
           before the edit is attempted, so a no-op run still leaves .bak files
           beside the project; not naming them left the user with unexplained

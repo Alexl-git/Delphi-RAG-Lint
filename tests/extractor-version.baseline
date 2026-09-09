@@ -542,4 +542,18 @@
 #   again was preferred over editing the hash under the old version, which would
 #   have meant asserting "cannot affect extraction" about a change that plainly
 #   does.
-1.13.0-alpha|394c89b95ead26a9621f69d9e035d259b757b80c7d86d73cc585a2ef643a3d88
+# 2026-09-09: hash updated WITHOUT a version bump, per the rule above.
+#   src\index\DRagLint.Index.Reconcile.pas changed: TProjectReconciler.Apply now
+#   REFUSES non-.pas closure entries (the {$I} includes) instead of splicing them
+#   into a uses clause as `QDefs in 'QDefs.inc'`, which does not compile; plus a
+#   new TReconcileApplyResult.Refused field and comments.
+#   NOT EXTRACTION, and that was checked rather than asserted: TProjectReconciler
+#   is instantiated ONLY by DRagLint.CLI.DoReconcileProject, never on the
+#   indexing path, and the change touches only the record and the Apply body. It
+#   cannot alter which symbols/refs/uses/call edges any index receives.
+#   Reconcile lives under src\index and so falls inside this guard's surface,
+#   but it is a project-MEMBERSHIP verb, not an extractor -- the same reasoning
+#   as the 2026-08-24 ManifestWrite entry above.
+#   A bump here would force a full re-parse of all 35 indexes; the previous one
+#   had just finished at 01:21 the same night, costing 5h32m.
+1.13.0-alpha|c4b87ef16f585311d507c27d817a570d632f17c63b7b05b9eece170a41f76c67

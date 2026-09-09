@@ -99,6 +99,21 @@ type
     Backups: TArray<string>;
     /// <summary>Project files whose contents actually changed on disk.</summary>
     Edited: TArray<string>;
+    /// <summary>Closure files that were REPORTED as Missing but deliberately
+    /// NOT written into the project, as absolute paths.</summary>
+    /// <remarks>
+    /// Today this is the <c>{$I}</c> include files. The closure carries
+    /// <c>.pas</c> AND <c>.inc</c> (Index.Closure keeps an .inc in Files on
+    /// purpose, it just does not recurse into it for uses), and the Missing
+    /// list is built from that closure with no extension filter -- so an
+    /// include reached Apply as a bare unit name and would have been spliced
+    /// into the uses clause as <c>uses ..., IxDefines;</c>, which does not
+    /// compile. An include is not a unit and can never be a project member.
+    /// <para>They stay in the REPORT (a human may still want to see what the
+    /// closure pulled in) and are refused by the WRITE, named here so the
+    /// refusal is loud rather than a silent drop.</para>
+    /// </remarks>
+    Refused: TArray<string>;
   end;
 
   /// <summary>Compares a Delphi project's stated member list against its actual
@@ -970,13 +985,41 @@ begin
   end;
 
   // -- Rebuild Missing list with RelPath relative to project dir (backslash) -
-  SetLength(ProjectRelMissing, Length(AResult.Missing));
+  { AND REFUSE ANYTHING THAT IS NOT A UNIT. The closure holds .pas AND .inc --
+    Index.Closure keeps an include in Files deliberately, it just does not
+    recurse into it for uses -- and Step 3 builds Missing straight off that
+    closure with no extension filter, taking the bare file base name. So a
+    $I include arrived here looking exactly like a missing unit and was
+    written into the uses clause. MEASURED on a fixture, not predicted --
+    EditDpr emits a FULL member entry, `in` clause and all:
+
+        uses
+          App.Core in 'App.Core.pas',
+          QDefs in 'QDefs.inc';       <-- does not compile
+
+    The INBOX note had predicted a bare `uses ..., QDefs;`; that was wrong,
+    and anyone grepping a real project for the predicted form would have
+    concluded the defect was not present.
+
+    Filtered HERE, at the one point that feeds BOTH editors, so the .dpr and
+    the .dproj cannot disagree about what a member is.
+
+    Refused, not dropped: the paths are returned so the caller can say WHY
+    the reported count and the written count differ. A silent difference
+    between "12 missing" and "10 added" is the kind of gap that gets read as
+    a bug in the writer. }
+  ProjectRelMissing:= nil;
   for I:= 0 to High(AResult.Missing) do
   begin
     Item:= AResult.Missing[I];
+    if not SameText(TPath.GetExtension(Item.FilePath), '.pas') then
+    begin
+      Result.Refused:= Result.Refused + [Item.FilePath];
+      Continue;
+    end;
     // MakeRelPath already produces backslash-relative from project dir.
     Item.RelPath:= MakeRelPath(Item.FilePath, ProjectDir);
-    ProjectRelMissing[I]:= Item;
+    ProjectRelMissing:= ProjectRelMissing + [Item];
   end;
 
   // -- Edit .dpr uses clause -------------------------------------------------
