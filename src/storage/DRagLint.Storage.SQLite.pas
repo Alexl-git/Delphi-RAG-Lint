@@ -7590,6 +7590,24 @@ end;
 /// <returns>The chosen candidate, or a default(TSymbol) (Id = 0) when no
 ///  rule narrows the field to one.</returns>
 /// <remarks>
+///  RULE 0 RUNS FIRST, BEFORE RULE 1: several CONTENT-IDENTICAL copies of one
+///  declaration collapse to a single candidate, and a set that collapses to
+///  exactly one is returned outright. Two candidates are copies only when they
+///  share a qualified name AND the same trimmed case-insensitive heritage AND
+///  the same (StartLine, EndLine) -- CONTENT, never identity. A group whose
+///  members differ in any of those is left wholly intact and still declines, so
+///  this can never degrade into "take the first candidate"; a forward stub can
+///  never merge into its own body, because their spans differ; and Vcl/FMX
+///  homonyms have different qualified names, so they never share a group.
+///  The representative kept is the copy in the scope's OWN file when the group
+///  has one -- so rule 1 keeps its exact meaning -- else the lowest Id.
+///  This exists because a library index can hold one source tree TWICE: a
+///  registry Search Path naming the PARENT of per-platform folders, walked
+///  recursively, put 2,462 foreign-platform DevExpress files into the Win32
+///  library and left 16,748 ancestor edges unresolved. See
+///  docs\PLAN-proptree-tcomponent-members.md Option B, and
+///  tests\autotest\run_proptree_duplicate_copy_guard.ps1 (CASE N is the one
+///  that pins the "still declines when they really differ" half).
 ///  Declining (Id = 0) is a CORRECT outcome, not a failure -- "when unsure,
 ///  don't claim" -- callers must never guess further on a decline. Rule 3's
 ///  segment compare is exact ('VclKit' has no dot, so UnitFrameworkPrefix
@@ -7664,6 +7682,7 @@ function PickAncestorCandidateByScope(const ACandidates: TArray<TSymbol>;
   const AScopeFrameworkAnchor: string): TSymbol;
 var
   S          : TSymbol;
+  Cands      : TArray<TSymbol>;
   ScopePrefix: string ;
   UsesHit    : TSymbol;
   UsesHits   : Integer;
@@ -7749,11 +7768,128 @@ var
     Result  := IsGuiFrameworkPrefix(CandSeg) and not SameText(ScopeSeg, CandSeg);
   end;
 
+  // RULE 0 (2026-09-09): several CONTENT-IDENTICAL copies of ONE declaration
+  // collapse to a single candidate BEFORE any rule runs.
+  //
+  // WHY. A library index can hold the same source tree twice. Measured case:
+  // the Win32 registry Search Path lists '$(DXVCL)\Library\RS37' -- the PARENT
+  // of DevExpress's per-platform folders -- and a library root is walked
+  // RECURSIVELY (the compiler does not walk it that way), so 'RS37\WinArm64EC'
+  // and 'RS37\Win64x' land in the Win32 library beside 'ExpressLibrary\Sources'.
+  // 21,265 class qnames then had a twin, 16,748 ancestor edges went unresolved,
+  // and TcxGrid's chain broke at TcxCustomGrid -> TcxControl -- four hops below
+  // TComponent, which is why proptree showed 103 top-level members on Win32
+  // against 471 on Win64, with Name and Tag missing.
+  //
+  // The rules below could not have done better. Both twins declare the same
+  // unit, so pass 2a scores UsesHits = 2 and falls through BY DESIGN ("never
+  // settle by order"); undotted DevExpress unit names leave rule 3 no segment;
+  // rule 4 declines. Declining is CORRECT for two candidates that differ. It is
+  // simply the wrong question for two candidates that are one declaration
+  // reached by two paths, and that is what this rule separates out.
+  //
+  // THE DISCRIMINATOR IS CONTENT, NOT IDENTITY -- deliberately. A group collapses
+  // only when every member shares the same trimmed, case-insensitive heritage
+  // AND the same (StartLine, EndLine). Consequences worth stating because each
+  // one is load-bearing:
+  //   * a forward stub ('TComponent = class;') can never merge into its own body:
+  //     different span. (ResolveAncestry step 1b already drops stubs, so this is
+  //     the second of two independent guarantees, not the only one.)
+  //   * Vcl/FMX homonyms have different QUALIFIED names, so they are never even
+  //     in the same group.
+  //   * a group whose members genuinely differ is left ENTIRELY intact and still
+  //     declines. This is what stops the fix degrading into "take the first
+  //     candidate", and it is pinned by CASE N of
+  //     tests\autotest\run_proptree_duplicate_copy_guard.ps1.
+  //
+  // The representative is the copy in the SCOPE'S OWN FILE when the group has
+  // one, so rule 1 keeps its exact meaning -- collapsing must never move a
+  // same-file candidate out from under it -- and otherwise the lowest Id, so the
+  // choice is stable across runs rather than dependent on row order.
+  function CollapseIdenticalCopies(const ASrc: TArray<TSymbol>): TArray<TSymbol>;
+  var
+    Groups: TObjectDictionary<string, TList<Integer>>;
+    Keep  : TList<Integer>;
+    Grp   : TList<Integer>;
+    Key   : string ;
+    I, J  : Integer;
+    Same  : Boolean;
+    Rep   : Integer;
+  begin
+    Result:= ASrc;
+    if Length(ASrc) < 2 then Exit;
+    Groups:= TObjectDictionary<string, TList<Integer>>.Create([doOwnsValues]);
+    Keep  := TList<Integer>.Create;
+    try
+      for I:= 0 to High(ASrc) do
+      begin
+        Key:= LowerCase(ASrc[I].QualifiedName);
+        if not Groups.TryGetValue(Key, Grp) then
+        begin
+          Grp:= TList<Integer>.Create;
+          Groups.Add(Key, Grp);
+        end;
+        Grp.Add(I);
+      end;
+      for Grp in Groups.Values do
+      begin
+        if Grp.Count = 1 then
+        begin
+          Keep.Add(Grp[0]);
+          Continue;
+        end;
+        Same:= True;
+        for J:= 1 to Grp.Count - 1 do
+          if not (SameText(Trim(ASrc[Grp[J]].Heritage), Trim(ASrc[Grp[0]].Heritage))
+                  and (ASrc[Grp[J]].StartLine = ASrc[Grp[0]].StartLine)
+                  and (ASrc[Grp[J]].EndLine   = ASrc[Grp[0]].EndLine)) then
+          begin
+            Same:= False;
+            Break;
+          end;
+        if not Same then
+        begin
+          // Genuinely different declarations that happen to share a name: keep
+          // every one, so the rules below still see the real ambiguity.
+          for J:= 0 to Grp.Count - 1 do Keep.Add(Grp[J]);
+          Continue;
+        end;
+        Rep:= Grp[0];
+        for J:= 0 to Grp.Count - 1 do
+        begin
+          if (AScopeFileId > 0) and (ASrc[Grp[J]].FileId = AScopeFileId) then
+          begin
+            Rep:= Grp[J];
+            Break;
+          end;
+          if ASrc[Grp[J]].Id < ASrc[Rep].Id then Rep:= Grp[J];
+        end;
+        Keep.Add(Rep);
+      end;
+      // Restore the caller's original ordering. Nothing below settles a tie by
+      // order, but a stable output keeps logs and goldens comparable run to run.
+      Keep.Sort;
+      SetLength(Result, Keep.Count);
+      for I:= 0 to Keep.Count - 1 do Result[I]:= ASrc[Keep[I]];
+    finally
+      Keep.Free;
+      Groups.Free;
+    end;
+  end;
+
 begin
   Result:= Default(TSymbol);
+  Cands := CollapseIdenticalCopies(ACandidates);
+  // A set that collapsed to exactly ONE names a single declaration reached by
+  // several paths -- precisely the situation both callers short-circuit BEFORE
+  // entering this function when the index happens to hold only one copy. Answer
+  // it the same way here rather than letting the rules re-derive it: rule 1
+  // would need a file match, and rules 2/3 would need a uses or namespace hit
+  // that a single unambiguous candidate should not have to earn.
+  if Length(Cands) = 1 then Exit(Cands[0]);
   // Rule 1: same unit as the referencing class.
   if AScopeFileId > 0 then
-    for S in ACandidates do
+    for S in Cands do
       if S.FileId = AScopeFileId then Exit(S);
   // Rule 2: candidate's declaring unit is named in the referencing unit's
   // uses -- only when it narrows the field to exactly one. Two-or-more
@@ -7768,7 +7904,7 @@ begin
     // unit by its FULL name.
     UsesHits:= 0;
     UsesHit := Default(TSymbol);
-    for S in ACandidates do
+    for S in Cands do
       if AScopeUsesNames.ContainsKey(LowerCase(DeclaringUnitOfQName(S.QualifiedName))) then
       begin
         Inc(UsesHits);
@@ -7795,7 +7931,7 @@ begin
     if UsesHits = 0 then
     begin
       UsesHit:= Default(TSymbol);
-      for S in ACandidates do
+      for S in Cands do
       begin
         CandUnit:= DeclaringUnitOfQName(S.QualifiedName);
         if CandUnit = '' then Continue;
@@ -7823,7 +7959,7 @@ begin
   begin
     PrefixHits:= 0;
     PrefixHit := Default(TSymbol);
-    for S in ACandidates do
+    for S in Cands do
       if SameText(UnitFrameworkPrefix(DeclaringUnitOfQName(S.QualifiedName)), ScopePrefix) then
       begin
         Inc(PrefixHits);

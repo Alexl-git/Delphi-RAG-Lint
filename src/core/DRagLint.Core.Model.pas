@@ -77,7 +77,12 @@ const
   /// <para>The surface is scoped BY FUNCTION, in tests\resolver-surface.txt, and
   /// guarded by tests\autotest\run_resolver_version_guard.ps1.</para>
   /// </remarks>
-  DRAGLINT_RESOLVER_VERSION = '1.1.0-alpha';
+  /// <para>1.1.0-alpha -&gt; 1.2.0-alpha (2026-09-09): PickAncestorCandidateByScope
+  /// gained rule 0 -- content-identical copies of one declaration collapse to a
+  /// single candidate, so an index holding one source tree twice resolves the
+  /// ancestor edges it used to decline. Changes DERIVED edges only, never a
+  /// parse: remedy is `index --all --resolve-only`, NOT a re-parse.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.2.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
