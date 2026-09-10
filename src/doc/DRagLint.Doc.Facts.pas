@@ -293,6 +293,17 @@ type
     /// are deliberately not (an ordinary call's var argument, e.g. SetLength,
     /// and a dot LHS are both absent by design).</remarks>
     MutatesParams    : string           ;
+    /// <summary>v22: the routine's declared directives, exactly as
+    /// symbols.directives stores them -- canonical lowercase, declaration order,
+    /// space-joined ('virtual overload stdcall'). '' when the routine declares
+    /// none.</summary>
+    /// <remarks>A straight passthrough of the indexed column, NOT a source
+    /// probe: that is the whole point of the v22 work. The regex probes that
+    /// DetectDeprecated and DetectMethodDirectives run read the declaration
+    /// LINE, so they cannot see a directive on a wrapped declaration. Rendered
+    /// by FormatPhase2FactLines with '; ' separators, which is the display form
+    /// rather than the stored one.</remarks>
+    Directives       : string           ;
     /// <summary>v(ADP3 T12): the UI controls/globals the routine touches,
     /// display-ready as 'FPanel, Application'. '' when none was DETECTED.</summary>
     /// <remarks>POSITIVE FINDINGS ONLY. An empty value means "no UI touch was
@@ -2280,6 +2291,16 @@ var
 begin
   Result:= False;
   AMsg  := '';
+  { v22: the INDEXED column decides whether the routine is deprecated; the line
+    probe below now runs only to mine the deprecation MESSAGE, which is a
+    payload the column deliberately does not store.
+    This closes a real false negative rather than tidying: the regex reads
+    ASym.StartLine ONLY, so `deprecated` on a wrapped declaration -- the second
+    line of a long parameter list -- was invisible, and the routine documented
+    itself as current. The column is built from the AST and has no such bound.
+    The probe is still attempted afterwards even when the column already said
+    True, because failing to find a message is not a reason to un-deprecate. }
+  Result:= Pos('deprecated', ASym.Directives) > 0;
   if ASym.StartLine <= 0 then Exit;
   Line:= ReadDeclLine(AStore.GetFilePath(ASym.FileId), ASym.StartLine);
   if Line = '' then Exit;
@@ -2287,7 +2308,7 @@ begin
   // message string, up to the terminating ';'. The message capture tolerates
   // a Pascal-escaped '' (embedded quote) via the non-greedy .*? + literal ''.
   M:= TRegEx.Match(Line, '\bdeprecated\b\s*(?:''(.*?)'')?\s*;', [roIgnoreCase]);
-  if not M.Success then Exit;
+  if not M.Success then Exit; { v22: leaves Result as the column decided it }
   Result:= True;
   if M.Groups.Count > 1 then
     if M.Groups[1].Success then
@@ -3501,6 +3522,10 @@ begin
   // v(ADP3 T11): var/out parameter writes -- same raw-passthrough contract
   // again (capped and formatted at analysis time by AnalyzeMutatesParams).
   Result.MutatesParams:= SFacts.MutatesParams;
+  { v22: straight from the indexed symbol, no probe. On a pre-v22 index this is
+    '' for every routine, so the Directives line simply does not render until
+    that index is re-parsed -- the same degradation every other v-column has. }
+  Result.Directives:= ASym.Directives;
   // v(ADP3 T12): UI affinity -- same raw-passthrough contract.
   Result.UiAffinity:= SFacts.UiAffinity;
   // v(ADP3 T13): external surfaces + transaction verbs -- same contract.

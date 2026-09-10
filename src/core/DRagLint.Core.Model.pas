@@ -53,7 +53,20 @@ const
   /// escape hatch. Guarded by tests\autotest\run_extractor_version_guard.ps1,
   /// which fails when extractor sources change without this constant moving.
   /// </remarks>
-  DRAGLINT_EXTRACTOR_VERSION = '1.14.0-alpha';
+  { 1.14.0-alpha -> 1.15.0-alpha (2026-09-09, PLAN-routine-directives-in-index.md).
+    A GENUINE extraction change -- the textbook case this constant exists for,
+    not a judgement call: every routine symbol now carries a new emitted fact
+    (directives), every class/record member carries another (vis_explicit), and
+    the DFM extractor emits a dfm-prop row for every value kind instead of only
+    string-valued ones. Schema moves 21 -> 22 in the same change, which would
+    force the re-parse on its own through IndexerFingerprint.
+    WHAT IS STALE UNTIL THE RE-PARSE, stated plainly: every pre-v22 row answers
+    NULL for both columns, so hover and the managed doc block show no
+    Directives line, `query --json` reports directives '' for routines that do
+    have them, and DFM text search still finds only quoted values. Nothing reads
+    WRONG -- it reads SHORT, which is the failure mode this stamp exists to make
+    visible rather than silent. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.15.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -202,6 +215,33 @@ type
     // name (e.g. 'TColor'), not an ancestor list (helpers have no ancestors).
     // The resolve pass (ResolveHelpers) reads this to populate type_helpers.
     IsHelper     : Boolean     ;
+    // v22 (PLAN-routine-directives-in-index.md): EVERY routine directive --
+    // virtual dynamic override abstract overload reintroduce final static
+    // assembler export inline deprecated platform experimental message stdcall
+    // cdecl pascal register safecall winapi varargs -- plus `external`, in
+    // canonical lowercase, DECLARATION order, space-joined. '' when the routine
+    // carries none; '' for every non-routine symbol.
+    //
+    // A NEW COLUMN RATHER THAN MORE WORDS IN Modifiers, and the reason is not
+    // taste: four consumers equality-match Trim(Modifiers) as THE visibility
+    // word or use Modifiers = '' as "not a method" -- LSP.Server,
+    // LSP.Completion, Convert.PropTree and CLI's IsValidTarget, which tests
+    // `Vis in ('published','public')`. Appending tokens there would silently
+    // drop members from proptree rather than fail loudly.
+    //
+    // The READ side maps NULL to '', so '' alone cannot distinguish "no
+    // directives" from "row written by a pre-v22 index" -- a consumer that
+    // needs that difference must read the DB's schema version.
+    Directives   : string     ;
+    // v22: True when a visibility keyword was actually WRITTEN for the member's
+    // section; False for the unlabelled leading section of a class or record.
+    // The distinction matters because under $M+ -- every TPersistent descendant
+    // -- that unlabelled section is PUBLISHED, while Modifiers says 'public'
+    // for both. Meaningless for non-members, where it is True. NULL on a
+    // pre-v22 row reads back as True: the conservative direction, since
+    // claiming "the keyword was written" invents nothing, whereas defaulting to
+    // False would invent published members across every old index.
+    VisExplicit  : Boolean    ;
     StartLine    : Integer    ;
     StartCol     : Integer    ;
     EndLine      : Integer    ;

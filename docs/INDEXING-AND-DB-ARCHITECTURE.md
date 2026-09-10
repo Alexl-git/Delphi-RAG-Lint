@@ -1,6 +1,6 @@
 # drag-lint indexing & database architecture
 
-**Applies to:** drag-lint **1.10.1-alpha** · index **schema_version 21** ·
+**Applies to:** drag-lint **1.10.1-alpha** · index **schema_version 22** ·
 extractor **1.14.0-alpha** · tree-sitter grammars delphi13 **14** / dfm **14**.
 Header re-verified 2026-09-09 against `SCHEMA_VERSION` and
 `DRAGLINT_EXTRACTOR_VERSION` in source, and the version stamps THROUGHOUT this
@@ -54,7 +54,7 @@ The write path is owned exclusively by `drag-lint index`.
         v   tree-sitter parse (delphi13 / dfm grammars)  +  resolve passes
         |
   ┌─────────────────────┐        ┌──────────────────────────────────────┐
-  │  drag-lint index     │  ───►  │  <name>.sqlite  (schema_version 21)  │
+  │  drag-lint index     │  ───►  │  <name>.sqlite  (schema_version 22)  │
   │  (the ONLY writer)   │        │  symbols·refs·call_edges·unit_uses·  │
   └─────────────────────┘        │  type_ancestors·di_bindings·FTS·...  │
                                   └──────────────────────────────────────┘

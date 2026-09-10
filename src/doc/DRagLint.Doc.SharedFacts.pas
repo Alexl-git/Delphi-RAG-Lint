@@ -373,11 +373,16 @@ const
     here makes an inbound slice swallow the fact that follows -- which the
     residual compare then reports as drift. That is the fail-safe direction, but
     it is still wrong, so keep this list in step with Doc.Regions. }
-  ALL_LABELS: array[0..19] of string = (
+  { v22: 'Directives:' joins the list. Registering it is not optional bookkeeping
+    -- this array is how a fact's text is bounded in the FLATTENED stored form,
+    so an unregistered label makes the PRECEDING fact's slice swallow it, and the
+    residual compare then reports drift on a block that is perfectly correct. }
+  ALL_LABELS: array[0..20] of string = (
     'Called from:', 'Used by:', 'Calls:', 'Returns:', 'Used in units:',
     'Complexity:', 'Owns returned:', 'Handles:', 'SQL:', 'Covered by:',
     'Mutates:', 'Touches:', 'Transaction:', 'Registered as:', 'Dataset:',
-    'Reads:', 'Writes:', 'Recursive', 'UI thread only', 'Pure');
+    'Reads:', 'Writes:', 'Recursive', 'UI thread only', 'Pure',
+    'Directives:');
 
   MORE_MARK = '(+';
   UNCERTAIN_SUFFIX = ' ?';

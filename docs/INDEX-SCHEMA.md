@@ -6,7 +6,7 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **21** (`SCHEMA_VERSION` in
+Current schema version at time of writing: **22** (`SCHEMA_VERSION` in
 `src/storage/DRagLint.Storage.Schema.pas`, verified 2026-09-09 against the
 constant AND against a live index rebuilt the same day -- previously this line
 had only ever been checked against the constant). Recent additive changes:
@@ -33,7 +33,14 @@ Schema history, one line per step:
   verbatim, so an unresolved call can still say what it hung off (see 2.3).
 - `20 -> 21`: additive column `refs.external_target` -- the qualified name of a
   call target that lives outside this DB, so a cross-database call stops looking
-  like an unresolved one (see 2.3). **This is the current version.**
+  like an unresolved one (see 2.3).
+- `21 -> 22`: additive columns `symbols.directives` (every routine directive,
+  canonical lowercase, declaration order, space-joined) and
+  `symbols.vis_explicit` (was a visibility keyword actually written for this
+  member's section). Riding the same extractor bump: the DFM extractor now emits
+  a `dfm-prop` row for EVERY value kind, not only string-valued properties, so
+  colours, sets, numbers and booleans became text-searchable. **This is the
+  current version.**
 
 All facts in this document were cross-checked against the DDL in
 `src/storage/DRagLint.Storage.SQLite.pas` and
@@ -185,7 +192,9 @@ markers, and -- since v14 -- typed local variables and parameters.
 | `name` | TEXT | Simple name |
 | `qualified_name` | TEXT | `Unit.TType.Member`-style fully qualified name |
 | `signature` | TEXT | Rendered signature (params + return type) for routines; may be blank for non-callables |
-| `modifiers` | TEXT | Free-form modifier text (e.g. visibility/`virtual`/`override` markers as captured) |
+| `modifiers` | TEXT | The member's VISIBILITY word -- `private` / `strict private` / `protected` / `public` / `published` -- plus a mirrored ` message` for a message handler. NOT directives: it never held `virtual`/`override` markers, despite what this row claimed until v22. Four consumers equality-match it as the visibility word, which is why v22 put directives in their own column rather than here. |
+| `directives` | TEXT | v22. Every routine directive, canonical lowercase, in declaration order, space-joined (`virtual overload stdcall`); `external` included. `'` when the routine declares none, and `'` for non-routine symbols. NULL only on a row written by a pre-v22 index. |
+| `vis_explicit` | INTEGER | v22. 1 when a visibility keyword was written for this member's section, 0 for the unlabelled leading section of a class or record -- which under `$M+` is PUBLISHED while `modifiers` says `public` for both. NULL on a pre-v22 row, read back as 1. |
 | `section` | TEXT | `''` \| `'interface'` \| `'implementation'` (usable-from-other-units test; NOT the same value set as `unit_uses.section`) |
 | `heritage` | TEXT (v11+) | Raw ancestor list text for class/interface symbols, e.g. `'TBar, IBaz'`; NULL for non-class/interface or no ancestors. Resolved into `type_ancestors` |
 | `is_virtual` | INTEGER (v12+) | 1 when the method is virtually dispatched (`virtual`/`dynamic`/`override`), else 0/NULL |

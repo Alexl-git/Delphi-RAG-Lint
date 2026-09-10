@@ -2154,6 +2154,24 @@ begin
        and (AFacts.Touches = '') and (AFacts.SqlWrites = '') and (AFacts.SqlReads = '')
        and ((Lines.Count > 0) or AHasOtherContent) then
       Lines.Add('Pure');
+    { v22 (PLAN-routine-directives-in-index.md): the routine's declared
+      DIRECTIVES, appended AFTER Pure.
+      POSITION. Every other Phase 3 line has a fixed slot and the order is a
+      contract, because this ONE function feeds BOTH the managed doc block and
+      hover -- a line inserted mid-block would rewrite every already-documented
+      block in the corpus. Appending after the last existing emitter is the only
+      placement that leaves existing blocks byte-identical except for the new
+      trailing line, which is exactly what the autodoc golden triage expects to
+      see and nothing else.
+      DISPLAY FORM DIFFERS FROM STORED FORM ON PURPOSE. The column is
+      space-joined and canonical ('virtual overload stdcall') because it is a
+      machine-readable list; the line is '; '-joined because that is how a
+      Delphi programmer writes directives and this line is read by people.
+      Omitted entirely when empty, like every other fact line -- and it never
+      creates a block of its own for the same reason Pure does not: it is
+      gated behind the same content test by virtue of being appended here. }
+    if AFacts.Directives <> '' then
+      Lines.Add('Directives: ' + EscXml(StringReplace(AFacts.Directives, ' ', '; ', [rfReplaceAll])));
     Result:= Lines.ToStringArray;
   finally
     Lines.Free;

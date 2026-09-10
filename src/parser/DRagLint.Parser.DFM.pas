@@ -131,6 +131,40 @@ function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding
 
 implementation
 
+{ v22: collapse every run of whitespace to ONE space and trim.
+  A local copy rather than a use of the identically-named helper in
+  DRagLint.Parser.Delphi13: that one is implementation-only, and widening a
+  parser unit's interface to share a four-line string routine would couple the
+  DFM extractor to the Delphi extractor for no benefit. A `set` value spans
+  lines in real .dfm files -- `Anchors = [akLeft,\r\n    akTop]` -- so without
+  this the stored text would carry the file's own line breaks and indentation
+  into the FTS index and no phrase search would ever match it. }
+function CollapseDfmWs(const ARaw: string): string;
+var
+  i   : Integer;
+  Prev: Boolean;
+  Sb  : TStringBuilder;
+begin
+  Sb:= TStringBuilder.Create;
+  try
+    Prev:= False;
+    for i:= 1 to Length(ARaw) do
+      if CharInSet(ARaw[i], [#9, #10, #13, ' ']) then
+      begin
+        if not Prev then Sb.Append(' ');
+        Prev:= True;
+      end
+      else
+      begin
+        Sb.Append(ARaw[i]);
+        Prev:= False;
+      end;
+    Result:= Trim(Sb.ToString);
+  finally
+    Sb.Free;
+  end;
+end;
+
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
 var
   StartIdx: Integer;
@@ -296,7 +330,49 @@ begin
     end;
   end;
   // v10: harvest string property text for the text index.
-  if (not ValueNode.IsNull) and (ValueNode.NodeType = 'string') then
+  // v22: ...and EVERY other value kind, not only strings. Until now a DFM
+  // property was searchable only when its value happened to be quoted, so
+  // `query --text clBtnFace --source dfm` and `--text akLeft` returned NOTHING
+  // while `Caption = 'x'` was found -- a gap that reads as "the text index is
+  // broken" rather than "this value kind was never emitted".
+  //
+  // VALUE NODE TYPES, MEASURED with tools\dumpdfm (2026-09-09) rather than
+  // guessed -- the plan listed them as UNMEASURED and they had to be dumped:
+  //   Left = 8            -> number      (child: integer)
+  //   Visible = False     -> boolean     (child: false/true)
+  //   Color = clBtnFace   -> identifier_value
+  //   Anchors = [akLeft]  -> set
+  //   Caption = 'Hello'   -> string      (already handled, above)
+  //   Picture.Data = {..} -> binary_blob  <- SKIPPED, see below
+  //
+  // binary_blob IS ITS OWN NODE TYPE, which is what makes the blob skip exact
+  // instead of a size heuristic. Emitting those would put every glyph and
+  // embedded image in the corpus into string_literals and hand the FTS index
+  // pages of hex to tokenise, for content no one will ever search by name.
+  if (not ValueNode.IsNull) and (ValueNode.NodeType <> 'string')
+     and (ValueNode.NodeType <> 'binary_blob') then
+  begin
+    var Lit: TStringLiteral; Lit:= Default(TStringLiteral);
+    Lit.Source   := 'dfm';
+    Lit.Kind     := 'dfm-prop';
+    Lit.OwnerName:= PropName;
+    Lit.Text     := CollapseDfmWs(NodeText(ValueNode, AState.Source));
+    { A cap, because a `set` or an identifier list has no natural bound and one
+      pathological property must not be able to bloat the text index. 256 is the
+      plan's figure; every value kind measured above is far below it, so the cap
+      is a backstop rather than a routine truncation. Truncated rather than
+      dropped: a searchable prefix beats an absent row. }
+    if Length(Lit.Text) > 256 then Lit.Text:= Copy(Lit.Text, 1, 256);
+    if Lit.Text <> '' then
+    begin
+      Lit.StartLine:= Integer(ValueNode.StartPoint.row   ) + 1;
+      Lit.StartCol := Integer(ValueNode.StartPoint.column) + 1;
+      Lit.EndLine  := Integer(ValueNode.EndPoint  .row   ) + 1;
+      Lit.EndCol   := Integer(ValueNode.EndPoint  .column) + 1;
+      AState.Literals.Add(Lit);
+    end;
+  end
+  else if (not ValueNode.IsNull) and (ValueNode.NodeType = 'string') then
   begin
     var Lit: TStringLiteral; Lit:= Default(TStringLiteral);
     Lit.Source   := 'dfm';

@@ -131,6 +131,10 @@ type
       'strict ' prefix when applicable) and stamped into each member's
       Modifiers.  Drives the UML visibility glyphs (+/-/#/~) in the graph. }
     CurrentVisibility: string;
+    { v22: was a visibility keyword actually written for the section the walk is
+      currently inside? True outside any class body, where the question does not
+      arise -- see VisibilityOfSection. }
+    CurrentVisExplicit: Boolean;
     { 'interface' | 'implementation' | '' -- which unit section the current
       symbol lives in; stamped into TSymbol.Section by Emit (agent gap #3:
       tells whether a symbol is usable from another unit). }
@@ -146,9 +150,15 @@ type
     RoutineDepth: Integer;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
+    { v22: ADirectives and AVisExplicit are DEFAULTED so the other Emit call
+      sites -- types, fields, consts, params -- are untouched by this change.
+      AVisExplicit defaults to True ("a keyword was written"), which is the
+      conservative reading for every non-member symbol, where the question does
+      not apply at all. }
     function Emit(
       AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature: string = ''; const AModifiers: string = '';
-      const AHeritage: string = ''; AIsVirtual: Boolean = False; AIsHelper: Boolean = False; const APropAccess: string = ''
+      const AHeritage: string = ''; AIsVirtual: Boolean = False; AIsHelper: Boolean = False; const APropAccess: string = '';
+      const ADirectives: string = ''; AVisExplicit: Boolean = True
     ): Integer;
     procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
@@ -212,7 +222,8 @@ begin
 end;
 
 function TWalkState.Emit(AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature,
-  AModifiers, AHeritage: string; AIsVirtual: Boolean; AIsHelper: Boolean; const APropAccess: string): Integer;
+  AModifiers, AHeritage: string; AIsVirtual: Boolean; AIsHelper: Boolean; const APropAccess: string;
+  const ADirectives: string; AVisExplicit: Boolean): Integer;
 var
   Sym: TSymbol;
 begin
@@ -227,6 +238,8 @@ begin
   Sym.Heritage     := AHeritage; { v11 (M1): class/interface ancestor list text; v15: helper target when IsHelper }
   Sym.IsVirtual    := AIsVirtual; { v12 (M1): method virtual dispatch flag }
   Sym.IsHelper     := AIsHelper;  { v15: record/class helper declaration flag }
+  Sym.Directives   := ADirectives;  { v22: every routine directive, canonical, declaration order; '' = none }
+  Sym.VisExplicit  := AVisExplicit; { v22: False only for a member in an UNLABELLED class section }
   if AParentSymbolIdx >= 0 then Sym.ParentId:= AParentSymbolIdx
   else Sym.ParentId:= -1;
   if not ARangeNode.IsNull then
@@ -686,7 +699,17 @@ end;
 
 // Read the visibility of a declSection node ('private'/'protected'/'public'/
 // 'published', prefixed 'strict ' when applicable).  Defaults to 'public'.
-function VisibilityOfSection(const ANode: TTSNode; const ASource: TBytes): string;
+//
+// v22: AExplicit reports whether a visibility keyword was actually WRITTEN.
+// The default-'public' fall-through is not the same fact as a written `public`:
+// in a {$M+} class -- every TPersistent descendant -- the unlabelled leading
+// section is PUBLISHED, and until now the index could not tell the two apart.
+// The returned STRING is unchanged in both cases, deliberately: 'public' is what
+// four consumers equality-match as THE visibility word, and encoding the new
+// fact into it (spec's "e.g. modifiers = 'default'") would make CLI's
+// IsValidTarget -- `Vis in ('published','public')` -- silently drop every
+// default-section member from proptree. The fact travels in its own column.
+function VisibilityOfSection(const ANode: TTSNode; const ASource: TBytes; out AExplicit: Boolean): string;
 var
   i       : Integer;
   C       : TTSNode;
@@ -696,6 +719,7 @@ var
 begin
   IsStrict:= False;
   Vis     := '';
+  AExplicit:= False;
   for i:= 0 to ANode.NamedChildCount - 1 do
   begin
     C:= ANode.NamedChild(i);
@@ -707,6 +731,9 @@ begin
     else if NT = 'kPublished' then Vis:= 'published'
     else if Vis <> '' then Break; // past the keyword(s), into members
   end;
+  { `strict` alone is not a visibility, so AExplicit tracks Vis, not IsStrict --
+    and the grammar never produces `strict` without one of the four keywords. }
+  AExplicit:= Vis <> '';
   if Vis = '' then Vis:= 'public';
   if IsStrict and ((Vis = 'private') or (Vis = 'protected')) then Result:= 'strict ' + Vis
   else Result:= Vis;
@@ -865,9 +892,12 @@ begin
   { Same member-walk convention as TryWalkClassOrRecord: default visibility
     'public', save/restore so a nested type doesn't leak sections outward. }
   OldVis:= AState.CurrentVisibility;
-  AState.CurrentVisibility:= 'public';
+  var OldVisExp: Boolean:= AState.CurrentVisExplicit;
+  AState.CurrentVisibility := 'public';
+  AState.CurrentVisExplicit:= False; { v22: members before any keyword are the DEFAULT section }
   for i:= 0 to HelperNode.NamedChildCount - 1 do Walk(HelperNode.NamedChild(i), AState, TypeIdx, QName);
-  AState.CurrentVisibility:= OldVis;
+  AState.CurrentVisibility := OldVis;
+  AState.CurrentVisExplicit:= OldVisExp;
   Result:= True;
 end; // function
 
@@ -901,9 +931,18 @@ begin
     handlers update it as they are walked.  Save/restore so a nested type does
     not leak its sections to the enclosing one. }
   OldVis:= AState.CurrentVisibility;
-  AState.CurrentVisibility:= 'public';
+  var OldVisExp: Boolean:= AState.CurrentVisExplicit;
+  AState.CurrentVisibility := 'public';
+  // v22: THIS is the case the vis_explicit column exists for. Under $M+ --
+  // every TPersistent descendant -- these members are PUBLISHED, not public,
+  // and the 'public' above is a fall-through, not a written keyword.
+  // (Line comments on purpose: a $M+ written with its braces inside a BRACE
+  // comment ends that comment at the directive's own closing brace, and the
+  // rest of the prose becomes code. This repo has recorded that four times.)
+  AState.CurrentVisExplicit:= False;
   for i:= 0 to ClassNode.NamedChildCount - 1 do Walk(ClassNode.NamedChild(i), AState, TypeIdx, QName);
-  AState.CurrentVisibility:= OldVis;
+  AState.CurrentVisibility := OldVis;
+  AState.CurrentVisExplicit:= OldVisExp;
   Result:= True;
 end; // function
 
@@ -930,9 +969,17 @@ begin
   Idx:= AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(TypeNode, AState.Source));
   { All interface members are public. }
   OldVis:= AState.CurrentVisibility;
-  AState.CurrentVisibility:= 'public';
+  var OldVisExp: Boolean:= AState.CurrentVisExplicit;
+  AState.CurrentVisibility := 'public';
+  // v22: TRUE here, unlike a class body, and the difference is not an oversight.
+  // vis_explicit answers "might this member actually be PUBLISHED under $M+?".
+  // An interface has no visibility sections and is never $M+ published, so its
+  // members are public by a language rule, not by a fall-through. Recording them
+  // as False would invite exactly the wrong inference.
+  AState.CurrentVisExplicit:= True;
   for i:= 0 to TypeNode.NamedChildCount - 1 do Walk(TypeNode.NamedChild(i), AState, Idx, QName);
-  AState.CurrentVisibility:= OldVis;
+  AState.CurrentVisibility := OldVis;
+  AState.CurrentVisExplicit:= OldVisExp;
   Result:= True;
 end; // function
 
@@ -1524,6 +1571,67 @@ begin
   end;
 end; // function
 
+// v22 (PLAN-routine-directives-in-index.md): EVERY routine directive, canonical
+// lowercase, in DECLARATION ORDER, space-joined; '' when the routine carries
+// none. This generalises the walk ProcIsVirtual already does.
+//
+// GRAMMAR FACTS, MEASURED with tools\dumpnode over a 24-routine fixture
+// (2026-09-09) rather than assumed:
+//   * each directive is its OWN procAttribute node -- `virtual; abstract;` is
+//     TWO nodes, not one node with two keyword children. So the outer loop
+//     appends at most one token per node, and order falls out of child order.
+//   * the keyword is ALWAYS the FIRST NAMED CHILD, spelled k<Directive> in
+//     PascalCase. 28 procAttribute nodes across 22 distinct kinds, zero
+//     exceptions. Strip the leading 'k', lowercase, done.
+//   * `external` is NOT a procAttribute at all: it is a sibling procExternal
+//     node whose child[0] is kExternal. Missing that is how `external` would
+//     silently never appear.
+//   * payloads seen: kDeprecated(literalString), kMessage(literalNumber). Only
+//     the BARE keyword is stored here -- the deprecation message stays on
+//     DetectDeprecated's regex, and `message` stays mirrored into modifiers.
+//
+// An UNKNOWN k* kind passes through the same rule rather than being dropped, so
+// a grammar that later exposes `forward` or `delayed` as a procAttribute starts
+// recording it without a code change. Nothing is silently discarded.
+function ProcDirectivesOf(const ANode: TTSNode): string;
+var
+  i    : Integer;
+  Child: TTSNode;
+  Kind : string ;
+  Sb   : TStringBuilder;
+
+  procedure AppendToken(const AToken: string);
+  begin
+    if AToken = '' then Exit;
+    if Sb.Length > 0 then Sb.Append(' ');
+    Sb.Append(AToken);
+  end;
+
+begin
+  Sb:= TStringBuilder.Create;
+  try
+    for i:= 0 to ANode.NamedChildCount - 1 do
+    begin
+      Child:= ANode.NamedChild(i);
+      if Child.NodeType = 'procAttribute' then
+      begin
+        if Child.NamedChildCount = 0 then Continue;
+        Kind:= Child.NamedChild(0).NodeType;
+        { The 'k' prefix is the grammar's marker for a keyword node. Guard it
+          rather than blindly Copy(2, ...): a payload node reaching child 0
+          would otherwise contribute a mangled token like 'iteralString'. }
+        if (Length(Kind) > 1) and (Kind[1] = 'k') then
+          AppendToken(LowerCase(Copy(Kind, 2, MaxInt)));
+      end
+      else if Child.NodeType = 'procExternal' then
+        AppendToken('external');
+    end;
+    Result:= Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+end; // function
+
 // A `message`/`resident` handler -- `procedure WMSize(var M: TWMSize); message
 // WM_SIZE;` -- is dispatched by the VCL through the message table, never called
 // by name. Recorded in Modifiers so consumers can tell it apart from ordinary
@@ -1661,7 +1769,13 @@ begin
     Modifiers:= Trim(Modifiers + ' message');
   { v0.42: Signature = full parameter list + return type (Code-Insight style),
     e.g. '(const A: Integer): Boolean'. Was return-type-only before. }
-  RoutineIdx:= AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode));
+  { v22: directives are collected for FREE routines too, not only methods --
+    `external`, `stdcall`, `inline`, `deprecated` and `varargs` are all
+    overwhelmingly free-routine directives, and an is_virtual-shaped
+    `AAsMethod and ...` gate here would have silently excluded every one of
+    them. AAsMethod still gates is_virtual, whose v12 meaning is unchanged. }
+  RoutineIdx:= AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode),
+                           False, '', ProcDirectivesOf(ANode), (not AAsMethod) or AState.CurrentVisExplicit);
   Result:= RoutineIdx;
   // v14 (D5, Task 2): emit each formal parameter as an skParam symbol parented
   // to this routine (RoutineIdx). Nested procs never reach WalkDeclProc (their
@@ -2027,7 +2141,15 @@ begin
         var FQName: string;
         if AParentQualifiedName <> '' then FQName:= AParentQualifiedName + '.' + FName
         else FQName:= FName;
-        AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility);
+        { v22: a FIELD carries vis_explicit too. Wiring only the routine emit
+          site left every field in an unlabelled section reading True -- which is
+          the wrong answer for exactly the population the column exists to
+          describe, since a published component field is the commonest case of
+          all. Caught by run_default_section_visibility.ps1: DefaultMethod said
+          False while FDefaultField, three lines above it in the same section,
+          said True. }
+        AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility,
+                    '', False, False, '', '', AState.CurrentVisExplicit);
       end;
     end;
     // Walk children so the field's type is visited and emits a type_use ref.
@@ -2062,7 +2184,8 @@ begin
         else if PHasGet then PAccess:= 'ro'
         else if PHasSet then PAccess:= 'wo'
         else PAccess:= ''; // bare redeclaration -> NULL -> inherits ancestor's accessors
-        AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility, '', False, False, PAccess);
+        AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility, '', False, False, PAccess,
+                    '', AState.CurrentVisExplicit); { v22: same reasoning as the field emit above }
       end;
     end;
     // Walk children so the property's type emits a type_use ref.
@@ -2075,7 +2198,9 @@ begin
   // then recurse into those members.
   if NodeType = 'declSection' then
   begin
-    AState.CurrentVisibility:= VisibilityOfSection(ANode, AState.Source);
+    var SecExplicit: Boolean;
+    AState.CurrentVisibility := VisibilityOfSection(ANode, AState.Source, SecExplicit);
+    AState.CurrentVisExplicit:= SecExplicit;
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
   end;

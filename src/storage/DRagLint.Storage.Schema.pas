@@ -11,7 +11,14 @@ const
     cannot hold because target_symbol_id is a NOT NULL FK into THIS DB.
     Both are retrofitted by Migrate() ALTERs (see there), so neither may be
     referenced from SCHEMA_DDL below -- read the INVARIANT. }
-  SCHEMA_VERSION = 21;
+  { 21 -> 22 (2026-09-09, PLAN-routine-directives-in-index.md): additive
+    symbols.directives (every routine directive, canonical, declaration order)
+    and symbols.vis_explicit (was a visibility keyword written for this member's
+    section). Both are ALSO retrofitted by Migrate() ALTERs for pre-v22 indexes,
+    and both are present in the CREATE below for new ones -- the prop_access
+    pattern. Riding the same bump: dfm-prop rows for EVERY value kind, not only
+    string-valued properties. }
+  SCHEMA_VERSION = 22;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
@@ -63,7 +70,21 @@ const
     // drives proptree is_writable = (prop_access <> 'ro'). NULL for non-property
     // symbols and for a bare redeclaration with no own accessor (resolved via
     // inheritance at query time). Migrate() ALTERs it onto pre-v17 tables.
-    '  prop_access     TEXT' + ')',
+    '  prop_access     TEXT,' +
+    { v22: every routine directive, canonical lowercase, DECLARATION order,
+      space-joined ('virtual overload stdcall'); '' when the routine has none;
+      '' for non-routine symbols. NULL only on a row written by a pre-v22 index.
+      Deliberately NOT folded into modifiers -- four consumers equality-match
+      that as THE visibility word. No index: nothing queries it by value at
+      volume; it is read per-symbol alongside the row. }
+    '  directives      TEXT,' +
+    { v22: 1 when a visibility keyword was written for this member's section,
+      0 for the unlabelled leading section of a class or record. Under $M+ that
+      unlabelled section is PUBLISHED while modifiers says 'public' for both,
+      which is the ambiguity this resolves. NULL on a pre-v22 row, read back as
+      1 (claiming the keyword was written invents nothing; the other default
+      would invent published members across every old index). }
+    '  vis_explicit    INTEGER' + ')',
 
     'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)', 'CREATE INDEX IF NOT EXISTS idx_symbols_qname ON symbols(qualified_name)',
     'CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id)', 'CREATE INDEX IF NOT EXISTS idx_symbols_parent ON symbols(parent_id)',

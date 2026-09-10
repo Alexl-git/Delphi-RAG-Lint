@@ -80,6 +80,14 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   **reindex first**. The answer may be stale.
 
 Add `--json` to any query for machine-readable output.
+
+A symbol row carries `directives` (schema v22): every routine directive in
+canonical lowercase, declaration order, space-joined -- `virtual overload
+stdcall`, and `external` for an external routine. `''` means the routine
+declares none; the field being ABSENT means the engine or index predates v22, so
+absent and empty are different answers. `vis_explicit` is `false` only for a
+member in a class's unlabelled leading section, which under `$M+` is actually
+published while `modifiers` says `public` for both.
 ---
 
 ## 1. Setup (once)

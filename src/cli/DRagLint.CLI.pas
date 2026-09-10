@@ -1824,6 +1824,57 @@ begin
   else begin AOk:= False; Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
 end;
 
+/// <summary>Open the platform LIBRARY index for a lint run, but ONLY when its
+/// schema is current. Returns nil (with a reason in AWhy) otherwise.</summary>
+/// <remarks>
+///  WHY THIS EXISTS -- a crash, not a tidiness point. The four lint entry points
+///  each opened the library index with a bare TSQLiteSymbolStore.Create wrapped
+///  in `except -> nil`, on the documented "never migrate someone else's
+///  gigabytes as a side effect of linting" policy. That is right, and it was
+///  also unsafe, because Create does not RAISE on a stale schema -- it returns a
+///  CRIPPLED store. The constructor only calls PrepareStatements when
+///  IsSchemaCurrent, so on a stale DB every prepared FQ* query stays nil and the
+///  first read dereferences one: an access violation inside
+///  Data.DB.TDataSet.GetActive, reported as `lint-all: skip &lt;file&gt;` with no
+///  hint that the library index was the cause.
+///
+///  Nothing had ever exercised that path, because the library index was always
+///  at the current schema. SCHEMA_VERSION 21 -> 22 made every library index
+///  stale until its re-parse, and lint-all crashed on every file. The bump
+///  EXPOSED this; it did not introduce it, and any future bump would do the same.
+///
+///  Degrading is the correct behaviour and the call sites already expect nil --
+///  a project store alone cannot resolve TFDQuery down to TDataSet, so
+///  datamodule member classification gets weaker, which is exactly what the
+///  existing warning at those sites says. Crashing is not a stronger form of
+///  that; it is a different outcome entirely.
+/// </remarks>
+function OpenLibraryStoreIfCurrent(const ADbPath: string; out AWhy: string): ISymbolStore;
+var
+  Found, Expected: Integer;
+begin
+  Result:= nil;
+  AWhy  := '';
+  if (ADbPath = '') or (not TFile.Exists(ADbPath)) then Exit;
+  try
+    Result:= TSQLiteSymbolStore.Create(ADbPath);
+  except
+    on E: Exception do
+    begin
+      Result:= nil;
+      AWhy  := Format('failed to open library store %s: %s', [ADbPath, E.Message]);
+      Exit;
+    end;
+  end;
+  if not Result.IsSchemaCurrent(Found, Expected) then
+  begin
+    Result:= nil;
+    AWhy  := Format('library index %s is schema v%d, this build needs v%d -- ' +
+                    'skipping it for this run; re-index it to restore full ancestry resolution',
+                    [ADbPath, Found, Expected]);
+  end;
+end;
+
 // AutoDoc multi-DB (Task 6): resolves every --db the user passed (via
 // ResolveConsumerDbs) OTHER than the primary AArgs.DbPath, opens each
 // read-only, and returns the ones that opened cleanly. Used to populate
@@ -4983,6 +5034,20 @@ begin
         JObj.AddPair('signature'     , Sym.Signature    );
         JObj.AddPair('modifiers'     , Sym.Modifiers    );
         JObj.AddPair('section'       , Sym.Section      );
+        { v22: emitted UNCONDITIONALLY, unlike heritage just below, and that is
+          the point rather than an inconsistency. An omitted-when-empty field
+          cannot express "this routine has no directives" -- it is
+          indistinguishable from an engine that does not know the column at all,
+          so the negative control could not be written. '' means none; the field
+          being absent means the engine predates v22. }
+        JObj.AddPair('directives'    , Sym.Directives   );
+        JObj.AddPair('vis_explicit'  , TJSONBool.Create(Sym.VisExplicit));
+        { v22: is_virtual was never in this JSON. It is added here because a
+          guard asserting the v12 bit is UNCHANGED by the directives work had no
+          way to observe it -- and an assertion whose subject is absent from the
+          output reads an absent field as False and passes for the wrong reason.
+          Measured exactly that way while writing run_directives_in_index.ps1. }
+        JObj.AddPair('is_virtual'    , TJSONBool.Create(Sym.IsVirtual));
         { v11 (M1): class/interface ancestor list; omitted when empty. }
         if Sym.Heritage <> '' then JObj.AddPair('heritage', Sym.Heritage);
         { interface-section symbols (and members of interface-section types) are
@@ -8224,6 +8289,7 @@ begin
         JObj.AddPair('line', TJSONNumber.Create(S.StartLine));
         JObj.AddPair('signature', S.Signature);
         JObj.AddPair('modifiers', S.Modifiers);
+        JObj.AddPair('directives', S.Directives); { v22: see the query emitter for why this is unconditional }
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -11064,12 +11130,12 @@ begin
       if FlowStore <> nil then
       begin
         var FlowLibDb: string := LintLibraryDb(AArgs);
-        if (FlowLibDb <> '') and TFile.Exists(FlowLibDb) then
-          try
-            FlowLibStore:= TSQLiteSymbolStore.Create(FlowLibDb);
-          except
-            on E: Exception do FlowLibStore:= nil; { degrade to project-only, never fail the run }
-          end;
+        { A STALE library index degrades to project-only exactly like an
+          unopenable one -- see OpenLibraryStoreIfCurrent for why a bare Create
+          here was an access violation waiting for the next schema bump. }
+        var FlowLibWhy: string;
+        FlowLibStore:= OpenLibraryStoreIfCurrent(FlowLibDb, FlowLibWhy);
+        if FlowLibWhy <> '' then EmitStatusLine(AArgs, 'WARNING: ' + FlowLibWhy);
       end;
       { Mirror of lint-all's drop (see the note above ScanAdd(0) there): when a
         store is present, the PRECISE type-aware string-equality built-in runs
@@ -15512,10 +15578,10 @@ begin
   Store:= TSQLiteSymbolStore.Create(ProjectDb);
   Store.Migrate;
   NoteIndexFreshnessOnce(Store, ProjectDb);
-  LibStore:= nil;
   var LibDb: string:= ResolveLibraryDb(AArgs);
-  if (LibDb <> '') and TFile.Exists(LibDb) then
-    try LibStore:= TSQLiteSymbolStore.Create(LibDb); except LibStore:= nil; end;
+  var LibWhy: string;
+  LibStore:= OpenLibraryStoreIfCurrent(LibDb, LibWhy); { nil on a stale schema -- see the helper }
+  if LibWhy <> '' then EmitStatusLine(AArgs, 'WARNING: ' + LibWhy);
 
   var Own: TOwnRoots:= TOwnRoots.Load(LintAnchorDir(AArgs, ProjectDb));
   if Own.Error <> '' then begin EmitStatusLine(AArgs, 'ERROR: ' + Own.Error); Exit(2); end;
@@ -15809,19 +15875,10 @@ begin
     on 2.2 GB of someone else's data. A failure here degrades the answer and is
     reported; it never fails the run, because every other check is still valid
     without it. }
-  LibStore:= nil;
-  if (LibDb <> '') and TFile.Exists(LibDb) then
-  begin
-    try
-      LibStore:= TSQLiteSymbolStore.Create(LibDb);
-    except
-      on E: Exception do
-      begin
-        LibStore:= nil;
-        EmitStatusLine(AArgs, Format('WARNING: failed to open library store %s: %s -- ownership and DCU checks degrade to project-only.', [LibDb, E.Message]));
-      end;
-    end;
-  end;
+  var LibWhy2: string;
+  LibStore:= OpenLibraryStoreIfCurrent(LibDb, LibWhy2);
+  if LibWhy2 <> '' then
+    EmitStatusLine(AArgs, Format('WARNING: %s -- ownership and DCU checks degrade to project-only.', [LibWhy2]));
   Findings:= nil;
 
   { --project: restrict the whole run to the units this project actually
@@ -16559,19 +16616,12 @@ begin
       comment above exists to prevent. Never migrate it: running schema
       migrations as a side effect of linting takes a write lock on gigabytes of
       someone else's data. }
-    ProjLibStore:= nil;
     var ProjLibDb: string:= ResolveLibraryDb(AArgs);
-    if (ProjLibDb <> '') and TFile.Exists(ProjLibDb) then
-      try
-        ProjLibStore:= TSQLiteSymbolStore.Create(ProjLibDb);
-      except
-        on E: Exception do
-        begin
-          ProjLibStore:= nil;
-          EmitStatusLine(AArgs, Format('WARNING: failed to open library store %s: %s -- ' +
-            'datamodule member classification degrades to project-only.', [ProjLibDb, E.Message]));
-        end;
-      end;
+    var ProjLibWhy: string;
+    ProjLibStore:= OpenLibraryStoreIfCurrent(ProjLibDb, ProjLibWhy);
+    if ProjLibWhy <> '' then
+      EmitStatusLine(AArgs, Format('WARNING: %s -- datamodule member classification degrades to project-only.',
+                                   [ProjLibWhy]));
     Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, AArgs.Rule, MakeSiblingStoreResolver(AArgs, SibKeep2, SibOwned2),
       ProjLibStore, OptIn2);

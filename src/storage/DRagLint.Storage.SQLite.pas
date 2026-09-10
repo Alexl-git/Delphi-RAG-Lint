@@ -3389,6 +3389,16 @@ begin
     Populated ('ro'/'rw'/'wo') during property extraction (Task 6); NULL for a
     pre-v17 DB row until it is re-indexed with the v17 engine. }
   TryExec('ALTER TABLE symbols ADD COLUMN prop_access TEXT');
+  { v22 (PLAN-routine-directives-in-index.md): two additive symbol columns,
+    ALTERed onto pre-v22 tables for the same reason as every column above.
+    On a pre-v22 row both read back NULL until the index is re-parsed --
+    directives NULL -> '' (indistinguishable from "this routine has none", which
+    is why a consumer that needs the difference must read the schema version)
+    and vis_explicit NULL -> True (the conservative direction: claiming the
+    keyword was written invents nothing, whereas False would invent a published
+    member on every member of every old index). }
+  TryExec('ALTER TABLE symbols ADD COLUMN directives TEXT');
+  TryExec('ALTER TABLE symbols ADD COLUMN vis_explicit INTEGER');
   { v19 (ADP3): four additive symbol_facts columns. TryExec swallows the
     "duplicate column name" error on an already-migrated DB, same as every
     ALTER above it. }
@@ -3834,7 +3844,7 @@ begin
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, is_helper, start_line, start_col, end_line, end_col, ' +
-    '  impl_start_line, impl_end_line, prop_access) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa)');
+    '  impl_start_line, impl_end_line, prop_access, directives, vis_explicit) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa, :dirs, :vexp)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id) ' +
@@ -4440,6 +4450,18 @@ begin
   FQInsertSymbol.ParamByName('pa'   ).DataType := ftString;
   if ASymbol.PropAccess <> '' then FQInsertSymbol.ParamByName('pa').AsString:= ASymbol.PropAccess
   else FQInsertSymbol.ParamByName('pa').Clear;
+  { v22: directives is bound as a STRING ALWAYS, INCLUDING the empty one -- the
+    opposite of the heritage/prop_access NULL-when-empty idiom directly above,
+    and the difference is load-bearing rather than an inconsistency.
+    '' must mean "this routine has no directives" and NULL must mean "this row
+    predates v22". Clearing the param when empty would collapse those two into
+    one value and make the negative control -- `MPlain` has directives '' and
+    not null -- unassertable. DataType is set explicitly for the same reason the
+    heritage idiom sets it: without it FireDAC can infer the type from a null
+    value and bind an empty string as NULL anyway. }
+  FQInsertSymbol.ParamByName('dirs' ).DataType := ftString;
+  FQInsertSymbol.ParamByName('dirs' ).AsString := ASymbol.Directives;
+  FQInsertSymbol.ParamByName('vexp' ).AsInteger:= Ord(ASymbol.VisExplicit);
   FQInsertSymbol.ExecSQL;
   Result:= FConn.GetLastAutoGenValue('');
   // Populate trigram index alongside each symbol insert so fuzzy queries
@@ -6558,6 +6580,18 @@ begin
     Result.IsHelper := AQ.FieldByName('is_helper').AsInteger <> 0;
   if AQ.FindField('prop_access') <> nil then { v17 (Task 6/R1): tolerate pre-v17 databases }
     Result.PropAccess := AQ.FieldByName('prop_access').AsString; { NULL -> '' -> writable/inherit }
+  { v22: FindField per column, the same tolerate-an-older-DB pattern. Note the
+    two defaults point in OPPOSITE directions on purpose. Directives NULL -> ''
+    is simply "nothing recorded". VisExplicit NULL -> True is a deliberate
+    conservative default: every row of every pre-v22 index would otherwise read
+    as "no visibility keyword written", which downstream means "might really be
+    published", and that would invent published members wholesale. }
+  Result.Directives := '';
+  Result.VisExplicit:= True;
+  if AQ.FindField('directives') <> nil then
+    Result.Directives:= AQ.FieldByName('directives').AsString;
+  if AQ.FindField('vis_explicit') <> nil then
+    Result.VisExplicit:= AQ.FieldByName('vis_explicit').IsNull or (AQ.FieldByName('vis_explicit').AsInteger <> 0);
   Result  .StartLine:= AQ.FieldByName('start_line').AsInteger;
   Result  .StartCol := AQ.FieldByName('start_col' ).AsInteger;
   Result  .EndLine  := AQ.FieldByName('end_line'  ).AsInteger;
