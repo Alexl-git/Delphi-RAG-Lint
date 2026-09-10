@@ -1200,7 +1200,7 @@ end; // function
   checked by two different tools that never meet.
 
   THE POSITIVE CASE IS EASY AND IRRELEVANT. What decides whether this rule can
-  ship is the three ways it fires on CORRECT code, and the gates below exist
+  ship is the four ways it fires on CORRECT code, and the gates below exist
   one per way:
 
   (a) THE PROPERTY IS INHERITED. Most properties a .dfm sets are declared on an
@@ -1217,6 +1217,16 @@ end; // function
   (c) THE CLASS NAME IS AMBIGUOUS. Two indexed units declaring the same class
       name means the .dfm's bare type token does not identify one of them, and
       guessing is how a rule reports a property that the OTHER class lacks.
+
+  (d) THE PROPERTY IS STREAMED BY HAND, not declared. `DefineProperties` calls
+      `Filer.DefineProperty('Name')` and the .dfm then sets `Name` exactly like
+      a real property, with no declaration anywhere. MEASURED, and it is the
+      whole volume: 321 findings on ORM3 CLIENT before this gate, 2 after, and
+      226 of the 321 were `Left`/`Top` -- which NEITHER `TComponent` NOR
+      `TPersistent` declares, because `TComponent.DefineProperties` streams
+      them for every non-visual component. `AddStreamedNames` reads the literal
+      names out of the body; its comment records why the class-level version of
+      this gate was refuted by measurement.
 
   A DOTTED PROPERTY IS ITS FIRST SEGMENT. `Font.Style` sets Style on the object
   held by the Font property; the class declares Font, not Font.Style. Checking
@@ -1241,6 +1251,13 @@ var
     "no members" and "do not ask" must not collapse into one answer. }
   Memo    : TObjectDictionary<string, TStringList>;
   Silent  : TDictionary<string, Boolean>          ;
+
+  { '<store>:<fileId>' -> every 'literal' row of that file, fetched once.
+    System.Classes.pas alone carries TComponent.DefineProperties, which is asked
+    for by practically every class in a form, so the fetch must not repeat. The
+    key carries the STORE because a file id is only unique within one database
+    and the project and library indexes are two. }
+  LitCache: TDictionary<string, TArray<TStringLiteral>>;
 
   { The one place a store is chosen. The project index first, the library
     second: a form's own component classes are project-local, its VCL and
@@ -1271,6 +1288,51 @@ var
     Result:= Hits = 1;
   end;
 
+  { Add the PSEUDO-properties a class streams by hand -- the literal names its
+    own DefineProperties body passes to Filer.DefineProperty. They are set in
+    the .dfm exactly like declared properties and appear in no declaration at
+    all, so without this the rule reports correct code.
+
+    THE VOLUME THIS ANSWERS: 226 of the 321 findings on ORM3 CLIENT were
+    `Left`/`Top`, which NEITHER TComponent NOR TPersistent declares --
+    TComponent.DefineProperties streams them for every non-visual component.
+
+    WHY THE NAMES AND NOT THE CLASS. "Silence a class whose chain declares
+    DefineProperties" was measured and REFUTED: it missed the 132 TOvcTC*
+    findings (no DefineProperties anywhere in their chain) and would have
+    silenced every visual control, since TControl, TWinControl, TCustomForm and
+    TDataModule all declare it. Reading the names keeps a class that streams
+    'Left' reportable for a name it neither declares nor streams.
+
+    WHY THE IMPL SPAN and not string_literals.symbol_id: for a .pas BODY literal
+    the stored symbol_id is the UNIT and owner_name is empty (SearchText,
+    Storage.SQLite.pas), so the owning routine is resolved live by line span --
+    the same way SearchText does it.
+
+    DELIBERATELY NO "empty body -> silence everything" fallback:
+    TPersistent.DefineProperties has an empty body and would re-open the whole
+    hole. A body that passes the name through a const still fires; that is left
+    to be handled on measurement rather than guessed at now. }
+  procedure AddStreamedNames(const AOwner: TSymbol; const AUsed: ISymbolStore;
+    AIsLib: Boolean; AList: TStringList);
+  var
+    Key : string                 ;
+    Lits: TArray<TStringLiteral> ;
+    Lit : TStringLiteral         ;
+  begin
+    if AOwner.ImplStartLine <= 0 then Exit;
+    Key:= (if AIsLib then 'l' else 'p') + ':' + IntToStr(AOwner.FileId);
+    if not LitCache.TryGetValue(Key, Lits) then
+    begin
+      Lits:= AUsed.GetLiteralsByKind(AOwner.FileId, 'literal');
+      LitCache.Add(Key, Lits);
+    end;
+    for Lit in Lits do
+      if (Lit.StartLine >= AOwner.ImplStartLine) and (Lit.StartLine <= AOwner.ImplEndLine)
+         and (Trim(Lit.Text) <> '') then
+        AList.Add(Trim(Lit.Text));
+  end;
+
   { Every member name the class chain declares, or nil to mean "stay silent
     about this class". }
   function MembersOf(const AClassName: string): TStringList;
@@ -1281,16 +1343,19 @@ var
     Ch     : TSymbol        ;
     Dummy  : Boolean        ;
     L      : TStringList    ;
+    IsLib  : Boolean        ;
   begin
     Result:= nil;
     if AClassName = '' then Exit;
     if Silent.TryGetValue(LowerCase(AClassName), Dummy) then Exit;
     if Memo.TryGetValue(LowerCase(AClassName), L) then Exit(L);
 
-    Used:= AStore;
+    Used := AStore;
+    IsLib:= False;
     if not ResolveClassIn(AStore, AClassName, Sym) then
     begin
-      Used:= ALibStore;
+      Used := ALibStore;
+      IsLib:= True;
       if not ResolveClassIn(ALibStore, AClassName, Sym) then
       begin
         Silent.AddOrSetValue(LowerCase(AClassName), True);
@@ -1312,12 +1377,20 @@ var
     L.Sorted       := True;
     L.Duplicates   := dupIgnore;
     for Ch in Used.FindAllChildSymbols(Sym.Id) do
-      if Ch.Name <> '' then L.Add(Ch.Name);
+      if Ch.Name <> '' then
+      begin
+        L.Add(Ch.Name);
+        if SameText(Ch.Name, 'DefineProperties') then AddStreamedNames(Ch, Used, IsLib, L);
+      end;
     { GATE (a): the ancestors, not just the class. }
     for Anc in Used.GetTransitiveAncestors(Sym.Id) do
       if Anc.Resolved and (Anc.SymbolId > 0) then
         for Ch in Used.FindAllChildSymbols(Anc.SymbolId) do
-          if Ch.Name <> '' then L.Add(Ch.Name);
+          if Ch.Name <> '' then
+          begin
+            L.Add(Ch.Name);
+            if SameText(Ch.Name, 'DefineProperties') then AddStreamedNames(Ch, Used, IsLib, L);
+          end;
 
     Memo.Add(LowerCase(AClassName), L);
     Result:= L;
@@ -1344,6 +1417,7 @@ begin
   Findings:= TList<TLintFinding>.Create;
   Memo    := TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
   Silent  := TDictionary<string, Boolean>.Create;
+  LitCache:= TDictionary<string, TArray<TStringLiteral>>.Create;
   try
     for Fid in AStore.GetAllFileIds do
     begin
@@ -1386,6 +1460,7 @@ begin
     end;
     Result:= Findings.ToArray;
   finally
+    LitCache.Free;
     Silent  .Free;
     Memo    .Free;
     Findings.Free;

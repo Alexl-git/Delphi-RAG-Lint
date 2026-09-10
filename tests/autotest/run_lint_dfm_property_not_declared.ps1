@@ -79,12 +79,22 @@ W (Join-Path $work 'uBase.pas') @(
   '    property Columns: TObject read FCols write FCols;',
   '  private','    FFont: TObject;','    FCols: TObject;',
   '  end;','','  TDerivedThing = class(TBaseThing)','  end;','',
-  '  TForeignThing = class(TSomethingNotInThisIndex)','  end;','','implementation','','end.')
+  '  TForeignThing = class(TSomethingNotInThisIndex)','  end;','',
+  '  TStreamerBase = class','  protected',
+  '    procedure DefineProperties(Filer: TObject);',
+  '    procedure Decoyer;','  end;','',
+  '  TStreamer = class(TStreamerBase)','  end;','',
+  'implementation','',
+  'procedure TStreamerBase.DefineProperties(Filer: TObject);','begin',
+  "    Filer.DefineProperty('Streamed');",'end;','',
+  'procedure TStreamerBase.Decoyer;','begin',
+  "    WriteLn('Decoy');",'end;','','end.')
 
 W (Join-Path $work 'uForm.pas') @(
   'unit uForm;','','interface','','uses','  uBase;','','type',
   '  TMyForm = class','  published','    Widget: TDerivedThing;',
-  '    Alien : TForeignThing;','    Grid  : TDerivedThing;','  end;','','implementation','','end.')
+  '    Alien : TForeignThing;','    Grid  : TDerivedThing;',
+  '    Streamy: TStreamer;','  end;','','implementation','','end.')
 
 W (Join-Path $work 'uForm.dfm') @(
   'object MyForm: TMyForm',
@@ -101,6 +111,11 @@ W (Join-Path $work 'uForm.dfm') @(
   '      item',
   "        ItemOnly = 'inside an item block, must be SILENT'",
   '      end>',
+  '  end',
+  '  object Streamy: TStreamer',
+  "    Streamed = 'streamed by an inherited DefineProperties, must be SILENT'",
+  "    Bogus = 'neither declared nor streamed, must FIRE'",
+  "    Decoy = 'a literal in ANOTHER method, must FIRE'",
   '  end',
   'end')
 
@@ -148,6 +163,30 @@ Check 'NEG a property inside a collection item block is SILENT' `
 Check 'NEG the collection property itself is declared, so Columns is not reported' `
       (($rows | Where-Object { $_ -match '"Columns"' }).Count -eq 0) `
       'Columns is undeclared on TDerivedThing -- if this fires, the fixture, not the rule, is wrong'
+
+# ---- DefineProperties scoping -------------------------------------------
+# 226 of the 321 findings on ORM3 CLIENT were `Left`/`Top`, which NEITHER
+# TComponent NOR TPersistent declares -- they are streamed by
+# TComponent.DefineProperties. A pseudo-property is written by a
+# `Filer.DefineProperty('Name')` call in a DefineProperties BODY, so the literal
+# names in that body are read and treated as declared members.
+#
+# THE FIRST PROPOSAL -- "silence the class when an ancestor declares
+# DefineProperties" -- WAS REFUTED BY MEASUREMENT: it missed 132 findings whose
+# chain has no DefineProperties at all, and would have silenced every visual
+# control, since TControl/TWinControl/TCustomForm all declare it. The two checks
+# below are what separate the two designs.
+Check 'NEG a name streamed by an inherited DefineProperties is SILENT' `
+      (($rows | Where-Object { $_ -match 'Streamed' }).Count -eq 0) `
+      'Left/Top and 226 of the 321 ORM3 findings are exactly this shape'
+
+Check 'POS a class WITH DefineProperties still reports a name it neither declares nor streams' `
+      (($rows | Where-Object { $_ -match 'Bogus' }).Count -ge 1) `
+      'THIS is the assertion that refutes "silence the whole class"; without it the fix is indistinguishable from switching the rule off for anything that streams'
+
+Check 'POS a literal OUTSIDE the DefineProperties span still FIRES' `
+      (($rows | Where-Object { $_ -match 'Decoy' }).Count -ge 1) `
+      'proves the IMPL-SPAN filter rather than "any literal anywhere in the unit"'
 
 Check 'the rule is OFF by default (R3 audits before it ships ON)' `
       (((& $Exe lint-all --db $db --quiet 2>$null | Out-String) -notmatch 'dfm-property-not-declared')) `
