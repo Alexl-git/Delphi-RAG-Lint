@@ -118,6 +118,8 @@ function RunLintTree(const pOptions   : TLintTreeOptions;
 implementation
 
 uses
+  System.DateUtils,
+  System.Diagnostics,
   DRagLint.Core.Encoding;
 
 const
@@ -131,6 +133,35 @@ type
     to the JSON renderer and seven to the text one, which is how the two
     drifted: the JSON branch carried the profile stamp and the text branch
     silently did not. }
+  { One interface symbol as the BASELINE recorded it. Carries the index's
+    symbol Id, which is what the routine rule joins refs on -- a parser-side
+    symbol has no id, which is why the NEW side is never the baseline. }
+  TBaselineSymbol = record
+    Id       : Int64;
+    Kind     : string;
+    QName    : string;
+    Signature: string;
+  end;
+
+  TLintTreeDelta = record
+    Removed: TArray<TBaselineSymbol>;
+    Changed: TArray<TBaselineSymbol>;
+    Added  : TArray<string>;
+  end;
+
+  TLintTreeFinding = record
+    FilePath : string;
+    Line     : Integer;
+    Col      : Integer;
+    Rule     : string;
+    Severity : string;
+    Message  : string;
+    { The refs.kind the hit came through, echoed so a reader can see that
+      member-access rows are included -- the correction of 2026-09-10. }
+    RefKind  : string;
+    Unchecked: Boolean;
+  end;
+
   TLintTreeReport = record
     Changed   : Boolean;
     ParseError: Boolean;
@@ -139,6 +170,12 @@ type
     OldFp     : string;
     OldSource : string;
     Profile   : TIndexerProfile;
+    Delta     : TLintTreeDelta;
+    Findings  : TArray<TLintTreeFinding>;
+    HasClosure: Boolean;
+    DirectCnt : Integer;
+    TotalCnt  : Integer;
+    ClosureMs : Int64;
   end;
 
   TSurfaceSide = record
@@ -287,8 +324,254 @@ begin
   end;
 end;
 
+{ ---- the diff, and the findings it drives ---------------------------------- }
+
+function BaselineSymbolsOf(const pRoot: TJSONObject): TArray<TBaselineSymbol>;
+var
+  Arr: TJSONArray;
+  I  : Integer;
+  Obj: TJSONObject;
+  Acc: TList<TBaselineSymbol>;
+  B  : TBaselineSymbol;
+begin
+  Acc:= TList<TBaselineSymbol>.Create;
+  try
+    Arr:= pRoot.GetValue('symbols') as TJSONArray;
+    if Arr <> nil then
+      for I:= 0 to Arr.Count - 1 do
+      begin
+        Obj:= Arr.Items[I] as TJSONObject;
+        if Obj = nil then
+          Continue;
+        B           := Default(TBaselineSymbol);
+        B.Id        := Obj.GetValue<Int64>('id', 0);
+        B.Kind      := Obj.GetValue<string>('kind', '');
+        B.QName     := Obj.GetValue<string>('qname', '');
+        B.Signature := Obj.GetValue<string>('signature', '');
+        Acc.Add(B);
+      end;
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
+function IsRoutineKind(const pKind: string): Boolean;
+begin
+  { The kinds whose references the resolver binds to a symbol id. Everything
+    else goes down the name-join path (B3 step 2) or is not reportable at all
+    -- which the report states rather than implies. }
+  Result:= SameText(pKind, 'procedure') or SameText(pKind, 'function')
+        or SameText(pKind, 'method')    or SameText(pKind, 'constructor')
+        or SameText(pKind, 'destructor');
+end;
+
+function SymbolKeyOf(const pQName, pSignature: string): string;
+begin
+  { (qualified_name, signature), not the name alone: overloads share a name, so
+    dropping one overload of three is a REMOVED entry that keying on the name
+    would hide behind its surviving siblings. }
+  Result:= LowerCase(pQName) + '|' + pSignature;
+end;
+
+function ComputeDelta(const pOld: TArray<TBaselineSymbol>;
+                      const pNew: TArray<TSymbol>): TLintTreeDelta;
+var
+  NewKeys : TDictionary<string, Boolean>;
+  NewNames: TDictionary<string, Boolean>;
+  OldNames: TDictionary<string, Boolean>;
+  Removed : TList<TBaselineSymbol>;
+  Changed : TList<TBaselineSymbol>;
+  Added   : TList<string>;
+  O       : TBaselineSymbol;
+  S       : TSymbol;
+begin
+  Result  := Default(TLintTreeDelta);
+  NewKeys := TDictionary<string, Boolean>.Create;
+  NewNames:= TDictionary<string, Boolean>.Create;
+  OldNames:= TDictionary<string, Boolean>.Create;
+  Removed := TList<TBaselineSymbol>.Create;
+  Changed := TList<TBaselineSymbol>.Create;
+  Added   := TList<string>.Create;
+  try
+    for S in pNew do
+    begin
+      if not SameText(S.Section, 'interface') then
+        Continue;
+      if S.Kind in [skUnit, skParam, skLocalVar] then
+        Continue;
+      NewKeys .AddOrSetValue(SymbolKeyOf(S.QualifiedName, S.Signature), True);
+      NewNames.AddOrSetValue(LowerCase(S.QualifiedName), True);
+    end;
+
+    for O in pOld do
+    begin
+      OldNames.AddOrSetValue(LowerCase(O.QName), True);
+      if NewKeys.ContainsKey(SymbolKeyOf(O.QName, O.Signature)) then
+        Continue;
+      { The name survives but the exact (name, signature) pair does not: the
+        declaration CHANGED. The name is gone entirely: REMOVED. Both break a
+        dependent; they read differently to a human and the message says which. }
+      if NewNames.ContainsKey(LowerCase(O.QName)) then
+        Changed.Add(O)
+      else
+        Removed.Add(O);
+    end;
+
+    for S in pNew do
+    begin
+      if not SameText(S.Section, 'interface') then
+        Continue;
+      if S.Kind in [skUnit, skParam, skLocalVar] then
+        Continue;
+      if not OldNames.ContainsKey(LowerCase(S.QualifiedName)) then
+        Added.Add(S.QualifiedName);
+    end;
+
+    Result.Removed:= Removed.ToArray;
+    Result.Changed:= Changed.ToArray;
+    Result.Added  := Added.ToArray;
+  finally
+    Added.Free;
+    Changed.Free;
+    Removed.Free;
+    OldNames.Free;
+    NewNames.Free;
+    NewKeys.Free;
+  end;
+end;
+
+{ One pass over one list. Called twice so the VERB is decided by which list the
+  symbol came from rather than re-derived inside the loop -- the first draft
+  computed it from the symbol itself and got it wrong for every entry. }
+procedure CollectRoutineFindings(const pStore    : ISymbolStore;
+                                 const pGone     : TArray<TBaselineSymbol>;
+                                 const pVerb     : string;
+                                 const pInClosure: TDictionary<Int64, string>;
+                                 const pUnchecked: TDictionary<Int64, Boolean>;
+                                 const pAcc      : TList<TLintTreeFinding>);
+var
+  O   : TBaselineSymbol;
+  Refs: TArray<TReference>;
+  Ref : TReference;
+  F   : TLintTreeFinding;
+begin
+  for O in pGone do
+  begin
+    if not IsRoutineKind(O.Kind) then
+      Continue;
+    { A baseline captured from the index always carries ids; a zero means the
+      baseline was hand-written or came from the parser side, and joining on it
+      would silently match nothing. Skipped rather than guessed. }
+    if O.Id <= 0 then
+      Continue;
+
+    { KEYED ON symbol_id ALONE, WITH NO KIND FILTER. CORRECTED 2026-09-10.
+      The design spec recorded "refs.symbol_id is populated for kind='call'
+      edges ONLY" from a 5-row fixture, and the draft rule filtered on it.
+      Re-measured on a fixture containing a PARENLESS function call
+      (`I := W.Value;` where `function Value: Integer`), the resolved row came
+      back as kind='member-access' pointing at uB.TWidget.Value.
+      docs\INDEX-SCHEMA.md had said so all along: "Populated for `call` and
+      `member-access` refs only". A kind='call' filter would therefore drop
+      every parenless call -- property-style getters and parameterless
+      functions, which are everywhere in Delphi -- SILENTLY, reading as an
+      all-clear. A resolved symbol_id is unambiguous by construction, so
+      dropping the kind filter is strictly safer, not looser. }
+    Refs:= pStore.FindReferencesTo(O.Id);
+    for Ref in Refs do
+    begin
+      if not pInClosure.ContainsKey(Ref.FileId) then
+        Continue;
+      F         := Default(TLintTreeFinding);
+      F.FilePath:= pInClosure[Ref.FileId];
+      F.Line    := Ref.StartLine;
+      F.Col     := Ref.StartCol;
+      F.Rule    := 'stale-interface-reference';
+      F.Severity:= 'warning';
+      F.RefKind := Ref.Kind;
+      F.Unchecked:= pUnchecked.ContainsKey(Ref.FileId);
+      F.Message := Format('the edited unit %s %s; this reference will not ' +
+        'compile until it is updated', [pVerb, O.QName]);
+      pAcc.Add(F);
+    end;
+  end;
+end;
+
+function BuildRoutineFindings(const pStore    : ISymbolStore;
+                              const pDelta    : TLintTreeDelta;
+                              const pClosure  : TArray<TDependentFile>;
+                              const pUnchecked: TDictionary<Int64, Boolean>):
+                              TArray<TLintTreeFinding>;
+var
+  InClosure: TDictionary<Int64, string>;
+  Acc      : TList<TLintTreeFinding>;
+  Dep      : TDependentFile;
+begin
+  InClosure:= TDictionary<Int64, string>.Create;
+  Acc      := TList<TLintTreeFinding>.Create;
+  try
+    for Dep in pClosure do
+      InClosure.AddOrSetValue(Dep.FileId, Dep.Path);
+    CollectRoutineFindings(pStore, pDelta.Removed, 'no longer declares',
+      InClosure, pUnchecked, Acc);
+    CollectRoutineFindings(pStore, pDelta.Changed, 'has changed the declaration of',
+      InClosure, pUnchecked, Acc);
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+    InClosure.Free;
+  end;
+end;
+
+{ A dependent whose file on disk is NEWER than the row the index holds for it
+  was edited after the index was built, so every ref position taken from that
+  row may be stale. Such findings are still REPORTED -- suppressing them would
+  hide real breakage -- but FLAGGED, because a line number from a stale row
+  points at plausible code in the wrong place, which is worse than an obvious
+  error. This repo has a scar for exactly that: find-callers once returned two
+  of three callers at a consistent 62-line offset, and every hit rendered real,
+  plausible Delphi from the wrong place. }
+function CollectUnchecked(const pStore  : ISymbolStore;
+                          const pClosure: TArray<TDependentFile>):
+                          TDictionary<Int64, Boolean>;
+var
+  Dep      : TDependentFile;
+  DiskTime : TDateTime;
+  DiskUnix : Int64;
+  IndexUnix: Int64;
+begin
+  Result:= TDictionary<Int64, Boolean>.Create;
+  for Dep in pClosure do
+  begin
+    { FileAge rather than TFile.GetLastWriteTime: it reports failure by returning
+      False instead of raising, so a deleted or locked dependent needs no
+      exception handler whose only action would be to set the same flag. }
+    if not FileAge(Dep.Path, DiskTime) then
+    begin
+      Result.AddOrSetValue(Dep.FileId, True);
+      Continue;
+    end;
+    IndexUnix:= pStore.GetFileMTime(Dep.FileId);
+    if IndexUnix <= 0 then
+    begin
+      { No recorded mtime at all -- treat as unverifiable rather than current.
+        A MISSING stamp is STALE, not fresh. }
+      Result.AddOrSetValue(Dep.FileId, True);
+      Continue;
+    end;
+    DiskUnix:= DateTimeToUnix(TTimeZone.Local.ToUniversalTime(DiskTime));
+    { One second of slack: FAT/network timestamps and the indexer's own read can
+      differ by sub-second amounts, and flagging every dependent as unchecked
+      would make the flag meaningless. }
+    if DiskUnix > IndexUnix + 1 then
+      Result.AddOrSetValue(Dep.FileId, True);
+  end;
+end;
+
 function ReadBaselineFile(const pPath: string; out AFingerprint: string;
-  out AProfile: TIndexerProfile; out AWhy: string): Boolean;
+  out AProfile: TIndexerProfile; out ASymbols: TArray<TBaselineSymbol>;
+  out AWhy: string): Boolean;
 var
   Text: string;
   Root: TJSONObject;
@@ -296,6 +579,7 @@ var
 begin
   AFingerprint:= '';
   AProfile    := Default(TIndexerProfile);
+  ASymbols    := [];
   AWhy        := '';
   Result      := False;
 
@@ -333,9 +617,67 @@ begin
       AWhy:= 'baseline carries no fingerprint';
       Exit;
     end;
-    Result:= True;
+    ASymbols:= BaselineSymbolsOf(Root);
+    Result  := True;
   finally
     Root.Free;
+  end;
+end;
+
+function UncheckedSuffix(const pUnchecked: Boolean): string;
+begin
+  { Said out loud rather than left to a JSON field the text reader never sees:
+    this dependent changed on disk after the index was built, so the LINE is
+    not to be trusted even though the finding is. }
+  if pUnchecked then
+    Result:= '   (UNCHECKED: this file changed since it was indexed)'
+  else
+    Result:= '';
+end;
+
+function QNameArray(const pSymbols: TArray<TBaselineSymbol>): TJSONArray;
+var
+  S: TBaselineSymbol;
+  O: TJSONObject;
+begin
+  Result:= TJSONArray.Create;
+  for S in pSymbols do
+  begin
+    O:= TJSONObject.Create;
+    O.AddPair('qname', S.QName);
+    O.AddPair('kind',  S.Kind);
+    O.AddPair('signature', S.Signature);
+    Result.AddElement(O);
+  end;
+end;
+
+function StringArray(const pItems: TArray<string>): TJSONArray;
+var
+  S: string;
+begin
+  Result:= TJSONArray.Create;
+  for S in pItems do
+    Result.Add(S);
+end;
+
+function FindingArray(const pFindings: TArray<TLintTreeFinding>): TJSONArray;
+var
+  F: TLintTreeFinding;
+  O: TJSONObject;
+begin
+  Result:= TJSONArray.Create;
+  for F in pFindings do
+  begin
+    O:= TJSONObject.Create;
+    O.AddPair('file',     F.FilePath);
+    O.AddPair('line',     TJSONNumber.Create(F.Line));
+    O.AddPair('col',      TJSONNumber.Create(F.Col));
+    O.AddPair('rule',     F.Rule);
+    O.AddPair('severity', F.Severity);
+    O.AddPair('message',  F.Message);
+    O.AddPair('ref_kind', F.RefKind);
+    O.AddPair('unchecked', TJSONBool.Create(F.Unchecked));
+    Result.AddElement(O);
   end;
 end;
 
@@ -350,8 +692,10 @@ var
   Root: TJSONObject;
   Fp  : TJSONObject;
   Base: TJSONObject;
+  Cl  : TJSONObject;
   NR  : TJSONArray;
   SB  : TStringBuilder;
+  F   : TLintTreeFinding;
 begin
   if not SameText(pOptions.Format, 'json') then
   begin
@@ -374,6 +718,15 @@ begin
             + ' -- no dependent can be affected.');
         SB.AppendLine('  new ' + Copy(pReport.NewFp, 1, FINGERPRINT_ECHO_CHARS));
         SB.AppendLine('  old ' + Copy(pReport.OldFp, 1, FINGERPRINT_ECHO_CHARS));
+        if pReport.HasClosure then
+          SB.AppendLine(Format('  %d dependent(s), %d of them direct  [%d ms]',
+            [pReport.TotalCnt, pReport.DirectCnt, pReport.ClosureMs]));
+        for F in pReport.Findings do
+          SB.AppendLine(Format('  %s:%d:%d  [%s] %s: %s%s',
+            [F.FilePath, F.Line, F.Col, F.Severity, F.Rule, F.Message,
+             UncheckedSuffix(F.Unchecked)]));
+        if Length(pReport.Findings) = 0 then
+          SB.AppendLine('  no reportable reference broke -- see not_reportable');
       end;
       Exit(SB.ToString);
     finally
@@ -402,8 +755,27 @@ begin
       TJSONNumber.Create(pReport.Profile.SchemaVersion));
     Root.AddPair('baseline', Base);
 
+    { NOT 'changed' for the delta array. The plan's schema names BOTH the
+      boolean and the array `changed`, which emits a duplicate JSON key; a
+      strict parser keeps the LAST, so the primary answer -- did anything
+      change at all -- silently became an array. Caught 2026-09-10 by parsing
+      the output instead of reading it. The boolean keeps the plain name
+      because it is what every consumer branches on. }
+    Root.AddPair('removed_symbols', QNameArray(pReport.Delta.Removed));
+    Root.AddPair('changed_symbols', QNameArray(pReport.Delta.Changed));
+    Root.AddPair('added_symbols',   StringArray(pReport.Delta.Added));
+
+    if pReport.HasClosure then
+    begin
+      Cl:= TJSONObject.Create;
+      Cl.AddPair('direct', TJSONNumber.Create(pReport.DirectCnt));
+      Cl.AddPair('total',  TJSONNumber.Create(pReport.TotalCnt));
+      Cl.AddPair('ms',     TJSONNumber.Create(pReport.ClosureMs));
+      Root.AddPair('closure', Cl);
+    end;
+
     Root.AddPair('buffer_set', TJSONArray.Create);
-    Root.AddPair('findings', TJSONArray.Create);
+    Root.AddPair('findings', FindingArray(pReport.Findings));
 
     { Stated rather than implied: an empty findings list means "no reportable
       row", not "nothing is broken". Property, field and member-access changes
@@ -495,6 +867,12 @@ var
   IndexSide  : TSurfaceSide;
   Report     : TLintTreeReport;
   BaseProfile: TIndexerProfile;
+  BaseSymbols: TArray<TBaselineSymbol>;
+  Closure    : TArray<TDependentFile>;
+  Unchecked  : TDictionary<Int64, Boolean>;
+  Dep        : TDependentFile;
+  T0         : TStopwatch;
+  TargetId   : Int64;
   Why        : string;
 begin
   AOutput:= ValidateAndResolve(pOptions, pOpenStore, Store, DiskLines, IndexSide);
@@ -601,7 +979,7 @@ begin
   if pOptions.BaselinePath <> '' then
   begin
     if not ReadBaselineFile(pOptions.BaselinePath, Report.OldFp, BaseProfile,
-      Why) then
+      BaseSymbols, Why) then
     begin
       AOutput:= 'ERROR: ' + Why;
       Exit(2);
@@ -618,6 +996,35 @@ begin
   end;
 
   Report.Changed:= not SameText(Report.NewFp, Report.OldFp);
+
+  { The closure is only computed when something actually changed. That is not
+    an optimisation for its own sake: the overwhelmingly common case in an
+    editor is a keystroke inside a method body, where the interface is
+    identical and there is nothing to fan out to. Paying for a recursive CTE
+    on every idle tick is how a background feature earns a reputation. }
+  if Report.Changed and (Length(BaseSymbols) > 0) then
+  begin
+    Report.Delta:= ComputeDelta(BaseSymbols, ParseRes.Symbols);
+
+    TargetId:= Store.FindFileIdByPath(pOptions.UnitPath);
+    T0      := TStopwatch.StartNew;
+    Closure := Store.GetDependentFiles(TargetId);
+    Report.ClosureMs := T0.ElapsedMilliseconds;
+    Report.HasClosure:= True;
+    Report.TotalCnt  := Length(Closure);
+    for Dep in Closure do
+      if Dep.IsDirect then
+        Inc(Report.DirectCnt);
+
+    Unchecked:= CollectUnchecked(Store, Closure);
+    try
+      Report.Findings:= BuildRoutineFindings(Store, Report.Delta, Closure,
+        Unchecked);
+    finally
+      Unchecked.Free;
+    end;
+  end;
+
   AOutput:= Render(pOptions, Report);
   Result := 0;
 end;

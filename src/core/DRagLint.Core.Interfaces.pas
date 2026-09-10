@@ -2052,6 +2052,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetUnitScopeEdges: TArray<TFileScopeEdge>;
+    /// <summary>Every unit that reaches <paramref name="AFileId"/> through its
+    /// uses clauses -- the fan-out an interface change has to be checked
+    /// against.</summary>
+    /// <param name="AFileId">files.id of the unit whose interface changed.</param>
+    /// <returns>Direct users first, then transitive ones, each ordered by path.
+    /// The target itself is never included. Empty when nothing uses it.</returns>
+    /// <remarks>Closure direction is USER-ward (dependents), not dependency-ward.
+    /// See TDependentFile for why there is no depth column.</remarks>
+    function GetDependentFiles(AFileId: Int64): TArray<TDependentFile>;
     /// <summary>Option 4: every UNIT-LEVEL routine -- a procedure/function whose
     /// parent symbol is the unit itself (id, file_id, name, signature, section
     /// populated). Backs TCallResolver's unit-level rung for a BARE call, which
