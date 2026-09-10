@@ -60,6 +60,8 @@ contains
   DragLint.Plugin.ProcRun in 'DragLint.Plugin.ProcRun.pas',
   DragLint.Plugin.SurfaceSplit in 'DragLint.Plugin.SurfaceSplit.pas',
   DragLint.Plugin.IndexJob in 'DragLint.Plugin.IndexJob.pas',
+  DragLint.Plugin.FanOutState in 'DragLint.Plugin.FanOutState.pas',
+  DragLint.Plugin.FanOut in 'DragLint.Plugin.FanOut.pas',
   DragLint.Plugin.UsagesForm in 'DragLint.Plugin.UsagesForm.pas',
   DragLint.Plugin.SymbolSearchForm in 'DragLint.Plugin.SymbolSearchForm.pas',
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',

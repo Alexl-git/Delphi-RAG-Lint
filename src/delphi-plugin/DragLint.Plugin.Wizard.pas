@@ -29,6 +29,7 @@ implementation
 
 uses
   Vcl.Dialogs
+  , DragLint.Plugin.FanOut
   , DragLint.Plugin.Editor
   , DragLint.Plugin.Options
   , DragLint.Plugin.ProjectMenu
@@ -62,6 +63,12 @@ begin
       - Editor paints AV in TOTAEditView.BeginPaint -> GetInterface
     All are idempotent; safe to call here in addition to the unit
     finalizations (which run later in the same shutdown). }
+  { PLAN-lint-tree P3. FIRST, and for two reasons the others do not have: it
+    holds an IOTAMessageNotifier the IDE would otherwise call back into, and it
+    may have an engine child running RIGHT NOW. ShutdownFanOut kills that child
+    and waits for it -- a dcc grandchild outliving the BPL that spawned it is a
+    process nobody is left to reap. }
+  try ShutdownFanOut; except end;
   try UnregisterAllSaveNotifiers; except end;
   try UnregisterDragLintEditViewNotifier; except end;
   try UnregisterProjectNotifier; except end;

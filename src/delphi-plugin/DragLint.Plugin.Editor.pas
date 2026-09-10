@@ -241,6 +241,9 @@ uses
   , DragLint.Plugin.GraphWindow
   , DragLint.Plugin.SaveNotifier
   , DragLint.Plugin.LiveDiagnostics
+  , { PLAN-lint-tree P3/P5: the interface-change fan-out. FanOut does NOT use
+      Editor, so this arrow only goes one way. }
+    DragLint.Plugin.FanOut
   , DragLint.Plugin.AutoComplete
   , DragLint.Plugin.Telemetry
   , { TEMP debug telemetry }
@@ -6222,6 +6225,11 @@ begin
   AddSectionHeader(RootMenu, 'Compile && Analysis');
   AddWrappedItem(RootMenu, 'Compile && Diagnose'            , InvokeCompileDiagnose);
   AddWrappedItem(RootMenu, 'Compile Buffer (unsaved)'       , InvokeGhostCheck     );
+  { PLAN-lint-tree P5. Tier 3 normally waits for a quiet period; this is the
+    manual path, for when you want the answer NOW rather than in fifteen
+    seconds. It is also the only way to reach tier 3 while the automatic
+    trigger is backing off. }
+  AddWrappedItem(RootMenu, 'Compile Dependents'              , InvokeCompileDependents);
 
   { ---- About & Help ---- }
   AddSeparator(RootMenu);
@@ -6273,6 +6281,15 @@ begin
   DragLint.Plugin.EditViewNotifier.GOnFileFirstSeenHook:= TriggerDiagnosticsOnSave;
   { v0.47: out-of-process compile-on-save -> surfaces compiler errors in the pane. }
   DragLint.Plugin.SaveNotifier.GAfterSaveCompileHook:= TriggerCompileOnSave;
+  { PLAN-lint-tree P3/P5: the interface-change fan-out. StartFanOut installs the
+    message-group notifier BEFORE the group exists, creates the tier-3 timer and
+    assigns LiveDiagnostics.GFanOutHook -- which is nil until this runs, so a
+    plugin without it simply never fans out rather than half-working. }
+  DragLint.Plugin.FanOut.StartFanOut;
+  { A save resets the discard back-off and FORCES a pending dependent compile.
+    It deliberately does NOT end the edit episode: the question the fan-out
+    answers -- does anything still point at what I removed -- spans saves. }
+  DragLint.Plugin.SaveNotifier.GAfterSaveFanOutHook:= NotifyFanOutSave;
   { Batch E Task 3: butterfly Call Graph tab double-click nav -- DockForm cannot
     uses-import Editor (Editor already uses DockForm) and DLNavigateToSource is
     implementation-private here, so wire it through the same hook pattern as

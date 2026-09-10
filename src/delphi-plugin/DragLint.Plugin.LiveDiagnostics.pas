@@ -35,6 +35,14 @@ procedure NotifyEditDirty;
 /// is deliberately not thread-safe.</remarks>
 procedure NotifyFanOutFingerprint(const AFingerprint: string);
 
+/// <summary>The active .pas editor buffer, unsaved text included.</summary>
+/// <param name="AFilePath">Receives the buffer's path; '' if there is none.</param>
+/// <returns>The buffer text, or '' when no .pas view is active.</returns>
+/// <remarks>MAIN THREAD ONLY -- it goes through IOTAEditReader. Exposed because
+/// tier 3 must re-read the CURRENT buffer rather than compile the snapshot tier
+/// 2 staged minutes earlier.</remarks>
+function ActiveBufferSnapshot(out AFilePath: string): string;
+
 var
   GLiveStatus: string = ''; { shown in the dock Diagnostics status line }
   { v0.47: assigned by the Editor unit to RunGhostCheckAsync(False). The runner
@@ -56,7 +64,7 @@ var
     Returns True if the fan-out actually started. nil-safe, and nil is the
     normal state until the FanOut unit is wired in -- a plugin without it
     simply never fans out. }
-  GFanOutHook: TFunc<string, Integer, Boolean> = nil;
+  GFanOutHook: TFunc<string, string, Integer, Boolean> = nil;
 
 implementation
 
@@ -679,7 +687,7 @@ begin
                            [FanGen, ExtractFileName(PollFile)]));
             var FanStarted: Boolean:= False;
             try
-              FanStarted:= GFanOutHook(PollFile, FanGen);
+              FanStarted:= GFanOutHook(PollFile, Snap, FanGen);
             except
               on E: Exception do LiveLog('fanout: hook raised ' + E.ClassName + ': ' + E.Message);
             end;
@@ -803,6 +811,11 @@ begin
     GRunner.FLastEdit    := GetTickCount;
   end
   else LiveLog('NotifyEditDirty: GRunner=nil -- live runner NOT started!');
+end;
+
+function ActiveBufferSnapshot(out AFilePath: string): string;
+begin
+  Result:= ActiveBufferText(AFilePath);
 end;
 
 procedure NotifyFanOutFingerprint(const AFingerprint: string);

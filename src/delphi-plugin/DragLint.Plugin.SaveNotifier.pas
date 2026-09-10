@@ -86,6 +86,13 @@ var
 var
   GAfterSaveCompileHook: procedure(const AFile: string) = nil;
 
+  { PLAN-lint-tree P3/P5: set by Editor to FanOut.NotifyFanOutSave. A save
+    resets the fan-out's discard back-off and forces a pending dependent
+    compile. A HOOK rather than a direct call for the same reason as the two
+    above -- Editor already uses SaveNotifier, so the arrow cannot point back. }
+var
+  GAfterSaveFanOutHook: procedure(const AFile: string) = nil;
+
 implementation
 
 uses
@@ -262,6 +269,11 @@ begin
       the IDE the way in-process Error Insight can. }
     if Cfg.AutoCompileOnSave and Assigned(GAfterSaveCompileHook) then
     try GAfterSaveCompileHook(SavedFile); except end;
+
+    { Tier 1 has just refreshed the index; tell the fan-out, which uses a save
+      as its forcing trigger for tier 3 and as the reset for its back-off. }
+    if Assigned(GAfterSaveFanOutHook) then
+    try GAfterSaveFanOutHook(SavedFile); except on E: Exception do begin end; end;
   except
     { Silent -- never propagate into the IDE save path. }
   end; // try
