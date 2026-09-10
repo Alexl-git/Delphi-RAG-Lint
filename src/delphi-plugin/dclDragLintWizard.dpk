@@ -59,6 +59,7 @@ contains
   DragLint.Plugin.Options in 'DragLint.Plugin.Options.pas',
   DragLint.Plugin.ProcRun in 'DragLint.Plugin.ProcRun.pas',
   DragLint.Plugin.SurfaceSplit in 'DragLint.Plugin.SurfaceSplit.pas',
+  DragLint.Plugin.IndexJob in 'DragLint.Plugin.IndexJob.pas',
   DragLint.Plugin.UsagesForm in 'DragLint.Plugin.UsagesForm.pas',
   DragLint.Plugin.SymbolSearchForm in 'DragLint.Plugin.SymbolSearchForm.pas',
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',

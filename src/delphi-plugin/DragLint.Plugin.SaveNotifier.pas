@@ -37,6 +37,10 @@ type
       FModule       : IOTAModule;
       FNotifierIndex: Integer   ;
       class procedure SpawnIndexerFile(const AExePath, AFilePath, ADbPath: string); static;
+      { PLAN-lint-tree P4, tier 1. Returns False when no .dproj could be
+        resolved, which is the caller's cue to fall back to the per-file spawn
+        rather than silently leave the index stale. }
+      class function  EnqueueProjectReindex(const AExePath, ADbPath: string): Boolean; static;
     public
       constructor Create(const AModule: IOTAModule);
       { IOTANotifier }
@@ -87,6 +91,12 @@ implementation
 uses
   Winapi.Windows
   , DragLint.Plugin.ExeResolver
+  , { PLAN-lint-tree P4: tier 1 goes through the QUEUE, not CreateProcessW, so
+      it is coalesced across a Save All and deferred while ide-release holds
+      the engine for a build. }
+    DragLint.Plugin.JobQueue
+  , DragLint.Plugin.IndexJob
+  , DragLint.Plugin.DbResolver
   ;
 
 { ---- helpers ---- }
@@ -159,6 +169,35 @@ begin
   end;
 end;
 
+{ ---- tier 1: the queued project reindex ---- }
+
+{ PLAN-lint-tree P4. The save path used to fire a DETACHED per-file
+  index <file> for every module the IDE saved. Three things were wrong with
+  that, and the queue fixes all three at once:
+
+    Save All on 30 units spawned 30 engines against one database. The queue
+    coalesces on the DB, so it becomes one run.
+    A detached spawn ignores the engine hold, so a save landing inside a build
+    window either died mid-run or held the file the build was replacing.
+    A per-FILE target cannot see a newly added unit's closure.
+
+  NOT --rebuild: see the header of DragLint.Plugin.IndexJob for what that
+  would do to the resident LSP. B0(c) measured the incremental form at 0.37 s
+  for a no-op pass and 1.21 s for a one-file write, with two resident LSP
+  children alive and no lock. }
+class function TDragLintSaveNotifier.EnqueueProjectReindex(const AExePath, ADbPath: string): Boolean;
+var
+  ProjFile: string;
+  Platform: string;
+begin
+  Result:= False;
+  ProjFile:= GetActiveProjectFilePath;
+  if ProjFile = '' then Exit;
+  Platform:= GetActivePlatformForLibrary;
+  JobQueue.Enqueue(BuildProjectIndexJob(AExePath, ProjFile, ADbPath, Platform));
+  Result:= True;
+end;
+
 { ---- TDragLintSaveNotifier ---- }
 { Constructor defined further down (after registration tracker globals) }
 
@@ -204,7 +243,11 @@ begin
               [ExtractFileName(SavedFile)])); except { swallow } end; end
     );
 
-    SpawnIndexerFile(ExePath, SavedFile, DbPath);
+    { Tier 1. The per-file spawn stays as the fallback for a unit saved with no
+      project open: it is exactly what this path did before, so the no-project
+      case is unchanged rather than quietly losing its reindex. }
+    if not EnqueueProjectReindex(ExePath, DbPath) then
+      SpawnIndexerFile(ExePath, SavedFile, DbPath);
 
     { v0.42: republish diagnostics for the saved file (syntax errors + lint).
       The hook sends textDocument/didSave to the running LSP, which replies with
