@@ -95,6 +95,18 @@ type
   TPreprocessor = reference to function(const pUtf8: TBytes;
                                         const pFile: string): TBytes;
 
+  /// <summary>Compiles one unit with a shadow directory FIRST on the unit
+  /// search path, so it binds the shadow copy of an edited unit.</summary>
+  /// <param name="pUnitPath">The dependent to compile, at its real path.</param>
+  /// <param name="pProjectPath">The .dproj supplying the compile context.</param>
+  /// <param name="pPlatform">win32 | win64.</param>
+  /// <param name="pShadowDir">Directory holding the staged buffer(s).</param>
+  /// <returns>Compiler findings; errors and warnings alike, filtered by the caller.</returns>
+  /// <remarks>Injected rather than called directly so this unit stays free of
+  /// the CLI, and so a test can drive tier 3 without a compiler.</remarks>
+  TUnitCompiler = reference to function(const pUnitPath, pProjectPath,
+    pPlatform, pShadowDir: string): TArray<TCompilerFinding>;
+
 /// <summary>Runs the verb and renders its report.</summary>
 /// <param name="pOptions">Parsed command-line options.</param>
 /// <param name="pOpenStore">Store opener; must not be nil.</param>
@@ -113,11 +125,13 @@ function RunLintTree(const pOptions   : TLintTreeOptions;
                      const pOpenStore : TStoreOpener;
                      const pParserFor : TParserFactory;
                      const pPreprocess: TPreprocessor;
+                     const pCompile   : TUnitCompiler;
                      out   AOutput    : string): Integer;
 
 implementation
 
 uses
+  Winapi.Windows,
   System.DateUtils,
   System.Diagnostics,
   DRagLint.Core.Encoding;
@@ -198,6 +212,8 @@ type
       bare-name join would have been ambiguous. Reported so an empty findings
       list is never mistaken for 'nothing broke'. }
     Suppressed: Integer;
+    Compiled  : Boolean;
+    ShadowDir : string;
   end;
 
   TSurfaceSide = record
@@ -964,6 +980,7 @@ begin
     Root.AddPair('findings', FindingArray(pReport.Findings));
     Root.AddPair('suppressed_ambiguous',
       TJSONNumber.Create(pReport.Suppressed));
+    Root.AddPair('compiled', TJSONBool.Create(pReport.Compiled));
 
     { Stated rather than implied: an empty findings list means "no reportable
       row", not "nothing is broken". Property, field and member-access changes
@@ -1038,10 +1055,131 @@ end;
   a wrong DEFAULT when a later branch forgets to set it, which for this verb
   means reporting changed:false -- a silent all-clear -- instead of refusing.
   Re-examine when B3 adds the closure and diff steps. }
+{ ---- tier 3: compile the dependents against the unsaved buffer -------------- }
+
+{ WHY A SHADOW DIRECTORY AND NOT THE REAL FILES. The 2026-09-08 ruling: a ghost
+  compile must never write the user's source. All dirty buffers go into ONE
+  shadow dir, and dcc is invoked with that dir FIRST on the unit search path, so
+  a dependent compiled from its real location still binds the SHADOW copy of the
+  edited unit. That is also why this cannot be an msbuild project build: a .dproj
+  binds its units by their own paths and a shadow cannot displace them.
+
+  THE PRECEDENCE IS THE WHOLE MECHANISM, AND IT IS A PREDICTION UNTIL A GUARD
+  PROVES IT. dcc will happily take a stale B.dcu over a shadow B.pas if the
+  search order lets it, in which case this tier reports success on exactly the
+  edit it was built to catch. The guard therefore has to build a stale .dcu
+  FIRST and prove the shadow still wins; without that step it proves nothing. }
+function CompileDependents(const pOptions   : TLintTreeOptions;
+                           const pPlatform  : string;
+                           const pCompile   : TUnitCompiler;
+                           const pClosure   : TArray<TDependentFile>;
+                           const pBufferBytes: TBytes;
+                           const pUnchecked : TDictionary<Int64, Boolean>;
+                           out   AShadowUsed: string): TArray<TLintTreeFinding>;
+var
+  ShadowDir : string;
+  Acc       : TList<TLintTreeFinding>;
+  Dep       : TDependentFile;
+  Raw       : TArray<TCompilerFinding>;
+  CF        : TCompilerFinding;
+  F         : TLintTreeFinding;
+  Ordered   : TList<TDependentFile>;
+begin
+  AShadowUsed:= '';
+  Acc        := TList<TLintTreeFinding>.Create;
+  Ordered    := TList<TDependentFile>.Create;
+  try
+    ShadowDir:= TPath.Combine(TPath.GetTempPath,
+      Format('draglint_tree_%d_%d', [GetCurrentProcessId, GetTickCount64]));
+    AShadowUsed:= ShadowDir;
+    try
+      TDirectory.CreateDirectory(ShadowDir);
+      { The edited unit, under its OWN file name, is the only thing staged. Its
+        dependents are compiled from their real locations -- staging them too
+        would hide a dependent that is itself unsaved, and tier 2 already marks
+        those UNCHECKED rather than pretending to have checked them. }
+      TFile.WriteAllBytes(
+        TPath.Combine(ShadowDir, ExtractFileName(pOptions.UnitPath)),
+        pBufferBytes);
+
+      { EVERY unit that will be compiled must be staged, not just the edited
+        one. CompileUnitInContext compiles `<shadow>\<basename of AUnitPath>`
+        (CLI.pas:18739), so naming a dependent whose file is NOT in the shadow
+        asks dcc to compile a path that does not exist -- which produced no
+        findings at all and read as a clean compile. MEASURED 2026-09-10: the
+        compile-shadow guard went red on exactly that, and ghost-check, which
+        stages every overlay entry, reported the E2003 the same fixture owed.
+        Dependents are staged from DISK because they are unedited; the edited
+        unit above is staged from the BUFFER. }
+      for Dep in pClosure do
+        if not SameText(Dep.Path, pOptions.UnitPath) then
+          if TFile.Exists(Dep.Path) then
+            TFile.Copy(Dep.Path,
+              TPath.Combine(ShadowDir, ExtractFileName(Dep.Path)), True);
+
+      { Direct users first, then the rest. A break usually surfaces in a direct
+        user, and a developer reading a truncated list wants that one first. }
+      for Dep in pClosure do
+        if Dep.IsDirect then
+          Ordered.Add(Dep);
+      for Dep in pClosure do
+        if not Dep.IsDirect then
+          Ordered.Add(Dep);
+
+      for Dep in Ordered do
+      begin
+        Raw:= pCompile(Dep.Path, pOptions.ProjectPath, pPlatform, ShadowDir);
+        for CF in Raw do
+        begin
+          { Errors only. A dependent that merely warns compiled fine, and tier 3
+            exists to answer "does this still BUILD", not to duplicate the
+            compiler's advice column. }
+          if not SameText(CF.Severity, 'Error') then
+            Continue;
+
+          F         := Default(TLintTreeFinding);
+          { Remap the shadow path back to the real unit so an IDE can place a
+            marker. Same remap DoGhostCheck performs. }
+          if SameText(ExtractFileName(CF.RawPath),
+                      ExtractFileName(pOptions.UnitPath)) then
+            F.FilePath:= pOptions.UnitPath
+          else if CF.RawPath <> '' then
+            F.FilePath:= CF.RawPath
+          else
+            F.FilePath:= Dep.Path;
+          F.Line     := CF.LineNo;
+          F.Col      := CF.ColNo;
+          F.Rule     := 'stale-interface-reference';
+          F.Severity := 'error';
+          F.RefKind  := 'compile';
+          F.Unchecked:= pUnchecked.ContainsKey(Dep.FileId);
+          F.Message  := Format('[compile] %s %s', [CF.Code, CF.Message]);
+          Acc.Add(F);
+        end;
+      end;
+    finally
+      { Best-effort. A leftover temp dir is harmless; failing to remove it must
+        never turn a successful check into an error. }
+      try
+        if TDirectory.Exists(ShadowDir) then
+          TDirectory.Delete(ShadowDir, True);
+      except
+        on E: Exception do
+          AShadowUsed:= ShadowDir + ' (not removed: ' + E.Message + ')';
+      end;
+    end;
+    Result:= Acc.ToArray;
+  finally
+    Ordered.Free;
+    Acc.Free;
+  end;
+end;
+
 function RunLintTree(const pOptions   : TLintTreeOptions;  // dl:ok too-many-exit-points@49da
                      const pOpenStore : TStoreOpener;
                      const pParserFor : TParserFactory;
                      const pPreprocess: TPreprocessor;
+                     const pCompile   : TUnitCompiler;
                      out   AOutput    : string): Integer;
 var
   Store      : ISymbolStore;
@@ -1060,6 +1198,8 @@ var
   Unchecked  : TDictionary<Int64, Boolean>;
   Dep        : TDependentFile;
   T0         : TStopwatch;
+  ShadowUsed : string;
+  EffPlatform: string;
   TargetId   : Int64;
   Why        : string;
 begin
@@ -1208,6 +1348,28 @@ begin
     try
       Report.Findings:= BuildFindings(Store, Report.Delta, Closure, Unchecked,
         TargetId, Report.Suppressed);
+
+      { Tier 3 runs only when ASKED and only when tier 2 already found the
+        interface changed. Compiling a dependent closure is seconds to minutes
+        of dcc; doing it speculatively on an unchanged interface would burn a
+        core for nothing. }
+      if pOptions.Compile and Assigned(pCompile) then
+      begin
+        Report.Compiled := True;
+        { --platform is OPTIONAL, and an empty one would hand dcc nothing. The
+          index knows which platform it was built for (schema_meta `plat=`), and
+          compiling a dependent for a DIFFERENT platform than the index was
+          built for would compare two different define profiles. So the index's
+          platform is the default, and an explicit --platform overrides it. }
+        if pOptions.Platform <> '' then
+          EffPlatform:= pOptions.Platform
+        else
+          EffPlatform:= IndexSide.Profile.Platform;
+        Report.Findings := Report.Findings +
+          CompileDependents(pOptions, EffPlatform, pCompile, Closure, RawBytes,
+            Unchecked, ShadowUsed);
+        Report.ShadowDir:= ShadowUsed;
+      end;
     finally
       Unchecked.Free;
     end;

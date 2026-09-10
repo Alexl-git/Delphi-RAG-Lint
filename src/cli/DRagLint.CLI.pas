@@ -15792,6 +15792,8 @@ begin
   end;
 end;
 
+function CompileUnitInContext(const AUnitPath, AProject, APlatform, AShadow: string): TCompileCheckResult; forward;
+
 { lint-tree -- the arg-mapping shim. The engine lives in
   DRagLint.Analysis.LintTree so it can be tested without a CLI, and so the three
   things it needs from the outside world -- a store, a parser, a preprocessor --
@@ -15829,7 +15831,11 @@ begin
       try
         Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
       except
-        Result:= nil;
+        on E: Exception do
+          { nil makes RunLintTree exit 2 naming the path. A missing file, a stale
+            schema and a locked DB are one outcome to the caller; catching
+            Exception rather than bare still lets EOutOfMemory through. }
+          Result:= nil;
       end;
     end,
     function(const AExtension: string): IParser
@@ -15846,6 +15852,14 @@ begin
         cannot drift into disagreeing about which branches are live. Blanking
         preserves byte length and LF, so symbol line numbers stay valid. }
       Result:= TAstParseCache.ApplyPreprocess(AUtf8, AFile);
+    end,
+    function(const AUnitPath, AProjectPath, APlatform, AShadowDir: string):
+      TArray<TCompilerFinding>
+    begin
+      { The SAME entry point ghost-check uses, so the two tiers cannot disagree
+        about how a shadow is put in front of the real unit. }
+      Result:= CompileUnitInContext(AUnitPath, AProjectPath, APlatform,
+                                    AShadowDir).Findings;
     end,
     Output);
 
@@ -17423,7 +17437,6 @@ end; // procedure
   check-unit and uses-fix), and Delphi resolves an implementation-section call
   top-down. DoGhostCheck's default path calls it, so without this the unit fails
   with E2003 rather than merely reading oddly. }
-function CompileUnitInContext(const AUnitPath, AProject, APlatform, AShadow: string): TCompileCheckResult; forward;
 
 { v0.48: ghost-check -- compile one or more units against their UNSAVED buffers.
 

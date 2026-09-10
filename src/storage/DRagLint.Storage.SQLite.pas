@@ -1082,6 +1082,8 @@ type
       /// </remarks>
       function GetUnitScopeEdges: TArray<TFileScopeEdge>;
     function GetDependentFiles(AFileId: Int64): TArray<TDependentFile>;
+    function GetLiteralsByKind(AFileId: Int64;
+                               const AKind: string): TArray<TStringLiteral>;
       /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed: List.ToArray.</returns>
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.TSymbolKindHelper.FromText: Unknown symbol kind: "%s"</exception>
       /// <remarks>
@@ -5575,6 +5577,64 @@ begin
     List.Free;
   end; // try
 end; // function
+
+function TSQLiteSymbolStore.GetLiteralsByKind(AFileId: Int64;
+  const AKind: string): TArray<TStringLiteral>;
+{ Enumerate one file's text spans of one kind. `SearchText` is FTS and needs a
+  PHRASE; a rule that must inspect every dfm-prop row of a form has no phrase to
+  search for, which is why this exists.
+  An empty AKind returns every kind rather than nothing -- the caller that wants
+  nothing simply does not call. }
+var
+  Q     : TFDQuery             ;
+  List  : TList<TStringLiteral>;
+  L     : TStringLiteral       ;
+  FSym  : TField; FSrc : TField; FKind: TField; FOwner: TField;
+  FText : TField; FSL  : TField; FSC  : TField; FEL   : TField; FEC: TField;
+begin
+  List:= TList<TStringLiteral>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  :=
+      'SELECT id, file_id, symbol_id, source, kind, owner_name, text, ' +
+      '       start_line, start_col, end_line, end_col ' +
+      '  FROM string_literals ' +
+      ' WHERE file_id = :fid ' +
+      '   AND (:kind = '''' OR kind = :kind2) ' +
+      ' ORDER BY start_line, start_col';
+    Q.ParamByName('fid'  ).AsLargeInt:= AFileId;
+    Q.ParamByName('kind' ).AsString  := AKind  ;
+    Q.ParamByName('kind2').AsString  := AKind  ;
+    Q.Open;
+    { Resolved once -- FieldByName is a linear name search per call. }
+    FSym  := Q.FieldByName('symbol_id' ); FSrc  := Q.FieldByName('source'    );
+    FKind := Q.FieldByName('kind'      ); FOwner:= Q.FieldByName('owner_name');
+    FText := Q.FieldByName('text'      ); FSL   := Q.FieldByName('start_line');
+    FSC   := Q.FieldByName('start_col' ); FEL   := Q.FieldByName('end_line'  );
+    FEC   := Q.FieldByName('end_col'   );
+    while not Q.Eof do
+    begin
+      L          := Default(TStringLiteral);
+      L.FileId   := AFileId;
+      L.SymbolId := FSym  .AsLargeInt;
+      L.Source   := FSrc  .AsString  ;
+      L.Kind     := FKind .AsString  ;
+      L.OwnerName:= FOwner.AsString  ;
+      L.Text     := FText .AsString  ;
+      L.StartLine:= FSL   .AsInteger ;
+      L.StartCol := FSC   .AsInteger ;
+      L.EndLine  := FEL   .AsInteger ;
+      L.EndCol   := FEC   .AsInteger ;
+      List.Add(L);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
 
 function TSQLiteSymbolStore.GetDependentFiles(AFileId: Int64): TArray<TDependentFile>;
 { The USER-direction closure: who would have to be recompiled if AFileId's
