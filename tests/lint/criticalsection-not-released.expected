@@ -1,3 +1,16 @@
 # Bad acquires Lock without a finally Leave (11); Good releases in finally (19) clean
 criticalsection-not-released 11
 !criticalsection-not-released 19
+# TMonitor.Enter/Exit is the SAME contract as Enter/Leave -- Exit in a finally releases.
+# GoodMonitor (31): correct Enter/try/finally/Exit idiom -- must be SILENT.
+!criticalsection-not-released 31
+# NEGATIVE CONTROLS -- these must fire BEFORE and AFTER the fix. Widening the
+# release-verb set is exactly the change that can make the rule unable to fire.
+# BadMonitorNoExit (43): acquired, never released.
+criticalsection-not-released 43
+# BadMonitorExitOutsideFinally (51): Exit is present but NOT in a finally.
+criticalsection-not-released 51
+# BadMonitorMixed: LockA (61) released in finally -> silent; LockB (67) leaked -> fires.
+# This pair also proves the key is the LOCK ARGUMENT, not the bare 'tmonitor' receiver.
+!criticalsection-not-released 61
+criticalsection-not-released 67
