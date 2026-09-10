@@ -83,6 +83,7 @@ uses
     must not be listed twice. }
   , DRagLint.Core   .Interfaces
   , DRagLint.Core   .Indexer
+  , DRagLint.Analysis.LintTree
   , DRagLint.Storage.SQLite
   , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in }
   , DRagLint.Parser .Delphi13
@@ -241,6 +242,13 @@ type
     FailOn       : string ; // --fail-on error|warning|info|none (ergonomics #12)
     Baseline     : string ; // --baseline <file>: report only findings NOT in it
     WriteBaseline: string ; // --write-baseline <file>: record current findings, exit 0
+    { lint-tree. --unit/--buffer/--project/--db/--baseline/--write-baseline/
+      --platform/--format are REUSED from the fields above; only these two are
+      new. `--with-rules`, not `--rules`: --rules already takes a VALUE
+      (RulesFile, for convert-*), so a boolean spelled --rules would swallow
+      the next argument. }
+    TreeCompile  : Boolean; // --compile   : lint-tree tier 3 (shadow compile)
+    TreeWithRules: Boolean; // --with-rules: also harvest dependent lint findings
     ConfigPath   : string ; // --config <file>: drag-lint-lint.json override path
     Enable       : string ; // --enable id1,id2: re-include disabled/off-by-default rules
     Profile      : string ; // --profile <name>: merge a named enable/disable set
@@ -704,6 +712,13 @@ begin
   Writeln('                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.');
   Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
   Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
+  Writeln('  drag-lint lint-tree          --unit <B.pas> --db <file.sqlite> [--buffer <buf>] [--project <.dproj>]');
+  Writeln('                               [--baseline <f.json>] [--write-baseline <f.json>] [--platform win32|win64]');
+  Writeln('                               [--with-rules] [--compile] [--format json|text]');
+  Writeln('                               ^ does an interface edit to <B.pas> reach any dependent? Exits 0 whether or');
+  Writeln('                                 not it found anything; 2 means it could NOT run. --baseline pins the OLD');
+  Writeln('                                 side to an edit-episode capture -- without it the OLD side is the live');
+  Writeln('                                 index, which is CLI/manual use only.');
   Writeln('  drag-lint exceptions-sync    [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project''s derived exception classes)');
   Writeln('                               Harvests every bare `raise Exception.Create(''literal'')` in the project and declares one class per');
   Writeln('                               DISTINCT message inside a drag-lint:auto managed block in the exceptions unit. DRY RUN WITHOUT --apply.');
@@ -1225,6 +1240,8 @@ begin
     else if (A = '--fail-on') and (i < ParamCount) then begin Inc(i); Result.FailOn:= ParamStr(i); end
     else if (A = '--baseline') and (i < ParamCount) then begin Inc(i); Result.Baseline:= ParamStr(i); end
     else if (A = '--write-baseline') and (i < ParamCount) then begin Inc(i); Result.WriteBaseline:= ParamStr(i); end
+    else if A = '--compile'      then Result.TreeCompile  := True
+    else if A = '--with-rules'   then Result.TreeWithRules:= True
     else if (A = '--config') and (i < ParamCount) then
     begin
       Inc(i);
@@ -15775,6 +15792,72 @@ begin
   end;
 end;
 
+{ lint-tree -- the arg-mapping shim. The engine lives in
+  DRagLint.Analysis.LintTree so it can be tested without a CLI, and so the three
+  things it needs from the outside world -- a store, a parser, a preprocessor --
+  are injected rather than reached for. That is not ceremony: the preprocessor in
+  particular MUST be the same one the indexer used, and making it a parameter is
+  what stops a second call site quietly parsing with a different profile. }
+function DoLintTree(const AArgs: TArgs): Integer;
+var
+  Options: TLintTreeOptions;
+  Output : string;
+begin
+  Options                  := Default(TLintTreeOptions);
+  Options.UnitPath         := AArgs.GhostUnit;
+  Options.BufferPath       := AArgs.GhostBuffer;
+  Options.ProjectPath      := AArgs.ProjectPath;
+  Options.DbPath           := AArgs.DbPath;
+  Options.BaselinePath     := AArgs.Baseline;
+  Options.WriteBaselinePath:= AArgs.WriteBaseline;
+  Options.Platform         := AArgs.CheckPlatform;
+  Options.Format           := AArgs.Format;
+  Options.WithRules        := AArgs.TreeWithRules;
+  Options.Compile          := AArgs.TreeCompile;
+
+  { A single --db, taken from --db or the first of a repeated --db. lint-tree
+    deliberately does NOT consult several indexes: a dependent found in another
+    project's index is not a dependent of THIS project, and the owner ruling of
+    2026-08-13 is that a cross-project name match is noise. }
+  if (Options.DbPath = '') and (Length(AArgs.DbPaths) > 0) then
+    Options.DbPath:= AArgs.DbPaths[0];
+
+  Result:= RunLintTree(
+    Options,
+    function(const ADbPath: string): ISymbolStore
+    begin
+      try
+        Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+      except
+        Result:= nil;
+      end;
+    end,
+    function(const AExtension: string): IParser
+    begin
+      if SameText(AExtension, '.pas') or SameText(AExtension, '.dpr')
+         or SameText(AExtension, '.dpk') then
+        Result:= TDelphi13Parser.Create
+      else
+        Result:= nil;
+    end,
+    function(const AUtf8: TBytes; const AFile: string): TBytes
+    begin
+      { The SAME call the direct lint path makes (Lint.Linter.pas), so the two
+        cannot drift into disagreeing about which branches are live. Blanking
+        preserves byte length and LF, so symbol line numbers stay valid. }
+      Result:= TAstParseCache.ApplyPreprocess(AUtf8, AFile);
+    end,
+    Output);
+
+  if Output <> '' then
+  begin
+    if Result = 0 then
+      Writeln(Output)
+    else
+      Writeln(ErrOutput, Output);
+  end;
+end;
+
 function DoLintAll(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>              ;
@@ -25653,6 +25736,7 @@ begin
     else if Args.Command = 'ghost-recover'     then Result:= DoGhostRecover    (Args)
     else if Args.Command = 'check-unit'        then Result:= DoCheckUnit       (Args)
     else if Args.Command = 'lint-all'          then Result:= DoLintAll         (Args)
+  else if Args.Command = 'lint-tree'         then Result:= DoLintTree        (Args)
     else if Args.Command = 'exceptions-sync'   then Result:= DoExceptionsSync  (Args)
     else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)
     else if Args.Command = 'cycles'            then Result:= DoCycles          (Args)
