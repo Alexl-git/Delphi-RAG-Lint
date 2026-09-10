@@ -27,6 +27,14 @@ procedure StopLiveDiagnostics;
 { Called from the edit-view notifier's Modified hook. }
 procedure NotifyEditDirty;
 
+/// <summary>Reports the surface fingerprint the engine returned for a fan-out
+/// run, so a repeated answer can stop the same shape being asked twice.</summary>
+/// <param name="AFingerprint">The engine's fingerprint for the last launch.</param>
+/// <remarks>Safe to call from the fan-out worker thread -- it marshals to the
+/// main thread itself, because the gate is driven from the runner's timer and
+/// is deliberately not thread-safe.</remarks>
+procedure NotifyFanOutFingerprint(const AFingerprint: string);
+
 var
   GLiveStatus: string = ''; { shown in the dock Diagnostics status line }
   { v0.47: assigned by the Editor unit to RunGhostCheckAsync(False). The runner
@@ -37,13 +45,25 @@ var
     Called on the MAIN thread. }
   GIdleGhostCheckHook: TFunc<Boolean> = nil;
 
+  { PLAN-lint-tree P2: assigned by the FanOut unit. Called on the MAIN thread
+    when the INTERFACE half of the active buffer has changed and then held
+    still for FANOUT_IDLE_MS -- i.e. "this edit could break a dependent, go
+    and look". The generation is the supersession token: a result arriving for
+    anything but the newest generation is stale and must be discarded, which is
+    why it is issued HERE, at the launch decision, rather than counted
+    independently by the worker.
+
+    Returns True if the fan-out actually started. nil-safe, and nil is the
+    normal state until the FanOut unit is wired in -- a plugin without it
+    simply never fans out. }
+  GFanOutHook: TFunc<string, Integer, Boolean> = nil;
+
 implementation
 
 uses
   System.Classes
   , System.JSON
   , System.IOUtils
-  , System.StrUtils
   , System.Generics.Collections
   , Vcl.ExtCtrls
   , Winapi.Windows
@@ -60,6 +80,10 @@ uses
   , { pure line parser -- split out so a console harness can test it; see
       tests\lintoutputparse\ }
     DragLint.Plugin.LintOutputParse
+  , { PLAN-lint-tree P2: the interface/implementation split and the launch
+      gate. Pure -- no OTA, no VCL -- so tests\SurfaceSplitTests.dpr exercises
+      the whole decision headless. }
+    DragLint.Plugin.SurfaceSplit
   ;
 
 const
@@ -67,6 +91,14 @@ const
   SEMANTIC_DEBOUNCE_MS = 5000; { keystroke->semantic check (compiler; slower) }
   GHOST_IDLE_MS        = 3500; { keystroke->auto ghost-check (full-project compile of the unsaved buffer; heavy, so a longer pause) }
   SWITCH_COMPILE_MS    = 1200; { tab-switch->compile-current-state (debounce so flipping through tabs doesn't spam) }
+  { PLAN-lint-tree P2, MEASURED AND BOUNDED by B0(b) 2026-09-10 -- keystroke->
+    fan-out. Parse+extract+store runs at ~26 s/MB, so with a ~0.5 s engine spawn
+    an ORM3 CLIENT unit costs ~0.75 s at the median, ~1.15 s at p90, ~6.2 s at
+    p99 and ~24 s at the largest (VARINSP.PAS, 914 KB). 2000 ms therefore holds
+    for ~90% of units, and for the top ~1% supersession is the NORMAL path --
+    which is what P1's cancellable spawn is for. Do not raise this to "fix"
+    supersession; superseding is the design. }
+  FANOUT_IDLE_MS       = 2000;
 
   { v0.46: append-only diagnostic trace so a "nothing shows" report is conclusive.
   Open via drag-lint > Open Plugin Log is the editor log; THIS file is dedicated
@@ -394,6 +426,16 @@ type
       FLastHashCheck  : Cardinal;
       FLastContentHash: Cardinal;
       FLastHashFile   : string  ;
+      { PLAN-lint-tree P2: the fan-out launch decision. Everything that decides
+        WHETHER to fan out lives in the record; this class only feeds it the
+        buffer and calls the hook.
+
+        The dl:ok below is a RULE gap, not an exemption: the constructor calls
+        FFanOut.Reset and the poll calls FFanOut.Consider, both of which mutate
+        the record -- referenced-never-set only counts assignments to the field
+        itself, so a record whose methods write it reads as never written.
+        Filed as docs\INBOX-referenced-never-set-record-methods.md. }
+      FFanOut         : TFanOutGate;  // dl:ok referenced-never-set@e2dc
       { v0.47: auto ghost-check (compile the unsaved buffer on idle). FGhostPending
       is armed on every edit (NotifyEditDirty / the content poll) and cleared when
       the compile starts -- so it fires once per edit-burst. }
@@ -522,6 +564,11 @@ end;
 constructor TLiveRunner.Create;
 begin
   inherited Create;
+  { Explicit, though a class instance arrives zero-filled: the gate's own
+    contract is that Reset establishes its start state, and relying on the
+    allocator to satisfy it makes the next field added to the record a silent
+    bug. }
+  FFanOut.Reset;
   FTimer:= TTimer.Create(nil);
   FTimer.Interval:= 250;
   FTimer.OnTimer := OnTick;
@@ -614,6 +661,30 @@ begin
           FGhostPending   := True; { arm the auto ghost-check too }
           FLastEdit       := GetTickCount; { debounce 700ms after the detected change }
           LiveLog('runner: content changed (poll) -> dirty');
+        end;
+
+        { PLAN-lint-tree P2: the interface-change fan-out, fed from the SAME
+          snapshot the lint poll just used. A second buffer read here could pick
+          up a later keystroke and leave the two tiers disagreeing about which
+          text they were looking at. Everything that DECIDES lives in the gate
+          (tests\SurfaceSplitTests.dpr); this is only the wiring. }
+        var FanGen: Integer:= 0;
+        if FFanOut.Consider(PollFile, Snap, GetTickCount64, FANOUT_IDLE_MS, FanGen) then
+        begin
+          if not Assigned(GFanOutHook) then
+            LiveLog('fanout: interface change settled but no hook is assigned -- skipped')
+          else
+          begin
+            LiveLog(Format('fanout: interface change settled -> launch gen %d for %s',
+                           [FanGen, ExtractFileName(PollFile)]));
+            var FanStarted: Boolean:= False;
+            try
+              FanStarted:= GFanOutHook(PollFile, FanGen);
+            except
+              on E: Exception do LiveLog('fanout: hook raised ' + E.ClassName + ': ' + E.Message);
+            end;
+            if not FanStarted then LiveLog('fanout: the hook declined to start (already running?)');
+          end;
         end;
       end; // if
     end; // if
@@ -732,6 +803,20 @@ begin
     GRunner.FLastEdit    := GetTickCount;
   end
   else LiveLog('NotifyEditDirty: GRunner=nil -- live runner NOT started!');
+end;
+
+procedure NotifyFanOutFingerprint(const AFingerprint: string);
+begin
+  { QUEUED, NOT CALLED. This arrives on the fan-out worker thread, and the gate
+    is a plain record driven from the timer -- so touching it here would be a
+    data race on the very state that decides whether the IDE spawns a process. }
+  TThread.Queue(nil,
+    procedure
+    begin
+      if GRunner = nil then Exit;
+      GRunner.FFanOut.NoteFingerprint(AFingerprint);
+      LiveLog('fanout: engine fingerprint ' + Copy(AFingerprint, 1, 12) + ' recorded');
+    end);
 end;
 
 procedure StartLiveDiagnostics;
