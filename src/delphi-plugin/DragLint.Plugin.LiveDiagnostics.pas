@@ -436,14 +436,8 @@ type
       FLastHashFile   : string  ;
       { PLAN-lint-tree P2: the fan-out launch decision. Everything that decides
         WHETHER to fan out lives in the record; this class only feeds it the
-        buffer and calls the hook.
-
-        The dl:ok below is a RULE gap, not an exemption: the constructor calls
-        FFanOut.Reset and the poll calls FFanOut.Consider, both of which mutate
-        the record -- referenced-never-set only counts assignments to the field
-        itself, so a record whose methods write it reads as never written.
-        Filed as docs\INBOX-referenced-never-set-record-methods.md. }
-      FFanOut         : TFanOutGate;  // dl:ok referenced-never-set@e2dc
+        buffer and calls the hook. }
+      FFanOut         : TFanOutGate;
       { v0.47: auto ghost-check (compile the unsaved buffer on idle). FGhostPending
       is armed on every edit (NotifyEditDirty / the content poll) and cleared when
       the compile starts -- so it fires once per edit-burst. }
