@@ -1191,6 +1191,206 @@ end; // function
 /// Never raises. The heavy lifting is one SQL statement -- see
 /// ISymbolStore.FindGlobalOnlyUsesEdges.
 /// </remarks>
+{ dfm-property-not-declared (R1, PLAN-lint-tree section 4).
+
+  A .dfm sets a property that the component's class and its ancestors do not
+  declare. At runtime that is an obscure load failure or a silently dropped
+  setting, and nothing in the catalog covers it: the DFM and the class are
+  checked by two different tools that never meet.
+
+  THE POSITIVE CASE IS EASY AND IRRELEVANT. What decides whether this rule can
+  ship is the three ways it fires on CORRECT code, and the gates below exist
+  one per way:
+
+  (a) THE PROPERTY IS INHERITED. Most properties a .dfm sets are declared on an
+      ancestor, not on the component's own class -- Caption, Left, Font. A rule
+      that looks only at the immediate class reports nearly every form in the
+      corpus. Hence the full ancestor walk.
+
+  (b) AN ANCESTOR CANNOT BE RESOLVED. The chain is then UNKNOWN, not empty, and
+      the honest answer is silence. Treating unresolved as "no such property"
+      reports the entire VCL. `UnresolvedAncestorNames` IS this gate -- it
+      returns the names it could not resolve, and a non-empty answer means stop.
+      This is the single most important line in the rule.
+
+  (c) THE CLASS NAME IS AMBIGUOUS. Two indexed units declaring the same class
+      name means the .dfm's bare type token does not identify one of them, and
+      guessing is how a rule reports a property that the OTHER class lacks.
+
+  A DOTTED PROPERTY IS ITS FIRST SEGMENT. `Font.Style` sets Style on the object
+  held by the Font property; the class declares Font, not Font.Style. Checking
+  the whole dotted string would report every sub-object property in the corpus.
+
+  COLLECTION ITEMS NEED NO GATE, and that is a measurement rather than an
+  assumption: the DFM extractor emits `Columns = <item ... end>` as ONE
+  dfm-prop row whose value text happens to contain the item's properties. The
+  inner names never reach this rule as property names, so there is nothing to
+  suppress -- and the guard asserts that, because an implementation that split
+  the value text would reintroduce the problem.
+
+  MEMOISED PER CLASS, not per property. A form sets dozens of properties on a
+  handful of classes; resolving the chain once per class turns an O(properties)
+  walk into an O(classes) one. }
+function CollectDfmPropertyNotDeclared(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>;
+  { class name -> the lowercased names it and its resolved ancestors declare.
+    A class present here with a nil list is one the rule has decided to stay
+    SILENT about; the two states are deliberately distinguishable, because
+    "no members" and "do not ask" must not collapse into one answer. }
+  Memo    : TObjectDictionary<string, TStringList>;
+  Silent  : TDictionary<string, Boolean>          ;
+
+  { The one place a store is chosen. The project index first, the library
+    second: a form's own component classes are project-local, its VCL and
+    DevExpress ancestors are not. }
+  function ResolveClassIn(const AStore2: ISymbolStore; const AName: string;
+                          out ASym: TSymbol): Boolean;
+  var
+    Cands: TArray<TSymbol>;
+    S    : TSymbol        ;
+    Hits : Integer        ;
+  begin
+    Result:= False;
+    ASym  := Default(TSymbol);
+    if AStore2 = nil then Exit;
+    Cands:= AStore2.FindSymbolsByExactName(AName);
+    Hits := 0;
+    for S in Cands do
+      { skTypeAlias, not a 'skType' -- there is no such kind. A .dfm block's
+        type token names a class in practice; the other three are accepted so a
+        record-based or aliased component type resolves rather than falling to
+        the silent branch for the wrong reason. }
+      if S.Kind in [skClass, skInterface, skRecord, skTypeAlias] then
+      begin
+        Inc(Hits);
+        ASym:= S;
+      end;
+    { Gate (c). Exactly one, or the bare type token does not identify a class. }
+    Result:= Hits = 1;
+  end;
+
+  { Every member name the class chain declares, or nil to mean "stay silent
+    about this class". }
+  function MembersOf(const AClassName: string): TStringList;
+  var
+    Sym    : TSymbol        ;
+    Used   : ISymbolStore   ;
+    Anc    : TTypeAncestor  ;
+    Ch     : TSymbol        ;
+    Dummy  : Boolean        ;
+    L      : TStringList    ;
+  begin
+    Result:= nil;
+    if AClassName = '' then Exit;
+    if Silent.TryGetValue(LowerCase(AClassName), Dummy) then Exit;
+    if Memo.TryGetValue(LowerCase(AClassName), L) then Exit(L);
+
+    Used:= AStore;
+    if not ResolveClassIn(AStore, AClassName, Sym) then
+    begin
+      Used:= ALibStore;
+      if not ResolveClassIn(ALibStore, AClassName, Sym) then
+      begin
+        Silent.AddOrSetValue(LowerCase(AClassName), True);
+        Exit(nil);
+      end;
+    end;
+
+    { GATE (b), and the rule turns on it. A chain with an unresolvable link is
+      an UNKNOWN chain: the missing ancestor is exactly where the property
+      probably is. }
+    if Length(Used.UnresolvedAncestorNames(AClassName, Sym.FileId)) > 0 then
+    begin
+      Silent.AddOrSetValue(LowerCase(AClassName), True);
+      Exit(nil);
+    end;
+
+    L:= TStringList.Create;
+    L.CaseSensitive:= False;
+    L.Sorted       := True;
+    L.Duplicates   := dupIgnore;
+    for Ch in Used.FindAllChildSymbols(Sym.Id) do
+      if Ch.Name <> '' then L.Add(Ch.Name);
+    { GATE (a): the ancestors, not just the class. }
+    for Anc in Used.GetTransitiveAncestors(Sym.Id) do
+      if Anc.Resolved and (Anc.SymbolId > 0) then
+        for Ch in Used.FindAllChildSymbols(Anc.SymbolId) do
+          if Ch.Name <> '' then L.Add(Ch.Name);
+
+    Memo.Add(LowerCase(AClassName), L);
+    Result:= L;
+  end;
+
+  { `Font.Style` -> `Font`. See the header. }
+  function HeadOf(const AProp: string): string;
+  var
+    P: Integer;
+  begin
+    P:= Pos('.', AProp);
+    if P > 0 then Result:= Copy(AProp, 1, P - 1) else Result:= AProp;
+  end;
+
+var
+  Fid    : Int64            ;
+  Path   : string           ;
+  Lit    : TStringLiteral   ;
+  Comp   : TSymbol          ;
+  ClsName: string           ;
+  Members: TStringList      ;
+  Head   : string           ;
+begin
+  Findings:= TList<TLintFinding>.Create;
+  Memo    := TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  Silent  := TDictionary<string, Boolean>.Create;
+  try
+    for Fid in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.dfm') then Continue;
+
+      for Lit in AStore.GetLiteralsByKind(Fid, 'dfm-prop') do
+      begin
+        if Lit.OwnerName = '' then Continue;
+        { The enclosing `object` block. Unresolved -> silent: without it there
+          is no class to check against. }
+        if Lit.SymbolId <= 0 then Continue;
+        Comp:= AStore.GetSymbolById(Lit.SymbolId);
+        if Comp.Id <> Lit.SymbolId then Continue;
+        { The DFM extractor stores the block's type on the symbol's Signature. }
+        ClsName:= Trim(Comp.Signature);
+        if ClsName = '' then Continue;
+
+        Members:= MembersOf(ClsName);
+        if Members = nil then Continue;   { gates (b) and (c) }
+
+        Head:= HeadOf(Lit.OwnerName);
+        if Head = '' then Continue;
+        if Members.IndexOf(Head) >= 0 then Continue;
+
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId   := 'dfm-property-not-declared';
+        F.Severity := 'warning';
+        F.FilePath := Path;
+        F.StartLine:= Lit.StartLine;
+        F.StartCol := Lit.StartCol;
+        F.EndLine  := Lit.EndLine;
+        F.EndCol   := Lit.EndCol;
+        F.Message  := Format('.dfm sets "%s" on %s: %s, but neither that class ' +
+                             'nor any of its ancestors declares it -- the form ' +
+                             'will fail to load or drop the setting',
+                             [Lit.OwnerName, Comp.Name, ClsName]);
+        Findings.Add(F);
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Silent  .Free;
+    Memo    .Free;
+    Findings.Free;
+  end;
+end;
+
 function CollectGlobalOnlyUsesEdges(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
 const
   { Ancestry does the work; this only names where the climb STOPS. Verified
@@ -2300,6 +2500,15 @@ begin
       own comment for why both are needed. }
     if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
       for var Gf in CollectGlobalOnlyUsesEdges(AStore, ALibraryStore) do Findings.Add(Gf);
+    Inc(TGlob, Tick - T0); T0:= Tick;
+
+    { dfm-property-not-declared (R1): whole-DFM pass. OFF by default AND gated
+      on OptedIn, for the reason that gate exists -- an ungated run would walk
+      every .dfm and every class chain on every lint-all and then have its
+      findings discarded downstream, paying the cost invisibly. R3 measures the
+      volume before the default moves. }
+    if WantRule('dfm-property-not-declared') and OptedIn('dfm-property-not-declared') then
+      for var Pf in CollectDfmPropertyNotDeclared(AStore, ALibraryStore) do Findings.Add(Pf);
     Inc(TGlob, Tick - T0); T0:= Tick;
 
     { duplicate-global-decl: whole-symbols pass (not per-file). ON by default

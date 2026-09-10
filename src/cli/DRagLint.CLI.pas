@@ -25,7 +25,14 @@ const
     disease this whole change set is treating. }
   PROJECT_RULES_OFF_BY_DEFAULT: TArray<string> = [
     'middle-man', 'fan-out', 'fan-in', 'feature-envy', 'instability',
-    'repeated-type-switch', 'missing-doc'];
+    'repeated-type-switch', 'missing-doc',
+    { R1, OFF until R3 audits the volume. THIS LIST AND THE OptIn ARRAYS ARE
+      TWO DIFFERENT GATES and a new off-by-default project rule needs BOTH:
+      this one stops the findings being PRINTED, the OptIn entry stops the
+      rule being RUN. Missing here, the rule reports on a default lint-all
+      before anyone has audited it; missing there, it is unreachable and
+      answers "0 finding(s)" for every input, which reads as a clean corpus. }
+    'dfm-property-not-declared'];
 
 const
   { Kept as a local alias so the seven existing uses below read unchanged; the
@@ -16359,6 +16366,13 @@ begin
       OptIn:= OptIn + ['global-only-uses-edge'];
     if Cfg.ShouldKeep('uses-global-census', False) then
       OptIn:= OptIn + ['uses-global-census'];
+    { R1. WITHOUT THIS LINE THE RULE IS UNREACHABLE, not merely off: the gate in
+      TProjectLintRules.Run requires OptedIn, this list is the only thing that
+      sets it, and --enable feeds the config filter rather than this array. A
+      rule missing here answers "0 finding(s)" on every run, for every input,
+      and looks exactly like a rule that found nothing. }
+    if Cfg.ShouldKeep('dfm-property-not-declared', True) then
+      OptIn:= OptIn + ['dfm-property-not-declared'];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
     { LibStore is the platform library index, already open above for the
@@ -16702,6 +16716,8 @@ begin
       OptIn2:= OptIn2 + ['global-only-uses-edge'];
     if LoadLintConfig(AArgs).ShouldKeep('uses-global-census', False) then
       OptIn2:= OptIn2 + ['uses-global-census'];
+    if LoadLintConfig(AArgs).ShouldKeep('dfm-property-not-declared', True) then
+      OptIn2:= OptIn2 + ['dfm-property-not-declared'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge
