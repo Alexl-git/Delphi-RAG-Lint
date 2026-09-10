@@ -128,6 +128,12 @@ const
     always in the JSON. }
   FINGERPRINT_ECHO_CHARS = 16;
 
+  { How many same-prefix symbols the ambiguity gate inspects before deciding a
+    bare name is safe to join on. The question is only "is there MORE THAN ONE
+    declarer", and the first foreign hit answers it, so this bounds a scan that
+    has already succeeded rather than the decision itself. }
+  AMBIGUITY_SCAN_LIMIT   = 200;
+
 type
   { The whole answer, in one place. It used to be eight positional parameters
     to the JSON renderer and seven to the text one, which is how the two
@@ -162,6 +168,18 @@ type
     Unchecked: Boolean;
   end;
 
+  { Everything a finding collector needs, so the two collectors take four
+    parameters instead of eight. They share the same six values and had begun
+    to drift apart in argument order. }
+  TFindingCtx = record
+    Store    : ISymbolStore;
+    OwnFileId: Int64;
+    Closure  : TArray<TDependentFile>;
+    InClosure: TDictionary<Int64, string>;
+    Unchecked: TDictionary<Int64, Boolean>;
+    Acc      : TList<TLintTreeFinding>;
+  end;
+
   TLintTreeReport = record
     Changed   : Boolean;
     ParseError: Boolean;
@@ -176,6 +194,10 @@ type
     DirectCnt : Integer;
     TotalCnt  : Integer;
     ClosureMs : Int64;
+    { How many removed/changed TYPE or DATA symbols were skipped because a
+      bare-name join would have been ambiguous. Reported so an empty findings
+      list is never mistaken for 'nothing broke'. }
+    Suppressed: Integer;
   end;
 
   TSurfaceSide = record
@@ -444,12 +466,9 @@ end;
 { One pass over one list. Called twice so the VERB is decided by which list the
   symbol came from rather than re-derived inside the loop -- the first draft
   computed it from the symbol itself and got it wrong for every entry. }
-procedure CollectRoutineFindings(const pStore    : ISymbolStore;
-                                 const pGone     : TArray<TBaselineSymbol>;
-                                 const pVerb     : string;
-                                 const pInClosure: TDictionary<Int64, string>;
-                                 const pUnchecked: TDictionary<Int64, Boolean>;
-                                 const pAcc      : TList<TLintTreeFinding>);
+procedure CollectRoutineFindings(const pCtx : TFindingCtx;
+                                 const pGone: TArray<TBaselineSymbol>;
+                                 const pVerb: string);
 var
   O   : TBaselineSymbol;
   Refs: TArray<TReference>;
@@ -478,45 +497,208 @@ begin
       functions, which are everywhere in Delphi -- SILENTLY, reading as an
       all-clear. A resolved symbol_id is unambiguous by construction, so
       dropping the kind filter is strictly safer, not looser. }
-    Refs:= pStore.FindReferencesTo(O.Id);
+    Refs:= pCtx.Store.FindReferencesTo(O.Id);
     for Ref in Refs do
     begin
-      if not pInClosure.ContainsKey(Ref.FileId) then
+      if not pCtx.InClosure.ContainsKey(Ref.FileId) then
         Continue;
       F         := Default(TLintTreeFinding);
-      F.FilePath:= pInClosure[Ref.FileId];
+      F.FilePath:= pCtx.InClosure[Ref.FileId];
       F.Line    := Ref.StartLine;
       F.Col     := Ref.StartCol;
       F.Rule    := 'stale-interface-reference';
       F.Severity:= 'warning';
       F.RefKind := Ref.Kind;
-      F.Unchecked:= pUnchecked.ContainsKey(Ref.FileId);
+      F.Unchecked:= pCtx.Unchecked.ContainsKey(Ref.FileId);
       F.Message := Format('the edited unit %s %s; this reference will not ' +
         'compile until it is updated', [pVerb, O.QName]);
-      pAcc.Add(F);
+      pCtx.Acc.Add(F);
     end;
   end;
 end;
 
-function BuildRoutineFindings(const pStore    : ISymbolStore;
-                              const pDelta    : TLintTreeDelta;
-                              const pClosure  : TArray<TDependentFile>;
-                              const pUnchecked: TDictionary<Int64, Boolean>):
-                              TArray<TLintTreeFinding>;
+{ The kind strings are TSymbolKind.ToText's, taken from KindText in
+  Core.Model.pas rather than guessed. The first draft of this file invented
+  'type_alias', 'const_decl' and 'var_decl'; none of the three exists, so the
+  whole name-join path matched nothing and reported a clean run -- silently,
+  which is the failure mode this verb exists to prevent. The real values are
+  class interface record enum type / var const. }
+function IsTypeKind(const pKind: string): Boolean;
+begin
+  Result:= SameText(pKind, 'class')  or SameText(pKind, 'interface')
+        or SameText(pKind, 'record') or SameText(pKind, 'enum')
+        or SameText(pKind, 'type');
+end;
+
+function IsDataKind(const pKind: string): Boolean;
+begin
+  Result:= SameText(pKind, 'const') or SameText(pKind, 'var');
+end;
+
+function BareNameOf(const pQName: string): string;
+var
+  P: Integer;
+begin
+  P:= LastDelimiter('.', pQName);
+  if P > 0 then
+    Result:= Copy(pQName, P + 1, MaxInt)
+  else
+    Result:= pQName;
+end;
+
+{ Would a bare-name join for S be AMBIGUOUS?
+
+  THE FLOOD THIS PREVENTS. refs.name_text stores the BARE member name, so
+  `Create`, `Free`, `Execute` and `Count` match across the whole corpus. Removing
+  a method named Create from B and joining on the name would light up every
+  dependent that constructs anything at all.
+
+  THE GATE, AND HOW IT DIFFERS FROM THE PLAN. The plan asks: "no OTHER unit
+  VISIBLE TO D declares an interface-level S". Per-dependent visibility needs the
+  machinery inside TProjectLintRules.Run, which is not yet a callable helper.
+  This asks the strictly STRONGER question -- does any unit ANYWHERE in the index
+  other than the edited one declare an interface-level S -- so it reports a
+  strict SUBSET of what the plan's gate would: never a false positive the plan
+  would have avoided, sometimes a silence where the plan would have spoken.
+
+  That trade is only acceptable because the silence is COUNTED and reported
+  (`suppressed_ambiguous`). An unreported suppression would be exactly the
+  failure this whole verb exists to prevent -- an all-clear that is really an
+  "I did not look". }
+function NameIsAmbiguous(const pStore: ISymbolStore; const pBareName: string;
+  const pOwnUnitFileId: Int64): Boolean;
+var
+  Candidates: TArray<TSymbol>;
+  S         : TSymbol;
+begin
+  Result:= False;
+  if pBareName = '' then
+    Exit(True);
+
+  { A generous cap: the question is only "is there more than one declarer", so
+    the first foreign hit answers it and the limit never truncates a decision,
+    only a scan that has already succeeded. }
+  Candidates:= pStore.FindSymbolsByPrefix(pBareName, AMBIGUITY_SCAN_LIMIT);
+  for S in Candidates do
+  begin
+    if not SameText(S.Name, pBareName) then
+      Continue;
+    if not SameText(S.Section, 'interface') then
+      Continue;
+    if S.FileId = pOwnUnitFileId then
+      Continue;
+    Exit(True);
+  end;
+end;
+
+{ Types, consts and vars: joined by NAME, because the resolver does not bind
+  their refs to a symbol id. MEASURED 2026-09-10 on the A-uses-B fixture:
+
+    TWidget  type_use  symbol_id=NULL      BConst  read  symbol_id=NULL
+    TWidget  read      symbol_id=NULL      BVar    read  symbol_id=NULL
+
+  so the symbol_id path that carries every routine finding is empty here. The
+  `read` kind for a const and a var was a PREDICTION in the plan and is now
+  measured; type_use likewise. }
+procedure CollectNameJoinFindings(const pCtx       : TFindingCtx;
+                                  const pGone      : TArray<TBaselineSymbol>;
+                                  const pVerb      : string;
+                                  var   ASuppressed: Integer);
+var
+  O    : TBaselineSymbol;
+  Bare : string;
+  Dep  : TDependentFile;
+  Refs : TArray<TReference>;
+  Ref  : TReference;
+  F    : TLintTreeFinding;
+  Want : Boolean;
+begin
+  for O in pGone do
+  begin
+    if not (IsTypeKind(O.Kind) or IsDataKind(O.Kind)) then
+      Continue;
+
+    Bare:= BareNameOf(O.QName);
+    if NameIsAmbiguous(pCtx.Store, Bare, pCtx.OwnFileId) then
+    begin
+      Inc(ASuppressed);
+      Continue;
+    end;
+
+    for Dep in pCtx.Closure do
+    begin
+      Refs:= pCtx.Store.GetReferencesFromFile(Dep.FileId);
+      for Ref in Refs do
+      begin
+        if not SameText(Ref.NameText, Bare) then
+          Continue;
+        { Kinds measured on the fixture. A type is referenced as `type_use` and
+          also as `read` (TWidget.Create reads the class reference); a const or
+          var is `read`, and a var may also be written. Anything else -- a
+          member-access on a removed TYPE, say -- is left alone rather than
+          guessed at. }
+        if IsTypeKind(O.Kind) then
+          Want:= SameText(Ref.Kind, 'type_use') or SameText(Ref.Kind, 'read')
+        else
+          Want:= SameText(Ref.Kind, 'read') or SameText(Ref.Kind, 'write');
+        if not Want then
+          Continue;
+
+        F          := Default(TLintTreeFinding);
+        F.FilePath := Dep.Path;
+        F.Line     := Ref.StartLine;
+        F.Col      := Ref.StartCol;
+        F.Rule     := 'stale-interface-reference';
+        F.Severity := 'warning';
+        F.RefKind  := Ref.Kind;
+        F.Unchecked:= pCtx.Unchecked.ContainsKey(Dep.FileId);
+        F.Message  := Format('the edited unit %s %s; this reference will not ' +
+          'compile until it is updated', [pVerb, O.QName]);
+        pCtx.Acc.Add(F);
+      end;
+    end;
+  end;
+end;
+
+function BuildFindings(const pStore     : ISymbolStore;
+                       const pDelta     : TLintTreeDelta;
+                       const pClosure   : TArray<TDependentFile>;
+                       const pUnchecked : TDictionary<Int64, Boolean>;
+                       const pOwnFileId : Int64;
+                       out   ASuppressed: Integer): TArray<TLintTreeFinding>;
 var
   InClosure: TDictionary<Int64, string>;
   Acc      : TList<TLintTreeFinding>;
   Dep      : TDependentFile;
+  Ctx      : TFindingCtx;
 begin
-  InClosure:= TDictionary<Int64, string>.Create;
-  Acc      := TList<TLintTreeFinding>.Create;
+  ASuppressed:= 0;
+  InClosure  := TDictionary<Int64, string>.Create;
+  Acc        := TList<TLintTreeFinding>.Create;
   try
     for Dep in pClosure do
       InClosure.AddOrSetValue(Dep.FileId, Dep.Path);
-    CollectRoutineFindings(pStore, pDelta.Removed, 'no longer declares',
-      InClosure, pUnchecked, Acc);
-    CollectRoutineFindings(pStore, pDelta.Changed, 'has changed the declaration of',
-      InClosure, pUnchecked, Acc);
+
+    Ctx          := Default(TFindingCtx);
+    Ctx.Store    := pStore;
+    Ctx.OwnFileId:= pOwnFileId;
+    Ctx.Closure  := pClosure;
+    Ctx.InClosure:= InClosure;
+    Ctx.Unchecked:= pUnchecked;
+    Ctx.Acc      := Acc;
+
+    { Routines first: they carry a resolved symbol_id, so their findings are
+      exact. The name-join path below is the best available answer for kinds
+      the resolver does not bind, and it is gated. }
+    CollectRoutineFindings(Ctx, pDelta.Removed, 'no longer declares');
+    CollectRoutineFindings(Ctx, pDelta.Changed,
+      'has changed the declaration of');
+
+    CollectNameJoinFindings(Ctx, pDelta.Removed, 'no longer declares',
+      ASuppressed);
+    CollectNameJoinFindings(Ctx, pDelta.Changed,
+      'has changed the declaration of', ASuppressed);
+
     Result:= Acc.ToArray;
   finally
     Acc.Free;
@@ -727,6 +909,10 @@ begin
              UncheckedSuffix(F.Unchecked)]));
         if Length(pReport.Findings) = 0 then
           SB.AppendLine('  no reportable reference broke -- see not_reportable');
+        if pReport.Suppressed > 0 then
+          SB.AppendLine(Format('  %d name(s) NOT checked: another unit also ' +
+            'declares them, so a name join would be ambiguous',
+            [pReport.Suppressed]));
       end;
       Exit(SB.ToString);
     finally
@@ -776,6 +962,8 @@ begin
 
     Root.AddPair('buffer_set', TJSONArray.Create);
     Root.AddPair('findings', FindingArray(pReport.Findings));
+    Root.AddPair('suppressed_ambiguous',
+      TJSONNumber.Create(pReport.Suppressed));
 
     { Stated rather than implied: an empty findings list means "no reportable
       row", not "nothing is broken". Property, field and member-access changes
@@ -1018,8 +1206,8 @@ begin
 
     Unchecked:= CollectUnchecked(Store, Closure);
     try
-      Report.Findings:= BuildRoutineFindings(Store, Report.Delta, Closure,
-        Unchecked);
+      Report.Findings:= BuildFindings(Store, Report.Delta, Closure, Unchecked,
+        TargetId, Report.Suppressed);
     finally
       Unchecked.Free;
     end;
