@@ -2776,6 +2776,103 @@ end;
   very pass it names. That is the same shape as the flag's own bring-up note:
   a flag that announces a re-derive and then does not do it is worse than no
   flag, because the operator believes the edges were rebuilt. }
+/// <summary>Directory base names a LIBRARY section for platform APlatform must
+/// not descend into: every OTHER registered platform token.</summary>
+/// <param name="APlatform">The platform this section is being built for. '' returns
+///  nothing -- an unknown platform must never prune, or a folder section would
+///  silently lose its whole tree.</param>
+/// <param name="ARegisteredPlatforms">Every platform token the IDE has registered
+///  (TProjectResolver.EnumRegistryPlatforms).</param>
+/// <returns>Base-name globs for TWalkFilter.SectionExclude, which
+///  TIndexer.ShouldPruneDir matches case-insensitively against a directory's base
+///  name at any depth.</returns>
+/// <remarks>
+///  WHY THIS IS COMPUTED AND NOT A HAND-WRITTEN LIST. A registry Search Path may
+///  name the PARENT of a vendor's per-platform folders, and a library root is
+///  walked RECURSIVELY -- the compiler does not walk it that way. Measured on
+///  this machine: the Win32 Search Path lists '$(DXVCL)\Library\RS37', whose
+///  children include 'WinArm64EC' and 'Win64x'. That put 2,462 foreign-platform
+///  DevExpress files into library-Win32.sqlite, gave 21,265 class qnames a
+///  same-qualified-name twin, and left 16,748 ancestor edges unresolved --
+///  TcxGrid showed 103 top-level members against Win64's 471.
+///  Both 'Win64x' and 'WinArm64EC' ARE registry Library subkeys (verified
+///  2026-09-09), so deriving the list from the registry catches this by
+///  construction. A hard-coded pair would fix this vendor on this machine and
+///  nothing else.
+///  THE ONE THING THIS MUST NEVER DO is prune the section's OWN platform:
+///  'RS37\Win32' (165 files) is legitimately part of the Win32 library. That is
+///  guaranteed here by construction rather than by a caller remembering it.
+/// </remarks>
+function SiblingPlatformExcludes(const APlatform: string;
+  const ARegisteredPlatforms: TArray<string>): TArray<string>;
+var
+  P: string;
+begin
+  Result:= nil;
+  if Trim(APlatform) = '' then Exit;
+  for P in ARegisteredPlatforms do
+    if (Trim(P) <> '') and (not SameText(P, APlatform)) then
+      Result:= Result + [P];
+end;
+
+/// <summary>Drop every root that lies INSIDE another root of the same section,
+/// so an overlapping pair is walked once instead of twice.</summary>
+/// <param name="ARoots">The section's resolved roots, in manifest order.</param>
+/// <param name="ADropped">Receives the roots removed, for reporting. Never nil-checked
+///  by callers that do not care -- it is an out parameter, always assigned.</param>
+/// <returns>ARoots minus the strict descendants, original order preserved.</returns>
+/// <remarks>
+///  The walk de-dups its VISITED LIST on the lowercased path, so a doubly-covered
+///  file is never committed twice and `walked=` stays correct. What the de-dup
+///  does NOT stop is the second IndexFile call running the whole skip/parse path:
+///  on an incremental run the file satisfies MayResume + FileIsUpToDate and lands
+///  in `up-to-date=`, and on a --rebuild it is genuinely RE-PARSED. Measured ~900
+///  redundant IndexFile calls per platform, roughly 10% of a 5.5 h rebuild.
+///  Real overlapping pairs on this machine: 'source\rtl\win' contains
+///  'source\rtl\win\winrt'; 'spring4d\Source' contains 17 roots that are
+///  themselves listed; 'OmniThreadLibrary' contains 'OmniThreadLibrary\src';
+///  'EurekaLog 7\Source' contains 'EurekaLog 7\Source\Extras'.
+///  DROPPING THE DESCENDANT LOSES NOTHING because the ancestor's walk is
+///  recursive and already reaches it -- this is a collapse, not an exclusion, and
+///  it must never be confused with one. The dropped root is still handed to the
+///  eviction scope by the caller, so what a section OWNS is unchanged; only the
+///  number of times it is visited changes.
+///  The observable signature, from docs\INBOX-nested-library-roots-double-walk.md:
+///  `attempted + up-to-date + oversize - walked` on a real library section is
+///  ~900 before this and must be 0 after.
+/// </remarks>
+function CollapseNestedRoots(const ARoots: TArray<string>;
+  out ADropped: TArray<string>): TArray<string>;
+var
+  I, J  : Integer;
+  Norm  : TArray<string>;
+  Nested: Boolean;
+begin
+  Result := nil;
+  ADropped:= nil;
+  SetLength(Norm, Length(ARoots));
+  for I:= 0 to High(ARoots) do
+    Norm[I]:= LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(Trim(ARoots[I]))));
+  for I:= 0 to High(ARoots) do
+  begin
+    Nested:= False;
+    for J:= 0 to High(ARoots) do
+    begin
+      if I = J then Continue;
+      { STRICT descendant only. Two roots spelled identically are NOT nested --
+        if that counted, each would drop the other and the pair would vanish
+        entirely. An exact duplicate is left to the walk's own visited-set. }
+      if (Norm[I] <> Norm[J]) and Norm[I].StartsWith(Norm[J]) then
+      begin
+        Nested:= True;
+        Break;
+      end;
+    end;
+    if Nested then ADropped:= ADropped + [ARoots[I]]
+    else            Result  := Result   + [ARoots[I]];
+  end;
+end;
+
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False;
   AResolveOnly: Boolean = False): Boolean;
@@ -2807,6 +2904,9 @@ var
   SectionScope   : TArray<string>                            ;
   EvictRoots     : TArray<string>                            ;
   Evicted        : TArray<string>                            ;
+  { A2: roots dropped from the WALK because another root of this same section
+    already contains them. They keep their eviction standing -- see the use site. }
+  DroppedRoots   : TArray<string>                            ;
 begin
   // Ensure output directory exists before creating the SQLite file.
   var DbDir:= ExtractFilePath(AItem.DbPath);
@@ -2924,8 +3024,39 @@ begin
                        [PrevRfp, CurRfp]));
     end;
 
+    { A2: a LIBRARY section must not descend into another platform's folders.
+      Computed here, in the CLI, and deliberately NOT in DRagLint.Index.Plan or
+      TIndexer.ShouldPruneDir: run_extractor_version_guard.ps1 hashes ALL of
+      src\parser, src\preprocess and src\index plus src\core\DRagLint.Core.Indexer.pas,
+      so either of those placements would move DRAGLINT_EXTRACTOR_VERSION and bill
+      a ~5 h full re-parse for a change that alters no parse. (INBOX-nested-library-
+      roots-double-walk.md guessed the Plan side "could be argued as no-bump"; the
+      guard as written says otherwise, and the guard is the authority.)
+      The globs go into SectionExclude, which ShouldPruneDir matches against a
+      directory's BASE NAME at any depth -- the same mechanism a hand-written
+      manifest `exclude` entry uses, so this is the automatic form of that
+      stopgap and survives a --rebuild from a manifest that never listed it. }
+    var LibFilter: TWalkFilter:= AItem.Filter;
+    if AItem.Mode = smLibrary then
+    begin
+      var SibExcl: TArray<string>;
+      var PlatResolver: DRagLint.Project.Resolver.TProjectResolver:=
+        DRagLint.Project.Resolver.TProjectResolver.Create;
+      try
+        SibExcl:= SiblingPlatformExcludes(AItem.Platform, PlatResolver.EnumRegistryPlatforms);
+      finally
+        PlatResolver.Free;
+      end;
+      if Length(SibExcl) > 0 then
+      begin
+        LibFilter.SectionExclude:= LibFilter.SectionExclude + SibExcl;
+        Writeln(Format('  Platform scope: pruning %d sibling-platform folder(s) from this %s walk (%s).',
+                       [Length(SibExcl), AItem.Platform, string.Join(', ', SibExcl)]));
+      end;
+    end;
+
     // Apply walk filter from the resolved plan item.
-    Indexer.SetWalkFilter(AItem.Filter);
+    Indexer.SetWalkFilter(LibFilter);
 
     // Cross-index dedup: exclude roots already covered by other sections.
     for ExDir in AItem.DedupExcludeRoots do Indexer.AddExcludeRoot(ExDir);
@@ -2941,7 +3072,21 @@ begin
     case AItem.Mode of
       smFolderTree, smLibrary:
       begin
-        for F in AItem.Roots do
+        { A2 shape 1: collapse roots that nest inside other roots of this same
+          section. The descendant is still added to EvictRoots below, so what the
+          section OWNS is unchanged -- only how many times it is VISITED changes.
+          Skipping this made ~900 files per platform take the whole skip/parse
+          path twice, and on --rebuild parse twice: ~10% of a 5.5 h walk. }
+        var WalkRoots: TArray<string>:= CollapseNestedRoots(AItem.Roots, DroppedRoots);
+        if Length(DroppedRoots) > 0 then
+          Writeln(Format('  Root scope: %d of %d root(s) nest inside another root of this section and are walked via it (%s).',
+                         [Length(DroppedRoots), Length(AItem.Roots), string.Join(', ', DroppedRoots)]));
+        { The collapsed roots keep their eviction standing. Eviction is bounded to
+          EvictRoots, so dropping a nested root from that list would narrow what
+          this section may prune and strand rows a rebuild should have removed. }
+        for F in DroppedRoots do
+          if TDirectory.Exists(F) or TFile.Exists(F) then EvictRoots:= EvictRoots + [F];
+        for F in WalkRoots do
         begin
           if TDirectory.Exists(F) then begin Indexer.IndexFolder(F, True); EvictRoots:= EvictRoots + [F]; end
           { A single-FILE root gets the same isolation the folder walk gives every
@@ -3387,11 +3532,40 @@ begin
       Writeln('  RootDir: ', Manifest.RootDir);
       Writeln('  OutDir:  ', Manifest.OutDir );
       Writeln(Format('  Sections to build: %d', [Length(Plan.Items)]));
-      for var PS in Plan.Items do Writeln(Format(
-          '    [%s] mode=%s db=%s', [
-            PS.Name + (if PS.Platform <> '' then '[' + PS.Platform + ']' else ''),
-            (function: string begin case PS.Mode of smFolderTree: Result:= 'folderTree'; smClosure: Result:= 'closure'; smLibrary: Result:= 'library'; else Result:= '?'; end; end)(),
-            PS.DbPath]));
+      { The dry run prints the A2 scope decisions because they are the only place
+        a walk's shape is decided BEFORE the walk, and a multi-hour library run is
+        far too expensive to be the first place an operator learns what it will
+        prune. tests\autotest\run_library_sibling_platform_guard.ps1 asserts on
+        exactly these two lines, and both are rendered from the SAME functions the
+        walk calls -- printing a separately-computed answer here would be a guard
+        that pins the printer instead of the behaviour. }
+      var DryResolver: DRagLint.Project.Resolver.TProjectResolver:=
+        DRagLint.Project.Resolver.TProjectResolver.Create;
+      try
+        for var PS in Plan.Items do
+        begin
+          Writeln(Format(
+            '    [%s] mode=%s db=%s', [
+              PS.Name + (if PS.Platform <> '' then '[' + PS.Platform + ']' else ''),
+              (function: string begin case PS.Mode of smFolderTree: Result:= 'folderTree'; smClosure: Result:= 'closure'; smLibrary: Result:= 'library'; else Result:= '?'; end; end)(),
+              PS.DbPath]));
+          if PS.Mode = smLibrary then
+          begin
+            var DrySib: TArray<string>:= SiblingPlatformExcludes(PS.Platform, DryResolver.EnumRegistryPlatforms);
+            Writeln(Format('        sibling-platform-prune: %d [%s]',
+                           [Length(DrySib), string.Join(', ', DrySib)]));
+          end;
+          if PS.Mode in [smLibrary, smFolderTree] then
+          begin
+            var DryDropped: TArray<string>;
+            var DryWalk   : TArray<string>:= CollapseNestedRoots(PS.Roots, DryDropped);
+            Writeln(Format('        roots: %d total, %d walked, %d nested-collapsed',
+                           [Length(PS.Roots), Length(DryWalk), Length(DryDropped)]));
+          end;
+        end;
+      finally
+        DryResolver.Free;
+      end;
       Exit(0);
     end; // else
   end; // if
