@@ -32,7 +32,7 @@ const
       rule being RUN. Missing here, the rule reports on a default lint-all
       before anyone has audited it; missing there, it is unreachable and
       answers "0 finding(s)" for every input, which reads as a clean corpus. }
-    'dfm-property-not-declared'];
+    'dfm-property-not-declared', 'dependent-project-not-recompiled'];
 
 const
   { Kept as a local alias so the seven existing uses below read unchanged; the
@@ -16373,6 +16373,8 @@ begin
       and looks exactly like a rule that found nothing. }
     if Cfg.ShouldKeep('dfm-property-not-declared', True) then
       OptIn:= OptIn + ['dfm-property-not-declared'];
+    if Cfg.ShouldKeep('dependent-project-not-recompiled', True) then
+      OptIn:= OptIn + ['dependent-project-not-recompiled'];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
     { LibStore is the platform library index, already open above for the
@@ -16718,6 +16720,8 @@ begin
       OptIn2:= OptIn2 + ['uses-global-census'];
     if LoadLintConfig(AArgs).ShouldKeep('dfm-property-not-declared', True) then
       OptIn2:= OptIn2 + ['dfm-property-not-declared'];
+    if LoadLintConfig(AArgs).ShouldKeep('dependent-project-not-recompiled', True) then
+      OptIn2:= OptIn2 + ['dependent-project-not-recompiled'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge

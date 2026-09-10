@@ -14,6 +14,7 @@ uses
   , System.Classes
   , System.StrUtils { StartsText / PosEx -- the .dfm text scan in global-only-uses-edge }
   , DRagLint.Lint.ReviewMarker { MarkerBearingLines -- which // is reached in code state }
+  , System.DateUtils { DateTimeToUnix / UnixToDateTime -- R2 dates against the CURRENT disk mtime, not the stored one }
   , System.IOUtils
   , System.JSON
   , System.Diagnostics { TStopwatch -- DRAGLINT_PROFILE per-rule attribution in Run }
@@ -1391,6 +1392,139 @@ begin
   end;
 end;
 
+{ dependent-project-not-recompiled (R2, PLAN-lint-tree section 4).
+
+  A unit marked `dl:shared` is compiled by more than one project. Edit it, build
+  the project you have open, and the OTHER projects still hold object code for
+  the old text -- with no error anywhere, because nothing in either project's
+  build knows the other exists. The symptom arrives later, as a binary that
+  behaves like a version of the source nobody can find.
+
+  TWO DELIBERATE DIVERGENCES FROM docs\INDEX-SCHEMA.md:174, BOTH TO BE KEPT.
+  That line defines staleness as `last_compiled_unix < mtime_unix` -- the
+  STORED mtime -- and treats a NULL stamp as stale. Neither is right here:
+
+  (1) THE COMPARISON IS AGAINST THE CURRENT DISK MTIME, not the stored one. The
+      stored mtime is only as fresh as the last index, so a unit edited and not
+      yet re-indexed would compare as current and the rule would go quiet at
+      exactly the moment it has something to say. The disk is the authority for
+      "when was this last changed"; the index is not.
+
+  (2) A NULL STAMP IS SILENT, not stale. NULL means the file has never been
+      compiled through `refresh-findings` in that project -- which is the state
+      of every file in a fresh checkout. Reporting them all would flood a new
+      clone with findings about work nobody has done yet, and the rule would be
+      switched off before it ever caught a real one.
+
+  Both are stated in the catalog entry too, so the next reader does not "fix"
+  the rule to match the schema doc.
+
+  WHO WRITES THE STAMP, AND WHY THAT DECIDES THE GUARD'S SHAPE.
+  `last_compiled_unix` is set ONLY by `refresh-findings`, and only on the
+  NON-FAILURE path: a compile that errors deliberately records findings WITHOUT
+  stamping. There is no read-only verb that can fake it, so the guard needs a
+  real dcc run and must SKIP cleanly when dcc is absent. }
+function CollectDependentProjectNotRecompiled(const AStore: ISymbolStore;
+  const ASiblingStore: TSiblingStoreResolver): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>;
+  Fid     : Int64              ;
+  Path    : string             ;
+  DiskUtc : Int64              ;
+  ProjName: string             ;
+  SibStore: ISymbolStore       ;
+  SibFid  : Int64              ;
+  Stamp   : Int64              ;
+
+  { The CURRENT disk mtime, or 0 when the file is gone or unreadable. Zero is
+    the silent answer: a unit we cannot date is one we cannot call stale. }
+  function DiskMTimeOf(const AFile: string): Int64;
+  begin
+    Result:= 0;
+    try
+      if TFile.Exists(AFile) then
+        Result:= DateTimeToUnix(TFile.GetLastWriteTime(AFile), False);
+    except
+      { A file we cannot date is a file we cannot call stale. Named rather than
+        bare so a genuine failure is distinguishable from the absent-file case
+        this exists for. }
+      on E: Exception do Result:= 0;
+    end;
+  end;
+
+  function WhenText(AUnix: Int64): string;
+  begin
+    if AUnix <= 0 then Exit('never');
+    Result:= FormatDateTime('yyyy-mm-dd hh:nn', UnixToDateTime(AUnix, False));
+  end;
+
+begin
+  Findings:= TList<TLintFinding>.Create;
+  try
+    { No resolver means no sibling indexes can be opened, so there is nothing
+      this rule can say. Silence, not an empty all-clear. }
+    if not Assigned(ASiblingStore) then Exit(nil);
+
+    for Fid in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      { The marker is the whole gate on which units are considered. Reading it
+        from SOURCE rather than deriving the project set is deliberate -- see
+        DRagLint.Lint.SharedUnit's header. }
+      if not TSharedUnit.IsShared(Path) then Continue;
+
+      DiskUtc:= DiskMTimeOf(Path);
+      if DiskUtc <= 0 then Continue;
+
+      for ProjName in TSharedUnit.ProjectsOf(Path) do
+      begin
+        if Trim(ProjName) = '' then Continue;
+        SibStore:= nil;
+        try
+          SibStore:= ASiblingStore(ProjName);
+        except
+          { A sibling index that will not open leaves that project UNKNOWN, not
+            current -- so the loop below skips it rather than reporting on a
+            stamp it never read. }
+          on E: Exception do SibStore:= nil;
+        end;
+        { A project whose index is not configured or cannot be opened is
+          UNKNOWN, not current. }
+        if SibStore = nil then Continue;
+
+        SibFid:= SibStore.FindFileIdByPath(Path);
+        { The sibling's index does not carry this unit: either the marker names
+          a project that no longer compiles it -- which `check-shared` reports,
+          not this rule -- or that index is stale in a way this rule cannot
+          speak to. }
+        if SibFid <= 0 then Continue;
+
+        Stamp:= SibStore.GetFileCompiledAt(SibFid);
+        if Stamp <= 0 then Continue;          { divergence (2): NULL is SILENT }
+        if Stamp >= DiskUtc then Continue;    { that project is current }
+
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId   := 'dependent-project-not-recompiled';
+        F.Severity := 'warning';
+        F.FilePath := Path;
+        F.StartLine:= 1;
+        F.StartCol := 1;
+        F.EndLine  := 1;
+        F.EndCol   := 1;
+        F.Message  := Format('this unit is dl:shared with %s and was changed %s, ' +
+                             'but %s last compiled it %s -- that project still ' +
+                             'holds object code for the older text',
+                             [ProjName, WhenText(DiskUtc), ProjName, WhenText(Stamp)]);
+        Findings.Add(F);
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Findings.Free;
+  end;
+end;
+
 function CollectGlobalOnlyUsesEdges(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
 const
   { Ancestry does the work; this only names where the climb STOPS. Verified
@@ -2509,6 +2643,11 @@ begin
       volume before the default moves. }
     if WantRule('dfm-property-not-declared') and OptedIn('dfm-property-not-declared') then
       for var Pf in CollectDfmPropertyNotDeclared(AStore, ALibraryStore) do Findings.Add(Pf);
+
+    { dependent-project-not-recompiled (R2): opens SIBLING indexes, so it is
+      gated the same way and for the same reason. }
+    if WantRule('dependent-project-not-recompiled') and OptedIn('dependent-project-not-recompiled') then
+      for var Rf2 in CollectDependentProjectNotRecompiled(AStore, ASiblingStore) do Findings.Add(Rf2);
     Inc(TGlob, Tick - T0); T0:= Tick;
 
     { duplicate-global-decl: whole-symbols pass (not per-file). ON by default
