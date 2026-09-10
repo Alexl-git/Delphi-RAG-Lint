@@ -83,6 +83,17 @@ Dry-run before `--apply`, always -- `--apply` edits the project file. Fix the
 project DB into a directory DB). Verify the closure actually grew by comparing
 `files=` on the section summary before and after.
 
+`files=` is a STOCK -- every row in the database, whichever run wrote it -- so
+it is the right field for that before/after comparison and its name is stable.
+The same line also carries `walked=`, the unique paths this run ADMITTED to the
+walk: `files - walked` is the rows the run never visited and never evicted
+(eviction is bounded to the evict roots), which is how a project DB that was
+once widened by a folder-target index keeps reporting more files than its
+closure has. `attempted=` and `up-to-date=` were previously called `parsed=`
+and `skipped=`; the values are unchanged, but `attempted` counts attempts made
+BEFORE the parse, so it legitimately exceeds `files=` when a parse fails, and
+`up-to-date` is a DIFFERENT population from the log's `SKIP` lines.
+
 Procedure, triage rules and the per-project run list:
 `docs\PLAN-project-completeness-sweep.md`.
 

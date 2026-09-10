@@ -3148,9 +3148,22 @@ begin
       anything" is not answerable from files+symbols alone -- a section can
       index every file and still resolve nothing.
 
-      parsed/skipped is the pair that makes an INCREMENTAL run legible: files
-      counts the whole corpus either way, so without it a run that re-parsed 3
-      files and one that re-parsed 9,593 print the same number.
+      files= is a STOCK -- rows in the database, whatever run wrote them --
+      while walked/attempted/up-to-date are FLOWS this run actually paid for.
+      They were once labelled parsed=/skipped=, which read as if they measured
+      the same population as files= and did not. `parsed` is incremented BEFORE
+      the parse, by contract (see IIndexer: deliberately an upper bound, so the
+      caller can gate the whole-DB resolve passes), so it counts files whose
+      parse RAISED and never got a row -- which is how a HEALTHY run printed
+      parsed=7003 against files=6993 and read as arithmetic gone wrong.
+      `skipped` meanwhile named a population DISJOINT from the log's own SKIP
+      lines: it counts up-to-date skips only, never the size-guard skip nor a
+      parse failure. Same numbers, honest labels.
+
+      walked= is Length(VisitedFiles): unique paths ADMITTED to the walk,
+      recorded before every skip. It is what makes files= readable, because
+      files - walked is the rows this run never visited and never evicted --
+      eviction is bounded to EvictRoots, so a row outside them survives forever.
 
       Throughput is here so the NEXT run can be estimated from the last one
       instead of guessed. The 12.5-hour figure in this repo's own history was
@@ -3160,11 +3173,21 @@ begin
       IIndexer exposes no error count, so this line does NOT claim one -- an
       `errors=0` that merely meant "not measured" would be worse than its
       absence. }
-    var Rate: Double:= 0;
-    if Elapsed > 0 then Rate:= Store.CountFiles / Elapsed * 60;
-    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d refs=%d parsed=%d skipped=%d [%.1fs, %.0f files/min] ===',
+    { The rate's numerator is ATTEMPTED, not the row count. Store.CountFiles is
+      a stock, so using it here divided the WHOLE CORPUS by this run's wall
+      clock: an incremental run that re-parsed three files claimed hundreds of
+      files/min, and --resolve-only quoted a rate for a walk that never
+      happened. When nothing was attempted there is no rate to report and 'n/a'
+      is the honest answer rather than a large and meaningless number. Elapsed
+      spans the four whole-DB resolve passes and the checkpoint as well as the
+      walk, so this is a SECTION rate, not a parser rate. }
+    var RateStr: string:= 'n/a';
+    if (Elapsed > 0) and (Indexer.ParsedFiles > 0) then
+      RateStr:= Format('%.0f attempted/min', [Indexer.ParsedFiles / Elapsed * SecsPerMin]);
+    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d refs=%d walked=%d attempted=%d up-to-date=%d [%.1fs, %s] ===',
       [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols,
-       Store.CountReferences, Indexer.ParsedFiles, Indexer.SkippedUpToDate, Elapsed, Rate]));
+       Store.CountReferences, Length(Indexer.VisitedFiles), Indexer.ParsedFiles,
+       Indexer.SkippedUpToDate, Elapsed, RateStr]));
     Result:= True;
   except
     on E: Exception do
