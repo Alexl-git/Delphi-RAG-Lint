@@ -557,6 +557,18 @@ end; // procedure
 
 { v0.47: cheap rolling hash of the buffer for the runner's change-detection
   poll -- avoids re-linting when nothing actually changed. }
+{ WRAPAROUND IS THE ALGORITHM, so overflow checking must be OFF here -- and
+  ONLY here. The design-time package compiles with -$Q+ (see the dcc32 line in
+  build_plugin_win32.bat), so this multiply raised EIntOverflow after about
+  seven characters, EVERY TIME. It was invisible for two reasons at once: the
+  caller ended in a bare `except` with an empty body, and the console test
+  harness builds with plain dcc64, where overflow checking is OFF -- so
+  run_surface_split.ps1 passed 35/35 against a function that could not survive
+  a single call inside the shipped BPL.
+
+  MEASURED 2026-09-11: 105 EIntOverflow in one session; the fan-out had never
+  once run. }
+{$OVERFLOWCHECKS OFF}
 function CheapHash(const S: string): Cardinal;
 var
   i: Integer;
@@ -564,6 +576,8 @@ begin
   Result:= Cardinal(Length(S));
   for i:= 1 to Length(S) do Result:= (Result * 31) + Cardinal(Ord(S[i]));
 end;
+{$IFOPT Q+}{$MESSAGE ERROR 'overflow checks must be off for the hash above'}{$ENDIF}
+{$OVERFLOWCHECKS ON}
 
 constructor TLiveRunner.Create;
 begin

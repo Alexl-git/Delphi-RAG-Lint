@@ -48,6 +48,16 @@
 
   Usage: pwsh -File tests\plugin\run_fanout_state.ps1
 #>
+#
+#  COMPILED WITH -$Q+ -$R+ ON PURPOSE: the same overflow and range checking the
+#  design-time BPL uses (see the dcc32 line in build_plugin_win32.bat). Without
+#  it this harness built with checks OFF while the shipped package built with
+#  them ON, so the two disagreed about what the code even means. That is not
+#  hypothetical: CheapBufferHash and CheapHash are wraparound hashes, they
+#  raised EIntOverflow on EVERY call inside the IDE, the fan-out never ran once
+#  -- and this suite reported GREEN throughout. A test that compiles differently
+#  from the thing it tests is not testing that thing.
+#
 [CmdletBinding()]
 param(
   [string]$Dpr     = "$PSScriptRoot\..\FanOutStateTests.dpr",
@@ -75,7 +85,7 @@ $lines = @(
   '@echo off',
   ('call "{0}"' -f $rs),
   ('cd /d "{0}"' -f $DprDir),
-  ('dcc64 -B -E"{0}" -N0"{1}" {2}' -f $WorkDir, $DcuDir, $DprName),
+  ('dcc64 -B -$Q+ -$R+ -E"{0}" -N0"{1}" {2}' -f $WorkDir, $DcuDir, $DprName),
   'echo BUILD_EXITCODE=%ERRORLEVEL%'
 )
 [System.IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [System.Text.Encoding]::ASCII)
