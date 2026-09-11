@@ -70,6 +70,7 @@ contains
   DragLint.Plugin.Telemetry in 'DragLint.Plugin.Telemetry.pas',
   DragLint.Plugin.DbResolver in 'DragLint.Plugin.DbResolver.pas',
   DragLint.Plugin.Theme in 'DragLint.Plugin.Theme.pas',
+  DragLint.Plugin.Updates in 'DragLint.Plugin.Updates.pas',
   DragLint.Plugin.Diagnose in 'DragLint.Plugin.Diagnose.pas',
   DragLint.Plugin.AboutForm in 'DragLint.Plugin.AboutForm.pas',
   DRagLint.Plugin.DbProbe in 'DRagLint.Plugin.DbProbe.pas',

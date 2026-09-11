@@ -94,6 +94,16 @@ function ApplyDiagFix(AFix: TDiagFix; out AError: string): Boolean;
 /// acceptable because the user asked for this screen. Main thread only.</remarks>
 function DiagVersions: TDiagLines;
 
+/// <summary>Versions of the sibling tools in the same family -- YADF, YADFOT,
+/// YADFSetup -- read from the artefacts that are actually INSTALLED.</summary>
+/// <returns>Rows for the "Related tools" group; dsInfo when a tool is simply
+/// not installed, which is normal and not a fault.</returns>
+/// <remarks>YADFOT is located through the IDE's own Known Packages list rather
+/// than a guessed path, so the row reports the package the IDE actually loads.
+/// The other two are its siblings on disk. File-system reads only -- no
+/// network. Main thread only.</remarks>
+function DiagRelatedTools: TDiagLines;
+
 /// <summary>LSP state, engine exe presence, and whether every resolved DB
 /// exists on disk.</summary>
 /// <returns>Rows for the Connections group; dsBad on anything not usable.</returns>
@@ -139,6 +149,7 @@ uses
   , System.JSON
   , Winapi.Windows
   , ToolsAPI
+  , DragLint.Plugin.Updates
   , DragLint.Plugin.Editor
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.LspClient
@@ -372,6 +383,58 @@ begin
   end;
   AJson := TJSONObject(Val);
   Result:= True;
+end;
+
+{ The sibling tools ship from the same author and the same GitHub account, and
+  the plugin already drives YADF (the Format commands), so "which YADF am I
+  actually running" is a question this window is the natural place to answer.
+
+  RESOLVED FROM THE IDE'S OWN Known Packages, not from a guessed build folder:
+  C:\Projects\YADF\Win32\Debug\EXE is where it happens to live today, and a
+  hard-coded path would keep reporting that build long after the IDE started
+  loading a different one -- the failure being reported would then be invisible
+  precisely when it mattered. }
+function DiagRelatedTools: TDiagLines;
+var
+  Bpl, Dir, Exe, Ver: string;
+
+  procedure AddTool(const ACaption, APath: string);
+  var
+    V: string;
+  begin
+    if (APath = '') or not FileExists(APath) then
+    begin
+      { Not installed is NORMAL for a sibling tool, so it is dsInfo, not a
+        warning. A window that cries wolf about optional components trains the
+        reader to skim the ones that matter. }
+      Add(Result, Line(ACaption, 'not installed', dsInfo));
+      Exit;
+    end;
+    V:= FileVersionOf(APath);
+    if V = '' then
+      Add(Result, Line(ACaption, '(no version resource)   ' + APath, dsWarn))
+    else
+      Add(Result, Line(ACaption, V + '   ' + APath, dsOk));
+  end;
+
+begin
+  Result:= nil;
+  Bpl:= FindKnownPackagePath('YADFOT');
+  if Bpl = '' then
+  begin
+    Add(Result, Line('YADFOT (IDE wizard)', 'not registered with this IDE', dsInfo));
+    Exit;
+  end;
+  AddTool('YADFOT (IDE wizard)', Bpl);
+
+  Dir:= ExtractFilePath(Bpl);
+  Exe:= Dir + 'YADF.exe';
+  AddTool('YADF', Exe);
+  AddTool('YADFSetup', Dir + 'YADFSetup.exe');
+
+  Ver:= FileVersionOf(Exe);
+  if Ver <> '' then
+    Add(Result, Line('YADF releases', 'github.com/Alexl-git/YADF', dsInfo));
 end;
 
 function DiagVersions: TDiagLines;

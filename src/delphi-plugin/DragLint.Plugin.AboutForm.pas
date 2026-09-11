@@ -57,6 +57,7 @@ type
       procedure DoDiagnose  (Sender: TObject);
       procedure DoCopyReport(Sender: TObject);
       procedure DoCloseClick(Sender: TObject);
+      procedure DoCheckUpdates(Sender: TObject);
       procedure DoAfterFix  (Sender: TObject);
       procedure AddButton(const ACaption: string; AHandler: TNotifyEvent;
                           var ALeft: Integer; var ATop: Integer);
@@ -87,6 +88,7 @@ uses
   , Vcl.Clipbrd
   , Vcl.Dialogs
   , DragLint.Plugin.Diagnose
+  , DragLint.Plugin.Updates
   , DragLint.Plugin.Theme
   , DragLint.Plugin.Editor
   ;
@@ -436,6 +438,10 @@ begin
   Screen.Cursor:= crHourGlass;
   try
     RenderGroup('Versions', DiagVersions);
+    { Same author, same GitHub account, and this plugin already drives YADF --
+      so "which YADF is the IDE actually loading" belongs on the one screen
+      that answers that question for everything else. }
+    RenderGroup('Related tools', DiagRelatedTools);
 
     Conn:= DiagConnections;
     RenderGroup('Connections', Conn);
@@ -525,7 +531,85 @@ begin
   AddProcButton('Recover Buffer-Compile Files'   , @InvokeGhostRecover   , L, T);
   AddProcButton('Import Build Log...'            , @InvokeImportLog      , L, T);
 
+  { Update checking is the ONE action in this window that touches the network,
+    so it is a button and never something that happens because the window
+    opened. An About box that blocks on a socket is an About box that hangs the
+    IDE on a train. }
+  AddButton('Check for Updates'      , DoCheckUpdates, L, T);
+
   AddButton('Close', DoCloseClick, L, T);
+end;
+
+{ Ask GitHub for the latest release of every component and report the outcome.
+
+  ON THE UI THREAD, BUT BOUNDED. A background thread would keep the dialog
+  responsive, but it would also outlive a dialog the user can close in the
+  meantime -- a callback into a freed form. The check is two HTTP GETs with an
+  explicit timeout each, initiated by an explicit click, so the bounded wait is
+  both shorter to reason about and impossible to orphan. The cursor says it is
+  working.
+
+  UNKNOWN IS REPORTED AS UNKNOWN. Offline, rate-limited or renamed repo all
+  render as "unknown", never as "up to date" -- the latter is the one answer a
+  user will not re-check, and it is the answer they would act on. }
+procedure TDragLintAboutForm.DoCheckUpdates(Sender: TObject);
+const
+  { A modal dialog is waiting. Long enough for a slow link, short enough that a
+    dead one does not read as a hang. }
+  CHECK_TIMEOUT_MS = 6000;
+var
+  C       : TDLComponentInfo;
+  Tag, Err: string;
+  Local   : string;
+  Reason  : string;
+  SB      : TStringBuilder;
+  AnyNew  : Boolean;
+  Bpl     : string;
+begin
+  SB    := TStringBuilder.Create;
+  AnyNew:= False;
+  Screen.Cursor:= crHourGlass;
+  try
+    for C in DLUpdateComponents do
+    begin
+      { The INSTALLED version, per component. drag-lint reports the version of
+        the running BPL; YADF the version of the exe beside the registered
+        wizard package. }
+      if SameText(C.DisplayName, 'drag-lint') then
+        Local:= PLUGIN_VERSION
+      else
+      begin
+        Bpl  := FindKnownPackagePath('YADFOT');
+        Local:= '';
+        if Bpl <> '' then Local:= FileVersionOf(ExtractFilePath(Bpl) + 'YADF.exe');
+      end;
+
+      Tag:= FetchLatestReleaseTag(C.Repo, CHECK_TIMEOUT_MS, Err);
+      if (Tag = '') and (Err <> '') then
+        SB.AppendLine(Format('%-12s unknown -- %s', [C.DisplayName, Err]))
+      else
+      begin
+        if IsUpdateAvailable(Tag, Local, Reason) then AnyNew:= True;
+        SB.AppendLine(Format('%-12s %s', [C.DisplayName, Reason]));
+      end;
+      SB.AppendLine(Format('%-12s   releases : %s', ['', C.ReleasesUrl]));
+      SB.AppendLine(Format('%-12s   changelog: %s', ['', C.ChangelogUrl]));
+      SB.AppendLine('');
+    end;
+
+    if AnyNew then
+      SB.AppendLine('A newer release exists. Open the releases page above to download it.')
+    else
+      SB.AppendLine('Nothing newer was found. Lines marked "unknown" were NOT checked ' +
+                    'successfully -- they are not a clean bill of health.');
+
+    { ShowTextReport already gives a Copy button, so the URLs above are
+      copy-pasteable rather than needing a second dialog to render a link. }
+    ShowTextReport('drag-lint: check for updates', SB.ToString);
+  finally
+    Screen.Cursor:= crDefault;
+    SB.Free;
+  end;
 end;
 
 procedure TDragLintAboutForm.DoRefresh(Sender: TObject);
