@@ -15879,6 +15879,18 @@ begin
   end;
 end;
 
+const
+  { The per-file scan is only PART of a lint-all run, so it only gets part of
+    the bar. Everything between the scan and the report is the tail, and it is
+    not a rounding error: on ORM3 CLIENT the tail is where the user waits.
+    LINTALL_TAIL_PHASES must equal the number of LintPhase() calls after the
+    scan loop -- it is the divisor, so if a phase is added or removed and this
+    is not updated the bar simply stops short of 99 or saturates early. It
+    cannot silently skew: run_lintall_progress_phases.ps1 asserts the sequence
+    is monotonic and that 100 appears only last. }
+  LINTALL_SCAN_PCT    = 90;
+  LINTALL_TAIL_PHASES = 13;
+
 function DoLintAll(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>              ;
@@ -15902,7 +15914,42 @@ var
     byte-identical to the old behaviour. }
   ScopeSet : TDictionary<string, Boolean>;
   Prof     : TLintPhaseProfiler          ;
+  TailPhase: Integer                     ;
+
+  { PROGRESS IS A CONTRACT, NOT DECORATION. The IDE plugin parses the digit run
+    before '%' out of these lines to drive its progress bar
+    (DragLint.Plugin.JobQueue.pas), so the SHAPE `lint-all: ... NN% ...` is
+    fixed even though the SCALE below is not.
+
+    THE DEFECT THIS EXISTS FOR: the per-file scan used to run 0..100, so the bar
+    hit 100% the moment the last file was scanned and then SAT there through
+    every phase below -- project rules, duplicate-code, the three filters and
+    the report write -- with no signal at all. On ORM3 that is minutes of
+    silence at "100%", which reads as a hang and is the single most common way
+    a user concludes the tool is broken when it is working.
+
+    So the scan is scaled into 0..LINTALL_SCAN_PCT and each phase after it
+    advances through the remainder, NAMING ITSELF -- "94% duplicate-code" says
+    what is running, which "100%" never did. 100% is emitted once, at the end,
+    and means done. }
+  procedure LintPhase(const AName: string);
+  var
+    Pct: Integer;
+  begin
+    Prof.Phase(AName);
+    if AArgs.Quiet then Exit;
+    Inc(TailPhase);
+    { Ceiling division so the FIRST phase already moves the bar off the scan
+      ceiling; the last lands on 99. 100 is reserved for "finished". }
+    Pct:= LINTALL_SCAN_PCT +
+          ((TailPhase * (99 - LINTALL_SCAN_PCT) + LINTALL_TAIL_PHASES - 1) div LINTALL_TAIL_PHASES);
+    if Pct > 99 then Pct:= 99;
+    Writeln(ErrOutput, Format('lint-all: %d%% %s', [Pct, AName]));
+    Flush(ErrOutput);
+  end;
+
 begin
+  TailPhase:= 0;
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
     lint walk never preprocessed at ALL -- Preprocess had three production
@@ -16083,7 +16130,9 @@ begin
         { Progress output (throttled by percentage) }
         if (not AArgs.Quiet) then
         begin
-          Pct:= ((FileIdx + 1) * 100) div Max(1, Length(FilePaths));
+          { Scaled to LINTALL_SCAN_PCT, not 100: the scan is not the whole run,
+            and reporting 100 here is what made the bar sit still. }
+          Pct:= ((FileIdx + 1) * LINTALL_SCAN_PCT) div Max(1, Length(FilePaths));
           if (FileIdx = 0) or (FileIdx = Length(FilePaths) - 1) or (Pct <> LastPct) then
           begin
             Writeln(ErrOutput, Format('lint-all: [%d/%d] %d%% %s', [FileIdx + 1, Length(FilePaths), Pct, ExtractFileName(PasPath)]));
@@ -16344,7 +16393,7 @@ begin
     The sibling resolver lets `unused-public-symbol` consult the projects a
     shared unit's own `dl:shared` header names instead of telling the reader to
     do it by hand. Lazy -- a project with no shared units opens nothing. }
-  Prof.Phase('project-rules');
+  LintPhase('project-rules');
   var SibKeep : TList<ISymbolStore>:= TList<ISymbolStore>.Create;
   var SibOwned: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
   try
@@ -16387,32 +16436,32 @@ begin
     SibOwned.Free;
   end;
   { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
-  Prof.Phase('class-metrics');
+  LintPhase('class-metrics');
   Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, '');
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
-  Prof.Phase('missing-doc');
+  LintPhase('missing-doc');
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
   { ADF Task 8: doc-drift -- store-backed (needs the doc graph + Raises facts);
     ON by default. Its --fix subset is applied in FinalizeAndOutput (Store passed). }
   { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
-  Prof.Phase('doc-drift');
+  LintPhase('doc-drift');
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
-  Prof.Phase('duplicate-code');
+  LintPhase('duplicate-code');
   Findings:= Findings + DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths, Cfg.ThresholdFor('duplicate-code', 90));
   { Interface reference cycles (needs all file paths) }
-  Prof.Phase('interface-cycles');
+  LintPhase('interface-cycles');
   Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);
   { Architecture layering (only if config present) }
-  Prof.Phase('layering');
+  LintPhase('layering');
   LayersCfg:= AArgs.LayersPath;
   if (LayersCfg = '') and FileExists('drag-lint-layers.json') then LayersCfg:= 'drag-lint-layers.json';
   if LayersCfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
-  Prof.Phase('unit-not-in-dpr');
+  LintPhase('unit-not-in-dpr');
   if AArgs.ProjectPath <> '' then
     Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, FilePaths)
   else
@@ -16434,7 +16483,7 @@ begin
       Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(InferredProj, FilePaths);
   end;
   { Used-unit resolvability (used-unit-not-resolvable) }
-  Prof.Phase('used-unit-resolvable');
+  LintPhase('used-unit-resolvable');
   Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
 
   { The per-file filter above only narrowed the SCAN. Every rule between the
@@ -16468,7 +16517,7 @@ begin
     cluster heavily by file and each call costs a LowerCase + MatchesMask per
     configured glob. Pinned by
     tests\autotest\run_lintall_project_rules_honour_exclude_paths.ps1. }
-  Prof.Phase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
+  LintPhase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
   begin
     var ExclMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
     try
@@ -16493,7 +16542,7 @@ begin
     end;
   end;
 
-  Prof.Phase(Format('ownership filter (%d findings)', [Length(Findings)]));
+  LintPhase(Format('ownership filter (%d findings)', [Length(Findings)]));
   if (not AArgs.LintThirdParty) and Own.Active then
   begin
     var OwnMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
@@ -16524,7 +16573,7 @@ begin
     class, clone detection, layering, doc rules, used-unit-not-resolvable), so
     without this the non-member noise walks straight back in through them.
     A finding carrying no file path is kept -- it belongs to the run, not a file. }
-  Prof.Phase('--project scope filter');
+  LintPhase('--project scope filter');
   if ScopeSet <> nil then
   begin
     var InScope: TArray<TLintFinding>:= nil;
@@ -16570,7 +16619,7 @@ begin
 
     Config "enabled":["<id>"] still overrides any of them (opt-in). doc-drift
     stays ON -- do NOT add it. }
-  Prof.Phase('finalize+output');
+  LintPhase('finalize+output');
   Result:= FinalizeAndOutput(
     AArgs, Findings, ScmDefOff + PROJECT_RULES_OFF_BY_DEFAULT + BUILTIN_RULES_OFF_BY_DEFAULT,
     { The roll-up counts EVERY severity, not just error-vs-everything-else. It
@@ -16660,6 +16709,16 @@ begin
                  under options defined relative to it, and lint-all's primary is
                  NOT AArgs.DbPath. See OpenExtraStoresExcept. }
   );
+  { 100% means FINISHED -- the report is written and every phase is done. It is
+    emitted exactly once, here, so a reader (and the IDE bar) can treat it as a
+    completion signal rather than as "the scan loop ended", which is what it
+    used to mean. }
+  if not AArgs.Quiet then
+  begin
+    Writeln(ErrOutput, 'lint-all: 100% done');
+    Flush(ErrOutput);
+  end;
+
   Prof.Done;
 end; // function
 
