@@ -62,7 +62,23 @@ type
     FLastChangeTick : UInt64  ;
     FGeneration     : Integer ;
     FLastWhy        : string  ;
+    FHashBeforeLaunch: string ;
   public
+    /// <summary>Take back the launch the last Consider authorised, because the
+    /// caller could not start it.</summary>
+    /// <remarks>Consider COMMITS when it answers True -- it advances the
+    /// launched-shape marker so the same edit cannot fire twice. If the caller
+    /// then declines (the worker is still unwinding), that commit makes the
+    /// edit VANISH: the gate reports "interface unchanged since the last
+    /// launch" forever after, and the change is never fanned out. Measured
+    /// 2026-09-11: two consecutive edits lost exactly this way while a 6m22s
+    /// tier-3 compile held the worker.
+    ///
+    /// The generation is deliberately NOT rewound. It is the staleness token;
+    /// reusing a number that was already handed out would make a late result
+    /// from the abandoned run look current.</remarks>
+    procedure UndoLaunch;
+
     /// <summary>Why the last Consider answered as it did -- DIAGNOSIS ONLY.</summary>
     /// <remarks>Consider has five distinct refusals that all returned a bare
     /// False, so a fan-out that never launched could not be told apart from one
@@ -334,6 +350,12 @@ end;
 
 { ---- TFanOutGate ---------------------------------------------------------- }
 
+procedure TFanOutGate.UndoLaunch;
+begin
+  FHashAtLaunch:= FHashBeforeLaunch;
+  FLastWhy     := 'launch taken back -- the caller could not start it';
+end;
+
 procedure TFanOutGate.Reset;
 begin
   FFile           := '';
@@ -342,6 +364,7 @@ begin
   FIfaceHash      := '';
   FHashAtLaunch   := '';
   FSilentShape    := '';
+  FHashBeforeLaunch:= '';
   FLastFingerprint:= '';
   FLastChangeTick := 0 ;
 end;
@@ -417,6 +440,7 @@ begin
     Exit;
   end;
 
+  FHashBeforeLaunch:= FHashAtLaunch;   { so UndoLaunch can put it back }
   FHashAtLaunch:= FIfaceHash;
   Inc(FGeneration);
   AGeneration:= FGeneration;

@@ -721,7 +721,19 @@ begin
             except
               on E: Exception do LiveLog('fanout: hook raised ' + E.ClassName + ': ' + E.Message);
             end;
-            if not FanStarted then LiveLog('fanout: the hook declined to start (already running?)');
+            if not FanStarted then
+            begin
+              { TAKE THE LAUNCH BACK. Consider COMMITS when it authorises one,
+                so a decline here would otherwise make the edit vanish: the gate
+                reports "interface unchanged since the last launch" from then
+                on and this change is never fanned out at all. Measured
+                2026-09-11: gen 2 and gen 3 were both lost this way while a
+                6m22s tier-3 compile held the worker, which is exactly the
+                "nothing changes for ten minutes" the owner reported. Undoing
+                re-arms it, so the next poll retries once the worker unwinds. }
+              FFanOut.UndoLaunch;
+              LiveLog('fanout: the hook declined to start -- launch taken back, will retry');
+            end;
           end;
         end;
       end; // if

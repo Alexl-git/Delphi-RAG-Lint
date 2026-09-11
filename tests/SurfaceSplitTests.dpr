@@ -351,6 +351,70 @@ begin
         'the short-circuit gated the file off entirely -- worse than not having it');
 end;
 
+
+{ A LAUNCH THE CALLER COULD NOT START MUST NOT BE LOST.
+
+  Consider COMMITS when it answers True -- it advances the launched-shape marker
+  so one edit cannot fire twice. If the caller then declines (the fan-out worker
+  is still unwinding from a previous run) that commit makes the edit VANISH:
+  every later poll reports "interface unchanged since the last launch" and the
+  change is never fanned out at all.
+
+  MEASURED IN PRODUCTION 2026-09-11, which is why this test exists: a 6m22s
+  tier-3 compile held the worker while two consecutive interface edits were
+  authorised and then declined. Both were lost, and the owner saw "nothing
+  changes for ten minutes". }
+procedure TestUndoLaunch;
+var
+  G       : TFanOutGate;
+  Gen     : Integer    ;
+  FirstGen: Integer    ;
+  Tick    : UInt64     ;
+  A, B    : string     ;
+begin
+  Writeln;
+  Writeln('-- a declined launch is taken back, not lost --');
+  A:= 'unit U; interface procedure One; implementation procedure One; begin end; end.';
+  B:= 'unit U; interface procedure Two; implementation procedure Two; begin end; end.';
+
+  G.Reset;
+  Tick:= 100000;
+  G.Consider('U.pas', A, Tick, 2000, Gen);
+  Inc(Tick, 10);
+  G.Consider('U.pas', B, Tick, 2000, Gen);
+  Inc(Tick, 3000);
+  Check('19a the settled interface change launches',
+        G.Consider('U.pas', B, Tick, 2000, Gen) and (Gen > 0));
+
+  G.UndoLaunch;   { the caller could not start it }
+
+  Inc(Tick, 3000);
+  Check('19b after UndoLaunch the SAME shape launches again',
+        G.Consider('U.pas', B, Tick, 2000, Gen),
+        'without this the edit is lost forever: ' + G.LastWhy);
+
+  Inc(Tick, 3000);
+  Check('19c NEGATIVE CONTROL: a launch that STANDS goes quiet again',
+        not G.Consider('U.pas', B, Tick, 2000, Gen),
+        G.LastWhy);
+
+  G.Reset;
+  Tick:= 500000;
+  G.Consider('V.pas', A, Tick, 2000, Gen);
+  Inc(Tick, 10);
+  G.Consider('V.pas', B, Tick, 2000, Gen);
+  Inc(Tick, 3000);
+  G.Consider('V.pas', B, Tick, 2000, Gen);
+  FirstGen:= Gen;
+  G.UndoLaunch;
+  Inc(Tick, 3000);
+  G.Consider('V.pas', B, Tick, 2000, Gen);
+  Check('19d the generation is NOT reused after an undo',
+        Gen > FirstGen,
+        Format('first=%d second=%d', [FirstGen, Gen]));
+end;
+
+
 begin
   GPass:= 0;
   GFail:= 0;
@@ -369,6 +433,7 @@ begin
     TestHashSensitivity;
     TestGate;
     TestSilentShape;
+    TestUndoLaunch;
   except
     on E: Exception do
     begin
