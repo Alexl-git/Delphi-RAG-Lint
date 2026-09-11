@@ -18869,10 +18869,19 @@ var
   DcuDir       : string                                    ;
   TmpRoot      : string                                    ;
 begin
+  { Platform FIRST: ResolveCompilePaths needs PlatDir. }
+  Plat:= LowerCase(APlatform);
+  if (Plat <> 'win32') and (Plat <> 'win64') then Plat:= 'win64';
+  DccExe  := IfThen(Plat = 'win32', 'dcc32'  , 'dcc64'  );
+  PlatDir := IfThen(Plat = 'win32', 'Win32'  , 'Win64'  );
+  WrongDir:= IfThen(Plat = 'win32', '\win64\', '\win32\');
   TargetBase:= ExtractFileName(AUnitPath);
   Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
   try
-    if AProject <> '' then Folders:= Resolver.Resolve(AProject)
+    { COMPILE paths, not INDEX paths. Resolve() adds the Browsing Path and both
+      platforms -- right for indexing, and the reason dcc was rebuilding
+      Spring4D from source (Source at -U position 8, its DCUs at 110). }
+    if AProject <> '' then Folders:= Resolver.ResolveCompilePaths(AProject, PlatDir)
     else Folders:= Resolver.ResolveLibraryPaths;
   finally
     Resolver.Free;
@@ -18881,11 +18890,7 @@ begin
   if AShadow <> '' then CompileTarget:= TPath.Combine(AShadow, TargetBase)
   else CompileTarget:= AUnitPath;
 
-  Plat:= LowerCase(APlatform);
-  if (Plat <> 'win32') and (Plat <> 'win64') then Plat:= 'win64';
-  DccExe  := IfThen(Plat = 'win32', 'dcc32'  , 'dcc64'  );
-  PlatDir := IfThen(Plat = 'win32', 'Win32'  , 'Win64'  );
-  WrongDir:= IfThen(Plat = 'win32', '\win64\', '\win32\');
+
 
   { See the sibling check-unit path above: one accessor, and a missing Studio is
     an attributable error rather than a wrong -U path. }

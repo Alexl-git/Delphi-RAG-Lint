@@ -150,7 +150,8 @@ type
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>);
+      procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>); overload;
+    procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>; ASearchPathOnly: Boolean); overload;
       /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
       /// <remarks>
@@ -254,6 +255,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Resolve(const ADprojPath: string): TArray<string>;
+    /// <summary>The folders dcc should COMPILE against: the project's own plus
+    /// the TARGET platform's registry Search Path, in registry order.</summary>
+    /// <remarks>Deliberately NOT Resolve: that one adds the Browsing Path and
+    /// both platforms, which is right for indexing and wrong for compiling --
+    /// it put a Source dir 102 positions ahead of its DCU dir and made dcc
+    /// rebuild Spring4D from source on every invocation.</remarks>
+    function ResolveCompilePaths(const ADprojPath, APlatform: string): TArray<string>;
       /// <summary>The INDEXING scope for ADprojPath: the project's own folders
       /// only -- its .dproj search paths, the directories named by the .dpr's
       /// `in '...'` clauses, and the project directory itself. The registry
@@ -578,6 +586,31 @@ begin
 end; // begin
 
 procedure TProjectResolver.ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>);
+begin
+  { FALSE, i.e. BOTH paths -- this overload must stay byte-identical in
+    behaviour to what it was, because its three callers are INDEXING callers.
+    Narrowing them to the Search Path would silently shrink what gets indexed,
+    and a smaller index answers confidently rather than failing. Only the
+    COMPILE path opts out, via ResolveCompilePaths. }
+  ReadLibraryPaths(AList, APlatforms, False);
+end;
+
+{ ASearchPathOnly=True omits the Browsing Path, and that distinction is the
+  whole of a 2026-09-11 performance bug.
+
+  The IDE COMPILES against the Search Path; the Browsing Path exists so Ctrl+Click
+  can find declarations, and it is source-heavy by design. Feeding both to dcc put
+  C:\Projects\spring4d\Source\Base\Collections at -U position 8 while
+  spring4d\Library\Delphi13\Win64\Debug sat at 110 -- so dcc compiled Spring4D
+  from source and died on its includes. Measured on this box: the Win64 Search
+  Path has 98 entries and orders every DCU dir ahead of its Source dir already;
+  the Browsing Path adds 135 more, and that is where the disorder comes from.
+
+  Indexing callers must keep BOTH -- a browsing-only root is still code the user
+  can open and therefore code the index should know. So Resolve is unchanged and
+  only the COMPILE path opts out. }
+procedure TProjectResolver.ReadLibraryPaths(AList: TList<string>;
+  const APlatforms: TArray<string>; ASearchPathOnly: Boolean);
 const
   VALUE_NAMES: array[0..1] of string = ('Search Path', 'Browsing Path');
 var
@@ -586,13 +619,16 @@ var
   HiveRoot: HKEY    ;
   Sam     : Cardinal;
   RegBase : string  ;
+  Last    : Integer ;
 begin
+  if ASearchPathOnly then Last:= 0 else Last:= High(VALUE_NAMES);
   // Probe HKCU + HKLM, both 32-bit + 64-bit registry views.
   for Plat in APlatforms do
   begin
     FCurrentPlatform:= Plat; // so $(Platform) expands to this target
-    for Val in VALUE_NAMES do
+    for var VIdx: Integer:= 0 to Last do
     begin
+      Val:= VALUE_NAMES[VIdx];
       RegBase:= BDS_REG_PATH + '\Library\' + Plat;
       for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
         for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do ReadRegPathInto(HiveRoot, RegBase, Val, Sam, procedure (S: string) begin AddSemicolonList(AList, S, ''); end);
@@ -731,6 +767,22 @@ begin
   if DprPath <> '' then ReadDprUsesPaths(DprPath, AList);
 end; // procedure
 
+{ See the declaration. Project folders first, then the TARGET platform's Search
+  Path in registry order -- which already puts every DCU dir ahead of its Source
+  dir on this box, so no reordering and no directory listing is needed. }
+function TProjectResolver.ResolveCompilePaths(const ADprojPath, APlatform: string): TArray<string>;
+var
+  List: TList<string>;
+begin
+  List:= TList<string>.Create;
+  try
+    CollectProjectFolders(ADprojPath, List);
+    ReadLibraryPaths(List, [APlatform], True);
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
 function TProjectResolver.Resolve(const ADprojPath: string): TArray<string>;
 var
   List: TList<string>;
