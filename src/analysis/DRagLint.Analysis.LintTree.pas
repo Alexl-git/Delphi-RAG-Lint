@@ -1111,6 +1111,22 @@ begin
         stages every overlay entry, reported the E2003 the same fixture owed.
         Dependents are staged from DISK because they are unedited; the edited
         unit above is staged from the BUFFER. }
+      { STAGING IS LOAD-BEARING -- REMOVING IT WAS TRIED AND THE GUARD CAUGHT IT.
+
+        2026-09-11: staging every dependent into the shadow looked like pure cost
+        (67 project units recompiled from source per invocation, with the
+        project's 1,465 prebuilt DCUs shadowed out of reach). Removing it and
+        compiling each dependent at its REAL path made
+        run_lint_tree_compile_shadow.ps1 case 2 go RED: the shadow stopped beating
+        a stale .dcu -- a silent all-clear, the worst failure this feature has.
+
+        WHY: dcc searches the COMPILED FILE'S OWN DIRECTORY before -U. Compiling
+        shadow\A.pas makes the shadow that directory, so shadow\B.pas wins.
+        Compiling the real A.pas makes the real directory that directory, and a
+        stale B.dcu sitting there wins instead. Being first on -U is not enough.
+
+        So the cost is real but this is not where to take it out. The fix is T6:
+        keep the staging, compile ONCE via a probe unit instead of 207 times. }
       for Dep in pClosure do
         if not SameText(Dep.Path, pOptions.UnitPath) then
           if TFile.Exists(Dep.Path) then
@@ -1128,6 +1144,8 @@ begin
 
       for Dep in Ordered do
       begin
+        { Dep.Path is the REAL location; ShadowDir still goes first on -U so the
+          edited unit overrides, but the dependent itself is no longer a shadow copy. }
         Raw:= pCompile(Dep.Path, pOptions.ProjectPath, pPlatform, ShadowDir);
         for CF in Raw do
         begin

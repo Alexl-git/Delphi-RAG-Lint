@@ -18905,8 +18905,17 @@ begin
     Resolver.Free;
   end;
 
-  if AShadow <> '' then CompileTarget:= TPath.Combine(AShadow, TargetBase)
-  else CompileTarget:= AUnitPath;
+  { The shadow holds ONLY the edited unit now (dependents are no longer staged --
+    staging them shadowed the project's prebuilt DCUs and forced a from-source
+    rebuild of every one). So use the shadow copy when it is actually there, and
+    otherwise compile the unit where it really lives. The shadow stays FIRST on
+    -U either way, which is what makes the edited unit override for dependents. }
+  CompileTarget:= AUnitPath;
+  if AShadow <> '' then
+  begin
+    var Staged: string:= TPath.Combine(AShadow, TargetBase);
+    if TFile.Exists(Staged) then CompileTarget:= Staged;
+  end;
 
 
 
