@@ -18002,6 +18002,7 @@ var
   CompileTarget: string                                    ;
   TargetBase   : string                                    ;
   TmpRoot      : string                                    ;
+  IncPath      : string                                    ;
   CfgDir       : string                                    ;
   DcuDir       : string                                    ;
   RsVars       : string                                    ;
@@ -18119,7 +18120,7 @@ begin
   { dcc reads <compiler>.cfg from its working dir, so name the cfg to match }
   var SearchPath: string:= UPath;
   if SearchPath = '' then SearchPath:= DcuDir else SearchPath:= SearchPath + ';' + DcuDir;
-  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [SearchPath, Namespaces, DcuDir]));
+  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-I"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [SearchPath, IncPath, Namespaces, DcuDir]));
 
   RsVars:= TStudioEnv.RsvarsBat;
   Cmd:= Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"', [RsVars, CfgDir, DccExe, CompileTarget]);
@@ -18884,6 +18885,7 @@ var
   CfgDir       : string                                    ;
   DcuDir       : string                                    ;
   TmpRoot      : string                                    ;
+  IncPath      : string                                    ;
 begin
   { Platform FIRST: ResolveCompilePaths needs PlatDir. }
   Plat:= LowerCase(APlatform);
@@ -18948,9 +18950,59 @@ begin
     own \Source\ lives outside <BDS> and is unaffected. }
   var BdsSrc: string:= LowerCase(IncludeTrailingPathDelimiter(BdsDir) + 'source');
 
-  for P in Folders do
-    if (P <> '') and (Pos(WrongDir, LowerCase(P)) = 0) and (Pos(BdsSrc, LowerCase(P)) = 0) then
+  { CLOUD-BACKED ROOTS ARE EXCLUDED BY STRING, never by probing. Enumerating a
+    OneDrive folder stalls on hydration -- measured 2026-09-11, 13 MINUTES of
+    wall clock for 10 CPU-seconds, twice. dcc pays the same cost we do, and these
+    entries sit at -U positions 3-4, so they are probed for nearly every unit
+    lookup. They arrive via $(BDSUSERDIR)/$(BDSCatalogRepository) when the
+    process inherits the IDE environment. }
+  var Cloud: TArray<string>:= ['\onedrive'];
+  for var EnvName: string in ['OneDrive', 'OneDriveCommercial', 'OneDriveConsumer'] do
+  begin
+    var EV: string:= GetEnvironmentVariable(EnvName);
+    if EV <> '' then Cloud:= Cloud + [LowerCase(IncludeTrailingPathDelimiter(EV))];
+  end;
+  for var Extra: string in GetEnvironmentVariable('DRAGLINT_EXCLUDE_ROOTS').Split([';']) do
+    if Trim(Extra) <> '' then Cloud:= Cloud + [LowerCase(Trim(Extra))];
+
+  { One filtered pass feeding BOTH -U and -I, with first-position dedup (the
+    project DCU dir was appearing twice). }
+  var Keep: TStringList:= TStringList.Create;
+  try
+    Keep.CaseSensitive:= False;
+    for P in Folders do
+    begin
+      if P = '' then Continue;
+      var LowP: string:= LowerCase(P);
+      if Pos(WrongDir, LowP) > 0 then Continue;
+      if Pos(BdsSrc  , LowP) > 0 then Continue;
+      var IsCloud: Boolean:= False;
+      for var C: string in Cloud do
+        if (C <> '') and (Pos(C, LowP) > 0) then IsCloud:= True;
+      if IsCloud then Continue;
+      if Keep.IndexOf(P) >= 0 then Continue;
+      Keep.Add(P);
       if UPath = '' then UPath:= P else UPath:= UPath + ';' + P;
+    end;
+
+    { THE INCLUDE PATH, and it is why tier 3 returned 219 findings and no real
+      ones. GROUND TRUTH, measured 2026-09-11 by dropping -Q and reading dcc:
+
+        DevExpress\VCL\ExpressBars\Sources\dxBar.pas(37)
+          Fatal: F1026 File not found: 'cxVer.inc'
+
+      dcc compiles dxBar from source and dies because an include resolves through
+      -I, which was never set at all -- so the compile aborts before reaching the
+      unit we care about, and no real finding is ever reported. msbuild feeds the
+      Library Path to -U and -I alike; this mirrors that.
+
+      Built from the SAME filtered list, so the cloud roots that stalled dcc for
+      13 minutes when -I was first attempted cannot return through this door. }
+    for P in Keep do
+      if IncPath = '' then IncPath:= P else IncPath:= IncPath + ';' + P;
+  finally
+    Keep.Free;
+  end;
   Namespaces:= ReadDccNamespaces(AProject);
 
   TmpRoot:= TPath.Combine(TPath.GetTempPath, 'draglint_checkunit');
@@ -18963,7 +19015,7 @@ begin
     after the project's own DCUs, so neither is displaced. }
   var SearchPath: string:= UPath;
   if SearchPath = '' then SearchPath:= DcuDir else SearchPath:= SearchPath + ';' + DcuDir;
-  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [SearchPath, Namespaces, DcuDir]));
+  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-I"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [SearchPath, IncPath, Namespaces, DcuDir]));
 
   RsVars:= TStudioEnv.RsvarsBat;
   Cmd:= Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"', [RsVars, CfgDir, DccExe, CompileTarget]);
