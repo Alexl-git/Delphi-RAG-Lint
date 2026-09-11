@@ -17908,6 +17908,41 @@ begin
   end; // try
 end; // function
 
+{ The project's OWN prebuilt DCUs, read from <DCC_DcuOutput> in the .dproj.
+
+  MEASURED 2026-09-11 and it is the whole of tier 3's cost. Micronite2027 keeps
+  1,465 DCUs (281 MB) in .\Win64\Debug\DCU, and that folder is NOT on
+  DCC_UnitSearchPath -- a DCU OUTPUT dir normally is not. So dcc had no way to
+  reach a single one of them and recompiled every project unit FROM SOURCE, on
+  every one of the 207 per-dependent invocations tier 3 makes. 6m22s, and the
+  shared -NU cache came out EMPTY afterwards because the compiles were failing
+  before codegen rather than succeeding slowly.
+
+  $(Platform) and $(Config) are expanded from the compile we are actually
+  running, not from the .dproj's defaults, because the whole point is to match
+  the DCUs the IDE built. A path that does not exist is simply not added --
+  a project that has never been built has no DCUs to reuse and must still
+  compile from source. }
+function ProjectDcuOutputDir(const ADprojPath, APlatform, AConfig: string): string;
+var
+  Content: string;
+  M      : TMatch;
+  Rel    : string;
+begin
+  Result:= '';
+  if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
+  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;
+  M:= TRegEx.Match(Content, '<DCC_DcuOutput>(.*?)</DCC_DcuOutput>', [roIgnoreCase, roSingleLine]);
+  if not M.Success then Exit;
+  Rel:= Trim(M.Groups[1].Value);
+  if Rel = '' then Exit;
+  Rel:= StringReplace(Rel, '$(Platform)', APlatform, [rfReplaceAll, rfIgnoreCase]);
+  Rel:= StringReplace(Rel, '$(Config)'  , AConfig  , [rfReplaceAll, rfIgnoreCase]);
+  if Pos('$(', Rel) > 0 then Exit;   { an unexpanded macro is not a usable path }
+  Result:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ADprojPath), Rel));
+  if not TDirectory.Exists(Result) then Result:= '';
+end;
+
 // Read DCC_Namespace from a .dproj (so dotted-down 'uses Forms' etc. resolve),
 // falling back to a broad default covering the common RTL/VCL roots.
 function ReadDccNamespaces(const ADprojPath: string): string;
@@ -18016,6 +18051,15 @@ begin
   { unit search path -- shadow first so the unsaved overlay wins }
   UPath:= '';
   if AArgs.Shadow <> '' then UPath:= AArgs.Shadow;
+  { THE PROJECT'S OWN PREBUILT DCUs, immediately after the shadow. This is the
+    difference between "load 1,465 DCUs" and "recompile the project from source,
+    once per dependent". It goes AFTER the shadow so the edited unit is still
+    compiled from the unsaved buffer -- that precedence is the whole mechanism,
+    and run_lint_tree_compile_shadow.ps1 case 2 builds a stale .dcu first to
+    prove it survives having DCU dirs on the path at all. }
+  var ProjDcu: string:= ProjectDcuOutputDir(AArgs.ProjectPath, PlatDir, 'Debug');
+  if ProjDcu <> '' then
+    if UPath = '' then UPath:= ProjDcu else UPath:= UPath + ';' + ProjDcu;
   if TDirectory.Exists(LibRelease) then
     if UPath = '' then UPath:= LibRelease else UPath:= UPath + ';' + LibRelease;
   { compile against precompiled DCUs only: drop the wrong platform AND any RTL/VCL
@@ -18039,8 +18083,27 @@ begin
   DcuDir:= TPath.Combine(TmpRoot, 'dcu');
   TDirectory.CreateDirectory(CfgDir);
   TDirectory.CreateDirectory(DcuDir);
+  { REUSE THE DCUs WE ALREADY BUILT. DcuDir was on -NU (output) only, so every
+    invocation wrote its DCUs into a shared cache that the NEXT invocation then
+    never searched. Tier 3 calls this once PER DEPENDENT -- 207 times for
+    uPipeClientConnection.pas -- so the whole closure was recompiled from source
+    on every one of them: measured 6m22s, against an IDE incremental build that
+    is effectively instant.
+
+    ORDER IS LOAD-BEARING AND IS THE ONE RISK. The shadow stays FIRST, ahead of
+    the cache: dcc will happily bind a previously built B.dcu instead of the
+    shadow B.pas if the search order lets it, and then tier 3 reports a clean
+    compile for exactly the edit it exists to catch -- a silent all-clear.
+    run_lint_tree_compile_shadow.ps1 case 2 builds a stale .dcu FIRST and proves
+    the shadow still wins; that guard is the reason this line can change at all.
+
+    Correctness of the reuse itself is dcc's own: a .dcu records the stamps of
+    the units it was built against, so a dependent whose used unit changed is
+    recompiled rather than loaded stale. }
   { dcc reads <compiler>.cfg from its working dir, so name the cfg to match }
-  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [UPath, Namespaces, DcuDir]));
+  var SearchPath: string:= UPath;
+  if SearchPath = '' then SearchPath:= DcuDir else SearchPath:= SearchPath + ';' + DcuDir;
+  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [SearchPath, Namespaces, DcuDir]));
 
   RsVars:= TStudioEnv.RsvarsBat;
   Cmd:= Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"', [RsVars, CfgDir, DccExe, CompileTarget]);
