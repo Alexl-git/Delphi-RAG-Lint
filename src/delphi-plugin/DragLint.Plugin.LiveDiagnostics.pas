@@ -116,6 +116,44 @@ begin
   DLT('livediag', AMsg); { TEMP: route to the shared telemetry log }
 end;
 
+{ IS THIS FILE OURS TO ANALYSE AT ALL?
+
+  MEASURED 2026-09-11, and it cost the owner a hung IDE. A tier-3 finding
+  pointed at an RTL unit; double-clicking it opened
+  <BDS>\source\rtl\sys\System.Variants.pas (217 KB) in the editor; the runner
+  treated that like any other active buffer and fired a lint + ghost-compile on
+  it. That run was still going 625 CPU-seconds later, it held the provider lock
+  the whole time, and the IDE could not finish shutting down -- bds.exe survived
+  with no window and had to be killed.
+
+  Embarcadero's own sources are never the user's code, are never what a
+  diagnostic should be about, and are exactly the files big enough to turn a
+  background convenience into a hang. So they are refused at the one place every
+  path goes through, rather than guarded at each caller. }
+function IsAnalysableFile(const APath: string): Boolean;
+var
+  Svc : IOTAServices;
+  Root: string      ;
+begin
+  Result:= False;
+  if APath = '' then Exit;
+  if not SameText(ExtractFileExt(APath), '.pas') then Exit;
+  try
+    if Supports(BorlandIDEServices, IOTAServices, Svc) and (Svc <> nil) then
+    begin
+      Root:= Svc.GetRootDirectory;
+      if Root <> '' then
+      begin
+        Root:= LowerCase(IncludeTrailingPathDelimiter(Root));
+        if Copy(LowerCase(APath), 1, Length(Root)) = Root then Exit(False);
+      end;
+    end;
+  except
+    { A missing IOTAServices must not make every file unanalysable -- failing
+      OPEN here is right, because the guard is a narrowing, not a permission. }
+  end;
+  Result:= True;
+end;
 { v0.46: cheap active-editor file name (no buffer read) -- used to auto-lint on
   tab/view switch. }
 function ActiveEditorFileName: string;
@@ -628,7 +666,7 @@ begin
       (no buffer read) and arm a lint -- so diagnostics appear automatically when
       you switch code tabs, without depending on open/edit events. }
     var ActiveFile: string:= ActiveEditorFileName;
-    if (ActiveFile <> '') and SameText(ExtractFileExt(ActiveFile), '.pas') and not SameText(ActiveFile, FLastActiveFile) then
+    if IsAnalysableFile(ActiveFile) and not SameText(ActiveFile, FLastActiveFile) then
     begin
       FLastActiveFile:= ActiveFile;
       FDirty         := True;
@@ -639,7 +677,7 @@ begin
     { v0.48: compile-on-switch -- compile the current state when you move to a
       DIFFERENT .pas (even if unchanged). Baseline-only on the first file seen (the
       project-open startup compile covers that one); arm a compile on later changes. }
-    if (ActiveFile <> '') and SameText(ExtractFileExt(ActiveFile), '.pas') and not SameText(ActiveFile, FSwitchFile) then
+    if IsAnalysableFile(ActiveFile) and not SameText(ActiveFile, FSwitchFile) then
     begin
       if FSwitchFile = '' then FSwitchFile:= ActiveFile { baseline only -- no compile }
       else if Settings.AutoCompileOnSwitch then
@@ -666,10 +704,10 @@ begin
         conditions were silent, so "the fan-out never fired" was
         indistinguishable from "the poll never looked" -- and that is exactly
         the question a failed T1 asks. }
-      if (PollFile = '') or not SameText(ExtractFileExt(PollFile), '.pas') then
+      if not IsAnalysableFile(PollFile) then
       begin
         if GHeartbeat mod 20 = 0 then
-          LiveLog(Format('poll: SKIP -- top buffer is [%s] (need a .pas)', [PollFile]));
+          LiveLog(Format('poll: SKIP -- [%s] is not ours to analyse (need a .pas outside the RAD Studio install)', [PollFile]));
       end
       else
       begin
