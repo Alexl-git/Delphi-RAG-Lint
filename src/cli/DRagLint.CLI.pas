@@ -17943,6 +17943,22 @@ begin
   if not TDirectory.Exists(Result) then Result:= '';
 end;
 
+{ Does the project build DEBUG DCUs? Load-bearing for the compile path.
+
+  Micronite2027 sets <DCC_DebugDCUs>true, so its 1,465 prebuilt DCUs -- 49 of
+  them Spring*.dcu -- were compiled against <BDS>\lib\<Plat>\DEBUG. Put only the
+  RELEASE RTL on -U and dcc rejects every one of them as built against a
+  different RTL and recompiles from SOURCE, which is why having the project's
+  DCU dir first on -U changed nothing at all. }
+function ProjectUsesDebugDcus(const ADprojPath: string): Boolean;
+var
+  Content: string;
+begin
+  Result:= False;
+  if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
+  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;
+  Result:= TRegEx.IsMatch(Content, '<DCC_DebugDCUs>\s*true\s*</DCC_DebugDCUs>', [roIgnoreCase]);
+end;
 // Read DCC_Namespace from a .dproj (so dotted-down 'uses Forms' etc. resolve),
 // falling back to a broad default covering the common RTL/VCL roots.
 function ReadDccNamespaces(const ADprojPath: string): string;
@@ -18899,6 +18915,7 @@ begin
 
   UPath:= '';
   if AShadow <> '' then UPath:= AShadow;
+
   if TDirectory.Exists(LibRelease) then
     if UPath = '' then UPath:= LibRelease else UPath:= UPath + ';' + LibRelease;
 
