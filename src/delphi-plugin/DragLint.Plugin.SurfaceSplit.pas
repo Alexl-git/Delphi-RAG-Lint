@@ -61,7 +61,16 @@ type
     FLastFingerprint: string  ;
     FLastChangeTick : UInt64  ;
     FGeneration     : Integer ;
+    FLastWhy        : string  ;
   public
+    /// <summary>Why the last Consider answered as it did -- DIAGNOSIS ONLY.</summary>
+    /// <remarks>Consider has five distinct refusals that all returned a bare
+    /// False, so a fan-out that never launched could not be told apart from one
+    /// that was never asked. Nothing reads this to decide anything; the runner
+    /// logs it when it CHANGES, which is what makes a silent gate visible
+    /// without flooding a 250 ms timer's log.</remarks>
+    property LastWhy: string read FLastWhy;
+
     /// <summary>Forgets every hash and clock, keeping the generation counter so
     /// a late result from a previous file can still be recognised as stale.</summary>
     procedure Reset;
@@ -331,12 +340,24 @@ var
 begin
   Result     := False;
   AGeneration:= 0;
-  if AFile = '' then Exit;
+  { FIVE DISTINCT REFUSALS USED TO LOOK IDENTICAL from outside -- Consider
+    returned a bare False and the caller could not say which gate held it. That
+    made "the fan-out never fired" undiagnosable without a debugger attached to
+    a running IDE. LastWhy costs one string assignment per poll and turns each
+    refusal into a named one. It is diagnosis, not control flow: nothing reads
+    it to decide anything. }
+  FLastWhy:= 'considering';
+  if AFile = '' then
+  begin
+    FLastWhy:= 'no file';
+    Exit;
+  end;
 
   { A different buffer is a baseline, never a launch: arriving on a tab is not
     editing it, and firing here would fan out on every tab switch. }
   if not SameText(AFile, FFile) then
   begin
+    FLastWhy:= 'baseline captured for a newly-active buffer (no launch)';
     Reset;
     FFile        := AFile;
     FBufHash     := CheapBufferHash(ABufText);
@@ -365,13 +386,27 @@ begin
       depends on. }
   end;
 
-  if FIfaceHash = FHashAtLaunch then Exit;   { nothing new since the last launch }
-  if (FSilentShape <> '') and (FIfaceHash = FSilentShape) then Exit;
-  if ANowTick - FLastChangeTick < AIdleMs then Exit;  { still settling }
+  if FIfaceHash = FHashAtLaunch then
+  begin
+    FLastWhy:= 'interface unchanged since the last launch';
+    Exit;
+  end;
+  if (FSilentShape <> '') and (FIfaceHash = FSilentShape) then
+  begin
+    FLastWhy:= 'this interface shape already answered the same fingerprint';
+    Exit;
+  end;
+  if ANowTick - FLastChangeTick < AIdleMs then
+  begin
+    FLastWhy:= Format('interface changed, still settling (%d of %d ms)',
+                      [ANowTick - FLastChangeTick, AIdleMs]);
+    Exit;
+  end;
 
   FHashAtLaunch:= FIfaceHash;
   Inc(FGeneration);
   AGeneration:= FGeneration;
+  FLastWhy:= Format('LAUNCH gen %d', [FGeneration]);
   Result:= True;
 end;
 

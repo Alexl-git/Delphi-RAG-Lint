@@ -434,6 +434,8 @@ type
       FLastHashCheck  : Cardinal;
       FLastContentHash: Cardinal;
       FLastHashFile   : string  ;
+      { Last reason the fan-out gate gave, so it is logged on change only. }
+      FLastFanWhy     : string  ;
       { PLAN-lint-tree P2: the fan-out launch decision. Everything that decides
         WHETHER to fan out lives in the record; this class only feeds it the
         buffer and calls the hook. }
@@ -646,7 +648,16 @@ begin
       FLastHashCheck:= GetTickCount;
       var PollFile: string                         ;
       var Snap: string:= ActiveBufferText(PollFile);
-      if (PollFile <> '') and SameText(ExtractFileExt(PollFile), '.pas') then
+      { WHY THE POLL DECLINED, throttled to once every ~20 polls. Both skip
+        conditions were silent, so "the fan-out never fired" was
+        indistinguishable from "the poll never looked" -- and that is exactly
+        the question a failed T1 asks. }
+      if (PollFile = '') or not SameText(ExtractFileExt(PollFile), '.pas') then
+      begin
+        if GHeartbeat mod 20 = 0 then
+          LiveLog(Format('poll: SKIP -- top buffer is [%s] (need a .pas)', [PollFile]));
+      end
+      else
       begin
         var HashNow: Cardinal:= CheapHash(Snap);
         if not SameText(PollFile, FLastHashFile) then
@@ -671,7 +682,18 @@ begin
           text they were looking at. Everything that DECIDES lives in the gate
           (tests\SurfaceSplitTests.dpr); this is only the wiring. }
         var FanGen: Integer:= 0;
-        if FFanOut.Consider(PollFile, Snap, GetTickCount64, FANOUT_IDLE_MS, FanGen) then
+        var FanFired: Boolean:= FFanOut.Consider(PollFile, Snap, GetTickCount64, FANOUT_IDLE_MS, FanGen);
+        { THE GATE'S REASONING, logged on CHANGE only. Consider returns a bare
+          Boolean and every one of its five refusals looked identical from out
+          here, so a fan-out that never fired gave no clue WHICH gate held it.
+          Logging on change rather than per poll keeps a 250 ms timer from
+          filling the log. }
+        if FFanOut.LastWhy <> FLastFanWhy then
+        begin
+          FLastFanWhy:= FFanOut.LastWhy;
+          LiveLog('fanout gate: ' + FLastFanWhy + ' [' + ExtractFileName(PollFile) + ']');
+        end;
+        if FanFired then
         begin
           if not Assigned(GFanOutHook) then
             LiveLog('fanout: interface change settled but no hook is assigned -- skipped')
@@ -788,8 +810,18 @@ begin
         );
       end).Start; // procedure
   except
-    FBusy:= False;
-    { never propagate into the IDE message loop }
+    on E: Exception do
+    begin
+      FBusy:= False;
+      { NEVER PROPAGATE into the IDE message loop -- but never swallow SILENTLY
+        either. This handler used to have an empty body, so anything raised
+        between the heartbeat and the content poll skipped the rest of the tick
+        FOREVER while the heartbeat kept logging happily: the runner looked
+        alive and did nothing, which is the most expensive shape a bug can
+        take. The tick number is included because a fault that repeats every
+        tick and one that fired once look identical without it. }
+      LiveLog(Format('runner: tick #%d EXC %s: %s', [GHeartbeat, E.ClassName, E.Message]));
+    end;
   end; // try
 end; // procedure
 
@@ -869,11 +901,20 @@ end;
 initialization
 
 finalization
+{ TEARDOWN BRACKETING. An access violation while the IDE closes leaves NOTHING
+  in the log -- the process is going away and the handler that would have said
+  so is part of what is being torn down. Bracketing every finalization that
+  holds an IDE notifier or interface turns that into a NAMED unit: the last
+  'begin' with no matching 'end' is where it died. Cheap, and it is the only
+  thing that makes a shutdown AV diagnosable after the fact. }
+  DLT('teardown', 'LiveDiagnostics: finalization BEGIN');
 { 2026-08-26: this unit's OWN finalization also stops the runner, so a runner
   that goes quiet does NOT prove UnregisterDragLintMenu reached its
   StopLiveDiagnostics step -- that ambiguity cost a diagnosis today. Record
   which path actually did it. }
 try LiveLog('finalization: entering StopLiveDiagnostics (UNIT finalization, not the menu teardown)'); except end;
 try StopLiveDiagnostics; except end;
+
+  DLT('teardown', 'LiveDiagnostics: finalization END');
 
 end.
