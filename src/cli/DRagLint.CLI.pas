@@ -18070,10 +18070,10 @@ begin
     unit -- so no real finding is ever reported. Project + Library (DCU) paths are
     kept (the project's own \Source\ stays, as it lives outside <BDS>). }
   var BdsSrc: string:= LowerCase(IncludeTrailingPathDelimiter(BdsDir) + 'source');
+
   for P in Folders do
     if (P <> '') and (Pos(WrongDir, LowerCase(P)) = 0) and (Pos(BdsSrc, LowerCase(P)) = 0) then
       if UPath = '' then UPath:= P else UPath:= UPath + ';' + P;
-
   Namespaces:= ReadDccNamespaces(AArgs.ProjectPath);
 
   { 4. write a dcc64.cfg (avoids the ~8 KB command-line limit on the path list)
@@ -18896,10 +18896,39 @@ begin
   if AShadow <> '' then UPath:= AShadow;
   if TDirectory.Exists(LibRelease) then
     if UPath = '' then UPath:= LibRelease else UPath:= UPath + ';' + LibRelease;
-  for P in Folders do
-    if (P <> '') and (Pos(WrongDir, LowerCase(P)) = 0) then
-      if UPath = '' then UPath:= P else UPath:= UPath + ';' + P;
 
+  { THE PROJECT'S OWN PREBUILT DCUs, right after the shadow. Micronite2027 keeps
+    1,465 of them (281 MB) in .\Win64\Debug\DCU, which is a DCU OUTPUT dir and
+    therefore NOT on DCC_UnitSearchPath -- so dcc could not reach one. After the
+    shadow, never before it: the unsaved buffer must still win, which
+    run_lint_tree_compile_shadow.ps1 case 2 proves by building a stale .dcu
+    first. The shared -NU cache goes on too, so 207 per-dependent invocations
+    stop discarding the DCUs each other just built. }
+  var ProjDcu: string:= ProjectDcuOutputDir(AProject, PlatDir, 'Debug');
+  if ProjDcu <> '' then
+    if UPath = '' then UPath:= ProjDcu else UPath:= UPath + ';' + ProjDcu;
+
+  { DROP RTL/VCL *SOURCE* DIRS -- THE SIBLING check-unit PATH HAS ALWAYS DONE
+    THIS AND THIS ONE NEVER DID. The two drifted, and this is the copy tier 3
+    actually calls.
+
+    MEASURED 2026-09-11, and it is the whole of tier 3's cost and noise. The
+    registry Browsing path contributes <BDS>\source\... entries -- 51 of them
+    here. With those on -U, dcc recompiles System.Variants and friends FROM
+    SOURCE against the already-loaded System.dcu and dies with
+    'F1026 File not found: System.Variants' / 'E2158 unit out of date or
+    corrupted' BEFORE it ever reaches the target unit. So tier 3 spent 6m22s per
+    run, wrote ZERO DCUs (every compile died before codegen), and returned 219
+    findings of which not one was about the user's code. The sibling's comment
+    predicted this exactly; it simply was not applied here.
+
+    Precompiled DCUs only. Project and Library (DCU) paths stay -- the project's
+    own \Source\ lives outside <BDS> and is unaffected. }
+  var BdsSrc: string:= LowerCase(IncludeTrailingPathDelimiter(BdsDir) + 'source');
+
+  for P in Folders do
+    if (P <> '') and (Pos(WrongDir, LowerCase(P)) = 0) and (Pos(BdsSrc, LowerCase(P)) = 0) then
+      if UPath = '' then UPath:= P else UPath:= UPath + ';' + P;
   Namespaces:= ReadDccNamespaces(AProject);
 
   TmpRoot:= TPath.Combine(TPath.GetTempPath, 'draglint_checkunit');
@@ -18907,7 +18936,12 @@ begin
   DcuDir:= TPath.Combine(TmpRoot, 'dcu');
   TDirectory.CreateDirectory(CfgDir);
   TDirectory.CreateDirectory(DcuDir);
-  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [UPath, Namespaces, DcuDir]));
+  { DcuDir was on -NU (output) only, so each of the 207 per-dependent runs wrote
+    DCUs the next one could not see. Last on the path: after the shadow and
+    after the project's own DCUs, so neither is displaced. }
+  var SearchPath: string:= UPath;
+  if SearchPath = '' then SearchPath:= DcuDir else SearchPath:= SearchPath + ';' + DcuDir;
+  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [SearchPath, Namespaces, DcuDir]));
 
   RsVars:= TStudioEnv.RsvarsBat;
   Cmd:= Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"', [RsVars, CfgDir, DccExe, CompileTarget]);
