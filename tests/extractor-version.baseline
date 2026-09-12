@@ -639,6 +639,11 @@
 #   4 checks failed (1,2,3,6) against the pre-fix build with both controls
 #   (4 = not a call kind, 5 = an unreferenced routine stays at zero) passing on
 #   BOTH engines, and 7/7 green after.
-DEFER-UNTIL|2026-09-17|0043ed0e28147b87452cec2f81ea9b51fe6db98f3f1bc15475ffa3af36a1540f|ref-gap G2 unit-qualified routine refs: fix shipped now, global re-parse batched with the next library rebuild
+# 2026-09-11 (session 88/89): the DEFER-UNTIL|2026-09-17 recorded above is
+#   DISCHARGED. The owner authorised the bump and the full re-parse before
+#   leaving, so ref-gap G2's unit-qualified refs are no longer carried as a
+#   debt: 1.15.0-alpha -> 1.16.0-alpha, and the hash the deferral pinned
+#   (0043ed0e...) is exactly the surface that is now stamped. Existing
+#   indexes are re-parsed rather than left silently short.
 
-1.15.0-alpha|4690cc31fb9f78c3378fe629e910e85bd0c1d22c99610be6de46f37264502b0b
+1.16.0-alpha|0043ed0e28147b87452cec2f81ea9b51fe6db98f3f1bc15475ffa3af36a1540f

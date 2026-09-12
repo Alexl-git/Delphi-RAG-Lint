@@ -66,7 +66,7 @@ const
     have them, and DFM text search still finds only quoted values. Nothing reads
     WRONG -- it reads SHORT, which is the failure mode this stamp exists to make
     visible rather than silent. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.15.0-alpha';
+  DRAGLINT_EXTRACTOR_VERSION = '1.16.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
