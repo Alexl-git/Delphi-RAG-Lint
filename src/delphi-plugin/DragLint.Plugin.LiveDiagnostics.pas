@@ -27,6 +27,22 @@ procedure StopLiveDiagnostics;
 { Called from the edit-view notifier's Modified hook. }
 procedure NotifyEditDirty;
 
+/// <summary>Reports the surface fingerprint the engine returned for a fan-out
+/// run, so a repeated answer can stop the same shape being asked twice.</summary>
+/// <param name="AFingerprint">The engine's fingerprint for the last launch.</param>
+/// <remarks>Safe to call from the fan-out worker thread -- it marshals to the
+/// main thread itself, because the gate is driven from the runner's timer and
+/// is deliberately not thread-safe.</remarks>
+procedure NotifyFanOutFingerprint(const AFingerprint: string);
+
+/// <summary>The active .pas editor buffer, unsaved text included.</summary>
+/// <param name="AFilePath">Receives the buffer's path; '' if there is none.</param>
+/// <returns>The buffer text, or '' when no .pas view is active.</returns>
+/// <remarks>MAIN THREAD ONLY -- it goes through IOTAEditReader. Exposed because
+/// tier 3 must re-read the CURRENT buffer rather than compile the snapshot tier
+/// 2 staged minutes earlier.</remarks>
+function ActiveBufferSnapshot(out AFilePath: string): string;
+
 var
   GLiveStatus: string = ''; { shown in the dock Diagnostics status line }
   { v0.47: assigned by the Editor unit to RunGhostCheckAsync(False). The runner
@@ -37,13 +53,25 @@ var
     Called on the MAIN thread. }
   GIdleGhostCheckHook: TFunc<Boolean> = nil;
 
+  { PLAN-lint-tree P2: assigned by the FanOut unit. Called on the MAIN thread
+    when the INTERFACE half of the active buffer has changed and then held
+    still for FANOUT_IDLE_MS -- i.e. "this edit could break a dependent, go
+    and look". The generation is the supersession token: a result arriving for
+    anything but the newest generation is stale and must be discarded, which is
+    why it is issued HERE, at the launch decision, rather than counted
+    independently by the worker.
+
+    Returns True if the fan-out actually started. nil-safe, and nil is the
+    normal state until the FanOut unit is wired in -- a plugin without it
+    simply never fans out. }
+  GFanOutHook: TFunc<string, string, Integer, Boolean> = nil;
+
 implementation
 
 uses
   System.Classes
   , System.JSON
   , System.IOUtils
-  , System.StrUtils
   , System.Generics.Collections
   , Vcl.ExtCtrls
   , Winapi.Windows
@@ -60,6 +88,10 @@ uses
   , { pure line parser -- split out so a console harness can test it; see
       tests\lintoutputparse\ }
     DragLint.Plugin.LintOutputParse
+  , { PLAN-lint-tree P2: the interface/implementation split and the launch
+      gate. Pure -- no OTA, no VCL -- so tests\SurfaceSplitTests.dpr exercises
+      the whole decision headless. }
+    DragLint.Plugin.SurfaceSplit
   ;
 
 const
@@ -67,6 +99,14 @@ const
   SEMANTIC_DEBOUNCE_MS = 5000; { keystroke->semantic check (compiler; slower) }
   GHOST_IDLE_MS        = 3500; { keystroke->auto ghost-check (full-project compile of the unsaved buffer; heavy, so a longer pause) }
   SWITCH_COMPILE_MS    = 1200; { tab-switch->compile-current-state (debounce so flipping through tabs doesn't spam) }
+  { PLAN-lint-tree P2, MEASURED AND BOUNDED by B0(b) 2026-09-10 -- keystroke->
+    fan-out. Parse+extract+store runs at ~26 s/MB, so with a ~0.5 s engine spawn
+    an ORM3 CLIENT unit costs ~0.75 s at the median, ~1.15 s at p90, ~6.2 s at
+    p99 and ~24 s at the largest (VARINSP.PAS, 914 KB). 2000 ms therefore holds
+    for ~90% of units, and for the top ~1% supersession is the NORMAL path --
+    which is what P1's cancellable spawn is for. Do not raise this to "fix"
+    supersession; superseding is the design. }
+  FANOUT_IDLE_MS       = 2000;
 
   { v0.46: append-only diagnostic trace so a "nothing shows" report is conclusive.
   Open via drag-lint > Open Plugin Log is the editor log; THIS file is dedicated
@@ -76,6 +116,44 @@ begin
   DLT('livediag', AMsg); { TEMP: route to the shared telemetry log }
 end;
 
+{ IS THIS FILE OURS TO ANALYSE AT ALL?
+
+  MEASURED 2026-09-11, and it cost the owner a hung IDE. A tier-3 finding
+  pointed at an RTL unit; double-clicking it opened
+  <BDS>\source\rtl\sys\System.Variants.pas (217 KB) in the editor; the runner
+  treated that like any other active buffer and fired a lint + ghost-compile on
+  it. That run was still going 625 CPU-seconds later, it held the provider lock
+  the whole time, and the IDE could not finish shutting down -- bds.exe survived
+  with no window and had to be killed.
+
+  Embarcadero's own sources are never the user's code, are never what a
+  diagnostic should be about, and are exactly the files big enough to turn a
+  background convenience into a hang. So they are refused at the one place every
+  path goes through, rather than guarded at each caller. }
+function IsAnalysableFile(const APath: string): Boolean;
+var
+  Svc : IOTAServices;
+  Root: string      ;
+begin
+  Result:= False;
+  if APath = '' then Exit;
+  if not SameText(ExtractFileExt(APath), '.pas') then Exit;
+  try
+    if Supports(BorlandIDEServices, IOTAServices, Svc) and (Svc <> nil) then
+    begin
+      Root:= Svc.GetRootDirectory;
+      if Root <> '' then
+      begin
+        Root:= LowerCase(IncludeTrailingPathDelimiter(Root));
+        if Copy(LowerCase(APath), 1, Length(Root)) = Root then Exit(False);
+      end;
+    end;
+  except
+    { A missing IOTAServices must not make every file unanalysable -- failing
+      OPEN here is right, because the guard is a narrowing, not a permission. }
+  end;
+  Result:= True;
+end;
 { v0.46: cheap active-editor file name (no buffer read) -- used to auto-lint on
   tab/view switch. }
 function ActiveEditorFileName: string;
@@ -394,6 +472,12 @@ type
       FLastHashCheck  : Cardinal;
       FLastContentHash: Cardinal;
       FLastHashFile   : string  ;
+      { Last reason the fan-out gate gave, so it is logged on change only. }
+      FLastFanWhy     : string  ;
+      { PLAN-lint-tree P2: the fan-out launch decision. Everything that decides
+        WHETHER to fan out lives in the record; this class only feeds it the
+        buffer and calls the hook. }
+      FFanOut         : TFanOutGate;
       { v0.47: auto ghost-check (compile the unsaved buffer on idle). FGhostPending
       is armed on every edit (NotifyEditDirty / the content poll) and cleared when
       the compile starts -- so it fires once per edit-burst. }
@@ -511,6 +595,18 @@ end; // procedure
 
 { v0.47: cheap rolling hash of the buffer for the runner's change-detection
   poll -- avoids re-linting when nothing actually changed. }
+{ WRAPAROUND IS THE ALGORITHM, so overflow checking must be OFF here -- and
+  ONLY here. The design-time package compiles with -$Q+ (see the dcc32 line in
+  build_plugin_win32.bat), so this multiply raised EIntOverflow after about
+  seven characters, EVERY TIME. It was invisible for two reasons at once: the
+  caller ended in a bare `except` with an empty body, and the console test
+  harness builds with plain dcc64, where overflow checking is OFF -- so
+  run_surface_split.ps1 passed 35/35 against a function that could not survive
+  a single call inside the shipped BPL.
+
+  MEASURED 2026-09-11: 105 EIntOverflow in one session; the fan-out had never
+  once run. }
+{$OVERFLOWCHECKS OFF}
 function CheapHash(const S: string): Cardinal;
 var
   i: Integer;
@@ -518,10 +614,17 @@ begin
   Result:= Cardinal(Length(S));
   for i:= 1 to Length(S) do Result:= (Result * 31) + Cardinal(Ord(S[i]));
 end;
+{$IFOPT Q+}{$MESSAGE ERROR 'overflow checks must be off for the hash above'}{$ENDIF}
+{$OVERFLOWCHECKS ON}
 
 constructor TLiveRunner.Create;
 begin
   inherited Create;
+  { Explicit, though a class instance arrives zero-filled: the gate's own
+    contract is that Reset establishes its start state, and relying on the
+    allocator to satisfy it makes the next field added to the record a silent
+    bug. }
+  FFanOut.Reset;
   FTimer:= TTimer.Create(nil);
   FTimer.Interval:= 250;
   FTimer.OnTimer := OnTick;
@@ -563,7 +666,7 @@ begin
       (no buffer read) and arm a lint -- so diagnostics appear automatically when
       you switch code tabs, without depending on open/edit events. }
     var ActiveFile: string:= ActiveEditorFileName;
-    if (ActiveFile <> '') and SameText(ExtractFileExt(ActiveFile), '.pas') and not SameText(ActiveFile, FLastActiveFile) then
+    if IsAnalysableFile(ActiveFile) and not SameText(ActiveFile, FLastActiveFile) then
     begin
       FLastActiveFile:= ActiveFile;
       FDirty         := True;
@@ -574,7 +677,7 @@ begin
     { v0.48: compile-on-switch -- compile the current state when you move to a
       DIFFERENT .pas (even if unchanged). Baseline-only on the first file seen (the
       project-open startup compile covers that one); arm a compile on later changes. }
-    if (ActiveFile <> '') and SameText(ExtractFileExt(ActiveFile), '.pas') and not SameText(ActiveFile, FSwitchFile) then
+    if IsAnalysableFile(ActiveFile) and not SameText(ActiveFile, FSwitchFile) then
     begin
       if FSwitchFile = '' then FSwitchFile:= ActiveFile { baseline only -- no compile }
       else if Settings.AutoCompileOnSwitch then
@@ -597,7 +700,16 @@ begin
       FLastHashCheck:= GetTickCount;
       var PollFile: string                         ;
       var Snap: string:= ActiveBufferText(PollFile);
-      if (PollFile <> '') and SameText(ExtractFileExt(PollFile), '.pas') then
+      { WHY THE POLL DECLINED, throttled to once every ~20 polls. Both skip
+        conditions were silent, so "the fan-out never fired" was
+        indistinguishable from "the poll never looked" -- and that is exactly
+        the question a failed T1 asks. }
+      if not IsAnalysableFile(PollFile) then
+      begin
+        if GHeartbeat mod 20 = 0 then
+          LiveLog(Format('poll: SKIP -- [%s] is not ours to analyse (need a .pas outside the RAD Studio install)', [PollFile]));
+      end
+      else
       begin
         var HashNow: Cardinal:= CheapHash(Snap);
         if not SameText(PollFile, FLastHashFile) then
@@ -614,6 +726,53 @@ begin
           FGhostPending   := True; { arm the auto ghost-check too }
           FLastEdit       := GetTickCount; { debounce 700ms after the detected change }
           LiveLog('runner: content changed (poll) -> dirty');
+        end;
+
+        { PLAN-lint-tree P2: the interface-change fan-out, fed from the SAME
+          snapshot the lint poll just used. A second buffer read here could pick
+          up a later keystroke and leave the two tiers disagreeing about which
+          text they were looking at. Everything that DECIDES lives in the gate
+          (tests\SurfaceSplitTests.dpr); this is only the wiring. }
+        var FanGen: Integer:= 0;
+        var FanFired: Boolean:= FFanOut.Consider(PollFile, Snap, GetTickCount64, FANOUT_IDLE_MS, FanGen);
+        { THE GATE'S REASONING, logged on CHANGE only. Consider returns a bare
+          Boolean and every one of its five refusals looked identical from out
+          here, so a fan-out that never fired gave no clue WHICH gate held it.
+          Logging on change rather than per poll keeps a 250 ms timer from
+          filling the log. }
+        if FFanOut.LastWhy <> FLastFanWhy then
+        begin
+          FLastFanWhy:= FFanOut.LastWhy;
+          LiveLog('fanout gate: ' + FLastFanWhy + ' [' + ExtractFileName(PollFile) + ']');
+        end;
+        if FanFired then
+        begin
+          if not Assigned(GFanOutHook) then
+            LiveLog('fanout: interface change settled but no hook is assigned -- skipped')
+          else
+          begin
+            LiveLog(Format('fanout: interface change settled -> launch gen %d for %s',
+                           [FanGen, ExtractFileName(PollFile)]));
+            var FanStarted: Boolean:= False;
+            try
+              FanStarted:= GFanOutHook(PollFile, Snap, FanGen);
+            except
+              on E: Exception do LiveLog('fanout: hook raised ' + E.ClassName + ': ' + E.Message);
+            end;
+            if not FanStarted then
+            begin
+              { TAKE THE LAUNCH BACK. Consider COMMITS when it authorises one,
+                so a decline here would otherwise make the edit vanish: the gate
+                reports "interface unchanged since the last launch" from then
+                on and this change is never fanned out at all. Measured
+                2026-09-11: gen 2 and gen 3 were both lost this way while a
+                6m22s tier-3 compile held the worker, which is exactly the
+                "nothing changes for ten minutes" the owner reported. Undoing
+                re-arms it, so the next poll retries once the worker unwinds. }
+              FFanOut.UndoLaunch;
+              LiveLog('fanout: the hook declined to start -- launch taken back, will retry');
+            end;
+          end;
         end;
       end; // if
     end; // if
@@ -715,8 +874,18 @@ begin
         );
       end).Start; // procedure
   except
-    FBusy:= False;
-    { never propagate into the IDE message loop }
+    on E: Exception do
+    begin
+      FBusy:= False;
+      { NEVER PROPAGATE into the IDE message loop -- but never swallow SILENTLY
+        either. This handler used to have an empty body, so anything raised
+        between the heartbeat and the content poll skipped the rest of the tick
+        FOREVER while the heartbeat kept logging happily: the runner looked
+        alive and did nothing, which is the most expensive shape a bug can
+        take. The tick number is included because a fault that repeats every
+        tick and one that fired once look identical without it. }
+      LiveLog(Format('runner: tick #%d EXC %s: %s', [GHeartbeat, E.ClassName, E.Message]));
+    end;
   end; // try
 end; // procedure
 
@@ -732,6 +901,25 @@ begin
     GRunner.FLastEdit    := GetTickCount;
   end
   else LiveLog('NotifyEditDirty: GRunner=nil -- live runner NOT started!');
+end;
+
+function ActiveBufferSnapshot(out AFilePath: string): string;
+begin
+  Result:= ActiveBufferText(AFilePath);
+end;
+
+procedure NotifyFanOutFingerprint(const AFingerprint: string);
+begin
+  { QUEUED, NOT CALLED. This arrives on the fan-out worker thread, and the gate
+    is a plain record driven from the timer -- so touching it here would be a
+    data race on the very state that decides whether the IDE spawns a process. }
+  TThread.Queue(nil,
+    procedure
+    begin
+      if GRunner = nil then Exit;
+      GRunner.FFanOut.NoteFingerprint(AFingerprint);
+      LiveLog('fanout: engine fingerprint ' + Copy(AFingerprint, 1, 12) + ' recorded');
+    end);
 end;
 
 procedure StartLiveDiagnostics;
@@ -777,11 +965,20 @@ end;
 initialization
 
 finalization
+{ TEARDOWN BRACKETING. An access violation while the IDE closes leaves NOTHING
+  in the log -- the process is going away and the handler that would have said
+  so is part of what is being torn down. Bracketing every finalization that
+  holds an IDE notifier or interface turns that into a NAMED unit: the last
+  'begin' with no matching 'end' is where it died. Cheap, and it is the only
+  thing that makes a shutdown AV diagnosable after the fact. }
+  DLT('teardown', 'LiveDiagnostics: finalization BEGIN');
 { 2026-08-26: this unit's OWN finalization also stops the runner, so a runner
   that goes quiet does NOT prove UnregisterDragLintMenu reached its
   StopLiveDiagnostics step -- that ambiguity cost a diagnosis today. Record
   which path actually did it. }
 try LiveLog('finalization: entering StopLiveDiagnostics (UNIT finalization, not the menu teardown)'); except end;
 try StopLiveDiagnostics; except end;
+
+  DLT('teardown', 'LiveDiagnostics: finalization END');
 
 end.

@@ -14,6 +14,7 @@ uses
   , System.Classes
   , System.StrUtils { StartsText / PosEx -- the .dfm text scan in global-only-uses-edge }
   , DRagLint.Lint.ReviewMarker { MarkerBearingLines -- which // is reached in code state }
+  , System.DateUtils { DateTimeToUnix / UnixToDateTime -- R2 dates against the CURRENT disk mtime, not the stored one }
   , System.IOUtils
   , System.JSON
   , System.Diagnostics { TStopwatch -- DRAGLINT_PROFILE per-rule attribution in Run }
@@ -1191,6 +1192,414 @@ end; // function
 /// Never raises. The heavy lifting is one SQL statement -- see
 /// ISymbolStore.FindGlobalOnlyUsesEdges.
 /// </remarks>
+{ dfm-property-not-declared (R1, PLAN-lint-tree section 4).
+
+  A .dfm sets a property that the component's class and its ancestors do not
+  declare. At runtime that is an obscure load failure or a silently dropped
+  setting, and nothing in the catalog covers it: the DFM and the class are
+  checked by two different tools that never meet.
+
+  THE POSITIVE CASE IS EASY AND IRRELEVANT. What decides whether this rule can
+  ship is the four ways it fires on CORRECT code, and the gates below exist
+  one per way:
+
+  (a) THE PROPERTY IS INHERITED. Most properties a .dfm sets are declared on an
+      ancestor, not on the component's own class -- Caption, Left, Font. A rule
+      that looks only at the immediate class reports nearly every form in the
+      corpus. Hence the full ancestor walk.
+
+  (b) AN ANCESTOR CANNOT BE RESOLVED. The chain is then UNKNOWN, not empty, and
+      the honest answer is silence. Treating unresolved as "no such property"
+      reports the entire VCL. `UnresolvedAncestorNames` IS this gate -- it
+      returns the names it could not resolve, and a non-empty answer means stop.
+      This is the single most important line in the rule.
+
+  (c) THE CLASS NAME IS AMBIGUOUS. Two indexed units declaring the same class
+      name means the .dfm's bare type token does not identify one of them, and
+      guessing is how a rule reports a property that the OTHER class lacks.
+
+  (d) THE PROPERTY IS STREAMED BY HAND, not declared. `DefineProperties` calls
+      `Filer.DefineProperty('Name')` and the .dfm then sets `Name` exactly like
+      a real property, with no declaration anywhere. MEASURED, and it is the
+      whole volume: 321 findings on ORM3 CLIENT before this gate, 2 after, and
+      226 of the 321 were `Left`/`Top` -- which NEITHER `TComponent` NOR
+      `TPersistent` declares, because `TComponent.DefineProperties` streams
+      them for every non-visual component. `AddStreamedNames` reads the literal
+      names out of the body; its comment records why the class-level version of
+      this gate was refuted by measurement.
+
+  A DOTTED PROPERTY IS ITS FIRST SEGMENT. `Font.Style` sets Style on the object
+  held by the Font property; the class declares Font, not Font.Style. Checking
+  the whole dotted string would report every sub-object property in the corpus.
+
+  COLLECTION ITEMS NEED NO GATE, and that is a measurement rather than an
+  assumption: the DFM extractor emits `Columns = <item ... end>` as ONE
+  dfm-prop row whose value text happens to contain the item's properties. The
+  inner names never reach this rule as property names, so there is nothing to
+  suppress -- and the guard asserts that, because an implementation that split
+  the value text would reintroduce the problem.
+
+  MEMOISED PER CLASS, not per property. A form sets dozens of properties on a
+  handful of classes; resolving the chain once per class turns an O(properties)
+  walk into an O(classes) one. }
+function CollectDfmPropertyNotDeclared(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>;
+  { class name -> the lowercased names it and its resolved ancestors declare.
+    A class present here with a nil list is one the rule has decided to stay
+    SILENT about; the two states are deliberately distinguishable, because
+    "no members" and "do not ask" must not collapse into one answer. }
+  Memo    : TObjectDictionary<string, TStringList>;
+  Silent  : TDictionary<string, Boolean>          ;
+
+  { '<store>:<fileId>' -> every 'literal' row of that file, fetched once.
+    System.Classes.pas alone carries TComponent.DefineProperties, which is asked
+    for by practically every class in a form, so the fetch must not repeat. The
+    key carries the STORE because a file id is only unique within one database
+    and the project and library indexes are two. }
+  LitCache: TDictionary<string, TArray<TStringLiteral>>;
+
+  { The one place a store is chosen. The project index first, the library
+    second: a form's own component classes are project-local, its VCL and
+    DevExpress ancestors are not. }
+  function ResolveClassIn(const AStore2: ISymbolStore; const AName: string;
+                          out ASym: TSymbol): Boolean;
+  var
+    Cands: TArray<TSymbol>;
+    S    : TSymbol        ;
+    Hits : Integer        ;
+  begin
+    Result:= False;
+    ASym  := Default(TSymbol);
+    if AStore2 = nil then Exit;
+    Cands:= AStore2.FindSymbolsByExactName(AName);
+    Hits := 0;
+    for S in Cands do
+      { skTypeAlias, not a 'skType' -- there is no such kind. A .dfm block's
+        type token names a class in practice; the other three are accepted so a
+        record-based or aliased component type resolves rather than falling to
+        the silent branch for the wrong reason. }
+      if S.Kind in [skClass, skInterface, skRecord, skTypeAlias] then
+      begin
+        Inc(Hits);
+        ASym:= S;
+      end;
+    { Gate (c). Exactly one, or the bare type token does not identify a class. }
+    Result:= Hits = 1;
+  end;
+
+  { Add the PSEUDO-properties a class streams by hand -- the literal names its
+    own DefineProperties body passes to Filer.DefineProperty. They are set in
+    the .dfm exactly like declared properties and appear in no declaration at
+    all, so without this the rule reports correct code.
+
+    THE VOLUME THIS ANSWERS: 226 of the 321 findings on ORM3 CLIENT were
+    `Left`/`Top`, which NEITHER TComponent NOR TPersistent declares --
+    TComponent.DefineProperties streams them for every non-visual component.
+
+    WHY THE NAMES AND NOT THE CLASS. "Silence a class whose chain declares
+    DefineProperties" was measured and REFUTED: it missed the 132 TOvcTC*
+    findings (no DefineProperties anywhere in their chain) and would have
+    silenced every visual control, since TControl, TWinControl, TCustomForm and
+    TDataModule all declare it. Reading the names keeps a class that streams
+    'Left' reportable for a name it neither declares nor streams.
+
+    WHY THE IMPL SPAN and not string_literals.symbol_id: for a .pas BODY literal
+    the stored symbol_id is the UNIT and owner_name is empty (SearchText,
+    Storage.SQLite.pas), so the owning routine is resolved live by line span --
+    the same way SearchText does it.
+
+    DELIBERATELY NO "empty body -> silence everything" fallback:
+    TPersistent.DefineProperties has an empty body and would re-open the whole
+    hole. A body that passes the name through a const still fires; that is left
+    to be handled on measurement rather than guessed at now. }
+  procedure AddStreamedNames(const AOwner: TSymbol; const AUsed: ISymbolStore;
+    AIsLib: Boolean; AList: TStringList);
+  var
+    Key : string                 ;
+    Lits: TArray<TStringLiteral> ;
+    Lit : TStringLiteral         ;
+  begin
+    if AOwner.ImplStartLine <= 0 then Exit;
+    Key:= (if AIsLib then 'l' else 'p') + ':' + IntToStr(AOwner.FileId);
+    if not LitCache.TryGetValue(Key, Lits) then
+    begin
+      Lits:= AUsed.GetLiteralsByKind(AOwner.FileId, 'literal');
+      LitCache.Add(Key, Lits);
+    end;
+    for Lit in Lits do
+      if (Lit.StartLine >= AOwner.ImplStartLine) and (Lit.StartLine <= AOwner.ImplEndLine)
+         and (Trim(Lit.Text) <> '') then
+        AList.Add(Trim(Lit.Text));
+  end;
+
+  { Every member name the class chain declares, or nil to mean "stay silent
+    about this class". }
+  function MembersOf(const AClassName: string): TStringList;
+  var
+    Sym    : TSymbol        ;
+    Used   : ISymbolStore   ;
+    Anc    : TTypeAncestor  ;
+    Ch     : TSymbol        ;
+    Dummy  : Boolean        ;
+    L      : TStringList    ;
+    IsLib  : Boolean        ;
+  begin
+    Result:= nil;
+    if AClassName = '' then Exit;
+    if Silent.TryGetValue(LowerCase(AClassName), Dummy) then Exit;
+    if Memo.TryGetValue(LowerCase(AClassName), L) then Exit(L);
+
+    Used := AStore;
+    IsLib:= False;
+    if not ResolveClassIn(AStore, AClassName, Sym) then
+    begin
+      Used := ALibStore;
+      IsLib:= True;
+      if not ResolveClassIn(ALibStore, AClassName, Sym) then
+      begin
+        Silent.AddOrSetValue(LowerCase(AClassName), True);
+        Exit(nil);
+      end;
+    end;
+
+    { GATE (b), and the rule turns on it. A chain with an unresolvable link is
+      an UNKNOWN chain: the missing ancestor is exactly where the property
+      probably is. }
+    if Length(Used.UnresolvedAncestorNames(AClassName, Sym.FileId)) > 0 then
+    begin
+      Silent.AddOrSetValue(LowerCase(AClassName), True);
+      Exit(nil);
+    end;
+
+    L:= TStringList.Create;
+    L.CaseSensitive:= False;
+    L.Sorted       := True;
+    L.Duplicates   := dupIgnore;
+    for Ch in Used.FindAllChildSymbols(Sym.Id) do
+      if Ch.Name <> '' then
+      begin
+        L.Add(Ch.Name);
+        if SameText(Ch.Name, 'DefineProperties') then AddStreamedNames(Ch, Used, IsLib, L);
+      end;
+    { GATE (a): the ancestors, not just the class. }
+    for Anc in Used.GetTransitiveAncestors(Sym.Id) do
+      if Anc.Resolved and (Anc.SymbolId > 0) then
+        for Ch in Used.FindAllChildSymbols(Anc.SymbolId) do
+          if Ch.Name <> '' then
+          begin
+            L.Add(Ch.Name);
+            if SameText(Ch.Name, 'DefineProperties') then AddStreamedNames(Ch, Used, IsLib, L);
+          end;
+
+    Memo.Add(LowerCase(AClassName), L);
+    Result:= L;
+  end;
+
+  { `Font.Style` -> `Font`. See the header. }
+  function HeadOf(const AProp: string): string;
+  var
+    P: Integer;
+  begin
+    P:= Pos('.', AProp);
+    if P > 0 then Result:= Copy(AProp, 1, P - 1) else Result:= AProp;
+  end;
+
+var
+  Fid    : Int64            ;
+  Path   : string           ;
+  Lit    : TStringLiteral   ;
+  Comp   : TSymbol          ;
+  ClsName: string           ;
+  Members: TStringList      ;
+  Head   : string           ;
+begin
+  Findings:= TList<TLintFinding>.Create;
+  Memo    := TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  Silent  := TDictionary<string, Boolean>.Create;
+  LitCache:= TDictionary<string, TArray<TStringLiteral>>.Create;
+  try
+    for Fid in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.dfm') then Continue;
+
+      for Lit in AStore.GetLiteralsByKind(Fid, 'dfm-prop') do
+      begin
+        if Lit.OwnerName = '' then Continue;
+        { The enclosing `object` block. Unresolved -> silent: without it there
+          is no class to check against. }
+        if Lit.SymbolId <= 0 then Continue;
+        Comp:= AStore.GetSymbolById(Lit.SymbolId);
+        if Comp.Id <> Lit.SymbolId then Continue;
+        { The DFM extractor stores the block's type on the symbol's Signature. }
+        ClsName:= Trim(Comp.Signature);
+        if ClsName = '' then Continue;
+
+        Members:= MembersOf(ClsName);
+        if Members = nil then Continue;   { gates (b) and (c) }
+
+        Head:= HeadOf(Lit.OwnerName);
+        if Head = '' then Continue;
+        if Members.IndexOf(Head) >= 0 then Continue;
+
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId   := 'dfm-property-not-declared';
+        F.Severity := 'warning';
+        F.FilePath := Path;
+        F.StartLine:= Lit.StartLine;
+        F.StartCol := Lit.StartCol;
+        F.EndLine  := Lit.EndLine;
+        F.EndCol   := Lit.EndCol;
+        F.Message  := Format('.dfm sets "%s" on %s: %s, but neither that class ' +
+                             'nor any of its ancestors declares it -- the form ' +
+                             'will fail to load or drop the setting',
+                             [Lit.OwnerName, Comp.Name, ClsName]);
+        Findings.Add(F);
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    LitCache.Free;
+    Silent  .Free;
+    Memo    .Free;
+    Findings.Free;
+  end;
+end;
+
+{ dependent-project-not-recompiled (R2, PLAN-lint-tree section 4).
+
+  A unit marked `dl:shared` is compiled by more than one project. Edit it, build
+  the project you have open, and the OTHER projects still hold object code for
+  the old text -- with no error anywhere, because nothing in either project's
+  build knows the other exists. The symptom arrives later, as a binary that
+  behaves like a version of the source nobody can find.
+
+  TWO DELIBERATE DIVERGENCES FROM docs\INDEX-SCHEMA.md:174, BOTH TO BE KEPT.
+  That line defines staleness as `last_compiled_unix < mtime_unix` -- the
+  STORED mtime -- and treats a NULL stamp as stale. Neither is right here:
+
+  (1) THE COMPARISON IS AGAINST THE CURRENT DISK MTIME, not the stored one. The
+      stored mtime is only as fresh as the last index, so a unit edited and not
+      yet re-indexed would compare as current and the rule would go quiet at
+      exactly the moment it has something to say. The disk is the authority for
+      "when was this last changed"; the index is not.
+
+  (2) A NULL STAMP IS SILENT, not stale. NULL means the file has never been
+      compiled through `refresh-findings` in that project -- which is the state
+      of every file in a fresh checkout. Reporting them all would flood a new
+      clone with findings about work nobody has done yet, and the rule would be
+      switched off before it ever caught a real one.
+
+  Both are stated in the catalog entry too, so the next reader does not "fix"
+  the rule to match the schema doc.
+
+  WHO WRITES THE STAMP, AND WHY THAT DECIDES THE GUARD'S SHAPE.
+  `last_compiled_unix` is set ONLY by `refresh-findings`, and only on the
+  NON-FAILURE path: a compile that errors deliberately records findings WITHOUT
+  stamping. There is no read-only verb that can fake it, so the guard needs a
+  real dcc run and must SKIP cleanly when dcc is absent. }
+function CollectDependentProjectNotRecompiled(const AStore: ISymbolStore;
+  const ASiblingStore: TSiblingStoreResolver): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>;
+  Fid     : Int64              ;
+  Path    : string             ;
+  DiskUtc : Int64              ;
+  ProjName: string             ;
+  SibStore: ISymbolStore       ;
+  SibFid  : Int64              ;
+  Stamp   : Int64              ;
+
+  { The CURRENT disk mtime, or 0 when the file is gone or unreadable. Zero is
+    the silent answer: a unit we cannot date is one we cannot call stale. }
+  function DiskMTimeOf(const AFile: string): Int64;
+  begin
+    Result:= 0;
+    try
+      if TFile.Exists(AFile) then
+        Result:= DateTimeToUnix(TFile.GetLastWriteTime(AFile), False);
+    except
+      { A file we cannot date is a file we cannot call stale. Named rather than
+        bare so a genuine failure is distinguishable from the absent-file case
+        this exists for. }
+      on E: Exception do Result:= 0;
+    end;
+  end;
+
+  function WhenText(AUnix: Int64): string;
+  begin
+    if AUnix <= 0 then Exit('never');
+    Result:= FormatDateTime('yyyy-mm-dd hh:nn', UnixToDateTime(AUnix, False));
+  end;
+
+begin
+  Findings:= TList<TLintFinding>.Create;
+  try
+    { No resolver means no sibling indexes can be opened, so there is nothing
+      this rule can say. Silence, not an empty all-clear. }
+    if not Assigned(ASiblingStore) then Exit(nil);
+
+    for Fid in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      { The marker is the whole gate on which units are considered. Reading it
+        from SOURCE rather than deriving the project set is deliberate -- see
+        DRagLint.Lint.SharedUnit's header. }
+      if not TSharedUnit.IsShared(Path) then Continue;
+
+      DiskUtc:= DiskMTimeOf(Path);
+      if DiskUtc <= 0 then Continue;
+
+      for ProjName in TSharedUnit.ProjectsOf(Path) do
+      begin
+        if Trim(ProjName) = '' then Continue;
+        SibStore:= nil;
+        try
+          SibStore:= ASiblingStore(ProjName);
+        except
+          { A sibling index that will not open leaves that project UNKNOWN, not
+            current -- so the loop below skips it rather than reporting on a
+            stamp it never read. }
+          on E: Exception do SibStore:= nil;
+        end;
+        { A project whose index is not configured or cannot be opened is
+          UNKNOWN, not current. }
+        if SibStore = nil then Continue;
+
+        SibFid:= SibStore.FindFileIdByPath(Path);
+        { The sibling's index does not carry this unit: either the marker names
+          a project that no longer compiles it -- which `check-shared` reports,
+          not this rule -- or that index is stale in a way this rule cannot
+          speak to. }
+        if SibFid <= 0 then Continue;
+
+        Stamp:= SibStore.GetFileCompiledAt(SibFid);
+        if Stamp <= 0 then Continue;          { divergence (2): NULL is SILENT }
+        if Stamp >= DiskUtc then Continue;    { that project is current }
+
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId   := 'dependent-project-not-recompiled';
+        F.Severity := 'warning';
+        F.FilePath := Path;
+        F.StartLine:= 1;
+        F.StartCol := 1;
+        F.EndLine  := 1;
+        F.EndCol   := 1;
+        F.Message  := Format('this unit is dl:shared with %s and was changed %s, ' +
+                             'but %s last compiled it %s -- that project still ' +
+                             'holds object code for the older text',
+                             [ProjName, WhenText(DiskUtc), ProjName, WhenText(Stamp)]);
+        Findings.Add(F);
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Findings.Free;
+  end;
+end;
+
 function CollectGlobalOnlyUsesEdges(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
 const
   { Ancestry does the work; this only names where the climb STOPS. Verified
@@ -2300,6 +2709,20 @@ begin
       own comment for why both are needed. }
     if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
       for var Gf in CollectGlobalOnlyUsesEdges(AStore, ALibraryStore) do Findings.Add(Gf);
+    Inc(TGlob, Tick - T0); T0:= Tick;
+
+    { dfm-property-not-declared (R1): whole-DFM pass. OFF by default AND gated
+      on OptedIn, for the reason that gate exists -- an ungated run would walk
+      every .dfm and every class chain on every lint-all and then have its
+      findings discarded downstream, paying the cost invisibly. R3 measures the
+      volume before the default moves. }
+    if WantRule('dfm-property-not-declared') and OptedIn('dfm-property-not-declared') then
+      for var Pf in CollectDfmPropertyNotDeclared(AStore, ALibraryStore) do Findings.Add(Pf);
+
+    { dependent-project-not-recompiled (R2): opens SIBLING indexes, so it is
+      gated the same way and for the same reason. }
+    if WantRule('dependent-project-not-recompiled') and OptedIn('dependent-project-not-recompiled') then
+      for var Rf2 in CollectDependentProjectNotRecompiled(AStore, ASiblingStore) do Findings.Add(Rf2);
     Inc(TGlob, Tick - T0); T0:= Tick;
 
     { duplicate-global-decl: whole-symbols pass (not per-file). ON by default

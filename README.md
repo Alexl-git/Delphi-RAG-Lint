@@ -638,7 +638,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 
 #### Lint
 
-**179 rules across 16 categories -- 126 built-in + 53 external `.scm`, 154
+**181 rules across 16 categories -- 128 built-in + 53 external `.scm`, 154
 enabled by default, 23 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -652,6 +652,7 @@ enabled by default, 23 with an auto-fix.**
 | [`lint-project`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-project) `--db <db>` | Project-wide structural rules -- god-class, circular-uses, layering-violation, unused-public-symbol, and more | `--rule <id>`, `--layers <f.json>` |
 | `lint-all --db <db>` | Full project report. Since the per-file verb gained the store-backed project rules, what `lint-all` *uniquely* adds is narrower than it used to be: cross-file duplicate code, `interface-reference-cycle`, exception-class enrichment, and doc-drift/missing-doc across the whole project (`review-marker-unused` and `review-marker-malformed` moved to the per-file verb too, 2026-09-03) | `--project <.dproj>` (report only that project's compile closure), `--output <file>`, `--json`, `--lint-third-party`, `--no-preprocess` (lint the raw bytes, including branches the compiler never sees -- the default now resolves conditionals the same way the indexer does) |
 | `lint-all --fix [--apply]` | **Autofix every fixable finding across the whole project.** Dry run without `--apply` -- this is what "Fix all in project" runs; it can rewrite many files at once | |
+| `lint-tree --unit <B.pas> --db <db>` | **Does an interface edit to `B.pas` reach any dependent?** Fingerprints the interface and diffs it against an edit-episode baseline, then reports the dependents whose references no longer resolve. Answers what `lint-all` cannot: removing an interface symbol dependents still use produces ZERO `lint-all` findings (measured 2026-09-10) -- the count actually goes DOWN. Exit 0 whether or not anything was found; 2 means it could not run. | `--write-baseline <f.json>` captures the OLD side once per edit episode, `--baseline <f.json>` diffs against it, `--buffer <f>` reads an UNSAVED buffer, `--compile` also compiles the dependents in a shadow dir, `--with-rules`, `--project`, `--platform`, `--format json` / `text` |
 | `exceptions-sync --db <db> [--apply] [--json]` | **Materialise the project's derived exception classes.** Harvests every bare `raise Exception.Create('literal')` in the project and declares ONE class per **distinct** message inside a `drag-lint:auto` managed block in the exceptions unit, creating that unit if it does not exist. Dry run without `--apply`. Opt in with an `"exceptions"` block in `drag-lint-lint.json` -- an empty one is enough. **The same-line `//` comment after each declaration is the KEY**, which is what lets you rename a mediocre generated class and keep its binding; edit the comment instead and the next run adds a second class for the old message. It is a verb rather than a `--fix` because its input is project-wide and its output is one file | `--config <lint.json>`, `--apply`, `--json` (one document on stdout, prose to stderr); config keys `unit` (default `uExceptionDefinitions`) and `root` (ancestor, default `Exception`) |
 | `lint <f> --db <db> --fix --fix-rule raise-bare-exception [--apply]` | The **call-site** half, and a genuine fix-it: rewrites `raise Exception.Create('msg')` to the class `exceptions-sync` generated for that message and adds the exceptions unit to `uses`. Reads the name **out of the generated unit** rather than re-deriving it, so a rename survives; needs `exceptions-sync --apply` to have run and the index refreshed. **Skips any file that tests the class exactly** (`ClassType = Exception`, `ClassNameIs('Exception')`) -- narrowing a raise would break that test -- and names the file it skipped | Reachable as an IDE code action, which `exceptions-sync` deliberately is not |
 | [`allow`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/allow) `<file>` | Record a `dl:ok` reviewed-finding marker (dry-run unless `--apply`) | `--fix-line`, `--fix-rule` |
@@ -806,10 +807,10 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (179 rules)
+### Lint rule pack (181 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.9.0-alpha: **179 rules across 16 categories -- 126
+external `.scm`). As of v1.9.0-alpha: **181 rules across 16 categories -- 128
 built-in and 53 external `.scm`, 154 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 

@@ -27,6 +27,10 @@ type
     Running     : Boolean;
     CurrentTitle: string ;
     Percent     : Integer;
+    { The phase or file the percent refers to -- 'duplicate-code', 'uMain.pas'.
+      Without it a stalled bar says only THAT it is working, never WHAT on,
+      which is exactly the question a user has when it stops moving. }
+    Phase       : string ;
     QueueDepth  : Integer; { pending jobs, NOT counting the running one }
     LastResult  : string ;
   end;
@@ -64,7 +68,8 @@ type
     procedure WorkerLoop;
     function  WaitWhileEngineHeld(const ATitle, AKey: string): Boolean;
     procedure RunOne(AJob: TDragLintJob);
-    procedure SetPercent(APct: Integer);
+    procedure SetPercent(APct: Integer); overload;
+    procedure SetPercent(APct: Integer; const APhase: string); overload;
     procedure SetLastResult(const AText: string);
   public
     constructor Create;
@@ -219,9 +224,15 @@ end;
 
 procedure TDragLintJobQueue.SetPercent(APct: Integer);
 begin
+  SetPercent(APct, '');
+end;
+
+procedure TDragLintJobQueue.SetPercent(APct: Integer; const APhase: string);
+begin
   FLock.Enter;
   try
     FState.Percent:= APct;
+    FState.Phase  := APhase;
   finally
     FLock.Leave;
   end;
@@ -262,10 +273,17 @@ begin
         procedure(ALine: string)
         var
           Pct, P, B, E: Integer;
+          Phase       : string ;
         begin
           SB.AppendLine(ALine);
-          { parse 'lint-all: ... NN% ...' -> the digit run just before '%' }
+          { parse 'lint-all: ... NN% <what>' -> the digit run just before '%',
+            and the text AFTER it: the phase name on a tail line
+            ('94% duplicate-code') or the file name during the scan
+            ('67% uMain.pas'). Both answer "what is it doing" -- which a bare
+            percentage never did, and the tail is exactly where the run used to
+            look stuck. }
           Pct:= -1;
+          Phase:= '';
           if (Length(ALine) > 9) and (Copy(ALine, 1, 9) = 'lint-all:') then
           begin
             P:= Pos('%', ALine);
@@ -274,9 +292,10 @@ begin
               E:= P - 1; B:= E;
               while (B >= 1) and CharInSet(ALine[B], ['0'..'9']) do Dec(B);
               Pct:= StrToIntDef(Copy(ALine, B + 1, E - B), -1);
+              Phase:= Trim(Copy(ALine, P + 1, MaxInt));
             end;
           end;
-          if Pct >= 0 then SetPercent(Pct);
+          if Pct >= 0 then SetPercent(Pct, Phase);
           if Assigned(AJob.OnLine) then
             try AJob.OnLine(ALine) except end;
         end,

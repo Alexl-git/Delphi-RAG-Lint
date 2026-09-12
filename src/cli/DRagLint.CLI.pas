@@ -25,7 +25,14 @@ const
     disease this whole change set is treating. }
   PROJECT_RULES_OFF_BY_DEFAULT: TArray<string> = [
     'middle-man', 'fan-out', 'fan-in', 'feature-envy', 'instability',
-    'repeated-type-switch', 'missing-doc'];
+    'repeated-type-switch', 'missing-doc',
+    { R1, OFF until R3 audits the volume. THIS LIST AND THE OptIn ARRAYS ARE
+      TWO DIFFERENT GATES and a new off-by-default project rule needs BOTH:
+      this one stops the findings being PRINTED, the OptIn entry stops the
+      rule being RUN. Missing here, the rule reports on a default lint-all
+      before anyone has audited it; missing there, it is unreachable and
+      answers "0 finding(s)" for every input, which reads as a clean corpus. }
+    'dfm-property-not-declared', 'dependent-project-not-recompiled'];
 
 const
   { Kept as a local alias so the seven existing uses below read unchanged; the
@@ -83,6 +90,7 @@ uses
     must not be listed twice. }
   , DRagLint.Core   .Interfaces
   , DRagLint.Core   .Indexer
+  , DRagLint.Analysis.LintTree
   , DRagLint.Storage.SQLite
   , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in }
   , DRagLint.Parser .Delphi13
@@ -241,6 +249,13 @@ type
     FailOn       : string ; // --fail-on error|warning|info|none (ergonomics #12)
     Baseline     : string ; // --baseline <file>: report only findings NOT in it
     WriteBaseline: string ; // --write-baseline <file>: record current findings, exit 0
+    { lint-tree. --unit/--buffer/--project/--db/--baseline/--write-baseline/
+      --platform/--format are REUSED from the fields above; only these two are
+      new. `--with-rules`, not `--rules`: --rules already takes a VALUE
+      (RulesFile, for convert-*), so a boolean spelled --rules would swallow
+      the next argument. }
+    TreeCompile  : Boolean; // --compile   : lint-tree tier 3 (shadow compile)
+    TreeWithRules: Boolean; // --with-rules: also harvest dependent lint findings
     ConfigPath   : string ; // --config <file>: drag-lint-lint.json override path
     Enable       : string ; // --enable id1,id2: re-include disabled/off-by-default rules
     Profile      : string ; // --profile <name>: merge a named enable/disable set
@@ -704,6 +719,13 @@ begin
   Writeln('                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.');
   Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
   Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
+  Writeln('  drag-lint lint-tree          --unit <B.pas> --db <file.sqlite> [--buffer <buf>] [--project <.dproj>]');
+  Writeln('                               [--baseline <f.json>] [--write-baseline <f.json>] [--platform win32|win64]');
+  Writeln('                               [--with-rules] [--compile] [--format json|text]');
+  Writeln('                               ^ does an interface edit to <B.pas> reach any dependent? Exits 0 whether or');
+  Writeln('                                 not it found anything; 2 means it could NOT run. --baseline pins the OLD');
+  Writeln('                                 side to an edit-episode capture -- without it the OLD side is the live');
+  Writeln('                                 index, which is CLI/manual use only.');
   Writeln('  drag-lint exceptions-sync    [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project''s derived exception classes)');
   Writeln('                               Harvests every bare `raise Exception.Create(''literal'')` in the project and declares one class per');
   Writeln('                               DISTINCT message inside a drag-lint:auto managed block in the exceptions unit. DRY RUN WITHOUT --apply.');
@@ -1225,6 +1247,8 @@ begin
     else if (A = '--fail-on') and (i < ParamCount) then begin Inc(i); Result.FailOn:= ParamStr(i); end
     else if (A = '--baseline') and (i < ParamCount) then begin Inc(i); Result.Baseline:= ParamStr(i); end
     else if (A = '--write-baseline') and (i < ParamCount) then begin Inc(i); Result.WriteBaseline:= ParamStr(i); end
+    else if A = '--compile'      then Result.TreeCompile  := True
+    else if A = '--with-rules'   then Result.TreeWithRules:= True
     else if (A = '--config') and (i < ParamCount) then
     begin
       Inc(i);
@@ -15775,6 +15799,98 @@ begin
   end;
 end;
 
+function CompileUnitInContext(const AUnitPath, AProject, APlatform, AShadow: string): TCompileCheckResult; forward;
+
+{ lint-tree -- the arg-mapping shim. The engine lives in
+  DRagLint.Analysis.LintTree so it can be tested without a CLI, and so the three
+  things it needs from the outside world -- a store, a parser, a preprocessor --
+  are injected rather than reached for. That is not ceremony: the preprocessor in
+  particular MUST be the same one the indexer used, and making it a parameter is
+  what stops a second call site quietly parsing with a different profile. }
+function DoLintTree(const AArgs: TArgs): Integer;
+var
+  Options: TLintTreeOptions;
+  Output : string;
+begin
+  Options                  := Default(TLintTreeOptions);
+  Options.UnitPath         := AArgs.GhostUnit;
+  Options.BufferPath       := AArgs.GhostBuffer;
+  Options.ProjectPath      := AArgs.ProjectPath;
+  Options.DbPath           := AArgs.DbPath;
+  Options.BaselinePath     := AArgs.Baseline;
+  Options.WriteBaselinePath:= AArgs.WriteBaseline;
+  Options.Platform         := AArgs.CheckPlatform;
+  Options.Format           := AArgs.Format;
+  Options.WithRules        := AArgs.TreeWithRules;
+  Options.Compile          := AArgs.TreeCompile;
+
+  { A single --db, taken from --db or the first of a repeated --db. lint-tree
+    deliberately does NOT consult several indexes: a dependent found in another
+    project's index is not a dependent of THIS project, and the owner ruling of
+    2026-08-13 is that a cross-project name match is noise. }
+  if (Options.DbPath = '') and (Length(AArgs.DbPaths) > 0) then
+    Options.DbPath:= AArgs.DbPaths[0];
+
+  Result:= RunLintTree(
+    Options,
+    function(const ADbPath: string): ISymbolStore
+    begin
+      try
+        Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+      except
+        on E: Exception do
+          { nil makes RunLintTree exit 2 naming the path. A missing file, a stale
+            schema and a locked DB are one outcome to the caller; catching
+            Exception rather than bare still lets EOutOfMemory through. }
+          Result:= nil;
+      end;
+    end,
+    function(const AExtension: string): IParser
+    begin
+      if SameText(AExtension, '.pas') or SameText(AExtension, '.dpr')
+         or SameText(AExtension, '.dpk') then
+        Result:= TDelphi13Parser.Create
+      else
+        Result:= nil;
+    end,
+    function(const AUtf8: TBytes; const AFile: string): TBytes
+    begin
+      { The SAME call the direct lint path makes (Lint.Linter.pas), so the two
+        cannot drift into disagreeing about which branches are live. Blanking
+        preserves byte length and LF, so symbol line numbers stay valid. }
+      Result:= TAstParseCache.ApplyPreprocess(AUtf8, AFile);
+    end,
+    function(const AUnitPath, AProjectPath, APlatform, AShadowDir: string):
+      TArray<TCompilerFinding>
+    begin
+      { The SAME entry point ghost-check uses, so the two tiers cannot disagree
+        about how a shadow is put in front of the real unit. }
+      Result:= CompileUnitInContext(AUnitPath, AProjectPath, APlatform,
+                                    AShadowDir).Findings;
+    end,
+    Output);
+
+  if Output <> '' then
+  begin
+    if Result = 0 then
+      Writeln(Output)
+    else
+      Writeln(ErrOutput, Output);
+  end;
+end;
+
+const
+  { The per-file scan is only PART of a lint-all run, so it only gets part of
+    the bar. Everything between the scan and the report is the tail, and it is
+    not a rounding error: on ORM3 CLIENT the tail is where the user waits.
+    LINTALL_TAIL_PHASES must equal the number of LintPhase() calls after the
+    scan loop -- it is the divisor, so if a phase is added or removed and this
+    is not updated the bar simply stops short of 99 or saturates early. It
+    cannot silently skew: run_lintall_progress_phases.ps1 asserts the sequence
+    is monotonic and that 100 appears only last. }
+  LINTALL_SCAN_PCT    = 90;
+  LINTALL_TAIL_PHASES = 13;
+
 function DoLintAll(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>              ;
@@ -15798,7 +15914,42 @@ var
     byte-identical to the old behaviour. }
   ScopeSet : TDictionary<string, Boolean>;
   Prof     : TLintPhaseProfiler          ;
+  TailPhase: Integer                     ;
+
+  { PROGRESS IS A CONTRACT, NOT DECORATION. The IDE plugin parses the digit run
+    before '%' out of these lines to drive its progress bar
+    (DragLint.Plugin.JobQueue.pas), so the SHAPE `lint-all: ... NN% ...` is
+    fixed even though the SCALE below is not.
+
+    THE DEFECT THIS EXISTS FOR: the per-file scan used to run 0..100, so the bar
+    hit 100% the moment the last file was scanned and then SAT there through
+    every phase below -- project rules, duplicate-code, the three filters and
+    the report write -- with no signal at all. On ORM3 that is minutes of
+    silence at "100%", which reads as a hang and is the single most common way
+    a user concludes the tool is broken when it is working.
+
+    So the scan is scaled into 0..LINTALL_SCAN_PCT and each phase after it
+    advances through the remainder, NAMING ITSELF -- "94% duplicate-code" says
+    what is running, which "100%" never did. 100% is emitted once, at the end,
+    and means done. }
+  procedure LintPhase(const AName: string);
+  var
+    Pct: Integer;
+  begin
+    Prof.Phase(AName);
+    if AArgs.Quiet then Exit;
+    Inc(TailPhase);
+    { Ceiling division so the FIRST phase already moves the bar off the scan
+      ceiling; the last lands on 99. 100 is reserved for "finished". }
+    Pct:= LINTALL_SCAN_PCT +
+          ((TailPhase * (99 - LINTALL_SCAN_PCT) + LINTALL_TAIL_PHASES - 1) div LINTALL_TAIL_PHASES);
+    if Pct > 99 then Pct:= 99;
+    Writeln(ErrOutput, Format('lint-all: %d%% %s', [Pct, AName]));
+    Flush(ErrOutput);
+  end;
+
 begin
+  TailPhase:= 0;
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
     lint walk never preprocessed at ALL -- Preprocess had three production
@@ -15979,7 +16130,9 @@ begin
         { Progress output (throttled by percentage) }
         if (not AArgs.Quiet) then
         begin
-          Pct:= ((FileIdx + 1) * 100) div Max(1, Length(FilePaths));
+          { Scaled to LINTALL_SCAN_PCT, not 100: the scan is not the whole run,
+            and reporting 100 here is what made the bar sit still. }
+          Pct:= ((FileIdx + 1) * LINTALL_SCAN_PCT) div Max(1, Length(FilePaths));
           if (FileIdx = 0) or (FileIdx = Length(FilePaths) - 1) or (Pct <> LastPct) then
           begin
             Writeln(ErrOutput, Format('lint-all: [%d/%d] %d%% %s', [FileIdx + 1, Length(FilePaths), Pct, ExtractFileName(PasPath)]));
@@ -16240,7 +16393,7 @@ begin
     The sibling resolver lets `unused-public-symbol` consult the projects a
     shared unit's own `dl:shared` header names instead of telling the reader to
     do it by hand. Lazy -- a project with no shared units opens nothing. }
-  Prof.Phase('project-rules');
+  LintPhase('project-rules');
   var SibKeep : TList<ISymbolStore>:= TList<ISymbolStore>.Create;
   var SibOwned: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
   try
@@ -16262,6 +16415,15 @@ begin
       OptIn:= OptIn + ['global-only-uses-edge'];
     if Cfg.ShouldKeep('uses-global-census', False) then
       OptIn:= OptIn + ['uses-global-census'];
+    { R1. WITHOUT THIS LINE THE RULE IS UNREACHABLE, not merely off: the gate in
+      TProjectLintRules.Run requires OptedIn, this list is the only thing that
+      sets it, and --enable feeds the config filter rather than this array. A
+      rule missing here answers "0 finding(s)" on every run, for every input,
+      and looks exactly like a rule that found nothing. }
+    if Cfg.ShouldKeep('dfm-property-not-declared', True) then
+      OptIn:= OptIn + ['dfm-property-not-declared'];
+    if Cfg.ShouldKeep('dependent-project-not-recompiled', True) then
+      OptIn:= OptIn + ['dependent-project-not-recompiled'];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
     { LibStore is the platform library index, already open above for the
@@ -16274,32 +16436,32 @@ begin
     SibOwned.Free;
   end;
   { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
-  Prof.Phase('class-metrics');
+  LintPhase('class-metrics');
   Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, '');
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
-  Prof.Phase('missing-doc');
+  LintPhase('missing-doc');
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
   { ADF Task 8: doc-drift -- store-backed (needs the doc graph + Raises facts);
     ON by default. Its --fix subset is applied in FinalizeAndOutput (Store passed). }
   { The seealso flag MUST match what `document` wrote the managed blocks under,
     or the staleness compare measures the option difference, not drift. }
-  Prof.Phase('doc-drift');
+  LintPhase('doc-drift');
   Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
-  Prof.Phase('duplicate-code');
+  LintPhase('duplicate-code');
   Findings:= Findings + DRagLint.Diagnostics.CloneChecks.TCloneChecker.CheckProject(FilePaths, Cfg.ThresholdFor('duplicate-code', 90));
   { Interface reference cycles (needs all file paths) }
-  Prof.Phase('interface-cycles');
+  LintPhase('interface-cycles');
   Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckInterfaceCycles(FilePaths);
   { Architecture layering (only if config present) }
-  Prof.Phase('layering');
+  LintPhase('layering');
   LayersCfg:= AArgs.LayersPath;
   if (LayersCfg = '') and FileExists('drag-lint-layers.json') then LayersCfg:= 'drag-lint-layers.json';
   if LayersCfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
-  Prof.Phase('unit-not-in-dpr');
+  LintPhase('unit-not-in-dpr');
   if AArgs.ProjectPath <> '' then
     Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, FilePaths)
   else
@@ -16321,7 +16483,7 @@ begin
       Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(InferredProj, FilePaths);
   end;
   { Used-unit resolvability (used-unit-not-resolvable) }
-  Prof.Phase('used-unit-resolvable');
+  LintPhase('used-unit-resolvable');
   Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
 
   { The per-file filter above only narrowed the SCAN. Every rule between the
@@ -16355,7 +16517,7 @@ begin
     cluster heavily by file and each call costs a LowerCase + MatchesMask per
     configured glob. Pinned by
     tests\autotest\run_lintall_project_rules_honour_exclude_paths.ps1. }
-  Prof.Phase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
+  LintPhase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
   begin
     var ExclMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
     try
@@ -16380,7 +16542,7 @@ begin
     end;
   end;
 
-  Prof.Phase(Format('ownership filter (%d findings)', [Length(Findings)]));
+  LintPhase(Format('ownership filter (%d findings)', [Length(Findings)]));
   if (not AArgs.LintThirdParty) and Own.Active then
   begin
     var OwnMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
@@ -16411,7 +16573,7 @@ begin
     class, clone detection, layering, doc rules, used-unit-not-resolvable), so
     without this the non-member noise walks straight back in through them.
     A finding carrying no file path is kept -- it belongs to the run, not a file. }
-  Prof.Phase('--project scope filter');
+  LintPhase('--project scope filter');
   if ScopeSet <> nil then
   begin
     var InScope: TArray<TLintFinding>:= nil;
@@ -16457,7 +16619,7 @@ begin
 
     Config "enabled":["<id>"] still overrides any of them (opt-in). doc-drift
     stays ON -- do NOT add it. }
-  Prof.Phase('finalize+output');
+  LintPhase('finalize+output');
   Result:= FinalizeAndOutput(
     AArgs, Findings, ScmDefOff + PROJECT_RULES_OFF_BY_DEFAULT + BUILTIN_RULES_OFF_BY_DEFAULT,
     { The roll-up counts EVERY severity, not just error-vs-everything-else. It
@@ -16547,6 +16709,16 @@ begin
                  under options defined relative to it, and lint-all's primary is
                  NOT AArgs.DbPath. See OpenExtraStoresExcept. }
   );
+  { 100% means FINISHED -- the report is written and every phase is done. It is
+    emitted exactly once, here, so a reader (and the IDE bar) can treat it as a
+    completion signal rather than as "the scan loop ended", which is what it
+    used to mean. }
+  if not AArgs.Quiet then
+  begin
+    Writeln(ErrOutput, 'lint-all: 100% done');
+    Flush(ErrOutput);
+  end;
+
   Prof.Done;
 end; // function
 
@@ -16605,6 +16777,10 @@ begin
       OptIn2:= OptIn2 + ['global-only-uses-edge'];
     if LoadLintConfig(AArgs).ShouldKeep('uses-global-census', False) then
       OptIn2:= OptIn2 + ['uses-global-census'];
+    if LoadLintConfig(AArgs).ShouldKeep('dfm-property-not-declared', True) then
+      OptIn2:= OptIn2 + ['dfm-property-not-declared'];
+    if LoadLintConfig(AArgs).ShouldKeep('dependent-project-not-recompiled', True) then
+      OptIn2:= OptIn2 + ['dependent-project-not-recompiled'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge
@@ -17340,7 +17516,6 @@ end; // procedure
   check-unit and uses-fix), and Delphi resolves an implementation-section call
   top-down. DoGhostCheck's default path calls it, so without this the unit fails
   with E2003 rather than merely reading oddly. }
-function CompileUnitInContext(const AUnitPath, AProject, APlatform, AShadow: string): TCompileCheckResult; forward;
 
 { v0.48: ghost-check -- compile one or more units against their UNSAVED buffers.
 
@@ -17733,6 +17908,57 @@ begin
   end; // try
 end; // function
 
+{ The project's OWN prebuilt DCUs, read from <DCC_DcuOutput> in the .dproj.
+
+  MEASURED 2026-09-11 and it is the whole of tier 3's cost. Micronite2027 keeps
+  1,465 DCUs (281 MB) in .\Win64\Debug\DCU, and that folder is NOT on
+  DCC_UnitSearchPath -- a DCU OUTPUT dir normally is not. So dcc had no way to
+  reach a single one of them and recompiled every project unit FROM SOURCE, on
+  every one of the 207 per-dependent invocations tier 3 makes. 6m22s, and the
+  shared -NU cache came out EMPTY afterwards because the compiles were failing
+  before codegen rather than succeeding slowly.
+
+  $(Platform) and $(Config) are expanded from the compile we are actually
+  running, not from the .dproj's defaults, because the whole point is to match
+  the DCUs the IDE built. A path that does not exist is simply not added --
+  a project that has never been built has no DCUs to reuse and must still
+  compile from source. }
+function ProjectDcuOutputDir(const ADprojPath, APlatform, AConfig: string): string;
+var
+  Content: string;
+  M      : TMatch;
+  Rel    : string;
+begin
+  Result:= '';
+  if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
+  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;
+  M:= TRegEx.Match(Content, '<DCC_DcuOutput>(.*?)</DCC_DcuOutput>', [roIgnoreCase, roSingleLine]);
+  if not M.Success then Exit;
+  Rel:= Trim(M.Groups[1].Value);
+  if Rel = '' then Exit;
+  Rel:= StringReplace(Rel, '$(Platform)', APlatform, [rfReplaceAll, rfIgnoreCase]);
+  Rel:= StringReplace(Rel, '$(Config)'  , AConfig  , [rfReplaceAll, rfIgnoreCase]);
+  if Pos('$(', Rel) > 0 then Exit;   { an unexpanded macro is not a usable path }
+  Result:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ADprojPath), Rel));
+  if not TDirectory.Exists(Result) then Result:= '';
+end;
+
+{ Does the project build DEBUG DCUs? Load-bearing for the compile path.
+
+  Micronite2027 sets <DCC_DebugDCUs>true, so its 1,465 prebuilt DCUs -- 49 of
+  them Spring*.dcu -- were compiled against <BDS>\lib\<Plat>\DEBUG. Put only the
+  RELEASE RTL on -U and dcc rejects every one of them as built against a
+  different RTL and recompiles from SOURCE, which is why having the project's
+  DCU dir first on -U changed nothing at all. }
+function ProjectUsesDebugDcus(const ADprojPath: string): Boolean;
+var
+  Content: string;
+begin
+  Result:= False;
+  if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
+  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;
+  Result:= TRegEx.IsMatch(Content, '<DCC_DebugDCUs>\s*true\s*</DCC_DebugDCUs>', [roIgnoreCase]);
+end;
 // Read DCC_Namespace from a .dproj (so dotted-down 'uses Forms' etc. resolve),
 // falling back to a broad default covering the common RTL/VCL roots.
 function ReadDccNamespaces(const ADprojPath: string): string;
@@ -17776,6 +18002,7 @@ var
   CompileTarget: string                                    ;
   TargetBase   : string                                    ;
   TmpRoot      : string                                    ;
+  IncPath      : string                                    ;
   CfgDir       : string                                    ;
   DcuDir       : string                                    ;
   RsVars       : string                                    ;
@@ -17803,74 +18030,16 @@ begin
 
   TargetBase:= ExtractFileName(AArgs.Target);
 
-  { 1. search path: the project's folders (incl. library + DCU output) or, with
-       no project, just the IDE library paths. }
-  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
-  try
-    if AArgs.ProjectPath <> '' then Folders:= Resolver.Resolve(AArgs.ProjectPath)
-    else Folders:= Resolver.ResolveLibraryPaths;
-  finally
-    Resolver.Free;
-  end;
+  { T4, 2026-09-11: ONE BUILDER. This was a second, drifted copy of
+    CompileUnitInContext's path/cfg/dcc logic, and the drift was not cosmetic --
+    this copy had the <BDS>\source filter and CompileUnitInContext did not, which
+    cost a 6-minute tier-3 run and a session of debugging. It then misled the
+    same session twice more: a fix went into the wrong copy, and a verification
+    read the wrong copy's cfg.
 
-  { 2. which file to compile: the shadow (unsaved) copy if given, else the real }
-  if AArgs.Shadow <> '' then CompileTarget:= TPath.Combine(AArgs.Shadow, TargetBase)
-  else CompileTarget:= AArgs.Target;
-
-  { 3. platform. The compiler + DCUs MUST match the project's active platform:
-       a Win32 System.dcu first on the path for a dcc64 compile triggers F2048
-       (bad unit format). So we pick dcc32/dcc64 to match, prepend that
-       platform's RTL lib, and drop the OTHER platform's DCU/lib/dcp dirs. The
-       plugin passes --platform from the project's active config; default win64
-       (ORM3 client + server). }
-  var Plat: string:= LowerCase(AArgs.CheckPlatform);
-  if (Plat <> 'win32') and (Plat <> 'win64') then Plat:= 'win64';
-
-  var DccExe  : string:= IfThen(Plat = 'win32', 'dcc32'  , 'dcc64'  );
-  var PlatDir : string:= IfThen(Plat = 'win32', 'Win32'  , 'Win64'  );
-  var WrongDir: string:= IfThen(Plat = 'win32', '\win64\', '\win32\');
-
-  { TStudioEnv.Root is $BDS, then the IDE registry, then an existence-checked
-    fallback; it raises EStudioNotFound when none resolves, which Run's handler
-    reports. Compiling without Studio cannot succeed, so failing here -- while
-    naming Studio -- beats handing dcc a wrong -U path and reading its
-    complaint about units instead. }
-  var BdsDir: string:= TStudioEnv.Root;
-  var LibRelease: string:= TPath.Combine(BdsDir, 'lib\' + PlatDir + '\release');
-
-  { unit search path -- shadow first so the unsaved overlay wins }
-  UPath:= '';
-  if AArgs.Shadow <> '' then UPath:= AArgs.Shadow;
-  if TDirectory.Exists(LibRelease) then
-    if UPath = '' then UPath:= LibRelease else UPath:= UPath + ';' + LibRelease;
-  { compile against precompiled DCUs only: drop the wrong platform AND any RTL/VCL
-    SOURCE dir under the IDE install. The registry Browsing path contributes
-    <BDS>\source\... entries; with those on -U, dcc recompiles e.g.
-    System.Variants from source against the already-loaded System.dcu and dies
-    with E2158 'unit out of date or corrupted' BEFORE it ever reaches the target
-    unit -- so no real finding is ever reported. Project + Library (DCU) paths are
-    kept (the project's own \Source\ stays, as it lives outside <BDS>). }
-  var BdsSrc: string:= LowerCase(IncludeTrailingPathDelimiter(BdsDir) + 'source');
-  for P in Folders do
-    if (P <> '') and (Pos(WrongDir, LowerCase(P)) = 0) and (Pos(BdsSrc, LowerCase(P)) = 0) then
-      if UPath = '' then UPath:= P else UPath:= UPath + ';' + P;
-
-  Namespaces:= ReadDccNamespaces(AArgs.ProjectPath);
-
-  { 4. write a dcc64.cfg (avoids the ~8 KB command-line limit on the path list)
-       in a temp dir, and run dcc64 there so it auto-reads the cfg. }
-  TmpRoot:= TPath.Combine(TPath.GetTempPath, 'draglint_checkunit');
-  CfgDir:= TPath.Combine(TmpRoot, 'cfg');
-  DcuDir:= TPath.Combine(TmpRoot, 'dcu');
-  TDirectory.CreateDirectory(CfgDir);
-  TDirectory.CreateDirectory(DcuDir);
-  { dcc reads <compiler>.cfg from its working dir, so name the cfg to match }
-  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [UPath, Namespaces, DcuDir]));
-
-  RsVars:= TStudioEnv.RsvarsBat;
-  Cmd:= Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"', [RsVars, CfgDir, DccExe, CompileTarget]);
-
-  Res:= TCompileChecker.RunCommand(Cmd);
+    check-unit now calls the same function tier 3 does. Everything below -- the
+    findings filter, the JSON, the exit code -- is unchanged. }
+  Res:= CompileUnitInContext(AArgs.Target, AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.Shadow);
 
   if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
   begin
@@ -18630,24 +18799,39 @@ var
   CfgDir       : string                                    ;
   DcuDir       : string                                    ;
   TmpRoot      : string                                    ;
+  IncPath      : string                                    ;
 begin
-  TargetBase:= ExtractFileName(AUnitPath);
-  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
-  try
-    if AProject <> '' then Folders:= Resolver.Resolve(AProject)
-    else Folders:= Resolver.ResolveLibraryPaths;
-  finally
-    Resolver.Free;
-  end;
-
-  if AShadow <> '' then CompileTarget:= TPath.Combine(AShadow, TargetBase)
-  else CompileTarget:= AUnitPath;
-
+  { Platform FIRST: ResolveCompilePaths needs PlatDir. }
   Plat:= LowerCase(APlatform);
   if (Plat <> 'win32') and (Plat <> 'win64') then Plat:= 'win64';
   DccExe  := IfThen(Plat = 'win32', 'dcc32'  , 'dcc64'  );
   PlatDir := IfThen(Plat = 'win32', 'Win32'  , 'Win64'  );
   WrongDir:= IfThen(Plat = 'win32', '\win64\', '\win32\');
+  TargetBase:= ExtractFileName(AUnitPath);
+  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    { COMPILE paths, not INDEX paths. Resolve() adds the Browsing Path and both
+      platforms -- right for indexing, and the reason dcc was rebuilding
+      Spring4D from source (Source at -U position 8, its DCUs at 110). }
+    if AProject <> '' then Folders:= Resolver.ResolveCompilePaths(AProject, PlatDir)
+    else Folders:= Resolver.ResolveLibraryPaths;
+  finally
+    Resolver.Free;
+  end;
+
+  { The shadow holds ONLY the edited unit now (dependents are no longer staged --
+    staging them shadowed the project's prebuilt DCUs and forced a from-source
+    rebuild of every one). So use the shadow copy when it is actually there, and
+    otherwise compile the unit where it really lives. The shadow stays FIRST on
+    -U either way, which is what makes the edited unit override for dependents. }
+  CompileTarget:= AUnitPath;
+  if AShadow <> '' then
+  begin
+    var Staged: string:= TPath.Combine(AShadow, TargetBase);
+    if TFile.Exists(Staged) then CompileTarget:= Staged;
+  end;
+
+
 
   { See the sibling check-unit path above: one accessor, and a missing Studio is
     an attributable error rather than a wrong -U path. }
@@ -18656,12 +18840,92 @@ begin
 
   UPath:= '';
   if AShadow <> '' then UPath:= AShadow;
+
   if TDirectory.Exists(LibRelease) then
     if UPath = '' then UPath:= LibRelease else UPath:= UPath + ';' + LibRelease;
-  for P in Folders do
-    if (P <> '') and (Pos(WrongDir, LowerCase(P)) = 0) then
-      if UPath = '' then UPath:= P else UPath:= UPath + ';' + P;
 
+  { THE PROJECT'S OWN PREBUILT DCUs, right after the shadow. Micronite2027 keeps
+    1,465 of them (281 MB) in .\Win64\Debug\DCU, which is a DCU OUTPUT dir and
+    therefore NOT on DCC_UnitSearchPath -- so dcc could not reach one. After the
+    shadow, never before it: the unsaved buffer must still win, which
+    run_lint_tree_compile_shadow.ps1 case 2 proves by building a stale .dcu
+    first. The shared -NU cache goes on too, so 207 per-dependent invocations
+    stop discarding the DCUs each other just built. }
+  var ProjDcu: string:= ProjectDcuOutputDir(AProject, PlatDir, 'Debug');
+  if ProjDcu <> '' then
+    if UPath = '' then UPath:= ProjDcu else UPath:= UPath + ';' + ProjDcu;
+
+  { DROP RTL/VCL *SOURCE* DIRS -- THE SIBLING check-unit PATH HAS ALWAYS DONE
+    THIS AND THIS ONE NEVER DID. The two drifted, and this is the copy tier 3
+    actually calls.
+
+    MEASURED 2026-09-11, and it is the whole of tier 3's cost and noise. The
+    registry Browsing path contributes <BDS>\source\... entries -- 51 of them
+    here. With those on -U, dcc recompiles System.Variants and friends FROM
+    SOURCE against the already-loaded System.dcu and dies with
+    'F1026 File not found: System.Variants' / 'E2158 unit out of date or
+    corrupted' BEFORE it ever reaches the target unit. So tier 3 spent 6m22s per
+    run, wrote ZERO DCUs (every compile died before codegen), and returned 219
+    findings of which not one was about the user's code. The sibling's comment
+    predicted this exactly; it simply was not applied here.
+
+    Precompiled DCUs only. Project and Library (DCU) paths stay -- the project's
+    own \Source\ lives outside <BDS> and is unaffected. }
+  var BdsSrc: string:= LowerCase(IncludeTrailingPathDelimiter(BdsDir) + 'source');
+
+  { CLOUD-BACKED ROOTS ARE EXCLUDED BY STRING, never by probing. Enumerating a
+    OneDrive folder stalls on hydration -- measured 2026-09-11, 13 MINUTES of
+    wall clock for 10 CPU-seconds, twice. dcc pays the same cost we do, and these
+    entries sit at -U positions 3-4, so they are probed for nearly every unit
+    lookup. They arrive via $(BDSUSERDIR)/$(BDSCatalogRepository) when the
+    process inherits the IDE environment. }
+  var Cloud: TArray<string>:= ['\onedrive'];
+  for var EnvName: string in ['OneDrive', 'OneDriveCommercial', 'OneDriveConsumer'] do
+  begin
+    var EV: string:= GetEnvironmentVariable(EnvName);
+    if EV <> '' then Cloud:= Cloud + [LowerCase(IncludeTrailingPathDelimiter(EV))];
+  end;
+  for var Extra: string in GetEnvironmentVariable('DRAGLINT_EXCLUDE_ROOTS').Split([';']) do
+    if Trim(Extra) <> '' then Cloud:= Cloud + [LowerCase(Trim(Extra))];
+
+  { One filtered pass feeding BOTH -U and -I, with first-position dedup (the
+    project DCU dir was appearing twice). }
+  var Keep: TStringList:= TStringList.Create;
+  try
+    Keep.CaseSensitive:= False;
+    for P in Folders do
+    begin
+      if P = '' then Continue;
+      var LowP: string:= LowerCase(P);
+      if Pos(WrongDir, LowP) > 0 then Continue;
+      if Pos(BdsSrc  , LowP) > 0 then Continue;
+      var IsCloud: Boolean:= False;
+      for var C: string in Cloud do
+        if (C <> '') and (Pos(C, LowP) > 0) then IsCloud:= True;
+      if IsCloud then Continue;
+      if Keep.IndexOf(P) >= 0 then Continue;
+      Keep.Add(P);
+      if UPath = '' then UPath:= P else UPath:= UPath + ';' + P;
+    end;
+
+    { THE INCLUDE PATH, and it is why tier 3 returned 219 findings and no real
+      ones. GROUND TRUTH, measured 2026-09-11 by dropping -Q and reading dcc:
+
+        DevExpress\VCL\ExpressBars\Sources\dxBar.pas(37)
+          Fatal: F1026 File not found: 'cxVer.inc'
+
+      dcc compiles dxBar from source and dies because an include resolves through
+      -I, which was never set at all -- so the compile aborts before reaching the
+      unit we care about, and no real finding is ever reported. msbuild feeds the
+      Library Path to -U and -I alike; this mirrors that.
+
+      Built from the SAME filtered list, so the cloud roots that stalled dcc for
+      13 minutes when -I was first attempted cannot return through this door. }
+    for P in Keep do
+      if IncPath = '' then IncPath:= P else IncPath:= IncPath + ';' + P;
+  finally
+    Keep.Free;
+  end;
   Namespaces:= ReadDccNamespaces(AProject);
 
   TmpRoot:= TPath.Combine(TPath.GetTempPath, 'draglint_checkunit');
@@ -18669,7 +18933,12 @@ begin
   DcuDir:= TPath.Combine(TmpRoot, 'dcu');
   TDirectory.CreateDirectory(CfgDir);
   TDirectory.CreateDirectory(DcuDir);
-  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [UPath, Namespaces, DcuDir]));
+  { DcuDir was on -NU (output) only, so each of the 207 per-dependent runs wrote
+    DCUs the next one could not see. Last on the path: after the shadow and
+    after the project's own DCUs, so neither is displaced. }
+  var SearchPath: string:= UPath;
+  if SearchPath = '' then SearchPath:= DcuDir else SearchPath:= SearchPath + ';' + DcuDir;
+  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-I"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [SearchPath, IncPath, Namespaces, DcuDir]));
 
   RsVars:= TStudioEnv.RsvarsBat;
   Cmd:= Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"', [RsVars, CfgDir, DccExe, CompileTarget]);
@@ -25653,6 +25922,7 @@ begin
     else if Args.Command = 'ghost-recover'     then Result:= DoGhostRecover    (Args)
     else if Args.Command = 'check-unit'        then Result:= DoCheckUnit       (Args)
     else if Args.Command = 'lint-all'          then Result:= DoLintAll         (Args)
+  else if Args.Command = 'lint-tree'         then Result:= DoLintTree        (Args)
     else if Args.Command = 'exceptions-sync'   then Result:= DoExceptionsSync  (Args)
     else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)
     else if Args.Command = 'cycles'            then Result:= DoCycles          (Args)

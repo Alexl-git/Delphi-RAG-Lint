@@ -590,4 +590,60 @@
 #   BOTH engines, so the two runs differ in the engine and nothing else.
 #   Superseded: 1.13.0-alpha|c4b87ef16f585311d507c27d817a570d632f17c63b7b05b9eece170a41f76c67
 
-1.15.0-alpha|4690cc31fb9f78c3378fe629e910e85bd0c1d22c99610be6de46f37264502b0b
+# 2026-09-10 (session 87): A DEFER-UNTIL. The bump IS genuinely owed -- read the
+#   reason before extending the date, and do not quietly delete the line.
+#
+#   WHAT CHANGED: ref-gap G2 in src\parser\DRagLint.Parser.Delphi13.pas. A
+#   UNIT-QUALIFIED reference to a routine -- `Alpha.Beta.Tools.Proc` -- was not
+#   recorded in `refs` AT ALL. Ref-gap G emits a member-access for the rhs of a
+#   dotted access only when the lhs is a PLAIN IDENTIFIER, and its own comment
+#   argued the deeper levels were covered "via the recursion below". They were
+#   not: the recursion emits a ref for each level's OWN rhs, so `A.B.C.Proc`
+#   yielded `read A` and `member-access B` and lost `C` and `Proc` entirely.
+#   The parser now emits NEW REF ROWS that no existing index contains, which is
+#   the clearest possible case of "an extractor emits different refs".
+#
+#   WHY IT MATTERS MORE THAN ITS SIZE SUGGESTS: `find-callers` UNDER-REPORTS on
+#   that shape, and an under-report is worse than an error -- a zero reads as
+#   "nothing calls this", which is the answer this index exists to be trusted
+#   for. `unused-public-symbol` then fires on live code, the finding most likely
+#   to get working code deleted. MEASURED on the plugin index, two assignments
+#   on adjacent lines of DragLint.Plugin.Editor.pas:
+#       GAfterSaveFanOutHook:= NotifyFanOutSave;                       -> 1 caller
+#       AddWrappedItem(..., DragLint.Plugin.FanOut.InvokeCompileDependents); -> 0
+#   Same routine kind, same file, same run; only the qualifier differs.
+#
+#   WHY DEFERRED RATHER THAN BUMPED NOW. The fix is wanted today; the ~5 h
+#   re-parse of every index is not, and there is no second banked extractor
+#   change to batch it with (INBOX-extractor-change-bank.md is gone -- session
+#   79 discharged both of its rows). Bumping today would bill the full re-parse
+#   for one change, on a day the owner is running in-IDE verification.
+#
+#   WHAT IS STALE MEANWHILE, stated plainly because a deferral is a live debt:
+#   every existing index still MISSES every unit-qualified routine reference, so
+#   `find-callers` and `unused-public-symbol` keep under-reporting on exactly
+#   the shape this fixes. That is unchanged from before the fix -- the deferral
+#   does not make anything worse, it just does not yet make it better.
+#
+#   THE CHEAP PARTIAL IS AVAILABLE AND DOES NOT NEED THE BUMP: a single
+#   `index --force-reparse` (or a plain rebuild) of ONE project DB picks the new
+#   refs up for that project in minutes. Do that for the plugin DB to close the
+#   filed case; the global re-parse is what is being postponed.
+#
+#   THE DATE IS A PLACEHOLDER, and deliberately a near one: 2026-09-17 so the
+#   debt cannot be forgotten. The owner should move it to whenever the next
+#   library rebuild is actually planned, or discharge it with a real bump.
+#
+#   Pinned by tests\autotest\run_unit_qualified_routine_refs.ps1, MEASURED RED
+#   then GREEN with the SAME runner and fixture and only the engine differing:
+#   4 checks failed (1,2,3,6) against the pre-fix build with both controls
+#   (4 = not a call kind, 5 = an unreferenced routine stays at zero) passing on
+#   BOTH engines, and 7/7 green after.
+# 2026-09-11 (session 88/89): the DEFER-UNTIL|2026-09-17 recorded above is
+#   DISCHARGED. The owner authorised the bump and the full re-parse before
+#   leaving, so ref-gap G2's unit-qualified refs are no longer carried as a
+#   debt: 1.15.0-alpha -> 1.16.0-alpha, and the hash the deferral pinned
+#   (0043ed0e...) is exactly the surface that is now stamped. Existing
+#   indexes are re-parsed rather than left silently short.
+
+1.16.0-alpha|0043ed0e28147b87452cec2f81ea9b51fe6db98f3f1bc15475ffa3af36a1540f

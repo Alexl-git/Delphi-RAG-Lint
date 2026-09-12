@@ -241,6 +241,9 @@ uses
   , DragLint.Plugin.GraphWindow
   , DragLint.Plugin.SaveNotifier
   , DragLint.Plugin.LiveDiagnostics
+  , { PLAN-lint-tree P3/P5: the interface-change fan-out. FanOut does NOT use
+      Editor, so this arrow only goes one way. }
+    DragLint.Plugin.FanOut
   , DragLint.Plugin.AutoComplete
   , DragLint.Plugin.Telemetry
   , { TEMP debug telemetry }
@@ -5899,6 +5902,7 @@ end;
 
 const
   LINTALL_MSG_CAP = 2000; { max clickable findings posted per run (avoid flooding the pane) }
+  LINTALL_GROUP_NAME = 'drag-lint lint-all';
 
 { v0.65.1: parse the lint-all report and post each finding to the IDE Messages
   view as a CLICKABLE tool message -- double-click jumps to file:line. Capped so a
@@ -5906,18 +5910,70 @@ const
   stays in the opened report. Report line format (CLI DoLintAll):
     <fullpath>:<line>:<col>  [<severity>] <rule-id>: <message>
   Parsed right-to-left by ':' so the drive-letter colon in 'C:\...' is safe. }
-procedure PostLintReportToMessages(const AReportPath: string);
+{ Fetch-or-create the lint-all tab. NOT CACHED, and that is a decision rather
+  than an oversight: FanOut holds an IOTAMessageGroup across background repaints
+  and therefore needs an IOTAMessageNotifier to learn when the user closes the
+  tab, because a stale reference is an access violation in someone else's stack.
+  This path posts ONCE, synchronously, on the UI thread, from a user-initiated
+  run -- the tab cannot be closed mid-loop -- so acquiring the group per run
+  removes that hazard instead of guarding it. }
+function EnsureLintAllGroup(const AMsgSvc: IOTAMessageServices): IOTAMessageGroup;
+begin
+  Result:= nil;
+  if AMsgSvc = nil then Exit;
+  try
+    Result:= AMsgSvc.GetGroup(LINTALL_GROUP_NAME);
+    if Result = nil then Result:= AMsgSvc.AddMessageGroup(LINTALL_GROUP_NAME);
+  except
+    on E: Exception do
+    begin
+      DLT('menu', 'lint-all: could not open the message group: ' + E.Message);
+      Result:= nil;
+    end;
+  end;
+end;
+
+procedure PostLintReportToMessages(const AReportPath, AProjectPath: string);
 var
   MS   : IOTAMessageServices;
+  Grp  : IOTAMessageGroup   ;
   Lines: TArray<string>;
-  Ln, Loc, Loc2, Rest, FName: string;
+  Ln, Loc, Loc2, Rest, FName, RunTitle: string;
   P, C1, C2, Line, Col, Posted, Total: Integer;
+  ParentRef, LineRef: Pointer;
 begin
   if not Supports(BorlandIDEServices, IOTAMessageServices, MS) then Exit;
   if not FileExists(AReportPath) then Exit;
   try Lines:= TFile.ReadAllLines(AReportPath); except Exit; end;
   Posted:= 0;
   Total := 0;
+
+  { One parent row per run, so a run is a single collapsible branch and the
+    PREVIOUS run stays beside it to compare against after a fix. The tab is
+    deliberately NOT cleared (owner's ruling); LINTALL_MSG_CAP is what keeps
+    the accumulation bounded. }
+  Grp      := EnsureLintAllGroup(MS);
+  ParentRef:= nil;
+  if Grp <> nil then
+  begin
+    RunTitle:= Format('%s-lint-all-%s',
+      [ChangeFileExt(ExtractFileName(AProjectPath), ''),
+       FormatDateTime('yyyy-mm-dd-hh-nn-ss', Now)]);
+    try
+      MS.AddToolMessage('', RunTitle, 'drag-lint', 0, 0, nil, ParentRef, Grp);
+    except
+      on E: Exception do
+      begin
+        DLT('menu', 'lint-all: parent row failed: ' + E.Message);
+        ParentRef:= nil;
+      end;
+    end;
+  end
+  else
+    { Degrade LOUDLY. Falling back to the flat Build tab silently would look
+      exactly like the feature never shipped. }
+    MS.AddTitleMessage('drag-lint: could not open the "' + LINTALL_GROUP_NAME +
+                       '" tab -- findings are in the Build tab, ungrouped.');
   for Ln in Lines do
   begin
     P:= Pos('  [', Ln); { two spaces before "[severity]" separate location from the rest }
@@ -5935,7 +5991,13 @@ begin
     Line := StrToIntDef(Copy(Loc2, C1 + 1, MaxInt), 0);
     FName:= Copy(Loc2, 1, C1 - 1);
     if (FName = '') or (Line <= 0) then Continue;
-    MS.AddToolMessage(FName, Rest, 'drag-lint', Line, Col);
+    if Grp <> nil then
+    begin
+      LineRef:= nil;
+      MS.AddToolMessage(FName, Rest, 'drag-lint', Line, Col, ParentRef, LineRef, Grp);
+    end
+    else
+      MS.AddToolMessage(FName, Rest, 'drag-lint', Line, Col);
     Inc(Posted);
   end;
   if Total > Posted then
@@ -6016,7 +6078,7 @@ begin
       if AExit = 2 then begin ShowMessage('drag-lint: lint-all failed (no index?). See plugin log.'); Exit; end;
       if FileExists(OutPath) then
       begin
-        PostLintReportToMessages(OutPath); { post each finding as a clickable Messages entry }
+        PostLintReportToMessages(OutPath, Proj); { post each finding as a clickable Messages entry }
         DLOpenInEditor(OutPath);           { + open the full report }
       end;
       Summary:= Trim(AOut);
@@ -6222,6 +6284,11 @@ begin
   AddSectionHeader(RootMenu, 'Compile && Analysis');
   AddWrappedItem(RootMenu, 'Compile && Diagnose'            , InvokeCompileDiagnose);
   AddWrappedItem(RootMenu, 'Compile Buffer (unsaved)'       , InvokeGhostCheck     );
+  { PLAN-lint-tree P5. Tier 3 normally waits for a quiet period; this is the
+    manual path, for when you want the answer NOW rather than in fifteen
+    seconds. It is also the only way to reach tier 3 while the automatic
+    trigger is backing off. }
+  AddWrappedItem(RootMenu, 'Compile Dependents'              , InvokeCompileDependents);
 
   { ---- About & Help ---- }
   AddSeparator(RootMenu);
@@ -6273,6 +6340,15 @@ begin
   DragLint.Plugin.EditViewNotifier.GOnFileFirstSeenHook:= TriggerDiagnosticsOnSave;
   { v0.47: out-of-process compile-on-save -> surfaces compiler errors in the pane. }
   DragLint.Plugin.SaveNotifier.GAfterSaveCompileHook:= TriggerCompileOnSave;
+  { PLAN-lint-tree P3/P5: the interface-change fan-out. StartFanOut installs the
+    message-group notifier BEFORE the group exists, creates the tier-3 timer and
+    assigns LiveDiagnostics.GFanOutHook -- which is nil until this runs, so a
+    plugin without it simply never fans out rather than half-working. }
+  DragLint.Plugin.FanOut.StartFanOut;
+  { A save resets the discard back-off and FORCES a pending dependent compile.
+    It deliberately does NOT end the edit episode: the question the fan-out
+    answers -- does anything still point at what I removed -- spans saves. }
+  DragLint.Plugin.SaveNotifier.GAfterSaveFanOutHook:= NotifyFanOutSave;
   { Batch E Task 3: butterfly Call Graph tab double-click nav -- DockForm cannot
     uses-import Editor (Editor already uses DockForm) and DLNavigateToSource is
     implementation-private here, so wire it through the same hook pattern as
@@ -6473,6 +6549,15 @@ begin
 SetCallerCountsHook(LspCallerCounts);
 
 finalization
+{ TEARDOWN BRACKETING. An access violation while the IDE closes leaves NOTHING
+  in the log -- the process is going away and the handler that would have said
+  so is part of what is being torn down. Bracketing every finalization that
+  holds an IDE notifier or interface turns that into a NAMED unit: the last
+  'begin' with no matching 'end' is where it died. Cheap, and it is the only
+  thing that makes a shutdown AV diagnosable after the fact. }
+  DLT('teardown', 'Editor: finalization BEGIN');
 UnregisterDragLintMenu;
+
+  DLT('teardown', 'Editor: finalization END');
 
 end.

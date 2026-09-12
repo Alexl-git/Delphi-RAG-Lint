@@ -66,7 +66,7 @@ const
     have them, and DFM text search still finds only quoted values. Nothing reads
     WRONG -- it reads SHORT, which is the failure mode this stamp exists to make
     visible rather than silent. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.15.0-alpha';
+  DRAGLINT_EXTRACTOR_VERSION = '1.16.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -426,6 +426,30 @@ type
   TFileScopeEdge = record
     FileId      : Int64;
     TargetFileId: Int64;
+  end;
+
+  /// <summary>One unit that would have to be recompiled because it reaches,
+  /// directly or transitively, the unit whose interface changed.</summary>
+  /// <remarks>
+  /// There is no DEPTH field, and that is a measurement rather than an
+  /// omission. unit_uses legitimately contains CYCLES -- Delphi allows a
+  /// circular reference through the implementation section, and this repo
+  /// ships a `circular-uses` rule because of it. The recursive CTE terminates
+  /// only because UNION dedupes on the file id alone; carrying a depth column
+  /// makes (fid, depth) the dedupe key, so a 2-cycle emits (A,0) (B,1) (A,2)
+  /// (B,3) ... forever. MEASURED 2026-09-10 on this repository's own index,
+  /// which has 2 such cycles: the fid-only closure is 78 rows in 1.8 ms, while
+  /// the depth-carrying form ARTIFICIALLY CAPPED at 200 already returns 4,124
+  /// rows -- 53x -- and is non-terminating without the cap. IsDirect carries
+  /// the only distinction the fan-out actually needs.
+  /// </remarks>
+  TDependentFile = record
+    /// <summary>files.id of the dependent.</summary>
+    FileId  : Int64;
+    /// <summary>Absolute path as the index stores it.</summary>
+    Path    : string;
+    /// <summary>True when it names the changed unit in its OWN uses clause.</summary>
+    IsDirect: Boolean;
   end;
 
   /// <summary>v14 (D5): a RENDERING value for one resolved (or best-effort

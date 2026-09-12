@@ -192,26 +192,48 @@ begin
   end;
 end;
 
+{ THE LOCK PROTECTS THE LIST, NOT THE CALLS -- and holding it across the calls
+  DEADLOCKED THE IDE ON EXIT.
+
+  GetDiagnostics spawns drag-lint.exe and waits for it. That is seconds
+  normally and MINUTES for a tier-3 compile of a many-dependent unit (measured
+  2026-09-11: 6m22s on a 207-dependent unit). While this held GLock for that
+  whole run, StopLiveDiagnostics -> UnregisterDiagnosticProvider -> the same
+  GLock blocked the MAIN thread. The owner closed the IDE five seconds after a
+  forced tier-3 compile began: the window vanished, bds.exe stayed alive with no
+  main window, the plugin BPL stayed locked, and the only trace was a
+  'LiveDiagnostics: finalization BEGIN' with no matching END. Earlier sessions
+  produced access-violation dialogs instead -- the same race landing differently.
+
+  So the provider list is COPIED under the lock and the lock is released before
+  any provider is called. A provider added or removed mid-run is simply not in
+  this pass's snapshot, which is the same guarantee the old code gave. }
 function AggregateDiagnostics(const ACtx: TDragLintDiagContext): TDragLintDiagItems;
 var
-  Acc: TList<TDragLintDiagItem>   ;
-  P  : IDragLintDiagnosticProvider;
-  D  : TDragLintDiagItem          ;
+  Acc  : TList<TDragLintDiagItem>   ;
+  P    : IDragLintDiagnosticProvider;
+  D    : TDragLintDiagItem          ;
+  Snap : TArray<IDragLintDiagnosticProvider>;
 begin
   SetLength(Result, 0);
   if GDiagnostic = nil then Exit;
+
+  TMonitor.Enter(GLock);
+  try
+    Snap:= GDiagnostic.ToArray;
+  finally
+    TMonitor.Exit(GLock);
+  end;
+
   Acc:= TList<TDragLintDiagItem>.Create;
   try
-    TMonitor.Enter(GLock);
-    try
-      for P in GDiagnostic do
+    begin
+      for P in Snap do
       try
         for D in P.GetDiagnostics(ACtx) do Acc.Add(D);
       except
         { one bad provider must not break diagnostics }
       end;
-    finally
-      TMonitor.Exit(GLock);
     end;
     Result:= Acc.ToArray;
   finally

@@ -172,6 +172,14 @@ type
     /// declSection is skipped.
     /// - Fields with 0 reads AND 0 writes (scope of unused-private-member,
     /// Task 6).
+    /// - Fields the class calls a MEMBER on ('FRec.Reset;', 'FRec.Do(x)',
+    /// 'Self.FRec.Reset'). A record-typed field mutated only through its own
+    /// methods is never the lhs of an assignment, so counting assignments alone
+    /// reported it as never written when the opposite was true. This is
+    /// deliberately TYPE-AGNOSTIC -- the pass is single-file with no store and
+    /// the record type is routinely declared in another unit -- so a class-typed
+    /// 'FList.Add(x)' whose FList is never assigned also stops being reported.
+    /// A member READ in value position ('X := FRec.Count') stays a read.
     /// Thread-safe if the parse cache is thread-safe for the caller's pattern;
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
@@ -2203,10 +2211,50 @@ var
     until Cur.IsNull;
   end;
 
+  { The RECEIVER of a member call -- `FRec.Method(...)` or `Self.FRec.Method`
+    -- resolved to one of this class's own fields, or '' when the receiver is
+    anything else. ADotNode is the `exprDot` that names the member.
+
+    WHY THIS IS TYPE-AGNOSTIC. A field mutated only through its own methods is
+    never the lhs of an assignment, so `referenced-never-set` reported it as
+    "read but never written". The obvious narrowing -- credit the call only for
+    a RECORD-typed receiver -- cannot be done here: this pass is single-file
+    AST with no store, and the filed case's record type is declared in another
+    unit. So a member call on a field counts as a write whatever the field's
+    type is. The accepted cost, stated as a decision rather than left as a
+    surprise: a class-typed `FList.Add(x)` whose `FList` is never assigned
+    stops being reported.
+
+    A member READ in value position (`X := FRec.Count`) is NOT routed here --
+    only exprCall and statement-level member calls are -- because that is the
+    shape that keeps the rule able to fire at all. }
+  function CallReceiverField(const ADotNode: TTSNode;
+    AFields: TDictionary<string, Boolean>): string;
+  var
+    RecvNode: TTSNode;
+    Nm      : string ;
+  begin
+    Result:= '';
+    if ADotNode.IsNull or (ADotNode.NodeType <> 'exprDot') then Exit;
+    RecvNode:= ADotNode.ChildByField('lhs');
+    if RecvNode.IsNull then Exit;
+    if RecvNode.NodeType = 'identifier' then
+      Nm:= LowerCase(Trim(NodeStr(RecvNode)))
+    else if (RecvNode.NodeType = 'exprDot') and (LhsBaseIdent(RecvNode) = 'self') then
+      { `Self.FRec.Method` -- same pairing as the assignment branch: only a
+        `self` base provably denotes this object, so `Other.FRec.Method` is
+        left alone rather than mis-credited to a same-named field here. }
+      Nm:= LhsMemberIdent(RecvNode)
+    else
+      Exit;
+    if (Nm <> '') and AFields.ContainsKey(Nm) then Result:= Nm;
+  end;
+
   { Walk a method body subtree and classify each field reference as a read or
     write. Updates AReads and AWrites maps (field-name-lower -> count).
     AInArgPos=True while walking actual call arguments (conservative: any field
-    in an arg position is counted as a possible write). }
+    in an arg position is counted as a possible write). A member CALL on a field
+    is a write to that field -- see CallReceiverField. }
   procedure ClassifyRefs(const ANode: TTSNode;
     AFields: TDictionary<string, Boolean>;
     AReads, AWrites: TDictionary<string, Integer>;
@@ -2220,6 +2268,8 @@ var
     ArgsNode: TTSNode;
     ArgNode : TTSNode;
     Ident   : string ;
+    EntNode : TTSNode;
+    RecvFld : string ;
   begin
     if ANode.IsNull then Exit;
     K:= ANode.NodeType;
@@ -2279,8 +2329,36 @@ var
           ClassifyRefs(ArgNode, AFields, AReads, AWrites, True);
         end;
       end;
+      { `FRec.Method(...)` MUTATES FRec. Credit the write before walking the
+        callee expression, which would otherwise record only a read. }
+      EntNode:= ANode.ChildByField('entity');
+      RecvFld:= CallReceiverField(EntNode, AFields);
+      if RecvFld <> '' then
+      begin
+        if AWrites.TryGetValue(RecvFld, Cnt) then AWrites[RecvFld]:= Cnt + 1
+        else AWrites.Add(RecvFld, 1);
+      end;
       { Walk entity (the callee expression) as normal read context. }
-      ClassifyRefs(ANode.ChildByField('entity'), AFields, AReads, AWrites, False);
+      ClassifyRefs(EntNode, AFields, AReads, AWrites, False);
+      Exit;
+    end;
+
+    { Statement-level paren-less member call: `FRec.Reset;`. There is no
+      exprCall node for it -- the statement's first named child is the exprDot
+      itself -- so the branch above never sees it. }
+    if K = 'statement' then
+    begin
+      if ANode.NamedChildCount > 0 then
+      begin
+        RecvFld:= CallReceiverField(ANode.NamedChild(0), AFields);
+        if RecvFld <> '' then
+        begin
+          if AWrites.TryGetValue(RecvFld, Cnt) then AWrites[RecvFld]:= Cnt + 1
+          else AWrites.Add(RecvFld, 1);
+        end;
+      end;
+      for I:= 0 to ANode.NamedChildCount - 1 do
+        ClassifyRefs(ANode.NamedChild(I), AFields, AReads, AWrites, AInArgPos);
       Exit;
     end;
 

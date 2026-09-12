@@ -733,6 +733,15 @@ end;
 initialization
 
 finalization
+{ TEARDOWN BRACKETING. An access violation while the IDE closes leaves NOTHING
+  in the log -- the process is going away and the handler that would have said
+  so is part of what is being torn down. Bracketing every finalization that
+  holds an IDE notifier or interface turns that into a NAMED unit: the last
+  'begin' with no matching 'end' is where it died. Cheap, and it is the only
+  thing that makes a shutdown AV diagnosable after the fact. }
+  DLT('teardown', 'DockForm: finalization BEGIN');
 try UnregisterDragLintDock; except end;
+
+  DLT('teardown', 'DockForm: finalization END');
 
 end.

@@ -2052,6 +2052,31 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetUnitScopeEdges: TArray<TFileScopeEdge>;
+    /// <summary>Every unit that reaches <paramref name="AFileId"/> through its
+    /// uses clauses -- the fan-out an interface change has to be checked
+    /// against.</summary>
+    /// <param name="AFileId">files.id of the unit whose interface changed.</param>
+    /// <returns>Direct users first, then transitive ones, each ordered by path.
+    /// The target itself is never included. Empty when nothing uses it.</returns>
+    /// <remarks>Closure direction is USER-ward (dependents), not dependency-ward.
+    /// See TDependentFile for why there is no depth column.</remarks>
+    function GetDependentFiles(AFileId: Int64): TArray<TDependentFile>;
+    /// <summary>Every indexed text span of one KIND in one file -- the
+    /// enumeration `string_literals` has no reader for.</summary>
+    /// <param name="AFileId">files.id to read.</param>
+    /// <param name="AKind">A `string_literals.kind` value, e.g. `dfm-prop`.
+    /// Empty returns every kind.</param>
+    /// <returns>Rows in (start_line, start_col) order; empty when none.</returns>
+    /// <remarks>
+    /// `SearchText` is FTS and answers "where is this phrase"; this answers
+    /// "what does this file declare of this kind", which no FTS query can do
+    /// without a phrase to search for. Needed by `dfm-property-not-declared`,
+    /// which must walk EVERY dfm-prop row of a form rather than look one up.
+    /// The table name understates it: since the comment corpus landed it also
+    /// holds comment prose and DFM type tokens, so ALWAYS discriminate on kind.
+    /// </remarks>
+    function GetLiteralsByKind(AFileId: Int64;
+                               const AKind: string): TArray<TStringLiteral>;
     /// <summary>Option 4: every UNIT-LEVEL routine -- a procedure/function whose
     /// parent symbol is the unit itself (id, file_id, name, signature, section
     /// populated). Backs TCallResolver's unit-level rung for a BARE call, which

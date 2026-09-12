@@ -186,6 +186,12 @@ function TDragLintStatusBar.StatesEqual(const A, B: TQueueState): Boolean;
 begin
   Result:= (A.Running = B.Running)
        and (A.Percent = B.Percent)
+       { Phase is compared for the same reason every other field is: ApplyState
+         only runs when the state DIFFERS, so a field left out of this test is a
+         field that never reaches the screen. Percent alone is not enough --
+         within one percent the phase can change, and those are precisely the
+         slow tail phases the label exists to name. }
+       and (A.Phase = B.Phase)
        and (A.QueueDepth = B.QueueDepth)
        and (A.CurrentTitle = B.CurrentTitle)
        and (A.LastResult = B.LastResult);
@@ -262,6 +268,7 @@ begin
   begin
     if AState.Percent >= 0 then
       FStateLbl.Caption:= AState.CurrentTitle + '  ' + IntToStr(AState.Percent) + '%'
+                        + (if AState.Phase <> '' then '  ' + AState.Phase else '')
     else
       FStateLbl.Caption:= AState.CurrentTitle + '  ...';
     if not FBar.Visible then FBar.Visible:= True;

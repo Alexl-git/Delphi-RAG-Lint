@@ -11,6 +11,7 @@ type
     AutoDiagnosticsOnSave: Boolean; { v0.42: run syntax/lint diagnostics on save }
     AutoCompileOnSave    : Boolean; { v0.47: out-of-process compile-check on save (surfaces E2003 etc.) }
     AutoCompileBuffer    : Boolean; { v0.47: auto-compile the UNSAVED buffer on idle (ghost-check) -- compiler errors without saving }
+    FanOutOnInterfaceEdit: Boolean; { PLAN-lint-tree P3: fan out to dependents when an INTERFACE edit settles. ON by default; set the registry value to 0 to stop it spawning anything, without a rebuild }
     AutoCompileOnStartup : Boolean; { v0.48: compile the project once when it opens, so compiler errors show immediately }
     AutoCompileOnSwitch  : Boolean; { v0.48: compile the current state when you switch to a .pas, even if unchanged }
     AutoJumpToDiagnostics: Boolean; { v0.48: after a compile updates the gutter, scroll the Structure tree to the Diagnostics section if it has any }
@@ -99,6 +100,7 @@ begin
   Result.AutoDiagnosticsOnSave:= True;
   Result.AutoCompileOnSave    := True;
   Result.AutoCompileBuffer    := True;
+  Result.FanOutOnInterfaceEdit:= True;
   Result.AutoCompileOnStartup := True;
   Result.AutoCompileOnSwitch  := True;
   Result.AutoJumpToDiagnostics:= True;
@@ -215,6 +217,7 @@ begin
       if Reg.ValueExists('AutoDiagnosticsOnSave') then Result.AutoDiagnosticsOnSave:= Reg.ReadInteger('AutoDiagnosticsOnSave') <> 0;
       if Reg.ValueExists('AutoCompileOnSave'    ) then Result.AutoCompileOnSave    := Reg.ReadInteger('AutoCompileOnSave'    ) <> 0;
       if Reg.ValueExists('AutoCompileBuffer'    ) then Result.AutoCompileBuffer    := Reg.ReadInteger('AutoCompileBuffer'    ) <> 0;
+      if Reg.ValueExists('FanOutOnInterfaceEdit') then Result.FanOutOnInterfaceEdit:= Reg.ReadInteger('FanOutOnInterfaceEdit') <> 0;
       if Reg.ValueExists('AutoCompileOnStartup' ) then Result.AutoCompileOnStartup := Reg.ReadInteger('AutoCompileOnStartup' ) <> 0;
       if Reg.ValueExists('AutoCompileOnSwitch'  ) then Result.AutoCompileOnSwitch  := Reg.ReadInteger('AutoCompileOnSwitch'  ) <> 0;
       if Reg.ValueExists('AutoJumpToDiagnostics') then Result.AutoJumpToDiagnostics:= Reg.ReadInteger('AutoJumpToDiagnostics') <> 0;
@@ -312,6 +315,7 @@ begin
       Reg.WriteInteger('AutoDiagnosticsOnSave', Ord(ASettings.AutoDiagnosticsOnSave));
       Reg.WriteInteger('AutoCompileOnSave'    , Ord(ASettings.AutoCompileOnSave    ));
       Reg.WriteInteger('AutoCompileBuffer'    , Ord(ASettings.AutoCompileBuffer    ));
+      Reg.WriteInteger('FanOutOnInterfaceEdit', Ord(ASettings.FanOutOnInterfaceEdit));
       Reg.WriteInteger('AutoCompileOnStartup' , Ord(ASettings.AutoCompileOnStartup ));
       Reg.WriteInteger('AutoCompileOnSwitch'  , Ord(ASettings.AutoCompileOnSwitch  ));
       Reg.WriteInteger('AutoJumpToDiagnostics', Ord(ASettings.AutoJumpToDiagnostics));

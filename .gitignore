@@ -106,6 +106,12 @@ circular-demo/*.res
 docs/PLAN-*
 docs/NEXT-SESSION-PLAN-*
 docs/PENDING-ISSUES-*
+# OWNER-* are the owner's own verification/test sheets. Their headers already
+# SAY "gitignored -- disk only" and that was simply not true: only docs/PLAN-*
+# matched, so OWNER-VERIFICATION-SESSION-86.md sat untracked-but-committable for
+# a whole session. They also name customer forms verbatim (AssignGroups.dfm,
+# AssignTools2.dfm), which is the same reason DESIGN-* is in this block.
+docs/OWNER-*
 docs/REPLY-*
 docs/QUESTIONS-*
 docs/TRIAGE-*

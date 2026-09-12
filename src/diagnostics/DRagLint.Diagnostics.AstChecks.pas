@@ -7689,6 +7689,10 @@ begin
 end; // function
 
 class function TAstChecker.CheckCriticalSection(const AFile: string): TArray<TLintFinding>;
+const
+  { Namespaces the TMonitor keys so a lock named 'lock' passed to
+    TMonitor.Enter can never be discharged by an instance Lock.Leave. }
+  MONITOR_KEY_PREFIX = 'tmonitor:';
 var
   Src             : TBytes                       ;
   PF      : TParsedFile        ;
@@ -7729,10 +7733,41 @@ var
     Result := True;
   end;
 
+  { TMonitor.Enter(L) / TMonitor.Exit(L) -> AKey = 'tmonitor:' + collapsed
+    lower(L). The lock is the ARGUMENT, not the receiver, so the argument is
+    what must key the acquire/release pair -- keying on the bare 'tmonitor'
+    receiver would collapse Enter(A) and Enter(B) into a single entry and let
+    one Exit discharge both. Returns False (so the call is IGNORED) for an
+    argument list that is not exactly one expression: TMonitor.Enter(Obj,
+    Timeout) is a conditional Boolean acquire whose lock may never be taken. }
+  function MonitorArgKey(const N: TTSNode; out AKey: string): Boolean;
+  var
+    Args, A0: TTSNode;
+    S       : string ;
+  begin
+    Result:= False;
+    AKey  := '';
+    Args:= N.ChildByField('args');
+    if Args.IsNull or (Args.NamedChildCount <> 1) then Exit;
+    A0:= Args.NamedChild(0);
+    if A0.IsNull then Exit;
+    { Whitespace inside the argument span ('Self . FLock', an argument wrapped
+      over two lines) must not make two spellings of one lock look different. }
+    S:= NodeStr(A0);
+    S:= StringReplace(S, ' ' , '', [rfReplaceAll]);
+    S:= StringReplace(S, #9  , '', [rfReplaceAll]);
+    S:= StringReplace(S, #13 , '', [rfReplaceAll]);
+    S:= StringReplace(S, #10 , '', [rfReplaceAll]);
+    if S = '' then Exit;
+    AKey  := MONITOR_KEY_PREFIX + LowerCase(S);
+    Result:= True;
+  end;
+
   procedure WalkBody(const N: TTSNode; AInFinally: Boolean);
   var
     I   : Integer;
     V, M: string ;
+    K   : string ;
     Lf  : Boolean;
     C   : TTSNode;
   begin
@@ -7740,7 +7775,21 @@ var
     if N.NodeType = 'defProc' then Exit;
     if DotMethod(N, V, M) then
     begin
-      if SameText(M, 'Enter') or SameText(M, 'Acquire') then
+      if V = 'tmonitor' then
+      begin
+        { The class-method form: TMonitor.Enter(L) ... finally TMonitor.Exit(L).
+          Only the exprCall shape carries the argument list, so the exprDot twin
+          the recursion also visits is skipped here rather than double-counted.
+          TryEnter is ignored by the exact 'Enter' match -- it returns a Boolean
+          and does not necessarily acquire. }
+        if (N.NodeType = 'exprCall') and MonitorArgKey(N, K) then
+        begin
+          if SameText(M, 'Enter') then
+          begin if not Acquired.ContainsKey(K) then Acquired.Add(K, N.StartPoint); end
+          else if SameText(M, 'Exit') and AInFinally then ReleasedInFinally.AddOrSetValue(K, True);
+        end;
+      end
+      else if SameText(M, 'Enter') or SameText(M, 'Acquire') then
       begin if not Acquired.ContainsKey(V) then Acquired.Add(V, N.StartPoint); end
       else if (SameText(M, 'Leave') or SameText(M, 'Release')) and AInFinally then ReleasedInFinally.AddOrSetValue(V, True);
     end;
@@ -7764,6 +7813,7 @@ var
     Body: TTSNode ;
     Pair: TPair<string, TTSPoint>;
     F   : TLintFinding;
+    LockName: string;
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
     if N.NodeType = 'defProc' then
@@ -7778,10 +7828,16 @@ var
           for Pair in Acquired do
             if not ReleasedInFinally.ContainsKey(Pair.Key) then
             begin
+              { The TMonitor keys are namespaced so Enter(A)/Enter(B) stay
+                distinct; the namespace is an implementation detail, so the
+                message reports the lock the user actually wrote. }
+              LockName:= Pair.Key;
+              if LockName.StartsWith(MONITOR_KEY_PREFIX) then
+                LockName:= Copy(LockName, Length(MONITOR_KEY_PREFIX) + 1, MaxInt);
               F:= Default(TLintFinding);
               F.RuleId  := 'criticalsection-not-released';
               F.Severity:= 'error';
-              F.Message := Format('Critical section %s is acquired without a matching Leave/Release in a finally block -- a lock leaked on an exception path deadlocks.', [Pair.Key]);
+              F.Message := Format('Critical section %s is acquired without a matching Leave/Release (or TMonitor.Exit) in a finally block -- a lock leaked on an exception path deadlocks.', [LockName]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(Pair.Value.Row   ) + 1;
               F.StartCol := Integer(Pair.Value.Column) + 1;

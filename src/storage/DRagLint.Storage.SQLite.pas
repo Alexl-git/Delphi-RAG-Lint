@@ -1081,6 +1081,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetUnitScopeEdges: TArray<TFileScopeEdge>;
+    function GetDependentFiles(AFileId: Int64): TArray<TDependentFile>;
+    function GetLiteralsByKind(AFileId: Int64;
+                               const AKind: string): TArray<TStringLiteral>;
       /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed: List.ToArray.</returns>
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.TSymbolKindHelper.FromText: Unknown symbol kind: "%s"</exception>
       /// <remarks>
@@ -5574,6 +5577,128 @@ begin
     List.Free;
   end; // try
 end; // function
+
+function TSQLiteSymbolStore.GetLiteralsByKind(AFileId: Int64;
+  const AKind: string): TArray<TStringLiteral>;
+{ Enumerate one file's text spans of one kind. `SearchText` is FTS and needs a
+  PHRASE; a rule that must inspect every dfm-prop row of a form has no phrase to
+  search for, which is why this exists.
+  An empty AKind returns every kind rather than nothing -- the caller that wants
+  nothing simply does not call. }
+var
+  Q     : TFDQuery             ;
+  List  : TList<TStringLiteral>;
+  L     : TStringLiteral       ;
+  FSym  : TField; FSrc : TField; FKind: TField; FOwner: TField;
+  FText : TField; FSL  : TField; FSC  : TField; FEL   : TField; FEC: TField;
+begin
+  List:= TList<TStringLiteral>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  :=
+      'SELECT id, file_id, symbol_id, source, kind, owner_name, text, ' +
+      '       start_line, start_col, end_line, end_col ' +
+      '  FROM string_literals ' +
+      ' WHERE file_id = :fid ' +
+      '   AND (:kind = '''' OR kind = :kind2) ' +
+      ' ORDER BY start_line, start_col';
+    Q.ParamByName('fid'  ).AsLargeInt:= AFileId;
+    Q.ParamByName('kind' ).AsString  := AKind  ;
+    Q.ParamByName('kind2').AsString  := AKind  ;
+    Q.Open;
+    { Resolved once -- FieldByName is a linear name search per call. }
+    FSym  := Q.FieldByName('symbol_id' ); FSrc  := Q.FieldByName('source'    );
+    FKind := Q.FieldByName('kind'      ); FOwner:= Q.FieldByName('owner_name');
+    FText := Q.FieldByName('text'      ); FSL   := Q.FieldByName('start_line');
+    FSC   := Q.FieldByName('start_col' ); FEL   := Q.FieldByName('end_line'  );
+    FEC   := Q.FieldByName('end_col'   );
+    while not Q.Eof do
+    begin
+      L          := Default(TStringLiteral);
+      L.FileId   := AFileId;
+      L.SymbolId := FSym  .AsLargeInt;
+      L.Source   := FSrc  .AsString  ;
+      L.Kind     := FKind .AsString  ;
+      L.OwnerName:= FOwner.AsString  ;
+      L.Text     := FText .AsString  ;
+      L.StartLine:= FSL   .AsInteger ;
+      L.StartCol := FSC   .AsInteger ;
+      L.EndLine  := FEL   .AsInteger ;
+      L.EndCol   := FEC   .AsInteger ;
+      List.Add(L);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetDependentFiles(AFileId: Int64): TArray<TDependentFile>;
+{ The USER-direction closure: who would have to be recompiled if AFileId's
+  interface changed.
+
+  NO DEPTH COLUMN, AND THAT IS DELIBERATE. unit_uses contains cycles -- Delphi
+  permits a circular reference through the implementation section, and this
+  repo ships a `circular-uses` rule precisely because they occur. This CTE
+  terminates only because UNION dedupes on fid alone. Add a depth column and the
+  dedupe key becomes (fid, depth), so a 2-cycle emits (A,0) (B,1) (A,2) (B,3)
+  without end. MEASURED 2026-09-10 against this repository's own index (2 cycles
+  present): fid-only returns 78 rows in 1.8 ms; the depth form CAPPED at 200
+  already returns 4,124 rows and does not terminate uncapped.
+
+  IsDirect is computed by a separate EXISTS rather than by recursion depth, which
+  is the only distinction the fan-out needs: direct users are compiled first in
+  tier 3 and reported first everywhere else. }
+var
+  Q      : TFDQuery              ;
+  List   : TList<TDependentFile> ;
+  D      : TDependentFile        ;
+  FFid   : TField                ;
+  FPath  : TField                ;
+  FDirect: TField                ;
+begin
+  List:= TList<TDependentFile>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  :=
+      'WITH RECURSIVE reach(fid) AS (' +
+      '  SELECT :tf ' +
+      '  UNION ' +
+      '  SELECT u.file_id FROM unit_uses u JOIN reach ON u.target_file_id = reach.fid) ' +
+      'SELECT r.fid AS fid, f.path AS path, ' +
+      '       CASE WHEN EXISTS (SELECT 1 FROM unit_uses d ' +
+      '                          WHERE d.file_id = r.fid AND d.target_file_id = :tf2) ' +
+      '            THEN 1 ELSE 0 END AS is_direct ' +
+      '  FROM reach r JOIN files f ON f.id = r.fid ' +
+      ' WHERE r.fid <> :tf3 ' +
+      ' ORDER BY is_direct DESC, f.path';
+    Q.ParamByName('tf' ).AsLargeInt:= AFileId;
+    Q.ParamByName('tf2').AsLargeInt:= AFileId;
+    Q.ParamByName('tf3').AsLargeInt:= AFileId;
+    Q.Open;
+    { Resolved ONCE. FieldByName does a linear name search per call, so three
+      calls per row turns a closure walk into a string-comparison loop. }
+    FFid   := Q.FieldByName('fid'      );
+    FPath  := Q.FieldByName('path'     );
+    FDirect:= Q.FieldByName('is_direct');
+    while not Q.Eof do
+    begin
+      D.FileId  := FFid   .AsLargeInt;
+      D.Path    := FPath  .AsString  ;
+      D.IsDirect:= FDirect.AsInteger = 1;
+      List.Add(D);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
 
 function TSQLiteSymbolStore.GetUnitScopeEdges: TArray<TFileScopeEdge>;
 { v14 (D5): resolved uses-scope edges (file_id -> target_file_id), the exact set

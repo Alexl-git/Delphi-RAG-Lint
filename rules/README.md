@@ -213,7 +213,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `format-specifier-type-mismatch` | error | literal `Format` argument type incompatible with its specifier |
 | `try-except-swallowed` | warning | `try..except` with no raise/log/`HandleException` |
 | `dataset-open-without-close` | warning | dataset opened without a matching `Close` in a `finally` |
-| `criticalsection-not-released` | error | lock `Enter`/`Acquire` without a `finally` `Leave`/`Release` |
+| `criticalsection-not-released` | error | lock `Enter`/`Acquire`, or `TMonitor.Enter(L)`, without a `finally` `Leave`/`Release`/`TMonitor.Exit(L)` |
 | `too-many-exit-points` | info | routine with more than 5 `Exit` statements |
 | `cyclomatic-complexity` | info | routine decision-point count over 15 |
 | `virtual-method-in-constructor` | warning | constructor calls a `virtual`/`dynamic`/`override` method of its own class |

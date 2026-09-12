@@ -253,6 +253,34 @@ begin
   Result:= Symbols.Count - 1;
 end; // function
 
+// Ref-gap G2 support: is this node a pure dotted chain of plain identifiers --
+// `A`, `A.B`, `A.B.C` -- with nothing but identifiers at every level?
+//
+// WHY IT EXISTS. Ref-gap G (below, in Walk's exprDot case) requires the lhs to
+// be a plain `identifier`, so it emits a member-access for the rhs of `A.Member`
+// and for NOTHING deeper. Its own comment says chained receivers are excluded
+// because "each exprDot LEVEL with a plain-identifier lhs emits its own
+// member-access via the recursion" -- true for the levels BELOW, and it is
+// exactly why the OUTERMOST rhs is lost: for `A.B.C.Proc` the recursion emits
+// `read A` and `member-access B`, and `C` and `Proc` are never referenced at
+// all. A UNIT-QUALIFIED call, `DRagLint.Plugin.DbResolver.GetActiveProjectFilePath`,
+// is precisely that shape -- so `find-callers` under-reported it and
+// `unused-public-symbol` fired on live code.
+//
+// This deliberately answers False for a CALL or INDEXED receiver (`f().X`,
+// `arr[i].X`): those are the future expression stage's problem, and admitting
+// them here would emit a ref whose name does not identify a declared symbol.
+function IsDottedIdentChain(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'identifier' then Exit(True);
+  if ANode.NodeType <> 'exprDot' then Exit;
+  var R:= ANode.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsDottedIdentChain(ANode.ChildByField('lhs'));
+end;
+
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string); forward;
 
 // v0.8: every `typeref` node that appears in a parameter type, field type,
@@ -2595,6 +2623,31 @@ begin
         var RG:= ANode.ChildByField('rhs');
         if (not RG.IsNull) and (RG.NodeType = 'identifier') then
           AState.EmitRef('member-access', NodeText(RG, AState.Source), RG);
+      end;
+      // Ref-gap G2 (2026-09-10): the same capture when the receiver is itself a
+      // dotted chain of identifiers -- `A.B.C.Proc`. G above handles only a
+      // plain-identifier lhs, and its comment argues the deeper levels are
+      // covered "via the recursion below". They are not: the recursion emits a
+      // ref for each level's OWN rhs, so `A.B.C.Proc` yields `read A` and
+      // `member-access B` and loses `C` and `Proc` entirely.
+      //
+      // A UNIT-QUALIFIED reference is exactly that shape. MEASURED on the
+      // plugin index: `GAfterSaveFanOutHook:= NotifyFanOutSave` recorded a
+      // caller, while the adjacent
+      // `AddWrappedItem(..., DragLint.Plugin.FanOut.InvokeCompileDependents)`
+      // recorded NONE -- so `find-callers` answered 0 for a routine that is
+      // used, and `unused-public-symbol` fired on it.
+      //
+      // 'member-access', NOT a call kind, and that is load-bearing:
+      // FindCallersByName (behind `find-callers` and, via IsReferenced, behind
+      // unused-public-symbol) is KIND-BLIND, so member-access is enough to fix
+      // both. Emitting a 'call' would widen the resolver's universe of call
+      // edges for a construct that is often not a call at all.
+      if (not L.IsNull) and (L.NodeType = 'exprDot') and IsDottedIdentChain(L) then
+      begin
+        var RG2:= ANode.ChildByField('rhs');
+        if (not RG2.IsNull) and (RG2.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RG2, AState.Source), RG2);
       end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;
