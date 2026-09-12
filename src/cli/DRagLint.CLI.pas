@@ -18030,102 +18030,16 @@ begin
 
   TargetBase:= ExtractFileName(AArgs.Target);
 
-  { 1. search path: the project's folders (incl. library + DCU output) or, with
-       no project, just the IDE library paths. }
-  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
-  try
-    if AArgs.ProjectPath <> '' then Folders:= Resolver.Resolve(AArgs.ProjectPath)
-    else Folders:= Resolver.ResolveLibraryPaths;
-  finally
-    Resolver.Free;
-  end;
+  { T4, 2026-09-11: ONE BUILDER. This was a second, drifted copy of
+    CompileUnitInContext's path/cfg/dcc logic, and the drift was not cosmetic --
+    this copy had the <BDS>\source filter and CompileUnitInContext did not, which
+    cost a 6-minute tier-3 run and a session of debugging. It then misled the
+    same session twice more: a fix went into the wrong copy, and a verification
+    read the wrong copy's cfg.
 
-  { 2. which file to compile: the shadow (unsaved) copy if given, else the real }
-  if AArgs.Shadow <> '' then CompileTarget:= TPath.Combine(AArgs.Shadow, TargetBase)
-  else CompileTarget:= AArgs.Target;
-
-  { 3. platform. The compiler + DCUs MUST match the project's active platform:
-       a Win32 System.dcu first on the path for a dcc64 compile triggers F2048
-       (bad unit format). So we pick dcc32/dcc64 to match, prepend that
-       platform's RTL lib, and drop the OTHER platform's DCU/lib/dcp dirs. The
-       plugin passes --platform from the project's active config; default win64
-       (ORM3 client + server). }
-  var Plat: string:= LowerCase(AArgs.CheckPlatform);
-  if (Plat <> 'win32') and (Plat <> 'win64') then Plat:= 'win64';
-
-  var DccExe  : string:= IfThen(Plat = 'win32', 'dcc32'  , 'dcc64'  );
-  var PlatDir : string:= IfThen(Plat = 'win32', 'Win32'  , 'Win64'  );
-  var WrongDir: string:= IfThen(Plat = 'win32', '\win64\', '\win32\');
-
-  { TStudioEnv.Root is $BDS, then the IDE registry, then an existence-checked
-    fallback; it raises EStudioNotFound when none resolves, which Run's handler
-    reports. Compiling without Studio cannot succeed, so failing here -- while
-    naming Studio -- beats handing dcc a wrong -U path and reading its
-    complaint about units instead. }
-  var BdsDir: string:= TStudioEnv.Root;
-  var LibRelease: string:= TPath.Combine(BdsDir, 'lib\' + PlatDir + '\release');
-
-  { unit search path -- shadow first so the unsaved overlay wins }
-  UPath:= '';
-  if AArgs.Shadow <> '' then UPath:= AArgs.Shadow;
-  { THE PROJECT'S OWN PREBUILT DCUs, immediately after the shadow. This is the
-    difference between "load 1,465 DCUs" and "recompile the project from source,
-    once per dependent". It goes AFTER the shadow so the edited unit is still
-    compiled from the unsaved buffer -- that precedence is the whole mechanism,
-    and run_lint_tree_compile_shadow.ps1 case 2 builds a stale .dcu first to
-    prove it survives having DCU dirs on the path at all. }
-  var ProjDcu: string:= ProjectDcuOutputDir(AArgs.ProjectPath, PlatDir, 'Debug');
-  if ProjDcu <> '' then
-    if UPath = '' then UPath:= ProjDcu else UPath:= UPath + ';' + ProjDcu;
-  if TDirectory.Exists(LibRelease) then
-    if UPath = '' then UPath:= LibRelease else UPath:= UPath + ';' + LibRelease;
-  { compile against precompiled DCUs only: drop the wrong platform AND any RTL/VCL
-    SOURCE dir under the IDE install. The registry Browsing path contributes
-    <BDS>\source\... entries; with those on -U, dcc recompiles e.g.
-    System.Variants from source against the already-loaded System.dcu and dies
-    with E2158 'unit out of date or corrupted' BEFORE it ever reaches the target
-    unit -- so no real finding is ever reported. Project + Library (DCU) paths are
-    kept (the project's own \Source\ stays, as it lives outside <BDS>). }
-  var BdsSrc: string:= LowerCase(IncludeTrailingPathDelimiter(BdsDir) + 'source');
-
-  for P in Folders do
-    if (P <> '') and (Pos(WrongDir, LowerCase(P)) = 0) and (Pos(BdsSrc, LowerCase(P)) = 0) then
-      if UPath = '' then UPath:= P else UPath:= UPath + ';' + P;
-  Namespaces:= ReadDccNamespaces(AArgs.ProjectPath);
-
-  { 4. write a dcc64.cfg (avoids the ~8 KB command-line limit on the path list)
-       in a temp dir, and run dcc64 there so it auto-reads the cfg. }
-  TmpRoot:= TPath.Combine(TPath.GetTempPath, 'draglint_checkunit');
-  CfgDir:= TPath.Combine(TmpRoot, 'cfg');
-  DcuDir:= TPath.Combine(TmpRoot, 'dcu');
-  TDirectory.CreateDirectory(CfgDir);
-  TDirectory.CreateDirectory(DcuDir);
-  { REUSE THE DCUs WE ALREADY BUILT. DcuDir was on -NU (output) only, so every
-    invocation wrote its DCUs into a shared cache that the NEXT invocation then
-    never searched. Tier 3 calls this once PER DEPENDENT -- 207 times for
-    uPipeClientConnection.pas -- so the whole closure was recompiled from source
-    on every one of them: measured 6m22s, against an IDE incremental build that
-    is effectively instant.
-
-    ORDER IS LOAD-BEARING AND IS THE ONE RISK. The shadow stays FIRST, ahead of
-    the cache: dcc will happily bind a previously built B.dcu instead of the
-    shadow B.pas if the search order lets it, and then tier 3 reports a clean
-    compile for exactly the edit it exists to catch -- a silent all-clear.
-    run_lint_tree_compile_shadow.ps1 case 2 builds a stale .dcu FIRST and proves
-    the shadow still wins; that guard is the reason this line can change at all.
-
-    Correctness of the reuse itself is dcc's own: a .dcu records the stamps of
-    the units it was built against, so a dependent whose used unit changed is
-    recompiled rather than loaded stale. }
-  { dcc reads <compiler>.cfg from its working dir, so name the cfg to match }
-  var SearchPath: string:= UPath;
-  if SearchPath = '' then SearchPath:= DcuDir else SearchPath:= SearchPath + ';' + DcuDir;
-  TFile.WriteAllText(TPath.Combine(CfgDir, DccExe + '.cfg'), Format('-U"%s"'#13#10'-I"%s"'#13#10'-NS%s'#13#10'-NU"%s"'#13#10'-Q'#13#10, [SearchPath, IncPath, Namespaces, DcuDir]));
-
-  RsVars:= TStudioEnv.RsvarsBat;
-  Cmd:= Format('cmd.exe /c "call "%s" && cd /d "%s" && %s "%s" 2>&1"', [RsVars, CfgDir, DccExe, CompileTarget]);
-
-  Res:= TCompileChecker.RunCommand(Cmd);
+    check-unit now calls the same function tier 3 does. Everything below -- the
+    findings filter, the JSON, the exit code -- is unchanged. }
+  Res:= CompileUnitInContext(AArgs.Target, AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.Shadow);
 
   if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
   begin
