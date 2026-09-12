@@ -104,6 +104,28 @@ Check 'the shadow buffer BEAT the stale .dcu' ($cc.Count -ge 1) `
 Check 'the compile error names the removed routine' `
       (($cc | Where-Object { $_.message -match 'FreeProc' }).Count -ge 1) `
       ($cc | ForEach-Object { $_.message } | Select-Object -First 2) -join ' | '
+# T6, 2026-09-11: tier 3 now compiles ONCE via a generated probe unit instead of
+# once per dependent, and findings are remapped through the closure. The OLD loop
+# remapped only the EDITED unit, so a dependent's finding kept a
+# C:\TEMP\draglint_tree_...\X.pas path that no IDE can place -- a finding you
+# cannot navigate to is most of a finding wasted. Assert the remap, and assert
+# the probe never leaks into the output as a finding of its own.
+# NON-VACUITY, asserted rather than assumed: the remap check below only means
+# something if a finding actually comes from a DEPENDENT. The edited unit was
+# always remapped correctly, even by the old per-dependent loop; it is the
+# dependent's finding that used to keep a C:\TEMP\draglint_tree_... path. So
+# pin that at least one compile finding is in TreeA, the dependent.
+Check 'a compile finding comes from the DEPENDENT (makes the remap check real)' `
+      (@($cc | Where-Object { $_.file -match 'TreeA' }).Count -ge 1) `
+      'if every finding were in the edited unit, the remap assertions below would pass vacuously'
+
+Check 'no finding points into the shadow directory' `
+      (@($cc | Where-Object { $_.file -match 'draglint_tree_' }).Count -eq 0) `
+      'a shadow path cannot be opened by the IDE; findings must map back to the real unit'
+Check 'the generated probe unit never appears as a finding' `
+      (@($cc | Where-Object { $_.file -match 'draglint_probe' }).Count -eq 0) `
+      "the probe's own F2063 echoes carry nothing the named unit does not"
+
 Check 'compile findings are errors, not warnings' `
       (($cc | Where-Object { $_.severity -ne 'error' }).Count -eq 0) ''
 
