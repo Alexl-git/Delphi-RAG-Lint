@@ -146,8 +146,22 @@ try {
 # ran. That is not hypothetical: the first version of this guard did exactly
 # that and PASSED against the unfixed build -- a guard incapable of failing.
 # Every assertion below is therefore made against findings lines only.
+# ...AND NOT THE PROGRESS LINE EITHER (2026-09-12). `lint-all:` is the engine's
+# own STATUS channel: the per-file scan line, skips, the summary, and -- since
+# the progress bar started naming each post-scan phase -- a line per tail phase.
+# The tail phases are named after the RULES they run, so a correct build now
+# prints `lint-all: 96% unit-not-in-dpr`, which matches the rule id while being
+# no kind of finding. That made check 4 (an emptiness assertion) fail against a
+# build that was behaving perfectly. Strip the status channel first; a finding
+# is what survives.
+#
+# The filter stays honest because checks 1 and 2 run through this same function
+# and DEMAND a finding -- if the exclusion below ever ate real findings, they
+# would fail, so check 4 cannot be quietly emptied into passing.
 function DprFindingLines([string]$Text) {
-    @($Text -split "`r?`n" | Where-Object { $_ -match 'unit-not-in-dpr' })
+    @($Text -split "`r?`n" |
+        Where-Object { $_ -notmatch '^\s*lint-all:' } |
+        Where-Object { $_ -match 'unit-not-in-dpr' })
 }
 $infFind   = (DprFindingLines $inferred) -join "`n"
 $expFind   = (DprFindingLines $explicit) -join "`n"
