@@ -1142,38 +1142,112 @@ begin
         if not Dep.IsDirect then
           Ordered.Add(Dep);
 
-      for Dep in Ordered do
-      begin
-        { Dep.Path is the REAL location; ShadowDir still goes first on -U so the
-          edited unit overrides, but the dependent itself is no longer a shadow copy. }
-        Raw:= pCompile(Dep.Path, pOptions.ProjectPath, pPlatform, ShadowDir);
-        for CF in Raw do
-        begin
-          { Errors only. A dependent that merely warns compiled fine, and tier 3
-            exists to answer "does this still BUILD", not to duplicate the
-            compiler's advice column. }
-          if not SameText(CF.Severity, 'Error') then
-            Continue;
+      { T6: ONE dcc INVOCATION, NOT 207.
 
-          F         := Default(TLintTreeFinding);
-          { Remap the shadow path back to the real unit so an IDE can place a
-            marker. Same remap DoGhostCheck performs. }
-          if SameText(ExtractFileName(CF.RawPath),
-                      ExtractFileName(pOptions.UnitPath)) then
-            F.FilePath:= pOptions.UnitPath
-          else if CF.RawPath <> '' then
-            F.FilePath:= CF.RawPath
-          else
-            F.FilePath:= Dep.Path;
-          F.Line     := CF.LineNo;
-          F.Col      := CF.ColNo;
-          F.Rule     := 'stale-interface-reference';
-          F.Severity := 'error';
-          F.RefKind  := 'compile';
-          F.Unchecked:= pUnchecked.ContainsKey(Dep.FileId);
-          F.Message  := Format('[compile] %s %s', [CF.Code, CF.Message]);
-          Acc.Add(F);
+        Every dependent is already staged in the shadow (that staging is what
+        creates shadow precedence -- see the note above). So a synthetic unit
+        whose interface `uses` all of them makes dcc compile the edited buffer
+        once, each dependent once, and everything else from DCU -- with the RTL,
+        DevExpress and Spring symbol tables loaded ONCE instead of 207 times.
+        That is what the IDE's own incremental build does.
+
+        Measured before this change: ~67 project units recompiled from source on
+        EVERY one of 207 invocations.
+
+        dcc stops at the first unit with errors, so a broken dependent costs one
+        re-run with that unit excluded. Invocations = 1 + independent breakage
+        roots, capped at the old cost so this can never be slower. }
+      var ProbeName: string:= 'draglint_probe';
+      var ProbePath: string:= TPath.Combine(ShadowDir, ProbeName + '.pas');
+      var Excluded : TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+      var Runs     : Integer:= 0;
+      try
+        while Runs <= Ordered.Count do
+        begin
+          var Names: TStringList:= TStringList.Create;
+          try
+            Names.Duplicates:= dupIgnore;
+            Names.Sorted    := False;
+            for Dep in Ordered do
+            begin
+              var UName: string:= ChangeFileExt(ExtractFileName(Dep.Path), '');
+              if Excluded.ContainsKey(LowerCase(UName)) then Continue;
+              if Names.IndexOf(UName) < 0 then Names.Add(UName);
+            end;
+            if Names.Count = 0 then Break;
+
+            { 7-bit ASCII, CRLF, and NO directives of any kind in the generated
+              text -- a brace-directive inside a brace comment has broken this
+              build four times. }
+            var SB: TStringBuilder:= TStringBuilder.Create;
+            try
+              SB.Append('unit ').Append(ProbeName).Append(';').Append(#13#10);
+              SB.Append('interface').Append(#13#10);
+              SB.Append('uses').Append(#13#10);
+              for var I: Integer:= 0 to Names.Count - 1 do
+              begin
+                SB.Append('  ').Append(Names[I]);
+                if I < Names.Count - 1 then SB.Append(',') else SB.Append(';');
+                SB.Append(#13#10);
+              end;
+              SB.Append('implementation').Append(#13#10);
+              SB.Append('end.').Append(#13#10);
+              TFile.WriteAllText(ProbePath, SB.ToString, TEncoding.ASCII);
+            finally
+              SB.Free;
+            end;
+          finally
+            Names.Free;
+          end;
+
+          Inc(Runs);
+          Raw:= pCompile(ProbePath, pOptions.ProjectPath, pPlatform, ShadowDir);
+
+          var NewlyBroken: string:= '';
+          for CF in Raw do
+          begin
+            if not SameText(CF.Severity, 'Error') then Continue;
+
+            var Base: string:= LowerCase(ChangeFileExt(ExtractFileName(CF.RawPath), ''));
+            { The probe's own F2063 'could not compile used unit' echoes carry no
+              information the named unit does not already carry. }
+            if SameText(Base, ProbeName) then Continue;
+
+            F         := Default(TLintTreeFinding);
+            if SameText(ExtractFileName(CF.RawPath), ExtractFileName(pOptions.UnitPath)) then
+              F.FilePath:= pOptions.UnitPath
+            else
+            begin
+              { Map a shadow copy back to the dependent's REAL path so an IDE can
+                place a marker -- the old loop only remapped the edited unit. }
+              F.FilePath:= CF.RawPath;
+              for Dep in Ordered do
+                if SameText(ExtractFileName(Dep.Path), ExtractFileName(CF.RawPath)) then
+                begin
+                  F.FilePath:= Dep.Path;
+                  Break;
+                end;
+            end;
+            F.Line     := CF.LineNo;
+            F.Col      := CF.ColNo;
+            F.Rule     := 'stale-interface-reference';
+            F.Severity := 'error';
+            F.RefKind  := 'compile';
+            F.Message  := Format('[compile] %s %s', [CF.Code, CF.Message]);
+            Acc.Add(F);
+
+            if (NewlyBroken = '') and not SameText(Base, ChangeFileExt(ExtractFileName(pOptions.UnitPath), '')) then
+              NewlyBroken:= Base;
+          end;
+
+          { Nothing new broke -> the pass is clean and we are done. }
+          if NewlyBroken = '' then Break;
+          if Excluded.ContainsKey(NewlyBroken) then Break;
+          Excluded.AddOrSetValue(NewlyBroken, True);
         end;
+      finally
+        Excluded.Free;
+        try if TFile.Exists(ProbePath) then TFile.Delete(ProbePath); except end;
       end;
     finally
       { Best-effort. A leftover temp dir is harmless; failing to remove it must
