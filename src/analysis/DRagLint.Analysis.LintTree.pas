@@ -1130,8 +1130,21 @@ begin
       for Dep in pClosure do
         if not SameText(Dep.Path, pOptions.UnitPath) then
           if TFile.Exists(Dep.Path) then
+          begin
             TFile.Copy(Dep.Path,
               TPath.Combine(ShadowDir, ExtractFileName(Dep.Path)), True);
+            { T5: the sibling .dfm goes too. A form unit carries an R-directive for its .dfm and
+              dcc resolves that NEXT TO THE UNIT -- which, for a staged copy, is
+              the shadow dir. Without this every form among the dependents fails
+              F1026 on its own .dfm. It was invisible until the include path was
+              fixed, because the compile died earlier; it is pre-empted here
+              rather than waited for. One TFile.Exists on an indexed path under
+              C:\Projects -- never a cloud root, so it cannot stall. }
+            var DepDfm: string:= ChangeFileExt(Dep.Path, '.dfm');
+            if TFile.Exists(DepDfm) then
+              TFile.Copy(DepDfm,
+                TPath.Combine(ShadowDir, ExtractFileName(DepDfm)), True);
+          end;
 
       { Direct users first, then the rest. A break usually surfaces in a direct
         user, and a developer reading a truncated list wants that one first. }
