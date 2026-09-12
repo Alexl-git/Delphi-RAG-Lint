@@ -3,6 +3,68 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.11.0-alpha -- 2026-09-11
+
+### Tier-3 compile: 382 s -> 30.1 s on a 207-dependent unit
+
+* `lint-tree --compile` ran ONE dcc invocation per dependent. It now compiles
+  once, via a generated probe unit in the shadow directory whose `uses` clause
+  names every dependent, with a capped re-run per independent breakage root.
+* The tier-3 compiler never dropped `<BDS>\source` from `-U` although its
+  sibling always had -- the two builders had drifted. dcc was recompiling the
+  RTL from source on every invocation and dying before it reached the unit under
+  test, which is why 216 of 219 findings were `F1026` on `.inc` files and none
+  were about the user's code.
+* `-I` is now set at all. It never was, so every include (`Spring.inc`,
+  `cxVer.inc`) failed to resolve. Built from the same filtered list as `-U`.
+* Cloud-backed roots (OneDrive and friends) are excluded from both flags by
+  string. Enumerating them stalls dcc; `DRAGLINT_EXCLUDE_ROOTS` is the hatch for
+  other providers.
+* The project's own `<DCC_DcuOutput>` is on `-U`, so prebuilt DCUs are reachable.
+* `check-unit` and tier 3 now share ONE builder instead of two drifted copies.
+
+### Plugin fixes found by in-IDE testing
+
+* **The interface fan-out had never once run.** `CheapHash`/`CheapBufferHash`
+  are wraparound hashes and the design-time package compiles with `-$Q+`, so
+  both raised `EIntOverflow` on every call. Hidden by a bare `except` with an
+  empty body AND by a test harness that compiled with overflow checks OFF; all
+  three plugin harnesses now build with `-$Q+ -$R+`.
+* **The IDE could not exit.** `AggregateDiagnostics` held the provider lock
+  across a minutes-long run while `UnregisterDiagnosticProvider` needed it on
+  the main thread. The lock now covers only the list copy.
+* A fan-out launch the worker could not start was silently lost; it is taken
+  back and retried.
+* The live runner analysed RAD Studio's own sources if you opened one -- a
+  217 KB RTL file started a run that held the lock for 625 CPU-seconds.
+
+### lint-all
+
+* Progress no longer sits at 100% while thirteen further phases run; the scan
+  scales to 90% and each phase reports itself by name.
+* Findings go to a `drag-lint lint-all` tab, nested under one row per run
+  (`<Project>-lint-all-<date>-<time>`), instead of flat in the Build tab.
+
+### About
+
+* Reports YADF / YADFOT / YADFSetup versions, resolved through the IDE's own
+  Known Packages.
+* "Check for Updates" compares against GitHub releases numerically, field by
+  field -- a string compare puts 1.10.1 below 1.4.0. Offline reads as
+  "unknown", never "up to date".
+
+### Rules
+
+* `criticalsection-not-released` understands `TMonitor.Enter/Exit` (was 12 of
+  the 13 errors in the plugin project, all false).
+* `referenced-never-set` counts a member call on a field as a write.
+* `dfm-property-not-declared` reads `DefineProperties` pseudo-properties:
+  321 findings on ORM3 CLIENT became 2.
+
+### Extractor
+
+* `DRAGLINT_EXTRACTOR_VERSION` 1.15.0-alpha -> 1.16.0-alpha, discharging the
+  deferred re-parse for unit-qualified routine references.
 ## v1.10.1-alpha -- 2026-09-07
 
 
