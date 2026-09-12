@@ -1069,6 +1069,41 @@ end;
   search order lets it, in which case this tier reports success on exactly the
   edit it was built to catch. The guard therefore has to build a stale .dcu
   FIRST and prove the shadow still wins; without that step it proves nothing. }
+{ Writes the synthetic probe unit. Extracted from CompileDependents purely to cut
+  its nesting -- the compile loop was 7 levels deep and deep-nesting flagged it.
+  7-bit ASCII, CRLF, and NO directives of any kind in the generated text: a
+  brace-directive inside a brace comment has broken this build five times. }
+procedure WriteProbeUnit(const pPath, pUnitName: string; pNames: TStringList);
+var
+  SB: TStringBuilder;
+  I : Integer       ;
+begin
+  SB:= TStringBuilder.Create;
+  try
+    SB.Append('unit ').Append(pUnitName).Append(';').Append(#13#10);
+    SB.Append('interface').Append(#13#10);
+    SB.Append('uses').Append(#13#10);
+    for I:= 0 to pNames.Count - 1 do
+    begin
+      SB.Append('  ').Append(pNames[I]);
+      if I < pNames.Count - 1 then SB.Append(',') else SB.Append(';');
+      SB.Append(#13#10);
+    end;
+    SB.Append('implementation').Append(#13#10);
+    SB.Append('end.').Append(#13#10);
+    TFile.WriteAllText(pPath, SB.ToString, TEncoding.ASCII);
+  finally
+    SB.Free;
+  end;
+end;
+{ REVIEWED 2026-09-11, dl:ok deep-nesting@0000 -- six levels, and they stay for
+  now. The shape is irreducible without splitting state across routines: an outer
+  resource try/finally, the re-run WHILE, the per-pass try/finally that owns the
+  name list, the findings FOR, and the per-finding branch. The probe-text writer
+  was already extracted to WriteProbeUnit, which took it from seven to six.
+  Splitting further would thread ShadowDir, Ordered, Excluded and Acc through
+  another signature to satisfy a counter -- more surface, not less complexity.
+  Re-examine if the re-run grows a third exit condition. }
 function CompileDependents(const pOptions   : TLintTreeOptions;
                            const pPlatform  : string;
                            const pCompile   : TUnitCompiler;
@@ -1192,23 +1227,7 @@ begin
             { 7-bit ASCII, CRLF, and NO directives of any kind in the generated
               text -- a brace-directive inside a brace comment has broken this
               build four times. }
-            var SB: TStringBuilder:= TStringBuilder.Create;
-            try
-              SB.Append('unit ').Append(ProbeName).Append(';').Append(#13#10);
-              SB.Append('interface').Append(#13#10);
-              SB.Append('uses').Append(#13#10);
-              for var I: Integer:= 0 to Names.Count - 1 do
-              begin
-                SB.Append('  ').Append(Names[I]);
-                if I < Names.Count - 1 then SB.Append(',') else SB.Append(';');
-                SB.Append(#13#10);
-              end;
-              SB.Append('implementation').Append(#13#10);
-              SB.Append('end.').Append(#13#10);
-              TFile.WriteAllText(ProbePath, SB.ToString, TEncoding.ASCII);
-            finally
-              SB.Free;
-            end;
+            WriteProbeUnit(ProbePath, ProbeName, Names);
           finally
             Names.Free;
           end;
@@ -1246,6 +1265,17 @@ begin
             F.Rule     := 'stale-interface-reference';
             F.Severity := 'error';
             F.RefKind  := 'compile';
+            { UNCHECKED says "this dependent was indexed before its current text",
+              and the IDE uses it to explain a finding that lands on a moved line.
+              The probe rewrite DROPPED it -- caught by unused-parameter on
+              pUnchecked, which is exactly what that rule is for. Resolved per
+              dependent, since the probe compiles many in one pass. }
+            for Dep in Ordered do
+              if SameText(ExtractFileName(Dep.Path), ExtractFileName(F.FilePath)) then
+              begin
+                F.Unchecked:= pUnchecked.ContainsKey(Dep.FileId);
+                Break;
+              end;
             F.Message  := Format('[compile] %s %s', [CF.Code, CF.Message]);
             Acc.Add(F);
 
@@ -1260,7 +1290,15 @@ begin
         end;
       finally
         Excluded.Free;
-        try if TFile.Exists(ProbePath) then TFile.Delete(ProbePath); except end;
+        { The probe is ours and lives in our own temp shadow; a failure to remove
+          it is harmless but must not be invisible -- an empty except here is the
+          shape this repo's own empty-except rule exists to flag. }
+        try
+          if TFile.Exists(ProbePath) then TFile.Delete(ProbePath); // dl:ok stat-gated-destructive@bbc8 -- ProbePath is a file THIS function just wrote into its own temp shadow dir; nothing else can win the race, and the except below reports it if the delete fails anyway
+        except
+          on E: Exception do
+            AShadowUsed:= AShadowUsed + ' (probe not removed: ' + E.Message + ')';
+        end;
       end;
     finally
       { Best-effort. A leftover temp dir is harmless; failing to remove it must
