@@ -6,9 +6,18 @@
 # and returns CodeAction objects with a WorkspaceEdit (fixed to map URIs to
 # TextEdit arrays, per LSP spec).
 #
-# This test verifies the implementation compiles and is callable. A full
-# end-to-end LSP session test (client -> server -> response) is deferred;
-# the unit tests in tests\reviewmarker cover the marker insertion logic.
+# WHAT THIS RUNNER IS, STATED HONESTLY: a SOURCE-SHAPE guard. Every check below
+# is a regex over .pas text, so it asserts that the wiring LOOKS right, not that
+# it works -- it would stay green if the handler returned null for every request.
+#
+# The behavioural half now exists: run_lsp_codeaction_endtoend.ps1 starts the
+# server, completes an initialize handshake, issues a real
+# textDocument/codeAction, and carries a negative control (a diagnostic from
+# another source must yield NO action).
+#
+# One check was REMOVED here rather than kept: `Check '... compiles' $true` could
+# not fail under any circumstance, which this repo treats as worse than no check
+# at all -- the build's own exit code already covers it.
 
 $ErrorActionPreference = 'Stop'
 $exe = Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'
@@ -36,11 +45,7 @@ function Check($name, $cond) {
 # declared in HandleInitialize (compile-time verification).
 Check 'LSP server executable exists' (Test-Path $exe)
 
-# Test 2: Verify the implementation compiles without errors.
-# The build succeeded with EXIT_CODE=0 above. If we got here, compilation passed.
-Check 'BuildCodeActions implementation compiles' $true
-
-# Test 3: Verify key implementation details are in place:
+# Test 2: Verify key implementation details are in place:
 # - HandleCodeAction is wired into the Run() dispatch loop
 # - BuildCodeActions creates WorkspaceEdit with correct structure (URI -> TextEdit[])
 # - TReviewMarkers is imported and used in the handler
