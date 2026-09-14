@@ -18,6 +18,7 @@ uses
   , DRagLint.Diagnostics.CloneChecks
   , DRagLint.Lint       .Config
   , DRagLint.Symbol     .Describe  { one shared type describer -- hover uses it too }
+  , DRagLint.Lint       .ReviewMarker
   ;
 
 type
@@ -179,6 +180,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
+      /// <summary>Code actions for diagnostics on AFile in the given range. Returns
+      /// a JSON array of CodeAction objects with edits to insert reviewed-markers.</summary>
+      /// <param name="AFile">Path to the source file.</param>
+      /// <param name="AStartLine">1-based start line of the range.</param>
+      /// <param name="AStartCol">1-based start column of the range.</param>
+      /// <param name="AEndLine">1-based end line of the range.</param>
+      /// <param name="AEndCol">1-based end column of the range.</param>
+      /// <param name="ADiagnostics">JSON array of diagnostic objects in LSP format (0-based lines).</param>
+      /// <returns>JSON array of CodeAction objects; empty when no actions apply.</returns>
+      /// <remarks>Pure function. Insertion must use TReviewMarkers.InsertInto().</remarks>
+      class function BuildCodeActions(const AFile: string; AStartLine, AStartCol, AEndLine, AEndCol: Integer;
+        const ADiagnostics: TJSONArray): TJSONArray;
     private
       /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
@@ -1063,6 +1076,125 @@ begin
       end; // for
     end; // if
   end; // if
+end; // function
+
+class function TLspCompletion.BuildCodeActions(const AFile: string; AStartLine, AStartCol, AEndLine, AEndCol: Integer;
+  const ADiagnostics: TJSONArray): TJSONArray;
+var
+  Lines: TStringList;
+  Diag: TJSONObject;
+  DiagLine: Integer;
+  DiagCode: string;
+  DiagMsg: string;
+  LineText: string;
+  NewLineText: string;
+  Action: TJSONObject;
+  Edit: TJSONObject;
+  TextEdit: TJSONObject;
+  RangeObj: TJSONObject;
+  StartObj: TJSONObject;
+  EndObj: TJSONObject;
+  FileUri: string;
+  EditsArray: TJSONArray;
+  ChangesMap: TJSONObject;
+begin
+  Result:= TJSONArray.Create;
+  if (ADiagnostics = nil) or not TFile.Exists(AFile) then Exit;
+
+  { Load the file to get the actual line text for marker insertion. }
+  Lines:= TStringList.Create;
+  try
+    { Treat the file as strict 7-bit ASCII (Delphi convention). }
+    Lines.LoadFromFile(AFile, TEncoding.ANSI);
+
+    { Process each diagnostic in the range to create code actions. }
+    for var I := 0 to ADiagnostics.Count - 1 do
+    begin
+      Diag:= ADiagnostics.Items[I] as TJSONObject;
+      if Diag = nil then Continue;
+
+      { Extract diagnostic properties. }
+      DiagCode:= '';
+      DiagMsg:= '';
+      DiagLine:= -1;
+
+      var DRange := Diag.GetValue('range') as TJSONObject;
+      if DRange <> nil then
+      begin
+        var StartPos := DRange.GetValue('start') as TJSONObject;
+        if StartPos <> nil then
+          DiagLine:= StrToIntDef(StartPos.GetValue('line').Value, -1) + 1; { convert to 1-based }
+      end;
+
+      var DCode := Diag.GetValue('code');
+      if DCode <> nil then DiagCode:= DCode.Value;
+
+      var DMsg := Diag.GetValue('message');
+      if DMsg <> nil then DiagMsg:= DMsg.Value;
+
+      { Only create actions for drag-lint findings in the requested range. }
+      if (DiagLine < 0) or (DiagCode = '') then Continue;
+      if (DiagLine < AStartLine) or (DiagLine > AEndLine) then Continue;
+
+      var DSource := Diag.GetValue('source');
+      if (DSource = nil) or (DSource.Value <> 'drag-lint') then Continue;
+
+      { Get the line text and create the marker. }
+      if (DiagLine - 1) >= Lines.Count then Continue;
+      LineText:= Lines[DiagLine - 1];
+
+      { Skip if the rule already has a marker on this line (idempotency check). }
+      var ExistingMarkers := TReviewMarkers.Parse(LineText);
+      var AlreadyMarked := False;
+      for var M in ExistingMarkers do
+        if SameText(M.RuleId, DiagCode) then begin AlreadyMarked:= True; Break; end;
+      if AlreadyMarked then Continue;
+
+      { Generate the new line with the marker inserted. The message is used as the
+        auto-generated reason (comment explaining why this finding was accepted). }
+      NewLineText:= TReviewMarkers.InsertInto(LineText, DiagCode, DiagMsg);
+      if NewLineText = LineText then Continue; { no change }
+
+      { Build the code action with text edit. LSP WorkspaceEdit.changes is a map from
+        document URI to array of TextEdits. We create one action per finding. }
+      Action:= TJSONObject.Create;
+      Action.AddPair('title', 'Mark as reviewed: ' + DiagCode);
+      Action.AddPair('kind', 'quickfix');
+
+      { Create the text edit to replace the line. Range spans the entire line from column 0
+        to the end of the original text (before the marker is inserted). }
+      TextEdit:= TJSONObject.Create;
+
+      RangeObj:= TJSONObject.Create;
+      StartObj:= TJSONObject.Create;
+      StartObj.AddPair('line'     , TJSONNumber.Create(DiagLine - 1));
+      StartObj.AddPair('character', TJSONNumber.Create(0));
+      EndObj:= TJSONObject.Create;
+      EndObj.AddPair('line'     , TJSONNumber.Create(DiagLine - 1));
+      EndObj.AddPair('character', TJSONNumber.Create(Length(LineText)));
+      RangeObj.AddPair('start', StartObj);
+      RangeObj.AddPair('end'  , EndObj  );
+
+      TextEdit.AddPair('range'  , RangeObj);
+      TextEdit.AddPair('newText', NewLineText);
+
+      { Build the WorkspaceEdit: a map from file URI to array of TextEdits. }
+      FileUri:= 'file:///' + StringReplace(AFile, '\', '/', [rfReplaceAll]);
+      EditsArray:= TJSONArray.Create;
+      EditsArray.AddElement(TextEdit);
+
+      ChangesMap:= TJSONObject.Create;
+      ChangesMap.AddPair(FileUri, EditsArray);
+
+      Edit:= TJSONObject.Create;
+      Edit.AddPair('changes', ChangesMap);
+
+      Action.AddPair('edit', Edit);
+      Result.AddElement(Action);
+    end; // for
+  finally
+    Lines.Free;
+  end; // try
 end; // function
 
 end.
