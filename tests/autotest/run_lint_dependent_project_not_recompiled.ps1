@@ -153,6 +153,29 @@ try {
           (($rows | Where-Object { $_ -match 'ProjC' }).Count -eq 0) `
           'a fresh checkout would flood with findings about work nobody has done'
 
+    # THE DEFAULT FLIPPED ON THE OWNER'S RULING, 2026-09-14 ("lets enable all 3
+    # and see what happens"). Checked HERE, with the finding live, and NOT after
+    # the rebuild below -- the first attempt put it there and it could not pass,
+    # because by then the finding has correctly cleared and no default can bring
+    # it back. An assertion placed where its subject cannot exist is not a
+    # strict test, it is a broken one.
+    #
+    # It takes THREE changes to move this rule's default, and the first two are
+    # not enough: the catalog's default_enabled, removal from
+    # PROJECT_RULES_OFF_BY_DEFAULT (the print filter), and the OptIn gate reading
+    # `ShouldKeep(id, ADefaultDisabled)` -- where passing True means "OFF unless
+    # --enabled". With the first two flipped and the third still True, `rules
+    # --json` reported ON while a default run printed nothing at all.
+    #
+    # Stated plainly, because this rule shipped ON without the measurement its
+    # sibling got: its 0 on ORM3 CLIENT is the GATE, not the corpus -- that
+    # project has no `dl:shared` markers, so the rule had nothing to look at.
+    $outDef  = (& $Exe lint-all --db $dbA --config $cfg --quiet 2>$null | Out-String)
+    $rowsDef = @($outDef -split "`r?`n" | Where-Object { $_ -match 'dependent-project-not-recompiled' -and $_ -match 'ProjB' })
+    Check 'the rule is ON by default -- no --enable needed (owner ruling 2026-09-14)' `
+          ($rowsDef.Count -ge 1) `
+          'all THREE gates must agree: catalog default_enabled, the print filter, and ShouldKeep(id, ADefaultDisabled=False)'
+
     # Rebuild ProjB: its stamp now passes the edit, so the finding must go.
     #
     # THE REINDEX IS PART OF THE REBUILD, not test scaffolding. refresh-findings
@@ -168,9 +191,7 @@ try {
     Check 'the finding CLEARS once that project is rebuilt' ($rows2.Count -eq 0) `
           'a finding that never clears is one people learn to ignore'
 
-    Check 'the rule is OFF by default (R3 audits before it ships ON)' `
-          (((& $Exe lint-all --db $dbA --config $cfg --quiet 2>$null | Out-String) -notmatch 'dependent-project-not-recompiled')) `
-          'a new project-wide rule must not default ON before its volume is measured'
+
   }
 }
 finally {

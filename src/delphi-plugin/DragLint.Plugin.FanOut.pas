@@ -414,8 +414,24 @@ begin
                           Res.ClosureMs]));
               { Tier 3 only ever follows a tier-2 answer for the same
                 generation -- compiling dependents nobody has identified would
-                be minutes of dcc for nothing. }
-              if (not ACtx.Compile) and (Length(Res.Findings) > 0) then
+                be minutes of dcc for nothing.
+
+                IT NO LONGER REQUIRES TIER 2 TO HAVE FOUND SOMETHING (2026-09-14),
+                and the old condition had the logic exactly backwards. Tier 2
+                reporting zero does NOT mean nothing broke: it cannot see a
+                removed PROPERTY at all, because property reads are never bound
+                to a symbol id. Measured that day -- two public properties
+                removed from a class with 207 dependents, tier 2 reported
+                "0 place(s) in 0 unit(s)", tier 3 never armed, and the save that
+                logged "tier 3 forced" was a no-op because FArmed was already
+                False. The one case where an actual compile is the only thing
+                that can answer was the one case that skipped it.
+
+                The cost argument it was written under is also gone: tier 3 was
+                382 s per run when this gate was added and is 30.1 s now. It
+                still waits out a 15 s quiet period and still backs off, so a
+                typing session does not trigger a compile per keystroke. }
+              if (not ACtx.Compile) and Res.Changed then
                 GTrigger.ArmAfterTier2(ACtx.Generation, GetTickCount64);
             end;
           fdStaleGeneration:

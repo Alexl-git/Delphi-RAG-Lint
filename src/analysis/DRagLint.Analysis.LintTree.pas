@@ -398,7 +398,32 @@ function IsRoutineKind(const pKind: string): Boolean;
 begin
   { The kinds whose references the resolver binds to a symbol id. Everything
     else goes down the name-join path (B3 step 2) or is not reportable at all
-    -- which the report states rather than implies. }
+    -- which the report states rather than implies.
+
+    PROPERTY AND FIELD STAY OUT, and 2026-09-14 established WHY with a
+    measurement rather than by assumption -- see
+    docs\INBOX-property-refs-never-resolve.md.
+
+    The owner removed two PUBLIC PROPERTIES from a class with 207 dependents and
+    got "0 place(s) in 0 unit(s)" twice. Widening this predicate was tried first
+    and is NOT the fix: it was built, staged and measured, and a property still
+    reported nothing. The blocker is upstream, in the resolver --
+
+        CallSiteRefKindSql = `ref.kind = 'call'`
+
+    so a property READ, which the extractor records as `member-access`, never
+    enters the resolve pass and never gets refs.symbol_id. FindReferencesTo(id)
+    consequently returns nothing for a property however wide this gate is.
+    Measured on the real index, the asymmetry is exact:
+
+        find-callers Disconnect --resolved -> 4 callers, all [certain]
+        find-callers Connected  --resolved -> 0
+
+    Widening this predicate alone would therefore be WORSE than leaving it: a
+    property would be counted as "handled", drop out of `not_reportable`, and
+    the caller would get silence with nothing to explain it -- which is the one
+    failure this verb exists to prevent. Fix the resolver first; this gate is
+    then a one-line follow-up, and `field` rides with it. }
   Result:= SameText(pKind, 'procedure') or SameText(pKind, 'function')
         or SameText(pKind, 'method')    or SameText(pKind, 'constructor')
         or SameText(pKind, 'destructor');
@@ -892,6 +917,7 @@ var
   Base: TJSONObject;
   Cl  : TJSONObject;
   NR  : TJSONArray;
+  Seen: TStringList; { distinct unhandled kinds for not_reportable }
   SB  : TStringBuilder;
   F   : TLintTreeFinding;
 begin
@@ -983,11 +1009,31 @@ begin
     Root.AddPair('compiled', TJSONBool.Create(pReport.Compiled));
 
     { Stated rather than implied: an empty findings list means "no reportable
-      row", not "nothing is broken". Property, field and member-access changes
-      are not reported, and a caller must not read silence as coverage. }
+      row", not "nothing is broken", and a caller must not read silence as
+      coverage.
+
+      COMPUTED FROM THIS RUN, not hard-coded (2026-09-14). The list used to read
+      ['property','field'] unconditionally -- and once properties became
+      reportable that constant was simply WRONG, in the direction that matters:
+      it told the reader their property change had not been checked when it had.
+      A static honesty-note that can go stale is worse than none, because it is
+      trusted. This emits the kinds THIS delta actually carried that neither the
+      id-join nor the name-join path handles, so it is empty when everything was
+      checked and names the real gap when there is one. }
     NR:= TJSONArray.Create;
-    NR.Add('property');
-    NR.Add('field');
+    Seen:= TStringList.Create;
+    try
+      Seen.CaseSensitive:= False;
+      Seen.Duplicates   := dupIgnore;
+      Seen.Sorted       := True;
+      for var NRSym: TBaselineSymbol in pReport.Delta.Removed + pReport.Delta.Changed do
+        if not (IsRoutineKind(NRSym.Kind) or IsTypeKind(NRSym.Kind)
+                or IsDataKind(NRSym.Kind)) then
+          Seen.Add(NRSym.Kind);
+      for var NRIdx: Integer := 0 to Seen.Count - 1 do NR.Add(Seen[NRIdx]);
+    finally
+      Seen.Free;
+    end;
     Root.AddPair('not_reportable', NR);
 
     Result:= Root.ToJSON;

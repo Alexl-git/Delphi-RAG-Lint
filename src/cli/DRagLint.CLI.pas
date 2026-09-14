@@ -25,14 +25,28 @@ const
     disease this whole change set is treating. }
   PROJECT_RULES_OFF_BY_DEFAULT: TArray<string> = [
     'middle-man', 'fan-out', 'fan-in', 'feature-envy', 'instability',
-    'repeated-type-switch', 'missing-doc',
-    { R1, OFF until R3 audits the volume. THIS LIST AND THE OptIn ARRAYS ARE
-      TWO DIFFERENT GATES and a new off-by-default project rule needs BOTH:
-      this one stops the findings being PRINTED, the OptIn entry stops the
-      rule being RUN. Missing here, the rule reports on a default lint-all
-      before anyone has audited it; missing there, it is unreachable and
-      answers "0 finding(s)" for every input, which reads as a clean corpus. }
-    'dfm-property-not-declared', 'dependent-project-not-recompiled'];
+    'repeated-type-switch', 'missing-doc'];
+    { THE O6 RULING WAS GIVEN 2026-09-14: "lets enable all 3 and see what
+      happens." `dfm-property-not-declared` and `dependent-project-not-recompiled`
+      were removed from this list on that instruction.
+
+      What the numbers were when it was given, so a later reader can judge it
+      rather than just obey it:
+        * dfm-property-not-declared -- 321 findings on ORM3 CLIENT before the
+          DefineProperties scoping, 2 after. Both survivors are `DockControl` on
+          `TdxRibbon` and are UNCONFIRMED (owner test T7 was not run).
+        * dependent-project-not-recompiled -- 0 on ORM3 CLIENT, and that zero is
+          the GATE not the corpus: ORM3 has no `dl:shared` markers, so the rule
+          had nothing to look at. It is ON here without ever having been
+          measured on a corpus that exercises it.
+
+      THIS LIST AND THE OptIn ARRAYS ARE TWO DIFFERENT GATES and a new
+      off-by-default project rule needs BOTH: this one stops the findings being
+      PRINTED, the OptIn entry stops the rule being RUN. Missing here, the rule
+      reports on a default lint-all before anyone has audited it; missing there,
+      it is unreachable and answers "0 finding(s)" for every input, which reads
+      as a clean corpus. Both rules keep their OptIn entries -- those make them
+      RUN, which is now what we want. }
 
 const
   { Kept as a local alias so the seven existing uses below read unchanged; the
@@ -16420,9 +16434,9 @@ begin
       sets it, and --enable feeds the config filter rather than this array. A
       rule missing here answers "0 finding(s)" on every run, for every input,
       and looks exactly like a rule that found nothing. }
-    if Cfg.ShouldKeep('dfm-property-not-declared', True) then
+    if Cfg.ShouldKeep('dfm-property-not-declared', {ADefaultDisabled=}False) then
       OptIn:= OptIn + ['dfm-property-not-declared'];
-    if Cfg.ShouldKeep('dependent-project-not-recompiled', True) then
+    if Cfg.ShouldKeep('dependent-project-not-recompiled', {ADefaultDisabled=}False) then
       OptIn:= OptIn + ['dependent-project-not-recompiled'];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
@@ -16808,9 +16822,9 @@ begin
       OptIn2:= OptIn2 + ['global-only-uses-edge'];
     if LoadLintConfig(AArgs).ShouldKeep('uses-global-census', False) then
       OptIn2:= OptIn2 + ['uses-global-census'];
-    if LoadLintConfig(AArgs).ShouldKeep('dfm-property-not-declared', True) then
+    if LoadLintConfig(AArgs).ShouldKeep('dfm-property-not-declared', {ADefaultDisabled=}False) then
       OptIn2:= OptIn2 + ['dfm-property-not-declared'];
-    if LoadLintConfig(AArgs).ShouldKeep('dependent-project-not-recompiled', True) then
+    if LoadLintConfig(AArgs).ShouldKeep('dependent-project-not-recompiled', {ADefaultDisabled=}False) then
       OptIn2:= OptIn2 + ['dependent-project-not-recompiled'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that

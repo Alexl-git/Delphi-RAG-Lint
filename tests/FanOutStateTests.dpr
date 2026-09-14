@@ -490,6 +490,40 @@ begin
   Check('16e and reports the ambiguous names it did NOT check',
         ContainsText(FanOutTitleText(R, 3), '2 ambiguous'),
         FanOutTitleText(R, 3));
+
+  { 2026-09-14. THE ZERO THAT LOOKED LIKE A BUG. Removing two public properties
+    from a class with 207 dependents produced "0 place(s) in 0 unit(s)", which
+    is the right answer to "did a REPORTABLE reference break" and the wrong
+    answer to what the reader is asking. Property reads are never bound to a
+    symbol id (the resolver only walks kind='call' refs), so the engine reports
+    the kind in not_reportable -- and the title has to say it, or silence reads
+    as an all-clear. }
+  ParseFanOutJson(
+    '{"schema":"lint-tree/1","changed":true,"findings":[],' +
+    '"suppressed_ambiguous":0,"not_reportable":["property"]}', R);
+  Check('16f a kind the run could NOT check is named in the title',
+        ContainsText(FanOutTitleText(R, 9), 'property') and
+        ContainsText(FanOutTitleText(R, 9), 'NOT checked'),
+        FanOutTitleText(R, 9));
+
+  { POSITIVE CONTROL. Without it, a builder that appended the phrase
+    unconditionally would pass 16f and quietly put "NOT checked" on every clean
+    run -- the opposite failure, and just as misleading.
+
+    It gets its OWN json rather than reusing JSON_TWO_FINDINGS, and that is the
+    point rather than a convenience: that fixture was captured when the engine
+    emitted a HARD-CODED not_reportable of ["property","field"] on every run,
+    so reusing it made this check fail the moment it was written. The engine now
+    computes the list from the delta, so "nothing unreportable" is an empty list
+    -- and this fixture says so explicitly. }
+  ParseFanOutJson(
+    '{"schema":"lint-tree/1","changed":true,' +
+    '"findings":[{"file":"C:\\p\\uA.pas","line":10,"col":3,"rule":"stale-interface-reference",' +
+    '"severity":"warning","message":"m"}],' +
+    '"suppressed_ambiguous":0,"not_reportable":[]}', R);
+  Check('16g a run with nothing unreportable says no such thing',
+        not ContainsText(FanOutTitleText(R, 3), 'NOT checked'),
+        FanOutTitleText(R, 3));
 end;
 
 begin

@@ -188,9 +188,22 @@ Check 'POS a literal OUTSIDE the DefineProperties span still FIRES' `
       (($rows | Where-Object { $_ -match 'Decoy' }).Count -ge 1) `
       'proves the IMPL-SPAN filter rather than "any literal anywhere in the unit"'
 
-Check 'the rule is OFF by default (R3 audits before it ships ON)' `
-      (((& $Exe lint-all --db $db --quiet 2>$null | Out-String) -notmatch 'dfm-property-not-declared')) `
-      'a new project-wide rule must not default ON before its volume is measured'
+# THE DEFAULT FLIPPED ON THE OWNER'S RULING, 2026-09-14: "lets enable all 3 and
+# see what happens." The assertion is inverted rather than deleted, because the
+# thing worth pinning is the same either way -- that the DEFAULT is what someone
+# decided, not what a gate happened to do.
+#
+# It takes THREE changes to move this rule's default and the first two are not
+# enough on their own, which is exactly why this check exists: the catalog's
+# default_enabled, removal from PROJECT_RULES_OFF_BY_DEFAULT (the print filter),
+# and the OptIn gate in CLI.pas. That third one reads
+# `ShouldKeep(id, ADefaultDisabled)` -- passing True means "OFF unless someone
+# --enables it". With the first two flipped and the third still True, `rules
+# --json` reported the rule ON and a default lint-all still printed NOTHING,
+# which is indistinguishable from a clean corpus.
+Check 'the rule is ON by default (owner ruling 2026-09-14)' `
+      (((& $Exe lint-all --db $db --quiet 2>$null | Out-String) -match 'dfm-property-not-declared')) `
+      'all THREE gates must agree: catalog default_enabled, the print filter, and ShouldKeep(id, ADefaultDisabled=False)'
 
 Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 if($fail){ Write-Host 'DFM PROPERTY GUARD: FAIL' -ForegroundColor Red; exit 1 }

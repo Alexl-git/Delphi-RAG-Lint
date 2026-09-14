@@ -112,6 +112,12 @@ type
     OldFp      : string ;
     Findings   : TArray<TFanOutFinding>;
     Suppressed : Integer;   { ambiguous name-joins deliberately not reported }
+    { Kinds this run CHANGED but could not check, straight from the engine's
+      not_reportable. Empty when everything was checked. Without it a removed
+      PROPERTY reads as "nothing broke" -- which is what happened on
+      2026-09-14: two public properties, 207 dependents, and a bare
+      "0 place(s) in 0 unit(s)". }
+    NotReportable: TArray<string>;
     Compiled   : Boolean;
     DirectCnt  : Integer;
     TotalCnt   : Integer;
@@ -410,6 +416,11 @@ begin
     AResult.ParseError:= Root.GetValue<Boolean>('parse_error', False);
     AResult.Reason    := Root.GetValue<string>('reason', '');
     AResult.Suppressed:= Root.GetValue<Integer>('suppressed_ambiguous', 0);
+    AResult.NotReportable:= nil;
+    var NRArr: TJSONArray:= Root.GetValue('not_reportable') as TJSONArray;
+    if NRArr <> nil then
+      for var NRi: Integer:= 0 to NRArr.Count - 1 do
+        AResult.NotReportable:= AResult.NotReportable + [NRArr.Items[NRi].Value];
     AResult.Compiled  := Root.GetValue<Boolean>('compiled', False);
 
     Fp:= Root.GetValue('fingerprint') as TJSONObject;
@@ -483,6 +494,16 @@ begin
     without it would be the all-clear the whole verb exists to prevent. }
   if AResult.Suppressed > 0 then
     Result:= Result + Format(' -- %d ambiguous name(s) not checked', [AResult.Suppressed]);
+  { THE SAME RULE, FOR A KIND RATHER THAN A NAME (2026-09-14). "0 place(s) in 0
+    unit(s)" is the correct answer to "did any REPORTABLE reference break" and
+    the wrong answer to the question the user is actually asking. The owner
+    commented out two public properties of a class with 207 dependents, read the
+    bare zero as the feature failing, and was right to: nothing on screen said a
+    property change is not checked at all. Naming the kind turns a silent
+    all-clear into a stated limit. }
+  if Length(AResult.NotReportable) > 0 then
+    Result:= Result + Format(' -- %s change(s) NOT checked',
+                             [string.Join('/', AResult.NotReportable)]);
   if AResult.Compiled then Result:= Result + ' -- dependents compiled';
 end;
 
