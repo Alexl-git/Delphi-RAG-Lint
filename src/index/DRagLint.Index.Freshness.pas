@@ -116,9 +116,10 @@ type
 /// to break the command it is advising.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas)</para>
-/// <para>Calls: DateTimeToUnix, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, FileAge</para>
+/// <para>Calls: Default, DRagLint.Core.FileTime.TryGetFileMTimeUnix, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue</para>
 /// <para>Returns: Default(TFreshnessReport)</para>
 /// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.FileTime.TryGetFileMTimeUnix"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
 /// <!-- drag-lint:auto END -->
