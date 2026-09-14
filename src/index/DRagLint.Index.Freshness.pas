@@ -23,12 +23,21 @@ unit DRagLint.Index.Freshness;
 /// sweep therefore asks the DB's rows, and handles ghosts by NOT counting them
 /// as staleness -- see TFreshnessReport.Missing.</para>
 ///
-/// <para>THE MTIME EXPRESSION IS COPIED DELIBERATELY, NOT REINVENTED.
-/// `DateTimeToUnix(TFile.GetLastWriteTime(P), False)` is what the indexer writes
-/// (`DRagLint.Core.Indexer.pas:881`) and what ComputeCoherence compares against.
-/// Getting the UTC flag wrong here would not fail -- it would report EVERY file
-/// as changed, on every command, which reads as a broken index rather than a
-/// broken check.</para>
+/// <para>THE MTIME EXPRESSION IS NOT REINVENTED HERE, AND ONCE IT WAS.
+/// The indexer writes `DateTimeToUnix(TFile.GetLastWriteTime(P), False)`
+/// (`DRagLint.Core.Indexer.pas:882`); this unit read it back with `FileAge`,
+/// which is a different Win32 path applying the CURRENT utc offset instead of
+/// the file's own. The two agreed for every file dated in the current
+/// daylight-saving period and disagreed by exactly one hour for every file dated
+/// in the other, so the note fired on every command against every index while
+/// being false for every file it named. The single reader is now
+/// `DRagLint.Core.FileTime.TryGetFileMTimeUnix`, which carries the mechanism and
+/// the measurement.</para>
+///
+/// <para>Getting this wrong does not fail loudly -- it reports files as changed
+/// on every command, which reads as a broken index rather than a broken check,
+/// and trains the reader to ignore the one signal that says an answer is not
+/// trustworthy.</para>
 ///
 /// <para>SILENCE IS NOT A CLAIM OF FRESHNESS. This is an mtime fast path, and
 /// the ruling's own concern #3 records why that is not a proof: a file restored
@@ -45,9 +54,9 @@ interface
 
 uses
   System.SysUtils,
-  System.DateUtils,
   System.IOUtils,
   DRagLint.Core.Model,
+  DRagLint.Core.FileTime,
   DRagLint.Core.Interfaces
   ;
 
@@ -143,9 +152,9 @@ implementation
 function ProbeIndexFreshness(const AStore: ISymbolStore;
   AMaxExamples: Integer = 3): TFreshnessReport;
 var
-  Stamps: TArray<TFileStamp>;
-  S     : TFileStamp        ;
-  DiskDT: TDateTime          ;
+  Stamps  : TArray<TFileStamp>;
+  S       : TFileStamp        ;
+  DiskUnix: Int64             ;
 begin
   Result := Default(TFreshnessReport);
   Result.Verdict := fvUnknown;
@@ -169,24 +178,34 @@ begin
   Stamps := AStore.GetAllFileStamps;
   for S in Stamps do
   begin
-    { FileAge, not TFile.Exists + TFile.GetLastWriteTime. The latter pair RAISES
-      when a file is locked, denied, or deleted between the two calls -- and a
-      freshness check must not be able to break the command it is advising. The
-      obvious try/except around it is a silent swallow, which this repo's own
-      try-except-swallowed rule flags, correctly.
+    { THIS USED TO BE FileAge, AND THAT WAS THE DEFECT -- see
+      DRagLint.Core.FileTime for the mechanism and the measurement.
 
-      The risk this trades in: FileAge must produce the SAME number the indexer
-      wrote with DateTimeToUnix(TFile.GetLastWriteTime(P), False), or every file
-      reports changed and the note fires on every command. That is asserted, not
-      assumed -- run_index_freshness.ps1's F1 builds a fresh index and requires
-      ZERO changed files, which is exactly this equivalence. }
-    if not FileAge(S.Path, DiskDT) then
+      The comment that stood here named the right risk and then mis-priced it.
+      It said FileAge "must produce the SAME number the indexer wrote", and
+      asserted that run_index_freshness.ps1's F1 proved it. F1 cannot: it creates
+      its fixture files during the run, so every file it indexes carries an mtime
+      in the CURRENT daylight-saving period -- the one period in which FileAge and
+      TFile.GetLastWriteTime agree. The guard could only ever be fed the input
+      that passes.
+
+      What it cost: on 2026-09-14 the note claimed 3,258 of 7,001 library files
+      had changed immediately after a complete from-scratch re-parse in which
+      nothing had changed, and it fired on EVERY command against EVERY index.
+
+      TryGetFileMTimeUnix keeps the property FileAge was chosen for -- it reports
+      failure by returning False rather than raising, so a freshness check still
+      cannot break the command it is advising -- and reads the FILETIME directly,
+      which is already UTC and so has no DST period to get wrong.
+      run_index_freshness_dst.ps1 is the guard that CAN fail: its fixture is
+      back-dated into the other period. }
+    if not TryGetFileMTimeUnix(S.Path, DiskUnix) then
     begin
       Inc(Result.Missing);
       Continue;
     end;
     Inc(Result.Checked);
-    if DateTimeToUnix(DiskDT, False) <> S.MTimeUnix then
+    if DiskUnix <> S.MTimeUnix then
     begin
       Inc(Result.Changed);
       if Length(Result.Examples) < AMaxExamples then

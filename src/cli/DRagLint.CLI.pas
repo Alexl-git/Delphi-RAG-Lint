@@ -6660,6 +6660,16 @@ begin
   if AArgs.SubCommand = 'descendants' then
   begin
     if AArgs.OfName = '' then begin Writeln('ERROR: query descendants requires --of <ancestor>'); Exit(2); end;
+    { Found is read AFTER the list is freed, so it has to be captured BEFORE.
+      This line used to be `if Names.Count = 0` sitting below the `finally` that
+      frees Names -- an exit code chosen from released memory. It presented as a
+      full 6,323-name result set returned with exit 1, reported by the converter
+      team on 2026-09-09; their adapter still carries an undocumented "only exit
+      2 counts as failure" workaround because of it. Pinned by
+      tests\query\run_query_descendants_exitcode.ps1, which asserts BOTH the
+      found and the empty case -- an unconditional Exit(0) would have destroyed
+      the only signal a caller has for "no such ancestor". }
+    var Found: Integer;
     var Names: TStringList:= TStringList.Create;
     try
       Names.Sorted:= True; Names.Duplicates:= dupIgnore; Names.CaseSensitive:= False;
@@ -6687,10 +6697,11 @@ begin
         for var Nm in Names do Writeln(Nm);
         if Names.Count = 0 then Writeln('(none)');
       end;
+      Found:= Names.Count;
     finally
       Names.Free;
     end;
-    if Names.Count = 0 then Result:= 1 else Result:= 0;
+    if Found = 0 then Result:= 1 else Result:= 0;
     Exit;
   end; // if
 

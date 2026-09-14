@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{9ECF674F-154F-4413-B44B-C1D3A7EAA640}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
@@ -123,6 +123,7 @@
         <DCCReference Include="..\sql\DRagLint.Sql.OrmLinker.pas"/>
         <DCCReference Include="..\sql\DRagLint.Sql.Guarded.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.EngineHold.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.FileTime.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DocComments.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Callers.pas"/>

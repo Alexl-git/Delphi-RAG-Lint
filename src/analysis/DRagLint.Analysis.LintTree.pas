@@ -132,9 +132,9 @@ implementation
 
 uses
   Winapi.Windows,
-  System.DateUtils,
   System.Diagnostics,
-  DRagLint.Core.Encoding;
+  DRagLint.Core.Encoding,
+  DRagLint.Core.FileTime;
 
 const
   { How much of a 64-char hash is echoed to a human. Enough to tell two
@@ -760,17 +760,27 @@ function CollectUnchecked(const pStore  : ISymbolStore;
                           TDictionary<Int64, Boolean>;
 var
   Dep      : TDependentFile;
-  DiskTime : TDateTime;
   DiskUnix : Int64;
   IndexUnix: Int64;
 begin
   Result:= TDictionary<Int64, Boolean>.Create;
   for Dep in pClosure do
   begin
-    { FileAge rather than TFile.GetLastWriteTime: it reports failure by returning
-      False instead of raising, so a deleted or locked dependent needs no
-      exception handler whose only action would be to set the same flag. }
-    if not FileAge(Dep.Path, DiskTime) then
+    { TryGetFileMTimeUnix keeps the reason FileAge was chosen here -- it reports
+      failure by returning False instead of raising, so a deleted or locked
+      dependent needs no exception handler whose only action would be to set the
+      same flag -- and fixes what FileAge got wrong.
+
+      FileAge applies the CURRENT utc offset rather than the one in force when
+      the file was written, so it read one hour LATE for every dependent dated in
+      the other daylight-saving period. Against the `DiskUnix > IndexUnix + 1`
+      test below that is not symmetric: the late reading is ALWAYS above the
+      threshold, so while the clocks are on summer time every winter-dated
+      dependent was flagged unchecked, and while they are on winter time the
+      error pointed the harmless way and nothing showed. A seasonal false
+      positive on a flag whose whole purpose is to mark which findings cannot be
+      trusted. See DRagLint.Core.FileTime. }
+    if not TryGetFileMTimeUnix(Dep.Path, DiskUnix) then
     begin
       Result.AddOrSetValue(Dep.FileId, True);
       Continue;
@@ -783,7 +793,6 @@ begin
       Result.AddOrSetValue(Dep.FileId, True);
       Continue;
     end;
-    DiskUnix:= DateTimeToUnix(TTimeZone.Local.ToUniversalTime(DiskTime));
     { One second of slack: FAT/network timestamps and the indexer's own read can
       differ by sub-second amounts, and flagging every dependent as unchecked
       would make the flag meaningless. }
