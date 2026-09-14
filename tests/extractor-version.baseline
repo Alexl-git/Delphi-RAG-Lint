@@ -646,4 +646,25 @@
 #   (0043ed0e...) is exactly the surface that is now stamped. Existing
 #   indexes are re-parsed rather than left silently short.
 
-1.16.0-alpha|0043ed0e28147b87452cec2f81ea9b51fe6db98f3f1bc15475ffa3af36a1540f
+# 2026-09-14: hash updated WITHOUT a version bump. The only surface file that
+#   changed is src\index\DRagLint.Index.Freshness.pas, which extracts NOTHING:
+#   it reads files.path / files.mtime_unix back out of an already-built index,
+#   compares them against the filesystem, and returns a record plus one stderr
+#   note. It emits no symbols, refs, uses or call edges, writes nothing to any
+#   database, and parses no source. No existing index can hold a different
+#   parse because of it, so a bump would buy a ~5 hour re-parse of every index
+#   and change not one row.
+#
+#   What actually changed in it: the mtime reader. It used FileAge, which
+#   applies the CURRENT utc offset; the indexer writes with
+#   TFile.GetLastWriteTime, which applies the offset in force when the file was
+#   written. The two disagreed by exactly one hour for every file dated in the
+#   other daylight-saving period, so the staleness note claimed 3258 of 7001
+#   library files had changed right after a clean full re-parse. Both readers
+#   now share DRagLint.Core.FileTime.TryGetFileMTimeUnix.
+#
+#   NOTE FOR THE NEXT READER: the surface is the whole of src\index, and
+#   src\index holds non-extracting utilities as well as the extractor. A hit
+#   here is therefore a question, not automatically a bump -- but the broad
+#   surface is deliberate, because it forces the question to be ASKED.
+1.16.0-alpha|2aa34e37ae77635fe6bceaf3280fd4674ea6aa761633a88fbb4ef3dd5e34a9db
