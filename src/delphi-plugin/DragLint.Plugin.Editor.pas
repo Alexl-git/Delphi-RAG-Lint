@@ -10,6 +10,7 @@ uses
   , Vcl.Dialogs
   , ToolsAPI
   , DragLint.Plugin.LspClient
+  , DragLint.Plugin.LintOutputParse { SelectPaneRows/TPaneRow -- the testable half of the Messages-pane cap }
   , DragLint.Plugin.ProjectNotifier
   , DragLint.Plugin.Settings
   , DragLint.Plugin.HoverForm
@@ -5938,9 +5939,10 @@ var
   MS   : IOTAMessageServices;
   Grp  : IOTAMessageGroup   ;
   Lines: TArray<string>;
-  Ln, Loc, Loc2, Rest, FName, RunTitle: string;
-  P, C1, C2, Line, Col, Posted, Total: Integer;
+  RunTitle: string;
+  Posted, Total, RulesShown: Integer;
   ParentRef, LineRef: Pointer;
+  Chosen: TArray<TPaneRow>;
 begin
   if not Supports(BorlandIDEServices, IOTAMessageServices, MS) then Exit;
   if not FileExists(AReportPath) then Exit;
@@ -5974,34 +5976,42 @@ begin
       exactly like the feature never shipped. }
     MS.AddTitleMessage('drag-lint: could not open the "' + LINTALL_GROUP_NAME +
                        '" tab -- findings are in the Build tab, ungrouped.');
-  for Ln in Lines do
+  { WHY THE CAP NEEDED AN ALLOCATION RULE, not just a number (2026-09-13).
+
+    The pane posted the report's FIRST 2000 lines. The report is ordered by
+    file, and ~83% of a real ORM3 run is [info], so the 2000 slots filled with
+    naming hints from the earliest files. The owner's report of it was
+    "Messages window doesn't have the circular dependency report at all", and
+    that was exactly right: circular-uses sat at report line 29457 of 49242 and
+    never got a slot -- two architectural warnings lost to thirteen thousand
+    hints.
+
+    The rule is now COVERAGE FIRST: every rule that fired gets one row before
+    any rule gets a second, then the remainder fills worst-severity-first.
+
+    It lives in DragLint.Plugin.LintOutputParse rather than here because that
+    unit is ToolsAPI-free and has a console harness, and this one can never
+    have either. An allocation rule nobody can test is precisely how the
+    fan-out defect survived three sessions. }
+  Chosen:= SelectPaneRows(Lines, LINTALL_MSG_CAP, Total, RulesShown);
+  for var R: TPaneRow in Chosen do
   begin
-    P:= Pos('  [', Ln); { two spaces before "[severity]" separate location from the rest }
-    if P < 2 then Continue;
-    Inc(Total);
-    if Posted >= LINTALL_MSG_CAP then Continue;
-    Loc := Copy(Ln, 1, P - 1);
-    Rest:= Copy(Ln, P + 2, MaxInt);
-    C2:= LastDelimiter(':', Loc);
-    if C2 < 2 then Continue;
-    Col := StrToIntDef(Copy(Loc, C2 + 1, MaxInt), 0);
-    Loc2:= Copy(Loc, 1, C2 - 1);
-    C1:= LastDelimiter(':', Loc2);
-    if C1 < 2 then Continue;
-    Line := StrToIntDef(Copy(Loc2, C1 + 1, MaxInt), 0);
-    FName:= Copy(Loc2, 1, C1 - 1);
-    if (FName = '') or (Line <= 0) then Continue;
     if Grp <> nil then
     begin
       LineRef:= nil;
-      MS.AddToolMessage(FName, Rest, 'drag-lint', Line, Col, ParentRef, LineRef, Grp);
+      MS.AddToolMessage(R.FileName, R.Text, 'drag-lint', R.Line, R.Col, ParentRef, LineRef, Grp);
     end
     else
-      MS.AddToolMessage(FName, Rest, 'drag-lint', Line, Col);
+      MS.AddToolMessage(R.FileName, R.Text, 'drag-lint', R.Line, R.Col);
     Inc(Posted);
   end;
+
+  { SAY WHAT WAS LEFT OUT AND ON WHAT PRINCIPLE. A bare "capped" invites exactly
+    the conclusion the owner drew -- that a finding is missing because it does
+    not exist. }
   if Total > Posted then
-    MS.AddTitleMessage(Format('drag-lint: %d of %d findings posted as clickable messages (capped) -- full list in %s', [Posted, Total, AReportPath]))
+    MS.AddTitleMessage(Format('drag-lint: %d of %d findings posted (cap %d). All %d rule(s) that fired are represented, worst severity first -- full list in %s',
+                              [Posted, Total, LINTALL_MSG_CAP, RulesShown, AReportPath]))
   else if Posted > 0 then
     MS.AddTitleMessage(Format('drag-lint: %d clickable finding(s) -- double-click a line to jump to source.', [Posted]))
   else

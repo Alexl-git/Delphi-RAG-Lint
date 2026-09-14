@@ -16668,8 +16668,39 @@ begin
         else if Length(CycF) = 0 then
           OL.AppendLine(Format('  none detected across %d file(s) scanned.', [Length(FilePaths)]))
         else
+        begin
+          { THE DETAIL IS THE POINT OF THE SECTION (2026-09-13). Naming the units
+            in a cycle and then saying "extract the shared code" tells the reader
+            nothing they can act on -- the owner's report of this was exact: it
+            "mentions units, but not ways to fix". So each cycle now lists its
+            edges, which section each goes through, and the declarations that
+            actually cross. The interface edges are the ones holding the cycle
+            together and are marked; an implementation-only edge can be left
+            alone.
+
+            Recomputed here rather than carried on the finding because a finding
+            is a single parsed line and a newline in Message would corrupt every
+            consumer of that contract. Gated on Length(CycF) > 0, so a project
+            with no cycles -- almost all of them -- pays nothing. }
+          var Detailed: TArray<TCycleCoupling>:= nil;
+          try
+            Detailed:= CollectCircularUsesDetailed(Store);
+          except
+            on E: Exception do
+              OL.AppendLine(Format('  (could not compute the per-edge detail: %s: %s)', [E.ClassName, E.Message]));
+          end;
           for FF in CycF do
+          begin
             OL.AppendLine(Format('  %s:%d  %s', [FF.FilePath, FF.StartLine, FF.Message]));
+            for var DC: TCycleCoupling in Detailed do
+              if SameText(DC.Finding.FilePath, FF.FilePath) and (DC.Finding.StartLine = FF.StartLine) then
+              begin
+                for var DL: string in DC.Detail do OL.AppendLine(DL);
+                Break;
+              end;
+            OL.AppendLine('');
+          end;
+        end;
         OL.AppendLine('');
 
         for FF in ASurv do OL.AppendLine(Format('%s:%d:%d  [%s] %s: %s', [FF.FilePath, FF.StartLine, FF.StartCol, FF.Severity, FF.RuleId, FF.Message]));
@@ -17015,9 +17046,65 @@ begin
   end; // try
 end; // function
 
+{ WHY compile-check RESOLVES ITS OWN DB (2026-09-13).
+
+  The IDE plugin issues `compile-check <project.dproj> --format json` with no
+  --db, because every other verb it drives resolves the database from the
+  manifest. compile-check did not, so it hit NoDbResolved and exited 2 -- on
+  EVERY invocation, for a project whose DB `resolve-dbs --project` resolves
+  without complaint. The plugin logged `parsed=False E=0 W=0 H=0`, which is
+  indistinguishable from "your project compiles cleanly": auto-compile-on-save
+  had been silently dead, and the owner's own broken edit (a property naming a
+  getter he had just commented out) was reported by dcc and never shown.
+
+  Resolution uses ResolveReadDbs -- the SAME function resolve-dbs uses -- rather
+  than a second lookup that could disagree with it. A .dproj/.dpr/.dpk target is
+  the active project; anything else is an editor file. }
+function ResolveCompileCheckDb(const AArgs: TArgs; const ATarget: string): string;
+var
+  Manifest: TIndexManifest;
+  Paths   : TArray<string>;
+  Ext     : string        ;
+  ProjArg : string        ;
+  FileArg : string        ;
+begin
+  Result:= AArgs.DbPath;
+  if Result <> '' then Exit; { an explicit --db always wins }
+  if ATarget = '' then Exit;
+
+  Ext:= LowerCase(ExtractFileExt(ATarget));
+  ProjArg:= ''; FileArg:= '';
+  if (Ext = '.dproj') or (Ext = '.dpr') or (Ext = '.dpk') then ProjArg:= ATarget
+  else FileArg:= ATarget;
+  if AArgs.ProjectPath <> '' then ProjArg:= AArgs.ProjectPath;
+
+  try
+    if AArgs.WorkspaceConfig <> '' then
+      Manifest:= TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig),
+                   ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
+    else
+      Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    Paths:= ResolveReadDbs(Manifest, ProjArg, FileArg);
+  except
+    { A manifest that will not load is not a reason to throw away a compile that
+      already succeeded -- the caller wants dcc's answer, not ours. }
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, Format('compile-check: could not load the manifest (%s: %s) -- findings will not be cached.', [E.ClassName, E.Message]));
+      Exit('');
+    end;
+  end;
+
+  { The project DB is the one that owns compiler findings for this target. The
+    platform library DB can also come back here and must never be written to. }
+  for var P: string in Paths do
+    if TFile.Exists(P) and not ContainsText(ExtractFileName(P), 'library-') then Exit(P);
+end;
+
 function DoCompileCheck(const AArgs: TArgs): Integer;
 var
   Target   : string             ;
+  DbPath   : string             ;
   Store    : ISymbolStore       ;
   Res      : TCompileCheckResult;
   ErrCount : Integer            ;
@@ -17048,8 +17135,21 @@ begin
     else if SameText(F.Severity, 'Hint') then Inc(HintCount);
   end;
 
-  if NoDbResolved(AArgs.DbPath, 'compile-check') then Exit(2);
-  if TFile.Exists(AArgs.DbPath) then begin Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate; TCompileChecker.InsertFindings(Store, Res.Findings); end;
+  { THE DB IS A CACHE HERE, NOT THE PRODUCT -- so its absence is a warning, not
+    an exit. The old code ran the whole compile and then threw the findings away
+    with Exit(2) because a store to RECORD them in had not resolved. The caller
+    asked what dcc says; it can be told that whether or not we can cache it.
+    Failing here is fail-open in the worst way: the plugin read the empty output
+    as zero errors. }
+  DbPath:= ResolveCompileCheckDb(AArgs, Target);
+  if DbPath = '' then
+    Writeln(ErrOutput, 'compile-check: no database resolved for this target -- reporting findings without caching them. Pass --db to cache, or check "drag-lint resolve-dbs".')
+  else if TFile.Exists(DbPath) then
+  begin
+    Store:= TSQLiteSymbolStore.Create(DbPath);
+    Store.Migrate;
+    TCompileChecker.InsertFindings(Store, Res.Findings);
+  end;
 
   Fmt:= LowerCase(AArgs.Format);
 

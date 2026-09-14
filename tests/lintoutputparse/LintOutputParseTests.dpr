@@ -54,6 +54,14 @@ const
 var
   L, C: Integer;
   T, R: string;
+  { SelectPaneRows fixture state }
+  Rep       : TArray<string> ;
+  Rows      : TArray<TPaneRow>;
+  Total     : Integer        ;
+  RulesShown: Integer        ;
+  I, J      : Integer        ;
+  Dupes     : Integer        ;
+  Found     : Boolean        ;
 
 begin
   Writeln('-- findings must parse (positive controls) --');
@@ -87,6 +95,58 @@ begin
   Check('  BADCOL leaves L=0 (no half-set out-param)', L = 0);
   Check('UNCLOSED rejected', not TryParseFindingLine(UNCLOSED, L, C, T, R));
   Check('empty rejected',    not TryParseFindingLine('',       L, C, T, R));
+
+  Writeln;
+  Writeln('-- Messages-pane allocation (SelectPaneRows) --');
+  { THE DEFECT: the pane took the report's FIRST N lines. The report is ordered
+    by file and most of a real run is [info], so on ORM3 the 2000 slots filled
+    with hints from the earliest files and `circular-uses` -- 2 warnings at
+    report line 29457 of 49242 -- never appeared. Owner, 2026-09-13: "Messages
+    window doesn't have the circular dependency report at all."
+
+    The fixture reproduces that SHAPE in miniature: a pile of info rows first,
+    the rare warning last, and a cap smaller than the pile. }
+  SetLength(Rep, 0);
+  for I := 1 to 12 do
+    Rep := Rep + [Format('C:\P\uNoise.pas:%d:1  [info] public-field: Public field', [I])];
+  Rep := Rep + ['C:\P\uLate.pas:9:1  [warning] circular-uses: Circular unit dependency among 2 units'];
+  Rep := Rep + ['C:\P\uLate.pas:11:1  [error] syntax-error: broken'];
+
+  Rows := SelectPaneRows(Rep, 3, Total, RulesShown);
+
+  Check('counts every parseable finding, not just the posted ones', Total = 14);
+  Check('respects the cap', Length(Rows) = 3);
+
+  { THE ASSERTION THAT WOULD HAVE CAUGHT THE ORIGINAL DEFECT. Under first-N,
+    a cap of 3 returns three public-field rows and nothing else. }
+  Found := False;
+  for I := 0 to High(Rows) do
+    if Pos('circular-uses', Rows[I].Text) > 0 then Found := True;
+  Check('the RARE rule survives a cap smaller than the noise (the actual bug)', Found);
+
+  Found := False;
+  for I := 0 to High(Rows) do
+    if Pos('syntax-error', Rows[I].Text) > 0 then Found := True;
+  Check('so does the error', Found);
+
+  Check('every distinct rule got a row', RulesShown = 3);
+  Check('worst severity is presented first', Pos('[error]', Rows[0].Text) > 0);
+
+  { NARROWNESS -- a row must never be posted twice. Pass 1 and pass 2 walk the
+    same list in different orders, so identity has to survive the reordering. }
+  Dupes := 0;
+  for I := 0 to High(Rows) do
+    for J := I + 1 to High(Rows) do
+      if (Rows[I].Order = Rows[J].Order) then Inc(Dupes);
+  Check('no row is posted twice', Dupes = 0);
+
+  { POSITIVE CONTROL for the cap itself: given room, everything is returned.
+    Without this, "respects the cap" is satisfied by a function that returns
+    nothing at all. }
+  Rows := SelectPaneRows(Rep, 100, Total, RulesShown);
+  Check('positive control: a cap above the total returns everything', Length(Rows) = 14);
+  Check('positive control: unparseable lines are still rejected',
+        Length(SelectPaneRows([NOTE, 'plain text'], 10, Total, RulesShown)) = 0);
 
   Writeln;
   Writeln('-- severity mapping --');

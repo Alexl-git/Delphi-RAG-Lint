@@ -114,6 +114,26 @@ type
     class function CheckLayering(const AStore: ISymbolStore; const AConfigPath: string): TArray<TLintFinding>;
   end;
 
+type
+  /// <summary>One circular-uses cycle: the finding a tool consumes, plus the
+  /// human narrative explaining what to extract to break it.</summary>
+  /// <remarks>Detail lines are pre-indented and ready to print, one per coupling
+  /// edge, and are EMPTY when the cycle's symbols could not be attributed. They
+  /// belong in a report section, never in Finding.Message -- a finding line is a
+  /// single parsed record and a newline in it corrupts every consumer.</remarks>
+  TCycleCoupling = record
+    Finding: TLintFinding ;
+    Detail : TArray<string>;
+  end;
+
+/// <summary>Every circular unit dependency, each with the per-edge symbol
+/// detail that says WHICH declarations couple the units.</summary>
+/// <param name="AStore">An open, migrated symbol store; nil yields no cycles.</param>
+/// <returns>One entry per strongly-connected component of 2+ units.</returns>
+/// <remarks>Runs ONE Tarjan pass over the unit graph and is the single
+/// implementation; the finding-only view is a projection of this. Never raises.</remarks>
+function CollectCircularUsesDetailed(const AStore: ISymbolStore): TArray<TCycleCoupling>;
+
 implementation
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -263,9 +283,29 @@ end;
   an implementation-section 'uses' -- still a coupling smell worth surfacing.
   Distinct from interface-reference-cycle (which is about interface-section symbol
   references). Uses Tarjan's SCC over file ids; one finding per component. }
-function CollectCircularUses(const AStore: ISymbolStore): TArray<TLintFinding>;
+{ WHY THE DETAIL EXISTS, and why it is not on the finding line (2026-09-13).
+
+  The old report said a cycle existed, named its units, and advised "extract the
+  shared code into a new unit" -- which is correct and useless, because the one
+  thing the reader needs is WHICH code. The owner's words: "This report doesn't
+  say anything except that there is a circular dependence and mentions units,
+  but not ways to fix."
+
+  So each cycle now also reports, per edge, the symbols the source unit actually
+  uses from the target, and which edges are INTERFACE edges. That is the whole
+  answer: an implementation-only edge cannot hold a cycle together, so the units
+  to separate are the ones joined by an interface edge, and the symbols listed
+  against it are the extraction candidates.
+
+  It goes in the report's NARRATIVE SECTION rather than the finding message on
+  purpose. A finding line is a single parsed record --
+  `<path>:<line>:<col>  [sev] <rule>: <msg>` -- and the IDE plugin splits on the
+  two spaces before '['. A multi-line message would corrupt every consumer of
+  that contract. The report's own comment already draws this line: the section
+  owns the narrative, the finding line owns the tooling contract. }
+function CollectCircularUsesDetailed(const AStore: ISymbolStore): TArray<TCycleCoupling>;
 var
-  Findings  : TList<TLintFinding>          ;
+  Findings  : TList<TCycleCoupling>        ;
   UnitName  : TDictionary<Int64, string>   ; { fid -> display unit name }
   FileOfUnit: TDictionary<string, Int64>   ; { lower full unit name -> fid }
   FileOfStem: TDictionary<string, Int64>   ; { lower last-segment stem -> fid }
@@ -282,6 +322,116 @@ var
   OnStack   : TDictionary<Int64, Boolean>  ;
   Stack     : TList<Int64>                 ;
   Counter   : Integer                      ;
+  { fid -> (symbolId -> name) for units in a cycle. Cached because a 3-unit
+    cycle asks several sources about the same target. }
+  SymCache  : TDictionary<Int64, TDictionary<Int64, string>>;
+
+  function UnitNameOr(AFid: Int64): string;
+  begin
+    if not UnitName.TryGetValue(AFid, Result) then Result:= '<unit ' + IntToStr(AFid) + '>';
+  end;
+
+  { The symbols another unit can SEE. Implementation-section declarations are
+    excluded because they cannot be the reason a second unit uses this one --
+    listing them as extraction candidates would send the reader to code that is
+    already private. }
+  function TargetSymbols(AFid: Int64): TDictionary<Int64, string>;
+  var
+    D: TDictionary<Int64, string>;
+    S: TSymbol;
+  begin
+    if SymCache.TryGetValue(AFid, D) then Exit(D);
+    D:= TDictionary<Int64, string>.Create;
+    { Cached BEFORE the read so a raise cannot leak the dictionary -- the caller
+      in DoLintAll wraps this whole pass and reports the failure, which is the
+      honest outcome; swallowing it here would silently print a cycle whose
+      symbol list is empty for a reason nobody could see. }
+    SymCache.AddOrSetValue(AFid, D);
+    for S in AStore.FindSymbolsByFile(AStore.GetFilePath(AFid)) do
+      if (S.Name <> '') and not SameText(S.Section, 'implementation') then
+        D.AddOrSetValue(S.Id, S.Name);
+    Result:= D;
+  end;
+
+  { ONE LINE PER EDGE OF THE CYCLE: who depends on whom, through which section,
+    and exactly which declarations cross. The interface edges are the ones that
+    hold the cycle together, so they are the ones worth extracting from. }
+  function CouplingLines(const AComp: TList<Int64>): TArray<string>;
+  const
+    MAX_NAMES = 12; { a coupling wider than this is a design answer, not a list }
+  var
+    Ai, Bi: Integer               ;
+    A, B  : Int64                 ;
+    K, Nm : string                ;
+    Names : string                ;
+    Lst   : TList<Int64>          ;
+    Tgt   : TDictionary<Int64, string>;
+    Seen  : TStringList           ;
+    R     : TReference            ;
+    Shown : Integer               ;
+    AnyIntf: Boolean              ;
+  begin
+    Result := nil;
+    AnyIntf:= False;
+    for Ai:= 0 to AComp.Count - 1 do
+      for Bi:= 0 to AComp.Count - 1 do
+      begin
+        if Ai = Bi then Continue;
+        A:= AComp[Ai]; B:= AComp[Bi];
+        if not Adj.TryGetValue(A, Lst) then Continue;
+        if Lst.IndexOf(B) < 0 then Continue; { not an edge of this cycle }
+
+        K  := IntToStr(A) + '|' + IntToStr(B);
+        Tgt:= TargetSymbols(B);
+        Seen:= TStringList.Create;
+        try
+          Seen.CaseSensitive:= False;
+          Seen.Duplicates   := dupIgnore;
+          Seen.Sorted       := True;
+          for R in AStore.GetReferencesFromFile(A) do
+            if Tgt.TryGetValue(R.SymbolId, Nm) then Seen.Add(Nm);
+
+          Shown:= Seen.Count;
+          if Shown > MAX_NAMES then Shown:= MAX_NAMES;
+          Names:= '';
+          for var Ni: Integer:= 0 to Shown - 1 do
+          begin
+            if Names <> '' then Names:= Names + ', ';
+            Names:= Names + Seen[Ni];
+          end;
+          if Seen.Count > Shown then
+            Names:= Names + Format(', ... and %d more', [Seen.Count - Shown]);
+          { SAY SO rather than printing an empty list: an edge with no resolved
+            names is a real answer (a .dfm-only or unresolved coupling), and a
+            blank would read as "nothing to move". }
+          if Names = '' then
+            Names:= '(no resolved symbol reference -- .dfm-only or an unresolved name)';
+
+          if EdgeHasIntf.ContainsKey(K) then AnyIntf:= True;
+          Result:= Result + [Format('      %s -> %s  [%s uses]%s  needs: %s',
+            [UnitNameOr(A), UnitNameOr(B),
+             (if EdgeHasIntf.ContainsKey(K) then 'interface' else 'implementation'),
+             (if EdgeHasIntf.ContainsKey(K) then '  <-- BREAK HERE' else ''),
+             Names])];
+        finally
+          Seen.Free;
+        end;
+      end;
+
+    { THE ADVICE HAS TO MATCH THE EDGES JUST PRINTED. A first version of this
+      closed every cycle with "remove one INTERFACE edge" and was immediately
+      wrong on the real corpus: both ORM3 cycles turn out to be entirely
+      implementation-section, so there was no interface edge to remove and the
+      reader was being sent to look for one that does not exist. }
+    if Length(Result) = 0 then Exit;
+    if AnyIntf then
+      Result:= Result + ['      => break it at an edge marked BREAK HERE: move those declarations into a',
+                         '         new unit that both sides use. That is the only edge forcing the cycle.']
+    else
+      Result:= Result + ['      => every edge is implementation-section, so this COMPILES and is a coupling',
+                         '         smell only. To decouple, move the declarations listed above into a shared',
+                         '         unit; there is no interface edge here that must go.'];
+  end;
 
   procedure StrongConnect(V: Int64);
   var
@@ -377,7 +527,10 @@ var
           var Ln: Integer:= 1;
           UnitLine.TryGetValue(Anchor, Ln);
           F.StartLine:= Ln; F.StartCol:= 1; F.EndLine:= Ln; F.EndCol:= 1;
-          Findings.Add(F);
+          var CC: TCycleCoupling;
+          CC.Finding:= F;
+          CC.Detail := CouplingLines(Comp);
+          Findings.Add(CC);
           finally
             Sorted.Free;
           end;
@@ -396,7 +549,8 @@ var
 begin
   Result:= nil;
   if AStore = nil then Exit;
-  Findings  := TList<TLintFinding>.Create;
+  Findings  := TList<TCycleCoupling>.Create;
+  SymCache  := TDictionary<Int64, TDictionary<Int64, string>>.Create;
   UnitName  := TDictionary<Int64, string>.Create;
   FileOfUnit:= TDictionary<string, Int64>.Create;
   FileOfStem:= TDictionary<string, Int64>.Create;
@@ -478,9 +632,22 @@ begin
     EdgeHasIntf.Free;
     Stack.Free; OnStack.Free; LowLink.Free; Index.Free;
     UnitLine.Free; FileOfStem.Free; FileOfUnit.Free; UnitName.Free;
+    for var SD in SymCache.Values do SD.Free;
+    SymCache.Free;
     Findings.Free;
   end;
 end; // function
+
+{ The finding-only view. A projection, never a second implementation: two SCC
+  passes that could disagree is exactly the kind of divergence the report's
+  "both surfaces reconcile by construction" comment exists to prevent. }
+function CollectCircularUses(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  CC: TCycleCoupling;
+begin
+  Result:= nil;
+  for CC in CollectCircularUsesDetailed(AStore) do Result:= Result + [CC.Finding];
+end;
 
 { Shared by the two uses-edge rules below (global-only-uses-edge and
   uses-global-census). Hoisted out of the first one when the second arrived:
