@@ -290,7 +290,15 @@ Write-Host '-- check 6: no side effects' -ForegroundColor Cyan
 
 $ghost = Join-Path $scratch 'no-such-index.sqlite'
 $r = Run @('sql','--query','SELECT 1','--db',$ghost)
-Check 'a missing --db is a usage error' (($r.Code -eq 2) -and ($r.Err -match 'not found')) "exit $($r.Code)"
+# The wording moved on 2026-09-14 with the explicit-`--db` strictness sweep: the
+# old text was "database not found", it is now "--db #N of M does not exist:
+# <path>". This assertion was re-pointed rather than loosened -- it now demands
+# MORE than it did: the exit code, the ordinal, and the offending path by name,
+# because "not found" alone did not say WHICH database and that is the whole
+# reason the message exists.
+Check 'a missing --db is a usage error' `
+  (($r.Code -eq 2) -and ($r.Err -match 'does not exist') -and ($r.Err -match '#1 of 1') -and ($r.Err -match 'no-such-index\.sqlite')) `
+  "exit $($r.Code); stderr: $($r.Err)"
 # EXISTENCE IS NOT SUFFICIENCY, and its cousin: a read-only SQLite open still
 # CREATES the file. That once left a 4096-byte drag-lint.sqlite in an arbitrary
 # directory and reported it as a valid, empty index.

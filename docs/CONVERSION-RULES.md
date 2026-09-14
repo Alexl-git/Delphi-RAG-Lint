@@ -1,4 +1,4 @@
-﻿# Conversion Rules DSL (Track 3, Batch 1)
+# Conversion Rules DSL (Track 3, Batch 1)
 
 `drag-lint`'s component-conversion foundation: an **index-driven** way to plan a
 component/type migration (for example `TDBEdit` -> `TcxDBEdit`, or any
@@ -172,7 +172,7 @@ member_kind-based exclusion, the node's own reported `visibility` is
 untouched); `public` emits published+public leaves, including public fields.
 
 Exit codes: **0** ok; **1** qname does not resolve to a class in any db; **2**
-usage error / no readable db / invalid `--min-visibility` value.
+usage error / an explicit `--db` that does not exist / invalid `--min-visibility` value. A named `--db` that is missing is always exit 2 -- never a tree built from the remaining databases.
 
 ### 2. `convert-scaffold` -- auto-draft a rules file
 
@@ -239,7 +239,7 @@ the validator, so the draft round-trips clean through `convert-validate`.
 
 Exit codes: **0** success; **1** either type is unresolved in every db (the verb
 names it); **2** missing `--from`/`--to`, invalid `--surface` value (must be
-`dfm`\|`pas`), or no readable db.
+`dfm`\|`pas`), or an explicit `--db` that does not exist. Rules scaffolded from a narrowed corpus would be silently wrong, so a missing `--db` refuses outright.
 
 ### 3. `convert-validate` -- check a rules file
 

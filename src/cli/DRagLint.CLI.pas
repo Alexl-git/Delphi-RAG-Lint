@@ -898,6 +898,12 @@ begin
   Writeln('  accepted by "lint-all --db P --db L". Passing them the other way round made');
   Writeln('  doc-drift report a block no command could clear (fixed 2026-08-25).');
   Writeln('  Omit --db entirely and the manifest resolver supplies the full set in order.');
+  Writeln('  AN EXPLICIT --db MUST EXIST. If any path you name is not there the verb prints');
+  Writeln('  the path, its position (--db #2 of 3) and the repair on stderr and exits 2 --');
+  Writeln('  it never answers from the databases that happened to open. A narrowed answer is');
+  Writeln('  indistinguishable from a complete one, which is how a conversion rule gets');
+  Writeln('  validated against a corpus smaller than you asked for. Manifest-resolved runs');
+  Writeln('  (no --db) are unaffected: absent files are dropped there before the verb runs.');
   Writeln('');
   Writeln('Defaults:');
   Writeln('  --db   no default. A verb with no --db resolves its database from the');
@@ -3896,6 +3902,56 @@ begin
   Writeln('       or pass --db <file.sqlite> explicitly.');
 end;
 
+/// <summary>Refuses a run whose EXPLICIT --db list names a file that does not
+/// exist. Every missing path is reported -- ordinal, path, repair command -- on
+/// stderr; the caller must Exit(2) on False.</summary>
+/// <param name="AArgs">Parsed args. ONLY DbPaths (the explicit list) is read.</param>
+/// <param name="AVerb">Verb name for the message prefix, e.g. 'proptree'.</param>
+/// <returns>True when the run may proceed: no --db was given, or all exist.</returns>
+/// <remarks>
+/// <para>NoDbResolved's sibling: that one says WHY there is no database, this
+/// says WHICH named database is not there.</para>
+///
+/// <para>WHY IT READS AArgs.DbPaths AND NOT THE RESOLVED LIST. DbPaths is
+/// non-empty iff the user typed --db. A manifest-resolved run leaves it empty,
+/// and those are already filtered by TDbSelect.Resolve(ARequireExists=True), so
+/// manifest runs cannot reach this check -- by construction, not by care.</para>
+///
+/// <para>WHY STDERR. stdout is the DOCUMENT under --format json|sarif, and an
+/// error printed there corrupts what a consumer parses. Exit 2 is the
+/// machine-readable signal; the prose is for a human, who sees both streams.</para>
+///
+/// <para>WHY EVERY MISSING PATH AND NOT THE FIRST. Two typos should cost one run,
+/// not two.</para>
+///
+/// <para>The defect this closes: verbs did `if not TFile.Exists(Db) then
+/// Continue`, answering from the databases that happened to exist and exiting 0.
+/// `convert-scaffold --db app --db lib-typo` drafted rules from a corpus smaller
+/// than the operator named, convert-validate then passed them, and convert-apply
+/// rewrote a form on that basis -- each step reporting success.</para>
+/// </remarks>
+function ExplicitDbsExist(const AArgs: TArgs; const AVerb: string): Boolean;
+var
+  I    : Integer;
+  P    : string ;
+  Shown: string ;
+begin
+  Result:= True;
+  for I:= 0 to High(AArgs.DbPaths) do
+  begin
+    P:= AArgs.DbPaths[I];
+    if TFile.Exists(P) then Continue;
+    Result:= False;
+    if P = '' then Shown:= '(empty)' else Shown:= P;
+    Writeln(ErrOutput, Format('ERROR: %s: --db #%d of %d does not exist: %s',
+      [AVerb, I + 1, Length(AArgs.DbPaths), Shown]));
+    Writeln(ErrOutput, '       An explicit --db must be an existing index. Nothing was answered.');
+    Writeln(ErrOutput, '       Find it:  drag-lint resolve-dbs --project <x.dproj>   (or --in <x.pas>)');
+    Writeln(ErrOutput, Format('       Build it: drag-lint index --project <x.dproj> --db "%s"', [Shown]));
+  end;
+  if not Result then Flush(ErrOutput);
+end;
+
 function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string): string;
 var
   DbBase: string;
@@ -5426,6 +5482,7 @@ var
   JArr     : TJSONArray                  ;
   JO       : TJSONObject                 ;
 begin
+  if not ExplicitDbsExist(AArgs, 'resolve-uses') then Exit(2);
   if AArgs.Name = '' then
   begin
     Writeln('Usage: drag-lint resolve-uses --name <Symbol> [--in <file.pas>] ' + '[--kind K] [--json] [--db <file.sqlite>]');
@@ -5724,6 +5781,7 @@ var
   DbPath     : string;
   SeenPaths  : TDictionary<string, Boolean>;
 begin
+  if not ExplicitDbsExist(AArgs, 'query unit-usage') then Exit(2);
   PathsToScan:= ResolveConsumerDbs(AArgs);
   ExportSyms := ResolveUnitExportSurface(PathsToScan, AArgs.UnitName);
   { NO EXPORT SURFACE IS NOT NO ANSWER.
@@ -5903,6 +5961,7 @@ var
   Tallies    : TArray<TSymbolTally>;
   I          : Integer       ;
 begin
+  if not ExplicitDbsExist(AArgs, 'query unit-usage') then Exit(2);
   if AArgs.UnitName = '' then
   begin Writeln('ERROR: query unit-usage requires --unit <UnitName>'); Exit(2); end;
   { --in is now OPTIONAL, and its absence is a DIFFERENT QUESTION rather than an
@@ -6075,6 +6134,7 @@ var
   Tallies    : TArray<TNameTally>;
   I          : Integer       ;
 begin
+  if not ExplicitDbsExist(AArgs, 'query type-usage') then Exit(2);
   if AArgs.InFile = '' then
   begin Writeln('ERROR: query type-usage requires --in <file.pas>'); Exit(2); end;
 
@@ -6212,6 +6272,7 @@ var
   JArr       : TJSONArray             ;
   JObj       : TJSONObject            ;
 begin
+  if not ExplicitDbsExist(AArgs, 'query --text') then Exit(2);
   if AArgs.TextQuery = '' then begin Writeln('ERROR: query --text requires a phrase'); Exit(2); end;
   if AArgs.TextSubstring then Mode:= 'substring'
   else if AArgs.TextAnyOrder then Mode:= 'anyorder'
@@ -6365,6 +6426,7 @@ var
   Limit      : Integer        ;
   Term       : string         ;
 begin
+  if not ExplicitDbsExist(AArgs, 'query name-like') then Exit(2);
   Term:= Trim(AArgs.NameLike);
   if Term = '' then
   begin
@@ -6448,6 +6510,7 @@ var
   LastStore     : ISymbolStore                    ;
   EffSizeGuardMB: Integer                         ;
 begin
+  if not ExplicitDbsExist(AArgs, 'query') then Exit(2);
   // v0.57 Task 8: text-content search routes to its own handler.
   if AArgs.TextQuery <> '' then Exit(DoQueryText(AArgs));
   // substring/discovery search over NAMES (distinct from --name, whose
@@ -7944,6 +8007,7 @@ var
   Db   : string         ;
   UsedDb: string        ;
 begin
+  if not ExplicitDbsExist(AArgs, 'hover') then Exit(2);
   if AArgs.QName = '' then begin Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json]'); Exit(2); end;
 
   // v0.94.1 BUGFIX: hover must search ALL --db paths, not just one. The IDE (and
@@ -8047,6 +8111,7 @@ var
   DbToUse : string               ;
   D       : string               ;
 begin
+  if not ExplicitDbsExist(AArgs, 'wiring') then Exit(2);
   { v8: resolve the DB like query/hover -- explicit --db if given, else
     manifest-driven. Fixes projects whose index is NOT named <Project>.sqlite
     beside the .dproj (e.g. ORM3 -> C:\Projects\DB\ORM3\drag-lint.sqlite). Use the
@@ -8403,6 +8468,7 @@ var
   L    : TImpactLevel;
   DeclO: TJSONObject ;
 begin
+  if not ExplicitDbsExist(AArgs, 'usages') then Exit(2);
   if AArgs.Name = '' then begin Writeln('Usage: drag-lint usages --name <X> ' + '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json]'); Exit(2); end;
   Width:= LowerCase(AArgs.Width);
   if Width = '' then Width:= 'narrow';
@@ -10755,6 +10821,7 @@ var
     start reporting markers in files the run deliberately does not report on. }
   ScannedFiles: TArray<string>              ;
 begin
+  if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
     lint walk never preprocessed at ALL -- Preprocess had three production
@@ -12026,6 +12093,7 @@ var
   SourceCount : Integer  ;
   RootPatLower: string   ;
 begin
+  if not ExplicitDbsExist(AArgs, 'uses-report') then Exit(2);
   Result:= 0;
 
   if AArgs.Output = '' then begin Writeln(ErrOutput, 'uses-report: --output <path.csv> is required'); Exit(2); end;
@@ -12281,6 +12349,7 @@ var
   Output: string       ;
   i     : Integer      ;
 begin
+  if not ExplicitDbsExist(AArgs, 'deps-report') then Exit(2);
   Result:= 0;
   Stores:= nil;
   try
@@ -13292,6 +13361,7 @@ var
   end;
 
 begin
+  if not ExplicitDbsExist(AArgs, 'sql') then Exit(2);
   { ---- the statement: exactly one source ---------------------------------- }
   SqlText:= AArgs.SqlQuery;
   if (SqlText <> '') and (AArgs.InFile <> '') then
@@ -14006,6 +14076,7 @@ var
   Fmt     : string                ;
   Dbs     : TArray<string>        ;
 begin
+  if not ExplicitDbsExist(AArgs, 'typeat') then Exit(2);
   Pos:= AArgs.Position;
   if Pos = '' then begin Writeln('Usage: drag-lint typeat <file>:<line>:<col> [--db <path> ...] ' + '[--format text|json]'); Exit(2); end;
 
@@ -15067,6 +15138,7 @@ function DoFindUnit(const AArgs: TArgs): Integer;
 var
   Edits: TArray<TTextEdit>; ResolvedUnit: string; Already: Boolean;
 begin
+  if not ExplicitDbsExist(AArgs, 'find-unit') then Exit(2);
   if (AArgs.Name = '') or (AArgs.InFile = '') then
   begin Writeln('ERROR: find-unit needs --name <Symbol> --in <file>'); Exit(2); end;
 
@@ -15584,6 +15656,7 @@ var
   Created  : Boolean                     ;
   I        : Integer                     ;
 begin
+  if not ExplicitDbsExist(AArgs, 'exceptions-sync') then Exit(2);
   Dbs:= ResolveConsumerDbs(AArgs);
   ProjectDb:= '';
   for var D in Dbs do
@@ -15974,6 +16047,7 @@ var
   end;
 
 begin
+  if not ExplicitDbsExist(AArgs, 'lint-all') then Exit(2);
   TailPhase:= 0;
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
@@ -17140,6 +17214,7 @@ var
   Sb       : TStringBuilder     ;
   FilePath : string             ;
 begin
+  if not ExplicitDbsExist(AArgs, 'compile-check') then Exit(2);
   Target:= AArgs.Target;
   if Target = '' then Target:= AArgs.QName; // fallback: --qname used as target
   if Target = '' then begin Writeln('Usage: drag-lint compile-check <target.dproj or target.pas> ' + '[--db PATH] [--format json|text]'); Exit(2); end;
@@ -19833,6 +19908,7 @@ var
   Store   : ISymbolStore        ;
   Findings: TArray<TLintFinding>;
 begin
+  if not ExplicitDbsExist(AArgs, 'check-ast') then Exit(2);
   if AArgs.Target = '' then begin Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--format text|json]'); Exit (2 ); end;
   if not TFile.Exists(AArgs.Target) then begin Writeln('ERROR: file not found: ', AArgs.Target); Exit(2); end;
   if NoDbResolved(AArgs.DbPath, 'check-ast') then Exit(2);
@@ -20754,6 +20830,7 @@ var
   end;
 
 begin
+  if not ExplicitDbsExist(AArgs, 'proptree') then Exit(2);
   if AArgs.QName = '' then
   begin Writeln('Usage: drag-lint proptree --qname X [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]'); Exit(2); end;
 
@@ -21000,6 +21077,7 @@ var
   end;
 
 begin
+  if not ExplicitDbsExist(AArgs, 'convert-validate') then Exit(2);
   if AArgs.RulesFile = '' then
   begin Writeln('Usage: drag-lint convert-validate --rules FILE [--from FromType] [--to ToType] [--print-parsed] [--db PATH ...]'); Exit(2); end;
   if not TFile.Exists(AArgs.RulesFile) then
@@ -21103,6 +21181,7 @@ var
   end;
 
 begin
+  if not ExplicitDbsExist(AArgs, 'convert-reemit') then Exit(2);
   if (AArgs.FromBlockFile = '') or (AArgs.RulesFile = '') or
      (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
   begin
@@ -21435,6 +21514,7 @@ var
   UTo     : string        ;
   Header  : string        ;
 begin
+  if not ExplicitDbsExist(AArgs, 'convert-scaffold') then Exit(2);
   if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
   begin Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--out FILE] [--surface dfm|pas] --db PATH [--db ...]'); Exit(2); end;
 
@@ -21840,6 +21920,7 @@ var
   end;
 
 begin
+  if not ExplicitDbsExist(AArgs, 'convert-apply') then Exit(2);
   UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
   JCtx   := Default(TApplyJsonCtx);
   JCtx.Mode:= if AArgs.Apply then 'apply' else 'dry-run';
@@ -22114,6 +22195,7 @@ var
   end; // procedure
 
 begin
+  if not ExplicitDbsExist(AArgs, 'reverse-calltree') then Exit(2);
   if AArgs.QName = '' then
   begin Writeln('Usage: drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH'); Exit(2); end;
 
@@ -22336,6 +22418,7 @@ var
   end; // procedure
 
 begin
+  if not ExplicitDbsExist(AArgs, 'butterfly') then Exit(2);
   if AArgs.QName = '' then
   begin Writeln('Usage: drag-lint butterfly --qname X [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH'); Exit(2); end;
 
@@ -23093,6 +23176,7 @@ var
   Csv    : string;
   P      : string;
 begin
+  if not ExplicitDbsExist(AArgs, 'forms-csv') then Exit(2);
   DbPaths:= ResolveConsumerDbs(AArgs);
   if Length(DbPaths) = 0 then begin Writeln(ErrOutput, 'forms-csv: need --db <index.sqlite>'); Exit(2); end;
   for P in DbPaths do
@@ -26155,6 +26239,12 @@ begin
         end;
       end;
       for var ServeDb in DbList do SizeGuardCheck(ServeDb, ServeSGMB, Args.Force32);
+      { Before Create, not after: TSQLiteSymbolStore opens the path for write, and
+        SQLite CREATES an empty database for one that is not there. So a typo in an
+        MCP config used to manufacture a brand-new, authoritative-looking, entirely
+        empty index -- which then answers "nothing found" to every question an agent
+        asks, convincingly and forever. }
+      if not ExplicitDbsExist(Args, 'serve') then Exit(2);
       var Server:= DRagLint.MCP.Server.TMCPServer.Create(DbList);
       try
         Server.Run;

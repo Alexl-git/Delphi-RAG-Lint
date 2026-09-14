@@ -118,6 +118,13 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` |
 | Repair what the linter can repair | `drag-lint lint-all --db <db> --fix` (preview), then `--fix --apply` |
 
+> **An explicit `--db` must exist.** If any path you pass is not there, the verb
+> names it (with its position, `--db #2 of 3`) on stderr and exits 2 -- it never
+> answers from the databases that happened to open. A narrowed answer is
+> indistinguishable from a complete one. Omit `--db` and the manifest resolver
+> supplies the set, dropping absent files itself.
+
+
 **The traps, because each one turns a correct command into a silent zero:**
 
 * `find-callers` matches the **bare member name**. `--name TFoo.Bar` returns 0;

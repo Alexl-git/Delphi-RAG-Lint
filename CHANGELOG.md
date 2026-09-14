@@ -3,6 +3,42 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### BREAKING: an explicit `--db` that does not exist now refuses the run
+
+Most verbs did `if not TFile.Exists(Db) then Continue` -- they dropped a `--db`
+the caller had named, answered from whatever remained, and exited 0 with nothing
+on either stream. `convert-scaffold --db app --db lib-typo` drafted rules from a
+corpus smaller than the operator asked for, `convert-validate` then passed them,
+and `convert-apply` rewrote a form on that basis, each step reporting success.
+
+Reported by the converter team against `proptree`; an audit found **40 sites, 31
+needing the change**, including three `query` subcommands -- so `query` was not
+self-consistent -- and:
+
+* **`lint <file> --db <missing>` silently dropped every store-backed rule and
+  reported FEWER findings.** Measured on `DRagLint.CLI.pas`: 429 findings with a
+  real index, 422 with a missing one, identical exit code, silence on both
+  streams. "I ran the linter and it was clean" could be false for an invisible
+  reason.
+* **`lint-all` and `serve` CREATED the database they were told did not exist** --
+  SQLite makes an empty file for a path opened for write, so a typo manufactured
+  a brand-new, authoritative-looking, entirely empty index that then answered
+  "nothing found" convincingly.
+
+Now: every missing path is named on **stderr** with its position (`--db #2 of 3`)
+and the repair command, stdout stays empty, and the verb exits 2. All 28 verbs
+route through one helper, `ExplicitDbsExist`, so strictness cannot drift per-verb.
+
+**Manifest-resolved runs (no `--db`) are unaffected by construction** -- the
+helper reads only the explicit list, and `TDbSelect.Resolve(ARequireExists=True)`
+already dropped absent files there.
+
+Errors move from stdout to stderr for `query` and `query --text`, which were the
+two strict verbs writing to stdout. stdout is the document under
+`--format json|sarif`; **exit 2 is the machine-readable signal, not the prose.**
+
 ## v1.11.0-alpha -- 2026-09-11
 
 ### Tier-3 compile: 382 s -> 30.1 s on a 207-dependent unit

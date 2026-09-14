@@ -2335,7 +2335,7 @@
 >   them" tree with call sites (`unit:line`) and cycle markers. `drag-lint reverse-calltree
 >   --qname X [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH` (repeat `--db`
 >   for multi-index; first DB that resolves the qname wins). **Exit-code contract:** `0` = ok,
->   `1` = qname not resolved in any given `--db`, `2` = usage error or no readable `--db`.
+>   `1` = qname not resolved in any given `--db`, `2` = usage error, or an explicit `--db` that does not exist (the verb refuses; it never answers from the ones that opened).
 >   `--format json` emits schema `reverse-calltree/1`. Engine `src/report/DRagLint.Report.RCallTree.pas`
 >   (pure, reusable at depth=1 for a future AutoDoc "called by" line). `TResolvedCaller` gained
 >   `CallSiteLine` (additive field, zero blast radius on existing consumers). **CLI-only by

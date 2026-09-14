@@ -44,6 +44,12 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` |
 | Repair what the linter can repair | `drag-lint lint-all --db <db> --fix` (preview), then `--fix --apply` |
 
+> **Pass only databases `resolve-dbs` printed.** An explicit `--db` that does not
+> exist is exit 2, never a narrower answer: the verb names the path and its
+> position on stderr and returns nothing. Match on the EXIT CODE, not the prose.
+> Omitting `--db` is always safe -- the manifest resolver drops absent files.
+
+
 **The traps, because each one turns a correct command into a silent zero:**
 
 * `find-callers` matches the **bare member name**. `--name TFoo.Bar` returns 0;

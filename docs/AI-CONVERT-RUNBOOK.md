@@ -1,4 +1,4 @@
-﻿# AI Runbook: Converting a Delphi Component with `drag-lint convert-apply`
+# AI Runbook: Converting a Delphi Component with `drag-lint convert-apply`
 
 Audience: an AI coding agent (or a developer driving one) asked to convert a
 Delphi component from one type to another on a real form -- for example
@@ -160,7 +160,7 @@ drag-lint convert-validate --rules convert.rules \
 
 Exit **0** = all `#link`/`#default` paths resolve (literal `???` stubs are
 tolerated). Exit **1** = a path is wrong -- fix it before applying. Exit **2** =
-bad args / no readable DB. Add `--print-parsed` to see how each line parsed.
+bad args, or an explicit `--db` that does not exist. Every `--db` you pass must be on this box -- `resolve-dbs --platform <p>` lists them; a wrong path is exit 2, never a narrower result. Add `--print-parsed` to see how each line parsed.
 
 **Do not run `convert-apply` until `convert-validate` exits 0.**
 
