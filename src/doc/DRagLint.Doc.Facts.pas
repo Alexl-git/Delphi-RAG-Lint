@@ -1354,6 +1354,18 @@ type
 
     Third unit to hit "a text scan cannot tell code from comment"; see
     DRagLint.Lint.SharedUnit's header, which argues it at length for dl:shared. }
+
+  /// <summary>What the INDEX knows a bare name to be, for the one raise shape
+  /// a text scanner cannot settle.</summary>
+  /// <remarks>rnkUnknown is a real third answer and must not be folded into
+  /// either other value: the RTL's own exception classes are absent from a
+  /// project-scoped index, so "not found" has to keep the cast reading rather
+  /// than suppress the tag.</remarks>
+  TRaiseNameKind = (rnkUnknown, rnkType, rnkRoutine);
+
+  /// <summary>Answers <see cref="TRaiseNameKind"/> for one bare name.</summary>
+  TRaiseNameKindFunc = reference to function(const AName: string): TRaiseNameKind;
+
   TBodyScanState = record
     InBrace    : Integer; { brace-comment depth }
     InStarParen: Boolean; { star-paren comment  }
@@ -1369,6 +1381,30 @@ type
       about what a re-raise names. }
     HandlerVars : TArray<string>;
     HandlerTypes: TArray<string>;
+    { v(2026-09-15, INBOX-doc-raise-shapes-still-unresolved shape 3): a handler
+      whose binding is WRAPPED --
+
+          on E:
+            Exception do
+
+      -- was read on one line only, so it bound nothing and the `raise E` that
+      followed then emitted no tag at all. These three fields make the binder
+      resumable across lines, the same pending-state pattern CollectRaiseDetail
+      already uses for a wrapped constructor, budget included. OnStage: 0 none,
+      1 awaiting the variable, 2 awaiting the ':', 3 awaiting the type. }
+    OnStage : Integer;
+    OnVar   : string ;
+    OnBudget: Integer;
+    { v(2026-09-15, shape 2): the ONE question this text scanner cannot answer
+      from text. `raise Ident(...)` is either a CAST to a type
+      (`raise Exception(AcquireExceptionObject)`) or a CALL to a factory
+      (`raise MakeError(42)`), and the two are syntactically identical. The
+      index can tell them apart and MineRaises already holds a store, so the
+      lookup is handed in here rather than the scanner growing a store
+      dependency. nil (the Default state, and every non-doc caller of the
+      shared scan) means "cannot ask", which keeps the historical cast reading
+      -- see ResolveRaiseClass for why unknown must NOT become silence. }
+    NameKind: TRaiseNameKindFunc;
   end;
 
 function IsCallSkipWord(const AWord: string): Boolean;
@@ -1599,25 +1635,89 @@ end;
   so a name bound twice (`on E: EAbort do ... on E: EInOutError do ...`) is
   resolved to whichever binding is most recent at the raise -- which, in
   source order, is the enclosing handler's. }
-procedure RecordHandlerBinding(const ALine: string; AIdx: Integer; var AScan: TBodyScanState);
+const
+  { A wrapped handler is one line of wrap in practice, and the budget exists for
+    the same reason RAISE_DETAIL_BUDGET_LINES does: without it an `on` that
+    never completes -- the last line of a body, a branch the preprocessor took
+    away -- stays armed and binds whatever identifier turns up pages later. }
+  HANDLER_WRAP_BUDGET_LINES = 2;
+
+{ The resumable half of `on <Var>: <Type> do`. Consumes as much of the binding
+  as this line carries, starting at AIdx, and leaves AScan.OnStage non-zero when
+  the line ran out mid-binding so the next line can finish it.
+
+  Every path that is NOT "the line ended" disarms: a type-only handler
+  (`on Exception do`, no colon), a dotted variable, an unparseable follow. That
+  matters more than it looks -- staying armed on a shape that will never
+  complete is how a bounded repair turns into a scanner that binds nonsense. }
+procedure AdvanceHandlerBinding(const ALine: string; var AIdx: Integer; var AScan: TBodyScanState);
 var
-  N   : Integer;
-  V, T: TArray<string>;
+  N: Integer;
+  C: TArray<string>;
 begin
   N:= Length(ALine);
-  while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
-  if (AIdx > N) or (not IsIdentStart(ALine[AIdx])) then Exit;
-  V:= ReadIdentChain(ALine, AIdx);
-  if Length(V) <> 1 then Exit;
-  while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
-  if (AIdx > N) or (ALine[AIdx] <> ':') then Exit;
-  Inc(AIdx);
-  while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
-  if (AIdx > N) or (not IsIdentStart(ALine[AIdx])) then Exit;
-  T:= ReadIdentChain(ALine, AIdx);
-  if Length(T) = 0 then Exit;
-  AScan.HandlerVars := AScan.HandlerVars  + [V[0]];
-  AScan.HandlerTypes:= AScan.HandlerTypes + [T[High(T)]];
+  while AScan.OnStage > 0 do
+  begin
+    while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
+    if AIdx > N then Exit; { the line ran out -- stay armed, see ResumeHandlerBinding }
+    case AScan.OnStage of
+      1: { awaiting the handler VARIABLE }
+        begin
+          if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= 0; Exit; end;
+          C:= ReadIdentChain(ALine, AIdx);
+          if Length(C) <> 1 then begin AScan.OnStage:= 0; Exit; end;
+          AScan.OnVar  := C[0];
+          AScan.OnStage:= 2;
+        end;
+      2: { awaiting the ':' -- `on Exception do` binds nothing }
+        begin
+          if ALine[AIdx] <> ':' then begin AScan.OnStage:= 0; Exit; end;
+          Inc(AIdx);
+          AScan.OnStage:= 3;
+        end;
+    else { awaiting the TYPE (last segment of a dotted one) }
+      begin
+        if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= 0; Exit; end;
+        C:= ReadIdentChain(ALine, AIdx);
+        AScan.OnStage:= 0;
+        if Length(C) = 0 then Exit;
+        AScan.HandlerVars := AScan.HandlerVars  + [AScan.OnVar];
+        AScan.HandlerTypes:= AScan.HandlerTypes + [C[High(C)]];
+      end;
+    end; // case
+  end; // while
+end;
+
+{ Called at the START of every body line by BOTH raise scanners, so MineRaises
+  and MineRaisesDetailed cannot disagree about a wrapped handler any more than
+  they can about a re-raise. Ages the budget first, so it counts LINES SINCE the
+  `on` rather than lines scanned.
+
+  KNOWN LIMIT, stated rather than hidden: this runs before the line's comment
+  state is advanced, so a binding wrapped ACROSS a brace comment could read the
+  comment's first word as the type. The budget bounds it to two lines and the
+  shape is vanishingly rare; a fix would mean interleaving the binder with
+  AdvanceCommentState, which is a bigger change than the defect. }
+procedure ResumeHandlerBinding(const ALine: string; var AScan: TBodyScanState);
+var
+  Idx: Integer;
+begin
+  if AScan.OnStage = 0 then Exit;
+  Dec(AScan.OnBudget);
+  if AScan.OnBudget < 0 then begin AScan.OnStage:= 0; Exit; end;
+  Idx:= 1;
+  AdvanceHandlerBinding(ALine, Idx, AScan);
+end;
+
+procedure RecordHandlerBinding(const ALine: string; AIdx: Integer; var AScan: TBodyScanState);
+var
+  Idx: Integer;
+begin
+  AScan.OnStage := 1;
+  AScan.OnVar   := '';
+  AScan.OnBudget:= HANDLER_WRAP_BUDGET_LINES;
+  Idx:= AIdx; { a LOCAL copy -- the callers step past the word `on` themselves }
+  AdvanceHandlerBinding(ALine, Idx, AScan);
 end;
 
 { The CLASS a `raise` names, or '' when the source does not say. AIdx is the
@@ -1627,13 +1727,37 @@ end;
 
     raise EFoo.Create(...)                 -> EFoo      (segment before the ctor)
     raise System.SysUtils.Exception.Create -> Exception (was: System)
+    raise Self.FErr;                       -> ''        (was: Self)
     raise Exception(AcquireExceptionObject) -> Exception (a cast; unchanged)
+    raise MakeError(42);                   -> ''        (was: MakeError)
     raise E;   with `on E: EConvertError`  -> EConvertError (was: E)
     raise Err; no binding                  -> ''        (was: Err)
 
-  The last arm is "absence over wrong": a bare identifier with no `(` and no
-  member access is a variable holding an object, and without a handler binding
-  its class is not stated anywhere the scanner can see. }
+  The '' arms are "absence over wrong" -- a generated <exception cref> naming a
+  class that does not exist is a FABRICATION, and this repo treats that as worse
+  than silence.
+
+  THE DOTTED ARM NEEDS THE `(`. `raise EFoo.Create(...)` and `raise Self.FErr`
+  are the same chain shape and only the parenthesis separates them: the first
+  ends in a CONSTRUCTOR (so the segment before it is the class), the second ends
+  in a FIELD (so the whole chain is a variable and its class is stated nowhere
+  the scanner can see). Taking the second-to-last segment unconditionally is
+  what emitted cref="Self".
+
+  COST OF THAT, STATED: `raise EFoo.Create;` -- a parameterless constructor
+  written without parentheses -- now yields '' where it used to yield EFoo.
+  Measured before choosing this rule: this repo has 49 dotted raises and ALL 49
+  carry the parenthesis, so the shape is unobserved here. It is the honest
+  direction anyway (a missing tag, not a wrong one), and it is what the filed
+  note prescribes.
+
+  THE SINGLE-SEGMENT-WITH-PAREN ARM NEEDS THE INDEX. `raise Ident(...)` is a
+  cast or a factory call and text cannot say which, so the store answers when
+  one was handed in. UNKNOWN KEEPS THE CAST READING, deliberately: a
+  project-scoped index does not contain System.SysUtils.Exception, and turning
+  "I have never heard of it" into silence would delete the correct tag from
+  every `raise Exception(AcquireExceptionObject)` in the corpus. Only a name the
+  index positively knows as a ROUTINE, and not as a type, suppresses. }
 function ResolveRaiseClass(const ALine: string; AIdx: Integer; const AScan: TBodyScanState): string;
 var
   Segs: TArray<string>;
@@ -1643,9 +1767,17 @@ begin
   N:= Length(ALine);
   Segs:= ReadIdentChain(ALine, AIdx);
   if Length(Segs) = 0 then Exit;
-  if Length(Segs) >= 2 then Exit(Segs[High(Segs) - 1]);
   while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
-  if (AIdx <= N) and (ALine[AIdx] = '(') then Exit(Segs[0]);
+  if Length(Segs) >= 2 then
+  begin
+    if (AIdx <= N) and (ALine[AIdx] = '(') then Exit(Segs[High(Segs) - 1]);
+    Exit; { a dotted chain ending in a field -- a variable, not a class }
+  end;
+  if (AIdx <= N) and (ALine[AIdx] = '(') then
+  begin
+    if Assigned(AScan.NameKind) and (AScan.NameKind(Segs[0]) = rnkRoutine) then Exit;
+    Exit(Segs[0]);
+  end;
   for var B:= High(AScan.HandlerVars) downto 0 do
     if SameText(AScan.HandlerVars[B], Segs[0]) then Exit(AScan.HandlerTypes[B]);
 end;
@@ -1656,6 +1788,11 @@ var
   Ident      : string ;
   LineEnded  : Boolean;
 begin
+  { A handler binding left half-read at the end of the previous line finishes
+    here, before anything else on this line is looked at -- so `on E:` /
+    `Exception do` / `raise E` binds before the raise is resolved. }
+  ResumeHandlerBinding(ALine, AState);
+
   I:= 1;
   N:= Length(ALine);
   while I <= N do
@@ -1840,6 +1977,9 @@ begin
     Dec(AState.Budget);
     if AState.Budget < 0 then DropPending;
   end;
+  { ...and so does a handler binding left half-read, for the same reason and by
+    the same rule as CollectRaiseClass. }
+  ResumeHandlerBinding(ALine, AState.Scan);
 
   I := 1;
   N := Length(ALine);
@@ -2473,6 +2613,31 @@ begin
   AConstructor:= AConstructor or SignatureIsConstructor(Line);
 end;
 
+{ The store lookup ResolveRaiseClass needs for `raise Ident(...)`, wrapped so
+  both miners hand in the SAME answer and cannot drift.
+
+  A TYPE WINS OVER A ROUTINE when a name is both, because the cast reading is
+  the one that yields a usable cref. FindSymbolsByExactName, not a kind-filtered
+  query, so one call answers both halves. }
+function MakeRaiseNameKindResolver(const AStore: ISymbolStore): TRaiseNameKindFunc;
+begin
+  if AStore = nil then Exit(nil);
+  Result:=
+    function(const AName: string): TRaiseNameKind
+    var
+      SawRoutine: Boolean;
+    begin
+      Result    := rnkUnknown;
+      SawRoutine:= False;
+      for var S in AStore.FindSymbolsByExactName(AName) do
+      begin
+        if S.Kind in [skClass, skInterface, skRecord, skTypeAlias] then Exit(rnkType);
+        if S.Kind in [skProcedure, skFunction, skMethod] then SawRoutine:= True;
+      end;
+      if SawRoutine then Result:= rnkRoutine;
+    end;
+end;
+
 class function TDocFactsBuilder.MineRaises(const AStore: ISymbolStore;
   const ASym: TSymbol): TArray<string>;
 begin
@@ -2488,6 +2653,7 @@ begin
     RaiseSet.CaseSensitive:= False;
     var Src2: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error }
     var RaiseState: TBodyScanState:= Default(TBodyScanState); { see TBodyScanState }
+    RaiseState.NameKind:= MakeRaiseNameKindResolver(AStore);  { cast vs factory call }
     for var Ln2:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src2)) do
       CollectRaiseClass(Src2[Ln2 - 1], RaiseSet, RaiseState);
     Result:= RaiseSet.ToStringArray;
@@ -2508,6 +2674,7 @@ begin
     var Src: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error }
     var State: TRaiseDetailState:= Default(TRaiseDetailState);
     State.Pending:= -1; { Default() would leave 0, which names a real entry }
+    State.Scan.NameKind:= MakeRaiseNameKindResolver(AStore); { as MineRaises -- the two must agree }
     for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src)) do
       CollectRaiseDetail(Src[Ln - 1], Acc, State);
     Result:= Acc.ToArray;
