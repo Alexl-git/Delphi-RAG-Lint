@@ -539,9 +539,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.Regions.EscXml, Format, StartsStr</para>
+    /// <para>Calls: Copy, DRagLint.Doc.Regions.EscXml, Format, StartsStr, StringReplace</para>
     /// <para>Returns: Lines.ToStringArray</para>
-    /// <para>Complexity: 40 (cyclomatic, outer body), 197 lines (full implementation)</para>
+    /// <para>Complexity: 41 (cyclomatic, outer body), 215 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
@@ -609,8 +609,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Doc.Regions.DropAlreadyPresentPhrases, DRagLint.Doc.Regions.EmitHarvestedRemarks, DRagLint.Doc.Regions.HasMalformedManagedFence, DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor, DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody, DRagLint.Doc.Regions.TDocRegions.IsManagedDesc, DRagLint.Doc.Regions.TDocRegions.IsManagedText, DRagLint.Doc.Regions.TDocRegions.MergeComment.ClassifyParamAction, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineException (+27 more)</para>
-    /// <para>Complexity: 86 (cyclomatic, outer body), 1394 lines (full implementation)</para>
+    /// <para>Calls: ContainsText, DRagLint.Doc.Regions.DropAlreadyPresentPhrases, DRagLint.Doc.Regions.EmitHarvestedRemarks, DRagLint.Doc.Regions.HasMalformedManagedFence, DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor, DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody, DRagLint.Doc.Regions.TDocRegions.IsManagedDesc, DRagLint.Doc.Regions.TDocRegions.IsManagedText, DRagLint.Doc.Regions.TDocRegions.MergeComment.ClassifyParamAction, DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineException (+30 more)</para>
+    /// <para>Complexity: 87 (cyclomatic, outer body), 1418 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.DropAlreadyPresentPhrases"/>
     /// <seealso cref="DRagLint.Doc.Regions.EmitHarvestedRemarks"/>
@@ -2497,6 +2497,148 @@ begin
   end;
 end;
 
+{ v(2026-09-15, PLAN-autofix-campaign 4.2 defect 3): THE AUTHOR'S OWN LINES.
+
+  The provenance contract (docs\AI-USAGE.md) says a tag without the marker is
+  never touched -- "not its text, not its whitespace". The repair path rebuilt
+  every preserved tag from the PARSED model: the parser collapses blank runs
+  (TDocCommentParser.CollapseWhitespace, shared with the indexer and not to be
+  changed for this), EmitTagged trims every continuation line, and the <param>
+  arm writes the SIGNATURE's spelling of the name. The words survived; the
+  bytes did not. BASICSF.CopyRecords came back with `Count` re-spelled to
+  `COunt` and its summary reflowed -- a delete+insert the owner has to review
+  for nothing, 559 files' worth of it on ORM3.
+
+  Whitespace collapsed to one blank, then trimmed; blanks touching a tag
+  bracket are dropped too, so `<param name="X"> (T) </param>` (BASICSF's
+  shape, measured) compares equal to the parser's trimmed `<param
+  name="X">(T)</param>`, and `<seealso cref="X" />` to the emitter's
+  `<seealso cref="X"/>`. Every difference this erases is whitespace the
+  parser itself already discards, so the compare can never call two
+  DIFFERENT texts equal. Used ONLY to decide whether two spellings say the
+  same thing -- never to produce output. }
+function CollapseForCompare(const S: string): string;
+begin
+  Result:= TRegEx.Replace(S, '\s+', ' ');
+  Result:= StringReplace(Result, ' />', '/>', [rfReplaceAll]);
+  Result:= StringReplace(Result, '> ', '>', [rfReplaceAll]);
+  Result:= StringReplace(Result, ' <', '<', [rfReplaceAll]);
+  Result:= Trim(Result);
+end;
+
+{ The raw lines (as the scanner left them: everything after the three slashes,
+  leading blank included) of the occurrence of <ATag ...> in ARawBlock that
+
+    (a) OWNS its lines -- opens at the start of a line and closes at the end
+        of one, so no other tag shares a line with it; and
+    (b) SAYS THE SAME THING the emitter was about to write: its collapsed text
+        equals CollapseForCompare(AOpen + AValue + AClose), case-insensitively,
+        so an author's `name="Count"` matches the signature's `COunt`.
+
+  (b) is the safety net and the reason this can sit beside the standalone /
+  residual / nested-occurrence machinery without changing any of its rulings:
+  a nested look-alike, a second occurrence, a tag whose attribute is spelled
+  differently, a line the author shares with another tag -- every shape that
+  fails the compare falls through to the parsed-model emit exactly as before.
+  Only the plain case, where the author's lines and the model agree, stops
+  being rewritten. Nil when no occurrence qualifies. }
+function VerbatimTagLines(const ARawBlock, ATag, AOpen, AValue, AClose: string): TArray<string>;
+var
+  Lines : TArray<string>;
+  Want  : string;
+  OpenL : string;
+  CloseL: string;
+  I, K  : Integer;
+  Acc   : string;
+  Cand  : TArray<string>;
+begin
+  Result:= nil;
+  Want  := CollapseForCompare(AOpen + AValue + AClose);
+  if Want = '' then Exit;
+  Lines := ARawBlock.Split([sLineBreak, #10, #13]);
+  OpenL := '<' + LowerCase(ATag);
+  CloseL:= '</' + LowerCase(ATag) + '>';
+  I:= 0;
+  while I <= High(Lines) do
+  begin
+    var T: string:= LowerCase(Trim(Lines[I]));
+    // An opening tag at the start of the line: `<tag>`, `<tag attr...>` or a
+    // self-closing `<tag .../>`; `<tagname>` where tagname merely starts with
+    // ATag (e.g. <see> vs <seealso>) is not a match.
+    var Opens: Boolean:= StartsStr(OpenL, T) and (Length(T) > Length(OpenL))
+      and CharInSet(T[Length(OpenL) + 1], ['>', ' ', '/']);
+    if not Opens then
+    begin
+      Inc(I);
+      Continue;
+    end;
+    Cand:= nil;
+    K:= I;
+    var Closed: Boolean:= False;
+    if EndsStr('/>', T) and (Pos('>', T) = Length(T)) then
+    begin
+      Cand  := [Lines[I]];
+      Closed:= True;
+    end
+    else
+      while K <= High(Lines) do
+      begin
+        var TK: string:= LowerCase(Trim(Lines[K]));
+        // A second opening before this one closed: this occurrence does not
+        // own its lines; abandon it and let the outer loop try the next.
+        if (K > I) and StartsStr(OpenL, TK) and (Length(TK) > Length(OpenL))
+           and CharInSet(TK[Length(OpenL) + 1], ['>', ' ', '/']) then Break;
+        Cand:= Cand + [Lines[K]];
+        Closed:= EndsStr(CloseL, TK);
+        if Closed then Break;
+        Inc(K);
+      end;
+    if not Closed then
+    begin
+      Inc(I);
+      Continue;
+    end;
+    Acc:= string.Join(' ', Cand);
+    if SameText(CollapseForCompare(Acc), Want) then Exit(Cand);
+    I:= K + 1;
+  end;
+end;
+
+{ The author's hand-written prose lines inside a multi-line <remarks> -- the
+  raw lines strictly between an opening line that is exactly `<remarks>` and
+  the first fence, marker or closing line -- when their collapsed text equals
+  ANormProse's. Same contract and same safety net as VerbatimTagLines; nil
+  when the shape is anything else (prose on the opening line, no standalone
+  <remarks>, a compare mismatch), in which case the caller re-emits from the
+  model as before. }
+function VerbatimRemarksProseLines(const ARawBlock, ANormProse: string): TArray<string>;
+var
+  Lines: TArray<string>;
+  I, K : Integer;
+  Acc  : string;
+begin
+  Result:= nil;
+  if Trim(ANormProse) = '' then Exit;
+  Lines:= ARawBlock.Split([sLineBreak, #10, #13]);
+  for I:= 0 to High(Lines) do
+  begin
+    if not SameText(Trim(Lines[I]), '<remarks>') then Continue;
+    var Cand: TArray<string>:= nil;
+    K:= I + 1;
+    while K <= High(Lines) do
+    begin
+      var TK: string:= Trim(Lines[K]);
+      if (Pos(AUTO_BEGIN, TK) > 0) or (Pos(AUTO_MARK, TK) > 0)
+         or (Pos(AUTO_SUM, TK) > 0) or EndsText('</remarks>', TK) then Break;
+      Cand:= Cand + [Lines[K]];
+      Inc(K);
+    end;
+    if Length(Cand) = 0 then Continue;
+    Acc:= string.Join(' ', Cand);
+    if SameText(CollapseForCompare(Acc), CollapseForCompare(ANormProse)) then Exit(Cand);
+  end;
+end;
+
 class function TDocRegions.MergeComment(const AExisting: TParsedDoc;
   const ASigParams: TArray<string>; const AFacts: TDocFacts;
   AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer;
@@ -2563,6 +2705,20 @@ var
       if i = 0 then Result:= Result + Parts[i]
       else Result:= Result + sLineBreak + APrefix + Trim(Parts[i]);
     Result:= Result + AClose;
+  end;
+  // v(2026-09-15, defect 3): the preserve arms' emitter. The author's own
+  // lines from ARaw (see VerbatimTagLines) when they exist and say what the
+  // model says; EmitTagged's rebuild otherwise. ALinePrefix is the comment
+  // marker WITHOUT APrefix's trailing blank, for the same reason the residual
+  // carry-through uses it: the scanner leaves the blank after the slashes on
+  // the raw line, so re-adding it would indent every preserved line by one
+  // more column per run.
+  function EmitPreserved(const ARaw, ALinePrefix, ATag, AOpen, AValue, AClose: string): string;
+  var Raw: TArray<string>;
+  begin
+    Raw:= VerbatimTagLines(ARaw, ATag, AOpen, AValue, AClose);
+    if Length(Raw) = 0 then Exit(EmitTagged(AOpen, AValue, AClose));
+    Result:= ALinePrefix + string.Join(sLineBreak + ALinePrefix, Raw);
   end;
   // v(ADP3 T9): the body of this test now lives on TDocRegions itself, as
   // IsEngineOwnedTagText -- Doc.Drift's harvest-drift check needs the SAME
@@ -3273,7 +3429,7 @@ begin
     // written at all.
     if StandaloneSummary.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw))
        and (not IsBlankBody(SummaryRaw)) then
-      Sb.AppendLine(EmitTagged('<summary>', SummaryRaw, '</summary>'))
+      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'summary', '<summary>', SummaryRaw, '</summary>'))
     // v(SESSION 74): AUTO_SUM, not AUTO_MARK. This arm is also the MIGRATION
     // for every legacy bare-AUTO_MARK summary: reaching it means the source
     // comment still yields prose, so the tag is the engine's, and it is
@@ -3358,9 +3514,9 @@ begin
     if StandaloneDep.Deprecated then
     begin
       if BodyDep <> '' then
-        Sb.AppendLine(EmitTagged('<deprecated>', BodyDep, '</deprecated>'))
+        Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'deprecated', '<deprecated>', BodyDep, '</deprecated>'))
       else
-        Sb.AppendLine(APrefix + '<deprecated/>');
+        Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'deprecated', '<deprecated/>', '', ''));
     end;
 
     // <param>: v(ADP3 T3 review round 2, Finding 1 -- the ONE tag where
@@ -3439,7 +3595,7 @@ begin
               // overwritten -- including one typed INSIDE the engine's own tag
               // without removing the marker (taPreserveStripped).
               taPreserveStripped: begin Sb.AppendLine(EmitTagged('<param name="' + P + '">', StripMark(EP.Desc), '</param>')); ParamEmitted:= True; end;
-              taPreserveVerbatim: begin Sb.AppendLine(EmitTagged('<param name="' + P + '">', EP.Desc, '</param>')); ParamEmitted:= True; end;
+              taPreserveVerbatim: begin Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'param', '<param name="' + P + '">', EP.Desc, '</param>')); ParamEmitted:= True; end;
               taEngineOwned: ;  // engine-owned and empty: fall through and REGENERATE
             end;
           end;
@@ -3481,7 +3637,7 @@ begin
         // hand-written, with content -- preserved verbatim; its mined cases (if
         // any) went into the 'Returns:' fact line above (IncludeReturns) instead
         // of disturbing this text.
-        Sb.AppendLine(EmitTagged('<returns>', BodyReturns, '</returns>'))
+        Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'returns', '<returns>', BodyReturns, '</returns>'))
       else
       begin
         // engine-owned (marked -- ALWAYS, regardless of post-marker content,
@@ -3558,7 +3714,7 @@ begin
           if IsManagedDesc(OrigExc.Desc) then
             Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', StripMark(OrigExc.Desc), '</exception>'))
           else
-            Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', OrigExc.Desc, '</exception>'));
+            Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'exception', '<exception cref="' + OrigExc.TypeName + '">', OrigExc.Desc, '</exception>'));
           PreservedCrefs:= PreservedCrefs + [OrigExc.TypeName];
           Break;
         end;
@@ -3595,7 +3751,7 @@ begin
     // v(ADP3 T3h): BodyExample, the located standalone occurrence's own text
     // (still unstripped, for the reason just above).
     if StandaloneExample.HasExampleTag then
-      Sb.AppendLine(EmitTagged('<example>', BodyExample, '</example>'));
+      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'example', '<example>', BodyExample, '</example>'));
 
     // <seealso>/<since>: v(ADP3 T3b) -- UNLIKE exception/example/deprecated,
     // these two DO have an engine-generated counterpart: RenderFactsBlock
@@ -3641,7 +3797,8 @@ begin
     begin
       var SeeTag: string:= 'seealso';
       if StandaloneSee.SeeAlsoIsInline[SeeIx] then SeeTag:= 'see';
-      Sb.AppendLine(APrefix + '<' + SeeTag + ' cref="' + StandaloneSee.SeeAlso[SeeIx] + '"/>');
+      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, SeeTag,
+        '<' + SeeTag + ' cref="' + StandaloneSee.SeeAlso[SeeIx] + '"/>', '', ''));
     end;
     // v(ADP3 T3b review round 3, NEW IMPORTANT): reads StandaloneSince.
     // HasSinceTag for PRESENCE (not the old SinceText <> '' content test,
@@ -3674,7 +3831,7 @@ begin
     // a surplus occurrence, retracted by SplitResidualLines and carried through
     // verbatim below, instead of being accounted for and then never emitted.
     if StandaloneSince.HasSinceTag then
-      Sb.AppendLine(EmitTagged('<since>', BodySince, '</since>'));
+      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'since', '<since>', BodySince, '</since>'));
 
     // v(ADP3 T3f): the carried-through residual -- every line of the original
     // region this function could not fully account for, verbatim, in source
@@ -3846,7 +4003,7 @@ begin
     // one-line form has nowhere to put a second, marked paragraph, so harvested
     // remarks take the multi-line path below exactly as Facts already do.
     if (Trim(Prose) <> '') and (Facts = '') and (HarvestedForEmit = '') and (not NormProse.Contains(#10)) then
-      Sb.AppendLine(APrefix + '<remarks>' + Trim(Prose) + '</remarks>')
+      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'remarks', '<remarks>', Trim(Prose), '</remarks>'))
     else if (Trim(Prose) <> '') or (Facts <> '') or (HarvestedForEmit <> '') then
     begin
       Sb.AppendLine(APrefix + '<remarks>');
@@ -3856,9 +4013,18 @@ begin
         // them with bare #10). Emit EACH line APrefix-prefixed so every output line
         // carries /// and the final CRLF join stays valid -- never one line with an
         // embedded bare LF.
-        for var ProseLine in NormProse.Split([#10]) do
-          if Trim(ProseLine) <> '' then
-            Sb.AppendLine(APrefix + Trim(ProseLine));
+        // v(2026-09-15, defect 3): the author's own lines when they exist and
+        // say what NormProse says (VerbatimRemarksProseLines) -- their
+        // indentation and blank lines are theirs to keep; the trimmed rebuild
+        // only when the shape is one the helper declines.
+        var RawProse: TArray<string>:= VerbatimRemarksProseLines(Eff.RawBlock, NormProse);
+        if Length(RawProse) > 0 then
+          for var RawLine in RawProse do
+            Sb.AppendLine(LinePrefix + RawLine)
+        else
+          for var ProseLine in NormProse.Split([#10]) do
+            if Trim(ProseLine) <> '' then
+              Sb.AppendLine(APrefix + Trim(ProseLine));
       end;
       // v(ADP3 T7): after the preserved hand prose, before the fence.
       // v(ADP3 T9): HarvestedForEmit, not AFacts.HarvestedRemarks -- see the

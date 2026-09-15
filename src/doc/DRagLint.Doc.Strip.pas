@@ -237,8 +237,13 @@ end;
 // opening tag's '>' (see TDocRegions.MergeComment's EmitTagged calls), so the
 // text up to (not including) the marker's position always ENDS with the
 // opening tag. Returns '' when the preceding text does not end with one of
-// the three recognized openers -- a marker in an unrecognized position is
+// the four recognized openers -- a marker in an unrecognized position is
 // left untouched by the caller (absence over a wrong removal).
+// v(2026-09-15): <exception> JOINS THE LIST. The engine has written marked
+// <exception cref> tags since the mined-raise work, and this function never
+// learned the opener, so `document --strip` left every one of them behind --
+// measured by run_doc_unmarked_block_byte_identical's strip(apply(x)) == x
+// inverse, which failed on exactly that line.
 function ManagedTagCloser(const ALine: string; AMarkPos: Integer): string;
 var
   Prefix: string;
@@ -247,6 +252,7 @@ begin
   if EndsText('<summary>', Prefix) then Result:= '</summary>'
   else if EndsText('<returns>', Prefix) then Result:= '</returns>'
   else if EndsText('>', Prefix) and (Pos('<param', Prefix) > 0) then Result:= '</param>'
+  else if EndsText('>', Prefix) and (Pos('<exception', Prefix) > 0) then Result:= '</exception>'
   else Result:= '';
 end;
 
@@ -260,6 +266,21 @@ end;
 // below -- <summary>/<returns> are stripped unconditionally regardless of
 // what this returns, matching `document --apply`'s own marked-always-means-
 // engine-owned rule for those two tags.
+// The tags whose MARKED body may be a human's text rather than the engine's,
+// and must therefore be left alone when non-empty (rule 1's exception below):
+// a bare-AUTO_MARK <param>, <summary> or <exception>. The engine's own bodies
+// -- AUTO_TYPE (declared type), AUTO_SUM (harvested prose), AUTO_EXC (mined
+// raise message) -- never qualify. One named predicate rather than a six-term
+// boolean, so the rule reads as the list it is.
+function MarkedTagMayHoldHumanText(const ACloser: string;
+  AIsTypeMark, AIsSumMark, AIsExcMark: Boolean): Boolean;
+begin
+  if SameText(ACloser, '</param>')     then Exit(not AIsTypeMark);
+  if SameText(ACloser, '</summary>')   then Exit(not AIsSumMark);
+  if SameText(ACloser, '</exception>') then Exit(not AIsExcMark);
+  Result:= False;
+end;
+
 function TagBodyIsEmpty(ALines: TStrings; ALo, AHi, AFrom: Integer; const ACloser: string): Boolean;
 var
   Combined : string;
@@ -291,6 +312,7 @@ var
   MarkLen    : Integer;  { length of whichever ownership marker matched }
   IsTypeMark : Boolean;  { True when it was AUTO_TYPE, not AUTO_MARK }
   IsSumMark  : Boolean;  { True when it was AUTO_SUM  -- the engine's harvested summary }
+  IsExcMark  : Boolean;  { True when it was AUTO_EXC  -- the engine's mined raise message }
   Closer     : string;
   RemarksOpen: Integer;
   Empty      : Boolean;
@@ -338,6 +360,7 @@ begin
     MarkLen:= Length(AUTO_MARK);
     IsTypeMark:= False;
     IsSumMark := False;
+    IsExcMark := False;
     if MarkPos = 0 then
     begin
       MarkPos:= Pos(AUTO_TYPE, Line);
@@ -354,6 +377,21 @@ begin
       begin
         MarkLen  := Length(AUTO_SUM);
         IsSumMark:= True;
+      end;
+    end;
+    // v(2026-09-15): the FOURTH marker. AUTO_EXC says the <exception> body is
+    // the engine's own mined raise message (see TDocRegions.AUTO_EXC), so it
+    // is deleted unconditionally, exactly as AUTO_TYPE and AUTO_SUM are. A
+    // bare-AUTO_MARK <exception> with a human's text inside joins the
+    // <param>/<summary> exception below, because apply preserves that text
+    // (ruling D-4) and the two verbs must agree.
+    if MarkPos = 0 then
+    begin
+      MarkPos:= Pos(AUTO_EXC, Line);
+      if MarkPos > 0 then
+      begin
+        MarkLen  := Length(AUTO_EXC);
+        IsExcMark:= True;
       end;
     end;
     if MarkPos > 0 then
@@ -391,8 +429,7 @@ begin
           // excluded from the exception (IsSumMark): that body IS the engine's
           // own harvested prose, so it is deleted unconditionally, exactly as
           // AUTO_TYPE is.
-          if ((SameText(Closer, '</param>')   and (not IsTypeMark))
-           or (SameText(Closer, '</summary>') and (not IsSumMark)))
+          if MarkedTagMayHoldHumanText(Closer, IsTypeMark, IsSumMark, IsExcMark)
              and (not TagBodyIsEmpty(ALines, I, J, MarkPos + MarkLen, Closer)) then
           begin
             I:= J + 1;

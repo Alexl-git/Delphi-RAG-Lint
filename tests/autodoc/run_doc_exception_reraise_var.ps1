@@ -160,6 +160,8 @@ end;
 end.
 '@
 
+$md5Orig = Get-FileMd5 $src
+
 Push-Location C:\TEMP
 try {
   & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
@@ -219,6 +221,16 @@ try {
 
   Check 'every emitted /// line is 7-bit ASCII' `
     (@([IO.File]::ReadAllLines($src) | Where-Object { $_ -match '^\s*///' -and ($_.ToCharArray() | Where-Object { [int]$_ -gt 126 }) }).Count -eq 0)
+
+  # --- CONTROL: strip is the exact inverse ------------------------------------
+  # The fixture has NO hand-written doc at all, so after `--strip --apply` the
+  # file must be the original bytes again. This is what proves the generated
+  # <exception> tags -- AUTO_MARK (no message) and AUTO_EXC (message) alike --
+  # are recognised by the stripper; before 2026-09-15 it knew neither opener.
+  & $exePath document --unit $src --db $db --strip --apply 2>$null | Out-Null
+  Check 'document --strip --apply exits 0' ($LASTEXITCODE -eq 0)
+  Check 'INVERSE: strip(apply(original)) is byte-identical to the original' `
+    ((Get-FileMd5 $src) -eq $md5Orig) ("orig=$md5Orig strip=" + (Get-FileMd5 $src))
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

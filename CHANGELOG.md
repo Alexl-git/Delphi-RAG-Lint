@@ -5,6 +5,53 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed: the documentation generator's two owner-reported defects (PLAN-autofix-campaign 4.2, session 93 W4-M0)
+
+Both fixes are RENDER-TIME. Raises are mined by a source-line scan at
+`document` time (`TDocFactsBuilder.MineRaises` / `MineRaisesDetailed`), not
+by the extractor, so neither bills `DRAGLINT_EXTRACTOR_VERSION`; both version
+constants are unchanged.
+
+* **`<exception cref="E">` is no longer fabricated from a re-raise.**
+  `on E: Exception do ... raise E;` (ORM3 `BASICSF.CopyRecords`) documented the
+  handler VARIABLE as a class. The scanners now record `on <Var>: <Type> do`
+  bindings and resolve a bare `raise <Var>` to the declared type (most recent
+  binding); a bare variable with no binding emits NO tag (absence over wrong),
+  and `raise Unit.Class.Create(...)` names the CLASS instead of the unit
+  (was `cref="System"`). `raise Class.Create('msg')` is unchanged, message
+  included. `DRagLint.Doc.Facts`: `ResolveRaiseClass`, `RecordHandlerBinding`,
+  `TBodyScanState.HandlerVars/HandlerTypes`. Guard:
+  `tests\autodoc\run_doc_exception_reraise_var.ps1`.
+* **An unmarked (hand-written) tag now survives `document --apply`
+  byte-identical**, as `docs\AI-USAGE.md`'s provenance contract promises
+  ("not its text, not its whitespace"). The repair path rebuilt every
+  preserved tag from the parsed model -- blank runs collapsed, continuation
+  lines trimmed, `<param name="Count">` re-spelled to the signature's `COunt`.
+  Every preserve arm (summary, deprecated, param, returns, exception, example,
+  see/seealso, since, remarks prose) now emits the author's own raw lines when
+  they exist and say what the model says, with a whitespace-collapse compare
+  as the safety net so every nested/duplicate/exotic shape falls back to the
+  previous behaviour. `DRagLint.Doc.Regions`: `VerbatimTagLines`,
+  `VerbatimRemarksProseLines`, `CollapseForCompare`, `EmitPreserved`. Guard:
+  `tests\autodoc\run_doc_unmarked_block_byte_identical.ps1` (whole-line
+  equality, ordered for the canonical shape, plus `strip(apply(x)) == x`).
+  RESIDUAL, filed as `docs\INBOX-doc-preserved-tags-reordered.md`: the
+  engine's fixed emission order still MOVES a `<returns>` written before the
+  `<param>`s -- bytes preserved, position not; owner's call.
+* **`document --strip` now removes the engine's own `<exception>` tags.**
+  `ManagedTagCloser` never learned the `<exception` opener and the stripper
+  did not know `AUTO_EXC`, so every generated exception tag survived `--strip`
+  -- found by the new guard's inverse check. Both fixed in
+  `DRagLint.Doc.Strip` (`MarkedTagMayHoldHumanText` keeps the D-4 exception
+  for a human's text inside a bare-marker tag).
+
+Sweep of sibling defects: `<returns>`'s `Observed: nil; Typed.` is the mined
+`Result :=` list (`Typed` is a local in `uPLANLIST.LoadByID`) -- by design,
+unlabeled. The `doc-drift` on `Core.Interfaces.pas:410` is "names facts in
+unit(s) this index does not hold; not auto-fixed" -- the cross-project caller
+union that `dl:shared` exists for, not a generator bug. Remaining raise
+shapes filed as `docs\INBOX-doc-raise-shapes-still-unresolved.md`.
+
 ### Tests: the per-verb flag axis is now derivable, and the gap is measured (plan section 10)
 
 `CLAUDE.md`'s DOCS-IN-SYNC table promises that **every flag a verb accepts is

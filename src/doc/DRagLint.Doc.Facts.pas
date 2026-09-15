@@ -92,7 +92,7 @@ type
   /// exists": callers must render the class alone in that case, exactly as
   /// they did before messages were mined at all.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CollectRaiseDetail (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineRaisesDetailed (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineRaisesDetailed (DRagLint.Doc.Facts.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -536,6 +536,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Make"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Normalized"/>
     /// <!-- drag-lint:auto END -->
@@ -551,6 +552,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Normalized"/>
     /// <!-- drag-lint:auto END -->
@@ -614,7 +616,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
     /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+36 more)</para>
-    /// <para>Complexity: 73 (cyclomatic, outer body), 1037 lines (full implementation)</para>
+    /// <para>Complexity: 73 (cyclomatic, outer body), 1041 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -641,6 +643,10 @@ type
     /// Deliberately ONE routine, not two: Build and the transitive
     /// exception-cref check must never disagree about what "the body raises"
     /// means. Costs a memoised source read plus a line scan of the body.
+    /// A re-raise through the handler variable (`on E: EFoo do raise E`)
+    /// names the handler's declared TYPE; a bare `raise Var` with no such
+    /// binding names nothing; `raise Unit.Class.Create` names the class.
+    /// See ResolveRaiseClass in the implementation for the four shapes.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseClass, DRagLint.Doc.Facts.SourceLines, Min</para>
@@ -1351,6 +1357,18 @@ type
   TBodyScanState = record
     InBrace    : Integer; { brace-comment depth }
     InStarParen: Boolean; { star-paren comment  }
+    { v(2026-09-15, PLAN-autofix-campaign 4.2 defect 1): the `on <Var>: <Type>
+      do` handler bindings seen so far in this body, in source order, parallel
+      arrays. `raise E` names the handler VARIABLE, and the scanner used to take
+      that identifier as the class -- BASICSF.CopyRecords was documented with
+      <exception cref="E">, a link to a class that does not exist. A bare
+      `raise <Ident>` can never be a class (a class reference is not an object;
+      `raise EFoo;` does not compile), so it is resolved through these bindings
+      to the declared type, most recent binding first. Both raise scanners
+      carry this state, so MineRaises and MineRaisesDetailed cannot disagree
+      about what a re-raise names. }
+    HandlerVars : TArray<string>;
+    HandlerTypes: TArray<string>;
   end;
 
 function IsCallSkipWord(const AWord: string): Boolean;
@@ -1554,6 +1572,84 @@ begin
     Result := False;
 end;
 
+{ Reads a dotted identifier chain (`A`, `A.B`, `A.B.C`) starting at AIdx, which
+  must be an identifier start. Returns the segments and leaves AIdx just past
+  the last one. No blanks are tolerated around the dots -- `raise E . Create`
+  is legal Pascal and vanishingly rare, and tolerating it would make `raise E
+  .` on a wrapped line read the next statement's first word as a member. }
+function ReadIdentChain(const ALine: string; var AIdx: Integer): TArray<string>;
+var
+  N, S: Integer;
+begin
+  Result:= nil;
+  N:= Length(ALine);
+  while (AIdx <= N) and IsIdentStart(ALine[AIdx]) do
+  begin
+    S:= AIdx;
+    while (AIdx <= N) and IsIdentPart(ALine[AIdx]) do Inc(AIdx);
+    Result:= Result + [Copy(ALine, S, AIdx - S)];
+    if (AIdx < N) and (ALine[AIdx] = '.') and IsIdentStart(ALine[AIdx + 1]) then Inc(AIdx)
+    else Break;
+  end;
+end;
+
+{ `on <Var>: <Type> do` -- records the binding Var -> Type (last segment of a
+  dotted type) in AScan. AIdx is the position just past the word `on`. A
+  type-only handler (`on Exception do`) binds nothing. Bindings are appended,
+  so a name bound twice (`on E: EAbort do ... on E: EInOutError do ...`) is
+  resolved to whichever binding is most recent at the raise -- which, in
+  source order, is the enclosing handler's. }
+procedure RecordHandlerBinding(const ALine: string; AIdx: Integer; var AScan: TBodyScanState);
+var
+  N   : Integer;
+  V, T: TArray<string>;
+begin
+  N:= Length(ALine);
+  while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
+  if (AIdx > N) or (not IsIdentStart(ALine[AIdx])) then Exit;
+  V:= ReadIdentChain(ALine, AIdx);
+  if Length(V) <> 1 then Exit;
+  while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
+  if (AIdx > N) or (ALine[AIdx] <> ':') then Exit;
+  Inc(AIdx);
+  while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
+  if (AIdx > N) or (not IsIdentStart(ALine[AIdx])) then Exit;
+  T:= ReadIdentChain(ALine, AIdx);
+  if Length(T) = 0 then Exit;
+  AScan.HandlerVars := AScan.HandlerVars  + [V[0]];
+  AScan.HandlerTypes:= AScan.HandlerTypes + [T[High(T)]];
+end;
+
+{ The CLASS a `raise` names, or '' when the source does not say. AIdx is the
+  identifier start after `raise` and is NOT advanced -- this is a peek, so both
+  scanners keep their own stepping (CollectRaiseDetail needs to see the
+  `.Ctor(` again to arm its message capture).
+
+    raise EFoo.Create(...)                 -> EFoo      (segment before the ctor)
+    raise System.SysUtils.Exception.Create -> Exception (was: System)
+    raise Exception(AcquireExceptionObject) -> Exception (a cast; unchanged)
+    raise E;   with `on E: EConvertError`  -> EConvertError (was: E)
+    raise Err; no binding                  -> ''        (was: Err)
+
+  The last arm is "absence over wrong": a bare identifier with no `(` and no
+  member access is a variable holding an object, and without a handler binding
+  its class is not stated anywhere the scanner can see. }
+function ResolveRaiseClass(const ALine: string; AIdx: Integer; const AScan: TBodyScanState): string;
+var
+  Segs: TArray<string>;
+  N   : Integer;
+begin
+  Result:= '';
+  N:= Length(ALine);
+  Segs:= ReadIdentChain(ALine, AIdx);
+  if Length(Segs) = 0 then Exit;
+  if Length(Segs) >= 2 then Exit(Segs[High(Segs) - 1]);
+  while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
+  if (AIdx <= N) and (ALine[AIdx] = '(') then Exit(Segs[0]);
+  for var B:= High(AScan.HandlerVars) downto 0 do
+    if SameText(AScan.HandlerVars[B], Segs[0]) then Exit(AScan.HandlerTypes[B]);
+end;
+
 procedure CollectRaiseClass(const ALine: string; AAcc: TStringList; var AState: TBodyScanState);
 var
   I, N, J, K : Integer;
@@ -1590,16 +1686,20 @@ begin
       J:= I;
       while (J <= N) and IsIdentPart(ALine[J]) do Inc(J);
       Ident:= Copy(ALine, I, J - I);
+      if SameText(Ident, 'on') then RecordHandlerBinding(ALine, J, AState);
       if SameText(Ident, 'raise') then
       begin
-        // Skip spaces, then capture the next identifier = exception class.
+        // Skip spaces, then resolve the raised CLASS from what follows -- see
+        // ResolveRaiseClass for the four shapes and why a bare variable is not
+        // taken as a class name.
         K := J;
         while (K <= N) and (ALine[K] = ' ') do Inc(K);
         if (K <= N) and IsIdentStart(ALine[K]) then
         begin
           var E: Integer:= K;
           while (E <= N) and IsIdentPart(ALine[E]) do Inc(E);
-          AAcc.Add(Copy(ALine, K, E - K));
+          var Cls: string:= ResolveRaiseClass(ALine, K, AState);
+          if Cls <> '' then AAcc.Add(Cls);
           I:= E;
           Continue;
         end;
@@ -1715,6 +1815,23 @@ var
     DropPending;
   end;
 
+  { Opens a pending raise for the class named at AIdx. The SAME resolution
+    CollectRaiseClass applies -- a re-raise through the handler variable names
+    the handler's type, an unresolvable bare variable names nothing -- and an
+    entry is added only when a class is known, so the two miners agree entry
+    for entry. Extracted so the scanner body stays under the cognitive limit. }
+  procedure OpenPendingRaiseAt(AIdx: Integer);
+  var D: TRaiseDetail;
+  begin
+    D.ExcClass := ResolveRaiseClass(ALine, AIdx, AState.Scan);
+    if D.ExcClass = '' then Exit;
+    D.Message  := '';
+    AAcc.Add(D);
+    AState.Pending      := AAcc.Count - 1;
+    AState.SawCtorParen := False;
+    AState.Budget       := RAISE_DETAIL_BUDGET_LINES;
+  end;
+
 begin
   { A pending raise ages by one line at the START of each new line, so the
     budget counts LINES SINCE the raise rather than lines scanned. }
@@ -1749,6 +1866,7 @@ begin
       J := I;
       while (J <= N) and IsIdentPart(ALine[J]) do Inc(J);
       Ident := Copy(ALine, I, J - I);
+      if SameText(Ident, 'on') then RecordHandlerBinding(ALine, J, AState.Scan);
       if SameText(Ident, 'raise') then
       begin
         { A new raise abandons any pending one -- `raise A; raise B.Create('x')`
@@ -1760,13 +1878,7 @@ begin
         begin
           var E: Integer := K;
           while (E <= N) and IsIdentPart(ALine[E]) do Inc(E);
-          var D: TRaiseDetail;
-          D.ExcClass := Copy(ALine, K, E - K);
-          D.Message  := '';
-          AAcc.Add(D);
-          AState.Pending      := AAcc.Count - 1;
-          AState.SawCtorParen := False;
-          AState.Budget       := RAISE_DETAIL_BUDGET_LINES;
+          OpenPendingRaiseAt(K);
           I := E;
           Continue;
         end;
