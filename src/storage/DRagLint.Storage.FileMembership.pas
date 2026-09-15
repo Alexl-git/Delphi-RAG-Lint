@@ -41,6 +41,13 @@ interface
 /// be a false "no".
 /// Opens READ-ONLY and closes before returning: an IDE-side caller must not hold
 /// a handle that a concurrent `index --all` would have to drop.
+/// LEAVES THE FILE HEADER ALONE TOO. The connection is told the journal mode
+/// the file ALREADY has (read from the SQLite header, see HeaderSaysWal), so
+/// the journal_mode pragma FireDAC runs on every connect is a no-op: a WAL
+/// index stays WAL, a rollback-journal database stays a rollback journal.
+/// Until 2026-09-14 the probe asked for WAL unconditionally and rewrote the
+/// header of every non-WAL database it touched. Pinned both ways by
+/// run_project_db_resolve.ps1 (6d).
 /// Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas)</para>
@@ -57,6 +64,7 @@ implementation
 
 uses
   System.SysUtils
+  , System.Classes
   , System.IOUtils
   , FireDAC.Comp.Client
   , FireDAC.Stan.Def
@@ -79,11 +87,53 @@ begin
     Result[1]:= UpCase(Result[1]);
 end;
 
+{ SQLite file header, offset 18: "file format write version" -- 2 when the
+  database is in WAL mode, 1 for a rollback journal (sqlite.org/fileformat2).
+  Read straight from the file so the connection below can be told the mode the
+  file ALREADY has.
+
+  WHY THE MODE HAS TO BE NAMED AT ALL. FireDAC executes
+  `PRAGMA journal_mode = <the JournalMode param, else Delete>` on EVERY connect
+  (FireDAC.Phys.SQLite.pas, SetPragma) -- there is no "leave it alone" value.
+  So a probe leaves the header untouched only by asking for what is already
+  there. Passing WAL unconditionally (the code until 2026-09-14) rewrote every
+  rollback-journal database it probed (journal_mode delete -> wal, measured on
+  seven verbs). Passing NOTHING -- the obvious repair -- would send Delete and
+  convert every real WAL index back on each probe, or fail BUSY under a live
+  LSP reader and surface as a truthful-looking "not mine". Neither is a read.
+
+  A file too short to carry a header (0 bytes -- a database created and never
+  written) reads as a rollback journal, and journal_mode=Delete on it is a
+  no-op. Any failure to read reads as False for the same reason. }
+const
+  SQLITE_HDR_WRITE_VERSION_OFFSET = 18; { sqlite.org/fileformat2, "file format write version" }
+  SQLITE_HDR_WRITE_VERSION_WAL    = 2 ; { 2 = WAL; 1 = legacy rollback journal }
+
+function HeaderSaysWal(const APath: string): Boolean;
+var
+  F  : TFileStream                                        ;
+  Hdr: array[0..SQLITE_HDR_WRITE_VERSION_OFFSET] of Byte;
+begin
+  Result:= False;
+  try
+    F:= TFileStream.Create(APath, fmOpenRead or fmShareDenyNone);
+    try
+      Result:= (F.Read(Hdr, SizeOf(Hdr)) = SizeOf(Hdr))
+           and (Hdr[SQLITE_HDR_WRITE_VERSION_OFFSET] = SQLITE_HDR_WRITE_VERSION_WAL);
+    finally
+      F.Free;
+    end; // try
+  except
+    on E: Exception do Result:= False;
+  end; // try
+end; // function
+
 function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
 var
   Conn: TFDConnection;
   Q   : TFDQuery     ;
   NP  : string       ;
+  Mode: string       ;
 begin
   Result:= False;
   if (ADbPath = '') or (AFilePath = '') then Exit;
@@ -99,14 +149,21 @@ begin
         without write access to its -shm wal-index (SQLite wal.html), and every
         index here is WAL -- the open fails with "disk I/O error", which this
         function would then report as a truthful-looking "file not in this DB".
-        Same reasoning, same params and same PRAGMA as
-        TSQLiteSymbolStore.Connect's read-only path: open normally, then forbid
-        writes per-connection. query_only does not disturb a concurrent
-        LSP/indexer. }
+        Same reasoning and same PRAGMA as TSQLiteSymbolStore.Connect's read-only
+        path: open normally, then forbid writes per-connection. query_only does
+        not disturb a concurrent LSP/indexer.
+
+        NOT the same JournalMode, though. Connect still asks for WAL on its
+        read-only path too, and its comment claims the journal mode is left
+        untouched -- it is not, for the reason on HeaderSaysWal. Here the mode
+        is whatever the file already has, so the pragma FireDAC runs at connect
+        changes nothing. query_only comes AFTER the connect, so it cannot be
+        what protects the header; only naming the current mode can. }
+      Mode:= if HeaderSaysWal(ADbPath) then 'WAL' else 'Delete';
       Conn.DriverName:= 'SQLite';
       Conn.Params.Values['Database'   ]:= ADbPath;
       Conn.Params.Values['LockingMode']:= 'Normal';
-      Conn.Params.Values['JournalMode']:= 'WAL';
+      Conn.Params.Values['JournalMode']:= Mode;
       Conn.Params.Values['Synchronous']:= 'Normal';
       Conn.LoginPrompt:= False;
       Conn.Open;

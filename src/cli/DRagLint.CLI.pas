@@ -8616,12 +8616,41 @@ begin
   JWrites:= TJSONArray.Create; JCalls := TJSONArray.Create;
   JTypes := TJSONArray.Create; JAttrs := TJSONArray.Create;
   JEvents:= TJSONArray.Create; JImpact:= TJSONArray.Create;
+  { Attach the arrays to JRoot BEFORE the loop, not after it, so JRoot owns
+    them on every path -- including the stale-db refusal below, which leaves
+    the loop early. Attached-then-filled is fine: AddPair keeps the reference
+    and AddElement on it afterwards lands in the document. Key order is the
+    order of these AddPairs, unchanged from when they sat after the loop. }
+  JRoot.AddPair('name', AArgs.Name);
+  JRoot.AddPair('width'       , Width  );
+  JRoot.AddPair('declarations', JDecls );
+  JRoot.AddPair('reads'       , JReads );
+  JRoot.AddPair('writes'      , JWrites);
+  JRoot.AddPair('calls'       , JCalls );
+  JRoot.AddPair('types'       , JTypes );
+  JRoot.AddPair('attributes'  , JAttrs );
+  JRoot.AddPair('events'      , JEvents);
+  JRoot.AddPair('impact'      , JImpact);
   try
     for DbPath in PathsToScan do
     begin
       if not TFile.Exists(DbPath) then Continue;
-      Store:= TSQLiteSymbolStore.Create(DbPath);
-      Store.Migrate;
+      { OpenReadOnlyStore, NOT Create+Migrate. Until 2026-09-14 this loop opened
+        every --db read-write and migrated it as a side effect of a read: a v12
+        index handed to `usages` came back at the current schema, 31 tables and
+        eleven times the size, exit 0, nothing said on either stream -- and the
+        evidence that it had ever been stale was gone with it. The read-only
+        open refuses a stale schema instead of repairing it; an explicit stale
+        --db refuses the whole run, a manifest-resolved one is skipped
+        (INBOX-read-verbs-migrate-the-db; pinned by run_explicit_db_strict T5d
+        and run_migrate_site_guard). }
+      var RoOk: Boolean;
+      Store:= OpenReadOnlyStore(DbPath, RoOk);
+      if (not RoOk) or (Store = nil) then
+      begin
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'usages', DbPath) then Exit(2);
+        Continue;
+      end;
 
       for S in Store.FindSymbolsByExactName(AArgs.Name) do
       begin
@@ -8650,17 +8679,6 @@ begin
 
       Store:= nil;
     end; // for
-
-    JRoot.AddPair('name', AArgs.Name);
-    JRoot.AddPair('width'       , Width  );
-    JRoot.AddPair('declarations', JDecls );
-    JRoot.AddPair('reads'       , JReads );
-    JRoot.AddPair('writes'      , JWrites);
-    JRoot.AddPair('calls'       , JCalls );
-    JRoot.AddPair('types'       , JTypes );
-    JRoot.AddPair('attributes'  , JAttrs );
-    JRoot.AddPair('events'      , JEvents);
-    JRoot.AddPair('impact'      , JImpact);
 
     if SameText(AArgs.Format, 'json') then Writeln(JRoot.Format(2))
     else
@@ -12275,8 +12293,10 @@ end; // begin
 /// uses-graph. Rollup by default (per-external unit: used-by count, resolved
 /// state, shortest import path); --edges switches to the flat
 /// (project-unit -&gt; external-unit) list. Formats: text|json|csv. Opens each
-/// --db as a TSQLiteSymbolStore (multi-DB, first-store-wins for stems),
-/// borrows them into BuildDepsReport, and frees them afterward.</summary>
+/// --db READ-ONLY via OpenReadOnlyStore (multi-DB, first-store-wins for stems),
+/// borrows them into BuildDepsReport, and frees them afterward. A stale
+/// explicit --db refuses the run (exit 2); a stale manifest-resolved one is
+/// skipped. Never migrates -- a report is a read.</summary>
 function DoDepsReport(const AArgs: TArgs): Integer;
 var
   Stores: TArray<ISymbolStore>;
@@ -12295,9 +12315,18 @@ var
     begin
       Path:= DbList[i];
       if not TFile.Exists(Path) then begin Writeln(ErrOutput, 'deps-report: db not found, skipping: ', Path); Continue; end;
+      { Read-only, never Migrate: this is a report. Same repair and same reason
+        as DoUsages (INBOX-read-verbs-migrate-the-db). Result:= 2 + Exit is this
+        nested procedure's existing way of refusing; the body checks it. }
+      var RoOk: Boolean;
+      var S: ISymbolStore:= OpenReadOnlyStore(Path, RoOk);
+      if (not RoOk) or (S = nil) then
+      begin
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'deps-report', Path) then begin Result:= 2; Exit; end;
+        Continue;
+      end;
       SetLength(Stores, Length(Stores) + 1);
-      Stores[High(Stores)]:= TSQLiteSymbolStore.Create(Path);
-      Stores[High(Stores)].Migrate;
+      Stores[High(Stores)]:= S;
     end;
   end; // procedure
 
@@ -14233,8 +14262,15 @@ begin
   for var D in Dbs do
   begin
     if not TFile.Exists(D) then Continue;
-    var S: ISymbolStore:= TSQLiteSymbolStore.Create(D);
-    S.Migrate;
+    { Read-only, never Migrate -- resolving a position is a read. Same repair
+      and same reason as DoUsages (INBOX-read-verbs-migrate-the-db). }
+    var SOk: Boolean;
+    var S: ISymbolStore:= OpenReadOnlyStore(D, SOk);
+    if (not SOk) or (S = nil) then
+    begin
+      if (not SOk) and StaleDbRefusesRun(AArgs, 'typeat', D) then Exit(2);
+      Continue;
+    end;
     SetLength(Stores, Length(Stores) + 1);
     Stores[High(Stores)]:= S;
   end;

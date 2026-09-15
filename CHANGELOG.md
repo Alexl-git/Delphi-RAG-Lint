@@ -3,6 +3,53 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### `usages`, `typeat` and `deps-report` no longer MIGRATE a stale `--db` in place
+
+Handed an explicit `--db` at an old schema, the three verbs opened it
+read-write, ran the full schema migration on it (measured: schema_version
+12 -> 22, 4 tables -> 31, 28 KB -> 320 KB, journal delete -> wal) and then
+answered from it -- exit 0, nothing on either stream. Against the 1.4 GB
+library index that is minutes under a write lock while the operator believes
+they ran a read, and afterwards the evidence that the index was ever stale is
+gone, so the refusal C3 introduced could never fire for them.
+
+They now open every `--db` read-only through the same path as the other read
+verbs, and a stale EXPLICIT `--db` is **refused (exit 2)** with the schema gap
+and both migrate commands on stderr -- the contract every other multi-db verb
+already had. A stale manifest-resolved db is still skipped, not refused.
+`run_explicit_db_strict.ps1` T5d now covers all sixteen verbs.
+
+A new guard, `run_migrate_site_guard.ps1`, pins the shape rather than the
+three instances: every `.Migrate` call in `src\cli` must sit in a routine on a
+named exemption list, with a reason. The list may only shrink. It records
+sixteen verbs that migrate BY CONTRACT (`index`, `rename`, the lint family,
+the self-tests) and fifteen read-shaped verbs that still carry the same defect
+(`hover`, `slice`, `uses-report`, `cycles`, `generate-docs`, ...) -- listed so
+the guard is green for the work that is done and red for the work being undone
+again, not as an endorsement.
+
+### The membership probe no longer rewrites a database's journal header
+
+`DbContainsFile` (what `resolve-dbs --in`, `lint`, `query unit-usage` and
+`query type-usage` use to ask "does this index hold this file?") asked FireDAC
+for `JournalMode=WAL` unconditionally, so probing a rollback-journal database
+flipped its header to WAL -- a write, from a function documented read-only.
+
+The obvious fix -- drop the parameter -- would have been worse: FireDAC runs
+`PRAGMA journal_mode = <param, else Delete>` on EVERY connect, so an absent
+parameter converts every real (WAL) index back to a rollback journal on each
+probe, or fails BUSY under a live LSP reader and reads as "not mine". The
+probe now reads the mode from the SQLite file header and asks for that, so
+the pragma is a no-op in both directions. `run_project_db_resolve.ps1` (6d)
+pins both: a rollback-journal fixture stays `delete`, a real index stays `wal`.
+
+Not changed: `TSQLiteSymbolStore.Connect`'s read-only path still passes WAL
+unconditionally, so a read verb that OPENS a stale non-WAL database (rather
+than merely probing it) still flips its header. Its own comment says the
+journal mode is untouched; it is not. Recorded, not fixed here.
+
 ## v1.12.0-alpha -- 2026-09-14
 
 **Two breaking changes.** Both are about a command that used to succeed while
