@@ -5,6 +5,47 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### A forward-declaration stub no longer shadows the real class in a BY-NAME pick
+
+DevExpress forward-declares its classes (`TcxCustomButton = class;`) and
+declares them for real further down. Both are `kind='class'` rows; the stub has
+no heritage, no members, no `type_ancestors` rows -- and the lower id.
+`FindSymbolsByQualifiedName` already ordered a body before a stub, but the
+BY-NAME lookup (`FindSymbolsByExactName`) ordered by `qualified_name` alone,
+which the two rows share, so every consumer that takes the first class-kind
+row by name started at the stub. Measured on library-Win64:
+`query ancestors --name TcxCustomButton` -> `(none)` while
+`--of TControl` on the same class said True.
+
+The by-name pair now carries the same body-before-stub leading term (then
+`qualified_name`, so two REAL declarations in two units keep their order).
+One change, every first-pick consumer: `query ancestors --name`, the
+abstract-instantiation class pick, `typeat`'s any-store lookup,
+virtual-method hiding (`ResolveTypeSymbolId`) and `wiring`'s form lookup.
+A class whose ONLY row is a stub still resolves as a class with no ancestors.
+`run_forward_decl_shadow.ps1`, RED against 1.12.0-alpha.
+
+### `query descendants` crosses a type alias standing in heritage position
+
+`TcxBaseButton = TCustomButton; TcxCustomButton = class(TcxBaseButton, ...)`.
+The alias row owns its `type_ancestors` edge since member C, but the
+descendants CTE joined `kind='class'` at every hop, so the alias never entered
+the name set and everything below it was silently absent: 2918 `TControl`
+descendants on library-Win64 without `TcxButton`, so the conversion editor
+could not offer it. Now 2923, `TcxButton` present, and an alias NAME is never
+emitted (an alias is not a class). Strong aliases (`= type X`) carry no
+heritage row and are neither crossed nor emitted.
+`run_descendants_alias_hop.ps1`, RED against 1.12.0-alpha.
+
+The converter note that reported both blamed the stub for both symptoms; the
+stub is invisible to `descendants` (no ancestor rows, name-walked), and its
+symptom B (`OptionsImage` a bare leaf in `proptree`) did not reproduce on
+either library index with either engine -- proptree routes every pick through
+`BodyOf`. Found while guarding: the late alias resolution in
+`GetTransitiveAncestors` keeps the ALIAS name on the resolved row, so
+`TcxButton --of TCustomButton` is False while `--of TControl` is True. Filed,
+not fixed here (`INBOX-late-resolved-alias-keeps-the-alias-name.md`).
+
 ### `usages`, `typeat`, `deps-report` and `uses-report` no longer MIGRATE a stale `--db` in place
 
 Handed an explicit `--db` at an old schema, the four verbs opened it

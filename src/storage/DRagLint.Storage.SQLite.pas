@@ -3873,8 +3873,41 @@ begin
   // EXACT first (binary, served by idx_symbols_name), NOCASE only as a RETRY on
   // zero rows -- see CaseSensitiveLookups for why it is this way round and not
   // NOCASE-by-default.
-  FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name ORDER BY qualified_name');
-  FQFindByNameCI        := NewQuery( 'SELECT * FROM symbols WHERE name = :name COLLATE NOCASE ORDER BY qualified_name');
+  //
+  // The BY-NAME pair carries the SAME body-before-stub leading term as the
+  // by-qualified-name pair below it, and since 2026-09-14 rather than since
+  // that pair was ordered. Until then it was `ORDER BY qualified_name` alone --
+  // and a forward-declaration stub shares its qualified name with its body, so
+  // between the two the tie fell to rowid and the STUB (declared first, lower
+  // id) came first. Every consumer that takes the first class-kind row BY NAME
+  // therefore started at a symbol with no type_ancestors rows and no children:
+  // `query ancestors --name TcxCustomButton` answered `(none)` on
+  // library-Win64 while `--of TControl` on the same class said True (that
+  // path iterates every candidate). Reported by the converter team
+  // (INBOX-forward-decl-shadows-real-class-declaration); pinned by
+  // tests\autotest\run_forward_decl_shadow.ps1. Also reached through this
+  // pick: FindSymbolByExactNameAnywhere (TypeAt, FindEventHandlersForForm),
+  // ResolveTypeSymbolId (virtual-method hiding), AstChecks' abstract-
+  // instantiation class pick.
+  //
+  // qualified_name stays the SECOND term, so two REAL declarations of one name
+  // in two units (TSizeConstraints in Vcl.Controls and FMX.Forms) keep exactly
+  // the order they had -- run_query_framework_preference.ps1 pins that FMX
+  // still sorts first with no project context.
+  FQFindByName          := NewQuery( 'SELECT * FROM symbols WHERE name = :name ' +
+    'ORDER BY (CASE WHEN kind IN (''class'', ''interface'') ' +
+    '            AND COALESCE(TRIM(heritage), '''') = '''' ' +
+    '            AND end_line <= start_line THEN 1 ELSE 0 END), ' +
+    'qualified_name, ' +
+    '(CASE WHEN impl_start_line IS NOT NULL AND impl_start_line > 0 THEN 0 ELSE 1 END), ' +
+    'file_id, start_line, id');
+  FQFindByNameCI        := NewQuery( 'SELECT * FROM symbols WHERE name = :name COLLATE NOCASE ' +
+    'ORDER BY (CASE WHEN kind IN (''class'', ''interface'') ' +
+    '            AND COALESCE(TRIM(heritage), '''') = '''' ' +
+    '            AND end_line <= start_line THEN 1 ELSE 0 END), ' +
+    'qualified_name, ' +
+    '(CASE WHEN impl_start_line IS NOT NULL AND impl_start_line > 0 THEN 0 ELSE 1 END), ' +
+    'file_id, start_line, id');
   // ORDERED, because it was not (ported from feat/autodoc-phase3; numbers
   // re-derived on this machine by tools/measure/phase1_verify.py against the
   // shipped C:\Projects\.drag-lint\library-Win64.sqlite, read-only).
@@ -11519,11 +11552,25 @@ function TSQLiteSymbolStore.FindDescendantNames(const AAncestorName: string): TA
 { Reverse of IsDescendantOf: every class whose TRANSITIVE ancestor closure includes
   AAncestorName. type_ancestors stores DIRECT parent edges (child symbol_id ->
   ancestor_name), so transitivity needs a recursive walk. A SQLite recursive CTE
-  seeds from classes directly deriving AAncestorName, then repeatedly finds classes
-  whose direct ancestor is any already-found class (matched by name). Bounded by
-  SQLite's cycle handling on the CTE + a UNION (not UNION ALL) to dedupe. Returns
-  distinct class names, sorted. Backs "list every TControl descendant" for the
-  conversion editor's class pickers. }
+  seeds from types directly deriving AAncestorName, then repeatedly finds types
+  whose direct ancestor is any already-found name. Bounded by SQLite's cycle
+  handling on the CTE + a UNION (not UNION ALL) to dedupe. Returns distinct class
+  names, sorted. Backs "list every TControl descendant" for the conversion
+  editor's class pickers.
+
+  THE WALK CROSSES A TYPE ALIAS; THE ANSWER NEVER NAMES ONE. DevExpress writes
+  `TcxBaseButton = TCustomButton;` and then `TcxCustomButton = class(TcxBaseButton,
+  ...)`. Since member C the alias row (kind='type') owns its own type_ancestors
+  edge to TCustomButton, so the chain IS in the index -- but this CTE joined
+  `s.kind = 'class'` at every hop, so the alias could never enter the name set
+  and every class below it (TcxCustomButton, TcxButton, and everything deriving
+  from them) was silently absent: 2918 TControl descendants on library-Win64
+  without TcxButton. The converter team's TO picker could not offer it. Both
+  hops now admit 'class' and 'type' rows; the final SELECT keeps only names
+  that were reached AS A CLASS, because an alias is not a class and must not
+  appear in a class picker. A strong alias (`= type TBase`) carries no
+  heritage row and is neither crossed nor emitted. Pinned by
+  tests\autotest\run_descendants_alias_hop.ps1. }
 var
   Q   : TFDQuery   ;
   List: TStringList;
@@ -11534,17 +11581,17 @@ begin
     List.Sorted:= True; List.Duplicates:= dupIgnore; List.CaseSensitive:= False;
     Q.Connection:= FConn;
     Q.SQL.Text  :=
-      'WITH RECURSIVE desc_names(name) AS ( ' +
-      '  SELECT DISTINCT s.name ' +
+      'WITH RECURSIVE desc_names(name, kind) AS ( ' +
+      '  SELECT DISTINCT s.name, s.kind ' +
       '    FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id ' +
-      '   WHERE ta.ancestor_name = :anc COLLATE NOCASE AND s.kind = ''class'' ' +
+      '   WHERE ta.ancestor_name = :anc COLLATE NOCASE AND s.kind IN (''class'', ''type'') ' +
       '  UNION ' +
-      '  SELECT DISTINCT s.name ' +
+      '  SELECT DISTINCT s.name, s.kind ' +
       '    FROM type_ancestors ta ' +
-      '    JOIN symbols s   ON s.id = ta.symbol_id AND s.kind = ''class'' ' +
+      '    JOIN symbols s   ON s.id = ta.symbol_id AND s.kind IN (''class'', ''type'') ' +
       '    JOIN desc_names d ON ta.ancestor_name = d.name COLLATE NOCASE ' +
       ') ' +
-      'SELECT name FROM desc_names ORDER BY name';
+      'SELECT DISTINCT name FROM desc_names WHERE kind = ''class'' ORDER BY name';
     Q.ParamByName('anc').AsString:= AAncestorName;
     Q.Open;
     while not Q.Eof do

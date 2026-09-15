@@ -407,9 +407,22 @@ type
     /// </remarks>
     procedure RollbackFileTx(const AToken: TFileTxToken);
 
+    /// <summary>Every symbol whose bare name is AName (exact match first, a
+    /// case-insensitive retry only on zero rows), in a TOTAL order a first-pick
+    /// consumer can rely on: a real class/interface declaration BEFORE a
+    /// forward-declaration stub of the same name (a stub -- `TFoo = class;` --
+    /// has empty heritage and a single-line span, no members and no ancestor
+    /// rows), then qualified_name, then an implemented routine before an
+    /// unimplemented overload, then file_id, start_line, id.</summary>
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
+    /// Result[0] is therefore never a stub when a body of the same name exists
+    /// anywhere in the index, and is the lone stub when nothing else exists
+    /// (a class whose body sits in an inactive $IFDEF branch still resolves as
+    /// a class with no ancestors, never as some other class). Two REAL
+    /// declarations of one name in two units keep qualified_name order.
+    /// Pinned by tests\autotest\run_forward_decl_shadow.ps1.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) (+44 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1186,10 +1199,15 @@ type
     function UnresolvedAncestorNames(const AClassName: string; AFileId: Int64): TArray<string>;
     /// <summary>Every class whose transitive ancestor set includes AAncestorName
     /// (the reverse of IsDescendantOf). Distinct class names, sorted. Backed by a
-    /// single indexed lookup on type_ancestors.ancestor_name.</summary>
+    /// single indexed lookup on type_ancestors.ancestor_name. The walk crosses a
+    /// plain TYPE ALIAS standing in heritage position (`TcxBaseButton =
+    /// TCustomButton; TcxCustomButton = class(TcxBaseButton)`), but an alias
+    /// name is never part of the answer -- only names reached as a class are.</summary>
     /// <param name="AAncestorName"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
     /// <remarks>
+    /// A strong alias (`= type TBase`) carries no heritage row and is neither
+    /// crossed nor emitted. Pinned by tests\autotest\run_descendants_alias_hop.ps1.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Convert.PropTree.BuildPropTree.ClosureClassIds (DRagLint.Convert.PropTree.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
