@@ -3,7 +3,17 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.12.0-alpha -- 2026-09-14
+
+**Two breaking changes.** Both are about a command that used to succeed while
+doing less than the caller asked for: a `--db` that did not exist was dropped
+and the run reported success anyway, and `default-resolved` -- a receipt for
+work that already worked -- buried the four kinds a human must act on inside
+`items[]`.
+
+Note on numbering: **v1.11.0-alpha was prepared but never published** (version
+bump and CHANGELOG only -- no tag, no release), so this release carries
+everything since the last published one, **v1.10.1-alpha**.
 
 ### `--help` lists every flag the CLI accepts, and the guard now enforces that
 
