@@ -5,6 +5,53 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Tests: the per-verb flag axis is now derivable, and the gap is measured (plan section 10)
+
+`CLAUDE.md`'s DOCS-IN-SYNC table promises that **every flag a verb accepts is
+listed on that verb's line**. Only the first half of that rule -- every verb is
+listed -- was checkable: `ParseArgs` is verb-agnostic, so nothing in the parser
+says which verb takes which flag, and `run_docs_sync_guard.ps1` check 9
+therefore polices flags as SETS and records the per-verb axis as a follow-on.
+
+**`tests\autotest\lib\CliFlagVerbMap.ps1` is that missing truth source**, from
+source alone: flag -> `TArgs` field (the `ParseArgs` chain) -> reading routine
+(`AArgs.<Field>`) -> verb entry routine (transitively, through the routines a
+verb hands `AArgs` to) -> verb (the `Args.Command` dispatch arms). It does
+**not** use the index, deliberately: the resolver walks `kind = 'call'` only
+(`docs\INBOX-property-refs-never-resolve.md`), so a field reference never gets a
+`refs.symbol_id` and a map built on those refs would be a ghost measurement.
+
+It lexes before it scans, because a text scan of Pascal is wrong three ways and
+all three are live in `DRagLint.CLI.pas`: comments there discuss `Result.Edges`
+in prose, `PrintHelp` PRINTS the text `{$IFDEF}` from inside a `Writeln`, and
+`:23773` is a real `{$IFNDEF WIN64}` whose dead arm must not contribute a
+cell. A conditional symbol with no ruling keeps BOTH arms and is named, never
+silently dropped.
+
+**`tests\autotest\run_flag_verb_map.ps1` proves the derivation and reports the
+gap.** MEASURED against the deployed banner: the code consumes **439** (verb,
+flag) cells and **124 of them, across 33 verbs, are absent from that verb's own
+`--help` block** -- 51 of the 124 being the same seventeen lint/autofix/doc
+flags repeated on `lint-project`, `check-ast` and `lint-all`, which the banner
+today factors onto the `lint` line. Closing that is a banner-design decision
+with an owner's name on it, so **the guard does not land red over it**: the gap
+is printed in full every run and RATCHETED against the recorded baseline, so it
+can grow no further silently. What the guard does hard-fail on is the
+derivation -- four planted cases (a read in a comment, in a string literal, in
+an inactive `{$IFDEF}` branch, and a positive control that the same read IS
+found when it is none of those) and four structural assertions, each encoding a
+defect measured while building the map: a qualified `TFbSnapshot.Run(AArgs.X)`
+read as a call to the DISPATCHER (which silently gave two verbs all 161 flags),
+`Run`'s interface forward declaration matched instead of its implementation
+(zero verbs, every downstream set legitimately empty), the four multi-line
+dispatch arms scoring as unresolved, and a branch's GUARD read of
+`Result.Command` counted as a binding (which handed `--dir`/`--root`/`--unit`
+to nearly every verb).
+
+The map independently reproduces the prediction the plan recorded for it:
+`--size-guard-mb` and `--force32` are consumed by exactly `index`, `query`,
+`lsp` and `serve`, and appear on none of those four verbs' lines.
+
 ### Docs: README and AI-USAGE now name every `--help` flag (plan 7d, unguarded by design)
 
 The flag long tail is closed: re-derived against the deployed banner (162

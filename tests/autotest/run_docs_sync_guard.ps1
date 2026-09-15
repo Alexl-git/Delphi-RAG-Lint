@@ -1076,8 +1076,19 @@ if (Test-Path -LiteralPath $schemaSrc) {
 # measured, a naive "flags between this verb line and the next" parse
 # attributes --rebuild to resolve-dbs and --fix to exceptions-sync, because
 # continuation prose names other verbs' flags freely. Flags are therefore
-# enforced as SETS. The per-verb matrix needs a flag -> TArgs field -> reader
-# map and is recorded as a follow-on.
+# enforced as SETS HERE.
+#
+# THE PER-VERB AXIS NOW HAS A TRUTH SOURCE, and it is a separate runner:
+# tests\autotest\lib\CliFlagVerbMap.ps1 derives flag -> TArgs field -> reading
+# routine -> verb from source alone, and tests\autotest\run_flag_verb_map.ps1
+# proves that derivation and reports the gap (MEASURED 2026-09-15: 439 cells
+# consumed, 124 of them absent from their verb's own --help block, across 33
+# verbs). It is deliberately NOT folded into this check: that gap is a banner-
+# DESIGN decision the owner has not taken, so it is ratcheted and printed
+# rather than failed, and this check must stay failable on the things that are
+# already agreed. A recorded number left in a header is how "144 flags" reached
+# a brief three releases after it stopped being true -- so if you re-measure,
+# re-measure there, not here.
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host '-- check 9: flags' -ForegroundColor Cyan
