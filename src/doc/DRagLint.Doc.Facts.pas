@@ -1642,6 +1642,15 @@ const
     away -- stays armed and binds whatever identifier turns up pages later. }
   HANDLER_WRAP_BUDGET_LINES = 2;
 
+  { The binder's stages, named rather than spelled as case labels: `2` on its own
+    does not say "we have the variable and are waiting for the colon", and this
+    state is read in three places. ON_STAGE_NONE is also the Default() value, so
+    a zeroed TBodyScanState is correctly "not mid-binding". }
+  ON_STAGE_NONE  = 0;
+  ON_STAGE_VAR   = 1;
+  ON_STAGE_COLON = 2;
+  ON_STAGE_TYPE  = 3;
+
 { The resumable half of `on <Var>: <Type> do`. Consumes as much of the binding
   as this line carries, starting at AIdx, and leaves AScan.OnStage non-zero when
   the line ran out mid-binding so the next line can finish it.
@@ -1656,31 +1665,31 @@ var
   C: TArray<string>;
 begin
   N:= Length(ALine);
-  while AScan.OnStage > 0 do
+  while AScan.OnStage <> ON_STAGE_NONE do
   begin
     while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
     if AIdx > N then Exit; { the line ran out -- stay armed, see ResumeHandlerBinding }
     case AScan.OnStage of
-      1: { awaiting the handler VARIABLE }
+      ON_STAGE_VAR: { awaiting the handler VARIABLE }
         begin
-          if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= 0; Exit; end;
+          if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
           C:= ReadIdentChain(ALine, AIdx);
-          if Length(C) <> 1 then begin AScan.OnStage:= 0; Exit; end;
+          if Length(C) <> 1 then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
           AScan.OnVar  := C[0];
-          AScan.OnStage:= 2;
+          AScan.OnStage:= ON_STAGE_COLON;
         end;
-      2: { awaiting the ':' -- `on Exception do` binds nothing }
+      ON_STAGE_COLON: { awaiting the ':' -- `on Exception do` binds nothing }
         begin
-          if ALine[AIdx] <> ':' then begin AScan.OnStage:= 0; Exit; end;
+          if ALine[AIdx] <> ':' then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
           Inc(AIdx);
-          AScan.OnStage:= 3;
+          AScan.OnStage:= ON_STAGE_TYPE;
         end;
     else { awaiting the TYPE (last segment of a dotted one) }
       begin
-        if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= 0; Exit; end;
+        if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
         C:= ReadIdentChain(ALine, AIdx);
-        AScan.OnStage:= 0;
-        if Length(C) = 0 then Exit;
+        AScan.OnStage:= ON_STAGE_NONE;
+        if Length(C) = 0 then Continue;
         AScan.HandlerVars := AScan.HandlerVars  + [AScan.OnVar];
         AScan.HandlerTypes:= AScan.HandlerTypes + [C[High(C)]];
       end;
@@ -1702,9 +1711,9 @@ procedure ResumeHandlerBinding(const ALine: string; var AScan: TBodyScanState);
 var
   Idx: Integer;
 begin
-  if AScan.OnStage = 0 then Exit;
+  if AScan.OnStage = ON_STAGE_NONE then Exit;
   Dec(AScan.OnBudget);
-  if AScan.OnBudget < 0 then begin AScan.OnStage:= 0; Exit; end;
+  if AScan.OnBudget < 0 then begin AScan.OnStage:= ON_STAGE_NONE; Exit; end;
   Idx:= 1;
   AdvanceHandlerBinding(ALine, Idx, AScan);
 end;
@@ -1713,7 +1722,7 @@ procedure RecordHandlerBinding(const ALine: string; AIdx: Integer; var AScan: TB
 var
   Idx: Integer;
 begin
-  AScan.OnStage := 1;
+  AScan.OnStage := ON_STAGE_VAR;
   AScan.OnVar   := '';
   AScan.OnBudget:= HANDLER_WRAP_BUDGET_LINES;
   Idx:= AIdx; { a LOCAL copy -- the callers step past the word `on` themselves }
@@ -1768,15 +1777,20 @@ begin
   Segs:= ReadIdentChain(ALine, AIdx);
   if Length(Segs) = 0 then Exit;
   while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
+  { The ONE peek the whole function turns on: a constructor call and a cast are
+    parenthesised, a field chain and a bare variable are not. }
+  var Parenthesised: Boolean:= (AIdx <= N) and (ALine[AIdx] = '(');
   if Length(Segs) >= 2 then
   begin
-    if (AIdx <= N) and (ALine[AIdx] = '(') then Exit(Segs[High(Segs) - 1]);
-    Exit; { a dotted chain ending in a field -- a variable, not a class }
+    { ...and with no paren the chain ends in a field, so it is a variable. }
+    if Parenthesised then Result:= Segs[High(Segs) - 1];
+    Exit;
   end;
-  if (AIdx <= N) and (ALine[AIdx] = '(') then
+  if Parenthesised then
   begin
-    if Assigned(AScan.NameKind) and (AScan.NameKind(Segs[0]) = rnkRoutine) then Exit;
-    Exit(Segs[0]);
+    if not (Assigned(AScan.NameKind) and (AScan.NameKind(Segs[0]) = rnkRoutine)) then
+      Result:= Segs[0];
+    Exit;
   end;
   for var B:= High(AScan.HandlerVars) downto 0 do
     if SameText(AScan.HandlerVars[B], Segs[0]) then Exit(AScan.HandlerTypes[B]);
