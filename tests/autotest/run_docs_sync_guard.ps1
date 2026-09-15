@@ -1037,6 +1037,277 @@ if (Test-Path -LiteralPath $schemaSrc) {
   }
 }
 
+
+# ---------------------------------------------------------------------------
+# CHECK 9 -- every accepted FLAG is in --help, and the prose cannot name a
+#            flag that is not
+#
+# WHY THIS EXISTS. Checks 1 and 7 police VERBS both ways; flags were policed
+# only incidentally (check 4 parses $helpFlags to spot stale "undocumented"
+# prose). The gap was not theoretical: CLAUDE.md's DOCS-IN-SYNC rule was
+# written after an afternoon found the ENTIRE autofix flag set -- --file --fix
+# --fix-line --fix-rule --apply --no-preprocess -- accepted by the CLI and
+# absent from --help, so a user reading the banner could not discover autofix
+# at all. Measured when this check was written: 19 more flags in exactly that
+# state, and the prose naming 3 flags the banner denies.
+#
+# WHAT IT ENFORCES, and what it deliberately does NOT.
+#   F1  every accepted flag appears in --help (or is exempt, with a reason)
+#   F2  every --help flag is actually accepted (no phantoms)
+#   F3  every flag README/AI-USAGE name appears in --help  <- REVERSE, total
+#   F4  every PROMOTED flag is named in both prose docs    <- FORWARD, narrow
+#
+# F4 is narrow ON PURPOSE. The strict shape would be "every one of the ~147
+# flags in all three documents": ~50 doc cells today and two more per flag
+# forever, in documents whose job is orientation. README:587 says in its own
+# voice that "the complete, authoritative flag list for every verb is
+# `drag-lint --help`", and CLAUDE.md's table holds README and AI-USAGE to
+# verbs, counts and paths -- not flag completeness. A guard that fails because
+# --parent-pid is missing from README is a guard someone weakens, and this repo
+# says a rule that is on but ignored is worse than one that is off. So F4 fails
+# only on flags the BANNER ITSELF promotes: the COMMON QUESTIONS block, the
+# Output/CI block, and flags appearing on >= 5 verb lines.
+#
+# PER-VERB IS NOT CHECKABLE, and the CLAUDE.md table's "on that verb's line"
+# is therefore NOT enforced here. ParseArgs is verb-agnostic: almost every flag
+# is parsed with no reference to Result.Command, so the code does not know
+# which verb accepts which flag -- the Do<Verb> routine that reads the TArgs
+# field does. Attributing flags from --help by position is worse than useless:
+# measured, a naive "flags between this verb line and the next" parse
+# attributes --rebuild to resolve-dbs and --fix to exceptions-sync, because
+# continuation prose names other verbs' flags freely. Flags are therefore
+# enforced as SETS. The per-verb matrix needs a flag -> TArgs field -> reader
+# map and is recorded as a follow-on.
+# ---------------------------------------------------------------------------
+Write-Host ''
+Write-Host '-- check 9: flags' -ForegroundColor Cyan
+
+# Its OWN regex, deliberately not check 4's $helpFlags. Two widenings are
+# needed here -- '*' after the first letter (or --n, which IS in help, reads as
+# undocumented) and [A-Za-z] on both sides (or --clientProcessId is invisible)
+# -- and check 4's population is keyed to its narrower one. Sharing would mean
+# this check silently changes which stale claims check 4 examines, so the two
+# are kept independent.
+$FlagRx  = '--[A-Za-z][A-Za-z0-9-]*'
+# Prose must END on an alphanumeric: README wraps '--scan-libraries-' across a
+# line break, and a trailing hyphen is a fragment, never a flag.
+$ProseRx = '--[A-Za-z][A-Za-z0-9-]*[A-Za-z0-9]'
+
+function Get-FlagSet([string]$Text, [string]$Rx) {
+  $s = New-Object System.Collections.Generic.HashSet[string]
+  foreach ($m in [regex]::Matches($Text, $Rx)) { [void]$s.Add($m.Value) }
+  return ,$s
+}
+
+# Flags ParseArgs accepts that --help deliberately does NOT print. THREE
+# admissible classes, and an entry must cite one:
+#   (a) flag of a verb that is itself in $UndocumentedOnPurpose
+#   (b) back-compat ALIAS whose canonical form IS in --help
+#   (c) test-harness entry point (pre-dispatch self-test)
+# Anything else is a defect -- document it on the verb's line. Class (b) is the
+# one that can absorb anything ("it's an alias of the default"), so it is
+# reviewed at each release exactly as $UndocumentedOnPurpose is.
+$FlagUndocumentedOnPurpose = [ordered]@{
+  '--expr'            = '(a) dump-pp-eval expression; that verb is itself exempt'
+  '--from-block'      = '(a) convert-reemit input; that verb is itself exempt'
+  '--selftest-fts5'   = '(c) pre-dispatch self-test (Run, ParamStr(1)), driven by a runner under tests\'
+  '--selftest-schema' = '(c) pre-dispatch self-test, same'
+  '--use-ignore'      = '(b) no-op alias of the DEFAULT; --no-use-ignore is the documented switch'
+  '--dir'             = '(b) alias of the positional <path> every verb documents'
+  '--target'          = '(b) alias of the positional <target> on compile-check/ghost-check/check-unit'
+}
+# Not parsed through the `A = '...'` chain, so the scan cannot see them; listed
+# by name WITH the handler that must still exist, so deleting the handler makes
+# this stale rather than silently fine.
+$StructuralFlags = [ordered]@{
+  '--help'    = 'IsHelpToken'
+  '--version' = "Result.Command = '--version'"
+}
+# Promoted flags a prose doc omits on purpose. Empty, and two-way asserted so
+# it cannot rot into a suppression list.
+$FlagHelpOnlyOnPurpose = [ordered]@{}
+
+# --- the accepted set: the ParseArgs chain is authoritative and total --------
+# It is one flat `else if A = '<flag>'` chain ending in
+# `raise Exception.CreateFmt('Unknown argument: %s', [A])`, so its literals ARE
+# the accepted set. Restricted to `A = '...'` rather than any '--x' literal
+# because that span also carries comments quoting args.push('--stdio') and
+# prose about `--rule --help`; a bare-literal sweep reads those as flags.
+$paSpan = [regex]::Match($cliSrc, '(?s)function ParseArgs\s*:\s*TArgs;.*?\r?\nend; // function')
+Check 'check 9: the ParseArgs span was located' $paSpan.Success `
+  'the accepted-flag scan has nothing to read -- was ParseArgs renamed or its closing comment changed?'
+
+$accepted = New-Object System.Collections.Generic.HashSet[string]
+if ($paSpan.Success) {
+  foreach ($m in [regex]::Matches($paSpan.Value, "\bA\s*=\s*'($FlagRx)'"))      { [void]$accepted.Add($m.Groups[1].Value) }
+  foreach ($m in [regex]::Matches($paSpan.Value, "A\.StartsWith\('($FlagRx)'")) { [void]$accepted.Add($m.Groups[1].Value) }
+}
+foreach ($m in [regex]::Matches($cliSrc, "ParamStr\(1\)\s*=\s*'($FlagRx)'"))    { [void]$accepted.Add($m.Groups[1].Value) }
+foreach ($k in $StructuralFlags.Keys) { [void]$accepted.Add($k) }
+
+$helpSet = Get-FlagSet $helpText $FlagRx
+
+# NON-EMPTINESS CONTROLS. Rewrite ParseArgs as a table or a case, or rename
+# PrintHelp, and both scans go quiet -- and a quiet scan passes every other
+# assertion in this check. Same bound check 1 puts on the dispatch scan.
+Check 'check 9: accepted-flag set is populated' ($accepted.Count -gt 100) `
+  "only $($accepted.Count) accepted flag(s) parsed -- the chain scan is broken, not the CLI"
+Check 'check 9: --help flag set is populated' ($helpSet.Count -gt 100) `
+  "only $($helpSet.Count) flag(s) in --help"
+
+# --- F0: the exe is a BUILT ARTIFACT; source and exe must agree --------------
+# third_party\dll-win64\drag-lint.exe is not tracked, so this check compares a
+# built artifact against source on disk -- two points in time. Without F0, a
+# PrintHelp edit with no rebuild reads as doc drift and sends the reader
+# hunting through the docs. With it, the failure says "rebuild first".
+$phSpan = [regex]::Match($cliSrc, '(?s)procedure PrintHelp.*?function ParseArgs')
+Check 'check 9: the PrintHelp span was located' $phSpan.Success 'cannot compare source help against the exe'
+if ($phSpan.Success) {
+  $srcHelpSet = Get-FlagSet $phSpan.Value $FlagRx
+  $f0Src = @($srcHelpSet | Where-Object { -not $helpSet.Contains($_) }) | Sort-Object
+  $f0Exe = @($helpSet    | Where-Object { -not $srcHelpSet.Contains($_) }) | Sort-Object
+  Check 'F0 the deployed exe''s --help matches PrintHelp in source' `
+    (($f0Src.Count -eq 0) -and ($f0Exe.Count -eq 0)) `
+    ("REBUILD FIRST -- in source only: $($f0Src -join ' ') | in the exe only: $($f0Exe -join ' ')")
+}
+
+# --- F1: accepted => documented ---------------------------------------------
+$f1 = @($accepted | Where-Object {
+          -not $helpSet.Contains($_) -and -not $FlagUndocumentedOnPurpose.Contains($_)
+        }) | Sort-Object
+Check 'F1 every accepted flag appears in --help (or is exempt)' ($f1.Count -eq 0) `
+  ("$($f1.Count) accepted but undiscoverable: " + ($f1 -join ' '))
+
+# --- F2: documented => accepted (no phantoms) -------------------------------
+$f2 = @($helpSet | Where-Object { -not $accepted.Contains($_) }) | Sort-Object
+Check 'F2 every --help flag is actually accepted' ($f2.Count -eq 0) `
+  ("$($f2.Count) phantom(s) -- --help offers what ParseArgs rejects: " + ($f2 -join ' '))
+
+# --- F1x / F2x: the exemption table cannot outlive what it exempts ----------
+$exStale = @($FlagUndocumentedOnPurpose.Keys | Where-Object { -not $accepted.Contains($_) })
+Check 'F1x every flag exemption is still accepted by the CLI' ($exStale.Count -eq 0) `
+  ("stale entr(ies) -- the flag is gone, delete the exemption: " + ($exStale -join ' '))
+$exNowDoc = @($FlagUndocumentedOnPurpose.Keys | Where-Object { $helpSet.Contains($_) })
+Check 'F2x no flag exemption is now IN --help' ($exNowDoc.Count -eq 0) `
+  ("documented after all, delete the exemption: " + ($exNowDoc -join ' '))
+$structGone = @($StructuralFlags.Keys | Where-Object { $cliSrc -notmatch [regex]::Escape($StructuralFlags[$_]) })
+Check 'F2x every structural flag''s handler still exists in source' ($structGone.Count -eq 0) `
+  ("handler string no longer found for: " + ($structGone -join ' '))
+
+foreach ($k in $FlagUndocumentedOnPurpose.Keys) {
+  Write-Host ("      [NOTE] flag not in --help on purpose: {0} -- {1}" -f $k, $FlagUndocumentedOnPurpose[$k]) -ForegroundColor DarkGray
+}
+
+# --- F3: the prose may not name a flag --help denies ------------------------
+# REVERSE and total: no list to maintain, and it catches the class that keeps
+# happening -- prose running ahead of, or behind, the banner. Scoped to README
+# and AI-USAGE exactly as check 7 is: docs\PLAN-* and docs\INBOX-* name
+# --allow-missing-db, which was specified and deliberately NOT shipped, and
+# sweeping those would fail the battery on a decision correctly recorded.
+$proseDocs = [ordered]@{
+  'README.md'        = (Join-Path $Repo 'README.md')
+  'docs\AI-USAGE.md' = (Join-Path $Repo 'docs\AI-USAGE.md')
+}
+$proseSets = @{}
+foreach ($name in $proseDocs.Keys) {
+  $p = $proseDocs[$name]
+  if (-not (Test-Path -LiteralPath $p)) { Check "check 9: $name exists" $false $p; continue }
+  $set = Get-FlagSet (Get-Content -LiteralPath $p -Raw) $ProseRx
+  $proseSets[$name] = $set
+  Check "check 9: $name flag list parsed" ($set.Count -gt 50) "($($set.Count) flag(s))"
+  $bad = @($set | Where-Object { -not $helpSet.Contains($_) }) | Sort-Object
+  Check "F3 every flag $name names is in --help" ($bad.Count -eq 0) `
+    ("$($bad.Count) named in prose but not in the banner: " + ($bad -join ' '))
+}
+
+# --- F4: the PROMOTED set must be in both prose docs ------------------------
+# DERIVED from the banner, never hand-listed, so it tracks the banner instead
+# of rotting beside it.
+$helpLines = $helpText -split "`r?`n"
+$promoted  = New-Object System.Collections.Generic.HashSet[string]
+$inCQ = $false; $inCI = $false
+foreach ($l in $helpLines) {
+  if ($l -match '^\s*COMMON QUESTIONS') { $inCQ = $true;  continue }
+  if ($l -match '^\s*Output/CI')        { $inCI = $true;  continue }
+  # A block ends at the next section header OR the next verb line. The verb-line
+  # clause is load-bearing: the Output/CI block is followed by MORE verb lines,
+  # not a header, and a parser that only closed on a header swallowed 8 verbs
+  # into "CI" and promoted 7 flags that nothing promotes.
+  if (($inCQ -or $inCI) -and ($l -match '^\s{2}drag-lint\s+\S' -or $l -match '^[A-Z][A-Za-z /]+:\s*$')) {
+    $inCQ = $false; $inCI = $false
+  }
+  if ($inCQ -or $inCI) { foreach ($m in [regex]::Matches($l, $FlagRx)) { [void]$promoted.Add($m.Value) } }
+}
+$verbLines = @($helpLines | Where-Object { $_ -match '^\s{2}drag-lint\s+\S' })
+Check 'check 9: verb lines parsed for cross-cutting flags' ($verbLines.Count -gt 50) `
+  "($($verbLines.Count) verb line(s))"
+$freq = @{}
+foreach ($l in $verbLines) {
+  $seen = New-Object System.Collections.Generic.HashSet[string]
+  foreach ($m in [regex]::Matches($l, $FlagRx)) { [void]$seen.Add($m.Value) }
+  foreach ($x in $seen) { $freq[$x] = 1 + $freq[$x] }
+}
+# 5 is a knob, so the derived set is PRINTED every run -- a threshold nobody can
+# see is a threshold nobody revisits.
+foreach ($x in @($freq.GetEnumerator() | Where-Object { $_.Value -ge 5 } | ForEach-Object { $_.Key })) {
+  [void]$promoted.Add($x)
+}
+[void]$promoted.Remove('--help')
+Check 'check 9: the promoted set is a sane size' (($promoted.Count -ge 20) -and ($promoted.Count -le 60)) `
+  "promoted=$($promoted.Count) -- outside 20..60 means the block parse broke, not that the banner changed"
+Write-Host ("      [NOTE] promoted flags ({0}): {1}" -f $promoted.Count, (($promoted | Sort-Object) -join ' ')) -ForegroundColor DarkGray
+
+foreach ($name in $proseSets.Keys) {
+  $missing = @($promoted | Where-Object {
+                 -not $proseSets[$name].Contains($_) -and -not $FlagHelpOnlyOnPurpose.Contains($_)
+               }) | Sort-Object
+  Check "F4 $name names every flag --help promotes" ($missing.Count -eq 0) `
+    ("$($missing.Count) promoted flag(s) a reader of this doc cannot find: " + ($missing -join ' '))
+}
+$hoStale = @($FlagHelpOnlyOnPurpose.Keys | Where-Object { -not $promoted.Contains($_) })
+Check 'F4x every $FlagHelpOnlyOnPurpose entry is still promoted' ($hoStale.Count -eq 0) `
+  ("no longer promoted, delete the entry: " + ($hoStale -join ' '))
+
+# --- POSITIVE CONTROLS ------------------------------------------------------
+# Every assertion above is of the form "this set difference is empty", and an
+# empty set is exactly what a BROKEN scan produces. These four plant a token
+# and require the matcher to find it. They mutate in-memory copies, the way
+# checks 7 and 8 do; no temp files.
+$guid = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+$tok  = "--zz-planted-$guid"
+
+$ctlSrc = $paSpan.Value + "`r`n  else if A = '$tok' then`r`n"
+$ctlAcc = New-Object System.Collections.Generic.HashSet[string]
+foreach ($m in [regex]::Matches($ctlSrc, "\bA\s*=\s*'($FlagRx)'")) { [void]$ctlAcc.Add($m.Groups[1].Value) }
+Check 'CONTROL F1 a planted accepted flag is seen as undocumented' `
+  ($ctlAcc.Contains($tok) -and -not $helpSet.Contains($tok)) `
+  'the accepted-flag scan cannot see a new chain entry, so F1 can never fail'
+
+$ctlHelpSet = Get-FlagSet ($helpText + " [$tok]") $FlagRx
+Check 'CONTROL F2 a planted --help flag is seen as a phantom' `
+  ($ctlHelpSet.Contains($tok) -and -not $accepted.Contains($tok)) `
+  'the --help scan cannot see a new token, so F2 can never fail'
+
+if ($proseSets.ContainsKey('README.md')) {
+  $ctlProse = Get-FlagSet ((Get-Content -LiteralPath $proseDocs['README.md'] -Raw) + " ``$tok``") $ProseRx
+  Check 'CONTROL F3 a planted prose flag is seen as not-in---help' `
+    ($ctlProse.Contains($tok) -and -not $helpSet.Contains($tok)) `
+    'the prose scan cannot see a new token, so F3 can never fail'
+}
+
+# --fix is in COMMON QUESTIONS, so it is promoted by construction; removing it
+# from a copy of the doc must make F4 notice.
+if ($proseSets.ContainsKey('docs\AI-USAGE.md') -and $promoted.Contains('--fix')) {
+  $ctlAiText = (Get-Content -LiteralPath $proseDocs['docs\AI-USAGE.md'] -Raw) -replace '--fix\b', ''
+  $ctlAiSet  = Get-FlagSet $ctlAiText $ProseRx
+  Check 'CONTROL F4 removing a promoted flag from the doc is detected' `
+    (-not $ctlAiSet.Contains('--fix')) `
+    'F4 cannot detect a promoted flag going missing'
+} else {
+  Check 'CONTROL F4 --fix is in the promoted set' $false `
+    '--fix is no longer promoted, so this control proves nothing -- pick another promoted flag'
+}
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'DOCS SYNC GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'DOCS SYNC GUARD: PASS' -ForegroundColor Green
