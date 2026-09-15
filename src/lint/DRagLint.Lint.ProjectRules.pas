@@ -593,10 +593,16 @@ begin
         var Tgt: Int64:= 0;
         if not FileOfUnit.TryGetValue(LowerCase(U.UnitName), Tgt) then
         begin
-          var S: string:= LowerCase(U.UnitName);
-          var Dp: Integer:= LastDelimiter('.', S);
-          if Dp > 0 then S:= Copy(S, Dp + 1, MaxInt);
-          FileOfStem.TryGetValue(S, Tgt);
+          { STEM FALLBACK ONLY FOR AN UNQUALIFIED NAME. The stem map exists so
+            that `uses SQLite` resolves to `Proj.Storage.SQLite` through the
+            project's unit-scope names. A DOTTED name that is not indexed is a
+            fully-qualified LIBRARY unit and must resolve to nothing: until
+            2026-09-15 `FireDAC.Phys.SQLite` fell through to stem `sqlite` and
+            became an edge to `DRagLint.Storage.SQLite`, reporting a phantom
+            2-unit cycle on every unit that opens a FireDAC connection.
+            run_circular_uses_message.ps1 pins both halves. }
+          if Pos('.', U.UnitName) = 0 then
+            FileOfStem.TryGetValue(LowerCase(U.UnitName), Tgt);
         end;
         if (Tgt > 0) and (Tgt <> Fid) and (not Lst.Contains(Tgt)) then Lst.Add(Tgt);
         { Remember WHICH SECTION each edge came from, so the finding can tell the

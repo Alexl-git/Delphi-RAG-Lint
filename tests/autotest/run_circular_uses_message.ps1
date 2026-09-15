@@ -120,6 +120,88 @@ implementation
 end.
 '@
 
+# ---- STEM fixtures: a DOTTED library unit must not resolve by its last segment
+# (2026-09-15). `FireDAC.Phys.SQLite` is not in any project index; the rule fell
+# through to stem `sqlite` and matched `DRagLint.Storage.SQLite`, reporting a
+# phantom 2-unit cycle on every unit that opens a FireDAC connection. Two
+# fixtures that differ ONLY in whether the unresolved name carries a dot:
+#
+#   DOTTED   -- uE's implementation uses `Vendor.Phys.SQLite` (not indexed).
+#               No edge may be inferred, so NO cycle.
+#   UNDOTTED -- uF's implementation uses bare `SQLite`, which the stem map is
+#               FOR (a unit-scope-name resolution). The edge IS inferred, so
+#               the cycle with Proj.Storage.SQLite IS reported. Without this
+#               control, deleting the stem map outright would pass the DOTTED
+#               assertion.
+$stemDotted = Join-Path $WorkDir 'stem-dotted'
+New-Item -ItemType Directory $stemDotted | Out-Null
+Write-Ascii (Join-Path $stemDotted 'Proj.Storage.SQLite.pas') @'
+unit Proj.Storage.SQLite;
+
+interface
+
+uses
+  uE;
+
+type
+  TStore = class
+  end;
+
+implementation
+
+end.
+'@
+Write-Ascii (Join-Path $stemDotted 'uE.pas') @'
+unit uE;
+
+interface
+
+type
+  TE = class
+  end;
+
+implementation
+
+uses
+  Vendor.Phys.SQLite;
+
+end.
+'@
+$stemBare = Join-Path $WorkDir 'stem-bare'
+New-Item -ItemType Directory $stemBare | Out-Null
+Write-Ascii (Join-Path $stemBare 'Proj.Storage.SQLite.pas') @'
+unit Proj.Storage.SQLite;
+
+interface
+
+uses
+  uF;
+
+type
+  TStore = class
+  end;
+
+implementation
+
+end.
+'@
+Write-Ascii (Join-Path $stemBare 'uF.pas') @'
+unit uF;
+
+interface
+
+type
+  TF = class
+  end;
+
+implementation
+
+uses
+  SQLite;
+
+end.
+'@
+
 function CycleMessage([string]$Dir, [string]$DbName) {
   $db = Join-Path $WorkDir $DbName
   & $Exe index $Dir --db $db 2>&1 | Out-Null
@@ -128,6 +210,14 @@ function CycleMessage([string]$Dir, [string]$DbName) {
 
 $implOut = CycleMessage $impl 'impl.sqlite'
 $intfOut = CycleMessage $intf 'intf.sqlite'
+$dottedOut = CycleMessage $stemDotted 'stem-dotted.sqlite'
+$bareOut   = CycleMessage $stemBare   'stem-bare.sqlite'
+Write-Host ''
+Write-Host 'STEM FALLBACK -- only an UNQUALIFIED name resolves by its last segment' -ForegroundColor Cyan
+Check 'a DOTTED, un-indexed library unit (Vendor.Phys.SQLite) creates NO edge -> no cycle' `
+    (-not ($dottedOut -match 'circular-uses')) "out=$dottedOut"
+Check 'CONTROL: a bare `uses SQLite` still resolves by stem -> the cycle IS reported' `
+    ($bareOut -match 'circular-uses') "out=$bareOut"
 Write-Host ''
 Write-Host ('  IMPL: ' + (($implOut -split "`n" | Select-String 'circular-uses') -join ' ')) -ForegroundColor DarkGray
 Write-Host ('  INTF: ' + (($intfOut -split "`n" | Select-String 'circular-uses') -join ' ')) -ForegroundColor DarkGray
