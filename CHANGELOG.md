@@ -39,6 +39,44 @@ Errors move from stdout to stderr for `query` and `query --text`, which were the
 two strict verbs writing to stdout. stdout is the document under
 `--format json|sarif`; **exit 2 is the machine-readable signal, not the prose.**
 
+### BREAKING: an explicit `--db` at an OLD SCHEMA now refuses the run too
+
+The other half of the same hazard, with a different cause: the file is there, but
+it was written by an older build. 19 multi-db loops did `if not RoOk then
+Continue` -- they skipped the stale store and answered from the rest, exit 0.
+And the CLI contradicted itself, because single-db verbs already refused: `outline
+--db <v12>` exited non-zero while `query --db <v12> --db <good>` quietly dropped
+it. The same database, two contracts, decided by which verb you happened to run.
+
+Now a stale database the operator named with `--db` refuses the run: the reason
+and BOTH migrate commands go to stderr, stdout stays empty, exit 2. This is the
+2026-08-13 ruling applied where it had never reached -- *a stale DB is not
+authoritative, and the answer is to rescan, not to report*. Manifest-resolved
+runs still skip a stale sibling, which is what the caller asked for.
+
+**The cost, stated plainly:** an operator whose standing `--db P --db L` list has
+a stale L is blocked on every verb until they reindex.
+
+Also fixed, and the reason `--format json` could break on a stale index: the
+`index schema vN < vM` line went to **stdout**. Measured across 13 verbs, 11
+printed it there -- into the middle of the JSON or SARIF document they were
+writing. Both emitters (`OpenReadOnlyStore` and `OpenWritableStore` -- the latter
+is the one `proptree` actually hits, since it opens writable by default) now write
+to stderr.
+
+Two things the measurement corrected on the way:
+
+* **`usages`, `typeat` and `deps-report` MIGRATE a stale `--db` in place** --
+  schema 12 to 22, 4 tables to 31, 28 KB to 320 KB, exit 0, silence. They call
+  `Store.Migrate` on whatever they are handed, against the documented policy of
+  never migrating someone else's gigabytes as a side effect of a read. There are
+  37 such call sites; these three were measured. Out of scope for this change and
+  NOT fixed here -- the guard's T5d pins the no-migration property for the 13
+  verbs it covers, so a regression into them is caught.
+* A stale index still answers `DbContainsFile`, so `query unit-usage` and `query
+  type-usage` probe membership BEFORE checking the schema. They refuse correctly
+  once the stale index actually holds the file, which is the realistic case.
+
 ## v1.11.0-alpha -- 2026-09-11
 
 ### Tier-3 compile: 382 s -> 30.1 s on a 207-dependent unit

@@ -48,6 +48,11 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > exist is exit 2, never a narrower answer: the verb names the path and its
 > position on stderr and returns nothing. Match on the EXIT CODE, not the prose.
 > Omitting `--db` is always safe -- the manifest resolver drops absent files.
+>
+> **The same applies to a `--db` that exists but is at an OLD SCHEMA** (exit 2,
+> reason and both migrate commands on stderr). A stale index cannot answer, so it
+> is refused rather than skipped -- reindex it (`index --project <x.dproj> --db
+> <db>`, or `index <dir> --db <db>` for a library index) or drop it from the list.
 
 
 **The traps, because each one turns a correct command into a silent zero:**
@@ -266,7 +271,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 **Query / search (find symbols, callers, text)**
 | Verb | What it does |
 |------|--------------|
-| `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss, `--exact` suppresses the fallback so 0 rows means "no such symbol", `--case-sensitive` opts out of the NOCASE retry. Exit 0 = hits / 1 = zero hits / 2 = bad usage (no selector, unreadable `--db`) / 3 = fatal (unrecognised argument). **A same-named VCL/FMX tie is ordered by the framework the run's own project uses** -- see below |
+| `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss, `--exact` suppresses the fallback so 0 rows means "no such symbol", `--case-sensitive` opts out of the NOCASE retry. Exit 0 = hits / 1 = zero hits / 2 = bad usage (no selector, or an explicit `--db` that is missing or at an old schema) / 3 = fatal (unrecognised argument). **A same-named VCL/FMX tie is ordered by the framework the run's own project uses** -- see below |
 | `query --text "<phrase>"` | full-text search over `.pas`/`.dfm`/`.sql` constants AND COMMENT PROSE: messages, DFM captions, SQL exception text, and `//` / `{ }` / `(* *)` / `///` comment text (`--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--kind literal\|const\|resourcestring\|format\|comment\|doc\|dfm-prop\|sql-exception`, `--limit N`) |
 | `query find-callers --name X` | callers of a symbol (`--context N`; `--resolved` for precise call-edge callers). `--resolved` also reports routines **reached as a callback** -- handed somewhere by bare name, `@X`, or an event assignment -- marked `[callback]` rather than `[certain]`/`[ambiguous]`, because that is a reach, not a call. Without it a live predicate passed to e.g. `TDirectory.GetFiles` read as dead |
 | `query find` | doc-driven find (`--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public`); `--decl-contains Z` matches the DECLARING SOURCE LINE (clauses the index does not model) and needs `--kind`, `--name` or `--unit` |

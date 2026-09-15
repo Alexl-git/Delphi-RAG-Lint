@@ -904,6 +904,11 @@ begin
   Writeln('  indistinguishable from a complete one, which is how a conversion rule gets');
   Writeln('  validated against a corpus smaller than you asked for. Manifest-resolved runs');
   Writeln('  (no --db) are unaffected: absent files are dropped there before the verb runs.');
+  Writeln('  AN EXPLICIT --db MUST ALSO BE AT THE CURRENT SCHEMA. A database that exists but');
+  Writeln('  was written by an older build cannot answer, so naming one is refused the same');
+  Writeln('  way (exit 2, reason and both migrate commands on stderr) instead of being');
+  Writeln('  skipped. Migrate it -- "index --project <x.dproj> --db <db>" for a project index,');
+  Writeln('  "index <dir> --db <db>" for a library one -- or drop it from the list.');
   Writeln('');
   Writeln('Defaults:');
   Writeln('  --db   no default. A verb with no --db resolves its database from the');
@@ -1825,8 +1830,16 @@ begin
     if not AQuiet then
       { Both forms, because at this point the schema is too old to be trusted to
         tell us which kind of database this is -- scan_type may predate it. The
-        folder form alone would be refused on a project index. }
-      Writeln(Format('index schema v%d < v%d: to migrate, run "drag-lint index --project <file.dproj> --db <db>"'
+        folder form alone would be refused on a project index.
+
+        ErrOutput, not Writeln. This line went to STDOUT until 2026-09-14, which
+        is why AQuiet exists at all: callers emitting JSON or SARIF had to ask to
+        be spared a diagnostic that would corrupt the document they were writing.
+        A diagnostic belongs on stderr in EVERY output format, where it needs no
+        opt-out -- and where the 11 verbs measured printing it to stdout stop
+        corrupting machine-readable output. AQuiet is kept: it still lets a
+        caller that reports the schema gap ITSELF avoid saying it twice. }
+      Writeln(ErrOutput, Format('index schema v%d < v%d: to migrate, run "drag-lint index --project <file.dproj> --db <db>"'
                    + ' for a project index, or "drag-lint index <dir> --db <db>" for a library index', [Found, Expected]));
   end;
   { INDEX FRESHNESS -- the 2026-08-13 owner ruling, warn-only half.
@@ -1835,10 +1848,10 @@ begin
     fire on a minutes-old exception class purely because the index had not seen
     it yet, and the finding was plausible, confident and wrong.
 
-    ErrOutput, NOT Writeln -- deliberately unlike the schema line four lines
-    above, which goes to stdout and would corrupt --format sarif (that is why
-    callers pass AQuiet at all). A note on stderr is safe on every output path,
-    so it is not gated on AQuiet.
+    ErrOutput, NOT Writeln -- as the schema line above now is too (both moved
+    2026-09-14; the schema one used to go to stdout and corrupt --format sarif,
+    which is the reason AQuiet was invented). A note on stderr is safe on every
+    output path, so it is not gated on AQuiet.
 
     Advisory only: no finding, no exit code, no stdout. The ruling's open
     questions -- refuse vs warn vs auto-reindex, and whether the gate lives here
@@ -1865,7 +1878,10 @@ begin
     Result:= nil; Exit; // writable open failed (locked / read-only file) -> caller falls back
   end;
   if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
-  else begin AOk:= False; Writeln(Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
+  { ErrOutput for the same reason as OpenReadOnlyStore's twin above: proptree
+    opens WRITABLE by default, so this -- not that one -- is the line a stale
+    `proptree --db <old>` actually printed, and it printed it onto stdout. }
+  else begin AOk:= False; Writeln(ErrOutput, Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
 end;
 
 /// <summary>Open the platform LIBRARY index for a lint run, but ONLY when its
@@ -3952,6 +3968,51 @@ begin
   if not Result then Flush(ErrOutput);
 end;
 
+/// <summary>Decides what a STALE-SCHEMA database means for the run in hand: a
+/// refusal when the operator named it with --db, a skip when the manifest chose
+/// it. Reports the refusal on stderr; the caller must Exit(2) on True.</summary>
+/// <param name="AArgs">Parsed args. ONLY DbPaths (the explicit list) is read.</param>
+/// <param name="AVerb">Verb name for the message prefix, e.g. 'proptree'.</param>
+/// <param name="ADbPath">The database whose schema is too old to answer from.</param>
+/// <returns>True when the run must refuse (the caller Exit(2)s); False when the
+/// caller should Continue to the next database.</returns>
+/// <remarks>
+/// <para>ExplicitDbsExist's sibling. That one refuses a --db that is not THERE;
+/// this one refuses a --db that is too OLD TO ANSWER. Both close one hazard:
+/// answering from fewer stores than the operator named, and exiting 0.</para>
+///
+/// <para>WHY `Length(DbPaths) &gt; 0` IS THE WHOLE TEST. ResolveConsumerDbs
+/// returns AArgs.DbPaths UNCHANGED when the user typed --db, so inside these
+/// loops the explicit list and the iterated list are the same array -- there is
+/// no manifest-derived member to mistake for an explicit one. Testing the LIST
+/// rather than matching THIS path also cannot fail OPEN on a spelling or
+/// separator difference, which a per-path string comparison could.</para>
+///
+/// <para>WHY IT REFUSES RATHER THAN WARNS -- the 2026-08-13 ruling, verbatim: a
+/// stale DB is not authoritative, and the answer is to RESCAN, not to report.
+/// The CLI already agreed for single-DB verbs (`outline --db &lt;v12&gt;` exits
+/// non-zero) while the multi-DB loops skipped, so one stale database refused one
+/// verb and was quietly dropped by the next -- the same file, two contracts.</para>
+///
+/// <para>THE COST, STATED PLAINLY: an operator whose standing `--db P --db L`
+/// list has a stale L is blocked on EVERY verb until they reindex. That is what
+/// the ruling asks for, and it will be felt.</para>
+///
+/// <para>The schema gap itself (`index schema v12 &lt; v22`) is already named on
+/// stderr by OpenReadOnlyStore / OpenWritableStore, so this adds the VERDICT and
+/// the REPAIR, not the diagnosis.</para>
+/// </remarks>
+function StaleDbRefusesRun(const AArgs: TArgs; const AVerb, ADbPath: string): Boolean;
+begin
+  Result:= Length(AArgs.DbPaths) > 0;
+  if not Result then Exit; { manifest-resolved: a stale sibling is not what was asked for }
+  Writeln(ErrOutput, Format('ERROR: %s: the explicit --db is at an OLD SCHEMA: %s', [AVerb, ADbPath]));
+  Writeln(ErrOutput, '       A stale index is not authoritative. Nothing was answered.');
+  Writeln(ErrOutput, Format('       Migrate it: drag-lint index --project <x.dproj> --db "%s"   (project index)', [ADbPath]));
+  Writeln(ErrOutput, Format('               or: drag-lint index <dir> --db "%s"                 (library index)', [ADbPath]));
+  Flush(ErrOutput);
+end;
+
 function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string): string;
 var
   DbBase: string;
@@ -5530,7 +5591,13 @@ begin
       AnyDb:= True;
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbP, RoOk);
-      if (not RoOk) or (Store = nil) then Continue; { stale DB reported; scan the rest }
+      if (not RoOk) or (Store = nil) then
+      begin
+        { Store = nil with RoOk true is an OPEN failure, not a stale schema, so
+          only the stale case can refuse the run. }
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'resolve-uses', DbP) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
       for S in Store.FindSymbolsByExactName(AArgs.Name) do
       begin
         Syms    := Syms     + [S];
@@ -5988,7 +6055,11 @@ begin
 
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbPath, RoOk);
-      if not RoOk then Continue;
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'query unit-usage', DbPath) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
 
       var Fid: Int64:= Store.FindFileIdByPath(Abs);
       if Fid <= 0 then Continue;
@@ -6181,7 +6252,11 @@ begin
       if not DbContainsFile(DbPath, Abs) then Continue;
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbPath, RoOk);
-      if not RoOk then Continue;
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'query type-usage', DbPath) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
       var Fid: Int64:= Store.FindFileIdByPath(Abs);
       if Fid <= 0 then Continue;
       Found:= True;
@@ -6290,7 +6365,11 @@ begin
   begin
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(DbPath, RoOk);
-    if not RoOk then Continue; { stale DB reported; skip, scan the rest }
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, 'query --text', DbPath) then Exit(2);
+      Continue; { manifest-resolved: stale DB reported, scan the rest }
+    end;
     Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim, AArgs.Kind);
     for M in Matches do begin SetLength(AllMatches, Length(AllMatches) + 1); AllMatches[High(AllMatches)]:= M; end;
   end;
@@ -6578,7 +6657,11 @@ begin
         begin
           var RoOk: Boolean;
           Store:= OpenReadOnlyStore(DbPath, RoOk);
-          if not RoOk then Continue; { stale DB reported; skip, scan the rest }
+          if not RoOk then
+          begin
+            if StaleDbRefusesRun(AArgs, 'query', DbPath) then Exit(2);
+            Continue; { manifest-resolved: stale DB reported, scan the rest }
+          end;
 
           for var Row in ResolvedCallersForName(Store, AArgs.Name) do
           begin
@@ -6623,7 +6706,11 @@ begin
     begin
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbPath, RoOk);
-      if not RoOk then Continue; { stale DB reported; skip, scan the rest }
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'query', DbPath) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
       // v0.17: use context variant if --context N is provided
       if AArgs.ContextLines > 0 then Refs:= Store.FindCallersByNameWithContext(AArgs.Name, AArgs.ContextLines)
       else Refs:= Store.FindCallersByName(AArgs.Name);
@@ -6654,7 +6741,11 @@ begin
     begin
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbPath, RoOk);
-      if not RoOk then Continue; { stale DB reported; skip, scan the rest }
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'query', DbPath) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
       var StartId : Int64:= 0   ;
       var StartKind: string:= '';
       for S in Store.FindSymbolsByExactName(AArgs.Name) do
@@ -6740,7 +6831,11 @@ begin
       begin
         var RoOk: Boolean;
         Store:= OpenReadOnlyStore(DbPath, RoOk);
-        if not RoOk then Continue; { stale DB reported; skip, scan the rest }
+        if not RoOk then
+        begin
+          if StaleDbRefusesRun(AArgs, 'query', DbPath) then Exit(2);
+          Continue; { manifest-resolved: stale DB reported, scan the rest }
+        end;
         for var Nm in Store.FindDescendantNames(AArgs.OfName) do
           Names.Add(Nm);
       end;
@@ -6798,7 +6893,11 @@ begin
   begin
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(DbPath, RoOk);
-    if not RoOk then Continue; { stale DB reported; skip, scan the rest }
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, 'query', DbPath) then Exit(2);
+      Continue; { manifest-resolved: stale DB reported, scan the rest }
+    end;
     if AArgs.QName <> '' then Symbols:= Store.FindSymbolsByQualifiedName(AArgs.QName)
     else
     begin
@@ -6835,7 +6934,11 @@ begin
     begin
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbPath, RoOk);
-      if not RoOk then Continue; { stale DB reported; skip, scan the rest }
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'query', DbPath) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
       Symbols:= Store.FindSymbolsFuzzy(AArgs.Name, 10);
       for S in Symbols do
       begin
@@ -15176,7 +15279,13 @@ begin
     AnyDb:= True;
     var RoOk: Boolean;
     var St: ISymbolStore:= OpenReadOnlyStore(DbP, RoOk);
-    if (not RoOk) or (St = nil) then Continue; { stale DB reported; scan the rest }
+    if (not RoOk) or (St = nil) then
+    begin
+      { St = nil with RoOk true is an OPEN failure, not a stale schema, so
+        only the stale case can refuse the run. }
+      if (not RoOk) and StaleDbRefusesRun(AArgs, 'find-unit', DbP) then Exit(2);
+      Continue; { manifest-resolved: stale DB reported, scan the rest }
+    end;
     if UnitStore = nil then
     begin
       var Fid: Int64:= St.FindFileIdByPath(TPath.GetFullPath(AArgs.InFile));
@@ -20876,7 +20985,11 @@ begin
       CandidateStore:= OpenWritableStore(Db, RoOk);
       if not RoOk then CandidateStore:= OpenReadOnlyStore(Db, RoOk); // graceful read-only fallback
     end;
-    if not RoOk then Continue;
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, 'proptree', Db) then Exit(2);
+      Continue; { manifest-resolved: stale DB reported, scan the rest }
+    end;
     Store:= CandidateStore; // at least one readable db
     var Candidate: TPropTree:= BuildPropTree(CandidateStore, AArgs.QName, Opts);
     if Candidate.RootType <> '' then
@@ -20975,6 +21088,9 @@ var
   E        : TRuleError         ;
   R        : TConversionRule    ;
   Depth    : Integer            ;
+  { TreeFor returns a TPropTree, so it cannot Exit(2) on a stale explicit --db.
+    It raises this flag instead and the body refuses right after the calls. }
+  StaleExplicitDb: Boolean      ;
 
   function KindStr(const AKind: TRuleKind): string;
   begin
@@ -21070,7 +21186,12 @@ var
       if not TFile.Exists(LDb) then Continue;
       var RoOk: Boolean;
       var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
-      if not RoOk then Continue;
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'convert-validate', LDb) then
+        begin StaleExplicitDb:= True; Exit; end;
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
       Cand:= BuildPropTree(CandStore, AQName, Opts);
       if Cand.RootType <> '' then Exit(Cand);
     end;
@@ -21111,8 +21232,12 @@ begin
   Opts.ToPersistent:= AArgs.ToPersistent;
 
   Dbs     := ResolveConsumerDbs(AArgs);
+  StaleExplicitDb:= False; { a local Boolean is not zero-initialised }
   FromTree := TreeFor(AArgs.CallFrom); // --from reuses CallFrom
   ToTree   := TreeFor(AArgs.RenameTo); // --to   reuses RenameTo
+  { TreeFor cannot Exit(2) from inside a function returning a tree, so the
+    refusal it could only flag is enforced here. }
+  if StaleExplicitDb then Exit(2);
 
   Errors:= ValidateConversionRules(RuleSet, FromTree, ToTree);
 
@@ -21151,6 +21276,9 @@ var
   RulesText: string             ;
   JRoot    : TJSONObject        ;
   JReport  : TJSONObject        ;
+  { TreeFor returns a TPropTree, so it cannot Exit(2) on a stale explicit --db.
+    It raises this flag instead and the body refuses right after the calls. }
+  StaleExplicitDb: Boolean      ;
 
   function ArrJson(const A: TArray<string>): TJSONArray;
   var S: string;
@@ -21174,7 +21302,12 @@ var
       if not TFile.Exists(LDb) then Continue;
       var RoOk: Boolean;
       var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
-      if not RoOk then Continue;
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'convert-reemit', LDb) then
+        begin StaleExplicitDb:= True; Exit; end;
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
       Cand:= BuildPropTree(CandStore, AQName, Opts);
       if Cand.RootType <> '' then Exit(Cand);
     end;
@@ -21212,8 +21345,12 @@ begin
   Opts.ToPersistent:= AArgs.ToPersistent;
 
   Dbs     := ResolveConsumerDbs(AArgs);
+  StaleExplicitDb:= False; { a local Boolean is not zero-initialised }
   FromTree:= TreeFor(AArgs.CallFrom); // --from reuses CallFrom
   ToTree  := TreeFor(AArgs.RenameTo); // --to   reuses RenameTo
+  { TreeFor cannot Exit(2) from inside a function returning a tree, so the
+    refusal it could only flag is enforced here. }
+  if StaleExplicitDb then Exit(2);
 
   Res:= ReemitComponent(BlockText, Rules, FromTree, ToTree, ParseCastLib(AArgs.CastLibFile));
 
@@ -21334,7 +21471,7 @@ end; // function
 /// qname), Output=--out (file; empty=stdout), Surface=--surface dfm|pas ('' =
 /// default 'dfm'), DbPath/DbPaths=index(es).</param>
 /// <returns>0 success; 1 either type unresolved in every db; 2 bad args (missing
-/// --from/--to, invalid --surface value) or no readable db.</returns>
+/// --from/--to, invalid --surface value) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
 /// <remarks>Output is DETERMINISTIC (paths sorted case-insensitively) so the
 /// emitted text is stable across runs. Emission order: (1) a '#convert From -&gt;
 /// To' header with a best-guess ', unit' uses-add taken from the qname unit
@@ -21550,7 +21687,11 @@ begin
     if not TFile.Exists(LDb) then Continue;
     var RoOk: Boolean;
     var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
-    if not RoOk then Continue;
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, 'convert-scaffold', LDb) then Exit(2);
+      Continue; { manifest-resolved: stale DB reported, scan the rest }
+    end;
     HaveStore:= True;
     var CF: TPropTree:= BuildPropTree(CandStore, AArgs.CallFrom, Opts);
     var CT: TPropTree:= BuildPropTree(CandStore, AArgs.RenameTo, Opts);
@@ -21809,7 +21950,7 @@ end; // procedure
 /// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
 /// hard error (missing .dfm when rules need it, invalid rules, BuildApplyPlan Ok=False, or
 /// --apply refused by the freshness guard); 2 on bad args (missing --unit/--rules, file not
-/// found, no readable db).</returns>
+/// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
 /// <remarks>Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
 /// missing .dfm is a hard error (exit 1) since every #convert rule needs DFM instances to
 /// locate. Rules are read + parsed + validated (ValidateConversionRules) against the
@@ -21868,6 +22009,15 @@ var
       if not TFile.Exists(LDb2) then Continue;
       var RoOk2: Boolean;
       var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb2, RoOk2);
+      { NO StaleDbRefusesRun here, and not an oversight. Unlike convert-validate
+        and convert-reemit -- whose TreeFor is the ONLY place they open a
+        database, so each needs a StaleExplicitDb flag -- this verb's StoresList
+        loop has already opened EVERY resolved db, with no Break, and refused a
+        stale explicit one with Exit(2) before this function is ever called. So
+        for an explicit --db list this branch is unreachable; for a manifest list
+        skipping is the correct behaviour anyway. Pinned by run_explicit_db_strict.ps1,
+        whose T5 row for convert-apply would go red if that loop ever moved
+        below here or grew a Break. }
       if not RoOk2 then Continue;
       Cand:= BuildPropTree(CandStore, AQName, Opts);
       if Cand.RootType <> '' then Exit(Cand);
@@ -22002,7 +22152,11 @@ begin
     begin
       if not TFile.Exists(LDb) then Continue;
       var St: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
-      if not RoOk then Continue;
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'convert-apply', LDb) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
       StoresList.Add(St);
     end;
     Stores:= StoresList.ToArray;
@@ -22110,7 +22264,7 @@ end; // function
 /// per-DB).</summary>
 /// <param name="AArgs">QName=root, Direction=callers|callees (default callers),
 /// Depth=tree depth (default 3), Format/AsJson=output, DbPath/DbPaths=index(es).</param>
-/// <returns>0 ok; 1 qname unresolved in every DB; 2 usage error / no readable db.</returns>
+/// <returns>0 ok; 1 qname unresolved in every DB; 2 usage error / no readable db (an explicit --db that is missing or stale is exit 2).</returns>
 function DoReverseCallTree(const AArgs: TArgs): Integer;
 var
   Dbs    : TArray<string>;
@@ -22226,7 +22380,11 @@ begin
     if not TFile.Exists(Db) then Continue;
     var RoOk: Boolean;
     var CandidateStore: ISymbolStore:= OpenReadOnlyStore(Db, RoOk);
-    if not RoOk then Continue;
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, 'reverse-calltree', Db) then Exit(2);
+      Continue; { manifest-resolved: stale DB reported, scan the rest }
+    end;
     var CandidateIds: TArray<Int64>:= ResolveEndpointIds(CandidateStore, AArgs.QName);
     if Length(CandidateIds) > 0 then
     begin
@@ -22321,7 +22479,7 @@ end; // function
 /// (default 3, &lt;0 clamped to 0), Format/AsJson=output (default dot),
 /// Output=optional file path (else stdout), DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok (even with zero callers and/or zero callees -- still a valid
-/// 1-node chart); 1 qname unresolved in every DB; 2 usage error / no readable db.</returns>
+/// 1-node chart); 1 qname unresolved in every DB; 2 usage error / no readable db (an explicit --db that is missing or stale is exit 2).</returns>
 function DoButterfly(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>;
@@ -22448,7 +22606,11 @@ begin
     if not TFile.Exists(Db) then Continue;
     var RoOk: Boolean;
     var CandidateStore: ISymbolStore:= OpenReadOnlyStore(Db, RoOk);
-    if not RoOk then Continue;
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, 'butterfly', Db) then Exit(2);
+      Continue; { manifest-resolved: stale DB reported, scan the rest }
+    end;
     AnyDbOpened:= True;
     var CandidateIds: TArray<Int64>:= ResolveEndpointIds(CandidateStore, AArgs.QName);
     if Length(CandidateIds) > 0 then

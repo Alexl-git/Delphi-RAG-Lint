@@ -114,11 +114,49 @@ end;
 end.
 '@
 
+# A form + its .dfm, so the four convert-* verbs have something real to convert.
+# All four must be in the stale matrix: each resolves types through its OWN db
+# loop, and a verb left out of the matrix stays lenient without anything saying so.
+Write-Ascii (Join-Path $srcA 'uForm.pas') @'
+unit uForm;
+
+interface
+
+uses
+  uAlpha;
+
+type
+  TMyForm = class(TObject)
+  published
+    alpha1: TAlphaBase;
+  end;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $srcA 'uForm.dfm') @'
+object MyForm: TMyForm
+  object alpha1: TAlphaBase
+    Tag = 1
+  end
+end
+'@
+
 $dbA   = Join-Path $WorkDir 'a.sqlite'
 $dbB   = Join-Path $WorkDir 'b.sqlite'
 $ghost = Join-Path $WorkDir 'ghost.sqlite'
 $ghos2 = Join-Path $WorkDir 'ghost2.sqlite'
 $rules = (Resolve-Path "$PSScriptRoot\..\..\rules").Path
+
+# Conversion rules + a DFM object block for convert-reemit. The rules file is a
+# DIRECTIVE format, not JSON -- a JSON body parses as prose and the verb bails
+# before it ever opens a database, which would fake a pass on every stale row.
+$convRules = Join-Path $WorkDir 'rules.txt'
+$convBlock = Join-Path $WorkDir 'block.txt'
+Write-Ascii $convRules "#convert TAlphaBase -> TBetaThing, uBeta`r`n"
+Write-Ascii $convBlock "object alpha1: TAlphaBase`r`n  Tag = 1`r`nend`r`n"
 
 & $exePath index $srcA --db $dbA 2>&1 | Out-Null
 & $exePath index $srcB --db $dbB 2>&1 | Out-Null
@@ -268,6 +306,186 @@ $noDb = Run-Verb @('proptree','--qname','uAlpha.TAlphaBase','--depth','1')
 Check 'P2 POSITIVE CONTROL a run with NO --db is not hit by the new error' `
       (($noDb.Err -notmatch 'does not exist:') -and ($noDb.Out -notmatch 'does not exist:')) `
       "manifest-resolved runs must be unaffected; got exit $($noDb.Code)"
+
+# =============================================================================
+# T5 -- THE STALE-SCHEMA HALF. A --db that EXISTS but sits at an old schema.
+#
+# Same hazard as a missing one, different cause: the verb answers from fewer
+# stores than the operator named and exits 0. The CLI already contradicted
+# itself here -- single-DB verbs refuse a stale DB with a non-zero exit while
+# the multi-DB loops skipped it and carried on.
+#
+# TWO THINGS THIS ARM GETS RIGHT THAT THE OBVIOUS VERSION GETS WRONG:
+#
+# 1. THE STALE DB GOES FIRST (--db v12 --db a). Measured 2026-09-14: with the
+#    stale db SECOND, proptree / butterfly / reverse-calltree / hover resolve the
+#    qname from `a`, Break, and NEVER OPEN the stale database -- so the site under
+#    test never runs and the row passes for a reason that has nothing to do with
+#    staleness. Stale-first is the only ordering that reaches the code.
+#
+# 2. THE FIXTURE IS RECREATED BEFORE EVERY RUN. Measured the same day: a stale
+#    db handed to `usages`, `typeat` or `deps-report` is MIGRATED IN PLACE
+#    (schema_version 12 -> 22, 4 tables -> 31, 28 KB -> 320 KB, exit 0, silence).
+#    One such row leaves every later row reading a CURRENT database. This is the
+#    ghost-DB lesson again: a guard whose fixture is mutated by the thing under
+#    test measures the order of its rows.
+# =============================================================================
+$py   = Join-Path $WorkDir 'mk_v12.py'
+$dbV12 = Join-Path $WorkDir 'v12.sqlite'
+# THE STALE FIXTURE MUST CONTAIN THE FILES, NOT JUST THE SCHEMA.
+#
+# An EMPTY v12 database is a weaker fixture than it looks. `query unit-usage` and
+# `query type-usage` call DbContainsFile(db, file) BEFORE they open the store, and
+# an empty `files` table makes that probe answer "not mine" -- truthfully -- so
+# the stale-schema check below it never runs and the row passes for the wrong
+# reason. A real stale project index DOES hold the file. So the fixture inserts
+# one row per source file, spelled the way DbContainsFile normalises a path:
+# ExpandFileName, backslashes, upper-case drive letter.
+Write-Ascii $py @'
+import sqlite3, sys, os
+c = sqlite3.connect(sys.argv[1])
+c.executescript("""
+CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO schema_meta(key, value) VALUES ('schema_version', '12');
+CREATE TABLE files (id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE,
+  mtime_unix INTEGER NOT NULL, sha256 TEXT NOT NULL,
+  parsed_at INTEGER NOT NULL, language TEXT NOT NULL);
+CREATE TABLE symbols (id INTEGER PRIMARY KEY,
+  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  parent_id INTEGER REFERENCES symbols(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, name TEXT NOT NULL, qualified_name TEXT NOT NULL,
+  signature TEXT, modifiers TEXT, section TEXT, heritage TEXT,
+  is_virtual INTEGER, start_line INTEGER NOT NULL, start_col INTEGER NOT NULL,
+  end_line INTEGER NOT NULL, end_col INTEGER NOT NULL,
+  impl_start_line INTEGER, impl_end_line INTEGER);
+CREATE TABLE refs (id INTEGER PRIMARY KEY,
+  symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
+  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, name_text TEXT NOT NULL,
+  start_line INTEGER NOT NULL, start_col INTEGER NOT NULL,
+  end_line INTEGER NOT NULL, end_col INTEGER NOT NULL);
+""")
+for i, f in enumerate(sys.argv[2:], start=1):
+    p = os.path.abspath(f).replace('/', '\\')
+    if len(p) > 1 and p[1] == ':':
+        p = p[0].upper() + p[1:]
+    c.execute("INSERT INTO files(id, path, mtime_unix, sha256, parsed_at, language)"
+              " VALUES (?, ?, 0, '', 0, 'pascal')", (i, p))
+c.commit(); c.close()
+'@
+
+function Reset-StaleDb {
+  foreach ($s in @($dbV12, "$dbV12-wal", "$dbV12-shm")) {
+    if (Test-Path $s) { Remove-Item $s -Force -ErrorAction SilentlyContinue }
+  }
+  python $py $dbV12 $fileA (Join-Path $srcA 'uForm.pas') 2>&1 | Out-Null
+}
+function Get-StaleSchemaVersion {
+  # 'NONE' when schema_meta is gone; the number otherwise. A migration moves it.
+  $q = 'import sqlite3,sys' + "`n" +
+       'c=sqlite3.connect(sys.argv[1])' + "`n" +
+       'try:' + "`n" +
+       '    r=c.execute("select value from schema_meta where key=' + "'schema_version'" + '").fetchone()' + "`n" +
+       '    print(r[0] if r else "NONE")' + "`n" +
+       'except Exception:' + "`n" +
+       '    print("ERR")' + "`n"
+  $qf = Join-Path $WorkDir 'ver.py'
+  Write-Ascii $qf $q
+  return (python $qf $dbV12 2>&1 | Select-Object -Last 1)
+}
+
+function Get-StaleFileCount {
+  $qf = Join-Path $WorkDir 'cnt.py'
+  Write-Ascii $qf ("import sqlite3,sys" + "`n" +
+                   "c=sqlite3.connect(sys.argv[1])" + "`n" +
+                   "try:" + "`n" +
+                   "    print(c.execute('select count(*) from files').fetchone()[0])" + "`n" +
+                   "except Exception:" + "`n" +
+                   "    print('ERR')" + "`n")
+  return (python $qf $dbV12 2>&1 | Select-Object -Last 1)
+}
+
+Reset-StaleDb
+$havePython = (Test-Path $dbV12) -and ((Get-StaleSchemaVersion) -eq '12')
+Check 'V the stale-schema fixture is really at v12 (python available)' $havePython `
+      'no usable python3 / sqlite3 -- T5 cannot run, and a skipped arm is not a pass'
+# Without this the fixture can silently regress to an empty `files` table, and the
+# membership pre-check in the two unit/type-usage verbs then skips the stale db
+# truthfully -- passing T5 without ever reaching the code it is meant to test.
+Check 'V the stale fixture CONTAINS the source files (membership probe must say yes)' `
+      ((Get-StaleFileCount) -eq '2') `
+      "files rows = $(Get-StaleFileCount), expected 2 -- an empty stale index is skipped as 'not mine' before the schema is ever checked"
+
+if ($havePython) {
+  # Stale db FIRST. Args are the same shape as the matrix above, plus the four
+  # convert verbs, which need a unit/rules/block of their own.
+  $staleMatrix = @(
+    @{ N='proptree';         A=@('proptree','--qname','uAlpha.TAlphaBase','--depth','1') }
+    @{ N='reverse-calltree'; A=@('reverse-calltree','--qname','uAlpha.TAlphaBase.Touch') }
+    @{ N='butterfly';        A=@('butterfly','--qname','uAlpha.TAlphaBase.Touch') }
+    @{ N='find-unit';        A=@('find-unit','--name','TBetaThing','--in',$fileA) }
+    @{ N='resolve-uses';     A=@('resolve-uses','--name','TBetaThing','--in',$fileA) }
+    @{ N='query --name';     A=@('query','--name','TAlphaBase') }
+    @{ N='query --text';     A=@('query','--text','hello world') }
+    @{ N='query type-usage'; A=@('query','type-usage','--in',$fileA,'--names','TAlphaBase') }
+    @{ N='query unit-usage'; A=@('query','unit-usage','--unit','uAlpha','--in',$fileA) }
+    @{ N='convert-scaffold'; A=@('convert-scaffold','--from','uAlpha.TAlphaBase','--to','uBeta.TBetaThing') }
+    # --from/--to are LOAD-BEARING here: convert-validate's TreeFor returns
+    # immediately on an empty qname, so without them the verb never opens a
+    # database at all and the row would pass without testing anything.
+    @{ N='convert-validate'; A=@('convert-validate','--rules',$convRules,
+                                 '--from','uAlpha.TAlphaBase','--to','uBeta.TBetaThing') }
+    @{ N='convert-reemit';   A=@('convert-reemit','--from-block',$convBlock,'--rules',$convRules,
+                                 '--from','uAlpha.TAlphaBase','--to','uBeta.TBetaThing') }
+    @{ N='convert-apply';    A=@('convert-apply','--unit',(Join-Path $srcA 'uForm.pas'),'--rules',$convRules) }
+  )
+  Check 'V the stale matrix covers all four convert-* verbs' `
+        (@($staleMatrix | Where-Object { $_.N -like 'convert-*' }).Count -eq 4) `
+        'a convert verb missing from this matrix stays lenient on stale, silently'
+
+  function Run-Stale([string[]]$VerbArgs) {
+    Reset-StaleDb
+    $p = Start-Process -FilePath $exePath -ArgumentList $VerbArgs -NoNewWindow -PassThru `
+          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory 'C:\TEMP'
+    if (-not $p.WaitForExit(90000)) { try { $p.Kill($true) } catch {}; return @{ Code=-1; Out=''; Err='(timed out)'; Ver='?' } }
+    return @{
+      Code = $p.ExitCode
+      Out  = ((Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue) + '')
+      Err  = ((Get-Content -LiteralPath $err -Raw -ErrorAction SilentlyContinue) + '')
+      Ver  = (Get-StaleSchemaVersion)
+    }
+  }
+
+  $t5 = @(); $t5b = @(); $t5c = @(); $t5d = @()
+  foreach ($m in $staleMatrix) {
+    $r = Run-Stale ($m.A + @('--db',$dbV12,'--db',$dbA,'--db',$dbB))
+    if ($r.Code -ne 2) { $t5 += ("{0}=exit{1}" -f $m.N, $r.Code) }
+    if ($r.Out -match 'index schema v') { $t5b += $m.N }
+    if (-not (StdoutIsSilent $r.Out))   { $t5c += $m.N }
+    if ($r.Ver -ne '12')                { $t5d += ("{0}->v{1}" -f $m.N, $r.Ver) }
+  }
+
+  Check 'T5 a stale-schema explicit --db exits 2 on every verb' ($t5.Count -eq 0) `
+        ("still answered from the remaining stores: " + ($t5 -join ', '))
+  Check 'T5b the schema line is on STDERR, never stdout' ($t5b.Count -eq 0) `
+        ("printed the schema line to stdout, which corrupts --format json|sarif: " + ($t5b -join ', '))
+  Check 'T5c stdout carries NO partial answer when a --db is stale' ($t5c.Count -eq 0) `
+        ("answered anyway on stdout: " + ($t5c -join ', '))
+  Check 'T5d a refused run does NOT migrate the stale database' ($t5d.Count -eq 0) `
+        ("migrated a database it was told to read, as a side effect of a query: " + ($t5d -join ', '))
+
+  # ---- P5 POSITIVE CONTROL: the stale matrix's verbs WORK on current DBs ------
+  # Without this, T5/T5b/T5c pass against a build that exits 2 for these verbs
+  # unconditionally -- which is exactly the failure T5 is meant to forbid.
+  $p5 = @()
+  foreach ($m in $staleMatrix) {
+    $r = Run-Verb ($m.A + @('--db',$dbA,'--db',$dbB))
+    if ($r.Code -ge 2) { $p5 += ("{0}=exit{1}" -f $m.N, $r.Code) }
+    if ($r.Out -match 'index schema v') { $p5 += ("{0}=spurious-schema-line" -f $m.N) }
+  }
+  Check 'P5 POSITIVE CONTROL the stale matrix verbs still answer on CURRENT --db' ($p5.Count -eq 0) `
+        ("these broke on good databases, so their T5 rows prove nothing: " + ($p5 -join ', '))
+}
 
 Write-Host ''
 if ($ListRedOnly) { Write-Host 'evidence run -- exit 0 regardless' -ForegroundColor DarkGray; exit 0 }
