@@ -81,7 +81,6 @@ $exempt = [ordered]@{
   'DoImpact'              = 'unaudited: read-shaped, Create+Migrate on --db'
   'DoSlice'               = 'unaudited: read-shaped, Create+Migrate on --db'
   'DoBenchContext'        = 'unaudited: read-shaped (benchmark), Create+Migrate on --db'
-  'DoUsesReport'          = 'unaudited: read-shaped, Create+Migrate on each --db -- the deps-report twin'
   'DoGenerateDocs'        = 'unaudited: read-shaped, Create+Migrate on --db'
   'DoFindDeadCode'        = 'unaudited: read-shaped, Create+Migrate on --db'
   'DoCheckUnit'           = 'unaudited: read-shaped (--resolve-uses), Create+Migrate on --db'
@@ -93,9 +92,11 @@ $exempt = [ordered]@{
   'DoCheckAst'            = 'unaudited: read-shaped, Create+Migrate on --db'
 }
 
-# The three verbs INBOX-read-verbs-migrate-the-db measured. Named here so the
-# RED-before-fix output says which verb, not just "a site outside the list".
-$fixed = @('DoUsages', 'DoTypeAt', 'DoDepsReport')
+# The three verbs INBOX-read-verbs-migrate-the-db measured, plus DoUsesReport
+# (deps-report's twin, which the note missed; fixed the same day as W1b). Named
+# here so the RED-before-fix output says which verb, not just "a site outside
+# the list".
+$fixed = @('DoUsages', 'DoTypeAt', 'DoDepsReport', 'DoUsesReport')
 
 # Returns @{ Routine; Line; File } per `.Migrate` site in the given .pas text.
 function Find-MigrateSites([string]$Path) {
@@ -150,7 +151,7 @@ Check 'T1 every .Migrate site sits in a listed routine (no NEW migrate-on-read)'
 
 # T2: the three fixed verbs, by name (a subset of T1, spelled out)
 $regressed = @($all | Where-Object { $_.Routine -in $fixed })
-Check 'T2 usages / typeat / deps-report do not migrate (INBOX-read-verbs-migrate-the-db)' ($regressed.Count -eq 0) `
+Check 'T2 usages / typeat / deps-report / uses-report do not migrate (INBOX-read-verbs-migrate-the-db)' ($regressed.Count -eq 0) `
       ("migrating again: " + (($regressed | ForEach-Object { "$($_.Routine) ($($_.File):$($_.Line))" }) -join ', '))
 
 # T3: no stale entry -- the list may only shrink, and it shrinks by hand

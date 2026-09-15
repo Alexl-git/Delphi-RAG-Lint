@@ -453,12 +453,16 @@ if ($havePython) {
     @{ N='usages';           A=@('usages','--name','Touch') }
     @{ N='typeat';           A=@('typeat',"$($fileA):8:15") }
     @{ N='deps-report';      A=@('deps-report') }
+    # uses-report is deps-report's twin (same OpenStores shape) and the INBOX
+    # note missed it; --output is REQUIRED or the verb exits 2 before it opens
+    # any database, which would fake a pass on this row.
+    @{ N='uses-report';      A=@('uses-report','--output',(Join-Path $WorkDir 'uses.csv')) }
   )
   Check 'V the stale matrix covers all four convert-* verbs' `
         (@($staleMatrix | Where-Object { $_.N -like 'convert-*' }).Count -eq 4) `
         'a convert verb missing from this matrix stays lenient on stale, silently'
-  Check 'V the stale matrix covers the three migrate-on-read verbs (usages, typeat, deps-report)' `
-        (@($staleMatrix | Where-Object { $_.N -in @('usages','typeat','deps-report') }).Count -eq 3) `
+  Check 'V the stale matrix covers the four migrate-on-read verbs (usages, typeat, deps-report, uses-report)' `
+        (@($staleMatrix | Where-Object { $_.N -in @('usages','typeat','deps-report','uses-report') }).Count -eq 4) `
         'a verb dropped from this matrix can go back to migrating a database it was told to read, silently'
 
   function Run-Stale([string[]]$VerbArgs) {

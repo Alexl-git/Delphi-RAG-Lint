@@ -5,9 +5,9 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
-### `usages`, `typeat` and `deps-report` no longer MIGRATE a stale `--db` in place
+### `usages`, `typeat`, `deps-report` and `uses-report` no longer MIGRATE a stale `--db` in place
 
-Handed an explicit `--db` at an old schema, the three verbs opened it
+Handed an explicit `--db` at an old schema, the four verbs opened it
 read-write, ran the full schema migration on it (measured: schema_version
 12 -> 22, 4 tables -> 31, 28 KB -> 320 KB, journal delete -> wal) and then
 answered from it -- exit 0, nothing on either stream. Against the 1.4 GB
@@ -19,14 +19,16 @@ They now open every `--db` read-only through the same path as the other read
 verbs, and a stale EXPLICIT `--db` is **refused (exit 2)** with the schema gap
 and both migrate commands on stderr -- the contract every other multi-db verb
 already had. A stale manifest-resolved db is still skipped, not refused.
-`run_explicit_db_strict.ps1` T5d now covers all sixteen verbs.
+`run_explicit_db_strict.ps1` T5d now covers all seventeen verbs.
+(`uses-report` is `deps-report`'s twin -- the same `OpenStores` shape -- and
+the original measurement missed it.)
 
 A new guard, `run_migrate_site_guard.ps1`, pins the shape rather than the
-three instances: every `.Migrate` call in `src\cli` must sit in a routine on a
+four instances: every `.Migrate` call in `src\cli` must sit in a routine on a
 named exemption list, with a reason. The list may only shrink. It records
 sixteen verbs that migrate BY CONTRACT (`index`, `rename`, the lint family,
-the self-tests) and fifteen read-shaped verbs that still carry the same defect
-(`hover`, `slice`, `uses-report`, `cycles`, `generate-docs`, ...) -- listed so
+the self-tests) and fourteen read-shaped verbs that still carry the same defect
+(`hover`, `slice`, `cycles`, `generate-docs`, `check-ast`, ...) -- listed so
 the guard is green for the work that is done and red for the work being undone
 again, not as an endorsement.
 

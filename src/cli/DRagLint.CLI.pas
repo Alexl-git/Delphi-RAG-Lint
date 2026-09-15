@@ -12014,9 +12014,18 @@ var
     begin
       Path:= DbList[i];
       if not TFile.Exists(Path) then begin Writeln(ErrOutput, 'uses-report: db not found, skipping: ', Path); Continue; end;
+      { Read-only, never Migrate: this is a report. The deps-report twin, fixed
+        the same day for the same reason (INBOX-read-verbs-migrate-the-db);
+        Result:= 2 + Exit is this nested procedure's existing refusal shape. }
+      var RoOk: Boolean;
+      var S: ISymbolStore:= OpenReadOnlyStore(Path, RoOk);
+      if (not RoOk) or (S = nil) then
+      begin
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-report', Path) then begin Result:= 2; Exit; end;
+        Continue;
+      end;
       SetLength(Stores, Length(Stores) + 1);
-      Stores[High(Stores)]:= TSQLiteSymbolStore.Create(Path);
-      Stores[High(Stores)].Migrate;
+      Stores[High(Stores)]:= S;
     end;
   end; // procedure
 
