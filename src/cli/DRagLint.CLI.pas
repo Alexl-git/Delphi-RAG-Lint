@@ -37,8 +37,22 @@ const
           `TdxRibbon` and are UNCONFIRMED (owner test T7 was not run).
         * dependent-project-not-recompiled -- 0 on ORM3 CLIENT, and that zero is
           the GATE not the corpus: ORM3 has no `dl:shared` markers, so the rule
-          had nothing to look at. It is ON here without ever having been
-          measured on a corpus that exercises it.
+          had nothing to look at.
+          MEASURED 2026-09-14 on YADF, which is the corpus it was built for:
+          7 `dl:shared` units across YADF / YADFOT / YADFSetup, all three indexes
+          fresh. STILL 0 findings, and this time the zero is CORRECT, not a gate:
+          YADFOT carries a real compile stamp (2026-09-14 09:45) on all six of
+          its shared units, every unit's disk mtime is 2026-08-21 21:44, so
+          `Stamp >= DiskUtc` -- that project genuinely is current. YADF,
+          YADFSetup, GuardTest and OptionsTest have NO stamps at all (0 of 9, 13,
+          8 and 2 files), so they are silent by divergence (2), by design.
+          It does NOT flood. Leave it ON.
+          THE RESIDUAL, because it is a property of the workflow and not of the
+          rule: `last_compiled_unix` is written ONLY by `refresh-findings`, so on
+          this box the rule can speak about exactly ONE of the five YADF indexes.
+          "ON by default" buys coverage only where that verb has actually run.
+          The fire path itself is pinned green by
+          tests\autotest\run_lint_dependent_project_not_recompiled.ps1.
 
       THIS LIST AND THE OptIn ARRAYS ARE TWO DIFFERENT GATES and a new
       off-by-default project rule needs BOTH: this one stops the findings being
