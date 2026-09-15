@@ -68,7 +68,14 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   Write-Host ("  [{0}] {1} {2}" -f $s, $Name, $Detail) -ForegroundColor $c
   if (-not $Ok) { $script:Failed = $true }
 }
-function Md5([string]$Path) { (Get-FileHash -Algorithm MD5 -Path $Path).Hash }
+# Opened with FileShare.ReadWrite: a live engine HOLDS the file, and Get-FileHash
+# (share Read only) fails with "used by another process" -- which would read as
+# a corrupted db rather than as the guard's own open mode.
+function Md5([string]$Path) {
+  $fs = [System.IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite')
+  try { $h = [System.Security.Cryptography.MD5]::Create(); return ([System.BitConverter]::ToString($h.ComputeHash($fs)) -replace '-', '') }
+  finally { $fs.Dispose() }
+}
 function WriteAscii($path, $text) {
   $t = ($text -replace "`r`n", "`n") -replace "`n", "`r`n"
   [System.IO.File]::WriteAllText($path, $t, (New-Object System.Text.ASCIIEncoding))

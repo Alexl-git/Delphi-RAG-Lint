@@ -5,6 +5,35 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### `drag-lint shutdown` -- a maintenance control channel for lingering `lsp` engines (owner request 2026-09-14)
+
+**An engine started in `lsp` mode now listens on a per-user, per-session
+named pipe** (`\\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>`, explicit DACL
+for the creating user only, remote clients rejected, never a TCP port) that
+answers exactly two messages: `status` (pid, versions, the databases it holds)
+and `shutdown`. Until now nothing could ask an engine another process spawned
+to let go of an index or of `drag-lint.exe`: LSP `shutdown`/`exit` rides the
+editor's own stdio, `--parent-pid` and the Job Object fire only when the
+spawner dies, and `ide-release` reaches the Delphi plugin but not a VS Code
+server. The alternative was `TerminateProcess`, which leaves `-wal`/`-shm`
+sidecars and in-flight work behind.
+
+**New verb `drag-lint shutdown [--db <f>]... [--wait <sec>] [--dry-run]
+[--all] [--force]`.** Discovery is the pipe namespace itself (no instance file
+to go stale); `--db` keeps only engines holding that index; `--dry-run` lists
+and changes nothing. An asked engine stops reading, closes every store, replies
+`exiting` and exits 0 -- measured: no sidecar left, database byte-identical.
+An engine inside a request answers `busy <method>` and keeps running (verb
+exit 1); `--force` escalates to `TerminateProcess` ONLY after that refusal and
+says `ESCALATING`. Every honoured or refused request is audited (asking pid +
+exe, time) on the engine's stderr and in
+`%LOCALAPPDATA%\drag-lint\control-channel-audit.log`. Only `lsp`-mode engines
+listen -- ONE gate, `ControlChannelEnabledFor`, provisional pending the
+owner's answer; widening is additive. New unit `DRagLint.Core.ControlChannel`;
+`run_control_channel_guard.ps1` (RED against 1.12.0-alpha) with positive
+controls: a killed reader DOES leave `-shm`, the DACL reader DOES see an
+Everyone ACE, `serve` does NOT listen, a stray message stops nothing.
+
 ### The extractor never downgrades an index; the LSP server is a reader (owner rulings 2026-09-14)
 
 **`index` and `index --all` REFUSE a database built by a NEWER extractor.**

@@ -124,6 +124,7 @@
         <DCCReference Include="..\sql\DRagLint.Sql.OrmLinker.pas"/>
         <DCCReference Include="..\sql\DRagLint.Sql.Guarded.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.EngineHold.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.ControlChannel.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.FileTime.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DocComments.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Fuzzy.pas"/>

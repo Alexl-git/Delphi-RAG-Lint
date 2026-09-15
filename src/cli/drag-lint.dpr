@@ -80,6 +80,7 @@ uses
   DRagLint.Sql.OrmLinker in '..\sql\DRagLint.Sql.OrmLinker.pas',
   DRagLint.Sql.Guarded in '..\sql\DRagLint.Sql.Guarded.pas',
   DRagLint.Core.EngineHold in '..\core\DRagLint.Core.EngineHold.pas',
+  DRagLint.Core.ControlChannel in '..\core\DRagLint.Core.ControlChannel.pas',
   DRagLint.Core.FileTime in '..\core\DRagLint.Core.FileTime.pas',
   DRagLint.Parser.DocComments in '..\parser\DRagLint.Parser.DocComments.pas',
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',

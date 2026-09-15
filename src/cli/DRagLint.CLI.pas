@@ -129,6 +129,7 @@ uses
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Sql    .Guarded   { TSqlGuard: the authorizer + time cap behind `sql` }
   , DRagLint.Core   .EngineHold { the sentinel behind `ide-release` }
+  , DRagLint.Core   .ControlChannel // dl:unit DRagLint.Core.ControlChannel accepted -- the wire constants travel with the pipe: the channel behind `shutdown`, and the lsp-only gate
   , DRagLint.Core   .StudioEnv  { TStudioEnv: the ONLY source of a RAD Studio path }
   , DRagLint.Lint   .Config
   , DRagLint.Lint   .RuleCatalog
@@ -245,6 +246,8 @@ type
     HoldSeconds     : Integer       ; // --seconds N: `ide-release` hold length
     Resume          : Boolean       ; // --resume: `ide-release` clears the hold instead of setting it
     StatusOnly      : Boolean       ; // --status: `ide-release` reports the hold without changing it
+    WaitSeconds     : Integer       ; // --wait N: `shutdown` graceful deadline per engine (default 5)
+    ForceKill       : Boolean       ; // --force: `shutdown` escalates to TerminateProcess -- only after a refusal
     SqlQuery        : string        ; // --query "SELECT ...": the one statement `sql` runs
     TimeoutMs       : Integer       ; // --timeout-ms N: `sql` wall-clock cap (default 10000)
     { `wiki`: the three modes. Term is the human phrase to look up; the two
@@ -775,6 +778,7 @@ begin
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]');
   Writeln('                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;');
   Writeln('                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.');
+  Writeln('                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.');
   Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>]: relay in front of RAD Studio''s DelphiLSP,');
   Writeln('                               so registering drag-lint as the Code Insight server keeps the compiler front end.');
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
@@ -804,6 +808,15 @@ begin
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
   Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
+  Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running `lsp` engines to stand down: close every store, exit 0)');
+  Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
+  Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Only an');
+  Writeln('                               engine started in lsp mode listens (one-shot verbs and `serve` do not). --all (the default) asks every');
+  Writeln('                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.');
+  Writeln('                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps');
+  Writeln('                               running (exit 1). --force TerminateProcess''es ONLY an engine that refused or did not answer, and says');
+  Writeln('                               ESCALATING when it does. Every honoured or refused request is audited on the engine''s stderr and in');
+  Writeln('                               %LOCALAPPDATA%\drag-lint\control-channel-audit.log (who asked: pid + exe, when).');
   Writeln('  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (writes a hold sentinel: a running Delphi IDE plugin will not respawn drag-lint.exe while it lasts and stops its LSP child on the next request that wants it, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Frees nothing by itself -- build\stage-engine.ps1 kills the running holder and retries. The plugin job queue also DEFERS its heavy jobs for the duration rather than starting them)');
   Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
@@ -1359,6 +1372,8 @@ begin
     else if (A = '--seconds') and (i < ParamCount) then begin Inc(i); Result.HoldSeconds:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--resume' then Result.Resume:= True
     else if A = '--status' then Result.StatusOnly:= True
+    else if (A = '--wait') and (i < ParamCount) then begin Inc(i); Result.WaitSeconds:= StrToIntDef(ParamStr(i), 0); end
+    else if A = '--force' then Result.ForceKill:= True
     else if (A = '--query') and (i < ParamCount) then begin Inc(i); Result.SqlQuery:= ParamStr(i); end
     else if (A = '--timeout-ms') and (i < ParamCount) then begin Inc(i); Result.TimeoutMs:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--term') and (i < ParamCount) then begin Inc(i); Result.Term:= ParamStr(i); end
@@ -13122,6 +13137,198 @@ begin
     Writeln('sentinel: ' + EngineHoldFilePath);
   end;
   Result:= 0;
+end; // function
+
+/// <summary>drag-lint shutdown: asks every reachable engine of THIS user and
+/// session that exposes a maintenance control channel (only engines started
+/// in lsp mode do) to stand down -- close every store and exit 0 -- and
+/// reports which did.</summary>
+/// <param name="AArgs">DbPaths keeps only engines holding one of those
+/// indexes; DryRun lists and changes nothing; WaitSeconds bounds the graceful
+/// wait per engine (default 5); ForceKill escalates to TerminateProcess ONLY
+/// for an engine that refused (busy) or did not answer, and says so.</param>
+/// <returns>0 when every engine asked exited (or none was reachable); 1 when
+/// at least one refused, did not answer, or did not exit in time.</returns>
+/// <remarks>Discovery is the pipe namespace itself -- a control pipe vanishes
+/// with its process, so there is no instance file to go stale. The graceful
+/// path is ALWAYS attempted first, --force or not. The engine writes the
+/// audit line, not this verb: the record is kept by the side that acted.
+/// docs\PLAN-maintenance-shutdown-channel.md.</remarks>
+function DoShutdown(const AArgs: TArgs): Integer;
+const
+  CONNECT_TIMEOUT_MS = 2000; { WaitNamedPipe: the engine serves one connection at a time }
+  KILL_WAIT_MS       = 5000; { after TerminateProcess, how long to wait for the handle to signal }
+  MS_PER_SECOND      = 1000;
+  STATUS_FIXED_FIELDS= 4;    { status<TAB>pid<TAB>version<TAB>extractor, then the databases }
+  FORCED_EXIT_CODE   = 3;    { the code a --force'd engine dies with: distinguishable from 0 and from a crash }
+type
+  TEngineRow = record
+    Pipe   : string        ;
+    Pid    : Cardinal      ;
+    Version: string        ;
+    Dbs    : TArray<string>;
+  end;
+var
+  Pipes   : TArray<string>    ;
+  Rows    : TArray<TEngineRow>;
+  Row     : TEngineRow        ;
+  Wanted  : TArray<string>    ;
+  Pipe    : string            ;
+  Reply   : string            ;
+  Err     : string            ;
+  Fields  : TArray<string>    ;
+  WaitMs  : Integer           ;
+  I       : Integer           ;
+  Holds   : Boolean           ;
+  H       : THandle           ;
+  Code    : DWORD             ;
+  T0      : UInt64            ;
+  Gone    : Boolean           ;
+  Failed  : Boolean           ;
+
+  function DbList(const ADbs: TArray<string>): string;
+  begin
+    Result:= string.Join('; ', ADbs);
+    if Result = '' then Result:= '(no store open)';
+  end;
+
+  function WaitGone(APid: Cardinal; AMs: Integer): Boolean;
+  var
+    HP: THandle;
+  begin
+    HP:= OpenProcess(SYNCHRONIZE, False, APid);
+    if HP = 0 then Exit(True); { already gone, or not ours to see -- treat as gone }
+    try
+      Result:= WaitForSingleObject(HP, Cardinal(AMs)) = WAIT_OBJECT_0;
+    finally
+      CloseHandle(HP);
+    end;
+  end;
+
+begin
+  WaitMs:= AArgs.WaitSeconds * MS_PER_SECOND;
+  if AArgs.WaitSeconds <= 0 then WaitMs:= CONTROL_DEFAULT_WAIT_MS;
+  if WaitMs > CONTROL_MAX_WAIT_MS then WaitMs:= CONTROL_MAX_WAIT_MS;
+  SetLength(Wanted, Length(AArgs.DbPaths));
+  for I:= 0 to High(AArgs.DbPaths) do Wanted[I]:= ExpandFileName(AArgs.DbPaths[I]);
+
+  Pipes:= ListControlPipesForThisUser;
+  SetLength(Rows, 0);
+  for Pipe in Pipes do
+  begin
+    if not ControlRequest(Pipe, CONTROL_MSG_STATUS, CONNECT_TIMEOUT_MS, Reply, Err) then
+    begin
+      Writeln(ErrOutput, 'WARN: ', Pipe, ': no status reply (', Err, ') -- skipped');
+      Continue;
+    end;
+    Fields:= Reply.Split([#9]);
+    if (Length(Fields) < STATUS_FIXED_FIELDS) or not SameText(Fields[0], CONTROL_REPLY_STATUS) then
+    begin
+      Writeln(ErrOutput, 'WARN: ', Pipe, ': unexpected status reply -- skipped: ', Reply);
+      Continue;
+    end;
+    Row.Pipe   := Pipe;
+    Row.Pid    := StrToIntDef(Fields[1], 0);
+    Row.Version:= Fields[2];
+    Row.Dbs    := Copy(Fields, STATUS_FIXED_FIELDS, Length(Fields) - STATUS_FIXED_FIELDS);
+    if Length(Wanted) > 0 then
+    begin
+      Holds:= False;
+      for I:= 0 to High(Row.Dbs) do
+        if not Holds then
+          for var W in Wanted do
+            if SameText(ExpandFileName(Row.Dbs[I]), W) then
+            begin
+              Holds:= True;
+              Break;
+            end;
+      if not Holds then Continue;
+    end;
+    SetLength(Rows, Length(Rows) + 1);
+    Rows[High(Rows)]:= Row;
+  end;
+
+  if Length(Rows) = 0 then
+  begin
+    if Length(Wanted) > 0 then
+      Writeln('no running drag-lint engine of this user/session holds the named database(s) (', Length(Pipes), ' engine(s) reachable).')
+    else
+      Writeln('no running drag-lint engine exposes a control channel for this user/session.');
+    Exit(0);
+  end;
+
+  Writeln(Format('%d engine(s) with a control channel (user %s, session %d):', [Length(Rows), CurrentUserSidString, CurrentSessionId]));
+  for Row in Rows do Writeln(Format('  pid %d  lsp  %s  %s', [Row.Pid, Row.Version, DbList(Row.Dbs)]));
+  if AArgs.DryRun then
+  begin
+    Writeln('dry run: nothing asked, nothing changed.');
+    Exit(0);
+  end;
+
+  Failed:= False;
+  for Row in Rows do
+  begin
+    T0:= GetTickCount64;
+    { The graceful path first, ALWAYS -- --force changes only what happens
+      after a refusal. }
+    if ControlRequest(Row.Pipe, CONTROL_MSG_SHUTDOWN + #9 + IntToStr(WaitMs), CONNECT_TIMEOUT_MS, Reply, Err) then
+    begin
+      Fields:= Reply.Split([#9]);
+      if (Length(Fields) > 0) and SameText(Fields[0], CONTROL_REPLY_EXITING) then
+      begin
+        Gone:= WaitGone(Row.Pid, WaitMs);
+        if Gone then
+          Writeln(Format('  pid %d: exiting (stores closed); exited after %.2f s', [Row.Pid, (GetTickCount64 - T0) / MS_PER_SECOND]))
+        else
+        begin
+          Writeln(Format('  pid %d: said exiting but is STILL RUNNING after %d ms', [Row.Pid, WaitMs]));
+          Failed:= True;
+        end;
+        Continue;
+      end;
+      if (Length(Fields) > 0) and SameText(Fields[0], CONTROL_REPLY_BUSY) then
+        Err:= 'BUSY -- ' + (if Length(Fields) > 2 then Fields[2] else 'not idle')
+      else
+        Err:= 'unexpected reply: ' + Reply;
+    end
+    else
+      Err:= 'no reply (' + Err + ')';
+
+    { Refused, or silent. Without --force that is the answer and it is loud. }
+    Writeln(Format('  pid %d: %s; left running', [Row.Pid, Err]));
+    if not AArgs.ForceKill then
+    begin
+      Failed:= True;
+      Continue;
+    end;
+    Writeln(Format('  pid %d: ESCALATING to TerminateProcess -- the graceful request was refused or unanswered (--force)', [Row.Pid]));
+    { QUERY_LIMITED too: without it GetExitCodeProcess fails and reports 0 --
+      measured by the guard's F2, which printed "TERMINATED (code 0)" for a
+      TerminateProcess(H, 3). }
+    H:= OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE or PROCESS_QUERY_LIMITED_INFORMATION_ACCESS, False, Row.Pid);
+    if H = 0 then
+    begin
+      Writeln(Format('  pid %d: cannot open for termination: %s', [Row.Pid, SysErrorMessage(GetLastError)]));
+      Failed:= True;
+      Continue;
+    end;
+    try
+      Code:= 0;
+      if TerminateProcess(H, FORCED_EXIT_CODE) and (WaitForSingleObject(H, KILL_WAIT_MS) = WAIT_OBJECT_0) then
+      begin
+        GetExitCodeProcess(H, Code);
+        Writeln(Format('  pid %d: TERMINATED (code %d) -- sidecar files may remain beside its databases', [Row.Pid, Code]));
+      end
+      else
+      begin
+        Writeln(Format('  pid %d: TerminateProcess failed: %s', [Row.Pid, SysErrorMessage(GetLastError)]));
+        Failed:= True;
+      end;
+    finally
+      CloseHandle(H);
+    end;
+  end;
+  Result:= if Failed then 1 else 0;
 end; // function
 
 { ---------------------------------------------------------------------------
@@ -26469,6 +26676,7 @@ begin
     else if Args.Command = 'sql'               then Result:= DoSql             (Args)
     else if Args.Command = 'wiki'              then Result:= DoWiki            (Args)
     else if Args.Command = 'ide-release'       then Result:= DoIdeRelease      (Args)
+    else if Args.Command = 'shutdown'          then Result:= DoShutdown        (Args)
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
     else if Args.Command = 'info'              then Result:= DoInfo            (Args)
     else if Args.Command = 'resolve-uses'      then Result:= DoResolveUses     (Args)
@@ -26569,11 +26777,38 @@ begin
       end;
       for var LspDb in DbList do SizeGuardCheck(LspDb, LspSGMB, Args.Force32);
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
+      var Ctl: TControlChannel:= nil;
       try
+        { docs\PLAN-maintenance-shutdown-channel.md (W3): the maintenance
+          control channel. ControlChannelEnabledFor is THE ONE place that
+          decides which modes listen (lsp only, provisionally). Started after
+          the stores are open so `status` names what is really held, and
+          signalled after LSP.Free so `exiting` never precedes a closed store.
+          Failing to listen is reported and is not fatal: an editor without a
+          control channel is the pre-W3 state, not a broken one. }
+        if ControlChannelEnabledFor(Args.Command) then
+        begin
+          Ctl:= TControlChannel.Create(LSP.StorePaths, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+          var CtlErr: string;
+          if Ctl.Start(CtlErr) then
+            Writeln(ErrOutput, 'drag-lint LSP: control channel listening on ', Ctl.PipeName,
+              ' (DACL: ', Ctl.OwnerSid, ' only; local named pipe; accepts status and shutdown)')
+          else
+          begin
+            Writeln(ErrOutput, 'drag-lint LSP: control channel NOT started: ', CtlErr);
+            FreeAndNil(Ctl);
+          end;
+          LSP.ControlChannel:= Ctl;
+        end;
         LSP.Run;
         Result:= 0;
       finally
-        LSP.Free;
+        LSP.Free; { every store closes here -- the reply below must follow it }
+        if Ctl <> nil then
+        begin
+          Ctl.StandDownComplete;
+          Ctl.Free;
+        end;
       end;
     end // if
     else if Args.Command = 'serve' then

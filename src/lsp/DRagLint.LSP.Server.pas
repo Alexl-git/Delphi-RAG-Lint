@@ -14,6 +14,7 @@ uses
   , TreeSitterLib
   , DRagLint.Core    .Model
   , DRagLint.Core    .Versions // dl:unit DRagLint.Core.Versions accepted -- INDEXER_FINGERPRINT_META_KEY: the stamp each --db is reported with at startup
+  , DRagLint.Core    .ControlChannel { W3: the maintenance control channel the lsp host cooperates with in Run }
   , DRagLint.Core    .Interfaces
   , DRagLint.Core    .Encoding
   , DRagLint.Storage .SQLite
@@ -131,6 +132,9 @@ type
       FLinter      : TLinter             ;
       FInitialized : Boolean             ;
       FShuttingDown: Boolean             ;
+      FControl     : TControlChannel     ; { nil = no channel (every mode but lsp); not owned }
+      function StandDownTaken: Boolean;
+      function ReadMessageGuarded: TJSONObject;
       /// <summary>Does any CONFIGURED store hold a files row for this path?</summary>
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
@@ -789,6 +793,17 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure Run;
+      /// <summary>The maintenance control channel Run cooperates with, or nil.</summary>
+      /// <remarks>Not owned: the CLI creates it AFTER the stores are open (so
+      /// `status` can name them) and signals it AFTER Free (so `exiting` is
+      /// only ever sent once every store is closed). Run brackets its blocking
+      /// stdin read and each handler for it, and leaves the loop the moment a
+      /// stand-down is taken. docs\PLAN-maintenance-shutdown-channel.md.</remarks>
+      property ControlChannel: TControlChannel read FControl write FControl;
+      /// <summary>The databases this server actually opened, in FStores order.</summary>
+      /// <returns>Paths of the stores that opened and passed the schema check;
+      /// a --db that was skipped is not in it.</returns>
+      property StorePaths: TArray<string> read FStorePaths;
   end;
 
 implementation
@@ -2954,6 +2969,23 @@ begin
   if (ClosedPath <> '') and SameText(ClosedPath, FEphemFile) then DropEphemeralStore;
 end; // procedure
 
+function TLSPServer.StandDownTaken: Boolean;
+begin
+  Result:= (FControl <> nil) and FControl.StandDownRequested;
+end;
+
+function TLSPServer.ReadMessageGuarded: TJSONObject;
+begin
+  { The bracket is what tells the control listener that cancelling the main
+    thread's synchronous I/O is safe: inside it the pending read is stdin's. }
+  if FControl <> nil then FControl.EnterRead;
+  try
+    Result:= ReadMessage;
+  finally
+    if FControl <> nil then FControl.LeaveRead;
+  end;
+end;
+
 procedure TLSPServer.Run;
 var
   Msg      : TJSONObject;
@@ -2964,7 +2996,14 @@ var
 begin
   while not FShuttingDown do
   begin
-    Msg:= ReadMessage;
+    { W3 control channel: a stand-down taken here (after a handler ran while
+      the request arrived) ends the loop without another read; one that
+      arrives DURING the read is delivered by CancelSynchronousIo, which makes
+      ReadMessage return nil -- the EnterRead/LeaveRead bracket is what tells
+      the listener that cancelling is safe, i.e. the pending I/O is stdin's and
+      not a SQLite page read inside a handler. }
+    if StandDownTaken then Break;
+    Msg:= ReadMessageGuarded;
     if Msg = nil then Break;
     try
       Method:= '';
@@ -2973,6 +3012,7 @@ begin
       ParamsVal:= Msg.GetValue('params');
       if ParamsVal is TJSONObject then Params:= TJSONObject(ParamsVal)
       else Params:= nil;
+      if FControl <> nil then FControl.BeginWork(Method);
 
       if Method      = 'initialize' then HandleInitialize(Id, Params)
       else if Method = 'initialized' then
@@ -2999,6 +3039,7 @@ begin
       else if Method = 'textDocument/didClose' then HandleDidClose(Params)
       else if (Id <> nil) and (Method <> '') then SendError(Id, -32601, 'method not found: ' + Method);
     finally
+      if FControl <> nil then FControl.EndWork;
       Msg.Free;
     end; // try
   end; // while
