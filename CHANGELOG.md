@@ -5,6 +5,24 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Docs: README and AI-USAGE now name every `--help` flag (plan 7d, unguarded by design)
+
+The flag long tail is closed: re-derived against the deployed banner (162
+flags), `README.md` lacked 27 and `docs\AI-USAGE.md` 45 -- more than the 16/34
+the plan recorded, because the banner has grown since (walk scoping, size
+guard, `lsp` client tokens, `--no-seealso`, `shutdown`). Both now lack only
+`--n`, which the guard's prose regex cannot see by construction (it requires
+two characters after `--`). Each new cell says what the flag is FOR, in the
+row of the verb that takes it: walk scoping and `--force-reparse`/`--no-skip`
+on `index`, `--size-guard-mb`/`--force32` wherever a DB is opened,
+`--parent-pid`/`--stdio`/`--clientProcessId` on `lsp`, `--no-seealso` and
+`--since [--base-dir]` on `document` (AI-USAGE previously listed `--seealso`
+as if it were still the opt-in), `--with-rules`/`--compile` on `lint-tree`,
+`--layers` on `lint-project`, and the `preprocess-file`/`ghost-check`/
+`pp-profile`/`fb-snapshot` flags in AI-USAGE's diagnostic section. **Check 9's
+F4 scope is unchanged**: the guard still demands only the promoted set, and
+this pass is not a guard obligation.
+
 ### `drag-lint shutdown` -- a maintenance control channel for lingering `lsp` engines (owner request 2026-09-14)
 
 **An engine started in `lsp` mode now listens on a per-user, per-session

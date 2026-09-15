@@ -265,8 +265,9 @@ Add `--json` to most commands for machine-readable output.
 Every verb below is a real `drag-lint` subcommand. Most take `--db <file>`
 (repeatable) and `--json`. `--help` (aliases `-h`, `-?`) is accepted after any
 verb and prints the FULL banner -- there is no per-verb help TEXT, so read the
-banner's line for the verb you want. This is the canonical list an AI should
-reach for; the pure-diagnostic verbs are broken out in 2b.
+banner's line for the verb you want (`drag-lint --version` prints just the
+engine version). This is the canonical list an AI should reach for; the
+pure-diagnostic verbs are broken out in 2b.
 
 **Query / search (find symbols, callers, text)**
 | Verb | What it does |
@@ -294,7 +295,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 **Analysis / reports (call graph, deps, cycles, impact)**
 | Verb | What it does |
 |------|--------------|
-| `context --task "verb qname"` | curated context bundle (doc + surface + body + callers); `--full-surface` only for form/DFM work. Adds a `## Wiki` section when the task phrase matches a `dl:wiki` alias (suppressed by `--no-docs`). **A qname that resolves to nothing now exits 1 and says `NOT FOUND`** -- it used to render an empty bundle at exit 0 |
+| `context --task "verb qname"` | curated context bundle (doc + surface + body + callers); `--full-surface` only for form/DFM work; `--max-callers N` caps the caller list and `--context N` the source lines around each. Adds a `## Wiki` section when the task phrase matches a `dl:wiki` alias (suppressed by `--no-docs`). **A qname that resolves to nothing now exits 1 and says `NOT FOUND`** -- it used to render an empty bundle at exit 0 |
 | `impact --qname U.T.M` | transitive caller blast radius (`--depth N`) |
 | `wiring --qname IIntf\|TForm` | Spring4D DI edges + DFM event handlers (`--coverage` for unresolved DI registrations) |
 | `find-callees --qname U.T.M` | resolved outgoing calls of a routine |
@@ -302,7 +303,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 | `callgraph --qname X` | N-deep resolved call tree (`--direction callers\|callees`, `--depth N`; cycle-guarded) |
 | `reverse-calltree --qname X` | N-deep call tree with call sites (`--direction callers\|callees`, default callers = *upward* "who calls X"; `--depth N`, `--format text\|json\|dot\|mermaid`) |
 | `butterfly --qname X` | composes callers (upward wing) + callees (downward wing) into one chart (`--depth N`, `--format dot\|mermaid\|text\|json`, default `dot`; static-export counterpart to the in-IDE butterfly tab) |
-| `proptree --qname X` | recursive deep-property enumerator: flattened dotted paths of a class's own + inherited properties, recursing into class-typed types down to `TPersistent` (`--depth N` cap 6, `--no-to-persistent`, `--min-visibility published\|public`, `--format text\|json`; JSON schema `proptree/2` -- adds per-leaf `is_writable`/`visibility`/`member_kind` + class-accurate `type`, additive over `proptree/1`) |
+| `proptree --qname X` | recursive deep-property enumerator: flattened dotted paths of a class's own + inherited properties, recursing into class-typed types down to `TPersistent` (`--depth N` cap 6, `--no-to-persistent`, `--refs-as-leaves` leaves `TComponent`-typed properties unexpanded -- references, not owned sub-objects; `--no-write-back` makes the query read-only, otherwise types the ancestry-bridge recovers are memoised back into the index; `--min-visibility published\|public`, `--format text\|json`; JSON schema `proptree/2` -- adds per-leaf `is_writable`/`visibility`/`member_kind` + class-accurate `type`, additive over `proptree/1`) |
 | `convert-scaffold --from F --to T` | auto-draft a VALID reFind-superset conversion-rules file from the real F/T property trees: concrete `#link` on 1 leaf-name+type match, `???` for ambiguities, `DROPPED` notes for orphaned source props (`--out <f>`, `--surface dfm\|pas` default `dfm` -- restricts auto-linked TARGETS to writable/in-surface leaves) -- see `docs/CONVERSION-RULES.md` |
 | `convert-validate --rules F` | parse + validate a reFind-superset conversion-rules DSL; `--from`/`--to` check `#link`/`#default` paths against the real trees (`--print-parsed`; exit 0 valid / 1 errors / 2 bad args) |
 | `convert-apply --unit F.pas --rules F --db D` | rewrites all 5 conversion surfaces (`.pas` decl retype, `.pas` uses-add, `.dfm` object-block re-emit, `.pas` property/event access-site rewrite, runtime-creator retype + TODO marker) for `.dfm` instances matching a `#convert` rule; dry-run (preview) by default, `--apply` writes for real with `.BCK<n>` backups + `recovery.txt` unless `--no-backup` (`--only Name1,Name2,...` to restrict instances); `--format json` (or `--json`) emits schema `apply/1` -- the six report surfaces plus `items[]`, one typed entry per reported line carrying a machine-readable `kind`, so an agent can DISPATCH on the conversion remainder (the `todos` / `reemit_notes` / `warnings` subset) instead of parsing prose, plus `resolved_defaults[]` -- informational receipts (a property absent because it sat at its declared `default`, carried across explicitly), kept OUT of `items[]` since 2026-09-14 because on a real form they run to thousands and buried the remainder. `items.length` always equals the sum of the six arrays and **`resolved_defaults` is NOT part of that sum** -- **step-by-step agent procedure in [`docs/AI-CONVERT-RUNBOOK.md`](AI-CONVERT-RUNBOOK.md)**; DSL reference in `docs/CONVERSION-RULES.md`. `--castlib <file>` names the `.castlib` whose `enum` blocks translate a `#link` value when the link carries a `: Cast` suffix -- **without it a cast-bearing `#link` passes the value through UNCHANGED**, so pass it whenever the rules file casts |
@@ -339,7 +340,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 | Verb | What it does |
 |------|--------------|
 | `document --qname U.T.M` | generate/repair one managed DocInsight comment (never filtered -- see accessor note below) |
-| `document --unit F` / `--project P` | document every public decl in a unit/project (`--stubs`, `--seealso`, `--since`, `--include-accessors`) |
+| `document --unit F` / `--project P` | document every public decl in a unit/project (`--stubs`, `--include-accessors`, `--since [--base-dir <repoRoot>]` for a git-derived `<since>` date -- silently skipped when git is absent). `<seealso cref>` links are ON by default in every document mode: `--no-seealso` turns them off, and `--seealso` is an accepted no-op left over from when it was the opt-in. `--project` also takes `--reindex` (brackets the run with `index`, so hover/LSP are correct immediately after) and `--document-third-party` (write into the vendored roots it otherwise names and skips) |
 | `document-all` | document every public decl in every indexed unit (`--include-accessors`) |
 | `document --strip --apply` | REMOVE the engine's own managed blocks and marked tags, leaving everything else byte-identical |
 | `generate-docs --qname U.T.M` | emit a doc comment (`--format xmldoc\|pasdoc`) |
@@ -515,16 +516,16 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 **Lint**
 | Verb | What it does |
 |------|--------------|
-| `rules` | list every lint rule (`--category`, `--json`; marks `fixable`) |
+| `rules` | list every lint rule (`--category`, `--json`; marks `fixable`; `--rules-dir <dir>` loads the external `.scm` pack from another folder -- `lint` takes it too) |
 | `lint <path>` | lint a file/dir (`--rule`, `--disable`, `--fix`; see 4b). Conditionals are resolved the way the indexer resolves them, so code inside a branch the compiler never sees is NOT reported; `--no-preprocess` lints the raw bytes instead. Add `--db <index>` to enable the store-backed checks -- without it type resolution and exception ancestry degrade conservatively. `--library-db <lib.sqlite>` overrides the manifest-resolved library index (the cross-store hop that lets a project class reach `TCustomForm`); absent, it resolves as before |
 | `lint <f> --db <db> --project-rules` | adds per-file `doc-drift`/`missing-doc`; off by default (per-decl cost can exceed the IDE's 8s budget) |
 | `lint <snap> --stand-in-for <real>` | lint a temp snapshot of an unsaved buffer as though it were `<real>`: store membership, file id, unit-name check and reported path all use the real path |
 | `lint --project P.dproj` | project-level rules (e.g. `unit-not-in-dpr`). Since 2026-09-08 a plain `lint-all --db <db>` ALSO evaluates `unit-not-in-dpr`: it infers the project file from the manifest section that owns the DB, so the canonical run no longer skips the membership check. Passing `--project` explicitly additionally SCOPES the report; inference does not |
-| `lint-project --db DB` | index-wide rules (god-class, circular-uses, layering-violation, ...) |
-| `lint-all` | lint everything indexed (`--output report.txt`, `--quiet`) |
-| `lint-tree` | does an interface edit to a unit reach any dependent? `--unit B.pas --db <db>` fingerprints B's interface; `--write-baseline f.json` captures the OLD side once per edit episode, `--baseline f.json` diffs against it, `--buffer f` reads an unsaved buffer. Exit 0 whether or not anything was found; 2 = could not run. A baseline from a different extractor/schema is REFUSED, not diffed. |
+| `lint-project --db DB` | index-wide rules (god-class, circular-uses, layering-violation, ...); `--layers <f.json>` is the architecture-layer config `layering-violation` needs (else `drag-lint-layers.json` in the CWD) |
+| `lint-all` | lint everything indexed (`--output report.txt`, `--quiet`); `--project <.dproj>` reports only that project's compile closure; `--lint-third-party` reports the vendored roots too instead of naming them as skipped |
+| `lint-tree` | does an interface edit to a unit reach any dependent? `--unit B.pas --db <db>` fingerprints B's interface; `--write-baseline f.json` captures the OLD side once per edit episode, `--baseline f.json` diffs against it, `--buffer f` reads an unsaved buffer, `--with-rules` also harvests the dependents' lint findings, `--compile` also compiles the dependents in a shadow dir. Exit 0 whether or not anything was found; 2 = could not run. A baseline from a different extractor/schema is REFUSED, not diffed. |
 | `exceptions-sync` | materialise the project's derived exception classes into the exceptions unit (`--apply`; dry-run without it; `--json` emits one machine-readable document on stdout with the counts and the classes it would add, prose to stderr). Harvests every bare `raise Exception.Create('literal')` project-wide and declares ONE class per DISTINCT message inside a `drag-lint:auto` managed block. Opt in with an `"exceptions"` block in `drag-lint-lint.json` -- an empty one is enough; key `unit` names the unit (default `uExceptionDefinitions`, **created if absent**) and key `root` the ancestor (default `Exception`). **The same-line `//` comment after each declaration IS the key**, so renaming a generated class is safe and editing its comment makes the next run add a second class for the old message. It is a VERB and not a `--fix` because its input is project-wide and its output is one file |
-| `check-unit <unit.pas>` | in-memory semantic check of one unit (`--project`, `--platform`, `--resolve-uses`) |
+| `check-unit <unit.pas>` | in-memory semantic check of one unit (`--project`, `--platform`, `--resolve-uses`; `--shadow <dir>` compiles an unsaved buffer staged there instead of the file on disk) |
 | `compile-check <target>` | real compiler diagnostics for a `.dproj`/`.pas` |
 | `refresh-findings --project X --db D` | recompile stale units (mtime > `files.last_compiled_unix`) + refresh `compiler_findings` per file; `>=2` stale -> full build, 1 stale -> incremental, `--full` forces full; feeds the IDE compiler overlay (surfaces DCC hints even for clean unchanged units). `--json` emits `mode` (full\|incremental\|noop) + counts; exit 1 if an Error survived, 2 = usage / no db. **Point `--db` at the project's OWN index, not a shared/library index** -- a full build clears + re-stamps `compiler_findings` for every indexed `.pas`/`.dpr`/`.dpk` file, so a shared index would lose findings for files outside this project |
 | `check-ast <file>` | syntax check without the compiler (`(line,col): error syntax-error`) |
@@ -533,7 +534,9 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 **Index / DB management**
 | Verb | What it does |
 |------|--------------|
-| `index <path>` | build/refresh an index; a `.dpr`/`.dproj` target = project (compile-closure) scan, a folder = library scan. `--recompile` (default) / `--rebuild`; also `--project`, `--scan-libraries`, `--watch`, `--deep` |
+| `index <path>` | build/refresh an index; a `.dpr`/`.dproj` target = project (compile-closure) scan, a folder = library scan. `--recompile` (default) / `--rebuild`; also `--project`, `--watch`, `--deep`. `--scan-libraries-win` (alias `--scan-libraries`) indexes the IDE's registered Win32+Win64 Library+Browsing paths, `--scan-libraries-all` every platform |
+| any `index` run | mode and sweep: `--force-reparse` (alias `--no-skip`) re-parses every walked file even when path+mtime+sha are unchanged -- once per DB after an engine upgrade that extracts something new; `--no-prune` is the one "delete nothing" switch (a dry look: both sweeps are computed and reported, nothing deleted), `--prune` forces the sweep for a single-FILE walk. Walk scoping: `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` skips any file larger than N KB, `--no-use-ignore` opts out of the `.drag-lint-ignore` file honoured by default, `--no-sql-ms` indexes EVERY `.sql` file rather than only the `MS*.sql` migration scripts, `--shallow` (default) vs `--deep` (also records usage refs) |
+| any verb that opens a DB | `--size-guard-mb N` / `--force32` (`index`, `query`, `lsp`, `serve`): the 32-bit build refuses a database larger than the guard because it would run out of address space mid-answer; the first moves the threshold, the second overrides the refusal. Neither is normally needed on Win64 |
 | `index <path> --resolve-only` | re-derive call edges / ancestry / helper targets from the STORED parses, skipping the walk. Use when `schema_meta.resolver_fingerprint` shows the edges predate the current resolver -- minutes, against the hours a re-parse costs, because no parse became wrong |
 | `index --all` | build every DB in the manifest (`--only`, `--platform`, `--jobs`, `--dry-run`) |
 | `register-project` | add a NEW project to the manifest as its own section, so `index --all` and the IDE's reindex can see it. Dry-run by default; `--apply` writes. Refuses when a section already claims the project |
@@ -541,9 +544,9 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 | `reconcile-project <App.dproj>` | sync project member list; flag stale used units (`--apply`). `--only <unit,...>` restricts MISSING -- and therefore what `--apply` writes -- to a reviewed selection, so a dry run with `--only` is an exact preview of the apply. EXTRA and STALE stay unfiltered: they are advisory, and `--apply` never touches them. Unmatched `--only` names appear in the `--json` document as `unmatched` AND on stderr; stdout stays pure JSON. `--json` carries `applied` -- the OUTCOME of `--apply`, always present and `false` on a dry run or when there was nothing to write, so exit 0 no longer covers both cases -- plus `backups` (the `.bak` paths taken) and `edited` (the project files that actually changed), present only with `--apply`. Those two are separate on purpose: a backup is taken before the edit is attempted and both editors are idempotent, so offer a revert on `backups` and report "N units added" from `edited`. `refused` (present only when `--apply` actually refused something) names closure entries that were REPORTED as MISSING but deliberately not written -- today the `{$I}` includes, which the closure carries alongside `.pas` and which would otherwise have been spliced in as `uses ..., QDefs;`. They stay in the report and are refused by the write, so a caller diffing `missing` against `edited` can explain the difference |
 | `library-drift` | registry roots missing from the library index (exit 2 = drift) |
 | `workspace index\|status\|add` | multi-project workspace operations |
-| `forms-csv --project P --db DB` | test-helper form-navigation CSV, one row per form |
+| `forms-csv --project P --db DB` | test-helper form-navigation CSV, one row per form (`--out <f.csv>`; `--root <TfrmMAIN>` names the form navigation starts from) |
 | `import-log <logfile>` | ingest a dcc/msbuild log into the index |
-| `export enums\|obsidian` | export enums (firebird-sql/csv/json/delphi-const) or an Obsidian vault |
+| `export enums\|obsidian` | export enums (firebird-sql/csv/json/delphi-const) or an Obsidian vault (`export obsidian --db D --output-dir <dir>`; `--open` launches the vault when done) |
 | `migrate-dbs` | move project indexes into each project's own `_D-RAG` folder, the one-DB-per-project layout. Dry-run by default; `--apply` performs the moves (`--config <drag-lint.json>`) |
 | `top` / `schema` / `sql` / `diff` | (also above) index introspection |
 
@@ -551,7 +554,7 @@ reach for; the pure-diagnostic verbs are broken out in 2b.
 | Verb | What it does |
 |------|--------------|
 | `serve --db DB` | MCP stdio server (JSON-RPC 2.0) -- see section 3 |
-| `lsp --db DB` | LSP stdio server. Beyond the standard methods it answers `draglint/hoverBundle` -- hover markdown + the `hover --format json` model + caller rows for one position, in a single reply (what the RAD Studio plugin uses instead of spawning the exe three times per tooltip); `draglint/callerCounts` -- every routine's caller count for one file in one reply; and `draglint/usages` (params `name`, optional `width`/`depth`) -- **the exact payload `usages --format json` prints**, built from the already-open stores, replacing a process spawn measured at 1,678 ms per Find Usages |
+| `lsp --db DB` | LSP stdio server. Beyond the standard methods it answers `draglint/hoverBundle` -- hover markdown + the `hover --format json` model + caller rows for one position, in a single reply (what the RAD Studio plugin uses instead of spawning the exe three times per tooltip); `draglint/callerCounts` -- every routine's caller count for one file in one reply; and `draglint/usages` (params `name`, optional `width`/`depth`) -- **the exact payload `usages --format json` prints**, built from the already-open stores, replacing a process spawn measured at 1,678 ms per Find Usages. `--parent-pid <n>` makes the server exit when that process dies (the IDE plugin passes its own pid, so a killed IDE never leaves an orphaned engine); `--stdio` and `--clientProcessId <n>` are accepted and IGNORED -- editor clients send them, and stdio is the only transport |
 | `lsp --proxy [--delphi-lsp PATH] [--trace FILE]` | LSP relay: spawns RAD Studio's `bin64\DelphiLSP.exe` and forwards the protocol, so registering drag-lint as the IDE's Code Insight server keeps the compiler front end. Transparent today; merging comes later. `--trace` appends every relayed message to FILE tagged `C>S` / `S>C` -- off by default, and pinned not to alter the relayed bytes. |
 
 ### 2a-i. VCL vs FMX: a bare name that two frameworks both declare
@@ -592,6 +595,19 @@ An AI rarely needs them; listed so the set is complete, not silently omitted:
 `dump-call-edges`, `ambiguous-calls`, `purge-locals`, `preprocess-file`,
 `pp-profile`, `dump-pp-lex`, `dump-pp-eval`, `fb-snapshot`, `link-orm`,
 `ghost-check`, `ghost-recover`.
+
+Flags on the ones you might actually reach for: `preprocess-file --file F`
+takes `--define SYM` and `--numeric K=V` (repeatable) to set the define
+profile, `--include-mode off|defines-only` (how `{$I}` includes are handled,
+default `off`), `--no-near-search` (resolve includes strictly beside the
+source) and `--tolerances` (opt into the dcc-tolerance `;` replacement pass);
+`pp-profile [--dproj P] [--platform win32|win64] [--config Release|Debug]`
+prints the resolved define profile; `fb-snapshot --connection "..." --db
+<sql.sqlite>` snapshots a live Firebird schema; `ghost-check <dproj>` compiles
+an UNSAVED buffer from a shadow dir -- `--unit <real.pas> --buffer <buf>` for
+one unit or `--overlays <manifest>` for several, and `--in-place` restores the
+old overwrite-then-restore behaviour, which can lose live edits if the IDE
+reloads inside that window; `bench-context [--n N]` times N context bundles.
 
 ---
 
