@@ -164,6 +164,41 @@ type
     RuleLine: Integer; { 1-based line in the rules file, or 0 }
   end;
 
+  /// <summary>One F property that was absent from the .dfm because it sat at its
+  /// declared default, whose value was resolved and written into the target
+  /// explicitly. INFORMATIONAL: the work was done and needs no follow-up.</summary>
+  /// <remarks>
+  /// <para>LIVES OUTSIDE TApplyReport.Items ON PURPOSE. This is the one kind
+  /// whose volume scales with the FORM rather than with the defects in it: a
+  /// real VARINSP-sized form produces on the order of 2,000 of these against at
+  /// most ~1,200 real properties, and items[] is the array a consumer dispatches
+  /// on. Leaving them there buried the four kinds a human must actually act on
+  /// under work that had already succeeded.</para>
+  /// <para>SLIMMER THAN TApplyItem, deliberately. `kind` and `field` would be the
+  /// same constant on every entry; `file` is the document's own `dfm`; and `text`
+  /// -- the ~130-byte prose -- is the bulk of an item and now carries nothing
+  /// that is not a typed key here. ToPath and Value in particular were dropped
+  /// on the floor before this record existed: they were recoverable only by
+  /// parsing English out of that prose.</para>
+  /// <para>FromType/ToType are omitted: they are per-instance constants,
+  /// recoverable from the instance's `field-retyped` item. Known gap, accepted --
+  /// an owned part with no .pas declaration has no such item, so its types live
+  /// only in `converted[]` prose; RuleLine still points at the `#link` under its
+  /// `#convert` header, which is the line to edit if the carry was wrong.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TApplyResolvedDefault = record
+    Instance: string;  { the .dfm instance -- a nested part appears under its OWN name }
+    FromPath: string;  { the F property that was absent because it was at its default }
+    ToPath  : string;  { where the value was written }
+    Value   : string;  { the resolved default, verbatim }
+    RuleLine: Integer; { 1-based line of the #link that carried it, or 0 }
+    Line    : Integer; { 1-based line of the instance's .dfm object header, or 0 }
+  end;
+
   /// <summary>Human-readable summary of one convert-apply run, grouped by
   /// surface: Converted lists one line per instance actually rewritten;
   /// AccessSites and CreatorSites list the .pas property/event-access and
@@ -176,10 +211,17 @@ type
   /// Items is the SAME report in typed form: one TApplyItem per entry across
   /// the six string arrays, in emission order, each carrying the kind and the
   /// structured facts the prose was rendered from.
-  /// INVARIANT: Length(Items) = the sum of the lengths of the six arrays.
+  /// INVARIANT 1: Length(Items) = the sum of the lengths of the six arrays.
   /// BuildApplyPlan maintains it structurally -- every report line is appended
   /// through a single Emit, which writes to exactly one array and to Items.
   /// The six arrays are kept as-is so existing text consumers are unaffected.
+  /// INVARIANT 2: ResolvedDefaults is DISJOINT from Items and from all six
+  /// arrays. It is appended through EmitResolved, which is the only writer and
+  /// touches nothing else, so invariant 1 above is unaffected by it. A
+  /// `default-resolved` entry appears in ResolvedDefaults and NOWHERE ELSE --
+  /// that separation is the whole point of the record (see
+  /// TApplyResolvedDefault), and a consumer summing the six arrays to predict
+  /// Length(Items) must NOT add this one in.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
@@ -193,6 +235,8 @@ type
     ReemitNotes : TArray<string>;
     Warnings    : TArray<string>;
     Items       : TArray<TApplyItem>;
+    { Disjoint from Items and from the six arrays above -- see invariant 2. }
+    ResolvedDefaults: TArray<TApplyResolvedDefault>;
   end;
 
   /// <summary>The outcome of BuildApplyPlan: the full set of text edits to
@@ -324,9 +368,9 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
-/// <para>Calls: BuildPropTree, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile (+18 more)</para>
+/// <para>Calls: BuildPropTree, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile (+19 more)</para>
 /// <para>Returns: Default(TApplyResult)</para>
-/// <para>Complexity: 14 (cyclomatic, outer body), 619 lines (full implementation)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 669 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.Emit"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport"/>
@@ -1106,6 +1150,8 @@ var
   AccessSites : TList<string>;
   Todos       : TList<string>;
   Items       : TList<TApplyItem>; { the typed mirror of the six lists above -- see Emit }
+  { NOT a mirror of anything -- its own surface, written only by EmitResolved. }
+  ResolvedDefaults: TList<TApplyResolvedDefault>;
   PasLines    : TStringList;
   PasFileSyms : TArray<TSymbol>;
   PasFileId   : Int64;
@@ -1181,6 +1227,16 @@ var
       afWarnings    : Warnings.Add(AItem.Text);
     end;
     Items.Add(AItem);
+  end;
+
+  // The ONLY writer of ResolvedDefaults, and deliberately not routed through
+  // Emit: Emit's contract is "one prose line AND one typed item", which is
+  // exactly what this kind must stop doing. Keeping it a separate procedure is
+  // what makes invariant 1 (Items = sum of the six) survive the split -- a
+  // resolved default now touches neither side of it.
+  procedure EmitResolved(const AEntry: TApplyResolvedDefault);
+  begin
+    ResolvedDefaults.Add(AEntry);
   end;
 
   // An item carrying only what the caller states. Context fields stay empty --
@@ -1271,17 +1327,31 @@ var
       default, carried across explicitly. INFORMATIONAL, not remainder -- the
       work was done. It is reported because the value appears in the output
       .dfm without appearing in the input one, and an operator diffing the two
-      deserves an account of where it came from. }
+      deserves an account of where it came from.
+
+      GOES TO ResolvedDefaults, NOT THROUGH Emit, AND THAT IS THE POINT OF IT.
+      Every other kind here is a remainder: a thing a human must still decide.
+      This one is a receipt. Its volume, alone among the kinds, scales with the
+      SIZE OF THE FORM rather than with what is wrong with it -- the converter
+      team measured ~2,156 of these against at most 1,229 real properties on one
+      form -- so while it sat in items[] it buried the four kinds that matter
+      under work that had already succeeded. Emitting it through Emit would put
+      it back into both items[] and reemit_notes[], which is the defect.
+
+      A nested part arrives here under its OWN instance name, because the
+      instance loop converts a part with the part's own trees (MEASURED
+      2026-09-14; run_convert_apply.ps1 Phase 9 pins it, and AI-CONVERT-RUNBOOK's
+      caveat is about HandleNested, a different path). }
     for var DR in AReport.DefaultsResolved do
     begin
-      var RIt: TApplyItem:= InstItem(aikDefaultResolved, afReemitNotes,
-        Format('%s: %s was absent from the DFM (at its declared default %s) -- carried to %s explicitly',
-          [Inst.InstanceName, DR.FromPath, DR.Value, DR.ToPath]));
-      RIt.FilePath:= ADfmPath;
-      RIt.Line    := ABlockLine;
-      RIt.Path    := DR.FromPath;
-      RIt.RuleLine:= DR.RuleLine;
-      Emit(RIt);
+      var RD: TApplyResolvedDefault;
+      RD.Instance:= Inst.InstanceName;
+      RD.FromPath:= DR.FromPath;
+      RD.ToPath  := DR.ToPath;
+      RD.Value   := DR.Value;
+      RD.RuleLine:= DR.RuleLine;
+      RD.Line    := ABlockLine;
+      EmitResolved(RD);
     end;
 
     { D5: a value a named ENUM cast could not translate -- no `map` matched and
@@ -1613,6 +1683,7 @@ begin
   AccessSites:= TList<string>.Create;
   Todos    := TList<string>.Create;
   Items    := TList<TApplyItem>.Create;
+  ResolvedDefaults:= TList<TApplyResolvedDefault>.Create;
   DoneUnits:= TDictionary<string, Boolean>.Create;
   ToTypesSeen:= TList<string>.Create;
   ConvertedInstNames:= TList<string>.Create;
@@ -1713,6 +1784,7 @@ begin
     Result.Report.AccessSites:= AccessSites.ToArray;
     Result.Report.Todos    := Todos.ToArray;
     Result.Report.Items    := Items.ToArray;
+    Result.Report.ResolvedDefaults:= ResolvedDefaults.ToArray;
     Result.Ok:= True;
   finally
     PasLines.Free;
@@ -1724,6 +1796,7 @@ begin
     AccessSites.Free;
     Todos.Free;
     Items.Free;
+    ResolvedDefaults.Free;
     DoneUnits.Free;
     ToTypesSeen.Free;
     ConvertedInstNames.Free;

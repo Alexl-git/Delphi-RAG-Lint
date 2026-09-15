@@ -862,7 +862,7 @@ begin
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose; --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix)');
+  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -21781,7 +21781,8 @@ end; // function
 
 /// <summary>Prints the human-readable summary of one convert-apply run: the
 /// header line, then one block per non-empty report surface.</summary>
-/// <param name="AReport">The report to print. ALL SIX of its arrays are shown.</param>
+/// <param name="AReport">The report to print. All six of its arrays are shown in full; ResolvedDefaults is summarised as a COUNT instead, because it is the one
+/// surface whose volume scales with the form rather than with its defects.</param>
 /// <param name="AEditCount">Edit count for the header line.</param>
 /// <param name="AVerb">'planned' (dry-run) or 'applied' (--apply).</param>
 /// <remarks>
@@ -21825,6 +21826,20 @@ begin
   Block('Todos',        AReport.Todos);
   Block('ReemitNotes',  AReport.ReemitNotes);
   Block('Warnings',     AReport.Warnings);
+  { ResolvedDefaults -- a COUNT, not a listing, and that asymmetry is deliberate.
+    Text mode used to print one line per resolved default under ReemitNotes,
+    which on a real form is ~2,000 lines of "this worked" ahead of the handful
+    that did not. A human reading the terminal needs to know the carries
+    happened and how many; the per-property account is a machine's question, so
+    it goes to --format json.
+
+    Uses Block so it keeps the `Heading:` + blank-line shape the runner slices
+    on, and prints nothing at all when the array is empty, like every other
+    surface here. }
+  if Length(AReport.ResolvedDefaults) > 0 then
+    Block('ResolvedDefaults',
+      [Format('%d property value(s) carried from their declared defaults (--format json lists each)',
+              [Length(AReport.ResolvedDefaults)])]);
 end; // procedure
 
 type
@@ -21894,8 +21909,11 @@ procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
 var
   JRoot, JFresh, JErr: TJSONObject;
   JRuleErrors, JItems: TJSONArray;
+  JResolved: TJSONArray ;
+  JRD      : TJSONObject;
   RE  : TRuleError;
   Item: TApplyItem;
+  RD  : TApplyResolvedDefault;
 begin
   JRoot:= TJSONObject.Create;
   try
@@ -21934,6 +21952,29 @@ begin
     JItems:= TJSONArray.Create;
     for Item in ACtx.Report.Items do JItems.AddElement(ItemJson(Item));
     JRoot.AddPair('items', JItems);
+
+    { resolved_defaults -- ALWAYS present, [] when empty, exactly like the six
+      arrays: a consumer must never have to tell "none" apart from "this engine
+      does not report it". Placed AFTER items so a streaming reader sees the
+      remainder first, which is the half that needs a human.
+
+      Six keys, not ten. Every entry would carry the same kind and field, `file`
+      is the document's own `dfm`, and `text` -- the bulk of a TApplyItem -- now
+      holds nothing that is not a typed key here. to_path and value in
+      particular were previously recoverable ONLY by parsing the prose. }
+    JResolved:= TJSONArray.Create;
+    for RD in ACtx.Report.ResolvedDefaults do
+    begin
+      JRD:= TJSONObject.Create;
+      JRD.AddPair('instance' , RD.Instance);
+      JRD.AddPair('from_path', RD.FromPath);
+      JRD.AddPair('to_path'  , RD.ToPath  );
+      JRD.AddPair('value'    , RD.Value   );
+      JRD.AddPair('rule_line', TJSONNumber.Create(RD.RuleLine));
+      JRD.AddPair('line'     , TJSONNumber.Create(RD.Line    ));
+      JResolved.AddElement(JRD);
+    end;
+    JRoot.AddPair('resolved_defaults', JResolved);
 
     Writeln(JRoot.ToJSON);
   finally
