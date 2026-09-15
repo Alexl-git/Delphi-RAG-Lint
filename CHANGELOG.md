@@ -5,6 +5,46 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### BREAKING: `default-resolved` leaves `items[]` for its own `resolved_defaults[]`
+
+`convert-apply --format json` gains a top-level `resolved_defaults[]` array, and
+`default-resolved` no longer appears in `items[]` or in `reemit_notes[]`.
+
+It is the one kind that is a RECEIPT rather than a remainder -- it records work
+that already succeeded -- and the only one whose volume scales with the SIZE of
+the form rather than with what is wrong with it. The converter team measured
+**~2,156 of these against at most 1,229 real properties** on a single form. In
+`items[]`, which is the array their contract tells them to dispatch on, that
+buried the four kinds a human must act on under work that had already worked.
+
+Six typed keys per entry -- `instance`, `from_path`, `to_path`, `value`,
+`rule_line`, `line`. **`to_path` and `value` are newly recoverable**: they
+existed only inside the prose before, so reading them meant parsing English.
+`kind`/`field` would be constant on every entry, `file` is the document's own
+`dfm`, and `text` carried nothing that is not now a typed key.
+
+The array is always present (`[]` when empty) and is **disjoint from `items[]`
+and from the six arrays** -- a consumer summing those six to predict
+`items.length` must not add it in. Text mode prints a one-line count instead of
+the entries.
+
+**Why it stays `apply/1`.** Adding a key is additive by the stated rule; a kind
+LEAVING `items[]` is not covered by it. The repo's closest precedent (the
+`default-superseded` rename, where "a consumer pinned to it sees the kind
+disappear") shipped as a `!` commit with no bump because nothing consumed it.
+Re-measured the same day rather than inherited: zero code hits in `src\tools\`,
+and the converter side's own note states the editor calls no `convert-apply`
+yet. With a real consumer this would have been `apply/2`.
+
+Measured on the way, and it corrects a documented limitation: **an owned part's
+absent-because-default property IS resolved and reported**, exactly once, under
+the part's own instance name. `AI-CONVERT-RUNBOOK` said otherwise; that sentence
+was about `HandleNested`, which re-runs a part with the PARENT's trees, and not
+about the instance loop, which is how a part actually reaches `apply/1`.
+
+`convert-reemit`'s own JSON (`report.defaultsResolved`, camelCase, no `schema`
+key) is a different surface and is unchanged.
+
 ### BREAKING: an explicit `--db` that does not exist now refuses the run
 
 Most verbs did `if not TFile.Exists(Db) then Continue` -- they dropped a `--db`

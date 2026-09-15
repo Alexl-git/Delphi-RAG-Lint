@@ -1,8 +1,20 @@
-﻿# The convert-apply REMAINDER contract -- schema `apply/1`
+# The convert-apply REMAINDER contract -- schema `apply/1`
 
 **Status: PROPOSED.** The `kind` vocabulary below is a compatibility surface, and
 it is not frozen until the converter side agrees it. Adding a kind is additive
 and stays `apply/1`; RENAMING one is breaking and needs `apply/2`.
+
+**2026-09-14 -- a kind LEAVING `items[]` is a wire change, and one was taken.**
+`default-resolved` now appears in its own `resolved_defaults[]` array and NO
+LONGER in `items[]` or `reemit_notes[]`. The additive/rename rule above does not
+cover a kind moving OUT, so this is recorded rather than inferred: a consumer
+filtering `items[]` on `default-resolved` sees the kind vanish, exactly as one
+pinned to `default-superseded` did at its rename. That rename shipped as a `!`
+commit with no schema bump because nothing consumed it, and the same is true
+here -- re-measured on the day, not inherited: zero code hits in `src\tools\`,
+and the converter side's own note states the editor calls no `convert-apply`
+yet. So the schema stays `apply/1`. Had there been a consumer, this would have
+been `apply/2`.
 
 *Engine side, 2026-09-04 (session 68). Implements
 `INBOX-URGENT-conversion-remainder-must-be-machine-readable.md`.*
@@ -48,13 +60,20 @@ drag-lint convert-apply --unit F.pas --rules R --db D --format json
       "instance": "Edit1", "from_type": "TOldEdit", "to_type": "TNewEdit",
       "file": "MyForm.pas", "path": "", "text": "{ TODO: ... }",
       "line": 24, "rule_line": 0 }
+  ],
+
+  // Informational receipts, DISJOINT from items[] and from the six arrays
+  // above -- see invariant 3. Always present, [] when none.
+  "resolved_defaults": [
+    { "instance": "Edit1", "from_path": "Enabled", "to_path": "Enabled2",
+      "value": "True", "rule_line": 3, "line": 2 }
   ]
 }
 ```
 
 `--json` is accepted as a synonym for `--format json`.
 
-### Two invariants you can rely on
+### Three invariants you can rely on
 
 1. **`items.length` == the sum of the lengths of the six arrays.** Every reported
    line appears exactly once in each representation. This is held structurally --
@@ -62,6 +81,10 @@ drag-lint convert-apply --unit F.pas --rules R --db D --format json
 2. **The REMAINDER is exactly the items whose `field` is `todos`,
    `reemit_notes` or `warnings`.** The other three fields describe work that WAS
    done.
+3. **`resolved_defaults` is DISJOINT from `items` and from all six arrays.** It
+   is written by its own `EmitResolved`, which touches nothing else, so it does
+   not participate in invariant 1 -- **do not add its length when checking
+   that sum.** It is always present, `[]` when empty, like the six.
 
 ### Failure paths are JSON too
 
@@ -94,7 +117,7 @@ not an expected mode.
 | `mapping-source-absent` | reemit_notes | an applied `#mapping`'s source path is not in this block AND has no `default` clause (NARROWED -- see below) |
 | `mapping-not-applied` | warnings | an applied `#mapping` matched nothing |
 | `default-rule-superseded` | warnings | a `#default` did not fire -- a `#link`/`#mapping` already carried that path |
-| `default-resolved` | reemit_notes | a source property absent because it sits at its declared `default`; its value was resolved and carried explicitly |
+| `default-resolved` | *(none -- see `resolved_defaults[]`)* | a source property absent because it sits at its declared `default`; its value was resolved and carried explicitly. **NOT an `items[]` field**: since 2026-09-14 this kind is reported only in the top-level `resolved_defaults[]` array |
 | `enum-cast-unmapped` | warnings | a `#link`'s enum cast had no `map` for this value and no `else`, so nothing was written |
 
 `ApplyItemKindName` is the single source of these spellings; nothing emits a
@@ -139,6 +162,12 @@ field change, not a rename, and does not break `apply/1`.
 The `convert-reemit` JSON gained a matching additive `report.defaultsSuperseded`
 array (`path`, `value`, `existing`, `ruleLine`). Existing keys are unchanged.
 
+**`convert-reemit`'s own JSON is a DIFFERENT surface and is untouched by the
+2026-09-14 change above.** It carries `report.defaultsResolved` in camelCase
+(`fromPath`/`toPath`/`value`/`ruleLine`) and has no `schema` key at all; only
+`convert-apply`'s `apply/1` document grew `resolved_defaults`. Nothing about
+`convert-reemit` moved, and `run_dfm_reemit.ps1` pins that.
+
 ### `mapping-source-absent` is an addition beyond the original table
 
 It is **not** in PLAN-SESSION-68's proposed vocabulary and needs your sign-off.
@@ -172,7 +201,7 @@ database). Three outcomes, not two:
 
 ### `stored` is a veto, and it is why this is not just "read the default"
 
-The premise "absent ⇒ the value equals the declared default" holds only for a
+The premise "absent ? the value equals the declared default" holds only for a
 property that is streamed **unconditionally**. The VCL's own `Color` is the case
 that matters -- `Vcl.Controls.pas:1996`:
 
@@ -205,6 +234,38 @@ Consequences you will see in `apply/1`:
   leaving the property absent silently adopts a value nobody chose. The item is
   informational: it exists so an operator diffing input against output has an
   account of a value that appears in one and not the other.
+
+  **Since 2026-09-14 it lives in its own `resolved_defaults[]` array**, not in
+  `items[]` and not in `reemit_notes[]`, at the converter side's request. The
+  reason is volume: it is the one kind whose count scales with the SIZE of the
+  form rather than with what is wrong with it -- ~2,156 entries against at most
+  1,229 real properties on one measured form -- so in `items[]` it buried the
+  kinds a human must act on. An array rather than a count-plus-sample because
+  the question asked of it is per-instance ("did MY sgr_Readings carry its
+  value?"). Six typed keys per entry:
+
+  ```jsonc
+  "resolved_defaults": [
+    { "instance": "sgr_Readings",
+      "from_path": "Options.Selection",
+      "to_path":   "OptionsSelection.CellSelect",
+      "value":     "True",
+      "rule_line": 14,
+      "line":      2280 }
+  ]
+  ```
+
+  `to_path` and `value` are newly recoverable -- they existed only inside the
+  prose before, so reading them meant parsing English. `kind`, `field`, `file`
+  and `text` are dropped: the first two would be the same constant on every
+  entry, `file` is the document's own `dfm`, and `text` carried nothing that is
+  not now a typed key. `from_type`/`to_type` are omitted as per-instance
+  constants, recoverable from that instance's `field-retyped` item.
+
+  **A nested owned part reports here too, under the part's OWN instance name**
+  (`instance: "Col1"`), exactly once -- measured 2026-09-14, not inferred. Text
+  mode prints a one-line count instead of the entries; use `--format json` for
+  the per-property account.
 * **`defaults-may-diverge` NARROWED.** It used to fire on every F/T conversion,
   on the stated grounds that the indexer had no default values. That premise is
   gone. It now fires only when a rule-referenced source is absent with no

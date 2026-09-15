@@ -318,8 +318,14 @@ drag-lint convert-apply     --unit <Form.pas> --rules c.rules --db <appdb> --db 
   unknown), and one whose `stored` clause is not `stored True` (omitted
   regardless of value -- see the contract's `stored` section). Those are what the
   narrowed `defaults-may-diverge` note now names.
-  Owned parts are the remaining limitation: the re-emit recursion is handed the
-  parent's property trees, so default-resolution is skipped inside a part.
+  Owned parts: the re-emit RECURSION (`HandleNested`) is handed the parent's
+  property trees, so default-resolution is skipped in that copy -- but this is
+  NOT the path a part reaches `apply/1` by, and the limitation is narrower than
+  this note used to claim. The instance loop converts an owned part with the
+  PART'S OWN trees, and MEASURED 2026-09-14 a part's absent-because-default
+  property IS resolved, carried, and reported -- exactly once, under the part's
+  own instance name (`resolved_defaults[].instance = "Col1"`), with the value
+  written into its block. Pinned by `run_convert_apply.ps1` Phase 9.
 - **Semantics behind an access rewrite.** Surface #4 renames `.AsInteger` ->
   `.Value` at the token level per your `#link`; if the *semantics* differ
   (integer vs float), the compiler or your tests must catch it. This is why the
