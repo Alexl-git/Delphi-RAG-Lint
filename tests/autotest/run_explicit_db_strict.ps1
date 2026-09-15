@@ -324,11 +324,17 @@ Check 'P2 POSITIVE CONTROL a run with NO --db is not hit by the new error' `
 #    staleness. Stale-first is the only ordering that reaches the code.
 #
 # 2. THE FIXTURE IS RECREATED BEFORE EVERY RUN. Measured the same day: a stale
-#    db handed to `usages`, `typeat` or `deps-report` is MIGRATED IN PLACE
+#    db handed to `usages`, `typeat` or `deps-report` was MIGRATED IN PLACE
 #    (schema_version 12 -> 22, 4 tables -> 31, 28 KB -> 320 KB, exit 0, silence).
 #    One such row leaves every later row reading a CURRENT database. This is the
 #    ghost-DB lesson again: a guard whose fixture is mutated by the thing under
 #    test measures the order of its rows.
+#
+#    Those three verbs were kept OUT of this matrix while C3 shipped, because C3
+#    did not fix them and a guard that is red for unfixed work teaches people to
+#    ignore it. They joined on 2026-09-14 (session 93, W1) as the RED half of
+#    their fix -- T5d is the row that turns green when they stop migrating, and
+#    P5 is what proves they still answer afterwards.
 # =============================================================================
 $py   = Join-Path $WorkDir 'mk_v12.py'
 $dbV12 = Join-Path $WorkDir 'v12.sqlite'
@@ -438,10 +444,22 @@ if ($havePython) {
     @{ N='convert-reemit';   A=@('convert-reemit','--from-block',$convBlock,'--rules',$convRules,
                                  '--from','uAlpha.TAlphaBase','--to','uBeta.TBetaThing') }
     @{ N='convert-apply';    A=@('convert-apply','--unit',(Join-Path $srcA 'uForm.pas'),'--rules',$convRules) }
+    # The three MIGRATE-ON-READ verbs (INBOX-read-verbs-migrate-the-db). Each
+    # opened every --db read-write and called Migrate before reading, so a v12
+    # fixture came back at the current schema. `usages` never used
+    # OpenReadOnlyStore at all; `typeat` and `deps-report` open EVERY --db, so
+    # stale-first is not even needed to reach their sites -- but it is kept for
+    # uniformity with the rows above.
+    @{ N='usages';           A=@('usages','--name','Touch') }
+    @{ N='typeat';           A=@('typeat',"$($fileA):8:15") }
+    @{ N='deps-report';      A=@('deps-report') }
   )
   Check 'V the stale matrix covers all four convert-* verbs' `
         (@($staleMatrix | Where-Object { $_.N -like 'convert-*' }).Count -eq 4) `
         'a convert verb missing from this matrix stays lenient on stale, silently'
+  Check 'V the stale matrix covers the three migrate-on-read verbs (usages, typeat, deps-report)' `
+        (@($staleMatrix | Where-Object { $_.N -in @('usages','typeat','deps-report') }).Count -eq 3) `
+        'a verb dropped from this matrix can go back to migrating a database it was told to read, silently'
 
   function Run-Stale([string[]]$VerbArgs) {
     Reset-StaleDb

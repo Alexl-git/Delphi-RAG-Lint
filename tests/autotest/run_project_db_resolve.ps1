@@ -351,6 +351,81 @@ Check 'membership: with NO db containing the file, the active-project order is u
 Check 'membership: reordering is a permutation -- no candidate is dropped' `
   (($mA.Count -eq 2) -and ($mB.Count -eq 2)) "A=$($mA.Count) B=$($mB.Count)"
 
+# --- 6d: the membership probe does not REWRITE the database it probes --------
+# DbContainsFile is documented as read-only, and it is -- for the rows. The
+# file header is another matter. FireDAC executes `PRAGMA journal_mode = <the
+# JournalMode param, else Delete>` on EVERY connect (FireDAC.Phys.SQLite.pas,
+# SetPragma), and until 2026-09-14 the probe passed WAL unconditionally, so
+# probing a rollback-journal database converted it to WAL: size and schema
+# unchanged, journal_mode delete -> wal, on seven verbs measured
+# (INBOX-read-verbs-migrate-the-db, the "smaller finding").
+#
+# TWO DIRECTIONS, ON PURPOSE. The obvious fix -- drop the param -- makes FireDAC
+# send Delete instead, which would convert every REAL index (all WAL) back to a
+# rollback journal on each probe, or fail BUSY under a live LSP reader and read
+# as a truthful-looking "not mine". So this block probes one database of EACH
+# kind in the same run and asserts both keep the mode they had. A one-direction
+# check would pass the fix that breaks the other direction.
+#
+# PD.sqlite is python-made (rollback journal, v12 shape, a real files row) and
+# is placed so it must WIN the resolution: AlphaOnly.pas is in PD and not in the
+# active project PB, so PD leading proves the probe actually ran on PD and said
+# yes, and PB (real, WAL, written by the indexer) was probed too and said no.
+Write-Host '== membership probe leaves the journal mode alone (6d) ==' -ForegroundColor Cyan
+$py = Get-Command python -ErrorAction SilentlyContinue
+Check '6d: python is available (a skipped arm is not a pass)' ($null -ne $py) 'python not on PATH'
+if ($null -ne $py) {
+  $dbD  = Join-Path $WorkDir 'PD.sqlite'
+  $mkPy = Join-Path $WorkDir 'mk_rollback.py'
+  $jmPy = Join-Path $WorkDir 'journal_mode.py'
+  Set-Content -LiteralPath $mkPy -Encoding Ascii -Value @'
+import sqlite3, sys, os
+c = sqlite3.connect(sys.argv[1])
+c.executescript("""
+CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO schema_meta(key, value) VALUES ('schema_version', '12');
+CREATE TABLE files (id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE,
+  mtime_unix INTEGER NOT NULL, sha256 TEXT NOT NULL,
+  parsed_at INTEGER NOT NULL, language TEXT NOT NULL);
+""")
+for i, f in enumerate(sys.argv[2:], start=1):
+    p = os.path.abspath(f).replace('/', '\\')
+    if len(p) > 1 and p[1] == ':':
+        p = p[0].upper() + p[1:]
+    c.execute("INSERT INTO files(id, path, mtime_unix, sha256, parsed_at, language)"
+              " VALUES (?, ?, 0, '', 0, 'pascal')", (i, p))
+c.commit(); c.close()
+'@
+  Set-Content -LiteralPath $jmPy -Encoding Ascii -Value @'
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+print(c.execute("PRAGMA journal_mode").fetchone()[0])
+c.close()
+'@
+  function Get-JournalMode([string]$Db) { return ([string](python $jmPy $Db 2>&1 | Select-Object -Last 1)).Trim().ToLowerInvariant() }
+
+  foreach ($s in @($dbD, "$dbD-wal", "$dbD-shm")) { if (Test-Path -LiteralPath $s) { Remove-Item -LiteralPath $s -Force } }
+  python $mkPy $dbD (Join-Path $memDir 'AlphaOnly.pas') 2>&1 | Out-Null
+  Set-Content -LiteralPath (Join-Path $memDir 'PD.dproj') -Value '<Project/>' -Encoding Ascii
+  $memCfgD = New-MemManifest 'd' 'PD' 'PB'   # folder match -> PD; PB is the ACTIVE project
+
+  $jmDBefore = Get-JournalMode $dbD
+  $jmBBefore = Get-JournalMode $dbB
+  Check '6d fixture: PD.sqlite starts as a ROLLBACK journal (delete)' ($jmDBefore -eq 'delete') "journal_mode=$jmDBefore"
+  Check '6d fixture: PB.sqlite (written by the real indexer) starts as WAL'  ($jmBBefore -eq 'wal')    "journal_mode=$jmBBefore"
+
+  $mD = Resolve-Mem (Join-Path $memDir 'AlphaOnly.pas') (Join-Path $memDir 'PB.dproj') $memCfgD
+  Check '6d control: the probe RAN on PD -- the rollback-journal db that holds the file leads over the active project' `
+    (($mD.Count -ge 1) -and ($mD[0] -like '*PD.sqlite')) ($mD -join ' | ')
+
+  $jmDAfter = Get-JournalMode $dbD
+  $jmBAfter = Get-JournalMode $dbB
+  Check '6d: probing a rollback-journal db leaves it a rollback journal (was: delete -> wal)' `
+    ($jmDAfter -eq 'delete') "journal_mode before=$jmDBefore after=$jmDAfter"
+  Check '6d: probing a WAL db leaves it WAL (the direction the "drop the param" fix would break)' `
+    ($jmBAfter -eq 'wal') "journal_mode before=$jmBBefore after=$jmBAfter"
+}
+
 # --- 6: --json carries the section name ------------------------------------
 $j = Resolve-Project (Join-Path $shared 'Alpha.dproj') -Json
 $obj = $null
