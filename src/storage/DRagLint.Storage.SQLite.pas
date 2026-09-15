@@ -18,6 +18,21 @@ uses
   , DRagLint.Core.Interfaces
   ;
 
+type
+  /// <summary>Raised by <see cref="TSQLiteSymbolStore.Migrate"/> when the
+  /// database's stored schema_version is NEWER than this engine's SCHEMA_VERSION.
+  /// A writer must never downgrade a database (owner ruling 2026-09-14,
+  /// PLAN-multi-client-index-safety, ruling 1).</summary>
+  /// <remarks>Migrate ends by stamping schema_version with the ENGINE's number,
+  /// so an older engine running it against a newer index would write the stamp
+  /// DOWN while leaving the newer tables and columns in place -- a database
+  /// that then lies about what it holds to every later open. The message names
+  /// both versions and the remedy (run the newer engine, or delete and rebuild
+  /// the index). The index verbs refuse EARLIER, before Migrate, with exit 2
+  /// (DRagLint.CLI.RefuseIfEngineOlderThanDb); this is the net under every
+  /// other writer, including one nobody has thought of yet.</remarks>
+  EIndexNewerThanEngine = class(Exception);
+
 var
   /// <summary>Process-wide switch: when False (the DEFAULT) the two exact name
   /// lookups -- FindSymbolsByExactName and FindSymbolsByQualifiedName -- compare
@@ -532,13 +547,16 @@ type
     public
       /// <summary>Opens (or creates) the SQLite index at ADbPath.</summary>
       /// <param name="ADbPath">Full path to the .sqlite index file.</param>
-      /// <param name="AReadOnly">When True the connection is opened
-      /// SQLITE_OPEN_READONLY and NO DDL/migration is performed: the caller must
-      /// NOT invoke Migrate or any Upsert/Delete/Insert method. Only the
-      /// read-safe init runs (connect + PrepareStatements), so query verbs never
-      /// issue DDL-on-read (which on a win32 sqlite3.dll silently DROPs the
-      /// string_literals sync triggers). Default False = today's write behavior,
-      /// byte-identical.</param>
+      /// <param name="AReadOnly">When True the connection is opened normally and
+      /// then put under `PRAGMA query_only = ON` (a true SQLITE_OPEN_READONLY
+      /// fails on a WAL database -- see Connect), with the journal mode the file
+      /// ALREADY has so the header is left alone. NO DDL/migration is performed:
+      /// the caller must NOT invoke Migrate or any Upsert/Delete/Insert method,
+      /// and every write on this handle raises SQLITE_READONLY. Only the
+      /// read-safe init runs (connect + PrepareStatements), so query verbs and
+      /// the LSP server never issue DDL-on-read (which on a win32 sqlite3.dll
+      /// silently DROPs the string_literals sync triggers). Default False = the
+      /// write behaviour, byte-identical to before this parameter existed.</param>
       /// <remarks>
       /// Read-only callers should first check IsSchemaCurrent and emit
       /// the actionable stale-schema message rather than run a query against a
@@ -594,7 +612,7 @@ type
       /// <returns>True when AFound &gt;= AExpected (current enough to read).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: StrToIntDef</para>
       /// <para>Returns: AFound &gt;= AExpected</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent</para>
@@ -2893,6 +2911,7 @@ uses
   , System.Math
   , System.Diagnostics        { v0.86: resolve-pass progress timing -- see ResolveLog }
   , DRagLint.Storage.Schema
+  , DRagLint.Storage.FileMembership { HeaderSaysWal: the read-only Connect names the journal mode the file already has }
   , DRagLint.Query  .Fuzzy
   , DRagLint.Index.CallResolver // v14 (D5): receiver-typing engine for ResolveCallTargets
   ;
@@ -3196,10 +3215,19 @@ begin
       no-writes with 'PRAGMA query_only = ON': every CREATE/DROP/INSERT/UPDATE/
       DELETE returns SQLITE_READONLY, so no DDL-on-read (no stamp, no FTS5 probe,
       no DROP TRIGGER) and no data change is possible. query_only is
-      per-connection (does not disturb a concurrent LSP/writer). Journal mode is
-      untouched, so the DB file's bytes are unchanged by a read verb. }
+      per-connection (does not disturb a concurrent LSP/writer).
+
+      THE JOURNAL MODE IS THE ONE THE FILE ALREADY HAS -- read from its header
+      (HeaderSaysWal), NOT a fixed 'WAL'. Until 2026-09-15 this path asked for
+      WAL and its comment claimed the journal mode was "untouched"; it was not.
+      FireDAC runs `PRAGMA journal_mode = <param>` on every connect, and
+      query_only is only executed AFTER that, so a rollback-journal database
+      opened by a read verb or by the LSP server had its header rewritten
+      (byte 18: 1 -> 2) by a connection that then wrote nothing else. Pinned by
+      run_lsp_reader_guard.ps1 (C2) and, for the membership probe that found
+      it, run_project_db_resolve.ps1 (6d). }
     FConn.Params.Values['LockingMode']:= 'Normal';
-    FConn.Params.Values['JournalMode']:= 'WAL';
+    FConn.Params.Values['JournalMode']:= if HeaderSaysWal(ADbPath) then 'WAL' else 'Delete';
     FConn.Params.Values['Synchronous']:= 'Normal';
     FConn.LoginPrompt:= False;
     FConn.Connected  := True;
@@ -3296,6 +3324,23 @@ var
   end;
 
 begin
+  { NEVER DOWNGRADE (owner ruling 2026-09-14, ruling 1). The stamp at the END
+    of this procedure writes the ENGINE's SCHEMA_VERSION unconditionally, so an
+    older engine reaching here against a newer index would stamp it DOWN and
+    leave the newer tables in place -- a database that then lies to every later
+    open. Checked BEFORE the first DDL so a refused run leaves the file
+    byte-identical. The index verbs refuse earlier and more politely (exit 2,
+    both versions named -- DRagLint.CLI.RefuseIfEngineOlderThanDb); this is
+    the net under every other writer, and it raises rather than returns
+    because no caller of Migrate has a "did not migrate" branch to take. }
+  var SchemaFound, SchemaExpected: Integer;
+  IsSchemaCurrent(SchemaFound, SchemaExpected);
+  if SchemaFound > SchemaExpected then
+    raise EIndexNewerThanEngine.CreateFmt(
+      'refusing to write: this database is at schema v%d, NEWER than this engine''s v%d (drag-lint %s). '
+      + 'A writer never downgrades an index. Run the engine that built it, or delete the index and rebuild it with this one.',
+      [SchemaFound, SchemaExpected, DRAGLINT_VERSION]);
+
   FConn.StartTransaction;
   try
     // Core schema (no FTS5): required; any failure aborts the migration.

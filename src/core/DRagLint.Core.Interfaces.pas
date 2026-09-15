@@ -193,7 +193,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.ResolverFingerprint (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.RefuseIfEngineOlderThanDb (DRagLint.CLI.pas), DRagLint.CLI.ResolverFingerprint (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>

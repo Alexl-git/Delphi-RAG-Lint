@@ -228,7 +228,7 @@ MetaSet $db 'schema_version' $schemaNewer
 $md5 = Md5 $db
 RunIndex @()
 Check 'R4 REFUSES (exit 2)' ($script:LastExit -eq 2) "exit=$($script:LastExit)"
-Check 'R4 names both schema versions' (($script:LastOut -match [regex]::Escape($schemaNewer)) -and ($script:LastOut -match "\b$schema0\b")) ''
+Check 'R4 names both schema versions' (($script:LastOut -match "v$schemaNewer\b") -and ($script:LastOut -match "v$schema0\b")) (($script:LastOut -split "`r?`n" | Where-Object { $_ -match 'schema' } | Select-Object -First 1))
 Check 'R4 file byte-identical' ((Md5 $db) -eq $md5)
 Check 'R4 schema_version still the newer one' ((MetaGet $db 'schema_version') -eq $schemaNewer) "schema_version=$(MetaGet $db 'schema_version')"
 

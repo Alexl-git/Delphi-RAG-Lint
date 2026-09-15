@@ -93,6 +93,7 @@ uses
   , System.SysUtils
   , System.Classes
   , System.IOUtils
+  , DRagLint.Core.Versions { CompareDottedVersions + INDEXER_FINGERPRINT_META_KEY: the never-downgrade gate }
   , System.NetEncoding { TNetEncoding.URL -- encodes the vault name into the obsidian:// URI }
   , System.JSON
   , System.StrUtils
@@ -3012,6 +3013,9 @@ begin
   end;
 end;
 
+{ Defined beside IndexerFingerprint, below; BuildPlanItem is its first caller. }
+function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean; forward;
+
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False;
   AResolveOnly: Boolean = False): Boolean;
@@ -3054,6 +3058,10 @@ begin
   T0:= Now;
   try
     Store:= TSQLiteSymbolStore.Create(AItem.DbPath);
+    { Ruling 1: never downgrade. Before Migrate, so a refusal leaves the file
+      byte-identical; False here is reported by the section roll-up like any
+      other failed section, and the OLD fingerprint stays in place. }
+    if RefuseIfEngineOlderThanDb(Store, AItem.DbPath) then Exit(False);
     Store.Migrate;
 
     { THE OPENING HALF OF A PAIR. The section already announces how it ENDED;
@@ -4204,7 +4212,7 @@ begin
   GScanPrev:= M;
 end;
 
-const INDEXER_FP_KEY  = 'indexer_fingerprint';
+const INDEXER_FP_KEY  = INDEXER_FINGERPRINT_META_KEY; { one spelling, in Core.Model; the LSP reads the same key }
 
 { The identity of what this build DERIVES from parses it already holds --
   call_edges, type_ancestors, type_helpers, unit_uses targets.
@@ -4260,6 +4268,78 @@ begin
   Result:= Format('v=%s;schema=%d;pp=%d;plat=%s',
                   [DRAGLINT_EXTRACTOR_VERSION, Expected, Ord(APreprocess),
                    LowerCase(EffectiveIndexPlatform(APlatform))]);
+end;
+
+{ The `v=` limb of a stored indexer fingerprint, or '' when the stamp is absent
+  or not in the `v=<ver>;...` form (a pre-fingerprint database, grandfathered
+  by ApplyIndexerFingerprint). }
+function ExtractorVersionOfFingerprint(const AFingerprint: string): string;
+const
+  VERSION_LIMB_PREFIX = 'v=';
+var
+  Rest   : string ;
+  SemiPos: Integer;
+begin
+  Result:= '';
+  if Pos(VERSION_LIMB_PREFIX, AFingerprint) <> 1 then Exit;
+  Rest   := Copy(AFingerprint, Length(VERSION_LIMB_PREFIX) + 1, MaxInt);
+  SemiPos:= Pos(';', Rest);
+  Result := if SemiPos > 0 then Copy(Rest, 1, SemiPos - 1) else Rest;
+end;
+
+{ NEVER DOWNGRADE -- the owner's ruling 1 of 2026-09-14
+  (docs\PLAN-multi-client-index-safety.md), enforced at the extractor's write
+  path, i.e. the two places that can re-parse: DoIndex and BuildPlanItem. Runs
+  BEFORE Migrate, so a refused run leaves the file byte-identical.
+
+  THE HAZARD. ApplyIndexerFingerprint compares the stored fingerprint for
+  INEQUALITY only: any difference forces a full re-parse, and the run then
+  stamps ITS OWN version. So an engine OLDER than the one that built the index
+  -- the VS Code extension's private copy sat at extractor 1.15.0 while the
+  canonical engine had just written 1.16.0 in a 7-hour re-parse; a stale CLI on
+  someone's PATH is the same shape -- would re-parse every file with the older
+  extractor and stamp the database DOWN, exit 0, evidence gone. This is what
+  protects that re-parse, from every client and not only the one we know.
+
+  engine OLDER than the stamp  -> True: REFUSE (both versions named, stderr).
+  engine EQUAL                 -> False: proceed.
+  engine NEWER                 -> False: proceed (the ordinary bump-and-re-parse).
+
+  COMPARED SEMANTICALLY (CompareDottedVersions), never as strings: '1.9.0'
+  sorts above '1.10.0' lexically, and that is precisely the pair that would let
+  an old engine through. The schema stamp is checked the same way, as an
+  integer, because Migrate would write it down too. No flag overrides this --
+  not --rebuild, not --force-reparse: both would still produce a downgraded
+  database. The way back is the engine that built the index, or a delete.
+  Pinned by tests\autotest\run_index_never_downgrades.ps1. }
+function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean;
+var
+  Stamp, DbVer   : string ;
+  Found, Expected: Integer;
+begin
+  Result:= False;
+  Stamp:= AStore.GetMetaValue(INDEXER_FP_KEY);
+  DbVer:= ExtractorVersionOfFingerprint(Stamp);
+  if (DbVer <> '') and (CompareDottedVersions(DRAGLINT_EXTRACTOR_VERSION, DbVer) < 0) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: refusing to write %s', [ADbPath]));
+    Writeln(ErrOutput, Format('  the index was built by extractor %s; this engine is extractor %s (drag-lint %s) -- OLDER.',
+                              [DbVer, DRAGLINT_EXTRACTOR_VERSION, DRAGLINT_VERSION]));
+    Writeln(ErrOutput, '  A writer never downgrades an index: re-parsing with an older extractor would throw away');
+    Writeln(ErrOutput, '  the newer parse and stamp the database down, silently. Run the engine that built it,');
+    Writeln(ErrOutput, '  or delete the index and rebuild it with this one. No flag overrides this.');
+    Exit(True);
+  end;
+  AStore.IsSchemaCurrent(Found, Expected);
+  if Found > Expected then
+  begin
+    Writeln(ErrOutput, Format('ERROR: refusing to write %s', [ADbPath]));
+    Writeln(ErrOutput, Format('  the index is at schema v%d; this engine is schema v%d (drag-lint %s) -- OLDER.',
+                              [Found, Expected, DRAGLINT_VERSION]));
+    Writeln(ErrOutput, '  A writer never downgrades an index. Run the engine that built it, or delete the index');
+    Writeln(ErrOutput, '  and rebuild it with this one.');
+    Exit(True);
+  end;
 end;
 
 // Decides whether this run re-parses everything, and records the current
@@ -4430,6 +4510,9 @@ begin
   if (DbHome <> '') and (not TDirectory.Exists(DbHome)) then TDirectory.CreateDirectory(DbHome);
 
   Store:= TSQLiteSymbolStore.Create(ResolvedDb);
+  { Ruling 1: never downgrade. Before Migrate, so a refusal leaves the file
+    byte-identical. Exit 2, the code every other refusal in this verb uses. }
+  if RefuseIfEngineOlderThanDb(Store, ResolvedDb) then Exit(2);
   Store.Migrate;
   { v0.42: deep scan emits identifier usage refs. Default deep, except a
     --scan-libraries scan defaults shallow (libraries are queried by call/type,

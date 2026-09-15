@@ -13,6 +13,7 @@ uses
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Core    .Model
+  , DRagLint.Core    .Versions // dl:unit DRagLint.Core.Versions accepted -- INDEXER_FINGERPRINT_META_KEY: the stamp each --db is reported with at startup
   , DRagLint.Core    .Interfaces
   , DRagLint.Core    .Encoding
   , DRagLint.Storage .SQLite
@@ -737,21 +738,24 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ADbPath: string); overload;
-      { v0.40.3: multi-DB constructor. Opens every path; missing paths are
-      logged via stderr (LSP doesn't see them) and skipped. The first
-      surviving store becomes FStore for legacy code paths. }
-      /// <summary><!-- drag-lint:auto sum -->v0.40.3: multi-DB constructor. Opens every
-      /// path; missing paths are logged via stderr (LSP doesn't see them) and skipped.
+      /// <summary>Multi-DB constructor. Opens every path READ-ONLY; a missing
+      /// path, an unopenable one, and one whose schema predates this engine are
+      /// each reported on stderr (the protocol channel is stdout) and skipped.
       /// The first surviving store becomes FStore for legacy code paths.</summary>
-      /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
-      /// <remarks>
+      /// <param name="ADbPaths">Index paths in priority order -- the project DB
+      /// first, the platform library behind it. Empty entries are ignored.</param>
+      /// <remarks>A READER. Never calls Migrate on a --db: the owner's ruling of
+      /// 2026-09-14 is that only the IDE writes an index, and a reader that
+      /// migrated would upgrade the database underneath its owner. The one
+      /// writable store this server owns is the ephemeral single-unit index in
+      /// %TEMP% (BuildEphemeralStore), which is never a project DB.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, GetStdHandle, Writeln</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, GetStdHandle, Writeln</para>
       /// <para>Overload 2 of 2</para>
       /// <para>constructor</para>
       /// <para>Reads: FStores, FStorePaths   Writes: FStdIn, FLinter, FStore</para>
       /// <para>Touches: file system</para>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Migrate"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
@@ -818,8 +822,37 @@ begin
       Continue;
     end;
     try
-      S:= TSQLiteSymbolStore.Create(Path);
-      S.Migrate;
+      { A READER, since 2026-09-15 (owner ruling 2: only the IDE writes; every
+        other client reads -- docs\PLAN-multi-client-index-safety.md). Until
+        then this loop opened every --db WRITABLE and ran Migrate (DDL), so each
+        editor held a writable, migrated connection to the real project index
+        and the 2.98 GB library index, and an editor on an OLDER engine migrated
+        the database it was only meant to read. query_only is the mechanism
+        (a true read-only open fails on WAL); the journal mode is the one the
+        file already has (HeaderSaysWal), so the header is left alone too.
+
+        A reader does not migrate. A database whose schema predates this engine
+        is REFUSED with the same actionable line the read verbs print, and the
+        loop moves on: the stores behind it still serve, and the IDE is the
+        side that brings the index forward. Pinned by run_lsp_reader_guard.ps1. }
+      S:= TSQLiteSymbolStore.Create(Path, {AReadOnly=}True);
+      var Found, Expected: Integer;
+      if not S.IsSchemaCurrent(Found, Expected) then
+      begin
+        Writeln(ErrOutput, Format('drag-lint LSP: index schema v%d < v%d, refusing %s -- a reader does not migrate; '
+          + 'to migrate, run "drag-lint index --project <file.dproj> --db <db>" for a project index, '
+          + 'or "drag-lint index <dir> --db <db>" for a library index', [Found, Expected, Path]));
+        S:= nil;
+        Continue;
+      end;
+      { The skew this server can see is stated once per store, on stderr, where
+        the editor's engine log captures it: which engine this is and what the
+        index was built by. T4 of the plan -- the skew is now SAFE (T1, T2);
+        this line is what makes it VISIBLE. }
+      var Stamp: string:= S.GetMetaValue(INDEXER_FINGERPRINT_META_KEY);
+      if Stamp = '' then Stamp:= 'unstamped';
+      Writeln(ErrOutput, Format('drag-lint LSP: %s (extractor %s) opened read-only %s [index %s]',
+        [DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, Path, Stamp]));
       SetLength(FStores, Length(FStores) + 1);
       FStores[High(FStores)]:= S;
       { Kept in lockstep with FStores -- appended only on the success path, so

@@ -62,6 +62,7 @@ uses
   TreeSitterLib in '..\..\third_party\delphi-tree-sitter\TreeSitterLib.pas',
   TreeSitter.Query in '..\..\third_party\delphi-tree-sitter\TreeSitter.Query.pas',
   DRagLint.Core.Model in '..\core\DRagLint.Core.Model.pas',
+  DRagLint.Core.Versions in '..\core\DRagLint.Core.Versions.pas',
   DRagLint.Core.DeclText in '..\core\DRagLint.Core.DeclText.pas',
   DRagLint.Core.Interfaces in '..\core\DRagLint.Core.Interfaces.pas',
   DRagLint.Wiring in '..\core\DRagLint.Wiring.pas',

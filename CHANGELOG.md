@@ -5,6 +5,52 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### The extractor never downgrades an index; the LSP server is a reader (owner rulings 2026-09-14)
+
+**`index` and `index --all` REFUSE a database built by a NEWER extractor.**
+The fingerprint gate compared for inequality only, so an engine whose
+`DRAGLINT_EXTRACTOR_VERSION` was OLDER than the stamp (the VS Code extension's
+private copy sat at 1.15.0 while the canonical engine had just written 1.16.0
+in a 7-hour re-parse; a stale CLI on PATH is the same shape) re-parsed every
+file with the older extractor and stamped the database DOWN -- exit 0, evidence
+gone. Now: engine older than the stamp -> exit 2 (`index --all`: the section
+fails), both versions named on stderr, file byte-identical, no flag overrides
+it (`--rebuild` and `--force-reparse` would still produce a downgraded index).
+Compared SEMANTICALLY (`CompareDottedVersions`, new unit
+`DRagLint.Core.Versions`): `1.100.0` is above `1.16.0`, which a string
+comparison gets wrong. A NEWER `schema_version` refuses the same way, and
+`TSQLiteSymbolStore.Migrate` raises `EIndexNewerThanEngine` before its first
+DDL as the net under every other writer. `run_index_never_downgrades.ps1`
+(RED against 1.12.0-alpha; positive control: an OLDER stamp still re-parses).
+
+**`lsp` opens every `--db` READ-ONLY and never migrates it.** Until now the
+server opened each database writable and ran `Migrate` (DDL), so every editor
+held a writable, migrated connection to the project index and the 2.98 GB
+library index, and an editor on an older engine migrated the database it was
+only meant to read. A `--db` whose schema predates the engine is refused on
+stderr with the read verbs' actionable line and skipped; the stores behind it
+still serve. Each opened store is announced on stderr with the engine's
+version, its extractor version and the index's stamp, so an engine/index skew
+is visible in the editor's engine log. `run_lsp_reader_guard.ps1`: a full
+session leaves a project DB byte-identical, a v12 DB named first is refused
+and untouched (positive control: `index` on the same file moves its md5).
+
+**The read-only connection names the journal mode the file already has.**
+`TSQLiteSymbolStore.Connect`'s read-only path asked for WAL unconditionally
+(and its comment claimed the mode was untouched); FireDAC runs
+`PRAGMA journal_mode = <param>` on every connect, so every read verb and the
+LSP rewrote a rollback-journal database's header (byte 18: 1 -> 2). Now the
+header is read first (`HeaderSaysWal`, exported from
+`DRagLint.Storage.FileMembership`, the same reading W1 used for the
+membership probe). Pinned by `run_lsp_reader_guard.ps1` C2.
+
+**`circular-uses` no longer infers an edge from a DOTTED, un-indexed unit's
+last segment.** `FireDAC.Phys.SQLite` fell through to stem `sqlite` and became
+an edge to `DRagLint.Storage.SQLite`, so every unit opening a FireDAC
+connection reported a phantom 2-unit cycle. The stem fallback now applies only
+to an unqualified name (`uses SQLite`), which is what the unit-scope-name map
+is for. `run_circular_uses_message.ps1` pins both halves.
+
 ### A forward-declaration stub no longer shadows the real class in a BY-NAME pick
 
 DevExpress forward-declares its classes (`TcxCustomButton = class;`) and

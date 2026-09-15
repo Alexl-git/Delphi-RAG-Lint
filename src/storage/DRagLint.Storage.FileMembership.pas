@@ -60,6 +60,27 @@ interface
 /// </remarks>
 function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
 
+/// <summary>True when the SQLite file at APath is in WAL mode, read straight
+/// from the file header (offset 18, "file format write version": 2 = WAL,
+/// 1 = rollback journal -- sqlite.org/fileformat2).</summary>
+/// <param name="APath">Full path to a .sqlite file. Opened read-only, shared,
+/// and closed before returning.</param>
+/// <returns>True only when the header says WAL. A missing, unreadable or
+/// too-short file (0 bytes -- created and never written) reads as False, i.e.
+/// a rollback journal, on which journal_mode=Delete is a no-op.</returns>
+/// <remarks>WHY A CONNECTION HAS TO BE TOLD THE MODE AT ALL. FireDAC executes
+/// `PRAGMA journal_mode = &lt;the JournalMode param, else Delete&gt;` on EVERY
+/// connect (FireDAC.Phys.SQLite.pas, SetPragma) -- there is no "leave it alone"
+/// value. So a READER leaves the header untouched only by asking for what is
+/// already there. Passing WAL unconditionally rewrote every rollback-journal
+/// database a read probe touched (measured on seven verbs, 2026-09-14); passing
+/// nothing sends Delete and converts every real WAL index back on each probe,
+/// or fails BUSY under a live LSP reader. Neither is a read.
+/// Exported (2026-09-15) so TSQLiteSymbolStore.Connect's read-only path and the
+/// LSP server use THIS reading of the header rather than a second copy of it.
+/// Thread-safe: no shared state.</remarks>
+function HeaderSaysWal(const APath: string): Boolean;
+
 implementation
 
 uses
@@ -87,24 +108,8 @@ begin
     Result[1]:= UpCase(Result[1]);
 end;
 
-{ SQLite file header, offset 18: "file format write version" -- 2 when the
-  database is in WAL mode, 1 for a rollback journal (sqlite.org/fileformat2).
-  Read straight from the file so the connection below can be told the mode the
-  file ALREADY has.
-
-  WHY THE MODE HAS TO BE NAMED AT ALL. FireDAC executes
-  `PRAGMA journal_mode = <the JournalMode param, else Delete>` on EVERY connect
-  (FireDAC.Phys.SQLite.pas, SetPragma) -- there is no "leave it alone" value.
-  So a probe leaves the header untouched only by asking for what is already
-  there. Passing WAL unconditionally (the code until 2026-09-14) rewrote every
-  rollback-journal database it probed (journal_mode delete -> wal, measured on
-  seven verbs). Passing NOTHING -- the obvious repair -- would send Delete and
-  convert every real WAL index back on each probe, or fail BUSY under a live
-  LSP reader and surface as a truthful-looking "not mine". Neither is a read.
-
-  A file too short to carry a header (0 bytes -- a database created and never
-  written) reads as a rollback journal, and journal_mode=Delete on it is a
-  no-op. Any failure to read reads as False for the same reason. }
+{ See the interface doc on HeaderSaysWal for why a reader must name the mode
+  the file already has. }
 const
   SQLITE_HDR_WRITE_VERSION_OFFSET = 18; { sqlite.org/fileformat2, "file format write version" }
   SQLITE_HDR_WRITE_VERSION_WAL    = 2 ; { 2 = WAL; 1 = legacy rollback journal }
