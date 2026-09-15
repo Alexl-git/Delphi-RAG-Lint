@@ -396,15 +396,26 @@ type
   TOldCol = class(TComponent)
   private
     FWidth: Integer;
+    FFlag : Boolean;
   published
     property Width: Integer read FWidth write FWidth;
+    { 5d: absent from Col1's .dfm block BECAUSE it sits at this declared default.
+      Whether a part's resolved defaults reach apply/1 at all was INFERRED, never
+      measured -- AI-CONVERT-RUNBOOK reads as if they do not. This property is
+      what makes the question answerable. }
+    property Flag: Boolean read FFlag write FFlag default True;
   end;
 
   TNewCol = class(TComponent)
   private
     FWidth: Integer;
+    FFlag2: Boolean;
   published
     property Width: Integer read FWidth write FWidth;
+    { Default deliberately DISAGREES with TOldCol.Flag's, so a value that is NOT
+      carried across means the opposite of what the form said -- the same trap
+      Phase 8's Enabled/Enabled2 pair pins at the top level. }
+    property Flag2: Boolean read FFlag2 write FFlag2 default False;
   end;
 
 implementation
@@ -452,6 +463,7 @@ $PartRulesBody = @'
 #link Text <- Caption
 #convert TOldCol -> TNewCol, PartUnit
 #link Width <- Width
+#link Flag2 <- Flag
 #default Width = 99
 #mapping ColMap from PartUnit.TColEnum to PartUnit.TNewCol
 #mapping ColMap #when Width = '999' -> Width = '1'
@@ -926,6 +938,14 @@ if ($null -ne $doc) {
   $missing = $six | Where-Object { -not ($doc.PSObject.Properties.Name -contains $_) }
   Check 'json: all six report arrays present' ($missing.Count -eq 0) "missing=$($missing -join ',')"
 
+  # resolved_defaults has the SAME always-present contract as the six: a consumer
+  # must never have to tell "no resolved defaults" apart from "key omitted".
+  # It is deliberately NOT added to $six -- it is disjoint from items[] AND from
+  # all six, so listing it there would break the invariant assertion below.
+  Check 'json: resolved_defaults is present too (always, [] when empty)' `
+    ($doc.PSObject.Properties.Name -contains 'resolved_defaults') `
+    'absent key -- a consumer cannot tell "none" from "this engine does not report it"'
+
   # THE INVARIANT: one item per reported line, across all six arrays.
   $sum = 0
   foreach ($k in $six) { $sum += @($doc.$k).Count }
@@ -1047,6 +1067,8 @@ if ($null -ne $mapDoc) {
   $six6 = @('converted','access_sites','creator_sites','todos','reemit_notes','warnings')
   $sum6 = 0
   foreach ($k in $six6) { $sum6 += @($mapDoc.$k).Count }
+  Check 'mapping: resolved_defaults is present (always, [] when empty)' `
+    ($mapDoc.PSObject.Properties.Name -contains 'resolved_defaults') 'key omitted'
   Check 'mapping: items.Count still equals the sum of the six arrays' `
     (@($mapDoc.items).Count -eq $sum6) "items=$(@($mapDoc.items).Count) sum=$sum6"
 }
@@ -1136,6 +1158,8 @@ if ($null -ne $defDoc) {
   $six7 = @('converted','access_sites','creator_sites','todos','reemit_notes','warnings')
   $sum7 = 0
   foreach ($k in $six7) { $sum7 += @($defDoc.$k).Count }
+  Check 'default: resolved_defaults is present (always, [] when empty)' `
+    ($defDoc.PSObject.Properties.Name -contains 'resolved_defaults') 'key omitted'
   Check 'default: items.Count still equals the sum of the six arrays' `
     (@($defDoc.items).Count -eq $sum7) "items=$(@($defDoc.items).Count) sum=$sum7"
 }
@@ -1176,18 +1200,56 @@ try { $resDoc = $resJson | ConvertFrom-Json } catch { $resDoc = $null }
 Check 'resolved: json parses' ($null -ne $resDoc) `
   "raw=$($resJson.Substring(0, [Math]::Min(200, $resJson.Length)))"
 if ($null -ne $resDoc) {
+  # =========================================================================
+  # `default-resolved` LEAVES items[] for its own `resolved_defaults` array.
+  #
+  # WHY: on a real form this kind is the flood. The converter team measured 28
+  # instances x 77 defaulted leaves = ~2,156 informational entries against at
+  # most 1,229 real properties, and items[] is the array their contract tells
+  # them to dispatch on -- so the remainder a human must act on was buried by
+  # work that had already been done successfully.
+  #
+  # THE SEPARATION ASSERTIONS BELOW ARE WORTHLESS ALONE. "no default-resolved
+  # in items[]" passes against a build that emits {}, or crashes, or drops the
+  # D4 loop entirely -- this repo has shipped that shape four times
+  # (feedback_a_guard_can_be_incapable_of_failing). Each one is therefore
+  # PAIRED with a positive control further down: the value still lands in the
+  # .dfm (Enabled2 = True), an actionable kind is still in items[], and the
+  # six-array invariant still holds. Do not delete a control to get green.
+  # =========================================================================
   $dr = @($resDoc.items) | Where-Object { $_.kind -eq 'default-resolved' }
-  Check 'resolved: a default-resolved item is emitted' ($dr.Count -eq 1) "count=$($dr.Count)"
-  if ($dr.Count -ge 1) {
-    Check 'resolved: it is informational (reemit_notes, not warnings)' `
-      ($dr[0].field -eq 'reemit_notes') "field=$($dr[0].field)"
-    Check 'resolved: it names the SOURCE property (Enabled)' ($dr[0].path -eq 'Enabled') `
-      "path=$($dr[0].path)"
+  Check 'resolved: default-resolved is GONE from items[]' ($dr.Count -eq 0) `
+    "count=$($dr.Count) -- items[] is the array the converter dispatches on"
+
+  $notesHit = @($resDoc.reemit_notes) | Where-Object { $_ -match 'absent from the DFM' }
+  Check 'resolved: reemit_notes no longer carries the resolved prose' ($notesHit.Count -eq 0) `
+    "count=$($notesHit.Count)"
+
+  # ---- the new array, and its shape ---------------------------------------
+  # @($null).Count is 1, so a null property would make the count assertion pass
+  # against a build that emitted nothing. Filter first (run_dfm_reemit.ps1:426).
+  Check 'resolved: resolved_defaults key is present' `
+    ($null -ne $resDoc.PSObject.Properties['resolved_defaults']) `
+    'the key must always be present, [] when empty -- same contract as the six arrays'
+  $rd = @($resDoc.resolved_defaults) | Where-Object { $null -ne $_ }
+  Check 'resolved: resolved_defaults has exactly ONE entry' ($rd.Count -eq 1) `
+    "count=$($rd.Count) -- POSITIVE: the work is still reported, just elsewhere"
+  if ($rd.Count -ge 1) {
+    Check 'resolved: entry names the instance (Edit1)' ($rd[0].instance -eq 'Edit1') `
+      "instance=$($rd[0].instance)"
+    Check 'resolved: entry names the SOURCE path (Enabled)' ($rd[0].from_path -eq 'Enabled') `
+      "from_path=$($rd[0].from_path)"
+    Check 'resolved: entry names the TARGET path (Enabled2)' ($rd[0].to_path -eq 'Enabled2') `
+      "to_path=$($rd[0].to_path)"
+    # to_path and value were dropped on the floor before this change -- they
+    # existed only inside the prose, so a consumer had to parse English.
+    Check 'resolved: entry carries the resolved VALUE (True)' ($rd[0].value -eq 'True') `
+      "value=$($rd[0].value)"
     # rule_line is the #link that carried it -- line 3 of $ResolvedRulesBody.
-    Check 'resolved: rule_line is the #link that carried it (3)' ($dr[0].rule_line -eq 3) `
-      "rule_line=$($dr[0].rule_line)"
-    Check 'resolved: the text names the resolved value and both paths' `
-      ($dr[0].text -match 'True' -and $dr[0].text -match 'Enabled2') "text=$($dr[0].text)"
+    Check 'resolved: entry rule_line is the #link that carried it (3)' ($rd[0].rule_line -eq 3) `
+      "rule_line=$($rd[0].rule_line)"
+    Check 'resolved: entry line anchors the instance block (>0)' ($rd[0].line -gt 0) `
+      "line=$($rd[0].line)"
   }
 
   # The value must actually land in the .dfm plan. Reporting it is no use if
@@ -1212,11 +1274,37 @@ if ($null -ne $resDoc) {
   foreach ($k in $six8) { $sum8 += @($resDoc.$k).Count }
   Check 'resolved: items.Count still equals the sum of the six arrays' `
     (@($resDoc.items).Count -eq $sum8) "items=$(@($resDoc.items).Count) sum=$sum8"
+
+  # POSITIVE CONTROL, explicit: items[] is not empty because everything broke --
+  # it still carries the REMAINDER, which is the whole point of emptying it of
+  # the informational flood.
+  $rem = @($resDoc.items) | Where-Object { $_.field -in @('todos','reemit_notes','warnings') }
+  Check 'resolved: POSITIVE CONTROL items[] still carries the remainder' ($rem.Count -ge 1) `
+    "count=$($rem.Count) -- if this is 0 the array is empty for the WRONG reason"
 }
 else {
   Check 'resolved: typed assertions were SKIPPED (document did not parse)' $false `
     'fix the parse failure above'
 }
+
+# ---- TEXT MODE must not re-create the flood it was moved out of -------------
+# The JSON side is only half the surface: PrintApplyReport printed every
+# resolved line under ReemitNotes, so a text-mode operator saw the same 2,156
+# entries. One summary line replaces them, keeping the `Heading:` + blank-line
+# shape this runner slices on.
+Check 'resolved: text mode carries a ResolvedDefaults summary' `
+  ($resRaw -match '(?m)^ResolvedDefaults:') `
+  'text mode must account for the carried values without listing them all'
+Check 'resolved: the text summary states the COUNT and points at --format json' `
+  ($resRaw -match '1 property value' -and $resRaw -match '--format json') `
+  'a bare heading would say the work happened without saying how much'
+
+# The ReemitNotes BLOCK specifically -- sliced, not searched whole-output, or a
+# match anywhere else would make this pass for the wrong reason.
+$rnM = [regex]::Match($resRaw, '(?m)^ReemitNotes:([\s\S]*?)(\r?\n\r?\n|\z)')
+$rnB = if ($rnM.Success) { $rnM.Groups[1].Value } else { '' }
+Check 'resolved: the ReemitNotes text block no longer lists the resolved lines' `
+  (-not ($rnB -match 'absent from the DFM')) "block=$rnB"
 
 Write-Host ''
 
@@ -1292,6 +1380,29 @@ if ($null -ne $partDoc) {
   Check 'part: it too is reported EXACTLY ONCE' `
     ($pna.Count -eq 1) "count=$($pna.Count)"
 
+  # --- a PART's resolved default reaches apply/1 too (5d) --------------------
+  # This was INFERRED and never measured, and AI-CONVERT-RUNBOOK:321-322 reads as
+  # if it were false -- that sentence is about HandleNested (Path A), which
+  # re-runs the part with the PARENT's trees and so resolves nothing. The
+  # instance loop (Path B) converts the part with its OWN trees, and MEASURED
+  # 2026-09-14 against the pre-change build it does resolve: exactly one entry,
+  # instance=Col1, from_path=Flag, and the plan really writes Flag2 = True.
+  # Asserted here so that reading cannot rot, and so a future fold that
+  # double-reports it turns this to 2.
+  $prd = @($partDoc.resolved_defaults) | Where-Object { $null -ne $_ -and $_.instance -eq 'Col1' }
+  Check 'part: the part''s resolved default reaches resolved_defaults, exactly once' `
+    ($prd.Count -eq 1) "count=$($prd.Count) -- 0 = parts do not resolve; 2 = both paths resolved and it is double-reported"
+  if ($prd.Count -ge 1) {
+    Check 'part: it names the part-local source leaf (Flag)' ($prd[0].from_path -eq 'Flag') `
+      "from_path=$($prd[0].from_path)"
+  }
+  # POSITIVE CONTROL, and the load-bearing half: reporting it is worthless if the
+  # value never lands. TNewCol.Flag2 defaults to False, so an absent Flag2 would
+  # silently mean the OPPOSITE of what the form said.
+  Check 'part: POSITIVE CONTROL Flag2 = True is written into Col1''s block' `
+    ($partRaw -match 'Flag2\s*=\s*True') `
+    'the part-level #link did not carry the resolved default into the plan'
+
   # --- CONTROL: the part really is nested, not a form field -----------------
   # If Col1 were declared in PartForm.pas this phase would prove nothing about
   # nested parts -- it would just be a second ordinary instance. The fixture's
@@ -1304,6 +1415,8 @@ if ($null -ne $partDoc) {
   $six9 = @('converted','access_sites','creator_sites','todos','reemit_notes','warnings')
   $sum9 = 0
   foreach ($k in $six9) { $sum9 += @($partDoc.$k).Count }
+  Check 'part: resolved_defaults is present (always, [] when empty)' `
+    ($partDoc.PSObject.Properties.Name -contains 'resolved_defaults') 'key omitted'
   Check 'part: items.Count still equals the sum of the six arrays' `
     (@($partDoc.items).Count -eq $sum9) "items=$(@($partDoc.items).Count) sum=$sum9"
 }
