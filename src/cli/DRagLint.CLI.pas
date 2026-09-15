@@ -5436,6 +5436,72 @@ begin
   end;
 end;
 
+{ `find-callers` prints each CALL SITE once.
+
+  THE DEFECT (INBOX-find-callers-duplicate-rows.md). `find-callers --name
+  Migrate` printed 75 rows for 38 unique file:line:col on this repo's own index:
+  38 refs of kind 'call' and 37 of kind 'member-access'.
+
+  BOTH ROWS ARE CORRECT, WHICH IS THE WHOLE POINT. A QUALIFIED call `Obj.Run`
+  emits one 'call' ref and one 'member-access' ref AT THE SAME POSITION; an
+  UNQUALIFIED `Run` emits only the 'call'. That is why the doubling is 38/37 and
+  not a clean 2x, and it is why the original note's "duplicates in the refs
+  TABLE means an extractor defect" reading -- which would have billed a
+  DRAGLINT_EXTRACTOR_VERSION bump and a ~5h15m re-parse of every database -- is
+  wrong. Nothing is duplicated in the table. The refs are distinct, carry
+  different kinds, and BOTH are load-bearing: `usages` groups by kind, rename
+  must rewrite every occurrence, and ResolvedCallersForName reads the
+  'call'-at-this-line fact to tell a callback reach from an ordinary member
+  call.
+
+  So this is a RENDERING fault in ONE verb -- the text form prints no kind, so
+  two correct rows are indistinguishable to the reader. Hence a POST-FILTER
+  here, for the same reason DropRefsThatCannotBeCallers above is one, and NOT a
+  change to the shared store query.
+
+  KEYED ON file+line+COL, NOT file+line. Two calls on one line is legal Pascal
+  (`A.Run; B.Run;`) and they are two real sites at two columns; a line-keyed
+  collapse would delete one, turning an over-report into an UNDER-report.
+  run_find_callers_no_duplicate_sites.ps1 case 5 is the positive control for
+  exactly that, and no ref in a 12,725-row sample of this index carries col 0,
+  so a position identifies one token.
+
+  The SURVIVING row is the highest-ranked kind at that position, so the one row
+  a reader gets is the 'call' rather than the 'member-access'. Order is
+  preserved: the winner keeps the slot the first ref at that position took. }
+function CollapseRefsAtSameSite(const ARefs: TArray<TReference>): TArray<TReference>;
+  function KindRank(const AKind: string): Integer;
+  begin
+    if SameText(AKind, 'call'         ) then Exit(3);
+    if SameText(AKind, 'member-access') then Exit(2);
+    if SameText(AKind, 'read'         ) then Exit(1);
+    Result:= 0;
+  end;
+var
+  Seen: TDictionary<string, Integer>;
+  Key : string                      ;
+  Idx : Integer                     ;
+  R   : TReference                  ;
+begin
+  Result:= nil;
+  Seen:= TDictionary<string, Integer>.Create;
+  try
+    for R in ARefs do
+    begin
+      Key:= Format('%d:%d:%d', [R.FileId, R.StartLine, R.StartCol]);
+      if Seen.TryGetValue(Key, Idx) then
+      begin
+        if KindRank(R.Kind) > KindRank(Result[Idx].Kind) then Result[Idx]:= R;
+        Continue;
+      end;
+      Result:= Result + [R];
+      Seen.Add(Key, High(Result));
+    end;
+  finally
+    Seen.Free;
+  end; // try
+end;
+
 function DoQueryHints(const AArgs: TArgs): Integer; forward;
 
 { v(A2): the --decl-contains arm of `query find`.
@@ -6841,6 +6907,7 @@ begin
       if AArgs.ContextLines > 0 then Refs:= Store.FindCallersByNameWithContext(AArgs.Name, AArgs.ContextLines)
       else Refs:= Store.FindCallersByName(AArgs.Name);
       Refs:= DropRefsThatCannotBeCallers(Store, Refs);
+      Refs:= CollapseRefsAtSameSite(Refs); { one row per call site -- see the note on the function }
       if Length(Refs) > 0 then
       begin
         if AArgs.ContextLines > 0 then PrintReferencesWithContext(Store, Refs, AArgs.ContextLines, AArgs.AsJson)
