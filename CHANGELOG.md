@@ -5,6 +5,48 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### `--help` lists every flag the CLI accepts, and the guard now enforces that
+
+19 flags were accepted by `ParseArgs` and printed by `--help` nowhere, so a user
+reading the banner could not discover them. 12 are now documented; 7 are
+recorded as deliberate exemptions with a reason each (verb-is-itself-exempt,
+back-compat alias, or test-harness entry point).
+
+Newly listed: `--exclude-under`, `--include-only`, `--max-file-kb`,
+`--no-use-ignore`, `--no-sql-ms`, `--deep`/`--shallow` (all `index` walk
+scoping), `--scan-libraries` (named as the alias it is), `--size-guard-mb` and
+`--force32` (they apply wherever a db is opened, so they went in the `Databases`
+block), `--clientProcessId` (`lsp`), and `--no-seealso`.
+
+**One banner line was WRONG, not merely incomplete.** It read "add `--seealso`
+to any document mode to emit `<seealso cref>` links". `DocSeeAlso` has defaulted
+to True since the flag became the default; `--seealso` is a kept no-op and
+`--no-seealso` is the real switch. A reader following that line would have
+concluded the links were off.
+
+`tests\autotest\run_docs_sync_guard.ps1` gains **check 9**, which polices flags
+the way it already polices verbs: every accepted flag must be in `--help` or
+exempt (both directions asserted, so the exemption table cannot outlive what it
+exempts); no `--help` flag may be a phantom; no prose doc may name a flag
+`--help` does not carry; and every flag the banner PROMOTES -- its COMMON
+QUESTIONS block, its Output/CI block, and anything on five or more verb lines --
+must be named in README and `docs\AI-USAGE.md`.
+
+That last rule is narrow on purpose. Demanding all ~147 flags in all three
+documents is ~50 doc cells now and two more per flag forever, in documents whose
+job is orientation; README says in its own voice that the authoritative flag
+list is `--help`. A guard that fails because `--parent-pid` is missing from
+README is a guard someone weakens, and this repo holds that a rule which is on
+but ignored is worse than one that is off.
+
+It found a real gap on its first run: `--enable`, `--profile` and `--fail-on` --
+the lint CI contract -- were absent from the document written for agents. Now
+documented there.
+
+Also new: **F0**, which compares the deployed exe's `--help` against `PrintHelp`
+in source and says "rebuild first" instead of reporting doc drift. The exe is
+not tracked, so the guard had been comparing two points in time.
+
 ### BREAKING: `default-resolved` leaves `items[]` for its own `resolved_defaults[]`
 
 `convert-apply --format json` gains a top-level `resolved_defaults[]` array, and

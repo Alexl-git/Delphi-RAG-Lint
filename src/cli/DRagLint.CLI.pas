@@ -649,8 +649,15 @@ begin
   Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
   Writeln('                               cross-DB rung runs last), so adding a library can never change an edge that already existed.');
   Writeln('                               Answers only when exactly ONE type and ONE member match; absence beats a guess.');
+  Writeln('                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...');
+  Writeln('                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]');
+  Writeln('                               --exclude-under and --include-only are repeatable and prune the walk;');
+  Writeln('                               --max-file-kb skips a file larger than N KB. --no-use-ignore opts OUT of the');
+  Writeln('                               .drag-lint-ignore file, which is honoured by default. --no-sql-ms indexes EVERY');
+  Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
+  Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
   Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--dry-run] [--watch [--interval N]]');
-  Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
+  Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths; alias --scan-libraries)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
   Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--dry-run [--json]] [--jobs <n>]');
   Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr>');
@@ -764,7 +771,9 @@ begin
   Writeln('                               It is a VERB and not a --fix because its input is project-wide and its output is one file; the CALL-SITE');
   Writeln('                               rewrite is the fix-it half and lives on `lint <file> --fix --fix-rule raise-bare-exception [--apply]`.');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
-  Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>]');
+  Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]');
+  Writeln('                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;');
+  Writeln('                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.');
   Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>]: relay in front of RAD Studio''s DelphiLSP,');
   Writeln('                               so registering drag-lint as the Code Insight server keeps the compiler front end.');
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
@@ -823,7 +832,8 @@ begin
   Writeln('     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too');
   Writeln('  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)');
   Writeln('     --strip is also accepted on --qname/--project/document-all (strips just that symbol''s doc region, or every file in scope); mutually exclusive with --stubs');
-  Writeln('     add --seealso to any document mode to emit <seealso cref> links to related symbols (callees + siblings)');
+  Writeln('     <seealso cref> links to related symbols (callees + siblings) are emitted BY DEFAULT in every document mode;');
+  Writeln('     --no-seealso turns them off. (--seealso is still accepted and does nothing -- it was the opt-in before it became the default.)');
   Writeln('     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent');
   Writeln('     @deprecated is auto-detected from the Pascal ''deprecated'' directive on the decl -- no flag needed');
   Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH]  - generate a Byte-family record helper for an enum');
@@ -912,6 +922,10 @@ begin
   Writeln('  accepted by "lint-all --db P --db L". Passing them the other way round made');
   Writeln('  doc-drift report a block no command could clear (fixed 2026-08-25).');
   Writeln('  Omit --db entirely and the manifest resolver supplies the full set in order.');
+  Writeln('  [--size-guard-mb N] [--force32] apply wherever a db is OPENED (index, query, lsp, serve):');
+  Writeln('  the 32-bit build refuses a database larger than the guard because it would run out of');
+  Writeln('  address space mid-answer; --size-guard-mb moves the threshold and --force32 overrides the');
+  Writeln('  refusal outright. On the Win64 build neither is normally needed.');
   Writeln('  AN EXPLICIT --db MUST EXIST. If any path you name is not there the verb prints');
   Writeln('  the path, its position (--db #2 of 3) and the repair on stderr and exits 2 --');
   Writeln('  it never answers from the databases that happened to open. A narrowed answer is');

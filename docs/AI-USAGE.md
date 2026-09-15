@@ -779,6 +779,17 @@ Two companion documents, both meant to be handed straight to your agent:
   nothing, and **exits 0** -- every downstream number then measures a stale
   database while reporting success.
 
+### The three flags that decide what a lint run reports
+
+These are the CI/config contract, and an agent that does not know them will
+either miss rules or fail a build on the wrong threshold:
+
+| flag | what it does |
+|---|---|
+| `--enable id1,id2` | turn named rules ON for this run, over their catalog default. **Some rules ship OFF because they flood on LEGACY code** -- `magic-literal`, `multiple-statements-per-line`, `commented-out-code`. That is a property of the old code, not of yours: code written today should pass them, so pass `--enable` when linting NEW work and hold it to the whole standard. |
+| `--profile <name>` | apply a named rule profile from `drag-lint-lint.json` instead of listing ids by hand. |
+| `--fail-on <level>` | the exit-code threshold -- `error`, `warning`, `info` or `hint`. This is what makes a lint run a BUILD GATE rather than a report; without it a wall of warnings still exits 0. |
+
 ---
 
 ## 5. Warnings (please read)
