@@ -861,7 +861,11 @@ var
         begin
           // When ToPersistent is on, do not enumerate the props of TPersistent /
           // TObject themselves (and everything above is unreachable anyway).
-          if AOpts.ToPersistent and IsStopClass(A.Name) then Break;
+          { Both names -- an ALIAS of TPersistent must stop a --to-persistent
+            climb exactly as the written name does (A.ResolvedName carries the
+            class a late-resolved type alias landed on). }
+          if AOpts.ToPersistent and
+             (IsStopClass(A.Name) or ((A.ResolvedName <> '') and IsStopClass(A.ResolvedName))) then Break;
           if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
           begin
             Sym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
@@ -1348,7 +1352,7 @@ var
     Result := SameText(ASym.Name, 'TComponent');
     if Result then Exit;
     for A in AStore.GetTransitiveAncestors(ASym.Id) do
-      if SameText(A.Name, 'TComponent') then Exit(True);
+      if A.MatchesName('TComponent') then Exit(True); { alias AND its target }
   end;
 
   // Recursive walk. APrefix is the dotted path down to (and including a trailing

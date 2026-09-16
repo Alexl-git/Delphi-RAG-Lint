@@ -940,7 +940,7 @@ var
       if Sy.Kind <> skClass then Continue;
       for var A: TTypeAncestor in AStore.GetTransitiveAncestors(Sy.Id) do
       begin
-        if SameText(A.Name, 'TDataModule') then Exit(True);
+        if A.MatchesName('TDataModule') then Exit(True);
         { An UNRESOLVED leaf is where the project index stops and the class was
           declared elsewhere; climbing it by name is the only way across. }
         if (not A.Resolved) and IsDataModuleClass(A.Name, ADepth + 1) then Exit(True);
@@ -1835,7 +1835,10 @@ var
         Result:= True;
         for A in S.GetTransitiveAncestors(Sy.Id) do
         begin
-          if IsBehaviouralRoot(A.Name) then
+          { Both names: a late-resolved TYPE ALIAS keeps the written alias in
+            A.Name and its target class in A.ResolvedName. }
+          if IsBehaviouralRoot(A.Name) or
+             ((A.ResolvedName <> '') and IsBehaviouralRoot(A.ResolvedName)) then
           begin
             ABehav:= True;
             Exit(True);

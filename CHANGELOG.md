@@ -5,6 +5,79 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### BREAKING (behaviour): a late-resolved type-alias ancestor now answers to BOTH names
+
+**What changes for a caller.** `query ancestors --name T --of A` returns **True**
+for strictly more `A` than before: when a heritage entry is a TYPE ALIAS that
+resolves to a class, the ancestry closure now answers to the alias AND to the
+class it resolves to. The alias name as written keeps answering exactly as it
+did -- nothing that was True becomes False.
+
+```
+  before:  query ancestors --name TcxButton --of TCustomButton   ->  False
+  after :  query ancestors --name TcxButton --of TCustomButton   ->  True
+  before and after:
+           query ancestors --name TcxButton --of TcxBaseButton   ->  True
+           query ancestors --name TcxButton --of TControl        ->  True
+           query ancestors --name TcxButton --of TCustomEdit     ->  False
+```
+
+`GetTransitiveAncestors` already late-resolved the alias and stamped the row
+with the TARGET's symbol id, file id and kind -- so the walk DID traverse it,
+which is why `--of TControl` was already True -- but it left `Name` as the alias
+and the target's own NAME never entered the closure. Marked breaking because
+every ancestry consumer reads this contract, not because a caller must change:
+the change is purely additive, and a caller only sees answers it should always
+have had.
+
+* **`TTypeAncestor` gains `ResolvedName`** -- '' on every ordinary edge, the
+  target class on a late-resolved alias. `Name` is untouched. The row COUNT and
+  ordinals are untouched.
+* **By-name ancestry matching moves to `TTypeAncestor.MatchesName`**, which
+  consults both names. Callers that read `SymbolId` are unaffected -- they never
+  read the new field.
+* **`query ancestors --json` gains `resolved_name`** on every ancestor element;
+  the text form renders `TcxBaseButton [class] -> TCustomButton`.
+* Consumers widened to both names: `IsDescendantOf`, `ImplementsInterface`,
+  LSP completion's type test, `IsTestRoutine`'s `TTestCase` climb, PropTree's
+  `TComponent` test and its `--to-persistent` stop-class test, ProjectRules'
+  `TDataModule` and behavioural-root climbs, and ClassMetrics' CBO/Ca ancestor
+  exclusion (an ancestor reached only through an alias is no longer also counted
+  as efferent coupling). `UnresolvedAncestorNames` is unchanged by construction
+  (it reads only UNRESOLVED rows).
+
+**Neither of the two obvious fixes was taken, and that is the load-bearing part.**
+Overwriting `Name` with the target would have broken every consumer that
+legitimately asks about the alias as written (PropTree's `ScopeSymbolFor`
+resolves `A.Name` in the declaring class's unit scope). Appending a SECOND row
+for the target would have put two rows on one symbol id, and
+`CallResolver.LookupMethodOnType` counts matches ACROSS ancestor rows and reads
+two candidates as AMBIGUOUS -- every inherited method would double and resolved
+call edges would be REMOVED, which that code's own comment calls the one outcome
+a resolution change must never produce. One row, two names.
+
+Query-side only: **no extractor change, no reindex, and existing indexes get the
+new answers as they are.** `DRAGLINT_VERSION` and `DRAGLINT_EXTRACTOR_VERSION`
+are both unchanged.
+
+Measured on `library-Win64`: the entire affected population is **6** heritage
+edges naming an alias whose target is a class (`TcxBaseButton -> TCustomButton`,
+`TMessage -> TMessageBase`, `TSkCustomPrinter -> TPrinterWin`,
+`TEurekaStackList -> TEurekaStackListV7`, `TBaseTransportFilter ->
+TFactoryObject`, `TFrame -> TFIBEditorCustomFrame`), every one a genuine
+`X = Y;` declaration. The ambiguous `TFrame` still DECLINES to resolve, so no
+wrong ancestor is grafted. **`query descendants --of TControl` is 2923 before
+and after** -- unchanged by design: `FindDescendantNames` is a recursive SQL CTE
+that never calls `GetTransitiveAncestors`, so the two verbs reach an alias by
+different paths.
+
+Guards: `tests\autotest\run_ancestors_alias_target_name.ps1` (asserts BOTH
+directions -- the target became reachable AND the written alias name did not
+vanish -- plus row-shape cases that fail the duplicate-row fix), and a new `A3`
+line in `tests\autotest\run_descendants_alias_hop.ps1`, which had asked for it
+by name. Closes `docs\INBOX-late-resolved-alias-keeps-the-alias-name.md` and the
+converter team's ask 2 in `INBOX-forward-decl-shadows-real-class-declaration.md`.
+
 ### Fixed: the documentation generator's two owner-reported defects (PLAN-autofix-campaign 4.2, session 93 W4-M0)
 
 Both fixes are RENDER-TIME. Raises are mined by a source-line scan at

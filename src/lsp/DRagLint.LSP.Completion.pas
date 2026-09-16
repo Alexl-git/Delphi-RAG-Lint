@@ -471,7 +471,7 @@ begin
     if SameText(Owner.Name, ATypeName) then Exit(True);
     Anc:= St.GetTransitiveAncestors(Owner.Id);
     for J:= 0 to High(Anc) do
-      if SameText(Anc[J].Name, ATypeName) then Exit(True);
+      if Anc[J].MatchesName(ATypeName) then Exit(True); { alias AND its target }
     Exit;   // the owning store answered; no other store can improve on it
   end;
 end;

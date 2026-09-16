@@ -49,7 +49,7 @@ type
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Calls: CollectDefProcNodes, CollectIdentifiers, CompareText, Connected, Copy, Default, DelegateBaseField, DelegationField, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory (+32 more)</para>
     /// <para>Returns: Roots.Count; Default(TMiddleManResult); nil; Findings.ToArray</para>
-    /// <para>Complexity: 28 (cyclomatic, outer body), 1042 lines (full implementation)</para>
+    /// <para>Complexity: 28 (cyclomatic, outer body), 1053 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory"/>
@@ -424,7 +424,13 @@ var
       Anc:= AStore.GetTransitiveAncestors(AInfo.Id);
       Inc(GBAnc, TStopwatch.GetTimeStamp - TAnc);
       for A in Anc do
-        if A.Name <> '' then Exclude.AddOrSetValue(LowerCase(A.Name), True);
+      begin
+        if A.Name         <> '' then Exclude.AddOrSetValue(LowerCase(A.Name        ), True);
+        { A late-resolved TYPE ALIAS is ONE ancestor under TWO names. Excluding
+          only the written alias left the target counted as efferent coupling,
+          which is exactly what an ancestor is defined not to be. }
+        if A.ResolvedName <> '' then Exclude.AddOrSetValue(LowerCase(A.ResolvedName), True);
+      end;
       Refs:= GetRefs(AInfo.FileId);
       for R in Refs do
       begin
@@ -479,7 +485,12 @@ var
         Anc:= AStore.GetTransitiveAncestors(Src.Id);
         Inc(GBAnc, TStopwatch.GetTimeStamp - TAnc);
         for A in Anc do
-          if A.Name <> '' then Exclude.AddOrSetValue(LowerCase(A.Name), True);
+        begin
+          if A.Name         <> '' then Exclude.AddOrSetValue(LowerCase(A.Name        ), True);
+          { Same alias rule as ComputeCBO -- the two exclusion sets must agree, or
+            Ca and CBO would disagree about what counts as an ancestor. }
+          if A.ResolvedName <> '' then Exclude.AddOrSetValue(LowerCase(A.ResolvedName), True);
+        end;
         Refs:= GetRefs(Src.FileId);
         for R in Refs do
         begin

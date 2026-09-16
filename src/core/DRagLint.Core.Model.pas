@@ -320,6 +320,25 @@ type
     SymbolId: Int64  ;
     FileId  : Int64  ;
     Ordinal : Integer; // position in the declaring type's heritage list (direct edges)
+    /// <summary>v1.13: the name of the class a late-resolved TYPE ALIAS edge
+    /// actually landed on, when that differs from <c>Name</c>; '' otherwise.
+    /// <c>Name</c> always stays the ancestor name as WRITTEN in the heritage
+    /// list.</summary>
+    /// <remarks>One ancestor, two names -- never a second ROW and never an
+    /// overwritten <c>Name</c>; GetTransitiveAncestors' assignment site states
+    /// why both of those break a consumer. Match with MatchesName, never with
+    /// <c>SameText(A.Name, X)</c>. Pinned by
+    /// tests\autotest\run_ancestors_alias_target_name.ps1.</remarks>
+    ResolvedName: string;
+    /// <summary>True when AName names this ancestor -- either as WRITTEN in the
+    /// heritage list (<c>Name</c>) or as the class a type alias resolved to
+    /// (<c>ResolvedName</c>). The by-name ancestry test; use it instead of
+    /// <c>SameText(A.Name, X)</c>, which misses every alias target.</summary>
+    /// <param name="AName">Candidate ancestor name; compared case-insensitively.
+    /// An empty AName never matches.</param>
+    /// <returns>True when AName equals Name or ResolvedName.</returns>
+    /// <remarks>Pure; no side effects.</remarks>
+    function MatchesName(const AName: string): Boolean;
   end;
 
   /// <summary>v15: one helper-target edge -- a `record helper for T` /
@@ -1717,6 +1736,15 @@ implementation
 uses
   System.SysUtils
   ;
+
+{ TTypeAncestor }
+
+function TTypeAncestor.MatchesName(const AName: string): Boolean;
+begin
+  if AName = '' then Exit(False);
+  Result:= SameText(Name, AName) or
+           ((ResolvedName <> '') and SameText(ResolvedName, AName));
+end;
 
 function IntrinsicSignature(const AName: string): string;
 begin

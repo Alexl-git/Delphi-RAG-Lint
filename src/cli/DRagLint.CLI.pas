@@ -6978,6 +6978,9 @@ begin
             AO.AddPair('name' , A.Name);
             AO.AddPair('kind' , A.Kind);
             AO.AddPair('resolved', TJSONBool.Create(A.Resolved));
+            { ADDITIVE: '' on every ordinary edge; the TARGET class name when
+              this row is a late-resolved TYPE ALIAS. `--of` matches both. }
+            AO.AddPair('resolved_name', A.ResolvedName);
             Arr.AddElement(AO);
           end;
           JO.AddPair('ancestors', Arr);
@@ -6988,7 +6991,10 @@ begin
       begin
         Writeln(AArgs.Name, ' ancestors:');
         for var A in Ancs do
-          if A.Resolved then Writeln(Format('  %s [%s]', [A.Name, A.Kind]))
+          { A late-resolved TYPE ALIAS is one ancestor under two names; render
+            both, or the reader cannot tell why `--of <target>` is True. }
+          if A.Resolved then Writeln(Format('  %s [%s]%s', [A.Name, A.Kind,
+            if A.ResolvedName <> '' then ' -> ' + A.ResolvedName else '']))
         else Writeln(Format('  %s [%s] (unresolved)', [A.Name, A.Kind]));
         if Length(Ancs) = 0 then Writeln('  (none)');
       end;

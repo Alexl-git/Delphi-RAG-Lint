@@ -43,18 +43,27 @@
                   TAliasBase` is True (already true pre-fix: GetTransitiveAncestors
                   late-resolves the alias and then expands the TARGET's own
                   edges) AND descendants lists TAliasChild.
+    A3            ...and rooted at the alias TARGET itself, `--of TAliasRoot`.
+                  Added when the second defect below shipped.
     exit          found -> 0 (run_query_descendants_exitcode.ps1 owns the empty
                   case; not repeated here).
 
   WHY A2 IS ROOTED AT TAliasBase AND NOT AT TAliasRoot -- a SECOND defect,
-  found while writing this guard and deliberately NOT pinned here:
-  GetTransitiveAncestors' late resolution keeps the ALIAS name on the resolved
-  row (`TAliasHop [class]`), so the alias TARGET's own name never enters the
-  closure and `--of TAliasRoot` answers False while `--of TAliasBase` answers
+  found while writing this guard and deliberately NOT pinned here at the time:
+  GetTransitiveAncestors' late resolution kept the ALIAS name on the resolved
+  row (`TAliasHop [class]`), so the alias TARGET's own name never entered the
+  closure and `--of TAliasRoot` answered False while `--of TAliasBase` answered
   True. Same on the library index: `TcxButton --of TControl` True,
   `TcxButton --of TCustomButton` False. Filed as
-  docs\INBOX-late-resolved-alias-keeps-the-alias-name.md; when that ships, add
-  the `--of TAliasRoot` line here.
+  docs\INBOX-late-resolved-alias-keeps-the-alias-name.md.
+
+  SHIPPED 2026-09-15: TTypeAncestor gained ResolvedName (the written alias stays
+  in Name; the target class it resolved to goes in ResolvedName) and by-name
+  matching moved to TTypeAncestor.MatchesName, so a late-resolved alias now
+  answers to BOTH names. A3 below is the line this header asked for. The full
+  both-directions contract -- including that the ALIAS name did not vanish and
+  that no second ROW was added -- is pinned by its own guard,
+  tests\autotest\run_ancestors_alias_target_name.ps1.
 
   RED SIGNATURE, observed against the pre-fix engine (drag-lint 1.12.0-alpha,
   third_party\dll-win64, 2026-09-14): the two CASE A lines and the descendants
@@ -207,6 +216,9 @@ Write-Host 'A2: `ancestors --of` (late-resolves the alias) and `descendants` agr
 $isDesc = Descends 'TAliasChild' 'TAliasBase'
 Check 'A2: TAliasChild --of TAliasBase is True (already true pre-fix; see the header for why not TAliasRoot)' ($isDesc -eq $true) "is_descendant=$isDesc"
 Check 'A2: ...and descendants lists TAliasChild (the half that was RED)' (($isDesc -eq $true) -and ($d.Names -contains 'TAliasChild')) "is_descendant=$isDesc listed=$($d.Names -contains 'TAliasChild')"
+$isDescRoot = Descends 'TAliasChild' 'TAliasRoot'
+Check 'A3: TAliasChild --of TAliasRoot (the alias TARGET) is True -- the two verbs agree at the SAME root' ($isDescRoot -eq $true) `
+  "is_descendant=$isDescRoot -- this is the root `descendants` was asked about, so a False here is the two verbs disagreeing"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

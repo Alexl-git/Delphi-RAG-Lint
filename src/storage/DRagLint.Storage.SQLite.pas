@@ -1925,9 +1925,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetVirtualMethodsIncludingAncestors (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ImplementsInterface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsDescendantOf (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UnresolvedAncestorNames (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: Default, DRagLint.Core.Model.CrossesGuiFramework, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolById, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass, IntToStr, LowerCase, Trim</para>
+      /// <para>Calls: Default, DRagLint.Core.Model.CrossesGuiFramework, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolById, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass, IntToStr, LowerCase, SameText, Trim</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors</para>
-      /// <para>Complexity: 18 (cyclomatic, outer body), 140 lines (full implementation)</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 162 lines (full implementation)</para>
       /// <para>Reads: FConn, FLateAncCache</para>
       /// <para>SQL: reads TYPE_ANCESTORS</para>
       /// <seealso cref="DRagLint.Core.Model.CrossesGuiFramework"/>
@@ -1944,14 +1944,14 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTransitiveAncestors, DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds, SameText</para>
+      /// <para>Calls: DRagLint.Core.Model.TTypeAncestor.MatchesName, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTransitiveAncestors, DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Model.TTypeAncestor.MatchesName"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTransitiveAncestors"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
@@ -1999,14 +1999,14 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTransitiveAncestors, DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds, SameText</para>
+      /// <para>Calls: DRagLint.Core.Model.TTypeAncestor.MatchesName, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTransitiveAncestors, DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds, SameText</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.ImplementsInterface</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Model.TTypeAncestor.MatchesName"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTransitiveAncestors"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ImplementsInterface(const AClassName, AInterfaceName: string; AFileId: Int64): Boolean;
@@ -11367,6 +11367,11 @@ begin
         A.Ordinal := Q.FieldByName('ordinal'      ).AsInteger;
         A.Name    := Q.FieldByName('ancestor_name').AsString;
         A.Kind    := Q.FieldByName('ancestor_kind').AsString;
+        { EXPLICIT, not incidental. An inline `var` inside a loop body is still a
+          ROUTINE-scoped local for managed-field initialization, so a
+          ResolvedName set on an earlier row would leak onto every later row
+          that never assigns it -- naming a wrong alias target rather than none. }
+        A.ResolvedName:= '';
         A.Resolved:= not Q.FieldByName('ancestor_symbol_id').IsNull;
         if A.Resolved then
         begin
@@ -11443,6 +11448,23 @@ begin
               A.SymbolId:= Late.Id;
               A.FileId  := Late.FileId;
               A.Kind    := Late.Kind.ToText;
+              { CARRY THE TARGET'S NAME. Everything above stamps the row with the
+                TARGET's identity while `A.Name` stays the ALIAS as written, so
+                the walk traversed the alias -- the target's own edges ARE
+                expanded below -- but the target's NAME never entered the
+                closure, and every by-name consumer answered False for it
+                (`TcxButton --of TCustomButton`, with `--of TControl` True).
+
+                ADDITIVE, and deliberately not either of the two obvious fixes.
+                Overwriting A.Name would silently break the consumers that ask
+                about the alias AS WRITTEN (PropTree's ScopeSymbolFor resolves
+                A.Name in the declaring class's unit scope). Appending a SECOND
+                row for the target would double every inherited method in
+                CallResolver.LookupMethodOnType, which reads two candidates as
+                AMBIGUOUS -- a REMOVED call edge, the one outcome a resolution
+                change must never produce. One row, two names; match with
+                TTypeAncestor.MatchesName. }
+              if not SameText(Late.Name, A.Name) then A.ResolvedName:= Late.Name;
             end;
           end;
           Acc.Add(A);
@@ -11533,7 +11555,7 @@ begin
   Result := False;
   for StartId in TypeCandidateIds(AClassName, AFileId) do
     for A in GetTransitiveAncestors(StartId) do
-      if SameText(A.Name, AAncestorName) then Exit(True);
+      if A.MatchesName(AAncestorName) then Exit(True); { alias AND its target -- see TTypeAncestor.ResolvedName }
 end;
 
 { The name-only leaves of AClassName's ancestor closure -- the OTHER half of the
@@ -11590,7 +11612,7 @@ begin
   Result := False;
   for StartId in TypeCandidateIds(AClassName, AFileId) do
     for A in GetTransitiveAncestors(StartId) do
-      if SameText(A.Name, AInterfaceName) and SameText(A.Kind, 'interface') then Exit(True);
+      if A.MatchesName(AInterfaceName) and SameText(A.Kind, 'interface') then Exit(True);
 end;
 
 function TSQLiteSymbolStore.FindDescendantNames(const AAncestorName: string): TArray<string>;

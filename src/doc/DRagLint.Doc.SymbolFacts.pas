@@ -2889,7 +2889,7 @@ begin
   ParentSym:= AStore.GetSymbolById(Sym.ParentId);
   if ParentSym.Kind <> skClass then Exit;
   for Anc in AStore.GetTransitiveAncestors(ParentSym.Id) do
-    if SameText(Anc.Name, 'TTestCase') then Exit(True);
+    if Anc.MatchesName('TTestCase') then Exit(True); { alias AND its target }
 end;
 
 // v(ADP3 T14): DI/ORM wiring for one symbol, as the stored wire string --
