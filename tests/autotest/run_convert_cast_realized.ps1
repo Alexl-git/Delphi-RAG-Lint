@@ -278,6 +278,103 @@ Check 'T6 the apply/1 document still parses with the new item kind' `
       (($good.J -ne $null) -and ($good.J.schema -eq 'apply/1')) `
       'adding an item kind broke the JSON document'
 
+# ============================================================================
+# THE .dfm HALF -- this is the one that stops data being destroyed.
+#
+# The converter team's report: `20 instance(s) converted, 60 edit(s) planned`
+# -- a clean-looking success -- with `btnEWAcAQL: dropped Picture.Data` for
+# every one of the twenty. The image bytes went nowhere and the operator had no
+# reason to look.
+#
+# The leaf is `Picture.Data`, which is UNDER the linked `Picture` and carries no
+# rule of its own, so it falls through to Dropped. `dfm keep-bytes-if-compatible`
+# is the instruction to carry it to the matching path under the TARGET, and
+# `compat` is the whitelist of payload formats the target will accept.
+#
+# NEVER RE-ENCODE, NEVER GUESS -- the converter team's own words: "rather have a
+# loud could-not-carry than a silent re-encode." So an unrecognised payload must
+# produce the cast's `todo`, not a best effort.
+# ============================================================================
+
+# btnPng carries a real PNG signature; btnOdd carries bytes matching nothing in
+# `compat`. One fixture, both outcomes, so neither can pass by the other's path.
+Write-Ascii (Join-Path $app 'TwoPic.pas') @'
+unit TwoPic;
+
+interface
+
+uses
+  Classes, LibA;
+
+type
+  TTwoForm = class(TForm)
+    btnPng: TSrcBtn;
+    btnOdd: TSrcBtn;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+
+Write-Ascii (Join-Path $app 'TwoPic.dfm') @'
+object TwoForm: TTwoForm
+  object btnPng: TSrcBtn
+    Caption = 'png'
+    Picture.Data = {89504E470D0A1A0A0000000D49484452}
+  end
+  object btnOdd: TSrcBtn
+    Caption = 'odd'
+    Picture.Data = {DEADBEEFDEADBEEFDEADBEEFDEADBEEF}
+  end
+end
+'@
+
+& $Exe index $app --db $dbApp 2>&1 | Out-Null
+
+function ApplyTwo([string]$Rules) {
+  Push-Location $app
+  try { $raw = (& $Exe convert-apply --unit 'TwoPic.pas' --rules $Rules --castlib $castlib --db $dbApp --db $dbA --db $dbB --format json 2>&1) -join "`n" }
+  finally { Pop-Location }
+  $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
+  if (-not $line) { return @{ Raw = $raw; J = $null } }
+  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json) } } catch { return @{ Raw = $raw; J = $null } }
+}
+$two = ApplyTwo $rulesGood
+$notes2 = (($two.J.reemit_notes + $two.J.warnings + $two.J.todos) -join ' || ')
+
+Check 'V2 POSITIVE CONTROL the two-instance fixture converts' `
+      (($two.J -ne $null) -and ($two.J.converted.Count -eq 2)) `
+      ("the .dfm assertions below would be measuring a failed conversion:`n" + $two.Raw)
+
+Check 'T7 a COMPATIBLE payload is no longer reported as dropped' `
+      (-not ($notes2 -match '(?i)btnPng.*dropped\s+Picture\.Data')) `
+      ("the PNG payload is still being dropped -- this is the data-loss case:`n" + $notes2)
+
+# The assertions below name the EXACT observable, not a word that might appear
+# in either outcome. The first draft matched `carried`, which also matches the
+# refusal's own "bytes NOT carried" -- so it passed on the failing path and
+# failed on the passing one. A grep over output whose shape you have not
+# inspected is a hypothesis about the shape, not a measurement.
+Check 'T8 and the target sub-object path is created for it' `
+      (($notes2 -match '(?i)btnPng[^|]*created OptionsImage\.Glyph') -and `
+       (-not ($notes2 -match '(?i)btnPng[^|]*mismatched Picture\.Data'))) `
+      ("the PNG payload did not take the carry path:`n" + $notes2)
+
+Check 'T9 an INCOMPATIBLE payload produces the cast todo, naming the instance' `
+      (($notes2 -match '(?i)btnOdd[^|]*mismatched Picture\.Data') -and ($notes2 -match '(?i)transfer the image')) `
+      ("an unrecognised payload must be reported loudly, never re-encoded or silently dropped:`n" + $notes2)
+
+Check 'T9b DISCRIMINATION the incompatible one is NOT created at the target' `
+      (-not ($notes2 -match '(?i)btnOdd[^|]*created OptionsImage\.Glyph')) `
+      ("the incompatible payload was carried anyway -- that is the silent re-encode the cast exists to avoid:`n" + $notes2)
+
+Check 'T9c the todo does not leak an unsubstituted placeholder' `
+      (-not ($notes2 -match '\{src\}|\{dst\}')) `
+      ("a raw placeholder reached the operator:`n" + $notes2)
+
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0

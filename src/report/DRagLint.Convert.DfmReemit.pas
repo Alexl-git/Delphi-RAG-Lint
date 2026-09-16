@@ -767,6 +767,94 @@ var
       end;
   end;
 
+  // The CLASS cast named by a #link whose FromPath is a PREFIX of ALeafPath,
+  // i.e. the rule links `Picture` and the .dfm leaf is `Picture.Data`.
+  //
+  // WHY A PREFIX SEARCH AND NOT LinkCastFor. LinkCastFor matches the path
+  // EXACTLY, which is right for a scalar. A class-valued property streams its
+  // payload on a nested leaf that carries no rule of its own, so an exact match
+  // finds nothing and the leaf falls through to Dropped. That is precisely how
+  // twenty buttons' image bytes went missing under a report that said
+  // `20 instance(s) converted`.
+  //
+  // Longest prefix wins, so a book linking both `Picture` and `Picture.Sub`
+  // resolves the more specific rule rather than whichever was declared first.
+  function ClassCastUnderPath(const ALeafPath: string; out ADef: TCastDef;
+    out AToPrefix, ARemainder: string): Boolean;
+  var
+    Q   : TConversionRule;
+    Best: Integer;
+    CD  : TCastDef;
+  begin
+    Result    := False;
+    AToPrefix := '';
+    ARemainder:= '';
+    ADef      := Default(TCastDef);
+    Best      := 0;
+    for Q in ARules.Rules do
+    begin
+      if (Q.Kind <> rkLink) or (Q.Cast = '') or (Q.FromPath = '') then Continue;
+      if Length(Q.FromPath) <= Best then Continue;
+      if not SameText(Copy(ALeafPath, 1, Length(Q.FromPath) + 1), Q.FromPath + '.') then Continue;
+      { The by-name class-cast lookup CastLib does not expose -- ClassCastFor
+        takes two TYPE names and answers the editor's question, the inverse of
+        this one, and FindEnumCast is the enum twin. Local for now because
+        Convert.CastLib.pas is the converter team's file with uncommitted work
+        in it; raised with them to hoist beside FindEnumCast once that lands. }
+      for CD in ACastLib.Casts do
+        if SameText(CD.Name, Q.Cast) then
+        begin
+          ADef      := CD;
+          AToPrefix := Q.ToPath;
+          ARemainder:= Copy(ALeafPath, Length(Q.FromPath) + 2, MaxInt);
+          Best      := Length(Q.FromPath);
+          Result    := True;
+          Break;
+        end;
+    end;
+  end;
+
+  // The streamed payload's format, sniffed from the leading bytes of a DFM
+  // binary blob, lowercase, or '' when nothing matches.
+  //
+  // SNIFFED, NEVER ASSUMED FROM THE PROPERTY NAME. A property called Picture
+  // says nothing about what was streamed into it, and guessing is exactly the
+  // failure the converter team asked to avoid: "rather have a loud
+  // could-not-carry than a silent re-encode."
+  function SniffPayloadFormat(const AValueText: string): string;
+  var
+    Hex: string;
+    C  : Char;
+  begin
+    Result:= '';
+    Hex   := '';
+    for C in AValueText do
+    begin
+      if CharInSet(C, ['0'..'9', 'A'..'F', 'a'..'f']) then Hex:= Hex + UpCase(C);
+      if Length(Hex) >= 16 then Break;
+    end;
+    if Length(Hex) < 4 then Exit;
+    if Hex.StartsWith('89504E47') then Exit('png');
+    if Hex.StartsWith('424D'    ) then Exit('bmp');
+    if Hex.StartsWith('FFD8FF'  ) then Exit('jpg');
+    if Hex.StartsWith('47494638') then Exit('gif');
+    if Hex.StartsWith('00000100') then Exit('ico');
+  end;
+
+  // Is AItem one of the comma-separated entries of AList, case-insensitively?
+  //
+  // Local rather than CastLib's Has, which is implementation-only there. Adding
+  // it to that unit's interface would mean editing the converter team's file
+  // while they have uncommitted work in it; this is four lines.
+  function CompatHas(const AList, AItem: string): Boolean;
+  var S: string;
+  begin
+    Result:= False;
+    if (Trim(AList) = '') or (Trim(AItem) = '') then Exit;
+    for S in AList.Split([',']) do
+      if SameText(Trim(S), Trim(AItem)) then Exit(True);
+  end;
+
   // Translate AValue through the ENUM cast named by a #link's ': Cast' suffix.
   //
   // Returns the value to write. AWrite is False when the cast is an enum cast
@@ -1117,6 +1205,53 @@ var
       PlaceAtPath(TRoot, ToPath, CastVal, ALeaf.Kind, Created);
       Exit;
     end;
+    (* KEEP-BYTES-IF-COMPATIBLE, before the leaf is given up as dropped.
+
+       A class-valued property streams its payload on a nested leaf that carries
+       no rule of its own, so it reaches here even though its PARENT is linked.
+       A cast whose dfm verb is keep-bytes-if-compatible says: carry those bytes
+       verbatim to the matching path under the target, provided the payload's
+       format is one the target accepts.
+
+       THREE OUTCOMES AGAIN, and none of them silent:
+         - format recognised AND in compat -> carried verbatim. PlaceAtPath
+           records it in Created, so it is reported rather than merely happening.
+         - format not in compat, or unrecognised -> the cast's own todo, into
+           Mismatched (WARN). NOT re-encoded and NOT quietly dropped: a wrong
+           image is worse than an absent one the operator was told about.
+         - no cast, or a different dfm verb -> falls through to Dropped, exactly
+           as before. *)
+    if ALeaf.Kind = dnkBinary then
+    begin
+      var CastDef  : TCastDef;
+      var ToPrefix : string;
+      var Remainder: string;
+      if ClassCastUnderPath(AFromPath, CastDef, ToPrefix, Remainder)
+         and SameText(Trim(CastDef.Dfm), 'keep-bytes-if-compatible')
+         and (ToPrefix <> '') and (Remainder <> '') then
+      begin
+        var Fmt: string:= SniffPayloadFormat(ALeaf.ValueText);
+        if (Fmt <> '') and CompatHas(CastDef.Compat, Fmt) then
+        begin
+          PlaceAtPath(TRoot, ToPrefix + '.' + Remainder, ALeaf.ValueText, dnkBinary, Created);
+          Exit;
+        end;
+        { The cast's own todo is written for the operator, so its placeholders
+          are substituted here too. Emitting a raw placeholder would hand the
+          reader the template instead of the instruction. }
+        var TodoText: string:= StringReplace(CastDef.Todo, '{src}', AFromPath, [rfReplaceAll]);
+        TodoText:= StringReplace(TodoText, '{dst}', ToPrefix + '.' + Remainder, [rfReplaceAll]);
+        Result.Report.Mismatched:= Result.Report.Mismatched +
+          [Format('%s: payload format %s is not in the compat list (%s) for cast %s -- bytes NOT carried. %s',
+             [AFromPath,
+              (if Fmt <> '' then Fmt else 'unrecognised'),
+              (if Trim(CastDef.Compat) <> '' then CastDef.Compat else 'none declared'),
+              CastDef.Name,
+              TodoText])];
+        Exit;
+      end;
+    end;
+
     // UNMAPPED + present in the DFM == non-default -> genuine potential loss.
     Dropped:= Dropped + [AFromPath];
   end;
