@@ -716,7 +716,7 @@ begin
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
   Writeln('       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)');
   Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
-  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json]');
+  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
   Writeln('  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]');
   Writeln('                               unit outline; backs the IDE Structure form.');
@@ -8934,7 +8934,7 @@ var
   DeclO: TJSONObject ;
 begin
   if not ExplicitDbsExist(AArgs, 'usages') then Exit(2);
-  if AArgs.Name = '' then begin Writeln('Usage: drag-lint usages --name <X> ' + '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json]'); Exit(2); end;
+  if AArgs.Name = '' then begin Writeln('Usage: drag-lint usages --name <X> ' + '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]'); Exit(2); end;
   Width:= LowerCase(AArgs.Width);
   if Width = '' then Width:= 'narrow';
 
